@@ -63,7 +63,7 @@
         Load Crops from YAML
       </button>
     </div>
-    <small class="form-text text-muted d-block mt-1">Paint <code>1</code> = background, <code>2</code> = foreground.</small>
+    <small class="form-text text-muted d-block mt-1">Paint <code>1</code> = background, <code>2</code> and up = foreground, an id per object.</small>
   </div>
 
   <!-- Annotated-region boxes, on demand only -->
@@ -76,26 +76,32 @@
     <small class="form-text text-muted d-block mt-1">Not while painting: it drops the selected draw tool.</small>
   </div>
 
-  <!-- Good regions: rehearsal anchors -->
+  <!-- The patch on screen: good regions (rehearsal anchors) and one-click labels -->
   <div class="mb-2">
-    <button type="button" class="btn btn-outline-success" id="markGoodRegionBtn"
-            title="Navigate until the screen shows output you are happy with, then click. Marks one model output patch, the size of an annotation crop. Training holds the model to what it already predicts there, while your scribbles correct it elsewhere; a scribble inside a good region wins. Shown as the good_regions layer.">
-      Mark This View as Good
-    </button>
-    <span id="goodRegionCount" class="ms-2 text-muted" style="font-size: 0.85rem;"></span>
-    <button type="button" class="btn btn-outline-secondary btn-sm ms-2" id="clearGoodRegionsBtn"
-            title="Remove all good regions from this session">
-      Clear
-    </button>
-    <button type="button" class="btn btn-outline-primary btn-sm ms-2" id="seedViewBtn"
-            title="Fills the unpainted voxels of the same patch from the model's prediction (its latest finetuned iteration, if one is served), thresholded at its decision boundary: foreground 2, or an id per object for an affinity model on an instance volume, background 1. Your strokes are kept. Then fix it with the brush. The viewer reloads to show it.">
-      Seed from Prediction
-    </button>
-    <button type="button" class="btn btn-outline-primary btn-sm ms-1" id="backgroundViewBtn"
-            title="Labels every unpainted voxel of the same patch background (1), for a region of false positives. Your strokes are kept. The viewer reloads to show it.">
-      All Background
-    </button>
-    <small class="form-text text-muted d-block mt-1">Marks the patch on screen as already right.</small>
+    <div class="d-flex flex-wrap align-items-center gap-2">
+      <button type="button" class="btn btn-outline-success btn-sm" id="markGoodRegionBtn"
+              title="Navigate until the screen shows output you are happy with, then click. Marks one model output patch, the size of an annotation crop. Training holds the model to what it already predicts there, while your scribbles correct it elsewhere; a scribble inside a good region wins. Shown as the good_regions layer.">
+        Mark as Good
+      </button>
+      <button type="button" class="btn btn-outline-primary btn-sm" id="seedViewBtn"
+              title="Fills the unpainted voxels of the patch from the model's prediction (its latest finetuned iteration, if one is served), thresholded at its decision boundary: an id per object, background 1. Your strokes are kept. Then fix it with the brush. The viewer reloads to show it.">
+        Seed from Prediction
+      </button>
+      <button type="button" class="btn btn-outline-primary btn-sm" id="backgroundViewBtn"
+              title="Labels every unpainted voxel of the patch background (1), for a region of false positives. Your strokes are kept. The viewer reloads to show it.">
+        All Background
+      </button>
+      <button type="button" class="btn btn-outline-primary btn-sm" id="splitObjectsBtn"
+              title="Gives each connected object in the patch an id of its own. To split a merged object, paint a background wall through it in every slice it spans, then click: the two sides get their own ids. A stroke joining two objects merges them into one id. Only object ids change; the viewer reloads to show it.">
+        Split Objects
+      </button>
+    </div>
+    <small class="form-text text-muted d-block mt-1">
+      Each acts on the patch on screen.
+      Good regions: <span id="goodRegionCount"></span>
+      <button type="button" class="btn btn-link btn-sm p-0 align-baseline" id="clearGoodRegionsBtn"
+              title="Remove all good regions from this session">clear</button>
+    </small>
   </div>
 
   <!-- Save action -->

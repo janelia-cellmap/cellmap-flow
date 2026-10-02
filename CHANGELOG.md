@@ -17,6 +17,9 @@ All notable changes to cellmap-flow. The format follows [Keep a Changelog](https
 - **Label the view in one click.** Beside *Mark This View as Good*, over the same patch:
   - *Seed from Prediction* fills it from the model's prediction, read from its running server (the latest finetuned iteration's when one is served) with the dashboard's input normalization and no postprocessing, and thresholded at the decision boundary: 0.5 on [0, 1] output, 0 on tanh or unbounded output (logits, signed distances). An affinity model's offset channels are averaged; on a uint16/uint32 volume each connected object gets its own id, and an object the user already painted part of keeps that id. Foreground is 2 (or the id), background 1. The user then cleans it up with the brush.
   - *All Background* labels it all 1, for a region of false positives.
+  - *Split Objects* relabels the patch's foreground by connected component (6-connected): paint a background wall through a merged object in every slice it spans, and the two sides get ids of their own; a stroke joining two objects merges them.
+  - A seed gives every object an id of its own, on every volume (a uint8 volume reuses ids the patch does not hold, an instance volume counts up), so a merge shows as one colour. A binary or distance target reads every id as foreground.
+  - After a change the paint layer is taken out and added back, so neuroglancer re-reads it; the viewer is reloaded only when that layer is not found.
   - Both fill only unpainted voxels, write to MinIO (what neuroglancer reads), pull the chunks to disk at once, and reload the viewer to show them. A patch over 128³ voxels is asked about first. Routes: `POST /api/finetune/view-labels/seed` and `/api/finetune/view-labels/background`.
   - A labelled patch trains as painted (sparse) annotation, not as a dense crop: only `imported_crops` boxes are dense.
 

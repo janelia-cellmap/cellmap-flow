@@ -1,8 +1,9 @@
 // Good regions: views the user marks as ones the model already gets right.
 // Training rehearses them (holds the model to what it predicts there), and
 // the rehearsal setting's hint says how much that will weigh. Beside them,
-// two buttons label the same patch at once (routes/finetune/view_labels.py):
-// from the model's prediction, or all background.
+// three buttons act on the same patch at once (routes/finetune/view_labels.py):
+// label it from the model's prediction or all background, or relabel its
+// objects by connected component.
 import { setBusy } from "../../lib/dom.js";
 import { getAnswer, postAnswer } from "./requests.js";
 
@@ -83,34 +84,34 @@ export function initGoodRegions({ log }) {
       .catch(() => {});
   });
 
-  // Neuroglancer keeps the chunks it has read, so new labels show only after
-  // it reloads. The iframe gets its state back from the dashboard: the same
-  // view, layers and position. Absent when no viewer is connected.
+  // Neuroglancer keeps the chunks it has read, so new labels show only once
+  // the paint layer is re-read. The server re-adds that layer (answer's
+  // layer_refreshed); when it could not, the whole viewer reloads instead,
+  // getting its state back from the dashboard. Absent when no viewer is connected.
   function reloadViewer() {
     const frame = document.querySelector("#my_iframe");
     if (frame) frame.src = frame.src;
   }
 
-  // what: "seed the view", say, for the log. A box too large to label
-  // without asking is answered needs_confirmation, and sent again confirmed;
-  // the button stays busy until that answer too.
-  function labelView(button, url, what, confirmed) {
+  // what: "seed the view", say, for the log; describe(d): the log line for an
+  // answer that changed labels. A box too large to label without asking is
+  // answered needs_confirmation, and sent again confirmed; the button stays
+  // busy until that answer too.
+  function labelView(button, url, what, describe, confirmed) {
     setBusy(button, true);
     return postAnswer(url, confirmed ? { confirm: true } : {})
       .then((d) => {
         if (d.needs_confirmation && !confirmed) {
-          return confirm(d.error) ? labelView(button, url, what, true) : undefined;
+          return confirm(d.error) ? labelView(button, url, what, describe, true) : undefined;
         }
         if (!d.success) {
           log.add(`Could not ${what}: ${d.error}`);
           alert(`Could not ${what}:\n\n${d.error}`);
         } else if (d.reload_viewer) {
-          const from = d.model ? ` from ${d.model}` : "";
-          log.add(`Labelled the view${from}: ${d.filled_foreground} foreground and ` +
-                  `${d.filled_background} background voxels; reloading the viewer`);
-          reloadViewer();
+          log.add(describe(d) + (d.layer_refreshed ? "" : "; reloading the viewer"));
+          if (!d.layer_refreshed) reloadViewer();
         } else {
-          log.add("Nothing to label: every voxel of the view is labelled already.");
+          log.add(describe(d));
         }
         log.showEnd();
       })
@@ -118,12 +119,30 @@ export function initGoodRegions({ log }) {
       .finally(() => setBusy(button, false));
   }
 
+  function describeFill(d) {
+    if (!d.reload_viewer) return "Nothing to label: every voxel of the view is labelled already.";
+    const from = d.model ? ` from ${d.model}` : "";
+    return `Labelled the view${from}: ${d.filled_foreground} foreground and ${d.filled_background} background voxels`;
+  }
+
+  function describeSplit(d) {
+    const objects = `${d.objects} object${d.objects === 1 ? "" : "s"}`;
+    if (!d.reload_viewer) {
+      return `Nothing to relabel: ${objects}, each already one id. A cut has to go through ` +
+             "every slice the object spans: paint the wall in the slices above and below too.";
+    }
+    return `Relabelled the view: ${objects}, ${d.split} split off, ${d.merged} merged`;
+  }
+
   const seedViewBtn = document.getElementById("seedViewBtn");
   seedViewBtn.addEventListener("click", () =>
-    labelView(seedViewBtn, "/api/finetune/view-labels/seed", "seed the view"));
+    labelView(seedViewBtn, "/api/finetune/view-labels/seed", "seed the view", describeFill));
   const backgroundViewBtn = document.getElementById("backgroundViewBtn");
   backgroundViewBtn.addEventListener("click", () =>
-    labelView(backgroundViewBtn, "/api/finetune/view-labels/background", "label the view background"));
+    labelView(backgroundViewBtn, "/api/finetune/view-labels/background", "label the view background", describeFill));
+  const splitObjectsBtn = document.getElementById("splitObjectsBtn");
+  splitObjectsBtn.addEventListener("click", () =>
+    labelView(splitObjectsBtn, "/api/finetune/view-labels/split", "split the view's objects", describeSplit));
 
   rehearsalFraction.addEventListener("change", updateRehearsalHint);
 

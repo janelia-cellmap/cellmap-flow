@@ -22,7 +22,7 @@ from cellmap_flow.serving import virtual_zarr
 from cellmap_flow.serving.protocol import ARGS_KEY
 from cellmap_flow.serving.probe import SIGNED_UNIT, UNBOUNDED, UNIT
 
-SEED, BACKGROUND = "/api/finetune/view-labels/seed", "/api/finetune/view-labels/background"
+SEED, BACKGROUND, SPLIT = (f"/api/finetune/view-labels/{what}" for what in ("seed", "background", "split"))
 BOX = (slice(4, 12),) * 3
 
 
@@ -126,7 +126,8 @@ def test_a_seed_is_the_thresholded_prediction_in_the_unpainted_voxels_of_the_vie
 
     assert body["success"] and body["model"] == "model" and body["reload_viewer"], body
     expected = np.zeros((16,) * 3, "u1")
-    expected[BOX] = np.where(foreground[BOX], 2, 1)
+    # The object's id is the lowest the box does not hold: 2 is the painted voxel's.
+    expected[BOX] = np.where(foreground[BOX], 3, 1)
     expected[6, 6, 6], expected[10, 10, 10] = 1, 2
     np.testing.assert_array_equal(labels[:], expected)
     assert (body["filled_foreground"], body["filled_background"]) == (4**3 - 1, 8**3 - 4**3 - 1)
@@ -134,11 +135,12 @@ def test_a_seed_is_the_thresholded_prediction_in_the_unpainted_voxels_of_the_vie
 
 
 @pytest.mark.parametrize("dtype, ids", [
-    pytest.param("u2", (9, 10), id="instance-volume-gets-ids"),
-    pytest.param("u1", (2, 2), id="uint8-volume-gets-2"),
+    pytest.param("u2", (9, 10), id="instance-volume-counts-up"),
+    pytest.param("u1", (2, 3), id="uint8-volume-reuses-free-ids"),
 ])
 def test_an_affinity_seed_labels_each_object(dashboard, served, server, monkeypatch, dtype, ids):
-    """A painted object keeps its id over the rest of it; a new one gets the next."""
+    """A painted object keeps its id over the rest of it; a new one gets the
+    next id (an instance volume) or the lowest free one (uint8)."""
     labels = served(dtype)
     labels[5, 5, 5] = 9 if dtype == "u2" else 2
     foreground = np.zeros((16,) * 3, bool)
@@ -203,3 +205,66 @@ def test_a_large_box_is_labelled_only_once_confirmed(dashboard, served, monkeypa
     assert not labels[:].any()
     assert dashboard.post(BACKGROUND, json={"size_nm": 16 * 16, "confirm": True}).get_json()["success"]
     assert labels[:].all()
+
+
+def _wall(labels, through_every_slice):
+    """One object, id 2, across the view, with a background wall at y = 8 in every slice or all but one."""
+    labels[BOX] = 2
+    labels[4:12 if through_every_slice else 11, 8, 4:12] = 1
+
+
+@pytest.mark.parametrize("paint, expected, counts", [
+    pytest.param(lambda l: _wall(l, True), lambda e: e.__setitem__((slice(4, 12), slice(9, 12), slice(4, 12)), 3),
+                 {"objects": 2, "split": 1, "merged": 0}, id="a-wall-through-every-slice-splits"),
+    pytest.param(lambda l: _wall(l, False), lambda e: None, {"objects": 1, "split": 0, "merged": 0},
+                 id="a-wall-missing-a-slice-splits-nothing"),
+])
+def test_split_relabels_the_views_objects_by_connected_component(dashboard, served, paint, expected, counts):
+    """The larger side keeps the id, the smaller gets the lowest free one; the
+    brush paints one slice, and an object cut in one slice is still one object."""
+    labels = served()
+    paint(labels)
+    before = labels[:]
+
+    body = dashboard.post(SPLIT, json={}).get_json()
+
+    assert body["success"] and {k: body[k] for k in counts} == counts, body
+    want = before.copy()
+    expected(want)
+    np.testing.assert_array_equal(labels[:], want)
+    assert body["reload_viewer"] is bool(counts["split"])
+
+
+def test_split_merges_objects_a_stroke_joins_and_keeps_the_rest(dashboard, served):
+    labels = served("u2")
+    labels[4:12, 4:7, 4:12] = 9
+    labels[4:12, 8:12, 4:12] = 10
+    labels[4:12, 7, 4:12] = 10  # a stroke joining them: one object, mostly 10
+    labels[0:3, 0:3, 0:3] = 20  # outside the view: untouched
+
+    body = dashboard.post(SPLIT, json={}).get_json()
+
+    assert (body["objects"], body["split"], body["merged"]) == (1, 0, 1)
+    assert (labels[4:12, 4:12, 4:12] == 10).all() and (labels[0:3, 0:3, 0:3] == 20).all()
+
+
+def test_a_label_change_re_adds_the_paint_layer_so_neuroglancer_re_reads_it(dashboard, served, viewer):
+    """Neuroglancer keeps the chunks it has read; the page used to reload the
+    whole viewer, which had every server recompute the view."""
+    served()
+    with viewer.txn() as s:
+        s.layers["annotation_vol-1"] = neuroglancer.SegmentationLayer(
+            source={"url": "s3+http://m:9000/annotations/vol-1.zarr/annotation"})
+        s.layers["other"] = neuroglancer.ImageLayer(source="zarr://http://x/raw")
+    generation_before = viewer.state.layers["annotation_vol-1"]
+
+    body = dashboard.post(BACKGROUND, json={}).get_json()
+
+    assert body["reload_viewer"] and body["layer_refreshed"]
+    layers = viewer.state.layers
+    assert [layer.name for layer in layers] == ["other", "annotation_vol-1"], "taken out and added back"
+    assert layers["annotation_vol-1"] is not generation_before
+    assert layers["annotation_vol-1"].layer.source[0].url == "s3+http://m:9000/annotations/vol-1.zarr/annotation"
+    assert layers["annotation_vol-1"].layer.tab == "Draw"
+    # Nothing to re-read when nothing changed.
+    assert dashboard.post(BACKGROUND, json={}).get_json()["layer_refreshed"] is False

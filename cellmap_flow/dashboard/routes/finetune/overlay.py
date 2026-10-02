@@ -126,6 +126,38 @@ def add_annotation_layer(viewer, layer_name, annotation_url, *, keep_existing=Fa
     return True
 
 
+def refresh_annotation_layer(viewer, volume_id) -> bool:
+    """Make neuroglancer re-read the paint layer of ``volume_id``'s volume.
+
+    Neuroglancer keeps the chunks it has read, so labels written behind its
+    back (a seed, a relabel) stay invisible until the layer is rebuilt. The
+    layer is taken out and added back with the same name and source: a
+    layer that is gone frees its chunks, and one added reads them again.
+    Lighter than reloading the viewer, which re-reads every layer and has
+    every inference server recompute the view; it still drops the draw tool
+    selected, as any layer update does. Returns whether a layer was found.
+    """
+    if viewer is None:
+        return False
+    marker = f"/{volume_id}.zarr/annotation"
+    found = []
+    for managed in viewer.state.layers:
+        sources = getattr(managed.layer, "source", None) or []
+        for source in sources:
+            url = str(getattr(source, "url", source) or "")
+            if marker in url:
+                found.append((managed.name, url))
+                break
+    if not found:
+        return False
+    with viewer.txn() as s:
+        for name, _ in found:
+            del s.layers[name]
+    for name, url in found:
+        add_annotation_layer(viewer, name, url[len("s3+"):] if url.startswith("s3+") else url)
+    return True
+
+
 def _chunk_outside_all_bboxes(
     chunk_lo_voxels: np.ndarray,
     chunk_hi_voxels: np.ndarray,
