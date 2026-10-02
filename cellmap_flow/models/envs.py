@@ -7,9 +7,9 @@ stacks. A model entry's ``env`` says where such a model's inference server,
 and its finetuning job, run instead::
 
     models:
-      cpsam:
+      my_model:
         type: script
-        script_path: example/cellpose_sam_model.py
+        script_path: /path/to/my_model.py
         env: cellpose4
 
 ``env`` is one of:

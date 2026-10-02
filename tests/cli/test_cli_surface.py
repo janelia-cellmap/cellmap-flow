@@ -31,6 +31,7 @@ from cellmap_flow.cli.server_cli import cli as server_cli
 from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.models.models_config import (
     BioModelConfig,
+    CellposeModelConfig,
     DaCapoModelConfig,
     FinetuneModelConfig,
     FlyModelConfig,
@@ -143,7 +144,31 @@ LONG_SCALE = ('scale', ('--scale',), (), 'text', False, None, False, 'Parameter:
 DATA_PATH = ('data_path', ('-d', '--data-path'), (), 'text', True, None, False, 'Path to the dataset')
 LOG_LEVEL = [('log_level', ('--log-level',), (), 'choice', False, 'INFO', False, 'Set the logging level')]
 
-# Each model type's own options, the same in both CLIs.
+
+
+def _cellpose_options(*pretrained_model_opts):
+    return [
+        ('voxel_size', ('-v', '--voxel-size'), (), 'text', True, None, False, 'Parameter: voxel_size'),
+        ('pretrained_model', pretrained_model_opts, (), 'text', False, 'cpsam_v2', False,
+         'Parameter: pretrained_model (default: cpsam_v2)'),
+        ('output', ('-o', '--output'), (), 'text', False, 'probability', False,
+         'Parameter: output (default: probability)'),
+        ('slices_per_chunk', ('-s', '--slices-per-chunk'), (), 'integer', False, 8, False,
+         'Parameter: slices_per_chunk (default: 8)'),
+        ('slice_size', ('--slice-size',), (), 'integer', False, 512, False, 'Parameter: slice_size (default: 512)'),
+        ('context', ('-c', '--context'), (), 'integer', False, 32, False, 'Parameter: context (default: 32)'),
+        ('batch_size', ('-b', '--batch-size'), (), 'integer', False, None, False, 'Parameter: batch_size (optional)'),
+        ('diameter', ('--diameter',), (), 'float', False, None, False, 'Parameter: diameter (optional)'),
+        ('flow_threshold', ('-f', '--flow-threshold'), (), 'float', False, 0.4, False,
+         'Parameter: flow_threshold (default: 0.4)'),
+        ('cellprob_threshold', ('--cellprob-threshold',), (), 'float', False, 0.0, False,
+         'Parameter: cellprob_threshold (default: 0.0)'),
+        NAME, LONG_SCALE,
+    ]
+
+
+# Each model type's own options, the same in both CLIs but for cellpose's
+# --pretrained-model: cellmap_flow_server's -p is its port.
 MODEL_OPTIONS = {
     'script': [
         ('script_path', ('-s', '--script-path'), (), 'text', True, None, False, 'Parameter: script_path'),
@@ -192,7 +217,9 @@ MODEL_OPTIONS = {
         ('revision', ('--revision',), (), 'text', False, None, False, 'Parameter: revision (optional)'),
         NAME, SCALE,
     ],
+    'cellpose': _cellpose_options('-p', '--pretrained-model'),
 }
+SERVER_MODEL_OPTIONS = {**MODEL_OPTIONS, 'cellpose': _cellpose_options('--pretrained-model')}
 
 SERVER_CHECK = ('server_check', ('--server-check',), (), 'boolean', False, False, True,
                 'Run server check instead of full inference')
@@ -283,7 +310,7 @@ CELLMAP_FLOW_SERVER = {
          PORT, DEBUG, CERTFILE, KEYFILE, RESAMPLE],
     **dict(sorted({
     'list-models': [],
-    **{t: [*options, KEYFILE, CERTFILE, PORT, DEBUG, DATA_PATH] for t, options in MODEL_OPTIONS.items()},
+    **{t: [*options, KEYFILE, CERTFILE, PORT, DEBUG, DATA_PATH] for t, options in SERVER_MODEL_OPTIONS.items()},
     }.items())),
 }
 
@@ -345,6 +372,9 @@ def test_cellmap_flow_type_is_a_hidden_alias_of_infer_type():
 _LISTED = [
     ("bioimage", "BioModelConfig", "model_name, voxel_size, edge_length_to_process, name, scale", "model_name, voxel_size"),
     ("cellmap", "CellMapModelConfig", "folder_path, name, scale", "folder_path"),
+    ("cellpose", "CellposeModelConfig",
+     "voxel_size, pretrained_model, output, slices_per_chunk, slice_size, context, batch_size, diameter, "
+     "flow_threshold, cellprob_threshold, name, scale", "voxel_size"),
     ("dacapo", "DaCapoModelConfig", "run_name, iteration, name, scale", "run_name, iteration"),
     ("finetune", "FinetuneModelConfig",
      "lora_adapter_path, base_model, name, scale, weights_path, input_voxel_size, output_voxel_size", ""),
@@ -508,6 +538,16 @@ CONFIGS = {
         " eyJ0eXBlIjoiZmx5IiwiY2hlY2twb2ludF9wYXRoIjoiL2NrcHQvZmx5IHJ1bi9tb2RlbC50cyIsImNoYW5uZWxzIjpbIm1pdG8iLCJlciJdLCJpbnB1dF92b3hlbF9zaXplIjpbMTYsMTYsMTZdLCJvdXRwdXRfdm94ZWxfc2l6ZSI6WzgsOCw4XSwiaW5wdXRfc2l6ZSI6WzEwMCwxMDAsMTAwXSwib3V0cHV0X3NpemUiOlsyMCwyMCwyMF0sIm5hbWUiOiJmbHkgYmFzZSJ9"
         " --name ft --scale s1",
     ),
+    "cellpose": (
+        lambda: CellposeModelConfig(voxel_size=(16, 8, 8), pretrained_model="/w/my model", output="masks",
+                                    batch_size=12, diameter=45, name="cp", scale="s2"),
+        {'type': 'cellpose', 'voxel_size': [16, 8, 8], 'pretrained_model': '/w/my model', 'output': 'masks',
+         'slices_per_chunk': 8, 'slice_size': 512, 'context': 32, 'batch_size': 12, 'diameter': 45.0,
+         'flow_threshold': 0.4, 'cellprob_threshold': 0.0, 'name': 'cp', 'scale': 's2'},
+        "cellpose --voxel-size 16,8,8 --pretrained-model '/w/my model' --output masks --slices-per-chunk 8"
+        " --slice-size 512 --context 32 --batch-size 12 --diameter 45.0 --flow-threshold 0.4"
+        " --cellprob-threshold 0.0 --name cp --scale s2",
+    ),
     "finetune_of_finetune": (
         lambda: FinetuneModelConfig(weights_path="/runs/r2/full_finetune/model_state_dict.pt",
                                     base_model=INNER_FINETUNE),
@@ -572,6 +612,20 @@ MODEL_CONFIG_TYPES = {
     ),
     "CellMapModelConfig": _type_info(
         "CellMapModelConfig", "Cell Map Model", _param_info("folder_path", "string", True, "file"), _NAME, _SCALE,
+    ),
+    "CellposeModelConfig": _type_info(
+        "CellposeModelConfig", "Cellpose Model",
+        _param_info("voxel_size", "string", True, "textarea"),
+        _param_info("pretrained_model", "str", False, "text", "cpsam_v2"),
+        _param_info("output", "str", False, "text", "probability"),
+        _param_info("slices_per_chunk", "int", False, "text", 8),
+        _param_info("slice_size", "int", False, "text", 512),
+        _param_info("context", "int", False, "text", 32),
+        _param_info("batch_size", "int", False, "text", None),
+        _param_info("diameter", "float", False, "text", None),
+        _param_info("flow_threshold", "float", False, "text", 0.4),
+        _param_info("cellprob_threshold", "float", False, "text", 0.0),
+        _NAME, _SCALE,
     ),
     "DaCapoModelConfig": _type_info(
         "DaCapoModelConfig", "Da Capo Model",
