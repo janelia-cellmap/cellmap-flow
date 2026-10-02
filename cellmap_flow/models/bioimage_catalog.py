@@ -1,5 +1,11 @@
 """The BioImage Model Zoo's models, for the dashboard's picker.
 
+They come from bioimage.io's artifact server (Hypha), whose listing holds
+each model's whole description: its axes (so 2D or 3D, and any declared
+voxel size, without a fetch per model) and weights. The legacy
+``collection.json`` index, which lags it (125 models to its 157 in
+October 2026), is the fallback when the server cannot be reached.
+
 ``list_bioimage_models`` answers from a cache file under
 ``~/.cellmap_flow/bioimage`` once there is one, so opening the Models tab
 does not download the zoo's index each time; ``refresh_bioimage_models``
@@ -22,6 +28,10 @@ from datetime import datetime, timezone
 from typing import Optional
 
 ZOO_INDEX_URL = "https://uk1s3.embassy.ebi.ac.uk/public-datasets/bioimage.io/collection.json"
+HYPHA_ARTIFACTS = "https://hypha.aicell.io/bioimage-io/artifacts"
+HYPHA_MODELS_URL = (
+    HYPHA_ARTIFACTS + '/bioimage.io/children?limit=1000&filters={"type":"model"}'
+).replace('{"type":"model"}', "%7B%22type%22%3A%22model%22%7D")
 # The index is ~300 kB; a stalled connection must not hang the dashboard's
 # request thread.
 FETCH_TIMEOUT_S = 30
@@ -143,14 +153,84 @@ def _fetch_index(url: str) -> dict:
         raise ZooIndexError(f"The BioImage Model Zoo index at {url} is not JSON: {e}") from e
 
 
-def _fetch_models() -> dict:
-    """Fetch and normalise the index, and cache it: the cache document."""
+def _space_axes(axes):
+    """The ids of an RDF input's space axes, and nm per voxel for those with a unit.
+
+    ``axes`` is spec 0.5's list of axis objects, or 0.4's string ("bczyx"),
+    which carries no units.
+    """
+    if isinstance(axes, str):
+        return [a for a in axes if a in "zyx"], {}
+    ids, sizes = [], {}
+    for axis in axes if isinstance(axes, list) else []:
+        if isinstance(axis, dict) and axis.get("type") == "space":
+            ids.append(axis.get("id"))
+            if axis.get("unit") in _NM_PER_UNIT:
+                sizes[axis.get("id")] = float(axis.get("scale", 1.0)) * _NM_PER_UNIT[axis["unit"]]
+    return ids, sizes
+
+
+def _voxel_size_from(sizes: dict) -> Optional[list]:
+    if "y" in sizes and "x" in sizes:
+        # A 2D model's z is its slices' spacing, which BioModelConfig takes as its y.
+        return [sizes.get("z", sizes["y"]), sizes["y"], sizes["x"]]
+    return None
+
+
+def normalise_artifact(artifact: dict) -> Optional[dict]:
+    """One Hypha artifact as the picker shows it: ``normalise``'s fields from
+    its description, with 2D/3D and the declared voxel size from its input's
+    axes. None for an artifact with no description."""
+    manifest = artifact.get("manifest")
+    alias = artifact.get("alias")
+    if not isinstance(manifest, dict) or not alias:
+        return None
+    files = f"{HYPHA_ARTIFACTS}/{alias}/files/"
+    covers = [c if str(c).startswith("http") else files + str(c) for c in manifest.get("covers") or []]
+    entry = normalise({
+        **manifest, "id": alias, "nickname": alias, "covers": covers, "rdf_source": files + "rdf.yaml",
+    })
+    inputs = manifest.get("inputs") or []
+    ids, sizes = _space_axes(inputs[0].get("axes") if inputs and isinstance(inputs[0], dict) else None)
+    if ids:
+        entry["dims"] = "3d" if "z" in ids else "2d"
+    entry["declared_voxel_size"] = _voxel_size_from(sizes)
+    entry["downloads"] = artifact.get("download_count")
+    return entry
+
+
+def _fetch_from_hypha() -> list:
+    listing = _fetch_index(HYPHA_MODELS_URL)
+    artifacts = listing.get("items") if isinstance(listing, dict) else listing
+    if not isinstance(artifacts, list):
+        raise ZooIndexError(f"bioimage.io's model listing at {HYPHA_MODELS_URL} is not a list")
+    return [e for e in (normalise_artifact(a) for a in artifacts if isinstance(a, dict)) if e]
+
+
+def _fetch_from_index() -> list:
     index = _fetch_index(ZOO_INDEX_URL)
     entries = index.get("collection") if isinstance(index, dict) else None
     if not isinstance(entries, list):
         raise ZooIndexError(f"The BioImage Model Zoo index at {ZOO_INDEX_URL} has no 'collection' list.")
-    models = [normalise(e) for e in entries if isinstance(e, dict) and e.get("type") == "model" and e.get("id")]
-    document = {"fetched": datetime.now(timezone.utc).isoformat(timespec="seconds"), "models": models}
+    return [normalise(e) for e in entries if isinstance(e, dict) and e.get("type") == "model" and e.get("id")]
+
+
+def _fetch_models() -> dict:
+    """Fetch and normalise the models, and cache them: the cache document.
+
+    From bioimage.io's artifact server, else (unreachable, or an answer
+    not understood) from the legacy index; both failing raises the
+    server's error with the index's.
+    """
+    try:
+        models, source = _fetch_from_hypha(), "hypha"
+    except ZooIndexError as hypha_error:
+        try:
+            models, source = _fetch_from_index(), "index"
+        except ZooIndexError as index_error:
+            raise ZooIndexError(f"{hypha_error}; and {index_error}") from index_error
+    document = {"fetched": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                "source": source, "models": models}
 
     # Written beside and moved into place: a reader never sees half a file.
     os.makedirs(os.path.dirname(BIOIMAGE_CACHE_FILE), exist_ok=True)
@@ -205,6 +285,8 @@ def declared_voxel_size(entry: dict) -> Optional[list]:
     sight. Remembered per model. Raises ZooIndexError when the description
     cannot be read, which the caller treats as "don't know".
     """
+    if "declared_voxel_size" in entry:
+        return entry["declared_voxel_size"]  # read from the listing's description
     source = entry.get("rdf_source")
     if not source:
         raise ZooIndexError(f"{entry.get('key')} names no description to read")
@@ -217,16 +299,9 @@ def declared_voxel_size(entry: dict) -> Optional[list]:
                 rdf = yaml.safe_load(response.read())
         except (urllib.error.URLError, OSError, ValueError, yaml.YAMLError) as e:
             raise ZooIndexError(f"Could not read {source}: {e}") from e
-        sizes = {}
         inputs = (rdf or {}).get("inputs") or []
-        for axis in (inputs[0].get("axes") if inputs and isinstance(inputs[0].get("axes"), list) else []):
-            if isinstance(axis, dict) and axis.get("type") == "space" and axis.get("unit") in _NM_PER_UNIT:
-                sizes[axis.get("id")] = float(axis.get("scale", 1.0)) * _NM_PER_UNIT[axis["unit"]]
-        if "y" in sizes and "x" in sizes:
-            # A 2D model's z is its slices' spacing, which BioModelConfig takes as its y.
-            _declared[source] = [sizes.get("z", sizes["y"]), sizes["y"], sizes["x"]]
-        else:
-            _declared[source] = None
+        _, sizes = _space_axes(inputs[0].get("axes") if inputs and isinstance(inputs[0], dict) else None)
+        _declared[source] = _voxel_size_from(sizes)
     return _declared[source]
 
 

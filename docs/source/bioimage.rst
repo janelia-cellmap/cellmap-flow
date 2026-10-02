@@ -10,8 +10,11 @@ In the dashboard
 ----------------
 
 1. Open the **Models** tab and expand **BioImage Model Zoo**. The list is
-   read from the zoo's index the first time and cached in
-   ``~/.cellmap_flow/bioimage/``; **Refresh** reads it again.
+   read from bioimage.io's artifact server (``hypha.aicell.io``) the first
+   time and cached in ``~/.cellmap_flow/bioimage/``; **Refresh** reads it
+   again. Its listing holds each model's description, so 2D or 3D comes
+   from the model's input axes. When the server cannot be reached the legacy
+   ``collection.json`` index is read instead, which lists fewer models.
 2. Narrow it with the search box (name, description and tags), **EM only**
    (on by default: models whose tags, name or description say electron
    microscopy) and **2D** / **3D**. The arrow beside a model opens its page
@@ -52,9 +55,12 @@ From Python
         if model["em"]:
             print(model["key"], model["dims"], model["name"])
 
-Each model has ``id`` (the index's, a Zenodo DOI for older models),
-``nickname``, ``key`` (what it is loaded by), ``name``, ``description``,
-``tags``, ``dims`` (``"2d"``, ``"3d"`` or None), ``em``,
-``weight_formats``, ``license``, ``cover`` and ``url`` (its bioimage.io
-page). ``refresh_bioimage_models()`` fetches the index again; a failed
-fetch raises ``ZooIndexError`` and keeps the cache.
+Each model has ``id`` (its alias on the server; in the legacy index a
+Zenodo DOI for older models), ``nickname``, ``key`` (what it is loaded by),
+``name``, ``description``, ``tags``, ``dims`` (``"2d"``, ``"3d"`` or None),
+``em``, ``weight_formats``, ``license``, ``cover``, ``url`` (its bioimage.io
+page) and, from the server, ``declared_voxel_size`` (nm, or None when its
+axes carry no unit: none of the zoo's models declared one in October 2026,
+so a blank voxel size is refused at Submit). ``refresh_bioimage_models()``
+fetches the list again; a failed fetch raises ``ZooIndexError`` and keeps
+the cache.

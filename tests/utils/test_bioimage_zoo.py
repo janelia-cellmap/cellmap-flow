@@ -52,11 +52,18 @@ bioimageio = { features = ["bioimageio"] }
 
 @pytest.fixture(autouse=True)
 def zoo(tmp_path, monkeypatch):
-    """The fake index, served from a cache under tmp_path; ``zoo.fetches``
-    counts the downloads, and ``zoo.index`` is what the next one gets."""
-    state = SimpleNamespace(fetches=0, index=INDEX, real_fetch=catalog._fetch_index)
+    """The fake legacy index, served from a cache under tmp_path; ``zoo.fetches``
+    counts its downloads, and ``zoo.index`` is what the next one gets.
+    bioimage.io's artifact server answers ``zoo.hypha``: by default it is
+    unreachable, so the index is used, as when the server is down."""
+    state = SimpleNamespace(fetches=0, index=INDEX, hypha=catalog.ZooIndexError("unreachable"),
+                            real_fetch=catalog._fetch_index)
 
     def fetch(url):
+        if url == catalog.HYPHA_MODELS_URL:
+            if isinstance(state.hypha, Exception):
+                raise state.hypha
+            return state.hypha
         state.fetches += 1
         if isinstance(state.index, Exception):
             raise state.index
@@ -273,3 +280,41 @@ def test_an_unreadable_description_leaves_the_voxel_size_to_the_server(submit, m
 
     monkeypatch.setattr(catalog, "declared_voxel_size", unreadable)
     assert submit({"id": "kind-seashell"}).status_code == 200 and len(submit.commands) == 1
+
+
+HYPHA_LISTING = [
+    {"alias": "impartial-shrimp", "download_count": 900, "manifest": {
+        "id": "impartial-shrimp", "name": "Neuron Segmentation in EM (Membrane Prediction)", "type": "model",
+        "description": "Membranes in electron microscopy", "tags": ["electron-microscopy", "3d"],
+        "covers": ["cover.thumbnail.jpg"], "license": "MIT", "weights": {"torchscript": {}, "pytorch_state_dict": {}},
+        "inputs": [{"id": "input0", "axes": "bczyx"}]}},
+    {"alias": "affable-shark", "manifest": {
+        "id": "affable-shark", "name": "Nuclei", "type": "model", "description": "Fluorescence nuclei",
+        "tags": ["fluorescence"], "inputs": [{"axes": [
+            {"type": "batch"}, {"type": "channel", "id": "channel"},
+            {"type": "space", "id": "y", "scale": 0.25, "unit": "micrometer"},
+            {"type": "space", "id": "x", "scale": 0.25, "unit": "micrometer"}]}]}},
+    {"alias": "no-description"},
+]
+
+
+def test_the_models_come_from_bioimageios_server_with_what_their_descriptions_say(zoo):
+    """Its listing holds each description: 2D or 3D from the input's axes, and
+    any declared voxel size without a fetch per model. The legacy index
+    lagged it by 32 models."""
+    zoo.hypha = HYPHA_LISTING
+    document = catalog.refresh_bioimage_models()
+    shrimp, shark = document["models"]
+    assert document["source"] == "hypha" and zoo.fetches == 0
+    assert (shrimp["key"], shrimp["dims"], shrimp["em"], shrimp["weight_formats"], shrimp["declared_voxel_size"]) == (
+        "impartial-shrimp", "3d", True, ["pytorch", "torchscript"], None)
+    assert shrimp["cover"] == f"{catalog.HYPHA_ARTIFACTS}/impartial-shrimp/files/cover.thumbnail.jpg"
+    assert (shark["dims"], shark["em"], shark["declared_voxel_size"]) == ("2d", False, [250.0, 250.0, 250.0])
+    assert catalog.declared_voxel_size(shrimp) is None and catalog.declared_voxel_size(shark) == [250.0] * 3
+
+
+def test_the_legacy_index_is_used_when_the_server_cannot_be_reached_and_both_failing_says_both(zoo):
+    assert catalog.refresh_bioimage_models()["source"] == "index" and zoo.fetches == 1
+    zoo.index = catalog.ZooIndexError("index down")
+    with pytest.raises(catalog.ZooIndexError, match="unreachable; and index down"):
+        catalog.refresh_bioimage_models()
