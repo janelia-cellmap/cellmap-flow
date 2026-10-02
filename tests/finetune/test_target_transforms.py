@@ -12,6 +12,7 @@ from cellmap_flow.finetune.target_transforms import (
     BinaryTargetTransform,
     BroadcastBinaryTargetTransform,
     DistanceTargetTransform,
+    IntervalTargetTransform,
     read_offsets_from_script,
 )
 
@@ -148,6 +149,50 @@ def test_the_foreground_of_a_cut_object_is_measured_to_annotated_background():
 def test_a_distance_target_needs_a_positive_sigma():
     with pytest.raises(ValueError):
         DistanceTargetTransform(0.0)
+
+
+def _bounds(ann, sigma, voxel_size=None):
+    """The (lower, upper) logit bounds and mask of a (Z, Y, X) annotation."""
+    bounds, mask = IntervalTargetTransform(sigma, voxel_size)(torch.from_numpy(ann[None, None].astype(np.float32)))
+    return bounds[0, 0].numpy(), bounds[0, 1].numpy(), mask[0, 0].numpy()
+
+
+def test_dense_paint_bounds_the_distance_exactly():
+    """Where the other class is nearer than anything unknown the two bounds meet,
+    at the distance target's own logit 2d/sigma; nearer the patch edge than the
+    other class, the edge is the lower bound."""
+    ann = np.ones((15, 15, 15))
+    ann[..., 8:] = 2
+    lower, upper, _ = _bounds(ann, 6.0)
+    for x, d in [(5, -3), (7, -1), (8, 1), (9, 2)]:
+        assert lower[7, 7, x] == upper[7, 7, x] == pytest.approx(2 * d / 6.0)
+    assert (lower[7, 7, 13], upper[7, 7, 13]) == pytest.approx((2 * 2 / 6.0, 2 * 6 / 6.0))
+
+
+def test_past_three_sigma_a_bound_saturates():
+    lower, upper, _ = _bounds(np.full((21, 21, 21), 2), 1.0)
+    assert (lower[10, 10, 10], upper[10, 10, 10]) == (6.0, np.inf)  # 11 voxels from the edge, no background
+
+
+@pytest.mark.parametrize("voxel_size", [(1, 1, 1), (3, 1, 1)])
+def test_scribbles_bracket_the_true_distance(voxel_size):
+    """Two strokes through a sphere, in a patch that cuts it: every painted voxel's
+    true distance, measured on the whole labelled volume, lies within its bounds."""
+    from scipy.ndimage import distance_transform_edt as edt
+
+    grid = np.meshgrid(*[np.arange(32) * v for v in voxel_size], indexing="ij")
+    fg = sum((g - 16 * v) ** 2 for g, v in zip(grid, voxel_size)) <= 10 ** 2
+    truth = np.where(fg, edt(fg, sampling=voxel_size), -edt(~fg, sampling=voxel_size))
+    painted = np.zeros(fg.shape, bool)
+    painted[16], painted[:, 12] = True, True
+    ann = np.where(painted, np.where(fg, 2, 1), 0)
+    patch = np.s_[4:28, 10:30, 3:20]
+    lower, upper, mask = _bounds(ann[patch], 4.0, voxel_size)
+    logit = 2 * truth[patch] / (4.0 * min(voxel_size))
+    on = mask > 0
+    assert np.all((lower[on] <= logit[on] + 1e-5) & (logit[on] <= upper[on] + 1e-5))
+    assert (lower[on] < upper[on]).mean() > 0.5  # a stroke brackets, it does not pin down
+    assert not lower[~on].any() and not upper[~on].any()
 
 
 @pytest.mark.parametrize("script, expected", [

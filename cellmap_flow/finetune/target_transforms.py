@@ -10,6 +10,9 @@ Each transform takes a raw annotation tensor (B, 1, Z, Y, X) with values:
 And produces:
   target: (B, C, Z, Y, X) — training target matching model output channels
   mask: (B, C, Z, Y, X) or (B, 1, Z, Y, X) — valid loss mask
+
+except IntervalTargetTransform, whose "target" is a lower and an upper bound
+on a distance model's output, for losses.IntervalLoss.
 """
 
 import logging
@@ -252,3 +255,106 @@ class DistanceTargetTransform(TargetTransform):
             target = target.expand(-1, self.num_channels, -1, -1, -1).contiguous()
             mask = mask.expand(-1, self.num_channels, -1, -1, -1).contiguous()
         return target, mask
+
+
+# How far out, in sigma, a distance bound still says anything: tanh(3) is
+# 0.995, so a voxel known to be at least 3 sigma inside is as good as at 3
+# sigma, and an upper bound beyond it constrains nothing a threshold sees.
+SATURATION_SIGMAS = 3.0
+
+
+class IntervalTargetTransform(TargetTransform):
+    """Bounds on a distance model's output at each painted voxel, for scribbles.
+
+    A distance target needs every voxel's distance to the object boundary,
+    and a stroke does not say where the boundary is. It does bound it:
+
+    - upper, U: the nearest voxel painted as the other class. The boundary
+      lies between the two, so |d| <= U.
+    - lower, L: the nearest voxel not painted as the voxel's own class --
+      the other class, unpainted (it may be either), or past the patch edge.
+      Every voxel closer is known to be its own class, so |d| >= L.
+
+    Where the paint is dense, the nearest voxel not of its own class is of
+    the other, and L == U: the exact distance DistanceTargetTransform would
+    give, with the same convention (edt to the nearest voxel of the other
+    class, so 1 voxel on either side of a boundary). On a stroke the two
+    bracket the truth. Both are computed in the patch the trainer gets, which
+    keeps them valid: a closer other-class voxel outside the patch would only
+    lower the true |d|, which U already exceeds or meets, and the patch edge
+    counts as "not its own class", which can only lower L. Reading context
+    around the patch would tighten bounds near its edges, but the dataset
+    hands the trainer the patch alone (augmented with it), so they are left
+    as loose as the patch makes them.
+
+    Distances are Euclidean in nm (``voxel_size_nm``, so an anisotropic
+    grid is measured as it is), and sigma, which is in output voxels as for
+    the distance target, is taken in the finest axis's voxels. The bounds
+    are returned in the model's logit space, where the distance target
+    (tanh(d/sigma) + 1)/2 = sigmoid(2d/sigma) is the line z = 2d/sigma, with
+    the sign of the painted class. Past SATURATION_SIGMAS a lower bound is
+    capped there and an upper bound dropped (+-inf).
+
+    Returns ``(bounds, mask)``: bounds (B, 2, Z, Y, X), the lower and upper
+    bound on the logit (0 off the paint), and mask (B, 1, Z, Y, X), the
+    painted voxels. Both have one channel per bound whatever the model's
+    channels: losses.IntervalLoss broadcasts them over its output.
+    """
+
+    def __init__(self, sigma_voxels: float = 6.0, voxel_size_nm=None):
+        if sigma_voxels <= 0:
+            raise ValueError(f"sigma_voxels must be positive, got {sigma_voxels}")
+        voxel_size = (1.0, 1.0, 1.0) if voxel_size_nm is None else voxel_size_nm
+        self.voxel_size_nm = tuple(float(v) for v in voxel_size)
+        self.sigma_nm = float(sigma_voxels) * min(self.voxel_size_nm)
+
+    def distance_bounds(self, ann):
+        """(L, U) in nm for each voxel of a (Z, Y, X) annotation; 0 off the paint, U inf with no other class."""
+        import numpy as np
+        from scipy.ndimage import distance_transform_edt as edt
+
+        sampling = self.voxel_size_nm
+        fg, bg = ann >= 2, ann == 1
+        lower = np.zeros(ann.shape)
+        upper = np.zeros(ann.shape)
+        for own, other in ((fg, bg), (bg, fg)):
+            if not own.any():
+                continue
+            # edt(x) is the distance from each nonzero voxel of x to the
+            # nearest zero; with no zero at all scipy returns garbage, so a
+            # patch without the other class has no upper bound, explicitly.
+            to_other = edt(~other, sampling=sampling) if other.any() else np.inf
+            # Padded with a ring of "not own class": the patch's surroundings.
+            to_not_own = edt(np.pad(own, 1, constant_values=False), sampling=sampling)[1:-1, 1:-1, 1:-1]
+            upper[own] = np.broadcast_to(to_other, ann.shape)[own]
+            lower[own] = to_not_own[own]
+        return lower, upper
+
+    def _one(self, ann):
+        """(Z, Y, X) annotation -> (lower, upper, mask) float32 numpy arrays, the bounds in logits."""
+        import numpy as np
+
+        lower, upper = self.distance_bounds(ann)
+        logit_per_nm = 2.0 / self.sigma_nm
+        saturation = SATURATION_SIGMAS * self.sigma_nm
+        near = logit_per_nm * np.minimum(lower, saturation)
+        far = np.where(upper < saturation, logit_per_nm * upper, np.inf)
+        fg, bg = ann >= 2, ann == 1
+        # Background lies on the negative side: its bounds swap and change sign.
+        lo = np.where(fg, near, np.where(bg, -far, 0.0))
+        hi = np.where(fg, far, np.where(bg, -near, 0.0))
+        return lo.astype(np.float32), hi.astype(np.float32), (ann > 0).astype(np.float32)
+
+    def __call__(self, annotation: Tensor) -> Tuple[Tensor, Tensor]:
+        import numpy as np
+
+        ann = annotation.detach().cpu().numpy()
+        if ann.ndim != 5 or ann.shape[1] != 1:
+            raise ValueError(
+                f"Expected annotation of shape (B, 1, Z, Y, X), got {tuple(ann.shape)}"
+            )
+        bounds = np.empty((ann.shape[0], 2, *ann.shape[2:]), dtype=np.float32)
+        masks = np.empty(ann.shape, dtype=np.float32)
+        for b in range(ann.shape[0]):
+            bounds[b, 0], bounds[b, 1], masks[b, 0] = self._one(ann[b, 0])
+        return torch.from_numpy(bounds).to(annotation.device), torch.from_numpy(masks).to(annotation.device)

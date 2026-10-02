@@ -119,6 +119,9 @@ def test_a_served_run_that_cannot_serve_fails(run_cli, tmp_path, options, marker
     pytest.param(["--output-type", "binary", "--loss-type", "dice"], True, id="binary with dice: broadcast"),
     # --select-channel slices the prediction to one channel; these targets had every channel.
     pytest.param(["--output-type", "distance", "--select-channel", "1"], True, id="distance, one channel"),
+    pytest.param(["--output-type", "distance", "--loss-type", "interval"], True, id="distance bounds"),
+    pytest.param(["--output-type", "binary_broadcast", "--loss-type", "interval"], False,
+                 id="bounds without a distance target: refused"),
     pytest.param(["--output-type", "binary_broadcast", "--select-channel", "0"], True,
                  id="broadcast binary, one channel"),
     pytest.param(["--select-channel", "3"], False, id="a channel the model does not have: refused"),
