@@ -5,7 +5,9 @@ and the input and output sizes, as a pair: 178 and 56 voxels a side when
 neither is given, and an error when only one is. A TorchScript file
 (``.ts``) or a ``StandardUnet`` state dict gets a sigmoid on top; a whole
 pickled model (``model.pt``) is used as it is, and only when
-``CELLMAP_FLOW_ALLOW_PICKLE`` allows it.
+``CELLMAP_FLOW_ALLOW_PICKLE`` allows it. Both of those need fly_organelles,
+so they run in pixi.toml's ``fly`` environment unless the entry gives
+another ``env``; a TorchScript file runs in any.
 """
 
 import logging
@@ -68,6 +70,18 @@ class FlyModelConfig(ModelConfig):
         # The server CLI passes these as "178,178,178" strings.
         self.input_size = _as_int_tuple(input_size)
         self.output_size = _as_int_tuple(output_size)
+
+    @property
+    def default_env(self):
+        """``fly`` for a raw checkpoint or an eager model.pt, else none (TorchScript runs anywhere).
+
+        A raw training checkpoint is loaded into fly_organelles'
+        ``StandardUnet``, and unpickling an eager ``model.pt`` imports
+        fly_organelles' classes: pixi.toml's ``fly`` environment has them,
+        cellmap-flow's own does not. A ``.ts`` file carries its own code and
+        runs wherever torch does.
+        """
+        return None if self.checkpoint_path.endswith(".ts") else "fly"
 
     def load_eval_model(self, num_channels, checkpoint_path):
         """Load evaluation model from checkpoint (TorchScript or PyTorch)."""

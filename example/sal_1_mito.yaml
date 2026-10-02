@@ -5,6 +5,9 @@ queue: "gpu_h100"
 json_data: {"input_norm": {"MinMaxNormalizer": {"min_value": 0.0, "max_value": 255.0, "invert": false}, "LambdaNormalizer": {"expression": "x*2-1"}}, "postprocess": {"ThresholdPostprocessor": {"threshold": 0.5}}}
 
 models:
+  # A raw training checkpoint is loaded into fly_organelles' StandardUnet, so
+  # this server runs in pixi.toml's `fly` environment without an `env:` here
+  # (a .ts checkpoint would run in the default one).
   - type: "fly"
     scale: "s1"
     resolution: 16

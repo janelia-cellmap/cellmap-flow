@@ -7,7 +7,9 @@ import json
 import shlex
 import sys
 import time
+import tomllib
 import types
+from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
@@ -162,6 +164,25 @@ def test_a_bioimage_model_declares_its_uint8_output(fake_frameworks, monkeypatch
     monkeypatch.setattr(bio, "load_input_information", lambda model: ("in", axes, [16] * 3, (slice(None),) * 5, False))
     monkeypatch.setattr(bio, "load_output_information", lambda model: (["out"], [axes], [16, 16, 16, 1], [16] * 3, 1))
     assert np.dtype(bio.output_dtype) == np.uint8 and tuple(bio.config.input_voxel_size) == (8, 8, 8)
+
+
+@pytest.mark.parametrize("config, env", [
+    pytest.param(lambda: FlyModelConfig(checkpoint_path="/ckpt/model_checkpoint_1000", channels=["mito"],
+                                        input_voxel_size=(8, 8, 8), output_voxel_size=(8, 8, 8)),
+                 "fly", id="fly-raw-checkpoint"),
+    pytest.param(lambda: FlyModelConfig(checkpoint_path="/ckpt/model.pt", channels=["mito"],
+                                        input_voxel_size=(8, 8, 8), output_voxel_size=(8, 8, 8)),
+                 "fly", id="fly-eager-model-pt"),
+    pytest.param(lambda: FlyModelConfig(checkpoint_path="/ckpt/model.ts", channels=["mito"],
+                                        input_voxel_size=(8, 8, 8), output_voxel_size=(8, 8, 8)),
+                 None, id="fly-torchscript"),
+])
+def test_a_model_types_default_environment(config, env):
+    """The pixi environment a type's server runs in when its entry names none."""
+    assert getattr(config(), "default_env", None) == env
+    if env is not None:
+        pixi = tomllib.loads((Path(__file__).resolve().parents[2] / "pixi.toml").read_text())
+        assert env in pixi["environments"]
 
 
 @pytest.mark.parametrize("seconds_later, model_type, downloads", [

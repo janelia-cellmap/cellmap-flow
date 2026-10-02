@@ -60,6 +60,24 @@ cellpose = "==3.1.1.1"
 [feature.cellpose4.pypi-dependencies]
 cellpose = ">=4"
 
+# fly_organelles' StandardUnet, which FlyModelConfig builds to load a raw
+# training checkpoint (and which unpickling an eager model.pt references).
+# Its package __init__ imports the training code too (gunpowder, fibsem-tools,
+# xarray), so it lives in an environment of its own; its pyproject declares
+# those, funlib.learn.torch and corditea included (git dependencies).
+[feature.fly.pypi-dependencies]
+fly-organelles = { git = "https://github.com/mzouink/fly-organelles", rev = "ab89c10" }
+
+[feature.fly.pypi-options.dependency-overrides]
+# fly-organelles pins xarray==2023.12.0, but cellmap-flow's
+# funlib.persistence 0.6.1 needs iohub, which needs xarray>=2024.1.1. The
+# StandardUnet does not use xarray; only the training data code does.
+xarray = ">=2024.1.1"
+# corditea (a fly-organelles dependency) asks for lsd-lite over git+ssh, which
+# needs a GitHub key: lock and install fail without one. The same commit (its
+# fix/empty_labels branch) over https instead.
+lsd-lite = { git = "https://github.com/neptunes5thmoon/lsd-lite.git", rev = "055892b81851fb78b4664144188c40f2d1f4ef05" }
+
 [feature.dacapo.pypi-dependencies]
 dacapo-ml = "*"
 
@@ -98,3 +116,9 @@ bioimageio = { features = ["finetune", "bioimageio"] }
 # For models that set `env: cellpose4`; its own solve group, so cellpose 4
 # can have the torch and numpy it needs without moving the default env's.
 cellpose4 = { features = ["cellpose4"], solve-group = "cellpose4" }
+# The `fly` model type defaults to it for raw checkpoints and eager model.pt
+# files; TorchScript files run anywhere. Its own solve group: in the default
+# one the overrides above do not apply (the group is solved as `default`), and
+# moving them to the workspace re-solved the default env (torch 2.14.0 ->
+# 2.14.1 among others).
+fly = { features = ["finetune", "fly"], solve-group = "fly" }
