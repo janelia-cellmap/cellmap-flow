@@ -58,6 +58,9 @@ def resolve_model_type(model_config) -> str:
             f"Models of type {model_type!r} cannot be finetuned; the trainer "
             f"supports {sorted(TRAINABLE_MODEL_TYPES)}."
         )
+    # Here, before the job manager makes the run's directory, so a refusal
+    # leaves nothing behind.
+    _check_env_can_finetune(model_config)
     return model_type
 
 
@@ -68,8 +71,11 @@ def model_entry(model_config, model_type: str, checkpoint_path: Optional[Path]) 
     The entry is the model's to_dict(), so the trainer builds the model the
     dashboard serves; ``checkpoint_path`` (find_checkpoint's) replaces the
     entry's own checkpoint, which is how an override reaches a Fly model.
+    A model with an ``env`` always goes as an entry: no other flag carries
+    the env, and without it the serving YAMLs the trainer writes would run
+    the finetuned model in the default environment.
     """
-    if model_type not in MODEL_ENTRY_TYPES:
+    if model_type not in MODEL_ENTRY_TYPES and not getattr(model_config, "env", None):
         return None
     entry = model_config.to_dict()
     if checkpoint_path and "checkpoint_path" in entry:
@@ -280,10 +286,20 @@ def _trainer_argv(model_config) -> List[str]:
         return [sys.executable, "-P", "-m", _TRAINER_MODULE]
     from cellmap_flow.models import envs
 
+    _check_env_can_finetune(model_config)
+    return envs.python_argv(env, _TRAINER_MODULE)
+
+
+def _check_env_can_finetune(model_config) -> None:
+    """Raise ValueError when the model's ``env`` cannot run the trainer."""
+    env = getattr(model_config, "env", None)
+    if not env:
+        return
+    from cellmap_flow.models import envs
+
     problem = envs.finetune_problem(env)
     if problem:
         raise ValueError(f"Cannot finetune {model_config.name}: {problem}")
-    return envs.python_argv(env, _TRAINER_MODULE)
 
 
 def _trainer_lib_dir(model_config) -> str:

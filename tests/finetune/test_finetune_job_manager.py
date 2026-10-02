@@ -116,6 +116,9 @@ class _EnvScript(_Script):
     def __init__(self, env):
         self.env = env
 
+    def to_dict(self):
+        return {"type": "script", "script_path": self.script_path, "name": self.name, "env": self.env}
+
 
 @pytest.fixture
 def pixi_manifest(tmp_path, monkeypatch):
@@ -148,12 +151,18 @@ def test_a_model_in_its_own_environment_is_trained_there(submit, pixi_manifest, 
     job = submit(_EnvScript(env), geometry=GEOMETRY)
     assert f"LD_LIBRARY_PATH={lib}" in job.command
     assert f"{program} -P -m cellmap_flow.finetune.finetune_cli --model-type script" in job.command
+    # As its entry, the only flag that carries the env on to the serving YAMLs the trainer writes.
+    from cellmap_flow.finetune.model_loading import decode_model_entry
+
+    entry = job.command.split("--model-entry ", 1)[1].split()[0]
+    assert decode_model_entry(entry)["env"] == env
 
 
-def test_an_environment_that_cannot_import_the_trainer_is_refused(submit, pixi_manifest):
+def test_an_environment_that_cannot_import_the_trainer_is_refused(submit, pixi_manifest, tmp_path):
     pixi_manifest(default_feature=False)
     with pytest.raises(ValueError, match="'cellpose4' does not install peft"):
         submit(_EnvScript("cellpose4"), geometry=GEOMETRY)
+    assert not list(tmp_path.glob("base/*/runs/*")), "refused before the run's directory is made"
 
 
 def test_a_trainer_that_fails_fails_its_job(submit, monkeypatch, tmp_path):

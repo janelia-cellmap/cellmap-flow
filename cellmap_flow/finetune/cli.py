@@ -456,9 +456,11 @@ def build_target_transform(args, model_config, output_voxel_size_nm=None):
         if args.offsets:
             offsets = json.loads(args.offsets)
 
-        # Try reading from model script
-        if offsets is None and args.model_script:
-            offsets = read_offsets_from_script(args.model_script)
+        # Try reading from model script (a model with an env comes as
+        # --model-entry, its script path in the config)
+        script = args.model_script or getattr(model_config, "script_path", None)
+        if offsets is None and script:
+            offsets = read_offsets_from_script(script)
 
         if offsets is None:
             raise ValueError(
