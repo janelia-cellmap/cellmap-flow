@@ -272,15 +272,24 @@ def test_a_seed_reads_the_model_chosen_else_the_latest_finetune(dashboard, serve
     get_session().jobs = [SimpleNamespace(model_name=name, host=f"http://{name}:8000")
                           for name in ("model", "model_finetuned_1", "model_finetuned_2", "other")]
     sources = dashboard.get("/api/finetune/view-labels/sources").get_json()
-    assert (sources["models"], sources["default"]) == (["model", "model_finetuned_1", "model_finetuned_2"],
-                                                        "model_finetuned_2")
+    assert (sources["models"], sources["default"]) == (
+        ["model", "model_finetuned_1", "model_finetuned_2", "other"], "model_finetuned_2")
     read = []
     monkeypatch.setattr(view_labels, "read_prediction",
                         lambda host, name, *a: read.append(name) or (np.zeros((1, 8, 8, 8), "f4"), a[1], a[2]))
     dashboard.post(SEED, json={})
     dashboard.post(SEED, json={"model": "model"})
-    assert read == ["model_finetuned_2", "model"]
-    assert dashboard.post(SEED, json={"model": "other"}).status_code == 409, "not a source for this volume"
+    dashboard.post(SEED, json={"model": "other"})
+    assert read == ["model_finetuned_2", "model", "other"]
+    assert dashboard.post(SEED, json={"model": "gone"}).status_code == 409
+
+
+def test_the_picker_lists_a_lone_model_before_any_volume_exists(dashboard):
+    """It was empty: it only listed the volume's model, and there was none."""
+    get_session().jobs = [SimpleNamespace(model_name="mito_aff", host="http://gpu:8000")]
+    get_session().annotation_volumes.clear()
+    assert dashboard.get("/api/finetune/view-labels/sources").get_json() == {
+        "success": True, "models": ["mito_aff"], "default": "mito_aff"}
 
 
 def test_a_label_change_re_reads_only_the_paint_layer_under_a_new_url(dashboard, served, viewer):

@@ -148,52 +148,53 @@ def _refresh_layer(volume_id) -> bool:
 # The prediction
 # ---------------------------------------------------------------------------
 
-def _prediction_sources(base_model):
-    """``[(model_name, host)]``: the running servers a seed can read, oldest first.
+def _prediction_sources():
+    """``[(model_name, host)]``: every running server, oldest first.
 
-    The model the volume is for and its finetuned iterations (finetune_layers
-    names each iteration's job ``<base>_finetuned...``), in the order they
-    were started, so the last is the latest finetune.
+    Any of them can seed: a prediction is read where the annotation voxels
+    lie, whatever the server's voxel size. Only listing the volume's model
+    and its finetunes left the picker empty before a volume existed, and
+    whenever a job's name differed from the one the volume recorded.
     """
-    sources = []
-    for job in get_session().jobs:
-        name, host = getattr(job, "model_name", None), getattr(job, "host", None)
-        if host and name and (name == base_model or name.startswith(f"{base_model}_finetuned")):
-            sources.append((name, host))
-    return sources
+    return [
+        (job.model_name, job.host)
+        for job in get_session().jobs
+        if getattr(job, "model_name", None) and getattr(job, "host", None)
+    ]
 
 
 def _prediction_server(base_model, chosen=None):
     """``(model_name, host)`` of the server whose prediction a seed reads.
 
-    ``chosen``, when the page names one of ``_prediction_sources``. Else the
-    latest finetuned iteration of the model the volume is for, when its
-    server is up: it is the model as it is now, and the layer the user
-    looks at after a round of training. Else the model's own server.
-    (None, None) when none is running.
+    ``chosen``, when the page names a running one. Else the latest
+    finetuned iteration of the model the volume is for (finetune_layers
+    names each iteration's job ``<base>_finetuned...``), when its server is
+    up: it is the model as it is now. Else the model's own server, else
+    the only server running. (None, None) when there is no pick to make.
     """
-    sources = _prediction_sources(base_model)
+    sources = _prediction_sources()
     if chosen:
         for name, host in sources:
             if name == chosen:
                 return name, host
         raise _Refused(f"No running server for {chosen}. Pick another model to seed from.")
-    finetuned = [s for s in sources if s[0] != base_model]
-    if finetuned:
-        return finetuned[-1]
-    return sources[0] if sources else (None, None)
+    if base_model:
+        finetuned = [s for s in sources if s[0].startswith(f"{base_model}_finetuned")]
+        own = [s for s in sources if s[0] == base_model]
+        if finetuned or own:
+            return (finetuned or own)[-1]
+    return sources[0] if len(sources) == 1 else (None, None)
 
 
 @finetune_bp.route("/api/finetune/view-labels/sources", methods=["GET"])
 def seed_sources():
-    """The models a seed can read, for the page's picker: ``models`` (names,
-    oldest first) and ``default``, the one a seed reads when none is chosen."""
+    """The models a seed can read, for the page's picker: ``models`` (every
+    running server, oldest first) and ``default``, the one a seed reads when
+    none is chosen (None when that is a choice for the user)."""
     _, volume = session_store().session_volume()
-    base_model = (volume or {}).get("model_name")
-    if not base_model:
-        return jsonify({"success": True, "models": [], "default": None})
-    names = [name for name, _ in _prediction_sources(base_model)]
-    return jsonify({"success": True, "models": names, "default": _prediction_server(base_model)[0]})
+    names = [name for name, _ in _prediction_sources()]
+    default = _prediction_server((volume or {}).get("model_name"))[0]
+    return jsonify({"success": True, "models": names, "default": default})
 
 
 def _get(url):
@@ -338,8 +339,10 @@ def seed_view_from_prediction():
             raise _Refused("The annotation volume does not say which model it is for.")
         model_name, host = _prediction_server(base_model, data.get("model"))
         if host is None:
-            raise _Refused(f"No running server for {base_model}. Start it from the Models tab first.")
-        channels, affinities = _seed_plan(base_model, data.get("select_channel"))
+            raise _Refused(f"No running server for {base_model}. Start it from the Models tab, or pick a model.")
+        # The model read decides the channels: a finetune's are its base's.
+        plan_for = base_model if model_name.startswith(f"{base_model}_finetuned") else model_name
+        channels, affinities = _seed_plan(plan_for, data.get("select_channel"))
         info = fetch_model_info(host)
         prediction, lo, hi = read_prediction(host, model_name, volume, lo, hi, info)
         foreground = foreground_mask(

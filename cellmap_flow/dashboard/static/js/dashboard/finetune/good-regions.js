@@ -129,32 +129,34 @@ export function initGoodRegions({ log }) {
   // Open whenever a setting is set, so a seed never silently uses an old one.
   seedSettings.open = Object.keys(seedBody()).length > 0;
 
-  // The models a seed can read: the volume's model and its finetuned
-  // iterations with a server up. Refreshed when the picker is opened, since
-  // finetunes come and go; the choice is kept while it is still running.
+  // The models a seed can read: every running server, newest first, the
+  // default (the volume model's latest finetune, else that model) marked.
+  // Refreshed every few seconds and before the picker opens, since models
+  // and finetunes come and go; the choice is kept while it is still running.
   const seedModel = document.getElementById("seedModel");
+  function showOnly(text) {
+    seedModel.replaceChildren(new Option(text, ""));
+    seedModel.disabled = true;
+  }
   function refreshSeedSources() {
     return getAnswer("/api/finetune/view-labels/sources")
       .then((d) => {
+        const names = (d && d.models) || [];
+        if (!names.length) return showOnly("no model running");
         const chosen = seedModel.value;
-        seedModel.replaceChildren();
-        const names = d.models || [];
-        if (!names.length) {
-          seedModel.append(new Option("no model running", ""));
-          seedModel.disabled = true;
-          return;
-        }
+        const options = names.slice().reverse().map((name) =>
+          new Option(name === d.default ? `${name} (default)` : name, name));
+        // Rebuilt only when the list changed, so an open picker is not reset under the cursor.
+        const now = Array.from(seedModel.options).map((o) => `${o.value}|${o.text}`).join(",");
+        if (now !== options.map((o) => `${o.value}|${o.text}`).join(",")) seedModel.replaceChildren(...options);
         seedModel.disabled = false;
-        names.slice().reverse().forEach((name) => {
-          const label = name === d.default ? `${name} (latest)` : name;
-          seedModel.append(new Option(label, name));
-        });
-        seedModel.value = names.includes(chosen) ? chosen : d.default;
+        seedModel.value = names.includes(chosen) ? chosen : (d.default || names[names.length - 1]);
       })
-      .catch(() => {});
+      .catch(() => showOnly("could not list models"));
   }
-  seedModel.addEventListener("focus", refreshSeedSources);
+  seedModel.addEventListener("mousedown", refreshSeedSources);
   refreshSeedSources();
+  setInterval(refreshSeedSources, 5000);
 
   function labelView(button, url, what, describe, confirmed, body = {}) {
     setBusy(button, true);
