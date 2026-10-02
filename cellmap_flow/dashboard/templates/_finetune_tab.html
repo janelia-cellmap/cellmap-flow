@@ -96,6 +96,10 @@
                 title="Labels every unpainted voxel of the patch background (1), for a region of false positives. Your strokes are kept. The viewer reloads to show it.">
           All Background
         </button>
+        <button type="button" class="btn btn-outline-secondary btn-sm" id="undoViewLabelsBtn" disabled
+                title="Takes back the last Seed, All Background or Split (up to 10): the patch goes back to what it held before. Voxels you have painted since are kept.">
+          Undo
+        </button>
         <button type="button" class="btn btn-outline-secondary btn-sm" id="splitObjectsBtn"
                 title="Gives each connected object in the patch an id of its own. To split a merged object, paint a background wall through it in every slice it spans, then click: the two sides get their own ids. A stroke joining two objects merges them into one id. The viewer reloads to show it.">
           Split Objects

@@ -5,6 +5,7 @@ All notable changes to cellmap-flow. The format follows [Keep a Changelog](https
 ## Unreleased
 
 ### Added
+- **Undo for the one-click label actions.** An *Undo* button beside Seed from Prediction, All Background and Split Objects takes back the last of them (up to 10 per volume): the patch goes back to what it held, except voxels painted since, which are kept.
 - **Resampling from the dashboard.** The Models tab has a *Resample if no scale matches the model* box: the servers it submits are started with `--resample`. The matching scale is still picked automatically when there is one; the box decides what happens when there is none.
   - `cellmap_flow yaml` with `resample: true` and the new `cellmap_flow view --resample` start the box ticked, so models added later in the dashboard resample too; before, only the YAML's own models did.
   - Blockwise runs and Export Config carry the setting.

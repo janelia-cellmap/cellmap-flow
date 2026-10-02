@@ -197,13 +197,14 @@ def _upload_chunks_only_on_disk(s3, root, arr, lo, hi, local_zarr_path):
             s3.put(str(local), remote)
 
 
-def fill_unpainted(state, volume_id, lo, hi, labels_for, local_zarr_path=None):
+def fill_unpainted(state, volume_id, lo, hi, labels_for, local_zarr_path=None, undo=None):
     """Write ``labels_for(existing)`` into the box ``[lo, hi)`` where the volume holds 0.
 
     ``labels_for`` gets the box as MinIO holds it and returns labels of the
     same shape (0 for "leave as it is"). Returns ``(n_foreground,
     n_background)``: how many voxels were filled with each. Nothing is
-    written when nothing would change.
+    written when nothing would change. ``undo``, a list, gets ``(lo, hi,
+    before, after)`` appended when something was written (``restore_box``).
     """
     s3, root, arr = open_served_labels(state, volume_id)
     if local_zarr_path:
@@ -213,19 +214,23 @@ def fill_unpainted(state, volume_id, lo, hi, labels_for, local_zarr_path=None):
     labels = np.asarray(labels_for(existing), dtype=arr.dtype)
     fill = (existing == 0) & (labels > 0)
     if fill.any():
+        before = existing.copy()
         existing[fill] = labels[fill]
         arr[box] = existing
+        if undo is not None:
+            undo.append((np.asarray(lo), np.asarray(hi), before, existing.copy()))
     n_foreground = int(np.count_nonzero(fill & (labels >= 2)))
     return n_foreground, int(np.count_nonzero(fill)) - n_foreground
 
 
-def rewrite_foreground(state, volume_id, lo, hi, relabel, local_zarr_path=None):
+def rewrite_foreground(state, volume_id, lo, hi, relabel, local_zarr_path=None, undo=None):
     """Write ``relabel(existing)``'s labels over the box's foreground voxels.
 
     ``relabel`` gets the box as MinIO holds it and returns ``(labels,
     counts)`` (``relabel_objects``); only foreground voxels (2 and up) whose
     label changed are written, so a stroke painted meanwhile elsewhere in
-    the box is kept. Returns ``(n_changed, counts)``.
+    the box is kept. Returns ``(n_changed, counts)``. ``undo``: as for
+    ``fill_unpainted``.
     """
     s3, root, arr = open_served_labels(state, volume_id)
     if local_zarr_path:
@@ -235,6 +240,26 @@ def rewrite_foreground(state, volume_id, lo, hi, relabel, local_zarr_path=None):
     labels, counts = relabel(existing)
     changed = (existing >= 2) & (np.asarray(labels, dtype=arr.dtype) != existing)
     if changed.any():
+        before = existing.copy()
         existing[changed] = np.asarray(labels, dtype=arr.dtype)[changed]
         arr[box] = existing
+        if undo is not None:
+            undo.append((np.asarray(lo), np.asarray(hi), before, existing.copy()))
     return int(np.count_nonzero(changed)), counts
+
+
+def restore_box(state, volume_id, lo, hi, before, after):
+    """Put the box back to ``before`` where it still holds ``after``: an undo.
+
+    Only voxels the action changed and nobody has touched since go back, so
+    a stroke painted in the box after the action is kept. Returns how many
+    voxels were restored.
+    """
+    _, _, arr = open_served_labels(state, volume_id)
+    box = tuple(slice(int(a), int(b)) for a, b in zip(lo, hi))
+    current = arr[box]
+    restore = (before != after) & (current == after)
+    if restore.any():
+        current[restore] = before[restore]
+        arr[box] = current
+    return int(np.count_nonzero(restore))

@@ -22,7 +22,7 @@ from cellmap_flow.serving import virtual_zarr
 from cellmap_flow.serving.protocol import ARGS_KEY
 from cellmap_flow.serving.probe import SIGNED_UNIT, UNBOUNDED, UNIT
 
-SEED, BACKGROUND, SPLIT = (f"/api/finetune/view-labels/{what}" for what in ("seed", "background", "split"))
+SEED, BACKGROUND, SPLIT, UNDO = (f"/api/finetune/view-labels/{what}" for what in ("seed", "background", "split", "undo"))
 BOX = (slice(4, 12),) * 3
 
 
@@ -289,7 +289,7 @@ def test_the_picker_lists_a_lone_model_before_any_volume_exists(dashboard):
     get_session().jobs = [SimpleNamespace(model_name="mito_aff", host="http://gpu:8000")]
     get_session().annotation_volumes.clear()
     assert dashboard.get("/api/finetune/view-labels/sources").get_json() == {
-        "success": True, "models": ["mito_aff"], "default": "mito_aff"}
+        "success": True, "models": ["mito_aff"], "default": "mito_aff", "can_undo": False}
 
 
 def test_a_label_change_re_reads_only_the_paint_layer_under_a_new_url(dashboard, served, viewer):
@@ -317,3 +317,35 @@ def test_a_label_change_re_reads_only_the_paint_layer_under_a_new_url(dashboard,
 
     dashboard.post(SPLIT, json={})  # nothing to relabel: the URL stays
     assert viewer.state.layers["annotation_vol-1"].layer.to_json()["source"]["url"].endswith(":09000/annotations/vol-1.zarr/annotation")
+
+
+def test_undo_takes_back_the_last_actions_and_keeps_strokes_painted_since(dashboard, served):
+    """All Background over objects the user had not seen: Undo puts the box
+    back, except where they painted after it."""
+    labels = served()
+    labels[5, 5, 5] = 2  # painted before
+    assert dashboard.post(UNDO, json={}).status_code == 409, "nothing to undo yet"
+
+    assert dashboard.post(BACKGROUND, json={}).get_json()["can_undo"]
+    labels[6, 6, 6] = 3  # painted after the fill, over a voxel it set to 1
+    labels[BOX[0].start, 4, 4] = 2  # and another
+    body = dashboard.post(UNDO, json={}).get_json()
+
+    assert body["success"] and not body["can_undo"]
+    expected = np.zeros((16,) * 3, "u1")
+    expected[5, 5, 5], expected[6, 6, 6], expected[BOX[0].start, 4, 4] = 2, 3, 2
+    np.testing.assert_array_equal(labels[:], expected)
+    assert body["restored"] == 8 ** 3 - 3
+    assert dashboard.post(UNDO, json={}).status_code == 409
+
+
+def test_undo_goes_back_one_action_at_a_time(dashboard, served):
+    labels = served()
+    labels[BOX] = 2
+    labels[4:12, 8, 4:12] = 1  # a wall: Split gives one side a new id
+    before_split = labels[:]
+    dashboard.post(SPLIT, json={})
+    assert not np.array_equal(labels[:], before_split)
+    dashboard.post(UNDO, json={})
+    np.testing.assert_array_equal(labels[:], before_split)
+    assert dashboard.get("/api/finetune/view-labels/sources").get_json()["can_undo"] is False
