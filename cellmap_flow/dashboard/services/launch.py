@@ -153,7 +153,7 @@ def _bioimage_params(selections):
         if voxel_size is None and trained.get("voxel_size"):
             voxel_size = trained["voxel_size"]
             logger.info(f"{key}: at {voxel_size} nm, the voxel size it was trained at ({trained['trained_on']})")
-        if voxel_size is None and found is not None and bioimage_job_name(key) not in _running_names():
+        if voxel_size is None and found is not None and bioimage_job_name(key) not in running_names():
             # Its server would refuse a model with no voxel size after its job
             # started, where nothing on the page shows it: refuse here.
             try:
@@ -174,8 +174,40 @@ def _bioimage_params(selections):
     return params
 
 
-def _running_names():
-    return {job.model_name for job in get_session().jobs}
+# The names whose launch thread has not returned yet: from Submit until the
+# job is in the session's jobs, which can be minutes (bsub, the queue, the
+# model loading). They count as running, so a second Submit in that time
+# (Resample toggled, say) does not start the same model again: two
+# "impartial_shrimp" jobs once ran side by side, one resampling and one not,
+# and the layer showed whichever came up last.
+_launching: set = set()
+_launching_lock = threading.Lock()
+
+
+def _launch(name, target, *args, daemon=False):
+    """Run ``target(*args)`` in its own thread, with ``name`` counted as
+    running (``running_names``) until it returns."""
+    with _launching_lock:
+        _launching.add(name)
+
+    def run():
+        try:
+            target(*args)
+        finally:
+            with _launching_lock:
+                _launching.discard(name)
+
+    thread = threading.Thread(target=run, daemon=daemon)
+    thread.start()
+    return thread
+
+
+def running_names() -> set:
+    """The models running, or on their way: the session's jobs and the
+    launches not finished yet."""
+    with _launching_lock:
+        launching = set(_launching)
+    return {job.model_name for job in get_session().jobs} | launching
 
 
 def kill_n_remove_from_neuroglancer(jobs, s):
@@ -203,7 +235,7 @@ def update_run_models(names: List[str], hf_repos: List[str] = None, bioimage_mod
     to_be_killed = [
         j for j in session.jobs if j.model_name not in all_names and not getattr(j, "owned_by_finetune", False)
     ]
-    names_running = [j.model_name for j in session.jobs]
+    names_running = running_names()
 
     threads = []
     st_data = PipelineSpec.from_steps(session.input_norms, session.postprocess).to_url_blob()
@@ -220,11 +252,7 @@ def update_run_models(names: List[str], hf_repos: List[str] = None, bioimage_mod
             for name, model_path in group.items():
                 if name in names and name not in names_running:
                     logger.info(f"To be submitted model : {model_path}")
-                    thread = threading.Thread(
-                        target=run_model, args=(model_path, name, st_data)
-                    )
-                    thread.start()
-                    threads.append(thread)
+                    threads.append(_launch(name, run_model, model_path, name, st_data))
 
         # Launch Hugging Face models
         for repo in hf_repos:
@@ -236,11 +264,7 @@ def update_run_models(names: List[str], hf_repos: List[str] = None, bioimage_mod
                 existing_names = [getattr(mc, 'name', None) for mc in session.models_config]
                 if hf_name not in existing_names:
                     session.models_config.append(hf_config)
-                thread = threading.Thread(
-                    target=run_hf_model, args=(repo, hf_name, st_data)
-                )
-                thread.start()
-                threads.append(thread)
+                threads.append(_launch(hf_name, run_hf_model, repo, hf_name, st_data))
 
         # Launch BioImage Model Zoo models. Their config is kept, as a
         # Hugging Face model's is, for the pipeline builder and for the
@@ -253,8 +277,6 @@ def update_run_models(names: List[str], hf_repos: List[str] = None, bioimage_mod
                     mc for mc in session.models_config
                     if not (isinstance(mc, BioModelConfig) and mc.name == params["name"])
                 ] + [BioModelConfig(**params)]
-                thread = threading.Thread(target=run_bioimage_model, args=(params, st_data))
-                thread.start()
-                threads.append(thread)
+                threads.append(_launch(params["name"], run_bioimage_model, params, st_data))
     # for thread in threads:
     #     thread.join()

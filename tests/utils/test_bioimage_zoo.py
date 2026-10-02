@@ -182,7 +182,7 @@ class _Job:
 
 
 class _InlineThread:
-    def __init__(self, target, args=()):
+    def __init__(self, target, args=(), daemon=None):
         self._target, self._args = target, args
 
     def start(self):

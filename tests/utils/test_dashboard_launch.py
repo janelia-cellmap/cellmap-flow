@@ -3,6 +3,7 @@ launch leaves, and a model taken off and put back on. Its commands are in
 test_launch_command, its layers in test_layer_sources_snapshot."""
 
 import logging
+import time
 from types import SimpleNamespace
 
 import neuroglancer
@@ -47,7 +48,7 @@ class _Job:
 
 
 class _InlineThread:
-    def __init__(self, target, args=()):
+    def __init__(self, target, args=(), daemon=None):
         self._target, self._args = target, args
 
     def start(self):
@@ -72,6 +73,34 @@ def test_a_model_taken_off_is_killed_forgotten_and_can_be_started_again(viewer, 
     # Selecting it again must start it again, not be a silent no-op.
     launch.update_run_models(["mito", "nuc"])
     assert launched == ["nuc"]
+
+
+def test_a_second_submit_while_a_model_is_still_starting_does_not_start_it_again(viewer, monkeypatch):
+    """Two impartial_shrimp jobs once ran side by side: Submit again (Resample
+    toggled) before the first had a server, and it was started twice."""
+    import threading
+
+    release, launched = threading.Event(), []
+
+    def slow_start(path, name, st):
+        launched.append(name)
+        release.wait(5)
+
+    monkeypatch.setattr(launch, "run_model", slow_start)
+    get_session().jobs = []
+    process_chain().input_norms, process_chain().postprocess = [], []
+    get_session().model_catalog = {"catalog": {"mito": "/models/mito"}}
+    try:
+        launch.update_run_models(["mito"])
+        launch.update_run_models(["mito"])
+        assert launched == ["mito"] and "mito" in launch.running_names()
+    finally:
+        release.set()
+    for _ in range(100):  # its launch thread returns
+        if "mito" not in launch.running_names():
+            break
+        time.sleep(0.05)
+    assert "mito" not in launch.running_names()
 
 
 def test_submit_on_the_models_tab_leaves_a_finetune_jobs_server_running(viewer, monkeypatch):
