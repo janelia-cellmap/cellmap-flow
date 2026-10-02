@@ -198,6 +198,8 @@ def test_a_3d_bioimage_models_shapes_come_from_its_test_tensors(fake_frameworks,
                                         input_voxel_size=(8, 8, 8), output_voxel_size=(8, 8, 8)),
                  None, id="fly-torchscript"),
     pytest.param(lambda: BioModelConfig(model_name="affable-shark", voxel_size=(8, 8, 8)), "bioimageio", id="bio"),
+    # pixi.toml's dacapo environment does not import DaCapo yet.
+    pytest.param(lambda: DaCapoModelConfig(run_name="r", iteration=0), None, id="dacapo"),
 ])
 def test_a_model_types_default_environment(config, env):
     """The pixi environment a type's server runs in when its entry names none."""
