@@ -169,10 +169,12 @@ def test_nothing_but_building_the_model_imports_cellpose(monkeypatch):
     assert "CellposeModelConfig" in registry.describe_types()
     result = CliRunner().invoke(main.cli, ["infer", "cellpose", "--help"])
     assert result.exit_code == 0 and "--pretrained-model" in result.output
-    # It runs in cellpose4: a process without cellpose refuses to build it, naming the env.
+    # Only building it imports cellpose. Where pixi provides cellpose4, the
+    # error names that env (ModelEnvError); where it cannot (CI, conda-only),
+    # the model falls back to this environment and the import itself fails.
     from cellmap_flow.models.configs.base import ModelEnvError
 
-    with pytest.raises(ModelEnvError, match="cellpose4"):
+    with pytest.raises((ModelEnvError, ImportError)):
         model.config
 
 
