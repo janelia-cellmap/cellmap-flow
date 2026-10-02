@@ -56,13 +56,21 @@ block_shape = np.array((SLICES, SIZE, SIZE, output_channels))
 output_dtype = np.uint64 if OUTPUT == "masks" else np.float32
 channels = ["cell"]
 
+# Cellpose cuts each slice into 256 px tiles overlapping by 10% (bsize,
+# tile_overlap: its defaults), so a slice of SIZE + 2 * CONTEXT = 576 px is
+# 3 x 3 tiles. Given the chunk as one batch, Cellpose puts the tiles of as
+# many slices as fit in batch_size into one GPU pass; this many is the whole
+# chunk at once. Lower it if a smaller GPU runs out of memory (e.g. 4 * 9).
+TILES_PER_SLICE = int(np.ceil(1.2 * (SIZE + 2 * CONTEXT) / 256)) ** 2
+BATCH_SIZE = SLICES * TILES_PER_SLICE
+
 # Cellpose's own evaluation settings; diameter None keeps Cellpose-SAM's
 # own scale (objects about 30 pixels across).
 eval_kwargs = {
     "diameter": None,
     "flow_threshold": 0.4,
     "cellprob_threshold": 0.0,
-    "batch_size": 8,
+    "batch_size": BATCH_SIZE,
     "compute_masks": OUTPUT == "masks",
 }
 
@@ -71,20 +79,23 @@ model = models.CellposeModel(gpu=True, pretrained_model="cpsam")
 
 def process_chunk(idi: ImageDataInterface, output_roi):
     data = idi.to_ndarray_ts(output_roi.grow(context, context))
-    # A list of 2D images: Cellpose segments each on its own. (A 3D array
-    # without do_3D is taken to be one 2D image with channels.)
-    masks, flows, _ = model.eval(list(data), **eval_kwargs)
-    inner = (slice(CONTEXT, CONTEXT + SIZE),) * 2
+    # A batch of 2D images, (z, y, x, channel): Cellpose still segments and
+    # normalizes each slice on its own, but batches their tiles together. A
+    # list of slices is run image by image instead: 2 passes a slice, 16 a
+    # chunk, at 8 tiles a pass. (z_axis is refused without do_3D, and a 3D
+    # array is taken for one 2D image with channels.)
+    masks, flows, _ = model.eval(data[..., np.newaxis], channel_axis=3, **eval_kwargs)
+    inner = (slice(None), slice(CONTEXT, CONTEXT + SIZE), slice(CONTEXT, CONTEXT + SIZE))
 
     if OUTPUT == "probability":
-        # flows[i][2] is the cell probability as a logit.
-        logits = np.stack([flow[2][inner] for flow in flows]).astype(np.float32)
+        # flows[2] is the cell probability as a logit, (z, y, x).
+        logits = np.reshape(flows[2], data.shape)[inner].astype(np.float32)
         return (1.0 / (1.0 + np.exp(-logits)))[np.newaxis]
 
-    output = np.zeros((len(masks), SIZE, SIZE), dtype=np.uint64)
+    output = np.zeros((len(data), SIZE, SIZE), dtype=np.uint64)
     next_id = 0
-    for z, mask in enumerate(masks):
-        mask = mask[inner].astype(np.uint64)
+    for z, mask in enumerate(np.reshape(masks, data.shape)[inner]):
+        mask = mask.astype(np.uint64)
         # Each slice numbers its objects from 1; shift them past the slices
         # before, so that an id means one object in the whole chunk.
         output[z] = np.where(mask > 0, mask + next_id, 0)
