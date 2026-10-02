@@ -84,10 +84,10 @@ export function initGoodRegions({ log }) {
       .catch(() => {});
   });
 
-  // Neuroglancer keeps the chunks it has read, so new labels show only after
-  // it reloads (a layer taken out and added back with the same source re-read
-  // nothing). The iframe gets its state back from the dashboard: the same
-  // view, layers and position. Absent when no viewer is connected.
+  // Neuroglancer keeps the chunks it has read. The server re-reads the paint
+  // layer alone (answer's layer_refreshed); only when it could not does the
+  // whole viewer reload, getting its state back from the dashboard. Absent
+  // when no viewer is connected.
   function reloadViewer() {
     const frame = document.querySelector("#my_iframe");
     if (frame) frame.src = frame.src;
@@ -167,8 +167,8 @@ export function initGoodRegions({ log }) {
           log.add(`Could not ${what}: ${d.error}`);
           alert(`Could not ${what}:\n\n${d.error}`);
         } else if (d.reload_viewer) {
-          log.add(describe(d) + "; reloading the viewer");
-          reloadViewer();
+          log.add(describe(d) + (d.layer_refreshed ? "" : "; reloading the viewer"));
+          if (!d.layer_refreshed) reloadViewer();
         } else {
           log.add(describe(d));
         }

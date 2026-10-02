@@ -126,6 +126,50 @@ def add_annotation_layer(viewer, layer_name, annotation_url, *, keep_existing=Fa
     return True
 
 
+def _respelled_port(url):
+    """``url`` with one more leading zero on its port: the same server, a new URL.
+
+    Neuroglancer keeps a data source, and the chunks it read, per URL: a
+    layer taken out and added back with the same URL re-read nothing. Its
+    S3 reader takes the host text as written, so ``host:09000`` is a source
+    it has never seen; the browser parses that port as 9000, so the
+    requests go where they always did. None when the URL names no port.
+    """
+    scheme, sep, rest = url.partition("://")
+    host, slash, path = rest.partition("/")
+    name, colon, port = host.rpartition(":")
+    if not sep or not colon or not port.isdigit():
+        return None
+    return f"{scheme}://{name}:0{port}{slash}{path}"
+
+
+def refresh_annotation_layer(viewer, volume_id) -> bool:
+    """Make neuroglancer re-read the paint layer of ``volume_id``'s volume, and only it.
+
+    Labels written behind its back (a seed, a relabel) show only once the
+    layer's chunks are read again. The layer is put back with the same name
+    and a new spelling of the same URL (``_respelled_port``), so the view,
+    the other layers and their servers are left alone; reloading the viewer
+    re-read every layer and had every server recompute the view. Returns
+    whether a layer was found and refreshed.
+    """
+    if viewer is None:
+        return False
+    marker = f"/{volume_id}.zarr/annotation"
+    found = []
+    for managed in viewer.state.layers:
+        for source in getattr(managed.layer, "source", None) or []:
+            url = str(getattr(source, "url", source) or "")
+            if marker in url:
+                respelled = _respelled_port(url[len("s3+"):] if url.startswith("s3+") else url)
+                if respelled:
+                    found.append((managed.name, respelled))
+                break
+    for name, url in found:
+        add_annotation_layer(viewer, name, url)
+    return bool(found)
+
+
 def _chunk_outside_all_bboxes(
     chunk_lo_voxels: np.ndarray,
     chunk_hi_voxels: np.ndarray,

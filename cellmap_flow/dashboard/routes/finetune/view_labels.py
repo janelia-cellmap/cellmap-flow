@@ -40,6 +40,7 @@ from cellmap_flow.dashboard.routes.finetune.common import (
     session_store,
 )
 from cellmap_flow.dashboard.routes.finetune.good_regions import view_box_nm
+from cellmap_flow.dashboard.routes.finetune.overlay import refresh_annotation_layer
 from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.finetune.session import fill
 from cellmap_flow.finetune.session.volume import volume_corner_nm
@@ -107,6 +108,7 @@ def _fill(volume_id, volume, lo, hi, labels_for):
     n_foreground, n_background = fill.fill_unpainted(
         get_session().minio_state, volume_id, lo, hi, labels_for, volume.get("zarr_path")
     )
+    layer_refreshed = False
     if n_foreground or n_background:
         # Now rather than at the next periodic sync, so training submitted
         # straight after sees the box. A failure is only late: the periodic
@@ -115,6 +117,7 @@ def _fill(volume_id, volume, lo, hi, labels_for):
             sync_annotation_volume_from_minio(volume_id)
         except Exception as e:
             logger.warning(f"Could not pull the labelled box of {volume_id} to disk yet: {e}")
+        layer_refreshed = _refresh_layer(volume_id)
     logger.info(
         f"Labelled box {lo.tolist()}..{hi.tolist()} of {volume_id}: "
         f"{n_foreground} foreground and {n_background} background voxels filled"
@@ -125,10 +128,20 @@ def _fill(volume_id, volume, lo, hi, labels_for):
         "shape_voxels": (hi - lo).tolist(),
         "filled_foreground": n_foreground,
         "filled_background": n_background,
-        # Neuroglancer shows the chunks it already read until it reloads; a
-        # layer taken out and added back with the same source re-read nothing.
+        # Neuroglancer shows the chunks it already read until the paint layer
+        # is re-read: done here, under a new URL, when the layer was found;
+        # else the page reloads the viewer.
         "reload_viewer": bool(n_foreground or n_background),
+        "layer_refreshed": layer_refreshed,
     }
+
+
+def _refresh_layer(volume_id) -> bool:
+    try:
+        return refresh_annotation_layer(get_session().viewer, volume_id)
+    except Exception as e:
+        logger.warning(f"Could not refresh the paint layer of {volume_id}: {e}")
+        return False
 
 
 # ---------------------------------------------------------------------------
@@ -396,11 +409,13 @@ def split_view_objects():
         n_changed, counts = fill.rewrite_foreground(
             get_session().minio_state, volume_id, lo, hi, fill.relabel_objects, volume.get("zarr_path")
         )
+        layer_refreshed = False
         if n_changed:
             try:
                 sync_annotation_volume_from_minio(volume_id)
             except Exception as e:
                 logger.warning(f"Could not pull the relabelled box of {volume_id} to disk yet: {e}")
+            layer_refreshed = _refresh_layer(volume_id)
         logger.info(
             f"Relabelled box {lo.tolist()}..{hi.tolist()} of {volume_id}: {counts['objects']} objects, "
             f"{counts['split']} split off, {counts['merged']} merged, {n_changed} voxels changed"
@@ -411,6 +426,7 @@ def split_view_objects():
             "shape_voxels": (hi - lo).tolist(),
             "changed": n_changed,
             "reload_viewer": bool(n_changed),
+            "layer_refreshed": layer_refreshed,
             **counts,
         })
     except _Refused as e:

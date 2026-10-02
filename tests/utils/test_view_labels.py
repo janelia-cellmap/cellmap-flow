@@ -281,3 +281,23 @@ def test_a_seed_reads_the_model_chosen_else_the_latest_finetune(dashboard, serve
     dashboard.post(SEED, json={"model": "model"})
     assert read == ["model_finetuned_2", "model"]
     assert dashboard.post(SEED, json={"model": "other"}).status_code == 409, "not a source for this volume"
+
+
+def test_a_label_change_re_reads_only_the_paint_layer_under_a_new_url(dashboard, served, viewer):
+    """Neuroglancer keeps a source's chunks per URL, so the same URL re-read
+    nothing, and reloading the viewer had every server recompute the view.
+    A port with one more leading zero is the same server to a browser."""
+    served()
+    with viewer.txn() as s:
+        s.layers["other"] = neuroglancer.ImageLayer(source="zarr://http://x/raw")
+        s.layers["annotation_vol-1"] = neuroglancer.SegmentationLayer(
+            source={"url": "s3+http://m:9000/annotations/vol-1.zarr/annotation"})
+
+    first = dashboard.post(BACKGROUND, json={}).get_json()
+    assert first["reload_viewer"] and first["layer_refreshed"]
+    layers = viewer.state.layers
+    assert layers["annotation_vol-1"].layer.source[0].url == "s3+http://m:09000/annotations/vol-1.zarr/annotation"
+    assert layers["annotation_vol-1"].layer.tab == "Draw" and layers["other"].layer.source[0].url == "zarr://http://x/raw"
+
+    dashboard.post(SPLIT, json={})  # nothing to relabel: the URL stays
+    assert layers["annotation_vol-1"].layer.source[0].url.endswith(":09000/annotations/vol-1.zarr/annotation")
