@@ -84,10 +84,10 @@ export function initGoodRegions({ log }) {
       .catch(() => {});
   });
 
-  // Neuroglancer keeps the chunks it has read, so new labels show only once
-  // the paint layer is re-read. The server re-adds that layer (answer's
-  // layer_refreshed); when it could not, the whole viewer reloads instead,
-  // getting its state back from the dashboard. Absent when no viewer is connected.
+  // Neuroglancer keeps the chunks it has read, so new labels show only after
+  // it reloads (a layer taken out and added back with the same source re-read
+  // nothing). The iframe gets its state back from the dashboard: the same
+  // view, layers and position. Absent when no viewer is connected.
   function reloadViewer() {
     const frame = document.querySelector("#my_iframe");
     if (frame) frame.src = frame.src;
@@ -114,6 +114,11 @@ export function initGoodRegions({ log }) {
     if (Number(seedMinSize.value) > 0) body.min_size = Number(seedMinSize.value);
     return body;
   }
+  function seedRequest() {
+    const body = seedBody();
+    if (seedModel.value) body.model = seedModel.value;
+    return body;
+  }
   function rememberSeedSettings() {
     try {
       localStorage.setItem(SETTINGS_KEY, JSON.stringify({ threshold: seedThreshold.value, min_size: seedMinSize.value }));
@@ -121,10 +126,35 @@ export function initGoodRegions({ log }) {
   }
   seedThreshold.addEventListener("change", rememberSeedSettings);
   seedMinSize.addEventListener("change", rememberSeedSettings);
-  seedSettings.hidden = Object.keys(seedBody()).length === 0;
-  document.getElementById("seedSettingsBtn").addEventListener("click", () => {
-    seedSettings.hidden = !seedSettings.hidden;
-  });
+  // Open whenever a setting is set, so a seed never silently uses an old one.
+  seedSettings.open = Object.keys(seedBody()).length > 0;
+
+  // The models a seed can read: the volume's model and its finetuned
+  // iterations with a server up. Refreshed when the picker is opened, since
+  // finetunes come and go; the choice is kept while it is still running.
+  const seedModel = document.getElementById("seedModel");
+  function refreshSeedSources() {
+    return getAnswer("/api/finetune/view-labels/sources")
+      .then((d) => {
+        const chosen = seedModel.value;
+        seedModel.replaceChildren();
+        const names = d.models || [];
+        if (!names.length) {
+          seedModel.append(new Option("no model running", ""));
+          seedModel.disabled = true;
+          return;
+        }
+        seedModel.disabled = false;
+        names.slice().reverse().forEach((name) => {
+          const label = name === d.default ? `${name} (latest)` : name;
+          seedModel.append(new Option(label, name));
+        });
+        seedModel.value = names.includes(chosen) ? chosen : d.default;
+      })
+      .catch(() => {});
+  }
+  seedModel.addEventListener("focus", refreshSeedSources);
+  refreshSeedSources();
 
   function labelView(button, url, what, describe, confirmed, body = {}) {
     setBusy(button, true);
@@ -137,8 +167,8 @@ export function initGoodRegions({ log }) {
           log.add(`Could not ${what}: ${d.error}`);
           alert(`Could not ${what}:\n\n${d.error}`);
         } else if (d.reload_viewer) {
-          log.add(describe(d) + (d.layer_refreshed ? "" : "; reloading the viewer"));
-          if (!d.layer_refreshed) reloadViewer();
+          log.add(describe(d) + "; reloading the viewer");
+          reloadViewer();
         } else {
           log.add(describe(d));
         }
@@ -166,7 +196,7 @@ export function initGoodRegions({ log }) {
 
   const seedViewBtn = document.getElementById("seedViewBtn");
   seedViewBtn.addEventListener("click", () =>
-    labelView(seedViewBtn, "/api/finetune/view-labels/seed", "seed the view", describeFill, false, seedBody()));
+    labelView(seedViewBtn, "/api/finetune/view-labels/seed", "seed the view", describeFill, false, seedRequest()));
   const backgroundViewBtn = document.getElementById("backgroundViewBtn");
   backgroundViewBtn.addEventListener("click", () =>
     labelView(backgroundViewBtn, "/api/finetune/view-labels/background", "label the view background", describeFill));

@@ -19,8 +19,8 @@ All notable changes to cellmap-flow. The format follows [Keep a Changelog](https
   - *All Background* labels it all 1, for a region of false positives.
   - *Split Objects* relabels the patch's foreground by connected component (6-connected): paint a background wall through a merged object in every slice it spans, and the two sides get ids of their own; a stroke joining two objects merges them.
   - A seed gives every object an id of its own, on every volume (a uint8 volume reuses ids the patch does not hold, an instance volume counts up), so a merge shows as one colour. A binary or distance target reads every id as foreground.
-  - A gear beside the buttons opens the seed settings: the probability threshold (blank: the model's own boundary) and the smallest object to keep, in voxels. Kept in the browser.
-  - After a change the paint layer is taken out and added back, so neuroglancer re-reads it; the viewer is reloaded only when that layer is not found.
+  - *Seed from* picks the running model a seed reads: the volume's model or one of its finetuned iterations (default: the latest).
+  - *Seed settings*: the probability threshold (blank: the model's own boundary) and the smallest object to keep, in voxels. Kept in the browser.
   - Both fill only unpainted voxels, write to MinIO (what neuroglancer reads), pull the chunks to disk at once, and reload the viewer to show them. A patch over 128³ voxels is asked about first. Routes: `POST /api/finetune/view-labels/seed` and `/api/finetune/view-labels/background`.
   - A labelled patch trains as painted (sparse) annotation, not as a dense crop: only `imported_crops` boxes are dense.
 

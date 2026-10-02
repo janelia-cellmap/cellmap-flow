@@ -8,7 +8,6 @@ POST ``/api/finetune/refresh-annotated-regions`` (redraw the boxes) and POST
 
 import json
 import logging
-import time
 import os
 
 import neuroglancer
@@ -124,48 +123,6 @@ def add_annotation_layer(viewer, layer_name, annotation_url, *, keep_existing=Fa
         s.layers[layer_name] = layer
         s.selected_layer.layer = layer_name
         s.selected_layer.visible = True
-    return True
-
-
-# How long the paint layer stays out before it is added back. The Python
-# viewer pushes its *latest* state to the browser when one changes: taken
-# out and put back in one go, the browser got a state with the layer still
-# in it and re-read nothing. The pause lets the removal reach the browser,
-# which drops the layer's chunks, so the layer added back reads them again.
-LAYER_REFRESH_PAUSE_SECONDS = 0.5
-
-
-def refresh_annotation_layer(viewer, volume_id) -> bool:
-    """Make neuroglancer re-read the paint layer of ``volume_id``'s volume.
-
-    Neuroglancer keeps the chunks it has read, so labels written behind its
-    back (a seed, a relabel) stay invisible until the layer is rebuilt. The
-    layer is taken out and, after LAYER_REFRESH_PAUSE_SECONDS, added back
-    with the same name and source: a layer that is gone frees its chunks,
-    and one added reads them again. Lighter than reloading the viewer, which
-    re-reads every layer and has every inference server recompute the view;
-    it still drops the draw tool selected, as any layer update does.
-    Returns whether a layer was found.
-    """
-    if viewer is None:
-        return False
-    marker = f"/{volume_id}.zarr/annotation"
-    found = []
-    for managed in viewer.state.layers:
-        sources = getattr(managed.layer, "source", None) or []
-        for source in sources:
-            url = str(getattr(source, "url", source) or "")
-            if marker in url:
-                found.append((managed.name, url))
-                break
-    if not found:
-        return False
-    with viewer.txn() as s:
-        for name, _ in found:
-            del s.layers[name]
-    time.sleep(LAYER_REFRESH_PAUSE_SECONDS)
-    for name, url in found:
-        add_annotation_layer(viewer, name, url[len("s3+"):] if url.startswith("s3+") else url)
     return True
 
 

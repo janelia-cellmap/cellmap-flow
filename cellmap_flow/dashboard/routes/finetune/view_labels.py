@@ -40,7 +40,6 @@ from cellmap_flow.dashboard.routes.finetune.common import (
     session_store,
 )
 from cellmap_flow.dashboard.routes.finetune.good_regions import view_box_nm
-from cellmap_flow.dashboard.routes.finetune.overlay import refresh_annotation_layer
 from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.finetune.session import fill
 from cellmap_flow.finetune.session.volume import volume_corner_nm
@@ -108,7 +107,6 @@ def _fill(volume_id, volume, lo, hi, labels_for):
     n_foreground, n_background = fill.fill_unpainted(
         get_session().minio_state, volume_id, lo, hi, labels_for, volume.get("zarr_path")
     )
-    layer_refreshed = False
     if n_foreground or n_background:
         # Now rather than at the next periodic sync, so training submitted
         # straight after sees the box. A failure is only late: the periodic
@@ -117,7 +115,6 @@ def _fill(volume_id, volume, lo, hi, labels_for):
             sync_annotation_volume_from_minio(volume_id)
         except Exception as e:
             logger.warning(f"Could not pull the labelled box of {volume_id} to disk yet: {e}")
-        layer_refreshed = _refresh_layer(volume_id)
     logger.info(
         f"Labelled box {lo.tolist()}..{hi.tolist()} of {volume_id}: "
         f"{n_foreground} foreground and {n_background} background voxels filled"
@@ -128,45 +125,62 @@ def _fill(volume_id, volume, lo, hi, labels_for):
         "shape_voxels": (hi - lo).tolist(),
         "filled_foreground": n_foreground,
         "filled_background": n_background,
-        # Neuroglancer shows the chunks it already read until the paint layer
-        # is re-read: done here when the layer was found, else the page
-        # reloads the viewer.
+        # Neuroglancer shows the chunks it already read until it reloads; a
+        # layer taken out and added back with the same source re-read nothing.
         "reload_viewer": bool(n_foreground or n_background),
-        "layer_refreshed": layer_refreshed,
     }
-
-
-def _refresh_layer(volume_id) -> bool:
-    try:
-        return refresh_annotation_layer(get_session().viewer, volume_id)
-    except Exception as e:
-        logger.warning(f"Could not refresh the paint layer of {volume_id}: {e}")
-        return False
 
 
 # ---------------------------------------------------------------------------
 # The prediction
 # ---------------------------------------------------------------------------
 
-def _prediction_server(base_model):
-    """``(model_name, host)`` of the server whose prediction a seed reads.
+def _prediction_sources(base_model):
+    """``[(model_name, host)]``: the running servers a seed can read, oldest first.
 
-    The latest finetuned iteration of the model the volume is for, when its
-    server is up: it is the model as it is now, and the layer the user
-    looks at after a round of training. Else the model's own server.
-    (None, None) when neither is running.
+    The model the volume is for and its finetuned iterations (finetune_layers
+    names each iteration's job ``<base>_finetuned...``), in the order they
+    were started, so the last is the latest finetune.
     """
-    own = finetuned = (None, None)
+    sources = []
     for job in get_session().jobs:
         name, host = getattr(job, "model_name", None), getattr(job, "host", None)
-        if not host or not name:
-            continue
-        if name == base_model:
-            own = (name, host)
-        # finetune_layers names each iteration's job so.
-        elif name.startswith(f"{base_model}_finetuned"):
-            finetuned = (name, host)
-    return finetuned if finetuned[0] else own
+        if host and name and (name == base_model or name.startswith(f"{base_model}_finetuned")):
+            sources.append((name, host))
+    return sources
+
+
+def _prediction_server(base_model, chosen=None):
+    """``(model_name, host)`` of the server whose prediction a seed reads.
+
+    ``chosen``, when the page names one of ``_prediction_sources``. Else the
+    latest finetuned iteration of the model the volume is for, when its
+    server is up: it is the model as it is now, and the layer the user
+    looks at after a round of training. Else the model's own server.
+    (None, None) when none is running.
+    """
+    sources = _prediction_sources(base_model)
+    if chosen:
+        for name, host in sources:
+            if name == chosen:
+                return name, host
+        raise _Refused(f"No running server for {chosen}. Pick another model to seed from.")
+    finetuned = [s for s in sources if s[0] != base_model]
+    if finetuned:
+        return finetuned[-1]
+    return sources[0] if sources else (None, None)
+
+
+@finetune_bp.route("/api/finetune/view-labels/sources", methods=["GET"])
+def seed_sources():
+    """The models a seed can read, for the page's picker: ``models`` (names,
+    oldest first) and ``default``, the one a seed reads when none is chosen."""
+    _, volume = session_store().session_volume()
+    base_model = (volume or {}).get("model_name")
+    if not base_model:
+        return jsonify({"success": True, "models": [], "default": None})
+    names = [name for name, _ in _prediction_sources(base_model)]
+    return jsonify({"success": True, "models": names, "default": _prediction_server(base_model)[0]})
 
 
 def _get(url):
@@ -289,7 +303,8 @@ def seed_view_from_prediction():
 
     JSON body, all optional: ``size_nm`` (as for mark-view), ``confirm``
     (label a large box), ``select_channel`` (the channel the session
-    trains, when it trains one), ``threshold`` (probability, 0 to 1; the
+    trains, when it trains one), ``model`` (a name from ``seed_sources``;
+    the latest finetune, else the base, when absent), ``threshold`` (probability, 0 to 1; the
     model's own boundary, 0.5, when absent) and ``min_size`` (objects of
     fewer voxels are background).
     """
@@ -308,7 +323,7 @@ def seed_view_from_prediction():
         base_model = volume.get("model_name")
         if not base_model:
             raise _Refused("The annotation volume does not say which model it is for.")
-        model_name, host = _prediction_server(base_model)
+        model_name, host = _prediction_server(base_model, data.get("model"))
         if host is None:
             raise _Refused(f"No running server for {base_model}. Start it from the Models tab first.")
         channels, affinities = _seed_plan(base_model, data.get("select_channel"))
@@ -381,13 +396,11 @@ def split_view_objects():
         n_changed, counts = fill.rewrite_foreground(
             get_session().minio_state, volume_id, lo, hi, fill.relabel_objects, volume.get("zarr_path")
         )
-        layer_refreshed = False
         if n_changed:
             try:
                 sync_annotation_volume_from_minio(volume_id)
             except Exception as e:
                 logger.warning(f"Could not pull the relabelled box of {volume_id} to disk yet: {e}")
-            layer_refreshed = _refresh_layer(volume_id)
         logger.info(
             f"Relabelled box {lo.tolist()}..{hi.tolist()} of {volume_id}: {counts['objects']} objects, "
             f"{counts['split']} split off, {counts['merged']} merged, {n_changed} voxels changed"
@@ -398,7 +411,6 @@ def split_view_objects():
             "shape_voxels": (hi - lo).tolist(),
             "changed": n_changed,
             "reload_viewer": bool(n_changed),
-            "layer_refreshed": layer_refreshed,
             **counts,
         })
     except _Refused as e:

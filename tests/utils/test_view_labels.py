@@ -248,31 +248,6 @@ def test_split_merges_objects_a_stroke_joins_and_keeps_the_rest(dashboard, serve
     assert (labels[4:12, 4:12, 4:12] == 10).all() and (labels[0:3, 0:3, 0:3] == 20).all()
 
 
-def test_a_label_change_re_adds_the_paint_layer_so_neuroglancer_re_reads_it(dashboard, served, viewer, monkeypatch):
-    """Neuroglancer keeps the chunks it has read; the page used to reload the
-    whole viewer, which had every server recompute the view."""
-    from cellmap_flow.dashboard.routes.finetune import overlay
-
-    monkeypatch.setattr(overlay, "LAYER_REFRESH_PAUSE_SECONDS", 0)
-    served()
-    with viewer.txn() as s:
-        s.layers["annotation_vol-1"] = neuroglancer.SegmentationLayer(
-            source={"url": "s3+http://m:9000/annotations/vol-1.zarr/annotation"})
-        s.layers["other"] = neuroglancer.ImageLayer(source="zarr://http://x/raw")
-    generation_before = viewer.state.layers["annotation_vol-1"]
-
-    body = dashboard.post(BACKGROUND, json={}).get_json()
-
-    assert body["reload_viewer"] and body["layer_refreshed"]
-    layers = viewer.state.layers
-    assert [layer.name for layer in layers] == ["other", "annotation_vol-1"], "taken out and added back"
-    assert layers["annotation_vol-1"] is not generation_before
-    assert layers["annotation_vol-1"].layer.source[0].url == "s3+http://m:9000/annotations/vol-1.zarr/annotation"
-    assert layers["annotation_vol-1"].layer.tab == "Draw"
-    # Nothing to re-read when nothing changed.
-    assert dashboard.post(BACKGROUND, json={}).get_json()["layer_refreshed"] is False
-
-
 def test_the_seed_settings_raise_the_threshold_and_drop_specks(dashboard, served, server):
     """A probability of 0.6 is foreground at the model's boundary and background
     at 0.7; a lone voxel is a speck once min_size is 2."""
@@ -290,3 +265,19 @@ def test_the_seed_settings_raise_the_threshold_and_drop_specks(dashboard, served
     body = dashboard.post(SEED, json={"min_size": 2}).get_json()
     assert body["filled_foreground"] == 4 ** 3 and labels[10, 10, 10] == 1 and (labels[5:9, 5:9, 5:9] == 2).all()
     assert dashboard.post(SEED, json={"threshold": 1.5}).status_code == 400
+
+
+def test_a_seed_reads_the_model_chosen_else_the_latest_finetune(dashboard, served, server, monkeypatch):
+    served()
+    get_session().jobs = [SimpleNamespace(model_name=name, host=f"http://{name}:8000")
+                          for name in ("model", "model_finetuned_1", "model_finetuned_2", "other")]
+    sources = dashboard.get("/api/finetune/view-labels/sources").get_json()
+    assert (sources["models"], sources["default"]) == (["model", "model_finetuned_1", "model_finetuned_2"],
+                                                        "model_finetuned_2")
+    read = []
+    monkeypatch.setattr(view_labels, "read_prediction",
+                        lambda host, name, *a: read.append(name) or (np.zeros((1, 8, 8, 8), "f4"), a[1], a[2]))
+    dashboard.post(SEED, json={})
+    dashboard.post(SEED, json={"model": "model"})
+    assert read == ["model_finetuned_2", "model"]
+    assert dashboard.post(SEED, json={"model": "other"}).status_code == 409, "not a source for this volume"

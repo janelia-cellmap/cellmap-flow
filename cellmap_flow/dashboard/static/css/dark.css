@@ -463,3 +463,73 @@ textarea.form-control[readonly] {
 .tab-pane h5:first-child {
   margin-top: 4px;
 }
+
+
+/* ---------- Finetune: the patch-on-screen tools ---------- */
+.patch-tools {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+}
+
+.patch-tools-title {
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+}
+
+.patch-tools-group + .patch-tools-group {
+  border-top: 1px solid var(--border-subtle);
+  margin-top: 10px;
+  padding-top: 10px;
+}
+
+.patch-tools-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+
+/* Even buttons that wrap to as many columns as fit the panel. */
+.patch-tools-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
+  gap: 6px;
+}
+
+.patch-tools-grid .btn {
+  width: 100%;
+  white-space: nowrap;
+}
+
+.patch-tools-settings {
+  margin-top: 8px;
+  font-size: 0.85rem;
+}
+
+.patch-tools-settings summary {
+  color: var(--text-muted);
+  cursor: pointer;
+  width: fit-content;
+}
+
+.patch-tools-settings summary:hover {
+  color: var(--text-primary);
+}
+
+.patch-tools-fields {
+  display: grid;
+  grid-template-columns: auto 7rem;
+  align-items: center;
+  gap: 6px 10px;
+  margin-top: 6px;
+}
+
+.patch-tools-fields label {
+  color: var(--text-muted);
+  margin: 0;
+}

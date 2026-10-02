@@ -76,44 +76,57 @@
     <small class="form-text text-muted d-block mt-1">Not while painting: it drops the selected draw tool.</small>
   </div>
 
-  <!-- The patch on screen: good regions (rehearsal anchors) and one-click labels -->
-  <div class="mb-2">
-    <label class="form-label fw-bold mb-1">Patch on screen</label>
-    <div class="d-flex align-items-center gap-2 flex-wrap">
-      <button type="button" class="btn btn-outline-secondary btn-sm" id="markGoodRegionBtn"
-              title="Navigate until the screen shows output you are happy with, then click. Marks one model output patch, the size of an annotation crop. Training holds the model to what it already predicts there, while your scribbles correct it elsewhere; a scribble inside a good region wins. Shown as the good_regions layer.">
-        Mark as Good
-      </button>
-      <button type="button" class="btn btn-outline-secondary btn-sm" id="seedViewBtn"
-              title="Fills the unpainted voxels of the patch from the model's prediction (its latest finetuned iteration, if one is served), thresholded at its decision boundary unless the settings say otherwise: an id per object, background 1. Your strokes are kept. Then fix it with the brush.">
-        Seed from Prediction
-      </button>
-      <button type="button" class="btn btn-outline-secondary btn-sm" id="backgroundViewBtn"
-              title="Labels every unpainted voxel of the patch background (1), for a region of false positives. Your strokes are kept.">
-        All Background
-      </button>
-      <button type="button" class="btn btn-outline-secondary btn-sm" id="splitObjectsBtn"
-              title="Gives each connected object in the patch an id of its own. To split a merged object, paint a background wall through it in every slice it spans, then click: the two sides get their own ids. A stroke joining two objects merges them into one id. Only object ids change.">
-        Split Objects
-      </button>
-      <button type="button" class="btn btn-link btn-sm p-0 text-muted" id="seedSettingsBtn"
-              title="Seed settings: the threshold and the smallest object to keep" aria-label="Seed settings">&#9881;</button>
+  <!-- The patch on screen: one-click labels, and good regions (rehearsal anchors) -->
+  <div class="patch-tools mb-3">
+    <div class="patch-tools-title">Patch on screen</div>
+
+    <div class="patch-tools-group">
+      <div class="patch-tools-label">Label it</div>
+      <div class="d-flex align-items-center gap-2 mb-2">
+        <label class="text-muted mb-0 text-nowrap" for="seedModel" style="font-size: 0.85rem;">Seed from</label>
+        <select class="form-select form-select-sm" id="seedModel"
+                title="The running model whose prediction Seed from Prediction reads: the model the volume is for, or one of its finetuned iterations. Default: the latest finetune."></select>
+      </div>
+      <div class="patch-tools-grid">
+        <button type="button" class="btn btn-outline-secondary btn-sm" id="seedViewBtn"
+                title="Fills the unpainted voxels of the patch from the chosen model's prediction, thresholded at its decision boundary unless the settings say otherwise: an id per object, background 1. Your strokes are kept. Then fix it with the brush. The viewer reloads to show it.">
+          Seed from Prediction
+        </button>
+        <button type="button" class="btn btn-outline-secondary btn-sm" id="backgroundViewBtn"
+                title="Labels every unpainted voxel of the patch background (1), for a region of false positives. Your strokes are kept. The viewer reloads to show it.">
+          All Background
+        </button>
+        <button type="button" class="btn btn-outline-secondary btn-sm" id="splitObjectsBtn"
+                title="Gives each connected object in the patch an id of its own. To split a merged object, paint a background wall through it in every slice it spans, then click: the two sides get their own ids. A stroke joining two objects merges them into one id. The viewer reloads to show it.">
+          Split Objects
+        </button>
+      </div>
+      <details class="patch-tools-settings" id="seedSettings">
+        <summary>Seed settings</summary>
+        <div class="patch-tools-fields">
+          <label for="seedThreshold">Threshold</label>
+          <input type="number" class="form-control form-control-sm" id="seedThreshold" min="0" max="1" step="0.05"
+                 placeholder="model's"
+                 title="Probability above which the prediction counts as foreground, 0 to 1. Blank: the model's own decision boundary (0.5 for a probability, 0 for a signed distance). Higher keeps only confident voxels.">
+          <label for="seedMinSize">Min object (voxels)</label>
+          <input type="number" class="form-control form-control-sm" id="seedMinSize" min="0" step="1" value="0"
+                 title="Objects of fewer voxels than this become background: specks the threshold lets through.">
+        </div>
+      </details>
     </div>
-    <div id="seedSettings" class="d-flex align-items-center gap-2 flex-wrap mt-1" hidden>
-      <label class="form-label mb-0 text-muted" for="seedThreshold" style="font-size: 0.85rem;">Threshold</label>
-      <input type="number" class="form-control form-control-sm" id="seedThreshold" min="0" max="1" step="0.05"
-             placeholder="model's" style="width: 6rem;"
-             title="Probability above which the prediction counts as foreground, 0 to 1. Blank: the model's own decision boundary (0.5 for a probability, 0 for a signed distance). Higher keeps only confident voxels.">
-      <label class="form-label mb-0 text-muted ms-2" for="seedMinSize" style="font-size: 0.85rem;">Min object</label>
-      <input type="number" class="form-control form-control-sm" id="seedMinSize" min="0" step="1" value="0"
-             style="width: 6rem;" title="Objects of fewer voxels than this become background: specks the threshold lets through.">
-      <span class="text-muted" style="font-size: 0.85rem;">voxels</span>
+
+    <div class="patch-tools-group">
+      <div class="patch-tools-label">Good regions</div>
+      <div class="d-flex align-items-center gap-2 flex-wrap">
+        <button type="button" class="btn btn-outline-secondary btn-sm" id="markGoodRegionBtn"
+                title="Navigate until the screen shows output you are happy with, then click. Marks one model output patch, the size of an annotation crop. Training holds the model to what it already predicts there, while your scribbles correct it elsewhere; a scribble inside a good region wins. Shown as the good_regions layer.">
+          Mark as Good
+        </button>
+        <span id="goodRegionCount" class="text-muted" style="font-size: 0.85rem;"></span>
+        <button type="button" class="btn btn-link btn-sm p-0" id="clearGoodRegionsBtn"
+                title="Remove all good regions from this session">clear</button>
+      </div>
     </div>
-    <small class="form-text text-muted d-block mt-1">
-      Good regions: <span id="goodRegionCount"></span>
-      <button type="button" class="btn btn-link btn-sm p-0 align-baseline" id="clearGoodRegionsBtn"
-              title="Remove all good regions from this session">clear</button>
-    </small>
   </div>
 
   <!-- Save action -->
