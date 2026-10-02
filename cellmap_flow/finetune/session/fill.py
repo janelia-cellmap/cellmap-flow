@@ -1,0 +1,140 @@
+"""Labelling a whole box of an annotation volume at once.
+
+The Finetune tab's "Seed" and "All background" buttons label the box on
+screen in one click: from the model's own prediction, for the user to clean
+up with the brush, or all background (1), for a region of false positives.
+Either way only unannotated voxels (0) are filled. A stroke the user painted
+is a decision about that voxel; a seed is a guess.
+
+The write goes to MinIO, as cc3d_relabel's does, not to the volume on disk:
+MinIO holds strokes the periodic sync has not pulled yet, which is what "only
+fill 0s" must see, and it is what neuroglancer reads. The caller then pulls
+the changed chunks to disk with ``sync.sync_volume``, so disk and MinIO agree
+and the periodic sync has nothing to revert.
+"""
+
+import logging
+from pathlib import Path
+
+import numpy as np
+import s3fs
+import zarr
+
+from cellmap_flow.finetune.session import minio
+from cellmap_flow.finetune.session.volume import volume_corner_nm
+
+logger = logging.getLogger(__name__)
+
+
+def box_voxels(volume, offset_nm, shape_nm, volume_shape):
+    """``(lo, hi)``: the annotation voxels whose centres lie in a box, clipped to the volume.
+
+    ``offset_nm`` and ``shape_nm`` are the box's lower corner and size in
+    world nm, as a good region records them; ``volume`` is the volume's
+    record, for its grid. None when no voxel of the volume is in the box.
+    """
+    voxel_size = np.asarray(volume["output_voxel_size"], dtype=float)
+    corner = volume_corner_nm(volume.get("dataset_offset_nm"), voxel_size)
+    start = (np.asarray(offset_nm, dtype=float) - corner) / voxel_size
+    end = start + np.asarray(shape_nm, dtype=float) / voxel_size
+    # Voxel i's centre is at i + 0.5 voxels from the corner.
+    lo = np.maximum(np.ceil(start - 0.5), 0).astype(int)
+    hi = np.minimum(np.ceil(end - 0.5), np.asarray(volume_shape)).astype(int)
+    if np.any(hi <= lo):
+        return None
+    return lo, hi
+
+
+def seed_labels(foreground, existing, instances):
+    """Labels for a box from a foreground mask: 2 (or instance ids) inside, 1 outside.
+
+    ``existing`` is what the box holds now. With ``instances`` each
+    connected component of ``foreground`` gets an id of its own, from one
+    past the box's largest label, so neighbouring objects stay apart for an
+    affinity target; but a component the user has already painted part of
+    takes the id painted there most, or the unpainted rest of an object
+    would be taught as a different object from its painted part. Ids from
+    elsewhere in the volume are not looked at: affinities only compare
+    nearby voxels, so a repeat far away does not matter for training.
+    """
+    labels = np.where(foreground, 2, 1).astype(existing.dtype)
+    if not instances or not foreground.any():
+        return labels
+    from scipy.ndimage import label
+
+    components, n = label(foreground)
+    ids = np.zeros(n + 1, dtype=np.int64)
+    painted = (existing >= 2) & (components > 0)
+    if painted.any():
+        pairs, counts = np.unique(
+            np.stack([components[painted], existing[painted].astype(np.int64)]), axis=1, return_counts=True
+        )
+        # Most-painted last, so its id is the one that stays.
+        order = np.argsort(counts, kind="stable")
+        ids[pairs[0, order]] = pairs[1, order]
+    fresh = np.flatnonzero(ids[1:] == 0) + 1
+    first = max(int(existing.max()), 1) + 1
+    if fresh.size and first + fresh.size - 1 > np.iinfo(existing.dtype).max:
+        raise ValueError(
+            f"{fresh.size} new objects do not fit in the volume's {existing.dtype} labels "
+            f"from id {first}"
+        )
+    ids[fresh] = first + np.arange(fresh.size)
+    labels[foreground] = ids[components[foreground]].astype(existing.dtype)
+    return labels
+
+
+def open_served_labels(state, volume_id):
+    """The volume's ``annotation/s0`` as MinIO serves it, open for writing.
+
+    The bucket key is ``<volume_id>.zarr``, as for the sync.
+    """
+    s3 = minio.make_s3_filesystem(state)
+    root = f"{state['bucket']}/{volume_id}.zarr"
+    if not s3.exists(f"{root}/annotation/s0/.zarray"):
+        raise FileNotFoundError(f"MinIO has no {root}/annotation/s0; serve the volume first")
+    # check=False skips S3Map's bucket probe: the array was just found.
+    return s3, root, zarr.open(s3fs.S3Map(root=root, s3=s3, check=False), mode="r+")["annotation/s0"]
+
+
+def _upload_chunks_only_on_disk(s3, root, arr, lo, hi, local_zarr_path):
+    """Put the box's chunks that are on disk but not in MinIO up first.
+
+    A chunk the box only partly covers is rewritten whole, from MinIO's copy
+    or from zeros when MinIO has none, and the pull afterwards copies it over
+    the one on disk. So a chunk only disk has -- an import whose mirror
+    failed -- would lose what the box does not cover. Normally every chunk
+    on disk is in MinIO and this only looks.
+    """
+    chunks = np.asarray(arr.chunks)
+    first, last = np.asarray(lo) // chunks, (np.asarray(hi) - 1) // chunks
+    local_s0 = Path(local_zarr_path) / "annotation" / "s0"
+    for index in np.ndindex(*(last - first + 1)):
+        key = ".".join(str(int(i)) for i in first + np.asarray(index))
+        local = local_s0 / key
+        remote = f"{root}/annotation/s0/{key}"
+        if local.is_file() and not s3.exists(remote):
+            logger.info(f"Chunk {key} of {root} is on disk only; uploading it before filling the box")
+            s3.put(str(local), remote)
+
+
+def fill_unpainted(state, volume_id, lo, hi, labels_for, local_zarr_path=None):
+    """Write ``labels_for(existing)`` into the box ``[lo, hi)`` where the volume holds 0.
+
+    ``labels_for`` gets the box as MinIO holds it and returns labels of the
+    same shape (0 for "leave as it is"). Returns ``(n_foreground,
+    n_background)``: how many voxels were filled with each. Nothing is
+    written when nothing would change.
+    """
+    s3, root, arr = open_served_labels(state, volume_id)
+    if local_zarr_path:
+        _upload_chunks_only_on_disk(s3, root, arr, lo, hi, local_zarr_path)
+    box = tuple(slice(int(a), int(b)) for a, b in zip(lo, hi))
+    existing = arr[box]
+    labels = np.asarray(labels_for(existing), dtype=arr.dtype)
+    fill = (existing == 0) & (labels > 0)
+    if fill.any():
+        existing[fill] = labels[fill]
+        arr[box] = existing
+    n_foreground = int(np.count_nonzero(fill & (labels >= 2)))
+    return n_foreground, int(np.count_nonzero(fill)) - n_foreground

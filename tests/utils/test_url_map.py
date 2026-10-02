@@ -42,6 +42,8 @@ URLS = {
     "/api/finetune/submit": "POST",
     "/api/finetune/sync-annotations": "POST",
     "/api/finetune/user-prefs": "GET, POST",
+    "/api/finetune/view-labels/background": "POST",
+    "/api/finetune/view-labels/seed": "POST",
     "/api/gpu-queues": "GET",
     "/api/huggingface-models": "GET",
     "/api/huggingface-models/refresh": "POST",
