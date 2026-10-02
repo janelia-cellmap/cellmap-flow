@@ -126,19 +126,10 @@ export function isDistanceModel(name) {
   return /distance/i.test(name || "");
 }
 
-// What a distance model trains with on scribbles, whatever the loss picked
-// above: submit replaces it (training_settings). Set here, over the
-// template's text, which describes the sign-only margin loss this replaced.
-const DISTANCE_MODEL_HINT = "Distance model: scribbles train on distance bounds, whatever the loss above.";
-const DISTANCE_MODEL_DETAIL =
-  "Each painted voxel is kept between the nearest voxel not painted as its own class " +
-  "and the nearest painted as the other: exact where the paint is dense. The slope is " +
-  "limited to a distance field's, and distillation of at least 0.5 holds the rest.";
-
+// The template's hint on what a distance model trains with on scribbles,
+// whatever the loss picked above: submit replaces it (training_settings).
 function showDistanceModelHint(name) {
   const hint = document.getElementById("distanceModelHint");
-  hint.textContent = DISTANCE_MODEL_HINT;
-  hint.title = DISTANCE_MODEL_DETAIL;
   hint.hidden = !isDistanceModel(name);
 }
 

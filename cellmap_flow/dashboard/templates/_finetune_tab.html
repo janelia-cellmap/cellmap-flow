@@ -358,7 +358,8 @@
             step="0.05"
           />
           <small class="text-muted">Smaller = stricter.</small>
-          <small class="text-info d-block" id="distanceModelHint" hidden>Distance model: scribbles train sign-only, at margin 0.5 and distillation of at least 0.5.</small>
+          <small class="text-info d-block" id="distanceModelHint" hidden
+                 title="Each painted voxel is kept between the nearest voxel not painted as its own class and the nearest painted as the other: exact where the paint is dense. The slope is limited to a distance field's, and distillation of at least 0.5 holds the rest.">Distance model: scribbles train on distance bounds, whatever the loss above.</small>
         </div>
       </div>
       <div class="col-md-6">
