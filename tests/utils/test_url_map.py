@@ -12,6 +12,8 @@ URLS = {
     "/api/bbx-generator": "POST",
     "/api/bbx-generator/finalize": "POST",
     "/api/bbx-generator/status": "GET",
+    "/api/bioimage-models": "GET",
+    "/api/bioimage-models/refresh": "POST",
     "/api/blockwise-config": "GET, POST",
     "/api/blockwise/generate": "POST",
     "/api/blockwise/precheck": "POST",

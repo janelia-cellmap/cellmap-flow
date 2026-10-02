@@ -3,10 +3,12 @@
 - ``update_run_models()``: stop and forget the models no longer picked,
   start the ones newly picked, each in its own thread. A finetune job's
   server is the Finetune tab's to stop, never this one's.
-- ``run_model()`` / ``run_hf_model()``: start one catalog or Hugging Face
-  model's inference server (``start_hosts``, which records the job) and add
-  its layer, the one Submit would give it. Each is served from its type's
-  ``default_env``, when the type sets one (``serving.launch.server_argv_for``).
+- ``run_model()`` / ``run_hf_model()`` / ``run_bioimage_model()``: start
+  one catalog, Hugging Face or BioImage Model Zoo model's inference server
+  (``start_hosts``, which records the job) and add its layer, the one Submit
+  would give it. Each is served from its type's ``default_env``, when the
+  type sets one (``serving.launch.server_argv_for``): a zoo model from
+  pixi's ``bioimageio`` environment.
 """
 
 from cellmap_flow.dashboard.state import get_session
@@ -14,7 +16,8 @@ from cellmap_flow.serving.launch import server_command_for
 from cellmap_flow.jobs.launch import start_hosts
 from cellmap_flow.jobs.spec import JobStartError
 from cellmap_flow.viewer.raw import PREDICTION_COLORS
-from cellmap_flow.models.models_config import HuggingFaceModelConfig
+from cellmap_flow.models import bioimage_catalog
+from cellmap_flow.models.models_config import BioModelConfig, HuggingFaceModelConfig
 from cellmap_flow.pipeline_spec import PipelineSpec
 from cellmap_flow.viewer.layers import prediction_layer
 import threading
@@ -87,6 +90,39 @@ def run_hf_model(repo, name, st_data):
         _show(job, st_data)
 
 
+def bioimage_job_name(key: str) -> str:
+    """A zoo model's job, layer and config name, from the key it is loaded
+    by: "affable-shark" is affable_shark. A DOI's slash and dots go too."""
+    return re.sub(r"\W+", "_", key).strip("_")
+
+
+def run_bioimage_model(params, st_data):
+    """Run a BioImage Model Zoo model: ``params`` are its BioModelConfig
+    arguments, name included (``bioimage_catalog.bioimage_entry``)."""
+    session = get_session()
+    command = server_command_for("bioimage", params, session.dataset_path, session.resample)
+    logger.info(f"To be submitted bioimage command : {command}")
+    job = _start(command, params["name"])
+    if job is not None:
+        _show(job, st_data)
+
+
+def _bioimage_params(selections):
+    """bioimage_entry()'s arguments for each ticked zoo model ({"id", "voxel_size"}).
+
+    Built before anything is stopped or started, so a model whose voxel size
+    is missing refuses the whole Submit (ValueError) rather than half of it.
+    The listed id may be a DOI; the model is loaded by its nickname when the
+    cached list has one.
+    """
+    params = []
+    for selection in selections:
+        found = bioimage_catalog.find_bioimage_model(selection["id"])
+        key = found["key"] if found else selection["id"]
+        params.append(bioimage_catalog.bioimage_entry(key, selection.get("voxel_size"), bioimage_job_name(key)))
+    return params
+
+
 def kill_n_remove_from_neuroglancer(jobs, s):
     """Kill ``jobs`` and drop their layers from the viewer state ``s``."""
     for job in jobs:
@@ -95,12 +131,17 @@ def kill_n_remove_from_neuroglancer(jobs, s):
         job.kill()
 
 
-def update_run_models(names: List[str], hf_repos: List[str] = None):
+def update_run_models(names: List[str], hf_repos: List[str] = None, bioimage_models: List[dict] = None):
+    """Run ``names`` (catalog models), ``hf_repos`` and ``bioimage_models``
+    ({"id", "voxel_size"} each) and stop every other model. A ValueError,
+    before anything changes, when a zoo model needs a voxel size."""
     session = get_session()
     if hf_repos is None:
         hf_repos = []
+    bioimage_params = _bioimage_params(bioimage_models or [])
 
-    all_names = names + [_sanitize_job_name(repo.split("/")[-1]) for repo in hf_repos]
+    all_names = (names + [_sanitize_job_name(repo.split("/")[-1]) for repo in hf_repos]
+                 + [p["name"] for p in bioimage_params])
     # Not a finetune job's server (finetune_layers marks it): it is the
     # training job itself, and its name, new with each iteration, has no
     # box on a Models tab rendered before it, so every Submit bkilled it.
@@ -143,6 +184,21 @@ def update_run_models(names: List[str], hf_repos: List[str] = None):
                 thread = threading.Thread(
                     target=run_hf_model, args=(repo, hf_name, st_data)
                 )
+                thread.start()
+                threads.append(thread)
+
+        # Launch BioImage Model Zoo models. Their config is kept, as a
+        # Hugging Face model's is, for the pipeline builder and for the
+        # Models tab to tick them on its next render (index_page). One left
+        # from an earlier run is replaced: its voxel size may be another.
+        for params in bioimage_params:
+            if params["name"] not in names_running:
+                logger.info(f"To be submitted bioimage model : {params}")
+                session.models_config = [
+                    mc for mc in session.models_config
+                    if not (isinstance(mc, BioModelConfig) and mc.name == params["name"])
+                ] + [BioModelConfig(**params)]
+                thread = threading.Thread(target=run_bioimage_model, args=(params, st_data))
                 thread.start()
                 threads.append(thread)
     # for thread in threads:

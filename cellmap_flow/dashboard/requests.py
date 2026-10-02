@@ -139,14 +139,38 @@ class SetData(BaseModel):
     dataset_path: Annotated[str, _required("dataset_path", strip=True)] = Field(None, validate_default=True)
 
 
+def _voxel_size(value):
+    """[z, y, x] in nm from "8", "4,4,8", 8 or [4, 4, 8]; None when blank.
+    Whole numbers stay ints: the model's server makes a Coordinate of them."""
+    if value is None or (isinstance(value, str) and not value.strip()):
+        return None
+    parts = value.replace(",", " ").split() if isinstance(value, str) else value
+    if not isinstance(parts, (list, tuple)):
+        parts = [parts]
+    sizes = [_number(p, float, "voxel_size") for p in parts]
+    if len(sizes) not in (1, 3) or any(s <= 0 for s in sizes):
+        raise ValueError(f"voxel_size must be one positive number or three (z,y,x), got {value!r}")
+    sizes = sizes * 3 if len(sizes) == 1 else sizes
+    return [int(s) if s.is_integer() else s for s in sizes]
+
+
+class BioimageSelection(BaseModel):
+    """A BioImage Model Zoo model ticked on the Models tab: its id or
+    nickname, and the voxel size typed beside it (blank: the model's own)."""
+
+    id: Annotated[str, _required("id", strip=True)] = Field(None, validate_default=True)
+    voxel_size: Annotated[Optional[list], BeforeValidator(_voxel_size)] = None
+
+
 class SubmitModels(BaseModel):
-    """The Models tab's Submit: the catalog models and Hugging Face repos to
-    run. Every other running model is stopped (services.launch).
-    ``resample``, when given, becomes the session's (``Session.resample``)
-    before the models are started."""
+    """The Models tab's Submit: the catalog models, Hugging Face repos and
+    BioImage Model Zoo models to run. Every other running model is stopped
+    (services.launch). ``resample``, when given, becomes the session's
+    (``Session.resample``) before the models are started."""
 
     selected_models: list[str] = []
     selected_hf_models: list[str] = []
+    selected_bioimage_models: list[BioimageSelection] = []
     resample: Optional[bool] = None
 
 
