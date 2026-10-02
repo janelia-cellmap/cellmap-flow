@@ -34,7 +34,7 @@ import os
 
 import numpy as np
 
-from cellmap_flow.models.configs.base import Config, ModelConfig
+from cellmap_flow.models.configs.base import Config, ModelConfig, _voxel_size
 from cellmap_flow.models.geometry import _numbers
 
 logger = logging.getLogger(__name__)
@@ -104,17 +104,6 @@ def _check_cellpose_4():
             f"The cellpose model type needs Cellpose 4; this environment has cellpose {version}. "
             "Run it in the cellpose4 environment (its default; leave out env, or give env: cellpose4)."
         )
-
-
-def _voxel_size(value):
-    """A voxel size given as one number, "5.24,4,4" or one per axis: three numbers, ints kept ints."""
-    if isinstance(value, str):
-        value = [float(v) for v in value.replace("(", "").replace(")", "").split(",") if v.strip()]
-    if np.ndim(value) == 0:
-        value = [value] * 3
-    elif len(value) == 1:
-        value = list(value) * 3
-    return _numbers(float(v) for v in value)
 
 
 class CellposeModelConfig(ModelConfig):

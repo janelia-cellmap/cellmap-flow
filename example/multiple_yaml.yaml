@@ -38,9 +38,10 @@ models:
     name: "script_model_1"
     scale: "s1"
 
-  # 5. BioImage model entry (voxel_size is required)
+  # 5. BioImage Model Zoo model entry: a zoo id, a URL, or the path of a
+  # model's rdf.yaml or .zip (voxel_size: unless its description gives one)
   - type: "bioimage"
-    model_path: "/path/to/bioimage/model.pth"
+    model: "/path/to/bioimage/model/rdf.yaml"
     voxel_size: [8, 8, 8]
     name: "bioimage_model_1"
 

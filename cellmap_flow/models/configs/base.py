@@ -33,7 +33,7 @@ from typing import Any
 
 import numpy as np
 
-from cellmap_flow.models.geometry import DEFAULT_OUTPUT_AXES, ModelGeometry, _voxels
+from cellmap_flow.models.geometry import DEFAULT_OUTPUT_AXES, ModelGeometry, _numbers, _voxels
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +65,20 @@ def _as_int_tuple(value):
     if isinstance(value, (int, float, np.integer, np.floating)):
         return (int(value),) * 3
     return tuple(int(v) for v in value)
+
+
+def _voxel_size(value):
+    """A voxel size given as one number, "5.24,4,4" or one per axis: three numbers, ints kept ints.
+
+    Unlike _as_int_tuple, which truncates a 5.24 nm voxel to 5.
+    """
+    if isinstance(value, str):
+        value = [float(v) for v in value.replace("(", "").replace(")", "").split(",") if v.strip()]
+    if np.ndim(value) == 0:
+        value = [value] * 3
+    elif len(value) == 1:
+        value = list(value) * 3
+    return _numbers(float(v) for v in value)
 
 
 def _plain(value):
@@ -480,8 +494,6 @@ class ModelConfig:
         and blockwise read it only for whether a chunk has a channel axis:
         one that has must have it first, and its spatial axes are the raw
         data's, in the raw data's order.
-        Note: this is distinct from config.output_axes used by BioModelConfig
-        for raw bioimageio model axes.
         """
         if hasattr(self.config, "chunk_output_axes"):
             return tuple(self.config.chunk_output_axes)

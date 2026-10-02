@@ -194,11 +194,15 @@ MODEL_OPTIONS = {
         ('sigmoid', ('--sigmoid',), (), 'boolean', False, True, False, 'Parameter: sigmoid (default: True)'),
     ],
     'bioimage': [
-        ('model_name', ('-m', '--model-name'), (), 'text', True, None, False, 'Parameter: model_name'),
-        ('voxel_size', ('-v', '--voxel-size'), (), 'text', True, None, False, 'Parameter: voxel_size'),
-        ('edge_length_to_process', ('-e', '--edge-length-to-process'), (), 'text', False, None, False,
-         'Parameter: edge_length_to_process (optional)'),
-        NAME, SCALE,
+        ('model', ('-m', '--model'), (), 'text', True, None, False, 'Parameter: model'),
+        ('voxel_size', ('-v', '--voxel-size'), (), 'text', False, None, False, 'Parameter: voxel_size (optional)'),
+        ('input_size', ('-i', '--input-size'), (), 'text', False, None, False, 'Parameter: input_size (optional)'),
+        ('context', ('-c', '--context'), (), 'text', False, None, False, 'Parameter: context (optional)'),
+        ('slices_per_chunk', ('-s', '--slices-per-chunk'), (), 'integer', False, None, False,
+         'Parameter: slices_per_chunk (optional)'),
+        ('weight_format', ('-w', '--weight-format'), (), 'text', False, None, False,
+         'Parameter: weight_format (optional)'),
+        NAME, LONG_SCALE,
     ],
     'cellmap': [
         ('folder_path', ('-f', '--folder-path'), (), 'text', True, None, False, 'Parameter: folder_path'),
@@ -379,7 +383,8 @@ def test_cellmap_flow_type_is_a_hidden_alias_of_infer_type():
 
 
 _LISTED = [
-    ("bioimage", "BioModelConfig", "model_name, voxel_size, edge_length_to_process, name, scale", "model_name, voxel_size"),
+    ("bioimage", "BioModelConfig", "model, voxel_size, input_size, context, slices_per_chunk, weight_format, name, scale",
+     "model"),
     ("cellmap", "CellMapModelConfig", "folder_path, name, scale", "folder_path"),
     ("cellpose", "CellposeModelConfig",
      "voxel_size, pretrained_model, output, slices_per_chunk, slice_size, context, batch_size, diameter, "
@@ -508,11 +513,18 @@ CONFIGS = {
         " --sigmoid False",
     ),
     "bio": (
-        lambda: BioModelConfig(model_name="affable-shark", voxel_size=(8, 8, 8),
-                               edge_length_to_process=64, name="bio", scale="s0"),
-        {'type': 'bioimage', 'model_name': 'affable-shark', 'voxel_size': [8, 8, 8], 'name': 'bio',
-         'scale': 's0', 'edge_length_to_process': 64},
-        "bioimage --model-name affable-shark --voxel-size 8,8,8 --edge-length-to-process 64 --name bio --scale s0",
+        lambda: BioModelConfig(model="affable-shark", voxel_size=(16, 8, 8), input_size=(20, 256, 256), context=8,
+                               slices_per_chunk=4, weight_format="onnx", name="bio", scale="s0"),
+        {'type': 'bioimage', 'model': 'affable-shark', 'voxel_size': [16, 8, 8], 'input_size': [20, 256, 256],
+         'context': 8, 'slices_per_chunk': 4, 'weight_format': 'onnx', 'name': 'bio', 'scale': 's0'},
+        "bioimage --model affable-shark --voxel-size 16,8,8 --input-size 20,256,256 --context 8"
+        " --slices-per-chunk 4 --weight-format onnx --name bio --scale s0",
+    ),
+    # Only the model: the rest follows its description.
+    "bio_bare": (
+        lambda: BioModelConfig(model="/models/my mito/rdf.yaml"),
+        {'type': 'bioimage', 'model': '/models/my mito/rdf.yaml'},
+        "bioimage --model '/models/my mito/rdf.yaml'",
     ),
     "cellmap": (
         lambda: _cellmap(folder_path="/models/my mito/"),
@@ -614,9 +626,12 @@ _SCALE = _param_info("scale", "string", False, "text", None)
 MODEL_CONFIG_TYPES = {
     "BioModelConfig": _type_info(
         "BioModelConfig", "Bio Model",
-        _param_info("model_name", "str", True, "text"),
-        _param_info("voxel_size", "string", True, "textarea"),
-        _param_info("edge_length_to_process", "string", False, "number", None),
+        _param_info("model", "str", True, "text"),
+        _param_info("voxel_size", "string", False, "textarea", None),
+        _param_info("input_size", "string", False, "number", None),
+        _param_info("context", "string", False, "text", None),
+        _param_info("slices_per_chunk", "int", False, "text", None),
+        _param_info("weight_format", "str", False, "text", None),
         _NAME, _SCALE,
     ),
     "CellMapModelConfig": _type_info(

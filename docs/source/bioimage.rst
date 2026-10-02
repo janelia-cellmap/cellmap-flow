@@ -36,7 +36,7 @@ The same model, without the dashboard:
     models:
       mito:
         type: bioimage
-        model_name: kind-seashell
+        model: kind-seashell
         voxel_size: [8, 8, 8]
 
 ``example/bioimage_em.yaml`` is a complete one.
