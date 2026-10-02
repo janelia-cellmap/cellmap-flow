@@ -1,87 +1,148 @@
 import logging
+from urllib.parse import urlparse
 
 from flask import Blueprint, render_template, request, jsonify
-import neuroglancer
 
 from cellmap_flow.norm.input_normalize import get_input_normalizers
 from cellmap_flow.post.postprocessors import get_postprocessors_list
-from cellmap_flow.models.model_merger import get_model_mergers_list
-from cellmap_flow.globals import g
-from cellmap_flow.utils.scale_pyramid import get_raw_layer
+from cellmap_flow.dashboard.requests import SetData, parse
+from cellmap_flow.dashboard.state import get_session
+from cellmap_flow.viewer.bootstrap import new_viewer
 
 logger = logging.getLogger(__name__)
 
 index_bp = Blueprint("index", __name__)
 
 
+def viewer_url_for(viewer_url, headers, scheme):
+    """The address the browser should load the neuroglancer viewer from.
+
+    Behind a reverse proxy (the request carries X-Forwarded-Host), the browser
+    can reach only the proxy, and an https page cannot embed the viewer's own
+    http://<node>:<port> address; so it asks for the viewer at the same path
+    on the proxy's host, which the proxy must route to the viewer. The scheme
+    is the proxy's X-Forwarded-Proto, else this request's own. Without the
+    header (direct access) the viewer's own address is returned unchanged.
+    """
+    forwarded_host = (headers.get("X-Forwarded-Host") or "").split(",")[0].strip()
+    if not viewer_url or not forwarded_host or forwarded_host.startswith(("localhost", "127.")):
+        return viewer_url
+    parsed = urlparse(viewer_url)
+    if not parsed.netloc or parsed.netloc == forwarded_host:
+        return viewer_url
+    proto = (headers.get("X-Forwarded-Proto") or scheme).split(",")[0].strip()
+    return parsed._replace(scheme=proto, netloc=forwarded_host).geturl()
+
+
+def _form_value(value):
+    """A parameter as the Input/Postprocess form shows and sends it back.
+
+    A flat list or tuple is comma-joined, the form the constructors parse
+    ("0,2" for ChannelSelection): rendered as it stands it became "[0, 2]",
+    which Submit All sent back and the constructor could not read.
+    """
+    if isinstance(value, (list, tuple)) and not any(
+        isinstance(v, (list, tuple, dict)) for v in value
+    ):
+        return ",".join(str(v) for v in value)
+    return value
+
+
+def chain_items(available, configured):
+    """The rows of an Input/Postprocess list, in the order to render them.
+
+    The configured steps come first, in the order they run, each with its own
+    parameter values; a step configured twice is listed twice. Every other
+    available step follows, unticked, with its defaults. Submit All sends the
+    ticked rows in display order, so rendering the configured chain in
+    registry order instead would reorder it on the next submit.
+
+    ``available`` is get_input_normalizers() / get_postprocessors_list();
+    ``configured`` is the live chain (the session's input_norms / postprocess).
+    """
+    defaults = {op["name"]: op.get("params", {}) for op in available}
+    items = []
+    configured_names = set()
+    for step in configured or []:
+        step_dict = step.to_dict()
+        name = step_dict.get("name")
+        configured_names.add(name)
+        if name in defaults:
+            # Only the constructor's parameters are editable, and to_dict can
+            # lack one the op stores under another name; fall back to its
+            # default rather than dropping the field.
+            params = {
+                key: step_dict.get(key, default)
+                for key, default in defaults[name].items()
+            }
+        else:
+            params = {k: v for k, v in step_dict.items() if k != "name"}
+        params = {k: _form_value(v) for k, v in params.items()}
+        items.append({"name": name, "checked": True, "params": params})
+    for op in available:
+        if op["name"] not in configured_names:
+            params = {k: _form_value(v) for k, v in op.get("params", {}).items()}
+            items.append({"name": op["name"], "checked": False, "params": params})
+    return items
+
+
 @index_bp.route("/")
 def index():
     # Render the main page with tabs
-    input_norms = get_input_normalizers()
-    output_postprocessors = get_postprocessors_list()
-    model_mergers = get_model_mergers_list()
-    model_catalog = g.model_catalog
-    model_catalog["User"] = {j.model_name: "" for j in g.jobs}
-    default_post_process = {d.to_dict()["name"]: d.to_dict() for d in g.postprocess}
-    default_input_norm = {d.to_dict()["name"]: d.to_dict() for d in g.input_norms}
+    session = get_session()
+    input_norm_items = chain_items(get_input_normalizers(), session.input_norms)
+    postprocess_items = chain_items(get_postprocessors_list(), session.postprocess)
+    # A copy: the "User" group lists this session's running models for the
+    # Models tab only. Written into the session's catalog it outlived the request,
+    # and everything else that walks the catalog (update_run_models, the
+    # pipeline builder's palette) found entries with no path.
+    model_catalog = dict(session.model_catalog)
+    model_catalog["User"] = {j.model_name: "" for j in session.jobs}
     logger.debug(f"Model catalog: {model_catalog}")
-    logger.debug(f"Default postprocess: {default_post_process}")
-    logger.debug(f"Default input norm: {default_input_norm}")
+    logger.debug(f"Input norm rows: {input_norm_items}")
+    logger.debug(f"Postprocess rows: {postprocess_items}")
 
     # Collect running HF model repos
     from cellmap_flow.models.models_config import HuggingFaceModelConfig
-    running_job_names = {j.model_name for j in g.jobs}
+    running_job_names = {j.model_name for j in session.jobs}
     default_hf_repos = [
-        mc.repo for mc in g.models_config
+        mc.repo for mc in session.models_config
         if isinstance(mc, HuggingFaceModelConfig) and mc.name in running_job_names
     ]
 
     return render_template(
         "index.html",
-        neuroglancer_url=g.NEUROGLANCER_URL,
-        inference_servers=g.INFERENCE_SERVER,
-        input_normalizers=input_norms,
-        output_postprocessors=output_postprocessors,
-        model_mergers=model_mergers,
-        default_post_process=default_post_process,
-        default_input_norm=default_input_norm,
+        neuroglancer_url=viewer_url_for(session.neuroglancer_url, request.headers, request.scheme),
+        input_norm_items=input_norm_items,
+        postprocess_items=postprocess_items,
         model_catalog=model_catalog,
-        default_models=[j.model_name for j in g.jobs],
+        default_models=[j.model_name for j in session.jobs],
         default_hf_repos=default_hf_repos,
-        server_config_cached=g._server_config_cached,
+        server_config_cached=session.server_config_cached,
     )
 
 
 @index_bp.route("/api/set-data", methods=["POST"])
 def set_data():
     """Set up neuroglancer viewer with a dataset path."""
+    body, error = parse(SetData, request.get_json(silent=True))
+    if error:
+        return error
+    dataset_path = body.dataset_path
     try:
-        data = request.get_json()
-        dataset_path = data.get("dataset_path", "").strip()
-        if not dataset_path:
-            return jsonify({"error": "dataset_path is required"}), 400
-
-        # Set up neuroglancer
-        neuroglancer.set_server_bind_address("0.0.0.0")
-        viewer = neuroglancer.Viewer()
-
-        g.dataset_path = dataset_path
-        g.viewer = viewer
-
-        with viewer.txn() as s:
-            s.dimensions = neuroglancer.CoordinateSpace(
-                names=["z", "y", "x"],
-                units="nm",
-                scales=[8, 8, 8],
-            )
-            s.layers["data"] = get_raw_layer(dataset_path)
-
-        g.NEUROGLANCER_URL = str(viewer)
-        logger.debug(f"Neuroglancer viewer set up: {g.NEUROGLANCER_URL}")
+        session = get_session()
+        session.dataset_path = dataset_path
+        # 8 nm z, y, x, as this viewer always had; unlike the CLIs' viewer it
+        # does not take its dimensions from the raw.
+        session.viewer = new_viewer(dataset_path, scales=(8, 8, 8))
+        session.neuroglancer_url = str(session.viewer)
+        logger.debug(f"Neuroglancer viewer set up: {session.neuroglancer_url}")
 
         return jsonify({
             "success": True,
-            "neuroglancer_url": g.NEUROGLANCER_URL,
+            "neuroglancer_url": viewer_url_for(
+                session.neuroglancer_url, request.headers, request.scheme
+            ),
         })
     except Exception as e:
         logger.error(f"Error setting data: {str(e)}")

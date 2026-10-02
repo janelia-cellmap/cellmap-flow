@@ -3,10 +3,10 @@ import logging
 import neuroglancer
 from flask import Blueprint, request, jsonify
 
-from cellmap_flow.utils.scale_pyramid import get_raw_layer
-from cellmap_flow.globals import g
-
-bbx_generator_state = g.bbx_generator_state
+from cellmap_flow.dashboard.requests import BbxGenerator, parse
+from cellmap_flow.dashboard.routes.index_page import viewer_url_for
+from cellmap_flow.dashboard.state import get_session
+from cellmap_flow.viewer.bootstrap import new_viewer
 
 logger = logging.getLogger(__name__)
 
@@ -53,83 +53,51 @@ def _extract_bounding_boxes(viewer):
 
 @bbx_bp.route("/api/bbx-generator", methods=["POST"])
 def start_bbx_generator():
-    """Start the Neuroglancer viewer for creating bounding boxes"""
+    """Start the box tool's Neuroglancer viewer (a BbxGenerator)."""
+    body, error = parse(BbxGenerator, request.get_json(silent=True))
+    if error:
+        return error
     try:
-        # Set Neuroglancer server to bind to 0.0.0.0 for external access
-        neuroglancer.set_server_bind_address("0.0.0.0")
+        dataset_path = body.dataset_path
+        num_boxes = body.num_boxes
+        existing_bounding_boxes = [box.model_dump() for box in body.existing_bounding_boxes or []]
 
-        data = request.json
-        dataset_path = data.get("dataset_path", "")
-        num_boxes = data.get("num_boxes", 1)
-        existing_bounding_boxes = data.get("existing_bounding_boxes", [])
-
-        if not dataset_path:
-            return jsonify({"error": "Dataset path is required"}), 400
-
-        # Create Neuroglancer viewer
-        viewer = neuroglancer.Viewer()
-
-        with viewer.txn() as s:
-            # Set coordinate space
-            s.dimensions = neuroglancer.CoordinateSpace(
-                names=["z", "y", "x"],
-                units="nm",
-                scales=[8, 8, 8],
-            )
-
-            # Add image layer
-            s.layers["fibsem"] = get_raw_layer(dataset_path)
-
-            # Add annotation layer for bounding boxes
-            s.layers[BBOX_LAYER_NAME] = neuroglancer.LocalAnnotationLayer(
-                dimensions=neuroglancer.CoordinateSpace(
-                    names=["z", "y", "x"],
-                    units="nm",
-                    scales=[1, 1, 1],
-                ),
-            )
-
-            # Add existing bounding boxes to the annotations layer
-            if existing_bounding_boxes and len(existing_bounding_boxes) > 0:
-                logger.info(f"Loading {len(existing_bounding_boxes)} existing bounding box(es)")
-                from neuroglancer import AxisAlignedBoundingBoxAnnotation
-
-                for idx, bbox in enumerate(existing_bounding_boxes):
-                    offset = bbox.get("offset", [0, 0, 0])
-                    shape = bbox.get("shape", [1, 1, 1])
-
-                    # Calculate min and max points from offset and shape - MUST be floats
-                    point_a = [float(offset[0]), float(offset[1]), float(offset[2])]
-                    point_b = [
-                        float(offset[0] + shape[0]),
-                        float(offset[1] + shape[1]),
-                        float(offset[2] + shape[2])
-                    ]
-
-                    # Create bounding box annotation with id and description
-                    ann = AxisAlignedBoundingBoxAnnotation(
-                        point_a=point_a,
-                        point_b=point_b,
-                        id=f"bbox-{idx + 1}",
-                        description=f"Bounding box {idx + 1}"
-                    )
-                    s.layers[BBOX_LAYER_NAME].annotations.append(ann)
-                    logger.info(f"Added existing bbox {idx + 1}: offset={offset}, shape={shape}")
+        # The boxes drawn so far, each with an id and a description. Their
+        # corners must be floats.
+        boxes = []
+        for idx, bbox in enumerate(existing_bounding_boxes):
+            offset = bbox["offset"]
+            shape = bbox["shape"]
+            boxes.append(neuroglancer.AxisAlignedBoundingBoxAnnotation(
+                point_a=[float(offset[j]) for j in range(3)],
+                point_b=[float(offset[j] + shape[j]) for j in range(3)],
+                id=f"bbox-{idx + 1}",
+                description=f"Bounding box {idx + 1}",
+            ))
+            logger.info(f"Added existing bbox {idx + 1}: offset={offset}, shape={shape}")
+        box_layer = neuroglancer.LocalAnnotationLayer(
+            dimensions=neuroglancer.CoordinateSpace(names=["z", "y", "x"], units="nm", scales=[1, 1, 1]),
+            annotations=boxes,
+        )
+        # 8 nm z, y, x, as this viewer always had.
+        viewer = new_viewer(dataset_path, scales=(8, 8, 8), raw_name="fibsem", layers={BBOX_LAYER_NAME: box_layer})
 
         # Store state
+        bbx_generator_state = get_session().bbx_generator_state
         bbx_generator_state["dataset_path"] = dataset_path
         bbx_generator_state["num_boxes"] = num_boxes
         bbx_generator_state["bounding_boxes"] = list(existing_bounding_boxes)
         bbx_generator_state["viewer"] = viewer
 
-        # Get the viewer URL and fix localhost reference
+        # The address the browser loads the viewer from: the request's host
+        # for a viewer on localhost, and behind a reverse proxy the proxy's,
+        # as for the dashboard's own viewer.
         viewer_url = str(viewer)
-
-        # Replace localhost with the actual request host for external access
         if "localhost" in viewer_url:
             client_host = request.host.split(":")[0]
             viewer_url = viewer_url.replace("localhost", client_host)
             logger.info(f"Replaced localhost with {client_host} in viewer URL")
+        viewer_url = viewer_url_for(viewer_url, request.headers, request.scheme)
 
         bbx_generator_state["viewer_url"] = viewer_url
         bbx_generator_state["viewer_state"] = viewer.state
@@ -157,6 +125,7 @@ def start_bbx_generator():
 def get_bbx_generator_status():
     """Get current status of bounding box generation"""
     try:
+        bbx_generator_state = get_session().bbx_generator_state
         # Extract bounding boxes from viewer if it exists
         bboxes = _extract_bounding_boxes(bbx_generator_state.get("viewer"))
 
@@ -178,6 +147,7 @@ def get_bbx_generator_status():
 def finalize_bbx_generation():
     """Finalize bounding box generation and return results"""
     try:
+        bbx_generator_state = get_session().bbx_generator_state
         # Extract final bounding boxes from viewer
         bboxes = _extract_bounding_boxes(bbx_generator_state.get("viewer"))
 

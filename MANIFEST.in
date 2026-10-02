@@ -1,5 +1,5 @@
 include cellmap_flow/dashboard/templates/*.html
 include cellmap_flow/dashboard/static/css/*.css
-include cellmap_flow/dashboard/static/js/*.js
+recursive-include cellmap_flow/dashboard/static/js *.js
 include cellmap_flow/dashboard/static/img/*
-include models/models.yaml
+include cellmap_flow/models/*.yaml

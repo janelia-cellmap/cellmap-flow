@@ -20,8 +20,8 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
-lib64/
+/lib/
+/lib64/
 parts/
 sdist/
 var/
@@ -178,3 +178,5 @@ test_corrections.zarr/
 correction_slices/
 corrections/
 output/
+# pixi environments (pixi.toml and pixi.lock are tracked)
+.pixi/

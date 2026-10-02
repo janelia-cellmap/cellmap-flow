@@ -1,7 +1,7 @@
 """Blockwise processing.
 
 ``CellMapFlowBlockwiseProcessor`` is re-exported lazily: importing it pulls in
-the whole inference stack, and ``cellmap_flow_blockwise --help`` -- which goes
+the whole inference stack, and ``cellmap_flow blockwise --help`` -- which goes
 through this package to reach cli.py -- paid ~18s for it before printing
 anything.
 """

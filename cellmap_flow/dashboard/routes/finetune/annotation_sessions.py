@@ -1,57 +1,47 @@
+"""Earlier sessions: listing them, and resuming one's volume in a new session.
+
+Routes: POST ``/api/finetune/list-existing-sessions``, POST
+``/api/finetune/load-existing-volume`` (the resume) and GET
+``/api/finetune/load-existing-volume-progress`` (how far a resume has got).
+"""
+
 import json
 import logging
 import os
-import threading
-import time
+import re
+import shutil
 from datetime import datetime
 
-from flask import jsonify
+from flask import jsonify, request
 
 from cellmap_flow.dashboard.finetune_utils import ensure_minio_serving
+from cellmap_flow.dashboard.progress import Progress
+from cellmap_flow.dashboard.routes.finetune.blueprint import finetune_bp
 from cellmap_flow.dashboard.routes.finetune.common import (
     ensure_corrections_storage,
+    rewrite_minio_url_for_proxy,
+    session_store,
     write_volume_manifest,
 )
 from cellmap_flow.dashboard.routes.finetune.overlay import refresh_annotated_regions_layer
-from cellmap_flow.globals import g
+from cellmap_flow.dashboard.state import get_session
+from cellmap_flow.finetune.session import manifest as session_manifest
+from cellmap_flow.finetune.session import sync as session_sync
+from cellmap_flow.finetune.session.manifest import read_manifest
+from cellmap_flow.finetune.session.volume import read_volume
 
 logger = logging.getLogger(__name__)
 
-
-# Module-level progress tracker for in-flight Resume operations, keyed by a
-# load_id supplied by the client. Same pattern as
-# yaml_crops._PROGRESS / _set_progress so the dashboard can poll for updates
-# while the long copytree + mirror is in flight.
-_RESUME_PROGRESS: dict = {}
-_RESUME_PROGRESS_LOCK = threading.Lock()
-_RESUME_PROGRESS_TTL_SECONDS = 300
+# Each resume's progress, by the load_id the page sent with it: the phase
+# (copying the zarrs, then MinIO's data, then mirroring), and the files and
+# zarrs copied so far.
+_RESUME_PROGRESS = Progress()
 
 
-def _set_resume_progress(load_id, **fields):
-    if not load_id:
-        return
-    with _RESUME_PROGRESS_LOCK:
-        entry = _RESUME_PROGRESS.setdefault(load_id, {"created_at": time.time()})
-        entry.update(fields)
-        entry["updated_at"] = time.time()
-        now = time.time()
-        stale = [
-            k for k, v in _RESUME_PROGRESS.items()
-            if now - v.get("updated_at", v.get("created_at", now)) > _RESUME_PROGRESS_TTL_SECONDS
-        ]
-        for k in stale:
-            _RESUME_PROGRESS.pop(k, None)
-
-
-def get_resume_progress_response(load_id):
-    if not load_id:
-        return jsonify({"success": False, "error": "Missing 'load_id' query param"}), 400
-    with _RESUME_PROGRESS_LOCK:
-        snapshot = _RESUME_PROGRESS.get(load_id)
-        snapshot = dict(snapshot) if snapshot else None
-    if snapshot is None:
-        return jsonify({"success": False, "error": f"Unknown load_id {load_id}"}), 404
-    return jsonify({"success": True, "progress": snapshot})
+@finetune_bp.route("/api/finetune/load-existing-volume-progress", methods=["GET"])
+def load_existing_volume_progress():
+    """How far the resume with this load_id has got."""
+    return _RESUME_PROGRESS.response(request.args.get("load_id"))
 
 
 def _copytree_with_progress(src, dst, load_id, label, parent_done, parent_total):
@@ -59,7 +49,6 @@ def _copytree_with_progress(src, dst, load_id, label, parent_done, parent_total)
     per-file progress. NFS round-trip latency dominates per-file cost, so
     threading gives a big speedup on small-file workloads (sparse zarr chunks).
     """
-    import shutil
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
     file_pairs: list[tuple[str, str]] = []
@@ -83,9 +72,7 @@ def _copytree_with_progress(src, dst, load_id, label, parent_done, parent_total)
     # affinity). No artificial ceiling — going above the slot count means
     # using cores LSF didn't give us; going below leaves throughput on the
     # table.
-    from cellmap_flow.dashboard.finetune_utils import _get_sync_worker_count
-
-    workers = max(1, min(_get_sync_worker_count(), files_in_src))
+    workers = max(1, min(session_sync.worker_count(), files_in_src))
 
     def _copy_one(pair):
         s, d = pair
@@ -99,7 +86,7 @@ def _copytree_with_progress(src, dst, load_id, label, parent_done, parent_total)
             fut.result()  # surface any exception
             copied_so_far += 1
             if copied_so_far % progress_step == 0 or copied_so_far == files_in_src:
-                _set_resume_progress(
+                _RESUME_PROGRESS.update(
                     load_id,
                     phase="copying",
                     current=label,
@@ -111,17 +98,73 @@ def _copytree_with_progress(src, dst, load_id, label, parent_done, parent_total)
     return files_in_src
 
 
-def _register_annotation_volume(volume_id, **volume_data):
-    if not hasattr(g, "annotation_volumes"):
-        g.annotation_volumes = {}
-    g.annotation_volumes[volume_id] = {
-        **volume_data,
-        "extracted_chunks": set(),
-        "chunk_sync_state": {},
-    }
+def _annotation_volume_dirs(corrections_dir):
+    """The annotation volumes in a corrections directory, the one to use first.
+
+    Only zarrs whose attrs say ``type: annotation_volume`` count: imported
+    crop zarrs and legacy _chunk_ extracts sit in the same directory and
+    were counted as volumes too. Resume used to take whichever of them
+    os.listdir() happened to return first. The first entry here is the one
+    the session's manifest trains on, else the most recently written.
+
+    The _chunk_ extracts are per-chunk copies that older dashboards wrote
+    beside the volume, often thousands of them; they are skipped by name,
+    without opening their attrs.
+    """
+    volumes = []
+    for entry in os.listdir(corrections_dir):
+        if not entry.endswith(".zarr") or "_chunk_" in entry:
+            continue
+        attrs_file = os.path.join(corrections_dir, entry, ".zattrs")
+        try:
+            with open(attrs_file) as f:
+                if json.load(f).get("type") != "annotation_volume":
+                    continue
+        except (OSError, ValueError):
+            continue
+        volumes.append((os.path.getmtime(attrs_file), entry))
+    volumes = [entry for _, entry in sorted(volumes, reverse=True)]
+    try:
+        trained = (read_manifest(corrections_dir) or {}).get("volume_zarr_path")
+    except (OSError, ValueError):
+        trained = None
+    if trained and os.path.basename(str(trained).rstrip("/")) in volumes:
+        name = os.path.basename(str(trained).rstrip("/"))
+        volumes.remove(name)
+        volumes.insert(0, name)
+    return volumes
 
 
-def list_existing_sessions_response(data):
+def _volume_dataset(volume_path):
+    """The raw dataset an annotation volume was painted on (its attrs'
+    ``dataset_path``), or None when it does not say."""
+    try:
+        with open(os.path.join(volume_path, ".zattrs")) as f:
+            return json.load(f).get("dataset_path")
+    except (OSError, ValueError):
+        return None
+
+
+def _same_dataset(a, b):
+    """Whether two dataset paths name one dataset: a trailing slash and a
+    trailing scale level (``/s2``) aside."""
+    def bare(path):
+        return re.sub(r"/s\d+$", "", str(path).rstrip("/"))
+    return bare(a) == bare(b)
+
+
+def _populated_chunk_count(volume_path):
+    """How many chunks of a volume's annotation/s0 are on disk, painted or imported."""
+    s0_dir = os.path.join(volume_path, "annotation", "s0")
+    try:
+        return sum(1 for entry in os.listdir(s0_dir) if not entry.startswith("."))
+    except OSError:
+        return 0
+
+
+@finetune_bp.route("/api/finetune/list-existing-sessions", methods=["POST"])
+def list_existing_sessions():
+    data = request.get_json() or {}
     try:
         output_path = data.get("output_path", "")
         if not output_path:
@@ -138,24 +181,21 @@ def list_existing_sessions_response(data):
             if not os.path.isdir(corrections_dir):
                 continue
 
-            volumes = []
-            chunks = []
-            for item in os.listdir(corrections_dir):
-                if not item.endswith(".zarr"):
-                    continue
-                full = os.path.join(corrections_dir, item)
-                if "_chunk_" in item:
-                    chunks.append(item)
-                else:
-                    volumes.append({"volume_id": item.replace(".zarr", ""), "path": full})
-
-            if volumes or chunks:
+            volumes = [
+                {"volume_id": item.replace(".zarr", ""), "path": os.path.join(corrections_dir, item)}
+                for item in _annotation_volume_dirs(corrections_dir)
+            ]
+            if volumes:
                 sessions.append(
                     {
                         "session_id": entry,
                         "session_path": session_dir,
                         "volumes": volumes,
-                        "chunk_count": len(chunks),
+                        # The volumes' populated chunks. This used to count
+                        # legacy per-chunk extracts, which no session gets
+                        # any more, so it said 0 for most sessions.
+                        "chunk_count": sum(_populated_chunk_count(v["path"]) for v in volumes),
+                        "dataset_path": _volume_dataset(volumes[0]["path"]),
                     }
                 )
 
@@ -165,25 +205,24 @@ def list_existing_sessions_response(data):
         return jsonify({"success": False, "error": str(e)}), 500
 
 
-def load_existing_volume_response(data):
+@finetune_bp.route("/api/finetune/load-existing-volume", methods=["POST"])
+def load_existing_volume():
+    data = request.get_json() or {}
     try:
-        import shutil
-
-        from cellmap_flow.dashboard.finetune_utils import minio_state
-
+        session = get_session()
+        minio_state = session.minio_state
         source_session_path = data.get("source_session_path")
         output_path = data.get("output_path")
         load_id = data.get("load_id")
-        if load_id:
-            _set_resume_progress(
-                load_id,
-                phase="starting",
-                done=False,
-                files_done=0,
-                files_total=0,
-                parent_done=0,
-                parent_total=0,
-            )
+        _RESUME_PROGRESS.update(
+            load_id,
+            phase="starting",
+            done=False,
+            files_done=0,
+            files_total=0,
+            parent_done=0,
+            parent_total=0,
+        )
         if not source_session_path or not output_path:
             return jsonify(
                 {"success": False, "error": "source_session_path and output_path required"}
@@ -194,11 +233,7 @@ def load_existing_volume_response(data):
         if not os.path.isdir(source_corrections):
             return jsonify({"success": False, "error": f"No corrections found in {source_session_path}"}), 404
 
-        volume_entries = [
-            entry
-            for entry in os.listdir(source_corrections)
-            if entry.endswith(".zarr") and "_chunk_" not in entry
-        ]
+        volume_entries = _annotation_volume_dirs(source_corrections)
         if not volume_entries:
             return jsonify(
                 {"success": False, "error": f"No annotation volume found in {source_corrections}"}
@@ -206,42 +241,32 @@ def load_existing_volume_response(data):
 
         volume_dir = volume_entries[0]
         volume_id = volume_dir.replace(".zarr", "")
+
+        # A volume's voxels are positions in the dataset it was painted on.
+        # Resumed in a dashboard showing another dataset, the strokes were
+        # drawn over the wrong EM, training read the old dataset, and the
+        # finetuned layer served the old dataset over the new one's view.
+        painted_on = _volume_dataset(os.path.join(source_corrections, volume_dir))
+        if painted_on and session.dataset_path and not _same_dataset(painted_on, session.dataset_path):
+            return jsonify({"success": False, "error": (
+                f"That session was painted on {painted_on}, and this dashboard has "
+                f"{session.dataset_path} open. Start the dashboard on {painted_on} to resume it."
+            )}), 409
+
         new_session_path, new_corrections = ensure_corrections_storage(output_path)
 
         all_zarr_entries = [item for item in os.listdir(source_corrections) if item.endswith(".zarr")]
-        has_volume_zarr = any("_chunk_" not in e for e in all_zarr_entries)
-        if has_volume_zarr:
-            # New unified flow: trainer reads the volume zarr directly via
-            # VirtualPatchDataset; the per-chunk _chunk_*.zarr extracts from
-            # the legacy materialize pipeline are dead weight (and on big
-            # sessions can be thousands of files).
-            zarr_entries = [e for e in all_zarr_entries if "_chunk_" not in e]
-            skipped_chunk_extracts = len(all_zarr_entries) - len(zarr_entries)
-            if skipped_chunk_extracts:
-                logger.info(
-                    f"Resume: skipping {skipped_chunk_extracts} legacy "
-                    f"_chunk_*.zarr extracts; trainer will read the volume "
-                    "zarr directly via the manifest."
-                )
-        else:
-            # Legacy session with only per-chunk extracts and no volume zarr.
-            # These were trainable only through CorrectionDataset, which is
-            # gone; VirtualPatchDataset needs the volume zarr the manifest
-            # points at. Resuming would copy the extracts and then fail at
-            # training time, so say so here instead.
-            return jsonify(
-                {
-                    "success": False,
-                    "error": (
-                        f"Session at {source_corrections} predates the "
-                        "annotation-volume format: it holds only "
-                        f"{len(all_zarr_entries)} per-chunk _chunk_*.zarr "
-                        "extracts and no volume zarr, so there is nothing for "
-                        "the trainer to read. Re-import this session's crops "
-                        "into a new session to convert it."
-                    ),
-                }
-            ), 400
+        # The trainer reads the volume zarr through the manifest. The
+        # per-chunk _chunk_*.zarr extracts that older dashboards wrote beside
+        # it are dead weight, and a big session has thousands of them.
+        zarr_entries = [e for e in all_zarr_entries if "_chunk_" not in e]
+        skipped_chunk_extracts = len(all_zarr_entries) - len(zarr_entries)
+        if skipped_chunk_extracts:
+            logger.info(
+                f"Resume: skipping {skipped_chunk_extracts} legacy "
+                f"_chunk_*.zarr extracts; trainer will read the volume "
+                "zarr directly via the manifest."
+            )
         copied = []
         for idx, item in enumerate(zarr_entries):
             src = os.path.join(source_corrections, item)
@@ -249,17 +274,16 @@ def load_existing_volume_response(data):
             if os.path.exists(dst):
                 logger.info(f"Skipping {item} (already exists in target)")
                 continue
-            if load_id:
-                _set_resume_progress(
-                    load_id,
-                    phase="copying",
-                    current=item,
-                    files_done=0,
-                    files_total=0,
-                    parent_done=idx,
-                    parent_total=len(zarr_entries),
-                    done=False,
-                )
+            _RESUME_PROGRESS.update(
+                load_id,
+                phase="copying",
+                current=item,
+                files_done=0,
+                files_total=0,
+                parent_done=idx,
+                parent_total=len(zarr_entries),
+                done=False,
+            )
             _copytree_with_progress(
                 src, dst, load_id, label=item,
                 parent_done=idx, parent_total=len(zarr_entries),
@@ -277,29 +301,37 @@ def load_existing_volume_response(data):
                     "if the source had unsynced chunks."
                 )
             elif not os.path.exists(new_minio):
-                if load_id:
-                    _set_resume_progress(
-                        load_id,
-                        phase="copying_minio",
-                        current=".minio",
-                        files_done=0, files_total=0,
-                        parent_done=len(zarr_entries),
-                        parent_total=len(zarr_entries) + 1,
-                        done=False,
-                    )
+                _RESUME_PROGRESS.update(
+                    load_id,
+                    phase="copying_minio",
+                    current=".minio",
+                    files_done=0, files_total=0,
+                    parent_done=len(zarr_entries),
+                    parent_total=len(zarr_entries) + 1,
+                    done=False,
+                )
                 _copytree_with_progress(
                     source_minio, new_minio, load_id, label=".minio",
                     parent_done=len(zarr_entries), parent_total=len(zarr_entries) + 1,
                 )
                 copied_minio = True
 
-        if load_id:
-            _set_resume_progress(
-                load_id,
-                phase="mirroring_minio",
-                current=volume_dir,
-                done=False,
-            )
+        # The good regions sit beside corrections/, not in it, and the
+        # trainer and the good-regions routes read them from the new
+        # session. Left behind, a resumed session showed no regions and
+        # trained with no rehearsal or anchored distillation.
+        source_regions = session_manifest.good_regions_path(source_corrections)
+        new_regions = session_manifest.good_regions_path(new_corrections)
+        copied_good_regions = os.path.isfile(source_regions) and not os.path.exists(new_regions)
+        if copied_good_regions:
+            shutil.copy2(source_regions, new_regions)
+
+        _RESUME_PROGRESS.update(
+            load_id,
+            phase="mirroring_minio",
+            current=volume_dir,
+            done=False,
+        )
 
         lineage_file = os.path.join(new_session_path, "loaded_from.json")
         with open(lineage_file, "w") as f:
@@ -308,6 +340,7 @@ def load_existing_volume_response(data):
                     "source_session_path": source_session_path,
                     "loaded_at": datetime.now().isoformat(),
                     "copied_files": copied,
+                    "copied_good_regions": copied_good_regions,
                 },
                 f,
                 indent=2,
@@ -320,40 +353,29 @@ def load_existing_volume_response(data):
             with open(zattrs_file) as f:
                 volume_meta = json.load(f)
 
-        s0_dir = os.path.join(new_volume_path, "annotation", "s0")
-        s0_count = 0
-        if os.path.isdir(s0_dir):
-            s0_count = sum(1 for entry in os.listdir(s0_dir) if not entry.startswith("."))
+        s0_count = _populated_chunk_count(new_volume_path)
 
         minio_url = ensure_minio_serving(new_volume_path, volume_id, output_base_dir=new_corrections)
-        _register_annotation_volume(
-            volume_id,
-            zarr_path=new_volume_path,
-            model_name=volume_meta.get("model_name"),
-            output_size=volume_meta.get("chunk_size"),
-            input_size=volume_meta.get("input_size"),
-            input_voxel_size=volume_meta.get("input_voxel_size"),
-            output_voxel_size=volume_meta.get("output_voxel_size"),
-            dataset_path=volume_meta.get("dataset_path"),
-            dataset_offset_nm=volume_meta.get("dataset_offset_nm"),
-            corrections_dir=new_corrections,
-        )
+        minio_url = rewrite_minio_url_for_proxy(minio_url)
+        # Whatever geometry the copied .zattrs has; what it lacks stays None.
+        record = read_volume(new_volume_path, require_geometry=False)
+        record.pop("chunk_sync_state")
+        session_store().register_volume(volume_id, **record)
         # A resumed session is trained the same way a fresh one is. The
         # geometry comes from the copied .zattrs, so a volume written before
-        # those keys existed simply gets no manifest and stays on the legacy
-        # path -- write_volume_manifest says so in the log.
-        write_volume_manifest(g.annotation_volumes[volume_id])
+        # those keys existed gets no manifest and cannot be trained --
+        # write_volume_manifest says so in the log.
+        write_volume_manifest(session.annotation_volumes[volume_id])
         refresh_annotated_regions_layer()
 
-        if load_id:
-            _set_resume_progress(
-                load_id,
-                phase="done",
-                done=True,
-                volume_id=volume_id,
-                copied_count=len(copied),
-                painted_chunk_count=s0_count,
-            )
+        _RESUME_PROGRESS.update(
+            load_id,
+            phase="done",
+            done=True,
+            volume_id=volume_id,
+            copied_count=len(copied),
+            painted_chunk_count=s0_count,
+        )
 
         return jsonify(
             {
@@ -372,6 +394,6 @@ def load_existing_volume_response(data):
         )
     except Exception as e:
         if load_id:
-            _set_resume_progress(load_id, phase="error", done=True, error=str(e))
+            _RESUME_PROGRESS.update(load_id, phase="error", done=True, error=str(e))
         logger.error(f"Error loading existing volume: {e}", exc_info=True)
         return jsonify({"success": False, "error": str(e)}), 500

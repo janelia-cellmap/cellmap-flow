@@ -8,7 +8,20 @@ finetuned models using FinetuneModelConfig (type: finetune).
 import logging
 from pathlib import Path
 
+from cellmap_flow.jobs.site import current_site
+
 logger = logging.getLogger(__name__)
+
+# The finetune CLI prints this with the path of each serving YAML it writes,
+# just before TRAINING_ITERATION_COMPLETE; the job manager reads the YAML
+# from there. Here, rather than in either of them, so both can import it
+# without importing the other.
+FINETUNED_MODEL_YAML_MARKER = "FINETUNED_MODEL_YAML:"
+
+# Stand-ins for a data path that are not one. The CLI used to fall back to
+# the second while this check only knew the first, so YAMLs pointing at
+# /path/to/data.zarr were written without complaint.
+PLACEHOLDER_DATA_PATHS = frozenset({"/path/to/your/data.zarr", "/path/to/data.zarr"})
 
 
 def generate_finetuned_model_yaml(
@@ -17,10 +30,10 @@ def generate_finetuned_model_yaml(
     model_name: str = None,
     output_path: Path = None,
     data_path: str = None,
-    queue: str = "gpu_h100",
-    charge_group: str = "cellmap",
+    queue: str = None,
+    charge_group: str = None,
     json_data: dict = None,
-    scale: str = "s0",
+    scale: str = None,
     weights_path: str = None,
 ) -> Path:
     """
@@ -38,17 +51,25 @@ def generate_finetuned_model_yaml(
         model_name: Name of the finetuned model
         output_path: Where to write the .yaml file
         data_path: Path to actual dataset (REQUIRED - no placeholders)
-        queue: LSF queue name
-        charge_group: LSF charge group
+        queue: LSF queue name; None is the site's default queue
+        charge_group: LSF charge group; None is the site's default one
         json_data: Optional dict with input_norm and postprocess from base model
-        scale: Scale level (e.g., "s0", "s1") from base model
+        scale: The level of a multiscale ``data_path`` to serve ("s1"), or
+            None for none. With none, the server picks the level by the
+            model's input voxel size, which is how the trainer read the same
+            ``data_path``. This was always "s0", so a model trained on s1 of
+            a multiscale group was served s0.
 
     Returns:
         Path to the generated YAML file
     """
     import yaml as yaml_lib
 
-    if not data_path or data_path == "/path/to/your/data.zarr":
+    site = current_site()
+    queue = site.default_queue if queue is None else queue
+    charge_group = site.default_charge_group if charge_group is None else charge_group
+
+    if not data_path or str(data_path) in PLACEHOLDER_DATA_PATHS:
         raise ValueError(
             "data_path is required and cannot be a placeholder. "
             "Must provide actual dataset path from training corrections."
@@ -61,8 +82,9 @@ def generate_finetuned_model_yaml(
         "type": "finetune",
         "name": model_name,
         "base_model": base_model_dict,
-        "scale": scale,
     }
+    if scale:
+        model_entry["scale"] = scale
     if weights_path:
         model_entry["weights_path"] = weights_path
     else:
@@ -111,15 +133,15 @@ def generate_finetuned_model_yaml(
 def generate_current_config_yaml(
     models: list,
     data_path: str,
-    queue: str = "gpu_h100",
-    charge_group: str = "cellmap",
+    queue: str = None,
+    charge_group: str = None,
     walltime: str = None,
     json_data: dict = None,
 ) -> str:
     """
     Build YAML text snapshotting the dashboard's current live server config
     (whatever models/normalization/postprocessing/queue are active right
-    now), so it can be handed back to `cellmap_flow_yaml` later.
+    now), so it can be handed back to `cellmap_flow yaml` later.
 
     Unlike generate_finetuned_model_yaml (which describes one specific
     finetune job), this is a general "export what's currently running"
@@ -129,8 +151,8 @@ def generate_current_config_yaml(
     Args:
         models: list of model entry dicts (each from ModelConfig.to_dict())
         data_path: current dataset path
-        queue: LSF queue name
-        charge_group: LSF charge group
+        queue: LSF queue name; None is the site's default queue
+        charge_group: LSF charge group; None is the site's default one
         walltime: LSF run limit ("HH:MM" or minutes); omitted when unset, so
             the reloaded config falls back to the built-in default
         json_data: dict with "input_norm"/"postprocess" keys reflecting the
@@ -140,6 +162,10 @@ def generate_current_config_yaml(
         YAML text (str) ready to write to a file.
     """
     import yaml as yaml_lib
+
+    site = current_site()
+    queue = site.default_queue if queue is None else queue
+    charge_group = site.default_charge_group if charge_group is None else charge_group
 
     yaml_dict = {
         "data_path": data_path,
@@ -159,7 +185,7 @@ def generate_current_config_yaml(
 
     header = (
         "# CellMap-Flow exported configuration\n"
-        "# Reload with: cellmap_flow_yaml <this file>\n"
+        "# Reload with: cellmap_flow yaml <this file>\n"
         "#\n"
     )
     if not has_json_data:

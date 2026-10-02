@@ -15,6 +15,6 @@ models:
 ### blockwise
 output_path: "/nrs/cellmap/zouinkhim/salivary/jrc_mus-salivary-1/jrc_mus-salivary-1.zarr/nuc_64_90_e_0100/s0"
 # optional output channel-if not set output all channels from model
-# output_channels:mito,ld
+# output_channels: [mito, ld]
 task_name: "nuc_64_90_e_0100_cellpose_task"
 workers: 4

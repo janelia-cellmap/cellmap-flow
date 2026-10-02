@@ -2,15 +2,15 @@
 # This demonstrates a typical normalization -> inference -> postprocessing workflow
 
 input_normalizers:
-  - name: StandardNormalizer
+  - name: MinMaxNormalizer
+    params:
+      min_value: 0.0
+      max_value: 255.0
+
+  - name: ZScoreNormalizer
     params:
       mean: 0.5
       std: 0.1
-  
-  - name: MinMaxNormalizer
-    params:
-      min_val: 0.0
-      max_val: 255.0
 
 postprocessors:
   - name: DefaultPostprocessor
@@ -19,8 +19,9 @@ postprocessors:
       clip_max: 1.0
       bias: 1.0
       multiplier: 127.5
-  
-  - name: InstanceSegmentation
+
+  # DefaultPostprocessor maps the model's [-1, 1] output to 0-255, so the
+  # midpoint of that range, not 0.5, separates foreground from background.
+  - name: ThresholdPostprocessor
     params:
-      threshold: 0.5
-      min_size: 100
+      threshold: 127

@@ -33,8 +33,8 @@ import logging
 import os
 import subprocess
 import sys
-import uuid
 from datetime import datetime
+from types import SimpleNamespace
 
 import numpy as np
 
@@ -97,7 +97,7 @@ def build_corrections(
     model_name=None,
     patches_per_epoch=None,
     jitter_voxels=None,
-    seed=0,
+    seed=None,
     dense_to_sparse_ratio=None,
     input_norm=None,
     postprocess=None,
@@ -108,13 +108,20 @@ def build_corrections(
 
     ``output_dir`` must not already contain a volume: this builds from
     scratch so the record describes everything in it.
+
+    ``patches_per_epoch``, ``jitter_voxels``, ``seed`` and
+    ``dense_to_sparse_ratio`` are the CLI's flags: each one given (not None)
+    wins over the crops YAML's own setting, which applies otherwise.
     """
-    from cellmap_flow.dashboard.finetune_utils import create_annotation_volume_zarr
-    from cellmap_flow.dashboard.routes.finetune.yaml_crops import _write_crop_into_volume
     from cellmap_flow.finetune.crop_loader import parse_crops_yaml
-    from cellmap_flow.finetune.virtual_dataset import write_manifest
-    from cellmap_flow.image_data_interface import ImageDataInterface
-    from cellmap_flow.utils.neuroglancer_utils import get_raw_closest_scale
+    from cellmap_flow.finetune.session.manifest import write_manifest
+    from cellmap_flow.finetune.session.volume import (
+        build_manifest,
+        create_volume_zarr,
+        new_volume_id,
+        plan_volume,
+        write_crop_into_volume,
+    )
 
     if os.path.isdir(output_dir) and any(
         n.endswith(".zarr") or n == "_virtual_sources.json" for n in os.listdir(output_dir)
@@ -136,83 +143,76 @@ def build_corrections(
             raise ValueError(f"No {k}: pass --repo with metadata or --{k.replace('_', '-')}")
     model_name = model_name or geom.get("model_name") or "model"
 
-    input_size = np.array(geom["input_shape"], dtype=int)
-    output_size = np.array(geom["output_shape"], dtype=int)
-    claimed_in_vs = np.array(geom["input_voxel_size"], dtype=float)
-    claimed_out_vs = np.array(geom["output_voxel_size"], dtype=float)
-
     # Same resolution snapping the dashboard does: a model that says 16 nm
     # runs on whichever raw pyramid level is closest to 16 nm.
-    eff_out_vs = np.array(get_raw_closest_scale(raw_dataset_path, tuple(claimed_out_vs)) or claimed_out_vs, dtype=float)
-    eff_in_vs = np.array(get_raw_closest_scale(raw_dataset_path, tuple(claimed_in_vs)) or claimed_in_vs, dtype=float)
-
-    idi = ImageDataInterface(raw_dataset_path, voxel_size=eff_out_vs)
-    dataset_offset_nm = np.array(idi.roi.offset, dtype=float)
-    dataset_shape_nm = np.array(idi.roi.shape, dtype=float)
-    dataset_shape_voxels = (dataset_shape_nm / eff_out_vs).astype(int)
-    dataset_shape_voxels = np.ceil(dataset_shape_voxels / output_size).astype(int) * output_size
+    geometry = plan_volume(
+        raw_dataset_path,
+        SimpleNamespace(
+            input_shape=np.array(geom["input_shape"], dtype=int),
+            output_shape=np.array(geom["output_shape"], dtype=int),
+            input_voxel_size=np.array(geom["input_voxel_size"], dtype=float),
+            output_voxel_size=np.array(geom["output_voxel_size"], dtype=float),
+        ),
+    )
 
     os.makedirs(output_dir, exist_ok=True)
-    volume_id = f"vol-{uuid.uuid4().hex[:8]}-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
-    zarr_path = os.path.join(output_dir, f"{volume_id}.zarr")
+    zarr_path = os.path.join(output_dir, f"{new_volume_id()}.zarr")
     input_norm = input_norm if input_norm is not None else DEFAULT_INPUT_NORM
 
-    ok, info = create_annotation_volume_zarr(
-        zarr_path=zarr_path,
-        dataset_shape_voxels=dataset_shape_voxels,
-        output_voxel_size=eff_out_vs,
-        dataset_offset_nm=dataset_offset_nm,
-        chunk_size=output_size,
-        dataset_path=raw_dataset_path,
-        model_name=model_name,
-        input_size=input_size,
-        input_voxel_size=eff_in_vs,
-        claimed_output_voxel_size=claimed_out_vs,
-        claimed_input_voxel_size=claimed_in_vs,
-        input_norm_config=input_norm,
-        postprocess_config=postprocess,
+    create_volume_zarr(
+        zarr_path, geometry, dataset_path=raw_dataset_path, model_name=model_name,
+        input_norm=input_norm, postprocess=postprocess,
     )
-    if not ok:
-        raise RuntimeError(f"create_annotation_volume_zarr failed: {info}")
-    logger.info(f"Created {zarr_path}: {dataset_shape_voxels.tolist()} voxels at {eff_out_vs.tolist()} nm")
+    logger.info(
+        f"Created {zarr_path}: {list(geometry.dataset_shape_voxels)} voxels "
+        f"at {list(geometry.output_voxel_size)} nm"
+    )
 
     volume_meta = {
         "zarr_path": zarr_path,
-        "output_voxel_size": eff_out_vs.tolist(),
-        "dataset_offset_nm": dataset_offset_nm.tolist(),
+        "dataset_path": raw_dataset_path,
+        "input_size": list(geometry.input_size),
+        "output_size": list(geometry.chunk_size),
+        "input_voxel_size": list(geometry.input_voxel_size),
+        "output_voxel_size": list(geometry.output_voxel_size),
+        "dataset_offset_nm": list(geometry.dataset_offset_nm),
     }
     cfg = parse_crops_yaml(crops_yaml)
     if not cfg.crops:
         raise ValueError(f"{crops_yaml} lists no crops")
     imported = []
     for entry in cfg.crops:
-        n_fg = _write_crop_into_volume(volume_meta, entry)
+        n_fg = write_crop_into_volume(volume_meta, entry)["n_fg_voxels"]
         logger.info(f"Imported {entry.name or entry.path}: {n_fg} fg voxels")
         imported.append({"name": entry.name, "path": entry.path, "fg_ids": entry.fg_ids,
                          "mode": entry.mode, "connected_components": entry.connected_components,
                          "n_fg_voxels": int(n_fg)})
     total_fg = sum(c["n_fg_voxels"] for c in imported)
     if total_fg == 0:
-        raise RuntimeError("No foreground voxel was imported from any crop; check fg_ids")
+        # Not refused: background-only crops train (the dataset centres
+        # patches on their background, teaching the model where there is
+        # nothing). But the same thing happens when fg_ids name no label in
+        # the crops, so say so.
+        logger.warning(
+            "No foreground voxel was imported from any crop: training will see "
+            "only background. If that is not intended, check fg_ids."
+        )
 
-    # The manifest's own fields win over the CLI's so a manifest that says
-    # patches_per_epoch travels with its crops.
-    manifest = {
-        "kind": "volume_zarr_v1",
-        "volume_zarr_path": zarr_path,
-        "raw_dataset_path": raw_dataset_path,
-        "input_size_voxels": input_size.tolist(),
-        "output_size_voxels": output_size.tolist(),
-        "input_voxel_size_nm": eff_in_vs.tolist(),
-        "output_voxel_size_nm": eff_out_vs.tolist(),
-        "patches_per_epoch": cfg.patches_per_epoch if cfg.patches_per_epoch is not None else patches_per_epoch,
-        "jitter_voxels": cfg.jitter_voxels if cfg.jitter_voxels is not None else jitter_voxels,
-        "seed": cfg.seed if cfg.seed is not None else seed,
-        "input_norm": input_norm,
-        "dense_to_sparse_ratio": cfg.dense_to_sparse_ratio if cfg.dense_to_sparse_ratio is not None else dense_to_sparse_ratio,
-    }
-    if postprocess is not None:
-        manifest["postprocess"] = postprocess
+    # A flag given on the command line wins; otherwise the crops YAML's
+    # setting, so a YAML that says patches_per_epoch travels with its crops.
+    # The YAML used to win, and CropsConfig.seed defaults to 0, so --seed
+    # never took effect.
+    def flag_or_yaml(flag, from_yaml):
+        return flag if flag is not None else from_yaml
+
+    manifest = build_manifest(volume_meta, input_norm=input_norm, postprocess=postprocess, overrides={
+        "patches_per_epoch": flag_or_yaml(patches_per_epoch, cfg.patches_per_epoch),
+        "jitter_voxels": flag_or_yaml(jitter_voxels, cfg.jitter_voxels),
+        "seed": flag_or_yaml(seed, cfg.seed),
+        "dense_to_sparse_ratio": flag_or_yaml(dense_to_sparse_ratio, cfg.dense_to_sparse_ratio),
+    })
+    if postprocess is None:
+        del manifest["postprocess"]
     manifest_path = write_manifest(output_dir, manifest)
 
     repo_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -223,13 +223,13 @@ def build_corrections(
         "model": {"repo": repo, "revision": revision, "model_name": model_name,
                   "out_channels": geom.get("out_channels"), "channels_names": geom.get("channels_names")},
         "geometry": {
-            "input_shape": input_size.tolist(), "output_shape": output_size.tolist(),
-            "claimed_input_voxel_size_nm": claimed_in_vs.tolist(),
-            "claimed_output_voxel_size_nm": claimed_out_vs.tolist(),
-            "effective_input_voxel_size_nm": eff_in_vs.tolist(),
-            "effective_output_voxel_size_nm": eff_out_vs.tolist(),
-            "dataset_offset_nm": dataset_offset_nm.tolist(),
-            "dataset_shape_voxels": dataset_shape_voxels.tolist(),
+            "input_shape": list(geometry.input_size), "output_shape": list(geometry.chunk_size),
+            "claimed_input_voxel_size_nm": list(geometry.claimed_input_voxel_size),
+            "claimed_output_voxel_size_nm": list(geometry.claimed_output_voxel_size),
+            "effective_input_voxel_size_nm": list(geometry.input_voxel_size),
+            "effective_output_voxel_size_nm": list(geometry.output_voxel_size),
+            "dataset_offset_nm": list(geometry.dataset_offset_nm),
+            "dataset_shape_voxels": list(geometry.dataset_shape_voxels),
         },
         "crops_yaml_path": os.path.abspath(crops_yaml),
         "crops_yaml": open(crops_yaml).read() if os.path.exists(crops_yaml) else None,
@@ -270,9 +270,9 @@ def main(argv=None):
     p.add_argument("--output-shape", type=_triple(int))
     p.add_argument("--input-voxel-size", type=_triple(float))
     p.add_argument("--output-voxel-size", type=_triple(float))
-    p.add_argument("--patches-per-epoch", type=int, help="fixed patches per epoch (default: one per fg-bearing chunk)")
+    p.add_argument("--patches-per-epoch", type=int, help="fixed patches per epoch (default: one per annotated chunk)")
     p.add_argument("--jitter-voxels", type=_triple(int))
-    p.add_argument("--seed", type=int, default=0)
+    p.add_argument("--seed", type=int, help="patch-sampling seed (default: the crops YAML's, else 0)")
     p.add_argument("--dense-to-sparse-ratio", type=float)
     p.add_argument("--input-norm", help="JSON input_norm block (default: MinMax 0-255 then x*2-1)")
     p.add_argument("--postprocess", help="JSON postprocess block recorded for the served yaml")

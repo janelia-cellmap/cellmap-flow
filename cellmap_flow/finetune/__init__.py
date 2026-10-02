@@ -3,36 +3,40 @@ Human-in-the-loop finetuning for CellMap-Flow models.
 
 This package provides lightweight LoRA-based finetuning for pre-trained models
 using user corrections as training data.
+
+The names below are imported when first used (PEP 562): importing a light
+submodule -- ``markers`` or ``job_manager.tailer``, which the dashboard
+reads a training job's log with -- used to import torch, the trainer and the
+dataset code first.
 """
 
-from cellmap_flow.finetune.lora_wrapper import (
-    detect_adaptable_layers,
-    wrap_model_with_lora,
-    print_lora_parameters,
-    load_lora_adapter,
-    save_lora_adapter,
-)
+import importlib
 
-from cellmap_flow.finetune.virtual_dataset import (
-    VirtualPatchDataset,
-    create_dataloader,
-)
+# name -> the submodule it lives in
+_EXPORTS = {
+    "detect_adaptable_layers": "lora_wrapper",
+    "wrap_model_with_lora": "lora_wrapper",
+    "print_lora_parameters": "lora_wrapper",
+    "load_lora_adapter": "lora_wrapper",
+    "save_lora_adapter": "lora_wrapper",
+    "VirtualPatchDataset": "data",
+    "create_dataloader": "data",
+    "LoRAFinetuner": "lora_trainer",
+    "DiceLoss": "losses",
+    "CombinedLoss": "losses",
+}
 
-from cellmap_flow.finetune.lora_trainer import (
-    LoRAFinetuner,
-    DiceLoss,
-    CombinedLoss,
-)
+__all__ = list(_EXPORTS)
 
-__all__ = [
-    "detect_adaptable_layers",
-    "wrap_model_with_lora",
-    "print_lora_parameters",
-    "load_lora_adapter",
-    "save_lora_adapter",
-    "VirtualPatchDataset",
-    "create_dataloader",
-    "LoRAFinetuner",
-    "DiceLoss",
-    "CombinedLoss",
-]
+
+def __getattr__(name):
+    module = _EXPORTS.get(name)
+    if module is None:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    value = getattr(importlib.import_module(f"{__name__}.{module}"), name)
+    globals()[name] = value
+    return value
+
+
+def __dir__():
+    return sorted(set(globals()) | set(__all__))

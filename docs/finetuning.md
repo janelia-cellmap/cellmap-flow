@@ -46,7 +46,7 @@ git reference there would make the published PyPI package unuploadable.
 Start by loading your data and model with a YAML configuration file:
 
 ```bash
-cellmap_flow_yaml my_yamls/jrc_c-elegans-bw-1_affinities.yaml
+cellmap_flow yaml my_yamls/jrc_c-elegans-bw-1_affinities.yaml
 ```
 
 This starts the dashboard with your dataset and model loaded into the Neuroglancer viewer.
@@ -88,12 +88,9 @@ Painted regions are also shown in the viewer as bounding boxes through the `anno
 
 Once the annotation volume is created or resumed and added to the viewer:
 
-1. **Select the annotation layer** by right-clicking on it in the layer list (it will be named something like `sparse_annotation_vol-XXXX`).
-2. Go to the **Draw** tab for that layer.
-3. **Bind keyboard shortcuts** to the drawing tools:
-   - Click the small box next to each tool name (e.g. `[A] Brush`, `[S] Flood Fill`, `[D] Seg Picker`).
-   - Press the letter you want to assign to that tool.
-   - Once bound, activate a tool by pressing **Shift + the assigned letter**.
+1. The new layer, named `annotation_vol-XXXX`, is **selected with its panel open**, ready to paint. (To come back to it later, right-click it in the layer list.)
+2. Go to its **Draw** tab. **A** is bound to the brush and **F** to flood fill; press **Shift + the letter** to use one.
+3. To bind another tool (e.g. `[D] Seg Picker`), click the small box next to its name and press the letter you want.
 
 
 
@@ -111,10 +108,6 @@ When you start drawing, Neuroglancer will ask if you want to write to the file â
 You can change the paint value in the Draw tab by editing the **Paint Value** field, or click **Random** next to **New Random Value** to pick a new instance ID.
 
 Annotate as many chunks as you like across the dataset. Only chunks with non-zero annotations will be used for training.
-
-### Deprecated dense crop workflow
-
-The **Create Annotation Crop** button is still available under the advanced section, but it is deprecated. It creates a small dense crop at the current view center and is rarely needed compared with the sparse full-volume workflow above.
 
 ## 5. Training
 

@@ -1,19 +1,16 @@
-import logging
-import numpy as np
-import inspect
+# The segmentation libraries (and neuroglancer, scipy.ndimage) are imported
+# inside the steps that use them: importing this module is how every chain
+# is read, including in processes that never run a segmentation step, and
+# together they took seconds to load.
 import ast
-import neuroglancer
-import pymorton
+import inspect
+import logging
 import threading
-from scipy.ndimage import label
-import mwatershed as mws
-from scipy.ndimage import measurements
-import fastremap
-from funlib.math import cantor_number
-import fastmorph
-from cellmap_flow.norm.input_normalize import SerializableInterface, deserialize_list
 
-postprocessing_lock = threading.Lock()
+import numpy as np
+
+from cellmap_flow.norm.input_normalize import SerializableInterface, deserialize_list
+from cellmap_flow.norm.safe_expression import compile_expression
 
 logger = logging.getLogger(__name__)
 
@@ -86,19 +83,63 @@ class ThresholdPostprocessor(PostProcessor):
         return True
 
 
+class FillHolesPostprocessor(PostProcessor):
+    """Threshold, then fill the background holes each foreground blob encloses.
+
+    For compact single-instance organelles (a nucleus, say) that never have
+    interior gaps; not for structures with a real lumen. It runs per chunk
+    with no halo, so a hole that touches the chunk's boundary is not enclosed
+    within the chunk and stays unfilled.
+    """
+
+    def __init__(self, threshold: float = 0.0):
+        self.threshold = float(threshold)
+
+    def _process(self, data):
+        import fastmorph
+
+        binary = data.astype(np.float32) > self.threshold
+        if binary.ndim == 3:
+            filled = fastmorph.fill_holes(binary, remove_enclosed=True)
+        elif binary.ndim == 4:
+            # fastmorph.fill_holes takes at most 3-D input.
+            filled = np.stack(
+                [fastmorph.fill_holes(channel, remove_enclosed=True) for channel in binary]
+            )
+        else:
+            raise ValueError(
+                f"FillHolesPostprocessor expects (z, y, x) or (c, z, y, x) data, "
+                f"got shape {data.shape}"
+            )
+        return filled.astype(np.uint8)
+
+    @property
+    def dtype(self):
+        return np.uint8
+
+    @property
+    def is_segmentation(self):
+        return True
+
+
 class LabelPostprocessor(PostProcessor):
     def __init__(self, channel: int = 0):
         self.channel = int(channel)
 
     def _process(self, data, chunk_corner, chunk_num_voxels):
-        to_process = data[self.channel]
-        to_process, num_features = label(to_process)
-        data[self.channel] = to_process
-        return data
+        from scipy.ndimage import label
+
+        # Into a new uint32 array: writing the labels back into the model's
+        # own (often uint8) array wrapped every id above 255, and the declared
+        # uint8 dtype wrapped them again on the way out.
+        labels, _ = label(data[self.channel])
+        out = data.astype(np.uint32)
+        out[self.channel] = labels
+        return out
 
     @property
     def dtype(self):
-        return np.uint8
+        return np.uint32
 
     @property
     def is_segmentation(self):
@@ -113,27 +154,21 @@ class MortonSegmentationRelabeling(PostProcessor):
         self.use_exact = use_exact == "True"
 
     def _process(self, data, chunk_corner, chunk_num_voxels):
+        import pymorton
+
         data = data.astype(np.uint64 if self.use_exact else np.uint16)
         to_process = data[self.channel]
-        #        if self.use_exact:
-        morton_order_number = pymorton.interleave(*chunk_corner)
-        unique_increment = chunk_num_voxels * morton_order_number
+        # A Python int, whatever the caller passes (the Inferencer passes a
+        # plain int), so the product cannot overflow before it is cast.
+        unique_increment = int(chunk_num_voxels) * pymorton.interleave(*chunk_corner)
         if not self.use_exact:
             mixed = (unique_increment * 2654435761) & 0xFFFFFFFF
             mixed ^= mixed >> 16
             unique_increment = mixed & 0xFFFF
-            # with postprocessing_lock:
-            # unique_increment = self.num_previous_segments
-            # self.num_previous_segments += len(
-            #     fastremap.unique(to_process[to_process > 0])
-            # )
 
-        to_process[to_process > 0] += unique_increment.astype(to_process.dtype)
+        to_process[to_process > 0] += to_process.dtype.type(unique_increment)
         data[self.channel] = to_process
         return data
-
-    # def to_dict(self):
-    #     return {"name": self.name()}
 
     @property
     def dtype(self):
@@ -167,14 +202,28 @@ class AffinityPostprocessor(PostProcessor):
         self.num_previous_segments = 0
 
     def _process(self, data, chunk_num_voxels, chunk_corner):
-        data = data / 255.0
+        import fastremap
+        import mwatershed as mws
+        import pymorton
+        from scipy import ndimage
+
+        # Integer input is the 0-255 that DefaultPostprocessor produces (the
+        # usual chain), so scale it back to [0, 1] exactly as before. Float
+        # input is already an affinity in [0, 1] (e.g. straight after a
+        # SigmoidPostprocessor); dividing that by 255 as well left every edge
+        # near zero and the watershed merged everything.
+        if np.issubdtype(data.dtype, np.integer) or data.dtype == np.bool_:
+            data = data / 255.0
+        else:
+            data = data.astype(np.float64)
         n_channels = data.shape[0]
-        self.neighborhood = self.neighborhood[:n_channels]
-        # raise Exception(data.max(), data.min(), self.neighborhood)
+        # Local, not self.neighborhood: truncating the attribute made every
+        # later call use the first chunk's channel count.
+        neighborhood = self.neighborhood[:n_channels]
 
         segmentation = mws.agglom(
             data.astype(np.float64) - self.bias,
-            self.neighborhood,
+            neighborhood,
         )
 
         # filter fragments
@@ -185,7 +234,7 @@ class AffinityPostprocessor(PostProcessor):
         fragment_ids = fastremap.unique(segmentation[segmentation > 0])
 
         for fragment, mean in zip(
-            fragment_ids, measurements.mean(average_affs, segmentation, fragment_ids)
+            fragment_ids, ndimage.mean(average_affs, segmentation, fragment_ids)
         ):
             if mean >= self.bias:
                 filtered_fragments.append(fragment)
@@ -195,31 +244,18 @@ class AffinityPostprocessor(PostProcessor):
         unique_increment = chunk_num_voxels * pymorton.interleave(*chunk_corner)
         if not self.use_exact:
             unique_increment = np.random.randint(0, 256) * 256
-            # https://chatgpt.com/c/67c5db69-a3cc-8001-8be5-21d00cef0a8f
-            # mixed = (unique_increment * 2654435761) & 0xFFFFFFFF
-            # mixed ^= mixed >> 16
-            # unique_increment = mixed & 0xFFFF  # with postprocessing_lock:
-            # unique_increment = self.num_previous_segments
-            # self.num_previous_segments += len(filtered_fragments)
 
         # numpy has no common integer type for uint64 and int64, so
         # ``np.result_type(np.uint64, np.int64)`` is float64 -- an in-place add of a
         # numpy *signed* scalar into a uint64 array therefore raises
-        # UFuncOutputCastingError. Both increments above are numpy int64
-        # (np.prod / np.random.randint), so cast explicitly to keep the add in
-        # uint64. (A plain Python int would also work under NEP 50's weak
-        # promotion, which is why this never reproduced with literal values.)
+        # UFuncOutputCastingError. np.random.randint gives a numpy int64, and a
+        # caller may pass chunk_num_voxels as one, so cast explicitly to keep
+        # the add in uint64. (A plain Python int would also work under NEP 50's
+        # weak promotion, which is why this never reproduced with literal values.)
         segmentation[segmentation > 0] += np.uint64(unique_increment)
         segmentation = segmentation.astype(np.uint64 if self.use_exact else np.uint16)
-        # for exact ids need the following: chunk_num_voxels * pymorton or funlib.math.cantor_number(chunk_corner), or pymorton?
-
-        # filtered_fragments = np.array(filtered_fragments, dtype=segmentation.dtype)
-        # data[self.channel] = to_process
         # insert empty dimension
         return np.expand_dims(segmentation, axis=0)
-
-    # def to_dict(self):
-    #     return {"name": self.name()}
 
     @property
     def dtype(self):
@@ -241,6 +277,8 @@ class SimpleBlockwiseMerger(PostProcessor):
         channel: int = 0,
         face_erosion_iterations: int = 0,
     ):
+        import neuroglancer
+
         use_exact = "True"
         self.channel = int(channel)
         self.face_erosion_iterations = int(face_erosion_iterations)
@@ -257,9 +295,29 @@ class SimpleBlockwiseMerger(PostProcessor):
             (0, 0, 1): (slice(None), slice(None), -1),
         }
         self.keys_to_skip = set()
+        # The server calls one instance from every Flask request thread; this
+        # guards the dict, the set and the equivalence map they all share.
+        self._lock = threading.Lock()
+
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        state.pop("_lock", None)
+        return state
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+        self._lock = threading.Lock()
+
+    def equivalences_json(self):
+        """The equivalences so far, read while no other chunk is adding to them."""
+        with self._lock:
+            return self.equivalences.to_json()
 
     def _process(self, data, chunk_corner):
+        import fastmorph
+
         segmentation = data[self.channel]
+        faces = {}
         for slice_reference, slice in self.slices.items():
             slice_data = segmentation[slice]
             if self.face_erosion_iterations > 0:
@@ -268,22 +326,18 @@ class SimpleBlockwiseMerger(PostProcessor):
                 )
             coord_0, coord_1 = np.where(slice_data > 0)
             segmented_ids = slice_data[coord_0, coord_1]
-            self.chunk_slice_position_to_coords_id_dict[
-                (chunk_corner, slice_reference)
-            ] = dict(
+            faces[(chunk_corner, slice_reference)] = dict(
                 zip(
                     zip(coord_0, coord_1),
                     segmented_ids,
                 )
             )
-        for key in self.keys_to_skip:
-            self.chunk_slice_position_to_coords_id_dict.pop(key, None)
-        self.calculate_equivalences()
-        # print(f"Edge voxel position to id dict: {self.edge_voxel_position_to_id_dict}")
+        with self._lock:
+            self.chunk_slice_position_to_coords_id_dict.update(faces)
+            for key in self.keys_to_skip:
+                self.chunk_slice_position_to_coords_id_dict.pop(key, None)
+            self.calculate_equivalences()
         return data.astype(np.uint64 if self.use_exact else np.uint16)
-
-    # def to_dict(self):
-    #     return {"name": self.name()}
 
     def calculate_equivalences(self):
         chunk_slice_position_to_coords_id_dict = (
@@ -323,14 +377,16 @@ class SimpleBlockwiseMerger(PostProcessor):
 
 class ChannelSelection(PostProcessor):
     def __init__(self, channels: str = "0"):
-        self.channels = [int(channel) for channel in channels.split(",")]
+        # "0,2" from the dashboard form; YAML may also give 2 or [0, 2].
+        if isinstance(channels, str):
+            channels = channels.split(",")
+        elif not isinstance(channels, (list, tuple)):
+            channels = [channels]
+        self.channels = [int(channel) for channel in channels]
 
     def _process(self, data):
         data = data[self.channels, :, :, :]
         return data
-
-    # def to_dict(self):
-    #     return {"name": self.name()}
 
     @property
     def num_channels(self):
@@ -340,13 +396,10 @@ class ChannelSelection(PostProcessor):
 class LambdaPostprocessor(PostProcessor):
     def __init__(self, expression: str):
         self.expression = expression
-        self._lambda = eval(f"lambda x: {expression}")
+        self._lambda = compile_expression(expression)
 
     def _process(self, data) -> np.ndarray:
         return self._lambda(data.astype(np.float32))
-
-    # def to_dict(self):
-    #     return {"name": self.name(), "expression": self.expression}
 
     @property
     def dtype(self):
@@ -381,6 +434,3 @@ def get_postprocessors_list() -> list[dict]:
 def get_postprocessors(elms) -> list[PostProcessor]:
     """Get postprocessors from either dict or list format."""
     return deserialize_list(elms, PostProcessor)
-
-
-PostProcessorMethods = [f for f in PostProcessor.__subclasses__()]

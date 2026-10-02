@@ -1,396 +1,177 @@
-from cellmap_flow.norm.input_normalize import MinMaxNormalizer, LambdaNormalizer
+"""Deprecated: ``g`` stands in for state that now lives with its owners.
 
-import os
-import queue
-import yaml
-import logging
-import threading
-import numpy as np
-from collections import deque
-import logging
-from typing import Any, Dict, List, Optional
+``cellmap_flow.globals.g`` used to hold everything a process shared. Each
+part now has an owner, and ``g`` forwards every name it had to that owner,
+warning with a DeprecationWarning that names the replacement:
 
-logger = logging.getLogger(__name__)
+- the launcher settings (``queue``, ``charge_group``, ``walltime``, ...,
+  ``save_server_config()``): ``cellmap_flow.jobs.settings.launcher_settings()``;
+- the chain (``input_norms``, ``postprocess``, their ``*_config``,
+  ``pipeline_spec``, ``set_pipeline()``, ``get_output_dtype()``):
+  ``cellmap_flow.process_chain.process_chain()``;
+- the servers this process started (``jobs``):
+  ``cellmap_flow.jobs.launch.started_jobs()``;
+- the rest, the dashboard's state: ``cellmap_flow.dashboard.state.get_session()``.
 
-# This is the basicConfig that actually takes effect in most processes,
-# because globals is imported before any CLI gets to configure logging.
-from cellmap_flow.utils.logging_setup import configure_logging
+``g`` and ``Flow`` go in the release after 0.3.0. Until then importing this
+module still configures logging, as it always has, so the scripts that
+import it keep their log lines. The owners are imported only when a name is
+used, so importing this module pulls in neither the dashboard nor jobs.
+"""
+
+import warnings
+
+from cellmap_flow.logging_setup import configure_logging
 
 configure_logging()
 
-SERVER_CONFIG_PATH = os.path.expanduser("~/.cellmap_flow/server_config.yaml")
+_SETTINGS = "cellmap_flow.jobs.settings.launcher_settings()"
+_CHAIN = "cellmap_flow.process_chain.process_chain()"
+_JOBS = "cellmap_flow.jobs.launch.started_jobs()"
+_SESSION = "cellmap_flow.dashboard.state.get_session()"
 
-SERVER_CONFIG_DEFAULTS = {
-    "queue": "gpu_h100",
-    "charge_group": "",
-    # LSF's own default on the GPU queues is 120 minutes, which killed
-    # inference servers two hours into a session. See DEFAULT_WALLTIME in
-    # bsub_utils for why this matches the Fileglancer app's own 8 hours.
-    "walltime": "08:00",
-    # Try other GPU queues when the requested one is busy or closed. On by
-    # default because a job that starts elsewhere beats one that never
-    # starts; turn it off when the queue itself matters (a benchmark pinned
-    # to one GPU model, a charge group valid on only one queue).
-    "cycle_gpu_queues": True,
-    "nb_cores_master": 4,
-    "nb_cores_worker": 12,
-    "nb_workers": 14,
+
+def _settings():
+    from cellmap_flow.jobs.settings import launcher_settings
+
+    return launcher_settings()
+
+
+def _chain():
+    from cellmap_flow.process_chain import process_chain
+
+    return process_chain()
+
+
+def _jobs():
+    from cellmap_flow.jobs.launch import started_jobs
+
+    return started_jobs()
+
+
+def _session():
+    from cellmap_flow.dashboard.state import get_session
+
+    return get_session()
+
+
+class _Forward:
+    """One of g's names: what replaces it, and how to read and write it there."""
+
+    __slots__ = ("replacement", "get", "set")
+
+    def __init__(self, replacement, get, set=None):
+        self.replacement, self.get, self.set = replacement, get, set
+
+
+def _attribute(owner, owner_text, attr, writable=True):
+    """``owner().<attr>``."""
+    return _Forward(
+        f"{owner_text}.{attr}",
+        lambda: getattr(owner(), attr),
+        (lambda value: setattr(owner(), attr, value)) if writable else None,
+    )
+
+
+def _builder(key):
+    """One node list of the builder's last apply, ``builder_state[key]``."""
+    def set_(value):
+        session = _session()
+        state = session.builder_state
+        state[key] = value
+        session.builder_state = state
+
+    return _Forward(f'{_SESSION}.builder_state["{key}"]', lambda: _session().builder_state[key], set_)
+
+
+def _replace_jobs(jobs):
+    # In place: start_hosts appends to this list and cleanup_handler kills
+    # from it, so it must stay the same list.
+    _jobs()[:] = jobs
+
+
+# Every name g had, and nothing else: new code uses the owners. In particular
+# a setting added after g was deprecated is not added here.
+_FORWARDS = {
+    **{key: _attribute(_settings, _SETTINGS, key) for key in (
+        "queue", "charge_group", "walltime", "cycle_gpu_queues", "nb_cores_master", "nb_cores_worker",
+        "nb_workers")},
+    "_server_config_cached": _attribute(_settings, _SETTINGS, "cached"),
+    # A plain write, as it always was: g.input_norms = [...] leaves the
+    # configured steps alone.
+    **{name: _attribute(_chain, _CHAIN, name) for name in (
+        "input_norms", "postprocess", "input_norm_config", "postprocess_config")},
+    "pipeline_spec": _attribute(_chain, _CHAIN, "spec", writable=False),
+    "jobs": _Forward(_JOBS, _jobs, _replace_jobs),
+    "NEUROGLANCER_URL": _attribute(_session, _SESSION, "neuroglancer_url"),
+    **{f"pipeline_{key}": _builder(key) for key in (
+        "inputs", "outputs", "edges", "normalizers", "models", "postprocessors")},
+    "pipeline_model_configs": _attribute(_session, _SESSION, "builder_model_configs"),
+    **{name: _attribute(_session, _SESSION, name) for name in (
+        "viewer", "dataset_path", "raw", "extra_layers", "shaders", "shader_controls", "models_config",
+        "model_catalog", "tmp_dir", "blockwise_tasks_dir", "log_buffer", "log_clients", "bbx_generator_state",
+        "review", "minio_state", "annotation_volumes", "output_sessions", "finetune_job_manager")},
 }
 
-SERVER_CONFIG_KEYS = list(SERVER_CONFIG_DEFAULTS.keys())
 
-
-def load_server_config_cache() -> Optional[Dict[str, Any]]:
-    """Load server config from cache file. Returns None if not found."""
-    if os.path.exists(SERVER_CONFIG_PATH):
-        with open(SERVER_CONFIG_PATH, "r") as f:
-            return yaml.safe_load(f) or {}
-    return None
-
-
-def save_server_config_cache(config: Dict[str, Any]) -> None:
-    """Save server config to cache file."""
-    os.makedirs(os.path.dirname(SERVER_CONFIG_PATH), exist_ok=True)
-    with open(SERVER_CONFIG_PATH, "w") as f:
-        yaml.dump(config, f, default_flow_style=False)
-
-# input_norms = [MinMaxNormalizer(), LambdaNormalizer("x*2-1")]
-# postprocess = [DefaultPostprocessor(), ThresholdPostprocessor(threshold=0.5)]
-
-input_norms = []
-postprocess = []
-viewer = None
+def _warn(name, replacement):
+    # stacklevel 3: past this function and g's accessor, to the line that
+    # used g, which is where the fix goes.
+    warnings.warn(
+        f"cellmap_flow.globals.{name} is deprecated and goes in the release after 0.3.0; use {replacement}",
+        DeprecationWarning,
+        stacklevel=3,
+    )
 
 
 class Flow:
-    _instance: Optional["Flow"] = None
-    
-    # Class-level type annotations for all instance attributes
-    jobs: List[Any]
-    models_config: List[Any]
-    servers: List[Any]
-    raw: Optional[Any]
-    input_norms: List[Any]
-    postprocess: List[Any]
-    viewer: Optional[Any]
-    dataset_path: Optional[str]
-    model_catalog: dict
-    queue: str
-    charge_group: str
-    nb_cores_master: int
-    nb_cores_worker: int
-    nb_workers: int
-    tmp_dir: Optional[str]
-    blockwise_tasks_dir: Optional[str]
-    neuroglancer_thread: Optional[Any]
-    pipeline_inputs: List[Any]
-    pipeline_outputs: List[Any]
-    pipeline_edges: List[Any]
-    pipeline_normalizers: List[Any]
-    pipeline_models: List[Any]
-    pipeline_postprocessors: List[Any]
-    shaders: dict
-    shader_controls: dict
-    _server_config_cached: bool
+    """Deprecated: the type of ``g``; see the module docstring.
 
-    # Dashboard state (moved from cellmap_flow.dashboard.state)
-    log_buffer: deque
-    log_clients: list
-    NEUROGLANCER_URL: Optional[str]
-    INFERENCE_SERVER: Optional[Any]
-    CUSTOM_CODE_FOLDER: str
-    bbx_generator_state: dict
-    finetune_job_manager: Any
-    minio_state: dict
-    annotation_volumes: dict
-    output_sessions: dict
+    Every attribute is forwarded to its owner on each use, never copied, so
+    ``g`` and the owners cannot disagree. It stores nothing itself: a name g
+    never had raises, as a misspelt one does on the dashboard's Session,
+    rather than being kept where nothing reads it.
+    """
+
+    __slots__ = ()
 
     def __new__(cls):
-        if cls._instance is None:
-            cls._instance = super(Flow, cls).__new__(cls)
-            cls._instance.jobs = []
-            cls._instance.models_config = []
-            cls._instance.servers = []
-            cls._instance.raw = None
-            cls._instance.input_norms = input_norms
-            # Raw JSON-serializable form of the dashboard's input_norm config.
-            # Populated by /api/run from the request payload; used by the
-            # finetune submit/restart flow so the trainer process applies the
-            # same normalization the dashboard uses at inference.
-            #
-            # NOTE: prefer ``current_input_norm_config()`` over reading this
-            # directly. Some startup paths (e.g. yaml_cli.py at server boot)
-            # populate ``input_norms`` from a YAML's ``json_data.input_norm``
-            # but never touch ``input_norm_config``. The helper falls back to
-            # reconstructing the dict from the live normalizer instances.
-            cls._instance.input_norm_config = {}
-            cls._instance.postprocess = postprocess
-            cls._instance.postprocess_config = {}
-            cls._instance.viewer = None
-            cls._instance.dataset_path = None
-            cls._instance.model_catalog = {}
-            # Uncomment and adjust if you want to load the model catalog:
-            models_path = os.path.normpath(
-                os.path.join(
-                    os.path.dirname(__file__), os.pardir, "models", "models.yaml"
-                )
-            )
-            with open(models_path, "r") as f:
-                cls._instance.model_catalog = yaml.safe_load(f)
+        _warn("Flow()", "the owners that cellmap_flow.globals' docstring lists (Flow() returns g)")
+        return g
 
-            # Load server config from cache or use defaults.
-            #
-            # Drive this from SERVER_CONFIG_DEFAULTS rather than naming each
-            # key by hand. save_server_config() already iterates the same
-            # dict, so a key listed there but missing from a hand-written
-            # assignment raised AttributeError on save -- which is how adding
-            # "walltime" killed every yaml run at startup.
-            cached = load_server_config_cache() or {}
-            for key, default in SERVER_CONFIG_DEFAULTS.items():
-                setattr(cls._instance, key, cached.get(key, default))
-            cls._instance._server_config_cached = bool(cached)
-            cls._instance.tmp_dir = os.path.expanduser("~/.cellmap_flow/blockwise_tmp")
-            cls._instance.blockwise_tasks_dir = os.path.expanduser("~/.cellmap_flow/blockwise_tasks")
-            cls._instance.neuroglancer_thread = None
+    def __getattr__(self, name):
+        forward = _FORWARDS.get(name)
+        if forward is None:
+            raise AttributeError(f"cellmap_flow.globals.g has no attribute {name!r}")
+        _warn(f"g.{name}", forward.replacement)
+        return forward.get()
 
-            # Pipeline visual state storage
-            cls._instance.pipeline_inputs = []
-            cls._instance.pipeline_outputs = []
-            cls._instance.pipeline_edges = []
-            cls._instance.pipeline_normalizers = []
-            cls._instance.pipeline_models = []
-            cls._instance.pipeline_postprocessors = []
+    def __setattr__(self, name, value):
+        forward = _FORWARDS.get(name)
+        if forward is None:
+            raise AttributeError(f"cellmap_flow.globals.g has no attribute {name!r}")
+        if forward.set is None:
+            raise AttributeError(f"cellmap_flow.globals.g.{name} cannot be set; it is derived from the chain")
+        _warn(f"g.{name}", forward.replacement)
+        forward.set(value)
 
-            # Shader state: key = layer name, value = shader string
-            cls._instance.shaders = {}
-            # ShaderControls state: key = layer name, value = shaderControls dict
-            cls._instance.shader_controls = {}
-
-            # Dashboard state (moved from cellmap_flow.dashboard.state)
-            cls._instance.log_buffer = deque(maxlen=1000)
-            cls._instance.log_clients = []
-            cls._instance.NEUROGLANCER_URL = None
-            cls._instance.INFERENCE_SERVER = None
-            cls._instance.CUSTOM_CODE_FOLDER = os.path.expanduser(
-                os.environ.get(
-                    "CUSTOM_CODE_FOLDER",
-                    "~/Desktop/cellmap/cellmap-flow/example/example_norm",
-                )
-            )
-            cls._instance.bbx_generator_state = {
-                "dataset_path": None,
-                "num_boxes": 0,
-                "bounding_boxes": [],
-                "viewer": None,
-                "viewer_process": None,
-                "viewer_url": None,
-                "viewer_state": None,
-            }
-            cls._instance.minio_state = {
-                "process": None,
-                "port": None,
-                "ip": None,
-                "bucket": "annotations",
-                "minio_root": None,
-                "output_base": None,
-                "last_sync": {},
-                "chunk_sync_state": {},
-                "sync_thread": None,
-            }
-            cls._instance.annotation_volumes = {}
-            cls._instance.output_sessions = {}
-            cls._instance._finetune_job_manager = None
-
-        return cls._instance
-
-    @property
-    def finetune_job_manager(self):
-        if self._finetune_job_manager is None:
-            from cellmap_flow.finetune.finetune_job_manager import FinetuneJobManager
-            self._finetune_job_manager = FinetuneJobManager()
-        return self._finetune_job_manager
-
-    @finetune_job_manager.setter
-    def finetune_job_manager(self, value):
-        self._finetune_job_manager = value
-
-    def to_dict(self):
-        return self.__dict__.items()
+    def __dir__(self):
+        return sorted({*object.__dir__(self), *_FORWARDS})
 
     def __repr__(self):
-        return f"Flow({self.__dict__})"
-
-    def __str__(self):
-        return f"Flow({self.__dict__})"
+        return "<cellmap_flow.globals.g, deprecated: see the cellmap_flow.globals docstring>"
 
     def save_server_config(self):
-        """Save current server config attributes to cache."""
-        config = {k: getattr(self, k) for k in SERVER_CONFIG_KEYS}
-        save_server_config_cache(config)
-        self._server_config_cached = True
+        _warn("g.save_server_config()", f"{_SETTINGS}.save()")
+        _settings().save()
 
-    def get_output_dtype(self, model_output_dtype):
+    def set_pipeline(self, spec, built=None):
+        _warn("g.set_pipeline()", f"{_CHAIN}.set()")
+        _chain().set(spec, built=built)
 
-        dtype = model_output_dtype
-
-        if len(self.postprocess) > 0:
-            # Postprocessors are applied in order (see Inferencer), so the dtype
-            # that actually reaches the client is the one declared by the LAST
-            # step that declares one. Scan in reverse, matching
-            # is_output_segmentation(). Scanning forward picked e.g.
-            # SigmoidPostprocessor's float32 ahead of a trailing
-            # AffinityPostprocessor's uint64, which both advertised the wrong
-            # dtype in the zarr metadata (neuroglancer: "Data type not
-            # compatible with segmentation layer") and cast uint64 label ids
-            # through float32, corrupting any id above 2**24.
-            for postprocess in self.postprocess[::-1]:
-                if postprocess.dtype:
-                    logger.info(
-                        f"Setting output dtype to {postprocess.dtype} from {postprocess} - was {dtype}"
-                    )
-                    dtype = postprocess.dtype
-                    break
-
-        return dtype
-
-    @classmethod
-    def run(
-        cls,
-        zarr_path,
-        model_configs,
-        queue="gpu_h100",
-        charge_group="cellmap",
-        input_normalizers=None,
-        post_processors=None,
-    ):
-
-        from cellmap_flow.utils.bsub_utils import start_hosts, SERVER_COMMAND
-        from cellmap_flow.utils.neuroglancer_utils import generate_neuroglancer_url
-
-        if input_normalizers is None:
-            input_normalizers = []
-        if post_processors is None:
-            post_processors = []
-
-        # Get the singleton instance (creates one if it doesn't exist)
-        instance = cls()
-        instance.queue = queue
-        instance.charge_group = charge_group
-        instance.dataset_path = zarr_path
-        instance.input_norms = input_normalizers
-        instance.postprocess = post_processors
-        instance.models_config = model_configs
-        instance.neuroglancer_thread = None
-
-        threads = []
-
-        for model_config in instance.models_config:
-            model_command = model_config.command
-            command = f"{SERVER_COMMAND} {model_command} -d {instance.dataset_path}"
-            print(f"Starting server with command: {command}")
-            thread = threading.Thread(
-                target=start_hosts,
-                args=(command, queue, charge_group, model_config.name),
-            )
-            thread.start()
-            threads.append(thread)
-
-        for thread in threads:
-            thread.join()
-
-        instance.neuroglancer_thread = threading.Thread(
-            target=generate_neuroglancer_url, args=(instance.dataset_path,)
-        )
-        instance.neuroglancer_thread.start()
-        # Optionally wait for the neuroglancer thread:
-        # instance.neuroglancer_thread.join()
-
-        print(f"*****Neuroglancer URL: {instance.dataset_path}")
-
-    @classmethod
-    def stop(cls):
-        instance = cls()
-        for job in instance.jobs:
-            print(f"Killing job {job.job_id}")
-            job.kill()
-        if instance.neuroglancer_thread is not None:
-            instance.neuroglancer_thread = None
-        instance.jobs = []
-
-    @classmethod
-    def delete(cls):
-        cls._instance = None
+    def get_output_dtype(self, model_output_dtype, postprocess=None):
+        _warn("g.get_output_dtype()", f"{_CHAIN}.output_dtype()")
+        return _chain().output_dtype(model_output_dtype, postprocess)
 
 
-g = Flow()
-
-
-# Custom handler to capture logs into Flow singleton
-class LogHandler(logging.Handler):
-    def emit(self, record):
-        log_entry = self.format(record)
-        g.log_buffer.append(log_entry)
-        # Send to all connected clients
-        for client_queue in g.log_clients:
-            try:
-                client_queue.put_nowait(log_entry)
-            except queue.Full:
-                pass
-
-
-def current_input_norm_config() -> dict:
-    """Return the dashboard's current input_norm as a JSON-serializable dict.
-
-    Reads ``g.input_norm_config`` if populated; otherwise reconstructs the
-    dict from the live ``g.input_norms`` instances via their ``.to_dict()``.
-    The fallback matters because some startup paths (yaml_cli) populate
-    ``g.input_norms`` from the YAML at server boot but never touch
-    ``input_norm_config`` -- if the user submits training without first
-    hitting /api/run, the manifest would otherwise be written empty.
-    """
-    cfg = getattr(g, "input_norm_config", None) or {}
-    if cfg:
-        return cfg
-    norms = getattr(g, "input_norms", None) or []
-    derived = {}
-    for n in norms:
-        try:
-            d = n.to_dict()
-            name = d.pop("name", type(n).__name__)
-            derived[name] = d
-        except Exception:
-            continue
-    return derived
-
-
-def current_postprocess_config() -> dict:
-    """Return the dashboard's current postprocess chain as a JSON-serializable dict.
-
-    Mirrors ``current_input_norm_config()``: reads ``g.postprocess_config`` if
-    populated, otherwise reconstructs the dict from the live ``g.postprocess``
-    instances via their ``.to_dict()``. The fallback matters for the same
-    reason it does for input_norm -- e.g. a yaml booted with a
-    ``json_data.postprocess`` (like ``SigmoidPostprocessor``) populates
-    ``g.postprocess`` but never touches ``postprocess_config``.
-    """
-    cfg = getattr(g, "postprocess_config", None) or {}
-    if cfg:
-        return cfg
-    procs = getattr(g, "postprocess", None) or []
-    derived = {}
-    for p in procs:
-        try:
-            d = p.to_dict()
-            name = d.pop("name", type(p).__name__)
-            derived[name] = d
-        except Exception:
-            continue
-    return derived
-
-
-def get_blockwise_tasks_dir():
-    tasks_dir = g.blockwise_tasks_dir or os.path.expanduser(
-        "~/.cellmap_flow/blockwise_tasks"
-    )
-    os.makedirs(tasks_dir, exist_ok=True)
-    return tasks_dir
+g = object.__new__(Flow)

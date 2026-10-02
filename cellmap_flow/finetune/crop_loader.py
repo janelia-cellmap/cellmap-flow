@@ -13,14 +13,14 @@ This module owns:
     - The pydantic schema (:class:`CropEntry`, :class:`CropsConfig`).
     - The label remap function (:func:`remap_labels`).
     - Small zarr-attrs helpers used by the loader to derive a crop's voxel
-      size, offset, and the array sub-path inside an OME-NGFF group.
+      size, offset, and the array sub-path inside an OME-NGFF group (the
+      array itself is read with ``io.source.open_array``).
 """
 
 from __future__ import annotations
 
 import logging
 import os
-from pathlib import Path
 from typing import Iterable, List, Literal, Optional, Tuple
 
 import numpy as np
@@ -28,7 +28,8 @@ import yaml
 import zarr
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from cellmap_flow.utils import zarr_v3
+from cellmap_flow.io import metadata, paths
+from cellmap_flow.io.ome import ome_corner
 
 logger = logging.getLogger(__name__)
 
@@ -86,15 +87,17 @@ class CropsConfig(BaseModel):
     govern epoch length, patch-center jitter (in voxels), and the per-worker
     RNG base seed for reproducible patch sampling across runs.
 
-    ``patches_per_epoch=None`` (the default) means "cover every populated
-    chunk roughly once per epoch" — the dataset substitutes the total
-    populated-chunk count at index build time. Override with an explicit
-    int to cap the epoch length.
+    ``patches_per_epoch=None`` (the default) means "cover every annotated
+    chunk roughly once per epoch" — the dataset substitutes the number of
+    chunks holding a voxel of either pool at index build time. Override
+    with an explicit int to cap the epoch length.
 
     ``dense_to_sparse_ratio=None`` (the default) means "auto-balance":
-    50/50 split between dense imported crops and sparse painted scribbles
-    when both pools exist; degrades to 1.0 (all from the surviving pool)
-    when only one pool has FG voxels.
+    half the patches are centred in the dense pool (foreground inside the
+    imported crops) and half in the sparse one (every annotated voxel
+    outside them, background included: the painted scribbles) when both
+    have voxels, and all in the one that has when only one does (see
+    ``finetune.data.sampler``).
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -119,12 +122,51 @@ class CropsConfig(BaseModel):
         return out
 
 
+YAML_SUFFIXES = (".yaml", ".yml")
+YAML_SIZE_LIMIT = 1_000_000
+
+
+class YamlFileRefused(ValueError):
+    """A path :func:`read_yaml_file` will not read; the message says why."""
+
+
+def read_yaml_file(path: str) -> str:
+    """Return the text of the YAML file at ``path``, or raise :class:`YamlFileRefused`.
+
+    The dashboard listens on every interface without authentication, and two
+    of its routes read a file the request names: read-yaml, for the editor,
+    and load-crops. Both used to read any file the dashboard's user could, so
+    this reads only a regular file that is YAML by name once symlinks are
+    resolved, and at most 1 MB of it.
+
+    A file that is missing, is not YAML, is not a regular file or cannot be
+    opened is refused with the same message, so the answer does not tell a
+    caller which paths exist either.
+    """
+    real = os.path.realpath(os.path.expanduser(path))
+    refused = YamlFileRefused("Only an existing .yaml or .yml file can be read")
+    if not real.lower().endswith(YAML_SUFFIXES) or not os.path.isfile(real):
+        raise refused
+    if os.path.getsize(real) > YAML_SIZE_LIMIT:
+        raise YamlFileRefused("File exceeds 1 MB; paste it directly instead")
+    try:
+        with open(real) as f:
+            return f.read()
+    except OSError:
+        raise refused from None
+
+
 def parse_crops_yaml(yaml_text_or_path: str) -> CropsConfig:
-    """Parse a YAML string OR the path to a YAML file into a validated config."""
+    """Parse YAML text, or the path to a YAML file, into a validated config.
+
+    A single line that ends in ``.yaml`` or ``.yml`` is a path, read through
+    :func:`read_yaml_file`; anything else is YAML text. Deciding by the name
+    rather than by whether the file exists is what keeps load-crops from
+    opening arbitrary files, or answering differently for one that exists.
+    """
     text = yaml_text_or_path
-    if "\n" not in yaml_text_or_path and os.path.exists(yaml_text_or_path):
-        with open(yaml_text_or_path) as f:
-            text = f.read()
+    if "\n" not in text and text.strip().lower().endswith(YAML_SUFFIXES):
+        text = read_yaml_file(text.strip())
     data = yaml.safe_load(text) or {}
     return CropsConfig.model_validate(data)
 
@@ -139,15 +181,17 @@ def _read_voxel_size_and_offset(
 ) -> Tuple[Tuple[str, ...], np.ndarray, np.ndarray]:
     """Return ``(array_subpath, voxel_size_nm, offset_nm)`` for an annotation zarr.
 
-    Handles three layouts:
+    ``offset_nm`` is the lower corner of voxel 0. An OME-NGFF translation is
+    voxel 0's centre, so half a voxel is taken off it; the legacy
+    ``transform``/``offset`` attributes are corners already.
+
+    Handles three layouts, in zarr v2 and v3 alike:
         1. Multiscale group with ``multiscales`` -> first scale's array.
-        2. Plain ``zarr.Array`` with ``transform``/``resolution`` attrs.
-        3. Plain ``zarr.Array`` with no metadata -> voxel_size=(1,1,1),
+        2. Plain array with ``transform``/``resolution`` attrs.
+        3. Plain array with no metadata -> voxel_size=(1,1,1),
            offset=(0,0,0).
 
-    Zarr **v3**-format stores (``zarr.json``) are handled separately in
-    :func:`_read_voxel_size_and_offset_v3`, since zarr-python 2.x cannot open
-    them at all.
+    The values are read as written: in the file's units, every axis.
     """
     # zarr.open reports the path *inside* the store, which for a missing
     # directory is the empty string -- "nothing found at path ''" names
@@ -170,95 +214,49 @@ def _read_voxel_size_and_offset(
         )
         raise FileNotFoundError(f"Crop path not found: {zarr_path}.{detail}")
 
-    if zarr_v3.is_v3_container(zarr_path):
+    if paths.is_v3_container(zarr_path):
         return _read_voxel_size_and_offset_v3(zarr_path)
-
     node = zarr.open(zarr_path, mode="r")
-
     if isinstance(node, zarr.hierarchy.Group):
-        attrs = dict(node.attrs)
-        multiscales = attrs.get("multiscales")
-        if multiscales:
-            ms = multiscales[0]
-            ds = ms["datasets"][0]
-            sub = ds["path"]
-            scale = np.array([1.0, 1.0, 1.0])
-            translation = np.array([0.0, 0.0, 0.0])
-            for tx in ds.get("coordinateTransformations", []):
-                if tx.get("type") == "scale":
-                    scale = np.array(tx["scale"], dtype=float)
-                elif tx.get("type") == "translation":
-                    translation = np.array(tx["translation"], dtype=float)
-            return (sub,), scale, translation
-        if "s0" in node:
-            return ("s0",), np.array([1.0, 1.0, 1.0]), np.array([0.0, 0.0, 0.0])
-        raise ValueError(
-            f"Group at {zarr_path} has no 'multiscales' attribute and no 's0' child."
-        )
-
-    attrs = dict(node.attrs)
-    if "transform" in attrs:
-        tx = attrs["transform"]
-        scale = np.array(tx.get("scale", [1, 1, 1]), dtype=float)
-        translation = np.array(tx.get("translate", [0, 0, 0]), dtype=float)
-        return (), scale, translation
-    if "resolution" in attrs:
-        scale = np.array(attrs["resolution"], dtype=float)
-        translation = np.array(attrs.get("offset", [0, 0, 0]), dtype=float)
-        return (), scale, translation
-    return (), np.array([1.0, 1.0, 1.0]), np.array([0.0, 0.0, 0.0])
+        return _crop_geometry(zarr_path, dict(node.attrs), "s0" in node)
+    return _crop_geometry(zarr_path, dict(node.attrs), None)
 
 
 def _read_voxel_size_and_offset_v3(
     zarr_path: str,
 ) -> Tuple[Tuple[str, ...], np.ndarray, np.ndarray]:
-    """Zarr-v3 counterpart of :func:`_read_voxel_size_and_offset`. Same three
-    layouts, read via plain ``json.load`` on ``zarr.json`` instead of
-    zarr-python (which cannot open v3 stores)."""
-    meta = zarr_v3.read_zarr_json(zarr_path)
-
+    """Zarr-v3 counterpart of :func:`_read_voxel_size_and_offset`, read from
+    ``zarr.json`` (zarr-python 2.x cannot open v3 stores)."""
+    meta = metadata.read_zarr_json(zarr_path)
+    attrs = metadata.attrs_from_meta(meta)
     if meta.get("node_type") == "group":
-        ms = zarr_v3.multiscales_from_group(zarr_path)
-        if ms is not None:
-            ds = ms["datasets"][0]
-            sub = ds["path"]
-            scale = np.array([1.0, 1.0, 1.0])
-            translation = np.array([0.0, 0.0, 0.0])
-            for tx in ds.get("coordinateTransformations", []):
-                if tx.get("type") == "scale":
-                    scale = np.array(tx["scale"], dtype=float)
-                elif tx.get("type") == "translation":
-                    translation = np.array(tx["translation"], dtype=float)
-            return (sub,), scale, translation
-        if zarr_v3.is_v3_container(os.path.join(zarr_path, "s0")):
-            return ("s0",), np.array([1.0, 1.0, 1.0]), np.array([0.0, 0.0, 0.0])
-        raise ValueError(
-            f"Group at {zarr_path} has no 'multiscales' attribute and no 's0' child."
+        return _crop_geometry(
+            zarr_path, attrs, paths.is_v3_container(os.path.join(zarr_path, "s0"))
         )
-
-    attrs = zarr_v3.attrs_from_meta(meta)
-    if "transform" in attrs:
-        tx = attrs["transform"]
-        scale = np.array(tx.get("scale", [1, 1, 1]), dtype=float)
-        translation = np.array(tx.get("translate", [0, 0, 0]), dtype=float)
-        return (), scale, translation
-    if "resolution" in attrs:
-        scale = np.array(attrs["resolution"], dtype=float)
-        translation = np.array(attrs.get("offset", [0, 0, 0]), dtype=float)
-        return (), scale, translation
-    return (), np.array([1.0, 1.0, 1.0]), np.array([0.0, 0.0, 0.0])
+    return _crop_geometry(zarr_path, attrs, None)
 
 
-def _open_array(zarr_path: str, sub: Tuple[str, ...]):
-    target = zarr_path
-    for piece in sub:
-        target = os.path.join(target, piece)
-    if zarr_v3.is_v3_container(target):
-        return zarr_v3.open_array_v3(target)
-    arr = zarr.open(target, mode="r")
-    if not isinstance(arr, zarr.Array):
-        raise ValueError(f"Expected zarr.Array at {target}, got {type(arr).__name__}")
-    return arr
+def _crop_geometry(zarr_path, attrs, has_s0):
+    """``_read_voxel_size_and_offset`` for a node's ``attrs``; ``has_s0`` is
+    None for an array, else whether the group has an ``s0`` child."""
+    if has_s0 is None:
+        voxel_size, offset = metadata.legacy_attrs(attrs, ndim=3)
+        return (), np.array(voxel_size, dtype=float), np.array(offset, dtype=float)
+
+    multiscales = attrs.get("multiscales")
+    if multiscales:
+        entry = multiscales[0]["datasets"][0]
+        scale, translation = metadata.dataset_transforms(entry)
+        scale = np.array([1.0, 1.0, 1.0] if scale is None else scale, dtype=float)
+        translation = np.array(
+            [0.0, 0.0, 0.0] if translation is None else translation, dtype=float
+        )
+        return (entry["path"],), scale, np.array(ome_corner(translation, scale))
+    if has_s0:
+        return ("s0",), np.array([1.0, 1.0, 1.0]), np.array([0.0, 0.0, 0.0])
+    raise ValueError(
+        f"Group at {zarr_path} has no 'multiscales' attribute and no 's0' child."
+    )
 
 
 # ---------------------------------------------------------------------------

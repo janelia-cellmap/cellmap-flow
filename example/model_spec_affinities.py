@@ -5,9 +5,9 @@ import torch
 import funlib.learn.torch
 import numpy as np
 
-voxel_size = (16, 16, 16)
-read_shape = Coordinate((178, 178, 178)) * Coordinate(voxel_size)
-write_shape = Coordinate((56, 56, 56)) * Coordinate(voxel_size)
+input_voxel_size = (16, 16, 16)
+read_shape = Coordinate((178, 178, 178)) * Coordinate(input_voxel_size)
+write_shape = Coordinate((56, 56, 56)) * Coordinate(input_voxel_size)
 output_voxel_size = Coordinate((16, 16, 16))
 
 

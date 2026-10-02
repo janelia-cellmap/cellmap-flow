@@ -12,10 +12,37 @@ And produces:
   mask: (B, C, Z, Y, X) or (B, 1, Z, Y, X) — valid loss mask
 """
 
-from typing import List, Tuple
+import logging
+from typing import List, Optional, Tuple
 
 import torch
 from torch import Tensor
+
+logger = logging.getLogger(__name__)
+
+
+def read_offsets_from_script(script_path) -> Optional[list]:
+    """The ``offsets`` a model script assigns, read by parsing it (not running it); None if none.
+
+    An affinity model's script names its neighbour offsets, which the
+    affinity target needs. The dashboard reads them too, to tell an affinity
+    model when a session is set up.
+    """
+    import ast
+
+    try:
+        with open(script_path, "r") as f:
+            tree = ast.parse(f.read())
+
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Assign):
+                for target in node.targets:
+                    if isinstance(target, ast.Name) and target.id == "offsets":
+                        return ast.literal_eval(node.value)
+    except Exception as e:
+        logger.debug(f"Could not read offsets from {script_path}: {e}")
+
+    return None
 
 
 class TargetTransform:
@@ -174,6 +201,7 @@ class DistanceTargetTransform(TargetTransform):
 
         annotated = ann > 0
         fg = ann >= 2
+        bg = ann == 1
         target = np.zeros(ann.shape, dtype=np.float32)
         mask = np.zeros(ann.shape, dtype=np.float32)
         if not annotated.any():
@@ -182,7 +210,16 @@ class DistanceTargetTransform(TargetTransform):
         # edt(x) is the distance from each nonzero voxel of x to the nearest
         # zero. With no zero anywhere scipy returns a large finite number for
         # every voxel; treat that as "no boundary in this patch" explicitly.
-        d_in = edt(fg) if (~fg).any() else np.full(ann.shape, np.inf)
+        #
+        # Both sides measure to the nearest *known* voxel of the other class:
+        # a background voxel's distance to annotated foreground, and a
+        # foreground voxel's distance to annotated background. d_in used to
+        # be edt(fg), which counts unannotated voxels as background too, so a
+        # foreground voxel next to an unannotated one -- at the edge of a
+        # dense crop that cuts through an object, say -- got a small d_in that
+        # always passed the trust test below, and was supervised toward 0.58
+        # to 0.88 as though the object ended at the crop edge.
+        d_in = edt(~bg) if bg.any() else np.full(ann.shape, np.inf)
         d_out = edt(~fg) if fg.any() else np.full(ann.shape, np.inf)
         signed = np.where(fg, d_in, -d_out)
 

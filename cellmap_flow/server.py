@@ -1,31 +1,202 @@
 import logging
 import os
+import select
 import socket
+import ssl
+import threading
+from collections import OrderedDict
 from http import HTTPStatus
+from typing import NamedTuple, Optional
+
 import numpy as np
-import numcodecs
-from flask import Flask, jsonify, redirect, request
+from flask import Flask, has_request_context, jsonify, redirect, request
 from flask_cors import CORS
-from flasgger import Swagger
-from funlib.geometry import Roi
 from funlib.geometry.coordinate import Coordinate
 
 from cellmap_flow.image_data_interface import ImageDataInterface
+from cellmap_flow.inference import timing
+from cellmap_flow.inference.runner import ChunkCancelled, DeviceSlots
 from cellmap_flow.inferencer import Inferencer
+from cellmap_flow.io.ome import CHANNEL_AXIS_NAMES
 from cellmap_flow.models.models_config import ModelConfig
-from cellmap_flow.utils.web_utils import (
-    get_public_ip,
-    IP_PATTERN,
-    get_free_port,
+from cellmap_flow.pipeline_spec import PipelineSpec, chain_num_channels, chain_output_dtype
+from cellmap_flow.process_chain import process_chain
+from cellmap_flow.serving import virtual_zarr
+from cellmap_flow.jobs.spec import IP_PATTERN
+from cellmap_flow.serving.protocol import (
+    ARGS_KEY,
+    INPUT_NORM_KEY,
+    decode_to_json,
+    split_dataset_url,
 )
-from cellmap_flow.utils.serilization_utils import get_process_dataset_url
-
-from cellmap_flow.globals import g
+from cellmap_flow.serving.restart_token import TOKEN_HEADER, tokens_match
 
 import requests
 import time
 
 logger = logging.getLogger(__name__)
+
+# How many distinct chains (layer URLs) one server keeps built at once.
+CHAIN_CACHE_SIZE = 32
+
+# How long a POST of merged ids to the dashboard may take.
+EQUIVALENCES_TIMEOUT_SECONDS = 10
+
+# How the server reads its raw data; see CellMapFlowServer.__init__.
+RAW_CACHE_BYTES_ENV = "CELLMAP_FLOW_RAW_CACHE_BYTES"
+RAW_CACHE_BYTES_DEFAULT = 1 << 30
+RAW_READ_CONCURRENCY_ENV = "CELLMAP_FLOW_RAW_READ_CONCURRENCY"
+HALF_PRECISION_ENV = "CELLMAP_FLOW_HALF_PRECISION"
+
+
+def _env_count(name, default):
+    """A whole number from the environment (``1e9`` allowed), or ``default``."""
+    value = os.environ.get(name)
+    if value in (None, ""):
+        return default
+    try:
+        return int(float(value))
+    except ValueError:
+        raise ValueError(f"{name} must be a number, got {value!r}") from None
+
+
+def _env_flag(name):
+    value = os.environ.get(name, "").strip().lower()
+    if value in ("", "0", "false", "no", "off"):
+        return False
+    if value in ("1", "true", "yes", "on"):
+        return True
+    raise ValueError(f"{name} must be 1 or 0, got {os.environ[name]!r}")
+
+
+def get_free_port():
+    """A TCP port free on this machine now, for a server to bind."""
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.bind(("0.0.0.0", 0))
+    free_port = s.getsockname()[1]
+    s.close()
+    return free_port
+
+
+def get_public_ip():
+    """
+    Return the local/private IP address in use on this machine
+    (e.g., 10.x.x.x or 192.168.x.x if behind NAT).
+    This *does not* return the real Internet-facing public IP
+    if you're behind NAT.
+    """
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        # 8.8.8.8 doesn't need to be reachable;
+        # the connect() call will assign a local IP regardless.
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+    except Exception:
+        # Fallback if something fails
+        ip = "127.0.0.1"
+    finally:
+        s.close()
+    return ip
+
+
+def _chain_from_url(dataset: str):
+    """``(dashboard_url, input_norms, postprocess)`` from a layer URL's args blob.
+
+    Logs, loudly, when the URL carries no chain or one that builds no input
+    normalizers: the model is then fed raw voxel values.
+    """
+    blob = split_dataset_url(dataset)
+    if blob is None:
+        # A layer URL without the args blob means this request carries no
+        # normalization and no postprocessing, and the model is about to be
+        # fed raw voxel values. For a model trained on, say, [-1, 1] that is
+        # not a subtle degradation -- the output is unrecognizable, and it
+        # looks exactly like a model that "trained badly" rather than one
+        # that is being served wrong. Returning three empty values in silence
+        # is what made that indistinguishable, so say it out loud.
+        logger.warning(
+            "Serving WITHOUT normalization or postprocessing: the layer URL "
+            f"has no {ARGS_KEY} block. Raw voxel values go to the model "
+            "unmodified. If the model expects normalized input (e.g. [-1, 1]) "
+            "its output will be meaningless. Re-add the layer from the "
+            "dashboard so the URL carries the current Input/Postprocess "
+            "configuration."
+        )
+        return None, [], []
+    # Decoded here rather than through PipelineSpec.from_url_blob so the
+    # messages below can show the chain exactly as the URL spelled it.
+    result = decode_to_json(blob)
+    logger.debug(f"Decoded dataset args: {result}")
+    dashboard_url = result.get("dashboard_url", None)
+    input_norm_fns, postprocess_fns = PipelineSpec.from_json_data(
+        result, strict=True
+    ).build()
+    # Log what actually got built, not the raw dict -- an args block that
+    # decodes fine but produces no normalizers is the same silent failure as
+    # having no args block at all.
+    if not input_norm_fns:
+        logger.warning(
+            "Dataset args decoded but produced NO input normalizers "
+            f"(input_norm={result.get(INPUT_NORM_KEY)!r}). The model "
+            "will see raw voxel values."
+        )
+    else:
+        logger.info(
+            f"Serving with input normalizers: "
+            f"{[type(fn).__name__ for fn in input_norm_fns]}, postprocessors: "
+            f"{[type(fn).__name__ for fn in postprocess_fns]}"
+        )
+    return dashboard_url, input_norm_fns, postprocess_fns
+
+
+def _client_gone_check():
+    """A callable telling whether this request's client has hung up, or None.
+
+    The werkzeug dev server puts the connection's socket in the environ. A
+    browser that drops a request, as neuroglancer does for chunks a pan took
+    out of view, closes that connection, and its socket then reads
+    end-of-file. While a request waits for its answer the client sends
+    nothing else, so any other readable state means it is still there.
+    Another WSGI server, a TLS socket, a platform without poll() or a call
+    outside a request (the CLI's server check) gives no signal: every
+    chunk is then computed, as before.
+    """
+    if not has_request_context():
+        return None
+    sock = request.environ.get("werkzeug.socket")
+    if sock is None or isinstance(sock, ssl.SSLSocket) or not hasattr(select, "poll"):
+        return None
+
+    def gone():
+        try:
+            poller = select.poll()
+            poller.register(sock, select.POLLIN)
+            if not poller.poll(0):
+                return False
+            return sock.recv(1, socket.MSG_PEEK) == b""
+        except (OSError, ValueError):  # reset, or already closed
+            return True
+
+    return gone
+
+
+def _post_equivalences(url, payload):
+    """POST a layer's merged ids to the dashboard; a failure is only logged."""
+    try:
+        requests.post(url, json=payload, timeout=EQUIVALENCES_TIMEOUT_SECONDS)
+    except requests.RequestException as e:
+        logger.warning(f"Could not send equivalences to {url}: {e}")
+
+
+class ServedChain(NamedTuple):
+    """The normalization/postprocessing a layer URL asks for."""
+
+    dashboard_url: Optional[str]
+    input_norms: Optional[list]  # None: the process's (process_chain().input_norms)
+    postprocess: Optional[list]  # None: the process's (process_chain().postprocess)
+
+    def effective_postprocess(self):
+        return process_chain().postprocess if self.postprocess is None else self.postprocess
 
 
 class CellMapFlowServer:
@@ -34,81 +205,158 @@ class CellMapFlowServer:
     All routes are defined via Flask decorators for convenience.
     """
 
-    def __init__(self, dataset_name: str, model_config: ModelConfig, restart_callback=None):
+    def __init__(
+        self,
+        dataset_name: str,
+        model_config: ModelConfig,
+        restart_callback=None,
+        restart_token=None,
+        resample=False,
+    ):
         """
         Initialize the server and set up routes via decorators.
+
+        ``resample``: when the dataset has no level at the model's input
+        voxel size, resample one to it (``on_voxel_size_mismatch="resample"``,
+        see ImageDataInterface) instead of reading the nearest level as if it
+        were at that size. ``cellmap_flow serve --resample``.
+
+        ``restart_callback`` enables POST /__control__/restart, which then
+        only accepts requests carrying ``restart_token`` in the
+        X-Restart-Token header.
+
+        ``CELLMAP_FLOW_GPU_SLOTS`` (default 1), read here, is how many chunk
+        requests may use the device at once; the rest wait their turn in
+        arrival order. See inference.runner.DeviceSlots.
+
+        ``CELLMAP_FLOW_RAW_CACHE_BYTES`` (default 1 GiB; 0 for none) and
+        ``CELLMAP_FLOW_RAW_READ_CONCURRENCY`` (default: tensorstore's, one
+        decode per core) set how the raw data is read.
+
+        ``CELLMAP_FLOW_HALF_PRECISION=1`` serves the model under half-precision
+        autocast, as ``half_precision = True`` in its config does, if it
+        agrees with fp32 at warmup. See Inferencer.
         """
+        if restart_callback is not None and not restart_token:
+            raise ValueError("restart_callback requires a restart_token")
 
-        self.zarr_block_shape = [int(x) for x in model_config.config.block_shape]
-        # Original (model-native) channel count, so refresh_dataset() can restore
-        # it once a postprocessor that overrode num_channels (e.g. affinities) is
-        # removed again instead of leaving vol_shape/zarr_block_shape pinned.
-        self._default_zarr_block_channels = self.zarr_block_shape[-1]
-
-        self.input_voxel_size = Coordinate(model_config.config.input_voxel_size)
-        self.output_voxel_size = Coordinate(model_config.config.output_voxel_size)
-        self.output_channels = model_config.config.output_channels
-        self.output_dtype = model_config.output_dtype
-        self.model_output_axes = model_config.chunk_output_axes
-
-        # Kept so /__control__/model_info can report geometry without the
-        # dashboard having to build the model itself.
-        self.model_config = model_config
-
-        self.inferencer = Inferencer(model_config)
-        self.restart_callback = restart_callback
-
-        # Load or initialize your dataset
-        self.idi_raw = ImageDataInterface(
-            dataset_name, voxel_size=self.input_voxel_size
+        # Before anything reads model_config.config: the Inferencer builds it
+        # so that the declared shapes are checked on its warmup forward, on
+        # the GPU, rather than by a separate forward on the CPU. A mismatch
+        # raises here, before the server announces itself.
+        self.inferencer = Inferencer(
+            model_config,
+            device_slots=DeviceSlots.from_env(),
+            half_precision=_env_flag(HALF_PRECISION_ENV),
         )
+
+        # Also what /__control__/model_info reports, so the dashboard does
+        # not have to build the model itself.
+        self.geometry = model_config.geometry
+        block_shape = list(self.geometry.block_shape())
+
+        # Whole nanometers, as the served grid always was (Coordinate
+        # truncates); model_info reports the sizes as they are.
+        self.input_voxel_size = Coordinate(self.geometry.input_voxel_size)
+        self.output_voxel_size = Coordinate(self.geometry.output_voxel_size)
+        self.output_channels = self.geometry.output_channels
+        self.output_dtype = self.geometry.output_dtype
+
+        self.restart_callback = restart_callback
+        self.restart_token = restart_token
+
+        # For the per-chunk timing line (_log_chunk_timing).
+        self._timing_lock = threading.Lock()
+        self._chunks_started = 0
+        self._chunks_in_flight = 0
+        self._first_chunk_at = None
+
+        # Every chunk request reads its input here, and neuroglancer sends
+        # them several at a time. The IDI's default single reader thread
+        # queued those reads behind one another (a cold 178^3 read from /nrs
+        # took 0.3-0.5 s instead of 0.2-0.3), and without a cache neighbouring
+        # chunks, whose inputs overlap by two thirds, each read and decoded
+        # it all again.
+        self.idi_raw = ImageDataInterface(
+            dataset_name,
+            voxel_size=self.input_voxel_size,
+            concurrency_limit=_env_count(RAW_READ_CONCURRENCY_ENV, None),
+            cache_bytes=_env_count(RAW_CACHE_BYTES_ENV, RAW_CACHE_BYTES_DEFAULT),
+            on_voxel_size_mismatch="resample" if resample else "relabel",
+        )
+        # The output grid starts at the corner of the raw level the model
+        # reads, so every output voxel sits exactly on the input voxels it is
+        # computed from. Anchored at 0 it was half a raw voxel off Janelia
+        # data, whose corner is -4 nm. Whole nanometers: Roi is integral.
+        self.origin = np.round(np.array(self.idi_raw.offset, dtype=float)).astype(int)
         self.axes = self.idi_raw.axes_names.copy()
-        # remove channel axis if present can be c^, c, or channel
-        for axis_name in ["c^", "c", "channel"]:
+        for axis_name in CHANNEL_AXIS_NAMES:
             if axis_name in self.axes:
                 self.axes.remove(axis_name)
 
         # Determine whether the model output includes a channel axis
-        self.has_channel = any(
-            ax in model_config.chunk_output_axes for ax in ("c", "c^", "channel")
-        )
+        self.has_channel = self.geometry.has_channel_axis
 
         if self.has_channel:
             # The model output spatial axes match the input data axes (not the
             # hardcoded default which assumes z,y,x).  Override so that
-            # _reorder_to_zarr_axes applies the correct permutation.
+            # reorder_to_zarr_axes applies the correct permutation. The
+            # channel axis is taken to come first, as blockwise takes it too,
+            # whatever chunk_output_axes says.
+            if self.geometry.chunk_output_axes[0] not in CHANNEL_AXIS_NAMES:
+                logger.warning(
+                    f"chunk_output_axes {self.geometry.chunk_output_axes} does not put "
+                    "the channel axis first; it is served as if it did"
+                )
             self.model_output_axes = ("c",) + tuple(self.axes)
         else:
             self.model_output_axes = tuple(self.axes)
 
-        # Refresh rate for custom state updates
+        # How often a layer's merged ids go to the dashboard; see _send_equivalences.
         self.refresh_rate_seconds = 5
         self.previous_refresh_time = 0
-        output_shape = (
-            np.array(self.idi_raw.shape)
-            * np.array(self.input_voxel_size)
-            / np.array(self.output_voxel_size)
+        self._refresh_lock = threading.Lock()
+
+        # Each layer URL carries its own chain; they are built once per URL
+        # and never written to the process's chain, so layers (tabs, users) sharing this server
+        # don't get each other's normalization.
+        self._chains = OrderedDict()
+        self._chain_lock = threading.Lock()
+        self._warned_no_chain = False
+
+        n_spatial = len(self.axes)
+        # block_shape is (*spatial, channels); only the spatial part is the
+        # chunk grid. The channel count comes from the model (or the chain).
+        self._spatial_block = block_shape[:n_spatial]
+        if self.has_channel and len(block_shape) > n_spatial:
+            if block_shape[n_spatial] != self.output_channels:
+                logger.warning(
+                    f"block_shape {block_shape} ends in {block_shape[n_spatial]} "
+                    f"channels but output_channels is {self.output_channels}; "
+                    "serving output_channels"
+                )
+        self._spatial_shape = virtual_zarr.served_spatial_shape(
+            self.idi_raw.offset,
+            self.idi_raw.shape,
+            self.idi_raw.voxel_size,
+            self.origin,
+            self.output_voxel_size,
         )
-        if self.has_channel:
-            self.vol_shape = [*output_shape, self.output_channels]
-        else:
-            self.vol_shape = [int(x) for x in output_shape]
-        self.vol_shape = [int(x) for x in self.vol_shape]
 
         # Chunk encoding for Zarr
-        self.chunk_encoder = self._initialize_chunk_encoder()
+        self.chunk_encoder = virtual_zarr.chunk_encoder()
 
         # Create and configure Flask
         self.app = Flask(__name__)
         CORS(self.app)
-        self._configure_swagger()
 
         hostname = socket.gethostname()
         print(f"Host name: {hostname}", flush=True)
 
+        # Opening a server's address in a browser shows what it serves.
         @self.app.route("/")
         def home():
-            return redirect("/apidocs/")
+            return redirect("/__control__/model_info")
 
         @self.app.route("/__control__/model_info", methods=["GET"])
         # Older name, kept so a dashboard can still talk to a server started
@@ -129,31 +377,20 @@ class CellMapFlowServer:
             SigmoidPostprocessor on a model that already ends in a sigmoid.
             """
             inferencer = self.inferencer
-            config = self.model_config.config
 
             # Geometry comes from the validated config rather than the warmup,
             # so it is reported even when the probe itself failed. Script-defined
             # models expose nothing to the dashboard through to_dict(), which
-            # makes this the only place it can learn e.g. that a model has 3+
-            # channels and might be predicting affinities.
-            # Channel names, not just the count: the dashboard decides whether
-            # a model predicts affinities by looking for "_aff" in them, and a
-            # script model exposes nothing through to_dict(), so this is the
-            # only way it can learn them without building the model.
-            channels = (
-                getattr(config, "channels", None)
-                or getattr(config, "channels_names", None)
-                or getattr(config, "classes", None)
+            # makes this the only place it can learn their shapes, and their
+            # channel names: the dashboard decides whether a model predicts
+            # affinities by looking for "_aff" in them.
+            # A resampled input really is at input_voxel_size; a relabelled
+            # one is at the level's, which moves the output (see to_model_info).
+            idi = self.idi_raw
+            info = self.geometry.to_model_info(
+                self.axes, idi.voxel_size if idi.resampled else idi.actual_voxel_size
             )
-
-            info = {
-                "output_channels": self.output_channels,
-                "channels": [str(c) for c in channels] if channels else None,
-                "write_shape": [int(v) for v in config.write_shape],
-                "read_shape": [int(v) for v in config.read_shape],
-                "output_voxel_size": [int(v) for v in config.output_voxel_size],
-                "input_voxel_size": [int(v) for v in config.input_voxel_size],
-            }
+            info["input_resampled_from"] = list(idi.actual_voxel_size) if idi.resampled else None
 
             output_class = getattr(inferencer, "output_class", None)
             if output_class is None:
@@ -177,15 +414,11 @@ class CellMapFlowServer:
         def control_restart():
             if self.restart_callback is None:
                 return jsonify({"success": False, "error": "Restart control not enabled"}), HTTPStatus.NOT_IMPLEMENTED
-            # Token gate: when CFLOW_RESTART_TOKEN is set in the server's env,
-            # require the caller to present a matching X-Restart-Token header.
-            # The dashboard sets this when spawning the inference server; other
-            # callers on the same network are rejected with 401.
-            expected_token = os.environ.get("CFLOW_RESTART_TOKEN")
-            if expected_token:
-                provided = request.headers.get("X-Restart-Token", "")
-                if provided != expected_token:
-                    return jsonify({"success": False, "error": "unauthorized"}), HTTPStatus.UNAUTHORIZED
+            # A restart can change what the job trains on, and this server
+            # listens on every interface, so only the job manager that wrote
+            # the job's token may trigger one.
+            if not tokens_match(self.restart_token, request.headers.get(TOKEN_HEADER)):
+                return jsonify({"success": False, "error": "unauthorized"}), HTTPStatus.UNAUTHORIZED
             try:
                 payload = request.get_json(silent=True) or {}
                 accepted = self.restart_callback(payload)
@@ -198,13 +431,11 @@ class CellMapFlowServer:
 
         @self.app.route("/<path:dataset>/.zattrs", methods=["GET"])
         def top_level_attributes(dataset):
-            self.refresh_dataset(dataset)
-
+            self.chain_for(dataset)  # builds and checks the chain, so a bad URL fails here
             return self._top_level_attributes_impl(dataset)
 
         @self.app.route("/<path:dataset>/s<int:scale>/.zarray", methods=["GET"])
         def attributes(dataset, scale):
-            self.refresh_dataset(dataset)
             return self._attributes_impl(dataset, scale)
 
         @self.app.route(
@@ -223,165 +454,134 @@ class CellMapFlowServer:
         def chunk_3d(dataset, scale, chunk_z, chunk_y, chunk_x):
             return self._chunk_impl(dataset, scale, chunk_z, chunk_y, chunk_x)
 
-    def _configure_swagger(self):
-        self.app.config["SWAGGER"] = {
-            "title": "CellMapFlow Virtual Zarr API",
-            "uiversion": 3,  # Use Swagger UI 3.x
-        }
-        swagger_config = {
-            "headers": [],
-            "specs": [
-                {
-                    "version": "0.0.1",
-                    "title": "CellMapFlow Virtual Zarr API",
-                    "endpoint": "api_spec",
-                    "description": "API to serve a virtual Zarr interface for Neuroglancer.",
-                    "route": "/api_spec.json",
-                }
-            ],
-            "static_url_path": "/flasgger_static",
-            "swagger_ui": True,
-            "specs_route": "/apidocs/",
-        }
-        self.swagger = Swagger(self.app, config=swagger_config)
+    def chain_for(self, dataset) -> ServedChain:
+        """The chain the requested layer URL carries, built once per URL.
 
-    def refresh_dataset(self, dataset):
-        g.dashboard_url, g.input_norms, g.postprocess = get_process_dataset_url(dataset)
+        A URL without an args block gets the process's chain
+        (``process_chain()``, empty in a server started from the CLI).
+        """
+        if not dataset or ARGS_KEY not in dataset:
+            if not self._warned_no_chain:
+                self._warned_no_chain = True
+                fallback = process_chain()
+                if not (fallback.input_norms or fallback.postprocess):
+                    _chain_from_url(dataset or "")  # logs the warning
+            return ServedChain(None, None, None)
 
+        parts = dataset.split(ARGS_KEY)
+        key = parts[1] if len(parts) == 3 else dataset
+        with self._chain_lock:
+            chain = self._chains.get(key)
+            if chain is not None:
+                self._chains.move_to_end(key)
+                return chain
+            dashboard_url, input_norms, postprocess = _chain_from_url(dataset)
+            chain = ServedChain(dashboard_url, list(input_norms), list(postprocess))
+            self._chains[key] = chain
+            while len(self._chains) > CHAIN_CACHE_SIZE:
+                self._chains.popitem(last=False)
+            return chain
+
+    def _zarr_geometry(self, chain: ServedChain):
+        """(shape, chunks) of the served array under ``chain``."""
+        shape = list(self._spatial_shape)
+        chunks = list(self._spatial_block)
         if self.has_channel:
-            # Reset to the model's native channel count first so that removing a
-            # postprocessor which had overridden it (e.g. affinities -> 1 channel)
-            # actually restores the previous working state instead of staying stuck.
-            self.vol_shape[-1] = self.output_channels
-            self.zarr_block_shape[-1] = self._default_zarr_block_channels
+            # After the chain: e.g. ChannelSelection serves fewer channels.
+            channels = chain_num_channels(chain.effective_postprocess(), self.output_channels)
+            shape.append(channels)
+            chunks.append(channels)
+        return shape, chunks
 
-        for postprocess in g.postprocess:
-            if hasattr(postprocess, "num_channels") and self.has_channel:
-                self.vol_shape[-1] = postprocess.num_channels
-                self.zarr_block_shape[-1] = postprocess.num_channels
-
-        # Update chunk encoder for Zarr
-        self.chunk_encoder = numcodecs.Blosc(
-            cname="zstd", clevel=5, shuffle=numcodecs.Blosc.SHUFFLE
-        )
+    def _output_dtype(self, chain: ServedChain):
+        # Whatever the model or the chain declares: a numpy class, an
+        # np.dtype or a string.
+        return np.dtype(chain_output_dtype(chain.effective_postprocess(), self.output_dtype))
 
     def _top_level_attributes_impl(self, dataset):
-        max_scale = 0
-        datasets = []
-        for s in range(max_scale + 1):
-            scale_factor = 2**s
-            scale_values = [
-                float(self.output_voxel_size[i] * scale_factor)
-                for i in range(len(self.output_voxel_size))
-            ]
-            translation_values = [0.0] * len(self.output_voxel_size)
-            if self.has_channel:
-                scale_values.append(1.0)
-                translation_values.append(0.0)
-            datasets.append(
-                {
-                    "coordinateTransformations": [
-                        {"type": "scale", "scale": scale_values},
-                        {"type": "translation", "translation": translation_values},
-                    ],
-                    "path": f"s{s}",
-                }
-            )
-
-        axes_list = []
-        for axis_name in self.axes:
-            axes_list.append({"name": axis_name, "type": "space", "unit": "nanometer"})
-        if self.has_channel:
-            axes_list.append({"name": "c", "type": "channel"})
-
-        top_scale = [1.0] * len(self.axes)
-        if self.has_channel:
-            top_scale.append(1.0)
-
-        attr = {
-            "multiscales": [
-                {
-                    "version": "0.4",
-                    "name": dataset,
-                    "axes": axes_list,
-                    "datasets": datasets,
-                    "coordinateTransformations": [
-                        {"type": "scale", "scale": top_scale}
-                    ],
-                }
-            ]
-        }
+        attr = virtual_zarr.zattrs(
+            self.axes, self.output_voxel_size, self.origin, self.has_channel, dataset
+        )
         return jsonify(attr), HTTPStatus.OK
 
     def _attributes_impl(self, dataset, scale):
-        dtype = g.get_output_dtype(self.output_dtype).__name__
-        # Map numpy dtypes to Zarr dtypes
-        dtype_map = {
-            "uint8": "|u1",
-            "uint16": "<u2",
-            "uint32": "<u4",
-            "uint64": "<u8",
-            "int8": "<i1",
-            "int16": "<i2",
-            "int32": "<i4",
-            "int64": "<i8",
-            "float32": "<f4",
-            "float64": "<f8",
-        }
-        zarr_dtype = dtype_map.get(dtype, dtype)
-
-        attr = {
-            "chunks": list(self.zarr_block_shape),
-            "compressor": {"id": "blosc", "cname": "zstd", "clevel": 5, "shuffle": 1},
-            "dtype": zarr_dtype,
-            "fill_value": 0,
-            "filters": None,
-            "order": "C",
-            "shape": self.vol_shape,
-            "zarr_format": 2,
-        }
+        chain = self.chain_for(dataset)
+        shape, chunks = self._zarr_geometry(chain)
+        attr = virtual_zarr.zarray(shape, chunks, self._output_dtype(chain))
         print(f"Array metadata (scale={scale}): {attr}", flush=True)
         return jsonify(attr), HTTPStatus.OK
 
+    # The first chunks a server serves log their timing at INFO, so a slow
+    # start can be read from the job's log as it is; the rest log at DEBUG.
+    CHUNKS_TIMED_AT_INFO = 20
+
     def _chunk_impl(self, dataset, scale, chunk_z, chunk_y, chunk_x):
-        corner = self.zarr_block_shape[:3] * np.array([chunk_z, chunk_y, chunk_x])
-        box = np.array([corner, self.zarr_block_shape[:3]]) * self.output_voxel_size
-        roi = Roi(box[0], box[1])
-        chunk_data = self.inferencer.process_chunk(self.idi_raw, roi)
+        timing.start()
+        arrived = time.perf_counter()
+        with self._timing_lock:
+            self._chunks_started += 1
+            self._chunks_in_flight += 1
+            number, in_flight = self._chunks_started, self._chunks_in_flight
+            if self._first_chunk_at is None:
+                self._first_chunk_at = arrived
+        try:
+            response = self._serve_chunk(dataset, chunk_z, chunk_y, chunk_x)
+        finally:
+            with self._timing_lock:
+                self._chunks_in_flight -= 1
+        self._log_chunk_timing((chunk_z, chunk_y, chunk_x), number, in_flight, arrived, response[1])
+        return response
+
+    def _log_chunk_timing(self, index, number, in_flight, arrived, status):
+        """One line saying where chunk ``index``'s time went.
+
+        ``number``: the chunk's place among the requests this server has had;
+        ``in_flight``: how many, it included, were being served when it
+        arrived. A chunk that waited long on "gpu wait" was queued behind
+        others; a long "read" is the raw data.
+        """
+        total = time.perf_counter() - arrived
+        stages = ", ".join(f"{name} {seconds:.2f}" for name, seconds in timing.finish().items())
+        outcome = "" if status == HTTPStatus.OK else f" -> {int(status)}"
+        level = logging.INFO if number <= self.CHUNKS_TIMED_AT_INFO else logging.DEBUG
+        logger.log(
+            level,
+            f"Chunk #{number} {'.'.join(map(str, index))}{outcome}: {total:.2f} s ({stages}); "
+            f"arrived {arrived - self._first_chunk_at:.2f} s after the first chunk request, "
+            f"{in_flight} in flight",
+        )
+
+    def _serve_chunk(self, dataset, chunk_z, chunk_y, chunk_x):
+        chain = self.chain_for(dataset)
+        roi = virtual_zarr.chunk_roi(
+            (chunk_z, chunk_y, chunk_x), self._spatial_block, self.output_voxel_size, self.origin
+        )
+        try:
+            chunk_data = self.inferencer.process_chunk(
+                self.idi_raw,
+                roi,
+                input_norms=chain.input_norms,
+                postprocess=chain.postprocess,
+                cancelled=_client_gone_check(),
+                grid_origin=self.origin,
+            )
+        except ChunkCancelled:
+            # Nobody is left to read it. 499 is nginx's "client closed request".
+            logger.debug(f"Skipped chunk {chunk_z}.{chunk_y}.{chunk_x}: its client went away")
+            return b"", 499
 
         # Reorder model output axes to Zarr-expected order
         if self.has_channel:
-            chunk_data = self._reorder_to_zarr_axes(chunk_data)
+            chunk_data = virtual_zarr.reorder_to_zarr_axes(
+                chunk_data, self.model_output_axes, self.axes
+            )
 
-        chunk_data = chunk_data.astype(g.get_output_dtype(self.output_dtype))
-
-        current_time = time.time()
-
-        # assume only one has equivalences
-        for postprocess in g.postprocess:
-            if (
-                hasattr(postprocess, "equivalences")
-                and postprocess.equivalences is not None
-                and (current_time - self.previous_refresh_time)
-                > self.refresh_rate_seconds
-            ):
-                equivalences = {
-                    "dataset": dataset,
-                    "equivalences": [
-                        [int(item) for item in sublist]
-                        for sublist in postprocess.equivalences.to_json()
-                    ],
-                }
-
-                response = requests.post(
-                    g.dashboard_url + "/update/equivalences",
-                    json=equivalences,
-                )
-                self.previous_refresh_time = current_time
-                continue
+        chunk_data = chunk_data.astype(self._output_dtype(chain))
+        self._send_equivalences(dataset, chain)
 
         # Encode using Zarr format
-        encoded = self.chunk_encoder.encode(chunk_data)
+        with timing.stage("encode"):
+            encoded = self.chunk_encoder.encode(chunk_data)
 
         return (
             encoded,
@@ -389,33 +589,38 @@ class CellMapFlowServer:
             {"Content-Type": "application/octet-stream"},
         )
 
-    def _reorder_to_zarr_axes(self, data: np.ndarray) -> np.ndarray:
-        """Reorder data from model output axes to Zarr-expected order matching self.axes + channel."""
-        zarr_axes = tuple(self.axes) + ("c",)
-        model_axes = self.model_output_axes
+    def _send_equivalences(self, dataset, chain: ServedChain):
+        """Send the dashboard the ids the chain's merger has merged, at most
+        once every ``refresh_rate_seconds`` across all requests.
 
-        if len(model_axes) != data.ndim:
-            logger.warning(
-                f"Model output ndim ({data.ndim}) != declared axes {model_axes}, "
-                "skipping reorder"
-            )
-            return data
-
-        if tuple(model_axes) == zarr_axes:
-            return data
-
-        # For single-channel output the byte layout is identical regardless of
-        # where the size-1 channel axis sits, so skip the expensive copy.
-        c_idx = model_axes.index("c")
-        if data.shape[c_idx] == 1:
-            return data.reshape([data.shape[model_axes.index(ax)] for ax in zarr_axes])
-
-        # Build permutation from model axes order to zarr axes order
-        perm = tuple(model_axes.index(ax) for ax in zarr_axes)
-        return np.ascontiguousarray(data.transpose(perm))
-
-    def _initialize_chunk_encoder(self):
-        return numcodecs.Blosc(cname="zstd", clevel=5, shuffle=numcodecs.Blosc.SHUFFLE)
+        From a thread of its own, with a timeout, so a slow or unreachable
+        dashboard neither holds up the chunk nor fails it. The time is taken
+        before posting, so requests arriving meanwhile do not each post too.
+        Only the first step with equivalences is sent, as the dashboard keeps
+        one set per layer.
+        """
+        # A chain encoded outside /api/process has no dashboard to tell.
+        if not chain.dashboard_url:
+            return
+        merger = next(
+            (p for p in chain.effective_postprocess() if getattr(p, "equivalences", None) is not None),
+            None,
+        )
+        if merger is None:
+            return
+        with self._refresh_lock:
+            now = time.time()
+            if now - self.previous_refresh_time <= self.refresh_rate_seconds:
+                return
+            self.previous_refresh_time = now
+        snapshot = getattr(merger, "equivalences_json", None)
+        pairs = snapshot() if snapshot else merger.equivalences.to_json()
+        payload = {
+            "dataset": dataset,
+            "equivalences": [[int(item) for item in pair] for pair in pairs],
+        }
+        url = chain.dashboard_url.rstrip("/") + "/update/equivalences"
+        threading.Thread(target=_post_equivalences, args=(url, payload), daemon=True).start()
 
     def run(self, debug=False, port=None, certfile=None, keyfile=None):
         """
@@ -432,6 +637,12 @@ class CellMapFlowServer:
         output = f"{IP_PATTERN[0]}{address}{IP_PATTERN[1]}"
         logger.error(output)
         print(output, flush=True)
+        # The same news, for a launcher that asked for it as a file (see
+        # jobs/ready.py): it then needs no bpeek. Written at the same moment
+        # as the marker, so before the port below is bound.
+        from cellmap_flow.jobs.ready import write_ready_file
+
+        write_ready_file(address)
 
         self.app.run(
             host="0.0.0.0",

@@ -3,48 +3,22 @@ from datetime import datetime
 
 from flask import Blueprint, request, jsonify, Response
 
-from cellmap_flow.globals import (
-    g,
-    SERVER_CONFIG_KEYS,
-    current_input_norm_config,
-    current_postprocess_config,
-)
-from cellmap_flow.models.run import update_run_models
+from cellmap_flow.dashboard.requests import CreateModelConfig, ServerConfigUpdate, SubmitModels, parse
+from cellmap_flow.dashboard.services.launch import update_run_models
+from cellmap_flow.dashboard.state import get_session
 
 logger = logging.getLogger(__name__)
 
 models_bp = Blueprint("models", __name__)
 
 
-@models_bp.route("/api/available-models")
-def get_available_models():
-    """Get available models from the model catalog"""
-    models = {}
-
-    # Build models from catalog
-    if hasattr(g, 'model_catalog') and g.model_catalog:
-        for category, category_models in g.model_catalog.items():
-            if isinstance(category_models, dict):
-                for model_name, model_path in category_models.items():
-                    full_name = f"{category}/{model_name}"
-                    models[full_name] = {
-                        'name': full_name,
-                        'category': category,
-                        'model_name': model_name,
-                        'path': model_path
-                    }
-
-    logger.info(f"Available models: {list(models.keys())}")
-    return jsonify(models)
-
-
 @models_bp.route("/api/model-config-types")
 def get_model_config_types():
     """Get available ModelConfig subclasses and their parameter metadata"""
-    from cellmap_flow.models.model_registry import get_all_model_configs
+    from cellmap_flow.models.registry import describe_types
 
     try:
-        config_types = get_all_model_configs()
+        config_types = describe_types()
         logger.info(f"Available model config types: {list(config_types.keys())}")
         return jsonify(config_types)
     except Exception as e:
@@ -55,23 +29,18 @@ def get_model_config_types():
 @models_bp.route("/api/create-model-config", methods=["POST"])
 def create_model_config():
     """Create a ModelConfig instance from user-provided parameters"""
-    from cellmap_flow.models.model_registry import instantiate_model_config
+    from cellmap_flow.models.registry import instantiate_model_config
 
+    body, error = parse(CreateModelConfig, request.get_json(silent=True))
+    if error:
+        return error
+    class_name = body.class_name
     try:
-        data = request.get_json()
-        class_name = data.get('class_name')
-        params = data.get('params', {})
+        # The form's values are strings; the registry parses them.
+        model_config = instantiate_model_config(class_name, body.params)
 
-        if not class_name:
-            return jsonify({'error': 'class_name is required'}), 400
-
-        # Instantiate the model config
-        model_config = instantiate_model_config(class_name, params)
-
-        # Store it in g.models_config for use in pipeline
-        if not hasattr(g, 'models_config'):
-            g.models_config = []
-        g.models_config.append(model_config)
+        # Configured, for the pipeline builder and blockwise.
+        get_session().models_config.append(model_config)
 
         logger.info(f"Created {class_name}: {model_config.name}")
         return jsonify({
@@ -82,13 +51,13 @@ def create_model_config():
         })
     except Exception as e:
         logger.error(f"Error creating model config: {str(e)}")
-        return jsonify({'error': str(e)}), 400
+        return jsonify({'success': False, 'error': str(e)}), 400
 
 
 @models_bp.route("/api/huggingface-models")
 def get_huggingface_models():
     """Get available models from Hugging Face (uses cache if available)"""
-    from cellmap_flow.models.model_registry import list_huggingface_models
+    from cellmap_flow.models.hf_catalog import list_huggingface_models
 
     try:
         hf_models = list_huggingface_models()
@@ -102,7 +71,7 @@ def get_huggingface_models():
 @models_bp.route("/api/huggingface-models/refresh", methods=["POST"])
 def refresh_huggingface_models_route():
     """Force refresh the Hugging Face models cache"""
-    from cellmap_flow.models.model_registry import refresh_huggingface_models
+    from cellmap_flow.models.hf_catalog import refresh_huggingface_models
 
     try:
         hf_models = refresh_huggingface_models()
@@ -115,12 +84,14 @@ def refresh_huggingface_models_route():
 
 @models_bp.route("/api/models", methods=["POST"])
 def submit_models():
-    data = request.get_json()
-    logger.warning(f"Data received: {type(data)} - {data.keys()} -{data}")
-    selected_models = data.get("selected_models", [])
-    selected_hf_models = data.get("selected_hf_models", [])
+    """Run the models the Models tab has ticked (a SubmitModels), and stop
+    the others: services.launch.update_run_models."""
+    body, error = parse(SubmitModels, request.get_json(silent=True))
+    if error:
+        return error
+    selected_models, selected_hf_models = body.selected_models, body.selected_hf_models
     update_run_models(selected_models, selected_hf_models)
-    logger.warning(f"Selected models: {selected_models}, HF models: {selected_hf_models}")
+    logger.info(f"Selected models: {selected_models}, HF models: {selected_hf_models}")
     return jsonify(
         {
             "message": "Data received successfully",
@@ -139,7 +110,7 @@ def job_logs():
     cluster node, and reading it means logging in and running bpeek.
     """
     jobs = []
-    for job in getattr(g, "jobs", []) or []:
+    for job in get_session().jobs or []:
         try:
             status = job.get_status()
             text = job.peek()
@@ -166,7 +137,7 @@ def gpu_queues():
     Polled about once a minute by the models tab; the underlying LSF query is
     cached server-side, so this is cheap to call.
     """
-    from cellmap_flow.utils.lsf_queues import gpu_queue_availability
+    from cellmap_flow.jobs.queues import gpu_queue_availability
 
     return jsonify(gpu_queue_availability())
 
@@ -174,9 +145,8 @@ def gpu_queues():
 @models_bp.route("/api/server-config")
 def get_server_config():
     """Get current server configuration."""
-    config = {k: getattr(g, k) for k in SERVER_CONFIG_KEYS}
-    config["cached"] = g._server_config_cached
-    return jsonify(config)
+    session = get_session()
+    return jsonify({**session.server_config, "cached": session.server_config_cached})
 
 
 @models_bp.route("/api/export-config")
@@ -184,25 +154,22 @@ def export_config():
     """
     Export the dashboard's current live config (models, normalization,
     postprocessing, queue/charge_group) as a downloadable YAML file that can
-    be reloaded later with `cellmap_flow_yaml`.
+    be reloaded later with `cellmap_flow yaml`.
     """
     from cellmap_flow.finetune.finetuned_model_templates import (
         generate_current_config_yaml,
     )
 
     try:
-        models = [m.to_dict() for m in (g.models_config or [])]
-        json_data = {
-            "input_norm": current_input_norm_config(),
-            "postprocess": current_postprocess_config(),
-        }
+        session = get_session()
+        models = [m.to_dict() for m in (session.models_config or [])]
         yaml_text = generate_current_config_yaml(
             models=models,
-            data_path=g.dataset_path or "",
-            queue=g.queue,
-            charge_group=g.charge_group,
-            walltime=getattr(g, "walltime", None),
-            json_data=json_data,
+            data_path=session.dataset_path or "",
+            queue=session.queue,
+            charge_group=session.charge_group,
+            walltime=session.walltime,
+            json_data=session.pipeline_spec.to_json_data(),
         )
     except Exception as e:
         logger.error(f"Error exporting config: {str(e)}")
@@ -220,12 +187,14 @@ def export_config():
 @models_bp.route("/api/server-config", methods=["POST"])
 def update_server_config():
     """Update server configuration and save to cache."""
-    data = request.get_json()
-    int_fields = {"nb_cores_master", "nb_cores_worker", "nb_workers"}
-    for key in SERVER_CONFIG_KEYS:
-        if key in data:
-            value = int(data[key]) if key in int_fields else data[key]
-            setattr(g, key, value)
-    g.save_server_config()
-    logger.info(f"Server config updated and cached: { {k: getattr(g, k) for k in SERVER_CONFIG_KEYS} }")
-    return jsonify({"success": True, "config": {k: getattr(g, k) for k in SERVER_CONFIG_KEYS}})
+    # Validated whole first: a bad number is the client's mistake (400), and
+    # must not leave half the settings applied.
+    body, error = parse(ServerConfigUpdate, request.get_json(silent=True))
+    if error:
+        return error
+    session = get_session()
+    for key, value in body.updates().items():
+        setattr(session, key, value)
+    session.save_server_config()
+    logger.info(f"Server config updated and cached: {session.server_config}")
+    return jsonify({"success": True, "config": session.server_config})

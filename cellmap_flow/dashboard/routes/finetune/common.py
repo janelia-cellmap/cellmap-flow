@@ -2,11 +2,15 @@ import json
 import logging
 import os
 from pathlib import Path
+from types import SimpleNamespace
+from typing import NamedTuple
 
 import zarr
 
-from cellmap_flow.dashboard.finetune_utils import get_or_create_session_path
-from cellmap_flow.globals import g
+from cellmap_flow.dashboard.state import get_session
+from cellmap_flow.finetune.session.minio import MINIO_PROXY_URL_ENV, proxied_url
+from cellmap_flow.finetune.session.store import SessionStore
+from cellmap_flow.models.geometry import channel_names_of
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +39,6 @@ RESTART_PASSTHROUGH_KEYS = [
     "num_workers",
     "no_augment",
     "no_mixed_precision",
-    "patch_shape",
     "output_type",
     "select_channel",
     "offsets",
@@ -43,21 +46,33 @@ RESTART_PASSTHROUGH_KEYS = [
 
 
 def find_model_config(model_name):
-    for model_config in getattr(g, "models_config", []) or []:
+    for model_config in get_session().models_config or []:
         if model_config.name == model_name:
             return model_config
     return None
 
 
+def current_chain():
+    """The dashboard's chains as step lists, ``(input_norm, postprocess)``.
+
+    A new volume and a training manifest record them, so that the trainer
+    normalizes its input as inference does, and the finetuned model's YAML
+    postprocesses as the dashboard does.
+    """
+    spec = get_session().pipeline_spec
+    return list(spec.input_norm), list(spec.postprocess)
+
+
 def viewer_position_and_scales():
-    if not hasattr(g, "viewer") or g.viewer is None:
+    viewer = get_session().viewer
+    if viewer is None:
         raise ValueError("Viewer not initialized")
 
     # .state, not .txn(): this only reads. txn() calls set_state() on exit
     # unconditionally, so using it here pushed a full viewer state -- built
     # from a snapshot that may predate a browser-side tool selection -- on
     # every crop creation, for no reason.
-    s = g.viewer.state
+    s = viewer.state
     position = s.position
     dimensions = s.dimensions
     scales_nm = None
@@ -87,9 +102,15 @@ def viewer_position_and_scales():
     return position, scales_nm
 
 
+def session_store():
+    """The dashboard's sessions and volume registry (its session's dicts)."""
+    session = get_session()
+    return SessionStore(session.output_sessions, session.annotation_volumes)
+
+
 def ensure_corrections_storage(output_path):
     if output_path:
-        session_path = get_or_create_session_path(output_path)
+        session_path = session_store().get_or_create(output_path)
         corrections_dir = os.path.join(session_path, "corrections")
         os.makedirs(corrections_dir, exist_ok=True)
         zarr.open_group(corrections_dir, mode="a")
@@ -125,31 +146,52 @@ def resolve_finetune_session(corrections_path_str):
     if base_corrections_path.name == "corrections" and base_corrections_path.exists():
         return base_corrections_path.parent, base_corrections_path
 
-    session_path = Path(get_or_create_session_path(str(base_corrections_path)))
+    # This dashboard's session for the base path, if it made one; else the
+    # newest one on disk, which is what a dashboard restart forgot. Only for
+    # training: creating volumes still starts a session of its own.
+    store = session_store()
+    base = os.path.expanduser(str(base_corrections_path))
+    if base not in get_session().output_sessions:
+        latest = store.latest_on_disk(base)
+        if latest is not None:
+            logger.info(f"No session for {base} in this dashboard; using the latest on disk: {latest}")
+            return Path(latest), Path(latest) / "corrections"
+
+    session_path = Path(store.get_or_create(str(base_corrections_path)))
     return session_path, session_path / "corrections"
 
 
 def detect_sparse_annotations(corrections_path):
+    """Whether the session trains on painted (sparse) annotations.
+
+    Read from the volume the manifest points at: annotated voxels outside
+    its imported crops are painted. This looked for per-chunk extracts
+    marked source == "sparse_volume", which are only written when there is
+    no manifest -- and every session has one now -- so it was always False:
+    the margin + distillation switch and the distance-model scribble guard in
+    submit never fired, and mask_unannotated was never set. A session
+    without a manifest cannot be trained, so it is not sparse either.
+    """
+    from cellmap_flow.finetune.session.manifest import has_painted_annotations, read_manifest
+
     try:
-        for path in corrections_path.iterdir():
-            if path.suffix == ".zarr" and (path / ".zattrs").exists():
-                attrs = json.loads((path / ".zattrs").read_text())
-                if attrs.get("source") == "sparse_volume":
-                    return True
+        manifest = read_manifest(str(corrections_path))
+        if manifest and manifest.get("volume_zarr_path"):
+            return has_painted_annotations(manifest["volume_zarr_path"])
     except Exception as e:
         logger.warning(f"Error checking for sparse annotations: {e}")
     return False
 
 
 def autodetect_output_type(model_config, output_type, offsets):
-    from cellmap_flow.finetune.finetune_cli import _read_offsets_from_script
+    from cellmap_flow.finetune.target_transforms import read_offsets_from_script
 
     resolved_output_type = output_type
     resolved_offsets = offsets
 
     if resolved_output_type is None:
         if hasattr(model_config, "script_path"):
-            script_offsets = _read_offsets_from_script(model_config.script_path)
+            script_offsets = read_offsets_from_script(model_config.script_path)
             if script_offsets is not None:
                 resolved_output_type = "affinities"
                 resolved_offsets = json.dumps(script_offsets)
@@ -159,15 +201,16 @@ def autodetect_output_type(model_config, output_type, offsets):
                 )
 
         if resolved_output_type is None:
+            # Read as channel_names_of reads them: a string is one name. They
+            # were iterated as they came, so a single "x_aff" channel was the
+            # letters "x", "_", "a"... and never an affinity model.
             channels = None
             try:
                 if hasattr(model_config, "_load_metadata"):
                     meta = model_config._load_metadata()
-                    channels = meta.get("channels_names")
-                elif getattr(model_config, "_config", None) is not None and hasattr(
-                    model_config._config, "channels"
-                ):
-                    channels = model_config._config.channels
+                    channels = channel_names_of(SimpleNamespace(channels_names=meta.get("channels_names")))
+                elif getattr(model_config, "_config", None) is not None:
+                    channels = channel_names_of(model_config._config)
             except Exception:
                 pass
 
@@ -178,15 +221,13 @@ def autodetect_output_type(model_config, output_type, offsets):
                 # so _config is normally None here and this check silently
                 # fell through to "binary" for an affinity model. Ask the same
                 # sources, which now carry the channel names.
-                from cellmap_flow.utils.model_geometry import resolve_model_geometry
+                from cellmap_flow.models.geometry_cache import resolve_model_geometry
 
                 try:
                     geometry = resolve_model_geometry(
                         getattr(model_config, "name", None), model_config
                     )
-                    channels = getattr(geometry, "channels", None) or getattr(
-                        geometry, "channels_names", None
-                    )
+                    channels = channel_names_of(geometry)
                 except Exception as e:
                     logger.debug(f"Could not resolve channels for autodetect: {e}")
 
@@ -224,7 +265,7 @@ def autodetect_output_type(model_config, output_type, offsets):
 
     if resolved_output_type == "affinities" and resolved_offsets is None:
         if hasattr(model_config, "script_path"):
-            resolved_offsets = _read_offsets_from_script(model_config.script_path)
+            resolved_offsets = read_offsets_from_script(model_config.script_path)
             if resolved_offsets is not None:
                 logger.info(f"Auto-detected {len(resolved_offsets)} offsets from model script")
                 resolved_offsets = json.dumps(resolved_offsets)
@@ -239,11 +280,119 @@ def autodetect_output_type(model_config, output_type, offsets):
     return resolved_output_type, resolved_offsets
 
 
+class TrainingSettings(NamedTuple):
+    """The target and loss a job trains with (see ``training_settings``)."""
+
+    output_type: str
+    loss_type: str
+    label_smoothing: float
+    distillation_lambda: float
+    mask_unannotated: bool
+    # The margin loss's margin when it must not be the form's, else None.
+    margin: float = None
+    # The sentence submit's answer carries when the loss was switched for
+    # sparse annotations, else None.
+    note: str = None
+
+
+# The margin at which margin loss only asks for the right side of 0.5.
+SIGN_ONLY_MARGIN = 0.5
+
+SPARSE_MSE_NOTE = "Auto-switched to margin loss + distillation (lambda=0.5) for sparse annotations"
+
+
+def training_settings(*, output_type, loss_type, label_smoothing, distillation_lambda, sparse):
+    """What a job trains with, from what was asked for and whether its session is sparse.
+
+    Some combinations cannot train, or would train the wrong thing, so they
+    are replaced here, where the user sees it in the answer, rather than
+    failing on the cluster:
+    - sparse annotations with mse: margin loss, with distillation to the
+      base model at 0.5, which is how sparse annotations train (see the
+      distance case below);
+    - a distance target with sparse annotations: a binary target with margin
+      loss instead, at margin 0.5 and distillation of at least 0.5 (see
+      below);
+    - a distance target otherwise: bce, without label smoothing.
+    A sparse session also masks its unannotated voxels out of the loss.
+    """
+    note = None
+    margin = None  # the form's
+    if sparse and loss_type == "mse":
+        loss_type = "margin"
+        distillation_lambda = 0.5
+        note = SPARSE_MSE_NOTE
+        logger.info(SPARSE_MSE_NOTE)
+
+    if output_type == "distance" and sparse:
+        # A distance target needs the 3D object boundary. Scribbles are
+        # strokes with unannotated voxels all around them, so the safe
+        # radius of every painted voxel is ~1 and next to nothing would be
+        # supervised. Fall back to what sparse annotations already use:
+        # a per-voxel binary target with margin loss and distillation to
+        # the base model elsewhere.
+        #
+        # At margin 0.5, so that only the side of 0.5 is enforced and the
+        # model's gradual field survives. The form's 0.3 pushed every
+        # painted voxel to 0.7 or 0.3, which on a distance model (sigma 6)
+        # is 2.5 voxels from the boundary: edges near strokes turned into
+        # steps. And distillation of at least 0.5: the form's default, 0.01,
+        # was passed through as "set", so almost nothing held the rest.
+        logger.info(
+            "output_type=distance with sparse annotations: using binary "
+            "target + margin loss instead (a distance transform needs dense 3D labels)"
+        )
+        output_type = "binary"
+        loss_type = "margin"
+        margin = SIGN_ONLY_MARGIN
+        distillation_lambda = max(distillation_lambda or 0.0, 0.5)
+        # The form still shows what was entered, so say what was used.
+        note = (
+            "Distance model on scribbles: trained as a binary target with margin loss at "
+            f"margin {margin} and distillation {distillation_lambda:g}, in place of the form's"
+        )
+    elif output_type == "distance":
+        # The soft distance target is only defined against BCE-with-logits;
+        # margin/dice assume hard labels and smoothing would blur a target
+        # that is already soft. The CLI rejects anything else.
+        if loss_type != "bce" or label_smoothing:
+            logger.info(
+                f"output_type=distance: using bce loss without label smoothing "
+                f"(requested loss_type={loss_type}, label_smoothing={label_smoothing})"
+            )
+        loss_type = "bce"
+        label_smoothing = 0.0
+
+    return TrainingSettings(
+        output_type=output_type,
+        loss_type=loss_type,
+        label_smoothing=label_smoothing,
+        distillation_lambda=distillation_lambda,
+        mask_unannotated=bool(sparse),
+        margin=margin,
+        note=note,
+    )
+
+
 def build_restart_params(data):
     updated_params = {}
     for key in RESTART_PASSTHROUGH_KEYS:
         if key in data and data[key] is not None:
             updated_params[key] = data[key]
+
+    # The trainer's flag is --no-augment. Send it alongside "augment" so a job
+    # started before the trainer learned to map "augment" -- which it used to
+    # drop -- still gets the toggle.
+    if "augment" in updated_params and "no_augment" not in updated_params:
+        augment = updated_params["augment"]
+        if isinstance(augment, str):
+            augment = augment.strip().lower() in ("true", "1", "yes", "on")
+        updated_params["no_augment"] = not bool(augment)
+
+    # --offsets is a JSON string on the trainer's side; a list would make its
+    # json.loads() fail and kill the restart.
+    if isinstance(updated_params.get("offsets"), (list, tuple)):
+        updated_params["offsets"] = json.dumps(updated_params["offsets"])
 
     if "distillation_scope" in data and data["distillation_scope"] is not None:
         scope = str(data["distillation_scope"]).lower()
@@ -264,76 +413,47 @@ def get_lsf_job_id(finetune_job):
     return None
 
 
-# Geometry the trainer cannot guess and will not run without.
-_MANIFEST_REQUIRED_FIELDS = (
-    "zarr_path",
-    "dataset_path",
-    "input_size",
-    "output_size",
-    "input_voxel_size",
-    "output_voxel_size",
-)
+def rewrite_minio_url_for_proxy(minio_url, request=None):
+    """``minio_url`` as the browser can reach it through a reverse proxy.
+
+    ``session.minio.proxied_url``, for ``request`` or else the Flask request
+    being handled. Unless CELLMAP_FLOW_MINIO_PROXY_URL is set and the
+    request came through a proxy (X-Forwarded-Host), and outside a request
+    (a background import, a script), the URL is returned unchanged.
+    """
+    if request is None and os.environ.get(MINIO_PROXY_URL_ENV, "").strip():
+        from flask import has_request_context, request as current_request
+
+        if has_request_context():
+            request = current_request
+    return proxied_url(minio_url, request)
 
 
 def write_volume_manifest(volume):
-    """Mark a browser-painted annotation volume as trainable by the new path.
+    """Mark an annotation volume as trainable by writing its manifest.
 
     ``create_dataloader`` requires this manifest: it is what points the
     trainer at the volume zarr to stream patches from, and it carries the
-    good regions, the dense/sparse ratio and the patch geometry. Without
-    one, training now raises rather than falling back -- the old per-chunk
-    dataset that used to serve that case honoured none of the above.
-
-    Only the YAML crop importer used to write one, so every session where
-    you painted scribbles in the browser trained on the legacy path and
-    silently ignored the regions you marked. Both volume-creating routes now
-    call this.
+    patch geometry, the dense/sparse ratio and the dashboard's chains. The
+    good regions beside it are honoured through the same dataset. Without
+    one, training raises rather than fall back to anything.
 
     Returns the manifest path, or None when the volume record is too
     incomplete to describe (a resumed session whose .zattrs predates these
-    fields, say) -- in which case the legacy path still applies, as before.
+    fields, say). Nothing is guessed: such a session cannot be trained, and
+    submit refuses it.
     """
-    from cellmap_flow.finetune.virtual_dataset import write_manifest
-    from cellmap_flow.globals import (
-        current_input_norm_config,
-        current_postprocess_config,
-    )
+    from cellmap_flow.finetune.session.manifest import write_manifest
+    from cellmap_flow.finetune.session.volume import build_manifest
 
-    missing = [f for f in _MANIFEST_REQUIRED_FIELDS if not volume.get(f)]
-    corrections_dir = volume.get("corrections_dir")
-    if missing or not corrections_dir:
-        logger.warning(
-            "Not writing a virtual-sources manifest: volume record is missing "
-            f"{missing or ['corrections_dir']}. Training will fall back to the "
-            "legacy correction-chunk dataset, which ignores good regions."
-        )
+    try:
+        if not volume.get("corrections_dir"):
+            raise ValueError(f"The record of volume {volume.get('zarr_path')} has no corrections_dir.")
+        input_norm, postprocess = current_chain()
+        manifest = build_manifest(volume, input_norm=input_norm, postprocess=postprocess)
+    except ValueError as e:
+        logger.warning(f"Not writing a virtual-sources manifest: {e} The session cannot be trained without one.")
         return None
-
-    manifest = {
-        "kind": "volume_zarr_v1",
-        "volume_zarr_path": volume["zarr_path"],
-        "raw_dataset_path": volume["dataset_path"],
-        "input_size_voxels": list(volume["input_size"]),
-        "output_size_voxels": list(volume["output_size"]),
-        "input_voxel_size_nm": list(volume["input_voxel_size"]),
-        "output_voxel_size_nm": list(volume["output_voxel_size"]),
-        # None means "one patch per populated chunk" -- full coverage of what
-        # the user actually painted, rather than a fixed count.
-        "patches_per_epoch": None,
-        "jitter_voxels": None,
-        "seed": 0,
-        # The trainer runs on LSF where g.input_norms is empty, so the
-        # normalization has to travel in the manifest. Without it the trainer
-        # feeds the model raw uint8 while inference feeds it [-1, 1], and the
-        # adapter is nonsense at inference time.
-        "input_norm": current_input_norm_config(),
-        "postprocess": current_postprocess_config(),
-        # None -> auto-balance the dense and sparse pools.
-        "dense_to_sparse_ratio": None,
-    }
-    path = write_manifest(str(corrections_dir), manifest)
-    logger.info(
-        f"Wrote virtual-sources manifest for {volume['zarr_path']} -> {path}; "
-        "training will use VirtualPatchDataset and honour good regions."
-    )
+    path = write_manifest(str(volume["corrections_dir"]), manifest)
+    logger.info(f"Wrote virtual-sources manifest for {volume['zarr_path']} -> {path}")
     return path

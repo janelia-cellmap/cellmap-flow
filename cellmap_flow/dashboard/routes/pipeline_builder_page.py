@@ -6,206 +6,149 @@ from flask import Blueprint, render_template
 from cellmap_flow.norm.input_normalize import get_input_normalizers
 from cellmap_flow.post.postprocessors import get_postprocessors_list
 from cellmap_flow.models.model_merger import get_model_mergers_list
-from cellmap_flow.globals import g
+from cellmap_flow.dashboard.state import get_session
+from cellmap_flow.pipeline_spec import builder_steps
 
 logger = logging.getLogger(__name__)
 
 pipeline_builder_bp = Blueprint("pipeline_builder", __name__)
 
 
+def _available_models():
+    """The builder's model palette, ``{key: model}``: each catalog model as
+    ``category/name`` with its path, then each configured model under its
+    own name with its ``to_dict()``, unless the catalog has that key."""
+    models = {}
+    for category, group in (get_session().model_catalog or {}).items():
+        if isinstance(group, dict):
+            for name, path in group.items():
+                key = f"{category}/{name}"
+                models[key] = {"name": key, "category": category, "model_name": name, "path": path}
+    for model_config in get_session().models_config or []:
+        if model_config.name not in models:
+            models[model_config.name] = {"name": model_config.name, **model_config.to_dict()}
+    return models
+
+
+def _configured(model_name):
+    """The ``to_dict()`` of the configured model called ``model_name``, or None."""
+    for model_config in get_session().models_config or []:
+        if getattr(model_config, "name", None) == model_name and hasattr(model_config, "to_dict"):
+            return model_config.to_dict()
+    return None
+
+
+def _chain_nodes(prefix, steps, saved):
+    """The builder's nodes for one live chain: an ``{id, name, params,
+    position}`` node per step of ``steps`` (pipeline_spec's ``{name,
+    **params}`` steps), given ``saved``, the nodes the builder last applied
+    for that chain.
+
+    If the saved nodes are that chain, which they are unless something other
+    than the builder has set it since, they are returned exactly as saved.
+    Otherwise each step takes the id and position of the first saved node of
+    the same op not already taken, so a step whose parameters changed stays
+    where it was. A step with no such node gets a new id and no position,
+    and the page gives it a place. Saved nodes left over were steps that
+    have since gone, and are dropped.
+    """
+    if builder_steps(saved) == tuple(steps):
+        return list(saved)
+    unused = list(saved)
+    stamp = int(time.time() * 1000)
+    nodes = []
+    for index, step in enumerate(steps):
+        if not isinstance(step, dict) or "name" not in step:
+            continue  # not a step; the op readers skip it too
+        node = {"id": f"{prefix}-{index}-{stamp}", "name": step["name"],
+                "params": {key: value for key, value in step.items() if key != "name"}}
+        same_op = next((n for n in unused if n.get("name") == step["name"]), None)
+        if same_op is not None:
+            unused.remove(same_op)
+            node["id"] = same_op.get("id", node["id"])
+            if "position" in same_op:
+                node["position"] = same_op["position"]
+        nodes.append(node)
+    return nodes
+
+
 @pipeline_builder_bp.route("/pipeline-builder")
 def pipeline_builder():
-    """Render the drag-and-drop pipeline builder interface with current state from globals"""
-    input_norms = get_input_normalizers()
-    output_postprocessors = get_postprocessors_list()
+    """The pipeline builder, starting from the dashboard's live chain.
 
-    # Get available models from model catalog
-    available_models = {}
-    if hasattr(g, 'model_catalog') and g.model_catalog:
-        for category, category_models in g.model_catalog.items():
-            if isinstance(category_models, dict):
-                for model_name, model_path in category_models.items():
-                    full_name = f"{category}/{model_name}"
-                    available_models[full_name] = {
-                        'name': full_name,
-                        'category': category,
-                        'model_name': model_name,
-                        'path': model_path
-                    }
+    The pipeline the page starts from (its page data's ``pipeline``) comes
+    from two places. Its normalizer and postprocessor nodes are the live
+    chain, ``session.pipeline_spec``, however that was last set: by the
+    builder's own apply, Submit on the dashboard page, a YAML, or any other
+    PUT /api/pipeline. The page sends the chain back with its first edit,
+    so nodes taken from anywhere else would undo whatever set the chain
+    since. Everything else is the builder's last canvas
+    (``session.builder_state``): the INPUT and OUTPUT nodes with their
+    paths, boxes and channels, the model nodes, the edges, and each node's
+    position. _chain_nodes says how the chain's nodes reuse the canvas's.
+    """
+    session = get_session()
+    available_models = _available_models()
+    spec = session.pipeline_spec
 
-    # Also include any models from g.models_config if available
-    if hasattr(g, 'models_config') and g.models_config:
-        for model_config in g.models_config:
-            model_dict = model_config.to_dict()
-            model_name = model_config.name
-            if model_name not in available_models:
-                available_models[model_name] = model_dict
-
-    logger.debug(f"\n{'='*80}")
-    logger.debug(f"AVAILABLE MODELS DEBUG:")
-    logger.debug(f"  Models from catalog: {[k for k in available_models.keys() if '/' in k]}")
-    logger.debug(f"  Models from config: {[k for k in available_models.keys() if '/' not in k]}")
-    logger.debug(f"  Total available models: {len(available_models)}")
-
-    # Ensure all models have proper structure for UI
-    models_with_config = {}
-    for model_name, model_data in available_models.items():
-        # Ensure the model has a 'name' field
-        if isinstance(model_data, dict):
-            models_with_config[model_name] = model_data
-            if 'name' not in models_with_config[model_name]:
-                models_with_config[model_name]['name'] = model_name
-        else:
-            models_with_config[model_name] = {'name': model_name}
-
-    available_models = models_with_config
-    logger.debug(f"  Final available_models count: {len(available_models)}")
-
-    # Check if we have stored pipeline state from previous apply
-    if hasattr(g, 'pipeline_normalizers') and len(g.pipeline_normalizers) > 0:
-        # Use stored pipeline state (includes IDs, positions, params)
-        current_normalizers = g.pipeline_normalizers
-        current_postprocessors = g.pipeline_postprocessors
-        current_models = g.pipeline_models
-        # Enrich current_models with config from g.models_config if available
-        if hasattr(g, 'models_config') and g.models_config:
-            for model_dict in current_models:
-                if 'config' not in model_dict:
-                    # Strip _server suffix for matching
-                    model_name = model_dict['name'].replace('_server', '')
-                    for model_config in g.models_config:
-                        config_name = getattr(model_config, 'name', '').replace('_server', '')
-                        if config_name == model_name:
-                            if hasattr(model_config, 'to_dict'):
-                                model_dict['config'] = model_config.to_dict()
-                            break
-        current_inputs = g.pipeline_inputs
-        current_outputs = g.pipeline_outputs
-        current_edges = g.pipeline_edges
+    # Use the state the builder last applied, if it has applied any (an apply
+    # sends at least the INPUT node, unless the user deleted it). Testing for
+    # normalizers alone threw away a saved pipeline that has none (the
+    # INPUT/OUTPUT nodes, output path, bounding boxes, edges, positions and
+    # models) and rebuilt it from the live objects on every reload.
+    saved = session.builder_state
+    if any(saved.values()):
+        # The stored nodes, with their ids, positions and params. A model
+        # node applied without its config gets the configured model's.
+        current_models = saved["models"]
+        for model_dict in current_models:
+            if "config" not in model_dict:
+                config = _configured(model_dict["name"])
+                if config is not None:
+                    model_dict["config"] = config
+        current_inputs = saved["inputs"]
+        current_outputs = saved["outputs"]
+        current_edges = saved["edges"]
     else:
-        # Fall back to converting from globals.input_norms and globals.postprocess
-        current_normalizers = []
-        for idx, norm in enumerate(g.input_norms):
-            norm_dict = norm.to_dict() if hasattr(norm, 'to_dict') else {'name': str(norm)}
-            norm_name = norm_dict.get('name', str(norm))
-            # Extract params: all dict items except 'name'
-            params = {k: v for k, v in norm_dict.items() if k != 'name'}
-            current_normalizers.append({
-                'id': f'norm-{idx}-{int(time.time()*1000)}',
-                'name': norm_name,
-                'params': params
-            })
-
-        # Current models (from jobs and models_config)
+        # Nothing applied yet: a node per running model with its config,
+        # from the configured models or else from a YAML the builder
+        # imported.
         current_models = []
-        logger.debug(f"\n{'='*80}")
-        logger.debug(f"Building current_models from g.jobs:")
-        logger.debug(f"  g.jobs count: {len(g.jobs)}")
-        logger.debug(f"  g.models_config exists: {hasattr(g, 'models_config')}")
-        if hasattr(g, 'models_config'):
-            logger.debug(f"  g.models_config count: {len(g.models_config) if g.models_config else 0}")
-            logger.debug(f"  g.models_config type: {type(g.models_config)}")
-            logger.debug(f"  g.models_config value: {g.models_config}")
-            if g.models_config:
-                logger.debug(f"  g.models_config names: {[getattr(mc, 'name', 'NO_NAME') for mc in g.models_config]}")
-                for mc in g.models_config:
-                    logger.debug(f"    Config object: {mc}, has to_dict: {hasattr(mc, 'to_dict')}")
-
-        # If models_config is empty but we have jobs, try to get configs from model_catalog
-        if (not hasattr(g, 'models_config') or not g.models_config) and hasattr(g, 'model_catalog'):
-            logger.debug(f"  models_config is empty, checking model_catalog for configs...")
-            # Check if available_models dict has configs
-            if available_models:
-                logger.debug(f"  available_models has {len(available_models)} entries with potential configs")
-
-        for idx, job in enumerate(g.jobs):
-            if hasattr(job, 'model_name'):
-                logger.debug(f"\n  Processing job {idx}: model_name={job.model_name}")
-                model_dict = {'id': f'model-{idx}-{int(time.time()*1000)}', 'name': job.model_name, 'params': {}}
-                # Try to find the corresponding ModelConfig to get full configuration
-                config_found = False
-
-                # First try g.models_config
-                if hasattr(g, 'models_config') and g.models_config:
-                    # Strip _server suffix for matching
-                    job_model_name = job.model_name.replace('_server', '')
-                    for model_config in g.models_config:
-                        model_config_name = getattr(model_config, 'name', None)
-                        config_name_stripped = model_config_name.replace('_server', '') if model_config_name else None
-                        logger.debug(f"    Checking model_config: {model_config_name} (stripped: {config_name_stripped}) vs job: {job.model_name} (stripped: {job_model_name})")
-                        if config_name_stripped and config_name_stripped == job_model_name:
-                            # Export the full model config using to_dict()
-                            if hasattr(model_config, 'to_dict'):
-                                model_dict['config'] = model_config.to_dict()
-                                logger.debug(f"    ✓ Config attached from models_config: {model_dict['config']}")
-                                config_found = True
-                            break
-
-                # Fallback: check available_models dict (which was enriched earlier)
-                if not config_found and available_models:
-                    job_model_name = job.model_name.replace('_server', '')
-                    for model_name, model_data in available_models.items():
-                        model_name_stripped = model_name.replace('_server', '')
-                        logger.debug(f"    Checking available_models: {model_name} (stripped: {model_name_stripped}) vs job: {job.model_name} (stripped: {job_model_name})")
-                        if model_name_stripped == job_model_name and isinstance(model_data, dict):
-                            # Models from g.models_config store to_dict() directly
-                            # (no nested 'config' key); use the dict itself as config
-                            model_dict['config'] = model_data.get('config', model_data)
-                            logger.debug(f"    ✓ Config attached from available_models: {model_dict['config']}")
-                            config_found = True
-                            break
-
-                # Second fallback: check previously saved pipeline_model_configs
-                if not config_found and hasattr(g, 'pipeline_model_configs'):
-                    job_model_name = job.model_name.replace('_server', '')
-                    for saved_name, saved_config in g.pipeline_model_configs.items():
-                        saved_name_stripped = saved_name.replace('_server', '')
-                        logger.debug(f"    Checking pipeline_model_configs: {saved_name} (stripped: {saved_name_stripped}) vs job: {job.model_name} (stripped: {job_model_name})")
-                        if saved_name_stripped == job_model_name:
-                            model_dict['config'] = saved_config
-                            logger.debug(f"    ✓ Config attached from pipeline_model_configs: {model_dict['config']}")
-                            config_found = True
-                            break
-
-                if not config_found:
-                    logger.warning(f"    ✗ No matching config found for {job.model_name}")
-                    logger.debug(f"       TIP: Import a YAML with full model configs to populate g.pipeline_model_configs")
-                current_models.append(model_dict)
-        logger.debug(f"{'='*80}\n")
-
-        current_postprocessors = []
-        for idx, post in enumerate(g.postprocess):
-            post_dict = post.to_dict() if hasattr(post, 'to_dict') else {'name': str(post)}
-            post_name = post_dict.get('name', str(post))
-            # Extract params: all dict items except 'name'
-            params = {k: v for k, v in post_dict.items() if k != 'name'}
-            current_postprocessors.append({
-                'id': f'post-{idx}-{int(time.time()*1000)}',
-                'name': post_name,
-                'params': params
-            })
-
+        saved_configs = session.builder_model_configs
+        for idx, job in enumerate(session.jobs):
+            if not hasattr(job, "model_name"):
+                continue
+            model_dict = {"id": f"model-{idx}-{int(time.time()*1000)}", "name": job.model_name, "params": {}}
+            config = _configured(job.model_name)
+            if config is None:
+                config = saved_configs.get(job.model_name)
+            if config is not None:
+                model_dict["config"] = config
+            else:
+                logger.warning(f"No config found for {job.model_name}; import a YAML with full model configs")
+            current_models.append(model_dict)
         current_inputs = []
         current_outputs = []
         current_edges = []
 
-    # Get current dataset_path from globals
-    dataset_path = getattr(g, 'dataset_path', None) or ''
-
-    # Get available model mergers
-    model_mergers = get_model_mergers_list()
+    current_normalizers = _chain_nodes("norm", spec.input_norm, saved["normalizers"])
+    current_postprocessors = _chain_nodes("post", spec.postprocess, saved["postprocessors"])
+    # An edge to or from a saved step that has gone goes with it.
+    gone = ({node.get("id") for node in saved["normalizers"] + saved["postprocessors"]}
+            - {node.get("id") for node in current_normalizers + current_postprocessors})
+    current_edges = [edge for edge in current_edges if edge.get("from") not in gone and edge.get("to") not in gone]
 
     return render_template(
         "pipeline_builder_v2.html",
-        input_normalizers=input_norms or {},
+        input_normalizers=get_input_normalizers() or {},
         available_models=available_models or {},
-        output_postprocessors=output_postprocessors or {},
-        model_mergers=model_mergers or {},
+        output_postprocessors=get_postprocessors_list() or {},
+        model_mergers=get_model_mergers_list() or {},
         current_normalizers=current_normalizers,
         current_models=current_models,
         current_postprocessors=current_postprocessors,
         current_inputs=current_inputs,
         current_outputs=current_outputs,
         current_edges=current_edges,
-        dataset_path=dataset_path,
+        dataset_path=session.dataset_path or "",
     )

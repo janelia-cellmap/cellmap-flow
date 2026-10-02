@@ -1,11 +1,71 @@
+import functools
 import logging
 import numpy as np
 import inspect
 
+from cellmap_flow.norm.safe_expression import compile_expression
+
 logger = logging.getLogger(__name__)
 
 
+def _jsonable(value):
+    """Turn numpy scalars/arrays and tuples into plain JSON types.
+
+    Constructor arguments are kept as given, but they end up in a URL blob via
+    json.dumps, which rejects numpy types.
+    """
+    if isinstance(value, np.generic):
+        return value.item()
+    if isinstance(value, np.ndarray):
+        return value.tolist()
+    if isinstance(value, (list, tuple)):
+        return [_jsonable(v) for v in value]
+    if isinstance(value, dict):
+        return {k: _jsonable(v) for k, v in value.items()}
+    return value
+
+
+def _record_init_params(init):
+    """Wrap ``__init__`` so the instance remembers the arguments it was built with.
+
+    Only the outermost ``__init__`` records: a subclass calling
+    ``super().__init__()`` must not overwrite its own arguments with the base
+    class's (usually empty) ones.
+    """
+    sig = inspect.signature(init)
+
+    @functools.wraps(init)
+    def wrapper(self, *args, **kwargs):
+        if "_init_params" not in self.__dict__:
+            params = {}
+            try:
+                bound = sig.bind(self, *args, **kwargs)
+                bound.apply_defaults()
+                for pname, value in list(bound.arguments.items())[1:]:
+                    kind = sig.parameters[pname].kind
+                    if kind is inspect.Parameter.VAR_POSITIONAL:
+                        continue
+                    if kind is inspect.Parameter.VAR_KEYWORD:
+                        params.update(value)
+                    else:
+                        params[pname] = value
+            except TypeError:
+                # Let the real __init__ raise its own, clearer error.
+                params = None
+            self.__dict__["_init_params"] = params
+        return init(self, *args, **kwargs)
+
+    wrapper._records_init_params = True
+    return wrapper
+
+
 class SerializableInterface:
+
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        init = cls.__dict__.get("__init__")
+        if init is not None and not getattr(init, "_records_init_params", False):
+            cls.__init__ = _record_init_params(init)
 
     @classmethod
     def name(cls):
@@ -34,23 +94,66 @@ class SerializableInterface:
         sig = inspect.signature(self._process)
         [kwargs.pop(k) for k in list(kwargs.keys()) if k not in sig.parameters]
         data = self._process(data, **kwargs)
-        return data.astype(self.dtype)
+        if self.dtype is None:
+            # No declared dtype means "whatever _process returned";
+            # astype(None) would silently promote it to float64.
+            return np.asarray(data)
+        return np.asarray(data).astype(self.dtype, copy=False)
 
     def _process(self, data):
         raise NotImplementedError("Subclasses must implement this method")
 
     def to_dict(self):
-        result = {}
+        """``{"name": <class name>, **constructor arguments}``.
+
+        Exactly what ``type(self)(**params)`` needs to rebuild this step. The
+        public attributes are not that: constructors parse their arguments
+        (a neighborhood string becomes a list, "0,1" becomes [0, 1]) and add
+        state of their own, so feeding the attributes back in raised TypeError
+        or built a different step.
+
+        Each argument is reported with its real type: when the constructor
+        stored it under its own name as a plain number, bool or string, that
+        stored value is used (0.5, not the "0.5" a form sent); anything it
+        parsed into something else keeps the argument as given.
+        """
+        params = self.__dict__.get("_init_params")
+        if params is None:
+            # Built without going through __init__ (e.g. unpickled from an
+            # older version); the public attributes are the best there is.
+            params = {k: v for k, v in self.__dict__.items() if not k.startswith("_")}
+        else:
+            params = {k: self._stored_or_given(k, v) for k, v in params.items()}
         result = {"name": self.name()}
-        for k, v in self.__dict__.items():
-            if not k.startswith("_"):
-                result[k] = v
+        result.update({k: _jsonable(v) for k, v in params.items()})
         return result
-        # return {self.name():result}
+
+    def _stored_or_given(self, name, given):
+        stored = self.__dict__.get(name, given)
+        if isinstance(stored, (bool, int, float, str, np.generic)):
+            return stored
+        return given
 
     @property
     def dtype(self):
         return None
+
+    def output_info(self, dtype, channels):
+        """``(dtype, channels, is_segmentation)`` of what this step returns.
+
+        ``dtype`` and ``channels`` describe what it is given. By default the
+        step's declared ``dtype`` replaces the incoming one (``None`` keeps
+        it), a ``num_channels`` attribute (only steps that change the count
+        have one) replaces the channel count, and ``is_segmentation`` is the
+        step's own, where ``None`` means it does not say. A step whose output
+        depends on its input in some other way overrides this.
+        """
+        own_dtype = self.dtype
+        return (
+            own_dtype if own_dtype else dtype,
+            getattr(self, "num_channels", channels),
+            getattr(self, "is_segmentation", None),
+        )
 
 
 class InputNormalizer(SerializableInterface):
@@ -89,6 +192,7 @@ class EuclideanDistance(InputNormalizer):
 
         if type not in ["edt", "sdf"]:
             raise ValueError("type must be either 'edt' or 'sdf'")
+        self.type = type
         self.anisotropy = tuple((int(anisotropy), int(anisotropy), int(anisotropy)))
         if type == "edt":
             self._func = edt.edt
@@ -96,8 +200,15 @@ class EuclideanDistance(InputNormalizer):
             self._func = edt.sdf
         else:
             raise ValueError("type must be either 'edt' or 'sdf'")
-        self.black_border = bool(black_border)
+        # The dashboard forms send every value as a string, and bool("False")
+        # is True.
+        if isinstance(black_border, str):
+            self.black_border = black_border.strip().lower() == "true"
+        else:
+            self.black_border = bool(black_border)
         self.parallel = int(parallel)
+        if activation in ("", "None", "none"):
+            activation = None
         self.activation = (
             lambda x: x
         )  # default to identity if no activation is specified
@@ -114,12 +225,9 @@ class EuclideanDistance(InputNormalizer):
                 )
 
     def _process(self, data):
-        from edt import edt, sdf
-
         if not isinstance(data, np.ndarray):
             raise TypeError("Input data must be a numpy array.")
 
-        # Ensure the data is in uint8 format for distance transform
         result = self._func(
             data,
             anisotropy=self.anisotropy,
@@ -131,22 +239,6 @@ class EuclideanDistance(InputNormalizer):
     @property
     def dtype(self):
         return np.float32
-
-    # Removed redundant dtype property definition.
-
-    def _process(self, data: np.ndarray, **kwargs) -> np.ndarray:
-
-        if not isinstance(data, np.ndarray):
-            raise TypeError("Input data must be a numpy array.")
-
-        from edt import edt
-
-        return edt(
-            data.astype(np.uint8),
-            anisotropy=self.anisotropy,
-            black_border=True,
-            parallel=5,
-        )
 
 
 class MinMaxNormalizer(InputNormalizer):
@@ -173,16 +265,17 @@ class MinMaxNormalizer(InputNormalizer):
 class LambdaNormalizer(InputNormalizer):
     def __init__(self, expression: str):
         self.expression = expression
-        # ``_lambda`` is a Python ``lambda`` and not picklable, which breaks
-        # multiprocessing workers (e.g. PyTorch DataLoader with spawn). Don't
-        # store it on the instance; build it lazily in ``_process`` so it
-        # lives only in the worker that needs it. ``__getstate__``/
-        # ``__setstate__`` further guarantee any older pickled instances
-        # don't try to round-trip the lambda.
+        # Reject anything outside the safe subset now, not on the first chunk.
+        compile_expression(expression)
+        # The compiled function is not picklable, which breaks multiprocessing
+        # workers (e.g. PyTorch DataLoader with spawn). Don't store it on the
+        # instance; build it lazily in ``_process`` so it lives only in the
+        # worker that needs it. ``__getstate__``/``__setstate__`` further
+        # guarantee older pickled instances don't try to round-trip it.
 
     def _get_lambda(self):
         if not hasattr(self, "_lambda") or self._lambda is None:
-            self._lambda = eval(f"lambda x: {self.expression}")
+            self._lambda = compile_expression(self.expression)
         return self._lambda
 
     def __getstate__(self):

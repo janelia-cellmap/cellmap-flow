@@ -1,3 +1,15 @@
+"""Training jobs: submitting one, restarting it, and following it.
+
+Routes:
+- POST ``/api/finetune/submit``: a job for a model over a session's corrections;
+- POST ``/api/finetune/job/<job_id>/restart``: the next iteration, with new settings;
+- GET ``/api/finetune/jobs``: every job, including those a dashboard before
+  this one started (they are looked for first);
+- GET ``/api/finetune/job/<job_id>/status`` and ``.../logs``;
+- GET ``/api/finetune/job/<job_id>/logs/stream``: the log as server-sent events;
+- POST ``/api/finetune/job/<job_id>/cancel`` and ``.../stop-early``.
+"""
+
 import os
 import json
 import logging
@@ -7,73 +19,40 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-from flask import Response, jsonify
+from flask import Response, jsonify, request
 
+from cellmap_flow.dashboard.finetune_layers import follow_jobs
 from cellmap_flow.dashboard.finetune_utils import sync_all_annotations_from_minio
+from cellmap_flow.dashboard.requests import FinetuneRestart, FinetuneSubmit, parse
+from cellmap_flow.dashboard.routes.finetune.blueprint import finetune_bp
 from cellmap_flow.dashboard.routes.finetune.common import (
     LOG_FILTER_PATTERNS,
     autodetect_output_type,
     build_restart_params,
+    current_chain,
     detect_sparse_annotations,
     find_model_config,
     get_lsf_job_id,
     resolve_finetune_session,
+    training_settings,
 )
-from cellmap_flow.globals import g
+from cellmap_flow.dashboard.state import get_session
+from cellmap_flow.finetune.job_manager.state import can_restart
+from cellmap_flow.finetune.session.store import SESSION_DIR_RE
+from cellmap_flow.jobs.site import current_site
+from cellmap_flow.jobs.spec import exists_now
 
 logger = logging.getLogger(__name__)
 
 
-def _parse_patches_per_epoch_override(data):
-    """Return ``(provided, value)`` for the optional virtual-dataset override.
-
-    ``0`` means "auto" (manifest ``None``); blank/missing means leave the
-    existing manifest value untouched.
-    """
-    if "patches_per_epoch" not in data:
-        return False, None
-    raw = data.get("patches_per_epoch")
-    if raw is None or raw == "":
-        return False, None
-    try:
-        value = int(raw)
-    except (TypeError, ValueError):
-        raise ValueError("patches_per_epoch must be a non-negative integer")
-    if value < 0:
-        raise ValueError("patches_per_epoch must be a non-negative integer")
-    return True, (None if value == 0 else value)
-
-
-def _parse_rehearsal_fraction_override(data):
-    """Return ``(provided, value)`` for the optional rehearsal-fraction override.
-
-    Blank/missing leaves the manifest alone. ``0`` is meaningful and distinct
-    from blank: it turns rehearsal off for this run without discarding the
-    regions, so you can compare with and without them.
-    """
-    if "rehearsal_fraction" not in data:
-        return False, None
-    raw = data.get("rehearsal_fraction")
-    if raw is None or raw == "":
-        return False, None
-    try:
-        value = float(raw)
-    except (TypeError, ValueError):
-        raise ValueError("rehearsal_fraction must be a number between 0 and 1")
-    if not 0.0 <= value <= 1.0:
-        raise ValueError("rehearsal_fraction must be a number between 0 and 1")
-    return True, value
-
-
 def _step_names(config):
-    """Step names from an input_norm/postprocess config, whichever shape it is.
+    """Step names from an input_norm/postprocess chain, whichever shape it is.
 
-    The dashboard POSTs these as a list of dicts carrying a "name" key, on
-    purpose: jsonify sorts dict keys, and the order of these steps changes
-    what they compute. pipeline.py stores that list verbatim, so
-    current_*_config() hands back a list whenever the pipeline has been
-    applied, and a name-keyed dict otherwise. Only used for logging, so an
-    unrecognised shape is worth naming rather than raising.
+    current_chain() gives a list of dicts carrying a "name" key, in the order
+    the steps run (a dict's keys would lose it: jsonify sorts them). A
+    manifest written before the chains were lists may still hold the legacy
+    name-keyed dict. Only used for logging, so an unrecognised shape gives no
+    names rather than raising.
     """
     if isinstance(config, dict):
         return list(config.keys())
@@ -85,33 +64,32 @@ def _step_names(config):
 def _backfill_manifest(corrections_dir):
     """Write a manifest for a session that predates the volume routes writing one.
 
-    Returns the manifest if one could be written, else None (leaving the
-    caller on the legacy correction-chunk path, as before).
+    Returns the manifest if one could be written, else None: the session
+    then has nothing the trainer can read, and submit refuses it.
     """
-    from cellmap_flow.dashboard.routes.finetune.common import write_volume_manifest
-    from cellmap_flow.finetune.virtual_dataset import read_manifest
+    from cellmap_flow.dashboard.routes.finetune.common import session_store, write_volume_manifest
+    from cellmap_flow.finetune.session.manifest import read_manifest
 
-    volumes = getattr(g, "annotation_volumes", {}) or {}
-    for volume in reversed(list(volumes.values())):
-        if str(volume.get("corrections_dir") or "") != str(corrections_dir):
-            continue
+    _, volume = session_store().session_volume(corrections_dir)
+    if volume is not None:
         if write_volume_manifest(volume) is None:
             return None
         return read_manifest(str(corrections_dir))
 
     logger.info(
-        f"No annotation volume registered for {corrections_dir}; "
-        "training on the legacy correction-chunk dataset."
+        f"No annotation volume registered for {corrections_dir}, so no "
+        "manifest to backfill; the session cannot be trained without one."
     )
     return None
 
 
-def _refresh_virtual_manifest_for_training(corrections_dir, manifest, data, context):
-    """Apply dashboard-owned training-time settings to a virtual manifest."""
-    from cellmap_flow.finetune.virtual_dataset import write_manifest
-    from cellmap_flow.globals import current_input_norm_config, current_postprocess_config
+def _refresh_virtual_manifest_for_training(corrections_dir, manifest, overrides, context):
+    """Write the dashboard's chains and the run's ``overrides`` (see
+    requests._ManifestOverrides) into a session's manifest before ``context``,
+    a submit or a restart."""
+    from cellmap_flow.finetune.session.manifest import write_manifest
 
-    current_norm = current_input_norm_config()
+    current_norm, current_postprocess = current_chain()
     if current_norm and manifest.get("input_norm") != current_norm:
         logger.info(
             "Refreshing manifest input_norm before %s "
@@ -122,7 +100,6 @@ def _refresh_virtual_manifest_for_training(corrections_dir, manifest, data, cont
         )
     manifest["input_norm"] = current_norm
 
-    current_postprocess = current_postprocess_config()
     if current_postprocess and manifest.get("postprocess") != current_postprocess:
         logger.info(
             "Refreshing manifest postprocess before %s "
@@ -133,43 +110,93 @@ def _refresh_virtual_manifest_for_training(corrections_dir, manifest, data, cont
         )
     manifest["postprocess"] = current_postprocess
 
-    override_given, patches_per_epoch = _parse_patches_per_epoch_override(data)
-    if override_given:
-        old_value = manifest.get("patches_per_epoch")
-        manifest["patches_per_epoch"] = patches_per_epoch
-        logger.info(
-            "Applying patches_per_epoch override before %s: %s -> %s",
-            context,
-            old_value,
-            "auto" if patches_per_epoch is None else patches_per_epoch,
-        )
-
-    rehearsal_given, rehearsal_fraction = _parse_rehearsal_fraction_override(data)
-    if rehearsal_given:
-        old_value = manifest.get("rehearsal_fraction")
-        manifest["rehearsal_fraction"] = rehearsal_fraction
-        logger.info(
-            "Applying rehearsal_fraction override before %s: %s -> %s",
-            context,
-            "auto" if old_value is None else old_value,
-            rehearsal_fraction,
-        )
+    for key, value in overrides.items():
+        logger.info(f"Applying the {key} override before {context}: {manifest.get(key)} -> {value}")
+        manifest[key] = value
 
     write_manifest(str(corrections_dir), manifest)
-    return override_given, patches_per_epoch
 
 
-def list_finetuning_jobs_response():
+def _pull_annotations(context):
+    """Pull from MinIO what changed since the last sync; the number of volumes pulled.
+
+    force=False diffs the chunk keys and downloads only what differs, so it
+    is cheap when nothing changed. 0 when MinIO is not running, or the sync
+    failed (logged, under ``context``): the volume on disk is then what
+    there is.
+    """
     try:
-        return jsonify({"success": True, "jobs": g.finetune_job_manager.list_jobs()})
+        t0 = time.perf_counter()
+        pulled = sync_all_annotations_from_minio(force=False) or 0
+        elapsed = time.perf_counter() - t0
+    except Exception as e:
+        logger.warning(f"{context}: error syncing annotations from MinIO: {e}")
+        return 0
+    if pulled < 0:
+        logger.info(f"{context}: MinIO is not running, so there is nothing to pull.")
+        return 0
+    if pulled:
+        logger.info(
+            f"{context}: pulled new annotations for {pulled} volume(s) in "
+            f"{elapsed:.2f}s; training uses them."
+        )
+    else:
+        logger.info(
+            f"{context}: nothing new to pull ({elapsed:.2f}s) -- annotations "
+            f"on disk are already current."
+        )
+    return pulled
+
+
+def _rehydrate_jobs():
+    """Reattach to jobs a previous dashboard process left running.
+
+    Looks in every session under the base paths this dashboard knows: the
+    ones it made sessions for, and the output path saved in the user prefs,
+    which is what a freshly restarted dashboard starts with.
+    """
+    from cellmap_flow.dashboard.routes.finetune.common import load_user_prefs
+
+    manager = get_session().finetune_job_manager
+    rehydrate = getattr(manager, "rehydrate_session", None)
+    if rehydrate is None:
+        return
+    # Before the jobs are found: finding one starts its monitor, which tells
+    # the viewer when its server is up.
+    follow_jobs(manager)
+    bases = {os.path.expanduser(b) for b in get_session().output_sessions}
+    saved = load_user_prefs().get("outputPath")
+    if saved:
+        bases.add(os.path.expanduser(saved))
+    for base in bases:
+        try:
+            sessions = [
+                os.path.join(base, entry) for entry in os.listdir(base)
+                if SESSION_DIR_RE.match(entry)
+            ]
+        except OSError:
+            continue
+        for session in sessions:
+            try:
+                rehydrate(session)
+            except Exception as e:
+                logger.warning(f"Could not look for running jobs in {session}: {e}")
+
+
+@finetune_bp.route("/api/finetune/jobs", methods=["GET"])
+def get_finetuning_jobs():
+    try:
+        _rehydrate_jobs()
+        return jsonify({"success": True, "jobs": get_session().finetune_job_manager.list_jobs()})
     except Exception as e:
         logger.error(f"Error listing jobs: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
 
 
-def get_job_status_response(job_id):
+@finetune_bp.route("/api/finetune/job/<job_id>/status", methods=["GET"])
+def get_job_status(job_id):
     try:
-        status = g.finetune_job_manager.get_job_status(job_id)
+        status = get_session().finetune_job_manager.get_job_status(job_id)
         if status is None:
             return jsonify({"success": False, "error": "Job not found"}), 404
         return jsonify({"success": True, **status})
@@ -178,36 +205,37 @@ def get_job_status_response(job_id):
         return jsonify({"success": False, "error": str(e)}), 500
 
 
-def get_job_logs_response(job_id):
+@finetune_bp.route("/api/finetune/job/<job_id>/logs", methods=["GET"])
+def get_job_logs(job_id):
     try:
-        logs = g.finetune_job_manager.get_job_logs(job_id)
+        manager = get_session().finetune_job_manager
+        job = (getattr(manager, "jobs", {}) or {}).get(job_id)
+        if job is not None and Path(job.log_file).exists():
+            # Whole lines only, with the byte offset they end at: the client
+            # opens the live stream from there, rather than having the stream
+            # send the whole log again on top of this.
+            logs, offset = _read_complete_lines(job.log_file, 0)
+            return jsonify({"success": True, "logs": logs, "offset": offset})
+        logs = manager.get_job_logs(job_id)
         if logs is None:
             return jsonify({"success": False, "error": "Job not found"}), 404
-        return jsonify({"success": True, "logs": logs})
+        return jsonify({"success": True, "logs": logs, "offset": 0})
     except Exception as e:
         logger.error(f"Error getting job logs: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
 
 
-def submit_finetuning_response(data):
+@finetune_bp.route("/api/finetune/submit", methods=["POST"])
+def submit_finetuning():
+    body, refused = parse(FinetuneSubmit, request.get_json() or {})
+    if refused:
+        return refused
     try:
-        model_name = data.get("model_name")
-        corrections_path_str = data.get("corrections_path")
-        if not model_name:
-            return jsonify({"success": False, "error": "model_name is required"}), 400
-        if not corrections_path_str:
-            return jsonify(
-                {
-                    "success": False,
-                    "error": "corrections_path is required. Please specify the output path where annotation crops are saved.",
-                }
-            ), 400
-
-        model_config = find_model_config(model_name)
+        model_config = find_model_config(body.model_name)
         if not model_config:
-            return jsonify({"success": False, "error": f"Model {model_name} not found"}), 404
+            return jsonify({"success": False, "error": f"Model {body.model_name} not found"}), 404
 
-        session_path, actual_corrections_path = resolve_finetune_session(corrections_path_str)
+        session_path, actual_corrections_path = resolve_finetune_session(body.corrections_path)
         if not actual_corrections_path.exists():
             return jsonify(
                 {
@@ -216,110 +244,68 @@ def submit_finetuning_response(data):
                 }
             ), 400
 
-        # Pre-training sync materialized per-chunk _chunk_*.zarr extracts for
-        # the old dataset, which has since been removed. VirtualPatchDataset
-        # reads annotation_volume.zarr directly, so when a manifest is present
-        # the sync is wasted work and can hang submit for many minutes when the
-        # volume contains imported YAML data.
-        from cellmap_flow.finetune.virtual_dataset import read_manifest
+        from cellmap_flow.finetune.session.manifest import read_manifest
 
         existing_manifest = read_manifest(str(actual_corrections_path))
         if existing_manifest is None:
             # Sessions started before the volume routes wrote a manifest have
             # a perfectly trainable volume zarr and no sentinel pointing at
-            # it, so they would silently train on the legacy per-chunk
-            # dataset and ignore any good regions marked. Backfill from the
-            # registered volume rather than making the user start over.
+            # it. Backfill from the registered volume rather than making the
+            # user start over.
             existing_manifest = _backfill_manifest(actual_corrections_path)
 
-        if existing_manifest is None:
-            try:
-                sync_all_annotations_from_minio(force=False)
-            except Exception as e:
-                logger.warning(f"Error syncing annotations before training: {e}")
-        else:
+        if existing_manifest is not None:
             _refresh_virtual_manifest_for_training(
-                actual_corrections_path, existing_manifest, data, "submit"
-            )
-            logger.info(
-                "Virtual sources manifest present; skipping pre-training MinIO sync."
+                actual_corrections_path, existing_manifest, body.overrides(), "submit"
             )
 
-        loss_type = data.get("loss_type", "mse")
-        distillation_lambda = data.get("distillation_lambda", 0.0)
+        output_type, offsets = autodetect_output_type(model_config, body.output_type, body.offsets)
+
+        # Whether the session is sparse is read from the volume on disk, which
+        # lags the browser's strokes (they go straight to MinIO) by up to the
+        # periodic sync's 30 s, or for good while that sync fails. So pull
+        # first, as restart does: strokes painted just before Submit made a
+        # distance model train distance/bce on scribbles, without the mask.
+        # The sync used to also write per-chunk extracts and could take
+        # minutes; it is only the chunk diff now.
+        _pull_annotations("Submit pre-sync")
         has_sparse = detect_sparse_annotations(actual_corrections_path)
-        sparse_auto_switched = False
-        if has_sparse and loss_type == "mse":
-            loss_type = "margin"
-            distillation_lambda = 0.5
-            sparse_auto_switched = True
-            logger.info(
-                "Auto-switched to margin loss + distillation (lambda=0.5) for sparse annotations"
-            )
-
-        output_type, offsets = autodetect_output_type(
-            model_config,
-            data.get("output_type", None),
-            data.get("offsets", None),
+        settings = training_settings(
+            output_type=output_type,
+            loss_type=body.loss_type,
+            label_smoothing=body.label_smoothing,
+            distillation_lambda=body.distillation_lambda,
+            sparse=has_sparse,
         )
 
-        label_smoothing = data.get("label_smoothing", 0.1)
-        if output_type == "distance" and has_sparse:
-            # A distance target needs the 3D object boundary. Scribbles are
-            # strokes with unannotated voxels all around them, so the safe
-            # radius of every painted voxel is ~1 and next to nothing would be
-            # supervised. Fall back to what sparse annotations already use:
-            # a per-voxel binary target with margin loss (only the side of 0.5
-            # is enforced, so the model's gradual field survives) and
-            # distillation to the base model elsewhere.
-            logger.info(
-                "output_type=distance with sparse annotations: using binary "
-                "target + margin loss instead (a distance transform needs dense 3D labels)"
-            )
-            output_type = "binary"
-            if loss_type not in ("margin",):
-                loss_type = "margin"
-            if distillation_lambda <= 0:
-                distillation_lambda = 0.5
-        elif output_type == "distance":
-            # The soft distance target is only defined against BCE-with-logits;
-            # margin/dice assume hard labels and smoothing would blur a target
-            # that is already soft. The CLI rejects anything else, so decide
-            # here where the user can see it in the response.
-            if loss_type != "bce" or label_smoothing:
-                logger.info(
-                    f"output_type=distance: using bce loss without label smoothing "
-                    f"(requested loss_type={loss_type}, label_smoothing={label_smoothing})"
-                )
-            loss_type = "bce"
-            label_smoothing = 0.0
-
-        finetune_job = g.finetune_job_manager.submit_finetuning_job(
+        session = get_session()
+        # Before the job exists: submitting starts its monitor, which tells
+        # the viewer when its server is up and when each iteration is done.
+        follow_jobs(session.finetune_job_manager)
+        finetune_job = session.finetune_job_manager.submit_finetuning_job(
             model_config=model_config,
             corrections_path=actual_corrections_path,
-            lora_r=data.get("lora_r", 8),
-            num_epochs=data.get("num_epochs", 10),
-            batch_size=data.get("batch_size", 2),
-            learning_rate=data.get("learning_rate", 1e-4),
+            lora_r=body.lora_r,
+            num_epochs=body.num_epochs,
+            batch_size=body.batch_size,
+            learning_rate=body.learning_rate,
             output_base=Path(session_path),
-            checkpoint_path_override=(
-                Path(data["checkpoint_path"]) if data.get("checkpoint_path") else None
-            ),
-            auto_serve=data.get("auto_serve", True),
-            mask_unannotated=has_sparse,
-            loss_type=loss_type,
-            label_smoothing=label_smoothing,
-            distillation_lambda=distillation_lambda,
-            distillation_scope=data.get("distillation_scope", "unlabeled"),
-            margin=data.get("margin", 0.3),
-            balance_classes=data.get("balance_classes", False),
-            # Default off: these interactive runs are a few dozen gradient
-            # steps, where augmentation adds variance without the many
-            # repeat views it needs to pay for itself.
-            augment=data.get("augment", False),
-            queue=data.get("queue", "gpu_h100"),
-            output_type=output_type,
-            select_channel=data.get("select_channel", None),
+            checkpoint_path_override=Path(body.checkpoint_path) if body.checkpoint_path else None,
+            auto_serve=body.auto_serve,
+            mask_unannotated=settings.mask_unannotated,
+            loss_type=settings.loss_type,
+            label_smoothing=settings.label_smoothing,
+            distillation_lambda=settings.distillation_lambda,
+            distillation_scope=body.distillation_scope,
+            margin=body.margin if settings.margin is None else settings.margin,
+            balance_classes=body.balance_classes,
+            augment=body.augment,
+            queue=body.queue,
+            # The request's, else the dashboard's own, else the site's.
+            charge_group=body.charge_group or session.charge_group or current_site().default_charge_group,
+            walltime=session.walltime,
+            output_type=settings.output_type,
+            select_channel=body.select_channel,
             offsets=offsets,
         )
 
@@ -330,13 +316,11 @@ def submit_finetuning_response(data):
             "output_dir": str(finetune_job.output_dir),
             # Over the parent so every run in the session tree overlays.
             "tensorboard_command": f"tensorboard --logdir {os.path.dirname(str(finetune_job.output_dir))}",
-            "output_type": output_type,
+            "output_type": settings.output_type,
             "message": "Finetuning job submitted successfully",
         }
-        if sparse_auto_switched:
-            response["note"] = (
-                "Auto-switched to margin loss + distillation (lambda=0.5) for sparse annotations"
-            )
+        if settings.note:
+            response["note"] = settings.note
         return jsonify(response)
     except ValueError as e:
         logger.error(f"Validation error: {e}")
@@ -346,45 +330,93 @@ def submit_finetuning_response(data):
         return jsonify({"success": False, "error": str(e)}), 500
 
 
-def stream_job_logs_response(job_id):
+def _read_complete_lines(path, offset):
+    """(text of the whole lines after byte ``offset``, byte offset after them).
+
+    Byte offsets, so they can be handed to the client as SSE event ids and
+    back, and a partial last line is left for the next read -- a read can
+    land mid-line ("Epoch 7/10 - Lo"), and emitting that split the record in
+    two, neither half matching the client's "Epoch N/M - Loss:" pattern.
+    """
+    with open(path, "rb") as f:
+        f.seek(offset)
+        chunk = f.read()
+    cut = chunk.rfind(b"\n") + 1
+    return chunk[:cut].decode("utf-8", errors="replace"), offset + cut
+
+
+def _requested_offset(request):
+    """Where the client wants the log from: the SSE Last-Event-ID, else ?offset=."""
+    for raw in (request.headers.get("Last-Event-ID"), request.args.get("offset")):
+        try:
+            if raw not in (None, ""):
+                return max(0, int(raw))
+        except (TypeError, ValueError):
+            pass
+    return 0
+
+
+# Statuses in which the job can still write to its log.
+_LIVE_STATUSES = ("PENDING", "RUNNING", "WAITING_FOR_RESTART")
+
+# The line bpeek puts before a job's output, which is not part of the log.
+_BPEEK_HEADER = re.compile(rb"\A<< output from stdout >>\r?\n")
+
+
+@finetune_bp.route("/api/finetune/job/<job_id>/logs/stream", methods=["GET"])
+def stream_job_logs(job_id):
+    """Server-sent log stream.
+
+    Every block of lines carries ``id: <byte offset>``, the position in the
+    log after it, and a (re)connection resumes from the client's
+    Last-Event-ID -- which EventSource sends by itself when it reconnects --
+    or from ``?offset=``. The stream ends with ``event: done`` once the job
+    is finished. It used to send the whole log on every connection and just
+    stop at the end, so the browser's automatic reconnect replayed the whole
+    log, plus "=== Training COMPLETED ===", every few seconds for as long as
+    the page stayed open.
+    """
     log_filters = [re.compile(pattern) for pattern in LOG_FILTER_PATTERNS]
+    start_offset = _requested_offset(request)
 
     def iter_visible_lines(text):
         for line in text.splitlines():
             if line and not any(pattern.search(line) for pattern in log_filters):
                 yield line
 
-    def sse_data_block(lines):
+    def sse_data_block(lines, event_id=None):
+        head = f"id: {event_id}\n" if event_id is not None else ""
         if not lines:
-            return None
+            # Nothing to show, but still say how far the log has been read,
+            # so a reconnect does not re-read it.
+            return head + "\n" if head else None
         payload = "\n".join(lines)
-        return "data: " + payload.replace("\n", "\ndata: ") + "\n\n"
+        return head + "data: " + payload.replace("\n", "\ndata: ") + "\n\n"
 
-    def read_bpeek_content(lsf_job_id):
+    def sse_done(status):
+        return f"event: done\ndata: {status}\n\n"
+
+    def read_bpeek_output(lsf_job_id):
+        """The job's output so far, as bpeek shows it: bytes, without bpeek's
+        "<< output from stdout >>" header. None when bpeek cannot be run."""
         try:
-            result = subprocess.run(
-                ["bpeek", str(lsf_job_id)],
-                capture_output=True,
-                text=True,
-                timeout=2,
-            )
+            result = subprocess.run(["bpeek", str(lsf_job_id)], capture_output=True, timeout=2)
         except Exception as e:
             logger.debug(f"bpeek call failed for job {lsf_job_id}: {e}")
             return None
-
-        output = result.stdout or ""
-        stderr = (result.stderr or "").strip()
+        stderr = result.stderr.decode("utf-8", errors="replace").strip()
         if stderr and "Not yet started" not in stderr:
             logger.debug(f"bpeek stderr for job {lsf_job_id}: {stderr}")
-        return output
+        return _BPEEK_HEADER.sub(b"", result.stdout or b"", count=1)
 
     def generate():
         heartbeat_interval_s = 1.0
         last_heartbeat = time.perf_counter()
 
-        fjm = g.finetune_job_manager
+        fjm = get_session().finetune_job_manager
         if job_id not in fjm.jobs:
             yield f"data: Job {job_id} not found\n\n"
+            yield sse_done("NOT_FOUND")
             return
 
         finetune_job = fjm.jobs[job_id]
@@ -392,92 +424,59 @@ def stream_job_logs_response(job_id):
         if finetune_job.lsf_job and hasattr(finetune_job.lsf_job, "job_id"):
             lsf_job_id = finetune_job.lsf_job.job_id
 
-        # Prefer the tee'd log file once it exists. LSF bpeek can buffer output
-        # and then release several batch lines at once, which makes the
-        # dashboard look stuck even while training is moving.
+        # How many bytes of the log the client has, whichever source they
+        # came from. The job's output is the log: the trainer's output goes
+        # through `tee` into both, byte for byte. So bpeek, read until the
+        # log file can be seen from here (jobs.spec.exists_now), and the file
+        # count the same bytes, and neither replays what the other sent: on
+        # switching sources, or when the browser reconnects with the id of
+        # a block bpeek sent. A block without an id, as bpeek's were, made a
+        # reconnect start the file from 0, and the log showed twice.
+        position = start_offset
         use_bpeek = lsf_job_id is not None
-        last_bpeek_line_count = 0
         last_bpeek_poll = 0.0
         bpeek_poll_interval_s = 1.0
-        streamed_bpeek = False
-        file_seen = finetune_job.log_file.exists()
-        last_position = 0
-        # A read can land mid-line ("Epoch 7/10 - Lo"). Emitting that as a
-        # complete line and advancing past it splits the record in two, and
-        # neither half matches the client's "Epoch N/M - Loss:" pattern, so the
-        # epoch silently vanishes from the loss plot. Hold the incomplete tail
-        # back and prepend it to the next read.
-        pending_partial = ""
 
-        def split_complete_lines(chunk):
-            """Return (complete_text, leftover_partial) for a freshly read chunk."""
-            nonlocal pending_partial
-            chunk = pending_partial + chunk
-            cut = chunk.rfind("\n")
-            if cut == -1:
-                pending_partial = chunk
-                return ""
-            pending_partial = chunk[cut + 1:]
-            return chunk[:cut]
+        def read_file():
+            """The new whole lines of the log as an SSE block, or None."""
+            nonlocal position
+            size = finetune_job.log_file.stat().st_size
+            if size < position:
+                position = 0  # the log was replaced
+            text, new_position = _read_complete_lines(finetune_job.log_file, position)
+            if new_position == position:
+                return None
+            position = new_position
+            return sse_data_block(list(iter_visible_lines(text)), position)
 
-        if file_seen:
-            try:
-                with open(finetune_job.log_file, "r") as f:
-                    content = f.read()
-                    last_position = f.tell()
-                block = sse_data_block(list(iter_visible_lines(content)))
-                if block:
-                    yield block
-            except Exception as e:
-                logger.error(f"Error reading log file: {e}")
-                file_seen = False
-        elif use_bpeek:
-            initial = read_bpeek_content(lsf_job_id)
-            if initial is None:
+        def read_bpeek():
+            """The new whole lines of the job's output as an SSE block, or None."""
+            nonlocal position, use_bpeek
+            output = read_bpeek_output(lsf_job_id)
+            if output is None:
                 use_bpeek = False
-            else:
-                last_bpeek_line_count = len(initial.splitlines())
-                streamed_bpeek = bool(initial)
-                block = sse_data_block(list(iter_visible_lines(initial)))
-                if block:
-                    yield block
+                return None
+            whole = output[: output.rfind(b"\n") + 1]
+            if len(whole) <= position:
+                return None
+            text = whole[position:].decode("utf-8", errors="replace")
+            position = len(whole)
+            return sse_data_block(list(iter_visible_lines(text)), position)
 
-        while finetune_job.status.value in ["PENDING", "RUNNING"]:
+        while True:
             try:
                 now = time.perf_counter()
-
-                if finetune_job.log_file.exists():
-                    if not file_seen:
-                        file_seen = True
-                        last_position = (
-                            finetune_job.log_file.stat().st_size
-                            if streamed_bpeek
-                            else 0
-                        )
-                    with open(finetune_job.log_file, "r") as f:
-                        f.seek(last_position)
-                        new_content = f.read()
-                        last_position = f.tell()
-                    if new_content:
-                        complete = split_complete_lines(new_content)
-                        block = sse_data_block(list(iter_visible_lines(complete)))
-                        if block:
-                            yield block
-                elif use_bpeek and lsf_job_id and now - last_bpeek_poll >= bpeek_poll_interval_s:
+                block = None
+                if exists_now(finetune_job.log_file):
+                    block = read_file()
+                elif use_bpeek and now - last_bpeek_poll >= bpeek_poll_interval_s:
                     last_bpeek_poll = now
-                    content = read_bpeek_content(lsf_job_id)
-                    if content is None:
-                        use_bpeek = False
-                    else:
-                        current_lines = content.splitlines()
-                        delta_lines = current_lines if len(current_lines) < last_bpeek_line_count else current_lines[last_bpeek_line_count:]
-                        last_bpeek_line_count = len(current_lines)
-                        if delta_lines:
-                            streamed_bpeek = True
-                            block = sse_data_block(list(iter_visible_lines("\n".join(delta_lines))))
-                            if block:
-                                yield block
+                    block = read_bpeek()
+                if block:
+                    yield block
 
+                if finetune_job.status.value not in _LIVE_STATUSES:
+                    break
                 if now - last_heartbeat >= heartbeat_interval_s:
                     yield ": ping\n\n"
                     last_heartbeat = now
@@ -486,26 +485,35 @@ def stream_job_logs_response(job_id):
                 logger.error(f"Error streaming logs: {e}")
                 break
 
-        # The loop above exits as soon as status leaves PENDING/RUNNING, which
-        # can happen before the last chunk of the log has been read. Without
-        # this final drain the closing epochs -- and the "Training Complete!"
-        # summary -- are never streamed, which is most likely exactly when
-        # training finished quickly.
+        # The loop above exits as soon as the job is finished, which can be
+        # before the last lines of the log have been read. Without this final
+        # drain the closing epochs -- and the "Training Complete!" summary --
+        # are never streamed. The log is final now, so a last line without
+        # its newline goes out too.
+        finished = finetune_job.status.value not in _LIVE_STATUSES
         try:
-            if finetune_job.log_file.exists():
-                with open(finetune_job.log_file, "r") as f:
-                    f.seek(last_position)
-                    remaining = f.read()
-                    last_position = f.tell()
-                remaining = (pending_partial + remaining) if pending_partial else remaining
-                pending_partial = ""
-                block = sse_data_block(list(iter_visible_lines(remaining)))
+            if exists_now(finetune_job.log_file):
+                block = read_file()
                 if block:
                     yield block
+                if finished:
+                    with open(finetune_job.log_file, "rb") as f:
+                        f.seek(position)
+                        tail = f.read()
+                    if tail:
+                        position += len(tail)
+                        block = sse_data_block(
+                            list(iter_visible_lines(tail.decode("utf-8", errors="replace"))), position
+                        )
+                        if block:
+                            yield block
         except Exception as e:
             logger.error(f"Error draining final log content: {e}")
 
-        yield f"data: === Training {finetune_job.status.value} ===\n\n"
+        if finished:
+            yield sse_done(finetune_job.status.value)
+        # Otherwise the loop broke on an error while the job still runs: end
+        # without "done", so the browser reconnects and resumes from its id.
 
     return Response(
         generate(),
@@ -518,9 +526,10 @@ def stream_job_logs_response(job_id):
     )
 
 
-def cancel_job_response(job_id):
+@finetune_bp.route("/api/finetune/job/<job_id>/cancel", methods=["POST"])
+def cancel_job(job_id):
     try:
-        success = g.finetune_job_manager.cancel_job(job_id)
+        success = get_session().finetune_job_manager.cancel_job(job_id)
         if success:
             return jsonify({"success": True, "message": f"Job {job_id} cancelled"})
         return jsonify({"success": False, "error": "Failed to cancel job"}), 400
@@ -529,9 +538,10 @@ def cancel_job_response(job_id):
         return jsonify({"success": False, "error": str(e)}), 500
 
 
-def stop_training_early_response(job_id):
+@finetune_bp.route("/api/finetune/job/<job_id>/stop-early", methods=["POST"])
+def stop_training_early(job_id):
     try:
-        jobs = getattr(g.finetune_job_manager, "jobs", {}) or {}
+        jobs = getattr(get_session().finetune_job_manager, "jobs", {}) or {}
         job = jobs.get(job_id)
         if job is None:
             return jsonify({"success": False, "error": f"Job {job_id} not found"}), 404
@@ -566,28 +576,75 @@ def stop_training_early_response(job_id):
         return jsonify({"success": False, "error": str(e)}), 500
 
 
-def get_inference_server_status_response(job_id):
-    try:
-        job = g.finetune_job_manager.get_job(job_id)
-        if not job:
-            return jsonify({"success": False, "error": "Job not found"}), 404
-        return jsonify(
-            {
-                "success": True,
-                "ready": job.inference_server_ready,
-                "url": job.inference_server_url,
-                "model_name": job.finetuned_model_name,
-                "model_script_path": str(job.model_script_path) if job.model_script_path else None,
-            }
-        )
-    except Exception as e:
-        logger.error(f"Error getting inference server status: {e}")
-        return jsonify({"success": False, "error": str(e)}), 500
+def _restart_training_settings(job, updated_params, corrections_dir):
+    """The target and loss settings a restart sends, adjusted as submit adjusts them.
+
+    The form holds what the user picked, not what submit replaced it with
+    (training_settings), and the trainer only checks what it is sent. So a
+    restart from the unchanged form undid submit's choice: a distance model
+    was sent the form's margin loss, and its next iteration failed at setup,
+    every time, and mse went back to training on scribbles. The same rules
+    are applied here, to the form's settings over the job's own, with the
+    session's sparsity read again after the sync: strokes painted since
+    submit can make it sparse.
+
+    All five settings are sent, so the trainer's settings are the adjusted
+    ones whichever of them the form left out. A job that does not know its
+    session (one from before jobs recorded it) keeps its mask_unannotated.
+    """
+    current = {**job.params, **updated_params}
+    settings = training_settings(
+        output_type=current.get("output_type"),
+        loss_type=current.get("loss_type"),
+        label_smoothing=current.get("label_smoothing"),
+        distillation_lambda=current.get("distillation_lambda"),
+        sparse=bool(corrections_dir) and detect_sparse_annotations(corrections_dir),
+    )
+    sent = {key: value for key, value in settings._asdict().items() if key != "note" and value is not None}
+    if not corrections_dir:
+        sent.pop("mask_unannotated")
+    return sent
 
 
-def restart_finetuning_job_response(job_id, data):
+@finetune_bp.route("/api/finetune/job/<job_id>/restart", methods=["POST"])
+def restart_finetuning_job(job_id):
+    data = request.get_json() or {}
+    body, refused = parse(FinetuneRestart, data)
+    if refused:
+        return refused
     try:
         restart_t0 = time.perf_counter()
+
+        from cellmap_flow.finetune.session.manifest import read_manifest
+
+        # Refused before anything is written or pulled: a restart the job
+        # cannot take used to rewrite the session's manifest with the form's
+        # settings, which later submits then inherited, and sync, and only
+        # then fail (with a 500).
+        manager = get_session().finetune_job_manager
+        job_record = (getattr(manager, "jobs", {}) or {}).get(job_id)
+        if job_record is None:
+            return jsonify({"success": False, "error": f"Job {job_id} not found"}), 404
+        if not can_restart(job_record):
+            return jsonify({"success": False, "error": (
+                f"Job {job_id} is in state {job_record.status.value} - can only restart a "
+                f"job that is waiting for a restart (its training iteration has "
+                f"finished or diverged)"
+            )}), 409
+        corrections_dir = str(job_record.corrections_path or "")
+
+        existing_manifest = (
+            read_manifest(corrections_dir) if corrections_dir else None
+        )
+        if existing_manifest is None and corrections_dir:
+            # Same backfill as submit: the trainer rebuilds its dataset from
+            # the manifest on every restart.
+            existing_manifest = _backfill_manifest(corrections_dir)
+
+        if existing_manifest is not None:
+            _refresh_virtual_manifest_for_training(
+                corrections_dir, existing_manifest, body.overrides(), "restart"
+            )
 
         # Every restart asks MinIO whether anything changed. That question is
         # cheap and is the only way to answer it -- the browser writes its
@@ -601,62 +658,13 @@ def restart_finetuning_job_response(job_id, data):
         #
         # This used to be skipped whenever a manifest was present, because the
         # sync also materialized per-chunk raw extracts the virtual dataset
-        # never reads, which on a big session took minutes. That extraction is
-        # now skipped inside the sync itself when a manifest exists (see
-        # sync_annotation_volume_from_minio), leaving just the chunk diff.
-        from cellmap_flow.finetune.virtual_dataset import read_manifest
+        # never reads, which on a big session took minutes. The sync is just
+        # the chunk diff now.
+        pulled = _pull_annotations(f"Restart pre-sync for job {job_id}")
 
-        jobs = getattr(g.finetune_job_manager, "jobs", {}) or {}
-        job_record = jobs.get(job_id)
-        corrections_dir = (
-            str(getattr(job_record, "corrections_path", "") or "")
-            if job_record is not None
-            else ""
-        )
-
-        existing_manifest = (
-            read_manifest(corrections_dir) if corrections_dir else None
-        )
-        if existing_manifest is None and corrections_dir:
-            # Same backfill as submit: a restart must not quietly drop to the
-            # legacy dataset just because the session predates the manifest.
-            existing_manifest = _backfill_manifest(corrections_dir)
-
-        if existing_manifest is not None:
-            _refresh_virtual_manifest_for_training(
-                corrections_dir, existing_manifest, data, "restart"
-            )
-
-        pulled = 0
-        try:
-            sync_t0 = time.perf_counter()
-            pulled = sync_all_annotations_from_minio(force=False) or 0
-            sync_elapsed = time.perf_counter() - sync_t0
-            if pulled < 0:
-                logger.info(
-                    f"Restart pre-sync for job {job_id}: MinIO is not running, "
-                    f"so there is nothing to pull."
-                )
-                pulled = 0
-            elif pulled:
-                logger.info(
-                    f"Restart pre-sync for job {job_id}: pulled new annotations "
-                    f"for {pulled} volume(s) in {sync_elapsed:.2f}s. The next "
-                    f"iteration trains on them."
-                )
-            else:
-                logger.info(
-                    f"Restart pre-sync for job {job_id}: nothing new to pull "
-                    f"({sync_elapsed:.2f}s) -- annotations on disk are already "
-                    f"current, so this is a parameters-only restart."
-                )
-        except Exception as e:
-            logger.warning(f"Error syncing annotations before restart: {e}")
-
-        job = g.finetune_job_manager.restart_finetuning_job(
-            job_id=job_id,
-            updated_params=build_restart_params(data),
-        )
+        updated_params = build_restart_params(data)
+        updated_params.update(_restart_training_settings(job_record, updated_params, corrections_dir))
+        job = manager.restart_finetuning_job(job_id=job_id, updated_params=updated_params)
         total_elapsed = time.perf_counter() - restart_t0
         logger.info(f"Restart request processed for job {job_id}: total={total_elapsed:.2f}s")
         if pulled:

@@ -41,13 +41,11 @@ import argparse
 import json
 import logging
 import os
-import shutil
 import sys
 import time
 from datetime import datetime
 
 import torch
-from torch import nn
 
 logger = logging.getLogger(__name__)
 
@@ -61,40 +59,6 @@ REL_TOL = 1e-5       # accepted output difference, relative to the output's own 
 def valid_tile(tile):
     """True when ``tile`` keeps the pooling phase of the 178 training tile."""
     return tile >= TRAIN_TILE and (tile - TRAIN_TILE) % (2 * POOL_FACTOR) == 0
-
-
-def merge_lora_into_conv3d(peft_model):
-    """Add each LoRA pair into its base Conv3d weight in place; return count.
-
-    PEFT's own ``merge_and_unload`` assumes 2-D conv kernels and fails on
-    Conv3d. For lora_A: Conv3d(Cin, r, k^3) and lora_B: Conv3d(r, Cout, 1^3),
-    delta[o, i, z, y, x] = scale * sum_r B[o, r] A[r, i, z, y, x].
-    """
-    from peft.tuners.lora import LoraLayer
-
-    n = 0
-    for mod in peft_model.modules():
-        if isinstance(mod, LoraLayer) and isinstance(mod.base_layer, nn.Conv3d):
-            for ad in mod.active_adapters:
-                a_w = mod.lora_A[ad].weight
-                b_w = mod.lora_B[ad].weight
-                if tuple(b_w.shape[2:]) != (1, 1, 1):
-                    raise NotImplementedError(f"lora_B kernel {tuple(b_w.shape[2:])} != 1^3")
-                delta = torch.einsum("or,rizyx->oizyx", b_w[:, :, 0, 0, 0], a_w) * mod.scaling[ad]
-                mod.base_layer.weight.data += delta.to(mod.base_layer.weight.dtype)
-                n += 1
-    return n
-
-
-def strip_lora_layers(module):
-    """Replace every LoraLayer under ``module`` by its (now merged) base layer."""
-    from peft.tuners.lora import LoraLayer
-
-    for parent in list(module.modules()):
-        for name, child in list(parent.named_children()):
-            if isinstance(child, LoraLayer):
-                setattr(parent, name, child.base_layer)
-    return module
 
 
 def load_eager_base(folder_path):
@@ -120,7 +84,12 @@ def apply_finetune(eager, lora_adapter_path=None, weights_path=None):
     dict keys carry a ``model.`` prefix. Wrapping the eager module the same
     way reproduces those names exactly (checked: 38/38 adapter tensors
     identical, 0.0 output difference at 178^3).
+
+    The adapter is folded in by ``LoraStrategy.merge``, the merge training
+    uses to continue from a finetuned model: every adapted layer, Conv3d,
+    Conv2d or Linear, to within float rounding of the adapter's output.
     """
+    from cellmap_flow.finetune.adaptation import LoraStrategy
     from cellmap_flow.finetune.lora_wrapper import BatchLoopWrapper
 
     if bool(lora_adapter_path) == bool(weights_path):
@@ -130,11 +99,7 @@ def apply_finetune(eager, lora_adapter_path=None, weights_path=None):
         from cellmap_flow.finetune.lora_wrapper import load_lora_adapter
 
         peft = load_lora_adapter(wrapped, lora_adapter_path, is_trainable=False).eval()
-        n = merge_lora_into_conv3d(peft)
-        base = peft.get_base_model()          # the BatchLoopWrapper
-        strip_lora_layers(base)
-        logger.info(f"Merged {n} LoRA conv pairs into the base weights")
-        merged = base.model
+        merged = LoraStrategy.merge(peft).model   # merge gives back the BatchLoopWrapper
     else:
         state = torch.load(weights_path, map_location="cpu", weights_only=True)
         missing, unexpected = wrapped.load_state_dict(state, strict=True)

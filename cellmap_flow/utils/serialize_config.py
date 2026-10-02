@@ -1,69 +1,23 @@
-import inspect
-from typing import Any
+"""Deprecated: ``Config`` is ``cellmap_flow.models.models_config.Config``.
 
-from types import ModuleType
+Kept only for ``Config``, which docs/source/plugins.rst told plugin authors
+to import from here; it warns, and goes in the release after 0.3.0.
+"""
 
-DEFAULT_AXES_NAMES = ["x", "y", "z"]
+import warnings
 
-class Config:
-    def __init__(self, **kwargs):
-        self.axes_names = kwargs.get("axes_names", DEFAULT_AXES_NAMES)
-        self.__dict__.update(kwargs)
-        self.kwargs = kwargs
+_MOVED = {"Config": "cellmap_flow.models.models_config"}
 
-    def __str__(self) -> str:
-        elms = []
-        for k, v in vars(self).items():
-            if any(x in k for x in ["kwargs", "__"]) or isinstance(v, ModuleType):
-                continue
-            if ["model","checkpoint"].__contains__(k):
-                elms.append(f"{k}")
-                continue
-            # if isinstance(v, np.ndarray):
-            #     elms.append(f"{k}: type={type(v)} shape={v.shape}\n")
-            # elif inspect.ismodule(v):
-            #     elms.append(f"{k}: <module '{v.__name__}'>\n")
-            # elif k=="checkpoint" or k=="model":
-            #     elms.append(f"{k}\n")
-            # else:
-            elms.append(f"{k}: {v}")
-        newline = '\n'
-        return f"{type(self).__name__}({newline.join(elms)})"
-    
-    def __repr__(self) -> str:
-        return self.__str__()
 
-    def to_dict(self):
-        """
-        Returns the configuration as a dictionary.
-        """
-        return self.kwargs
+def __getattr__(name):
+    if name not in _MOVED:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    warnings.warn(
+        f"cellmap_flow.utils.serialize_config.{name} is deprecated; "
+        f"import it from {_MOVED[name]}",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    import importlib
 
-    def serialize(self):
-        """
-        Serializes the configuration to a string representation.
-        """
-        serialized = {}
-        for key, value in self.kwargs.items():
-            if (
-                inspect.ismodule(value)
-                or inspect.isclass(value)
-                or inspect.isfunction(value)
-                or inspect.isbuiltin(value)
-            ):
-                # Skip modules, classes, and functions
-                continue
-            elif "__" in key:
-                # Skip private attributes
-                continue
-            elif not isinstance(value, (int, float, str, bool)):
-                serialized[key] = str(value)
-            else:
-                serialized[key] = value
-        return serialized
-
-    def get(self, key: str, default: Any = None) -> Any:
-        """
-        Gets the value of a configuration key.
-        """
-        return self.kwargs.get(key, default)
+    return getattr(importlib.import_module(_MOVED[name]), name)

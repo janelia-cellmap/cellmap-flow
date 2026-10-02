@@ -11,24 +11,27 @@ term against the frozen teacher).
 Kept deliberately separate from ``imported_crops``: those carry real labels,
 these carry only a human's assertion that the model's own output is
 acceptable there. Both are evidence, but not the same kind.
+
+Routes: GET ``/api/finetune/good-regions`` (the session's regions), POST
+``/api/finetune/good-regions/mark-view`` (a box where the viewer looks) and
+POST ``/api/finetune/good-regions/delete`` (one region by ``id``, or all).
 """
 
-import json
 import logging
-import os
 import uuid
 
 import neuroglancer
 import numpy as np
-from flask import jsonify
+from flask import jsonify, request
 
-from cellmap_flow.dashboard.routes.finetune.common import viewer_position_and_scales
-from cellmap_flow.globals import g
+from cellmap_flow.dashboard.routes.finetune.blueprint import finetune_bp
+from cellmap_flow.dashboard.routes.finetune.common import session_store, viewer_position_and_scales
+from cellmap_flow.dashboard.state import get_session
+from cellmap_flow.finetune.session import manifest as session_manifest
 
 logger = logging.getLogger(__name__)
 
 GOOD_REGIONS_LAYER = "good_regions"
-GOOD_REGIONS_FILENAME = "good_regions.json"
 
 # Used when neither the request nor the active volume says how big a region
 # should be. One model *output* patch is the natural unit: it is what you can
@@ -41,60 +44,38 @@ DEFAULT_REGION_SIZE_NM = 896.0
 
 def _active_volume():
     """The annotation volume currently being worked on, or None."""
-    volumes = getattr(g, "annotation_volumes", {}) or {}
-    for volume in reversed(list(volumes.values())):
-        if volume.get("corrections_dir"):
-            return volume
-    return None
+    return session_store().session_volume()[1]
 
 
 def _minio_corrections_dir():
-    """The session's corrections dir as MinIO knows it, or None.
+    """The corrections dir MinIO was first started for, or None.
 
-    A second, independent witness to which session is live. The sync thread
-    runs off this, so it stays true for as long as annotations are flowing --
-    including after a dashboard restart clears g.annotation_volumes.
+    The fallback when no volume is registered. It is this process's state,
+    like the volume registry, so it does not survive a dashboard restart
+    either: after one, marks are refused until a volume is created or
+    resumed.
     """
-    try:
-        from cellmap_flow.dashboard.finetune_utils import minio_state
-
-        return minio_state.get("output_base") or None
-    except Exception as e:
-        logger.debug(f"Could not read minio_state for the session path: {e}")
-        return None
+    return get_session().minio_state.get("output_base") or None
 
 
 def _store_path():
     """Where this session's good regions live, or None if there is no session.
 
-    Falls back to MinIO's record when no volume is registered in-process.
-    The two can disagree: g.annotation_volumes is in-process state that a
-    dashboard restart wipes, while the MinIO sync keeps going from its own
-    copy. When they did disagree, every mark was lost in a way that looked
-    like success -- the save failed, so the next load returned [], so each
-    click appended to an empty list and replaced the previous region instead
-    of adding to it. You could click ten times and still have one box.
+    The session's volume's corrections dir, else MinIO's. With no volume
+    registered and no fallback, every mark used to be lost in a way that
+    looked like success -- the save failed, so the next load returned [],
+    so each click appended to an empty list and replaced the previous
+    region instead of adding to it. You could click ten times and still
+    have one box. Now the mark is refused instead.
     """
     volume = _active_volume() or {}
-    corrections_dir = volume.get("corrections_dir") or _minio_corrections_dir()
-    if not corrections_dir:
-        return None
-    return os.path.join(
-        os.path.dirname(str(corrections_dir).rstrip("/")), GOOD_REGIONS_FILENAME
+    return session_manifest.good_regions_path(
+        volume.get("corrections_dir") or _minio_corrections_dir()
     )
 
 
 def load_good_regions():
-    path = _store_path()
-    if not path or not os.path.exists(path):
-        return []
-    try:
-        with open(path) as f:
-            data = json.load(f)
-        return data if isinstance(data, list) else []
-    except (OSError, ValueError) as e:
-        logger.warning(f"Could not read good regions from {path}: {e}")
-        return []
+    return session_manifest.load_good_regions(_store_path())
 
 
 def save_good_regions(regions):
@@ -102,16 +83,7 @@ def save_good_regions(regions):
     if not path:
         logger.warning("No annotation session yet; good regions were not saved.")
         return False
-    try:
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        tmp = f"{path}.tmp"
-        with open(tmp, "w") as f:
-            json.dump(regions, f, indent=2)
-        os.replace(tmp, path)
-        return True
-    except OSError as e:
-        logger.error(f"Could not save good regions to {path}: {e}")
-        return False
+    return session_manifest.save_good_regions(path, regions)
 
 
 def _default_size_nm():
@@ -128,9 +100,10 @@ def _default_size_nm():
     return [DEFAULT_REGION_SIZE_NM] * 3
 
 
-def mark_current_view_response(data):
+@finetune_bp.route("/api/finetune/good-regions/mark-view", methods=["POST"])
+def mark_current_view_good():
     """Record a box centred on wherever the viewer is looking right now."""
-    data = data or {}
+    data = request.get_json(silent=True) or {}
     try:
         position, scales_nm = viewer_position_and_scales()
         if position is None:
@@ -188,13 +161,15 @@ def mark_current_view_response(data):
         return jsonify({"success": False, "error": str(e)}), 500
 
 
-def list_good_regions_response():
+@finetune_bp.route("/api/finetune/good-regions", methods=["GET"])
+def list_good_regions():
     regions = load_good_regions()
     return jsonify({"success": True, "regions": regions, "count": len(regions)})
 
 
-def delete_good_region_response(data):
-    region_id = (data or {}).get("id")
+@finetune_bp.route("/api/finetune/good-regions/delete", methods=["POST"])
+def delete_good_region():
+    region_id = (request.get_json(silent=True) or {}).get("id")
     regions = load_good_regions()
     if region_id is None:
         kept = []
@@ -209,14 +184,15 @@ def delete_good_region_response(data):
 
 def refresh_good_regions_layer(regions=None):
     """Draw the good regions in the viewer so you can see what you marked."""
-    if not hasattr(g, "viewer") or g.viewer is None:
+    session = get_session()
+    if session.viewer is None:
         return 0
     regions = load_good_regions() if regions is None else regions
 
     axes_names = ["z", "y", "x"]
     try:
-        if getattr(g, "raw", None) is not None:
-            source = getattr(g.raw, "source", None)
+        if session.raw is not None:
+            source = getattr(session.raw, "source", None)
             if source is not None and hasattr(source, "dimensions"):
                 axes_names = list(source.dimensions.names)
     except Exception:
@@ -239,7 +215,7 @@ def refresh_good_regions_layer(regions=None):
         )
 
     try:
-        with g.viewer.txn() as s:
+        with session.viewer.txn() as s:
             # Keep whatever visibility the user chose, but start visible when
             # creating the layer: unlike annotated_regions, which appears on
             # its own and was asked to stay out of the way, these boxes only

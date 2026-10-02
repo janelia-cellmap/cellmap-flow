@@ -3,49 +3,43 @@
 </div>
 <form id="postProcessForm">
   <div id="postProcessList">
-  {% for normalizer in output_postprocessors %}
-    {# Check if this post-processor is in the default_post_process dict #}
-    {% set is_checked = normalizer.name in default_post_process and normalizer.name != 'custom_code' %}
-
-    <div class="postprocessor-item mb-3 p-2 border rounded" data-postprocessor="{{ normalizer.name }}">
+  {# postprocess_items: the configured chain in the order it runs (a step used
+     twice appears twice), then every other postprocessor unticked. Element ids
+     carry the row index because the same postprocessor can have two rows. #}
+  {% for item in postprocess_items %}
+    {% set row_id = "postProcess" ~ loop.index0 %}
+    <div class="postprocessor-item mb-3 p-2 border rounded" data-postprocessor="{{ item.name }}">
       <div class="form-check mb-2 d-flex align-items-center">
         <span class="drag-handle me-2">⋮⋮</span>
         <input
           class="form-check-input postProcessCheckbox"
           type="checkbox"
-          id="postProcessMethod_{{ normalizer.name }}"
-          name="postProcessMethod_{{ normalizer.name }}"
-          value="{{ normalizer.name }}"
-          {% if is_checked %}checked{% endif %}
+          id="{{ row_id }}_enabled"
+          name="{{ row_id }}_enabled"
+          value="{{ item.name }}"
+          {% if item.checked %}checked{% endif %}
         />
-        <label class="form-check-label ms-2" for="postProcessMethod_{{ normalizer.name }}">
-          {{ normalizer.name }}
+        <label class="form-check-label ms-2" for="{{ row_id }}_enabled">
+          {{ item.name }}
         </label>
       </div>
 
     <!-- Show or hide the param div based on whether it's checked by default -->
     <div
-      id="postProcess_{{ normalizer.name }}Params"
-      class="ps-4"
-      {% if is_checked %} style="display: block;" {% else %} style="display: none;" {% endif %}
+      class="ps-4 step-params"
+      {% if item.checked %} style="display: block;" {% else %} style="display: none;" {% endif %}
     >
-      {% for param_name, default_val in normalizer.params.items() %}
-        {# If there's an override in the dict, use that; otherwise fallback #}
-        {% if is_checked and param_name in default_post_process[normalizer.name] %}
-          {% set param_val = default_post_process[normalizer.name][param_name] %}
-        {% else %}
-          {% set param_val = default_val %}
-        {% endif %}
-
+      {% for param_name, param_val in item.params.items() %}
         <div class="mb-3">
-          <label for="postProcess_{{ normalizer.name }}_{{ param_name }}" class="form-label">
+          <label for="{{ row_id }}_param_{{ param_name }}" class="form-label">
             {{ param_name }}
           </label>
           <input
             type="text"
             class="form-control"
-            id="postProcess_{{ normalizer.name }}_{{ param_name }}"
-            name="postProcess_{{ normalizer.name }}_{{ param_name }}"
+            id="{{ row_id }}_param_{{ param_name }}"
+            name="{{ row_id }}_param_{{ param_name }}"
+            data-param="{{ param_name }}"
             value="{{ param_val }}"
           />
         </div>
@@ -53,35 +47,6 @@
     </div>
     </div>
   {% endfor %}
-  </div>
-
-  <!-- Handle custom code checkbox and editor -->
-  {% set is_custom_code_checked = 'custom_code' in default_post_process %}
-  <div class="form-check mb-2">
-    <input
-      class="form-check-input"
-      type="checkbox"
-      value="custom_code"
-      id="customCodeCheckbox_postProcess"
-      {% if is_custom_code_checked %}checked{% endif %}
-    />
-    <label class="form-check-label" for="customCodeCheckbox_postProcess">
-      Custom Code (PostProcess)
-    </label>
-  </div>
-
-  <div
-    id="customCodeParams_postProcess"
-    style="display: {% if is_custom_code_checked %}block{% else %}none{% endif %}; margin-left: 20px;"
-  >
-    <h5 style="text-transform: none; letter-spacing: 0;">Code Editor</h5>
-    <textarea
-      id="pythonEditor_postProcess"
-      class="form-control"
-      rows="5"
-      placeholder="Enter Python code here..."
-    >{% if is_custom_code_checked %}{{ default_post_process['custom_code'] }}{% endif %}</textarea>
-    <div id="errorMsg_postProcess" class="text-danger mt-2"></div>
   </div>
 
   <!-- "Submit All" button -->
@@ -99,141 +64,3 @@
   </div>
 </form>
 
-<script>
-document.addEventListener("DOMContentLoaded", function () {
-  // Show/hide param fields for post-process checkboxes
-  const postProcessCheckboxes = document.querySelectorAll(
-    "#postProcessForm .postProcessCheckbox"
-  );
-  function updatePostItemState(checkbox) {
-    const item = checkbox.closest(".postprocessor-item");
-    if (item) item.classList.toggle("item-checked", checkbox.checked);
-    const paramDiv = document.getElementById("postProcess_" + checkbox.value + "Params");
-    if (paramDiv) paramDiv.style.display = checkbox.checked ? "block" : "none";
-  }
-  postProcessCheckboxes.forEach(function (checkbox) {
-    updatePostItemState(checkbox);
-    checkbox.addEventListener("change", function () { updatePostItemState(this); });
-  });
-
-  // Toggle custom code
-  const customCodeCheckbox = document.getElementById("customCodeCheckbox_postProcess");
-  const customCodeParams = document.getElementById("customCodeParams_postProcess");
-  customCodeCheckbox.addEventListener("change", function () {
-    customCodeParams.style.display = this.checked ? "block" : "none";
-  });
-
-  // Optional Skulpt-based syntax checking
-  const editor = document.getElementById("pythonEditor_postProcess");
-  const errorMsg = document.getElementById("errorMsg_postProcess");
-
-  function checkSyntax() {
-    if (typeof Sk === "undefined") {
-      return;
-    }
-    try {
-      Sk.parse("user_code.py", editor.value);
-      errorMsg.textContent = "";
-    } catch (err) {
-      errorMsg.textContent = err.toString();
-    }
-  }
-
-  function debounce(func, delay) {
-    let timeout;
-    return function () {
-      clearTimeout(timeout);
-      timeout = setTimeout(func, delay);
-    };
-  }
-
-  editor.addEventListener("input", debounce(checkSyntax, 500));
-
-  // Drag and drop functionality — only via the drag handle
-  const postProcessList = document.getElementById("postProcessList");
-  let draggedPostItem = null;
-
-  // Make the parent item draggable only while the handle is held
-  postProcessList.querySelectorAll(".drag-handle").forEach(function (handle) {
-    handle.addEventListener("mousedown", function () {
-      const item = handle.closest(".postprocessor-item");
-      item.setAttribute("draggable", "true");
-    });
-  });
-
-  document.addEventListener("mouseup", function () {
-    postProcessList.querySelectorAll(".postprocessor-item[draggable]").forEach(function (item) {
-      item.removeAttribute("draggable");
-    });
-  });
-
-  postProcessList.addEventListener("dragstart", function (e) {
-    const item = e.target.closest ? e.target.closest(".postprocessor-item") : e.target;
-    if (item && item.classList.contains("postprocessor-item")) {
-      draggedPostItem = item;
-      item.style.opacity = "0.5";
-    }
-  });
-
-  postProcessList.addEventListener("dragend", function (e) {
-    const item = e.target.closest ? e.target.closest(".postprocessor-item") : e.target;
-    if (item && item.classList.contains("postprocessor-item")) {
-      item.style.opacity = "1";
-      item.removeAttribute("draggable");
-    }
-  });
-
-  postProcessList.addEventListener("dragover", function (e) {
-    e.preventDefault();
-    const afterElement = getDragAfterElementPost(postProcessList, e.clientY);
-    if (afterElement == null) {
-      postProcessList.appendChild(draggedPostItem);
-    } else {
-      postProcessList.insertBefore(draggedPostItem, afterElement);
-    }
-  });
-
-  function getDragAfterElementPost(container, y) {
-    const draggableElements = [...container.querySelectorAll(".postprocessor-item:not(.dragging)")];
-    return draggableElements.reduce(function (closest, child) {
-      const box = child.getBoundingClientRect();
-      const offset = y - box.top - box.height / 2;
-      if (offset < 0 && offset > closest.offset) {
-        return { offset: offset, element: child };
-      } else {
-        return closest;
-      }
-    }, { offset: Number.NEGATIVE_INFINITY }).element;
-  }
-
-  // Gather post-process data for submission IN ORDER
-  window.gatherPostProcessData = function () {
-    const payload = [];
-    const orderedItems = document.querySelectorAll("#postProcessList .postprocessor-item");
-    
-    orderedItems.forEach((item) => {
-      const checkbox = item.querySelector(".postProcessCheckbox");
-      if (checkbox && checkbox.checked) {
-        const baseName = checkbox.value;
-        const postData = { name: baseName };
-
-        const paramDiv = document.getElementById("postProcess_" + baseName + "Params");
-        const inputs = paramDiv.querySelectorAll("input");
-        inputs.forEach((inp) => {
-          const paramName = inp.id.replace("postProcess_" + baseName + "_", "");
-          postData[paramName] = inp.value;
-        });
-        
-        payload.push(postData);
-      }
-    });
-
-    // If custom code is checked
-    if (customCodeCheckbox.checked) {
-      payload.push({ name: "custom_code", code: editor.value });
-    }
-
-    return payload;
-  };
-});
-</script>

@@ -6,10 +6,12 @@ data_path: "/some/shared/path"
 # Required: project/charge group identifier
 charge_group: "my_project_name"
 
-# Optional: queue name (defaults to "gpu_h100" if omitted)
+# Optional: queue name (defaults to the saved queue, else "gpu_h100", if omitted)
 queue: "gpu_h100"
 
 # List of models to run. Each entry must include a "type" field and the corresponding parameters.
+# "scale" picks a level of a multiscale data_path (s0, s1, ...); it is ignored,
+# with a warning, when data_path already points at a single array.
 models:
 
   # 1. DaCapo model entry
@@ -18,32 +20,34 @@ models:
     iteration: 60
     name: "dacapo_model_1"
 
-  # 2. Another DaCapo model entry (iteration defaults to 0 if omitted)
+  # 2. Another DaCapo model entry (iteration is required)
   - type: "dacapo"
     run_name: "run_2"
+    iteration: 0
     name: "dacapo_model_2"
 
   # 3. CellMap model entry
-  - type: "cellmap-model"
+  - type: "cellmap"
     config_folder: "/path/to/cellmap/configs/folder"
     name: "cellmap_model_1"
-    scale: "high_res"
+    scale: "s0"
 
   # 4. Script-based model entry
   - type: "script"
     script_path: "/path/to/custom_script.py"
     name: "script_model_1"
-    scale: "low_res"
+    scale: "s1"
 
-  # 5. BioImage model entry
+  # 5. BioImage model entry (voxel_size is required)
   - type: "bioimage"
     model_path: "/path/to/bioimage/model.pth"
+    voxel_size: [8, 8, 8]
     name: "bioimage_model_1"
 
 
 ### blockwise
-output_path: "/some/shared/path/output"
+output_path: "/some/shared/path/output.zarr"
 # optional output channel-if not set output all channels from model
-# output_channels:mito,ld
+# output_channels: [mito, ld]
 task_name: "cellpose_task"
 workers: 4

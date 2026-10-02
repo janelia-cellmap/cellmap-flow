@@ -1,0 +1,427 @@
+# Changelog
+
+All notable changes to cellmap-flow. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow `cellmap_flow.__version__`.
+
+## Unreleased (the cleanup, PR #103)
+
+One pull request carries the whole cleanup: bug fixes in place, dead-code removal, consolidation into `io/`, `jobs/`, `pipeline_spec`, `models/registry`, `inference/`, `serving/`, `finetune/session/` and `viewer/`, the PR #102 features, and the first-chunk latency work. Every behaviour change is its own commit whose subject starts with "Behaviour change:"; they are listed at the end of this entry.
+
+### Changed
+- The wheel no longer installs top-level `tests`, `example`, `docs` and `models` packages. The model catalog moved to `cellmap_flow/models/models.yaml`.
+- Dependencies:
+  - removed `gunicorn`, `marshmallow` and the `xarray` pin;
+  - added `requests`, `scipy` and `click`;
+  - the `[finetune]` extra is `peft` + `tensorboard`, and `[postprocess]` is `edt`.
+
+- **Lambda normalizer/postprocessor expressions** must be numpy math on `x`: arithmetic, comparisons, indexing, `abs`, whitelisted `np.*` functions and dtypes, and a few array methods. Anything else raises `ValueError` when the op is built. Every expression in the repo and docs is `x*2-1`, which is unaffected. They may not repeat a list or tuple (`[x] * n`), pass keywords other than `axis`, `keepdims`, `dtype`, `a_min` and `a_max`, or give `np.full_like`/`ones_like`/`zeros_like` a positional shape: each of these let a layer URL make a server allocate without bound.
+- **Custom-code postprocessing is removed**, along with the `CUSTOM_CODE_FOLDER` env var. It never ran from the UI.
+- **Seven dashboard routes are removed.** Nothing called them: `/api/available-models`, `/api/pipeline/validate`, `/api/dataset-path`, `/api/shaders`, `/api/finetune/view-center`, `/api/finetune/job/<id>/inference-server`, `/api/viewer/add-finetuned-layer`.
+- **Restarting a finetune job over HTTP needs the job's token.** The job manager writes it to `<output_dir>/restart_token`. A restart can only change training settings. Jobs started before this change fall back to the `restart_signal.json` file.
+- **The dashboard no longer sends CORS headers.** Inference servers still do.
+- **`/api/finetune/read-yaml` only serves `.yaml`/`.yml` files**, checked after resolving symlinks.
+
+- **Launching:** when bsub exists but every queue refuses a job, launching raises `JobStartError` naming each queue's error, instead of starting the GPU server on the current host. A job that never reports a host is a failure (and a still-pending one is killed), not a "ready" server.
+- **`data_path` + `scale`:** one rule in `cellmap_flow`, `cellmap_flow_yaml` and blockwise. An array path is used as is, with a warning if `scale` disagrees; a group path gets `scale` appended. The bundled `…/s3` + `scale: s3` examples no longer open `…/s3/s3`. Blockwise now honours `scale`.
+- **Config errors:** bad YAML raises `ConfigError` (a `ValueError`) instead of calling `sys.exit`. The CLIs still exit 1.
+- **Ctrl+C cleanup:** it is installed by the CLI entry points instead of on import, and exits 128+signal.
+- **`cellmap_flow <type> -q`:** defaults to the saved queue instead of `gpu_h100`.
+- **Blockwise:**
+  - Output starts at the raw data's offset.
+  - Old progress markers are ignored, so a resumed run recomputes its blocks.
+  - The master exits 1 if any block failed.
+  - Workers get a walltime (from an optional `walltime` in the task YAML) and their own logs.
+- **Local runs:** logs go to `~/.cellmap_flow/server_logs/<name>_local_*.log`.
+
+- **Chain format:** URL blobs, exported YAMLs, blockwise task YAMLs and finetune manifests use the ordered list form `[{name, **params}]` with real types. Old dict-form files still load.
+- **Outputs that were wrong and are now right:**
+  - Datasets that were misread: N5, precomputed, multichannel OME, micrometer units, fractional voxel sizes, relabelled scales with an offset.
+  - `EuclideanDistance` now applies its parameters (default output `tanh(distance)`).
+  - `LabelPostprocessor` serves uint32.
+  - `AffinityPostprocessor` takes float input as the [0, 1] affinities it is; only integer input is still divided by 255. After a `SigmoidPostprocessor`, or on a [0, 1] model output, the affinities used to be about 250× too small and the watershed merged everything, so those chains now give a different (real) segmentation. `DefaultPostprocessor` → `AffinityPostprocessor` is bit-identical.
+  - A new `FillHolesPostprocessor` (from PR #102) thresholds the output and fills each blob's enclosed holes, per channel, returning uint8 labels. It runs per chunk with no halo, so a hole touching a chunk's edge stays open.
+  - Steps without a declared dtype keep their input dtype instead of float64.
+  - Bio models serve uint8, and can be launched at all.
+  - Unique label ids (`MortonSegmentationRelabeling`, `AffinityPostprocessor`) are offset by each chunk's index counted from the output grid's first chunk, which starts at the raw data's corner, and spaced by the chunk's output voxels, so a served layer and a blockwise run give a block the same ids. On data whose corner lies within one chunk of 0 (Janelia's −4 nm, say), with equal input and output voxel sizes, the ids are main's. They change for models whose output voxel size differs from the input's, and for data whose corner is a chunk or more from 0.
+- **Served array:** larger for datasets with an offset, and one voxel longer when the extent doesn't divide evenly (ceil, not floor).
+- **Inference servers** send a layer's merged ids to the dashboard from a background thread, with a 10 s timeout, at most once per refresh interval across all requests. A slow or unreachable dashboard no longer holds up chunk requests or fails them with a 500.
+- **Processed chunks are channel-first.** The server warns at start-up when a config's `chunk_output_axes` puts the channel axis elsewhere, and serves the chunk as if it were first, as before.
+- The postprocessing advice recognises an affinity model whose metadata gives its channel names as one string (`"affinities"`).
+- **Launch commands:** quoted, and they now include name, scale, Fly sizes and Bio voxel size.
+- **DaCapo:** channel names change where the old guess had the wrong count.
+- **Dependencies:** `h5py` is no longer a core dependency.
+
+- **Finetune training results change** (K26):
+  - distance targets near unannotated voxels;
+  - background-only corrections are now sampled;
+  - `--balance-classes` combined with label smoothing;
+  - `mse` on logit models;
+  - best-epoch choice when rehearsal-only batches occur, and an epoch of rehearsal patches only is never ranked best (its distillation-only loss of ~0 used to win the whole run, and that epoch was exported);
+  - painted (sparse) sessions are now detected, which switches distance models to binary + margin and mse to margin + distillation 0.5;
+  - base norm layers and the teacher run in eval mode;
+  - augmentation for signed, float or windowed data;
+  - a full-finetune restart now starts from the base weights;
+  - an explicit distillation weight of 0 with good regions marked is honoured.
+- **Full finetune with distillation** keeps a frozen teacher copy: one extra set of parameters on the GPU.
+- **Finetune on-disk layout:**
+  - serving YAMLs for new runs go to `<session>/models`;
+  - each iteration exports to `iterations/NNN_<ts>/`, with `lora_adapter` / `full_finetune` as symlinks to the latest (older YAMLs keep working; a full finetune keeps one state dict per iteration);
+  - `metadata.json` records `lsf_job_id`, `status`, `models_dir`, `model_entry`, `inference_server_url` and `finetuned_model_name`;
+  - MinIO writes `.minio.log`;
+  - sync uses temporary `.part` files.
+- **Finetune CLI:** new flags `--models-dir`, `--model-entry`, `--model-folder`, `--queue` and `--charge-group` (added, none removed). Bioimage models are refused at submit.
+- **Finetune dashboard:** a new `WAITING_FOR_RESTART` job status. Jobs still alive on LSF are reattached after a dashboard restart.
+
+- **OME-NGFF translation is voxel 0's centre** (1c′), as the spec and Neuroglancer have it; cellmap-flow read it as the corner.
+  - On Janelia pyramids (`translation = scale/2 − 4`), s1 and s2 were read 8 and 16 nm off. Every prediction made from those levels was misaligned, and the levels disagreed with each other. Reads from them change.
+  - The served virtual zarr and the blockwise output now start at the corner of the raw level the model reads (−4 nm on Janelia data), not at 0.
+  - Both write `translation = corner + voxel/2`, so the translation values in output metadata change. Blockwise into an output written by an older version stops, with a message to use a new output path: the two grids differ by half a voxel.
+  - Legacy `resolution`/`offset` and N5 `transform` attributes are unchanged.
+  - The raw layer is drawn at its true position. It used to pass the offset in nm as a voxel count, so any dataset not at the origin was drawn far from its data.
+  - Finetune: the volume format is unchanged, and on Janelia v3 data new volumes are identical to old ones. Existing sessions train with label/raw pairing moved by at most half a raw input voxel, toward where Neuroglancer drew the labels. Odd output sizes and good-region patches no longer pair labels with raw half an annotation voxel off. YAML crops downsampled by a factor other than 2 can land one voxel over.
+
+- **Removed in Phase 2** (nothing in the repo or on `fileglancer` used them):
+  - CLI: `cellmap_flow_server run-ui-server`.
+  - Python API: `Flow.run`, `Flow.stop`, `Flow.delete` and `Flow.to_dict` (`Flow.run` was already broken); `create_and_run_app(inference_servers=)`; `g.INFERENCE_SERVER`, `g.servers` and `g.neuroglancer_thread`; the module globals `cellmap_flow.globals.input_norms`, `postprocess` and `viewer`; `ds.get_array_path_if_needed` and `ds.find_target_scale`; `PostProcessorMethods`, `MERGE_MODE_MAP` and `Config.serialize`. The modules `utils/job_extensions.py`, `utils/generate_neuroglancer.py`, `dashboard/bbx_generator.py`, `dashboard/routes/finetune/service.py` and `dashboard/routes/finetune/annotation.py` are gone.
+  - The Python Scripts docs page now shows `run_multiple` (what `cellmap_flow_yaml` calls) instead of `Flow.run`.
+  - Inference servers: `/apidocs/`, `/api_spec.json` and `/flasgger_static/*` are gone. `/` redirects to `/__control__/model_info`.
+  - Finetune: `/api/finetune/create-crop` and its button (K10). `/api/finetune/sync-annotations` ignores `crop_id`.
+  - Existing finetune sessions: a resume or sync no longer cuts `<volume>_chunk_*.zarr` extracts (nothing read them). A restart no longer writes `training_log_<n>.txt`/`metadata_<n>.json` copies. Existing files are left alone. The job and status responses drop three always-null keys. The Load-existing dialog counts a volume's painted chunks (it showed 0 for most sessions). No training results change.
+  - Dependencies: `flasgger` and `funlib.math`; the `[docs]` extra drops `nbsphinx`, `myst_nb` and `jupytext`.
+  - Examples: `check_norm`, `dacapo_run`, `dacapo_run_retrieve`, `larissa_lsd`, `model_setup04_dacapo`, `server_check`, `generate_slider`, `serialization_json_norm`, both `run07` copies of `model_spec.py`, the two dated `example/cellmap/` shell scripts, `example/models.yaml` and `omnx_model.py`. `omnx_model_converted.py` is now `onnx_model.py`, pointed at the catalog copy of its model.
+
+- **Phase 3 so far** (each is its own "Behaviour change:" commit):
+  - Submit names a prediction layer by a hash of its chain settings instead of the time. Resubmitting identical settings no longer makes neuroglancer drop its cached chunks; any change still refreshes.
+  - The dashboard's model form offers plugin model types. A plugin subclass without its own `cli_name` gets its own type name, and no longer takes over its parent's.
+  - Finetune tab rehydration asks LSF about all of a session's jobs in one `bjobs` call. A job LSF has purged is recorded once, as `COMPLETED` if its log shows a finished iteration and `FAILED` otherwise (with `status_detail`), instead of being re-queried on every load.
+  - Server start-up detection reads a ready file the server writes, and falls back to bpeek, now with a 0.5 s → 5 s backoff.
+  - A precomputed dataset's `voxel_offset` becomes its translation.
+  - `run.py`: a multi-word `SERVER_COMMAND` (fileglancer's `pixi run cellmap_flow_server`) is split instead of being quoted as one program (`7d8d7ad`, a fix for a bug this PR introduced).
+  - PR #102 port:
+    - the blockwise master builds no inferencers (no GPU warmup on the master);
+    - blockwise task ids are `predict_{model}_{task}`, so a `track_progress` run interrupted before this and resumed after redoes its blocks;
+    - a blockwise run is named after the typed job name, which the builder now asks for at Generate;
+    - the viewer's dimensions are pinned to the raw data's finest level;
+    - behind a reverse proxy, the iframe loads the viewer through it.
+  - Latency:
+    - chunk requests use the GPU one at a time in arrival order (`CELLMAP_FLOW_GPU_SLOTS`, default 1);
+    - a chunk whose client hung up before its turn gets 499 and isn't computed;
+    - a served model's shapes are checked on its warmup forward, on the serving device, instead of in a separate forward when its config is built. A mismatch raises the same `ValueError`, still before the server prints its address. Server start goes from 26–34 s to 14–16 s;
+    - fp16 is opt-in (`CELLMAP_FLOW_HALF_PRECISION=1`, or `half_precision = True` in a model script), checked against fp32 at warmup; a model that differs by more than 1% of its output range is served in fp32.
+  - Round 1's 5 s bpeek backoff is reverted (`94e8de5`). NFS can hide the new ready file for up to 30 s, and the backoff then delayed server detection.
+  - A blockwise worker checks its first model's shapes once, on the warmup forward. It used to run the check a second time, on whatever device the loader left the model on.
+  - The pipeline builder builds its nodes from elements, not HTML strings (`629bfa1`, X2). Ids, names and parameters in an imported YAML or JSON file can no longer run as script in the dashboard, and a node whose id holds a quote now works.
+  - Finetune:
+    - a YAML crop imported with several CPUs no longer loses rows where two parallel slabs met: the slabs are cut on the volume's chunk rows, so each chunk has one writer;
+    - a new volume's voxel count is its data's extent in output voxels, rounded up, one rule for create-volume, crop import and `build_corrections`; on every level tried it equals the old count;
+    - a volume whose attrs lack its geometry is no longer given 56³ chunks, a 178³ input, 16 nm voxels and a zero offset. It is still served and synced, and writing its manifest fails with a message naming the missing attrs;
+    - `export_merged` folds adapters on Conv2d and Linear layers into the merged model, through the merge training uses; they were left out without a warning. `export_merged.merge_lora_into_conv3d` and `strip_lora_layers` are removed;
+    - importing `cellmap_flow.finetune` no longer loads torch, and importing `finetune_cli` no longer configures logging (`3cccd79`);
+    - creating or loading an annotation volume selects its layer in the viewer with the layer panel open, ready to paint (`42a3797`);
+    - a LoRA job restarted with `lora_r=0` keeps its adapter's alpha. It used to get alpha 0, so every later iteration trained nothing and served the base model.
+  - Viewer and dashboard (wave 3):
+    - the startup viewer draws a labelling model's output as segmentations, as Submit already did;
+    - a model started from the Models tab gets the same layer Submit gives it, where it used to get a fixed red 0–255 shader and no overlay;
+    - a prediction is drawn at the voxel size the server reports (`effective_output_voxel_size`), with older servers keeping the closest-raw-scale lookup;
+    - a model without a channel axis gets a 3-D overlay transform;
+    - a bad model-form or set-data request body gets a 400 `{"success": false, "error"}`, where some were a 500;
+    - the Finetune tab's model and progress polls pause while the browser tab is hidden. The job-status poll keeps running, so failure notifications still arrive.
+  - Reading data (wave 3):
+    - a read that starts before voxel 0 and off the grid floors instead of truncating toward zero;
+    - the raw layer finds a pyramid's levels from its multiscales metadata, so OME-Zarr pyramids with numeric level paths work;
+    - an N5 `units` string applies to every axis. It used to be reversed letter by letter, so `units: "um"` data was read 1000× too small;
+    - a level path missing under a zarr v3 group is treated as missing, as under v2. A mistyped v3 level used to silently read s0.
+  - Wave 4:
+    - finetune training draws its patches in chunk order, so the same seed draws the same patches on every machine. Before, the pools followed the filesystem's listing order, which differs between machines and between copies of a session;
+    - a finetuned model's layer is built like every other prediction layer: a labelling chain shows as a segmentation, and the server's reported voxel size and channel axis place it;
+    - a restart the model refuses (a LoRA job asked for rank 0, or a full finetune asked for a rank) records the rank and alpha actually kept in `metadata.json`;
+    - a malformed finetune request is refused with a 400 before anything is done. A restart with a bad override was a 500, and submit rewrote the manifest before rejecting a bad number;
+    - the pipeline builder reads and writes its YAML with js-yaml. Exports keep `separate_bounding_boxes_zarrs`, a second input's dataset path, channel names with commas, nested arrays and paths that need quoting; the exported text style changes;
+    - the pipeline builder's unload beacon only fires when there is an unsent change;
+    - the dashboard's GPU-queue poll pauses while the page is hidden.
+
+- **Phase 4 (the breaking release), so far:**
+  - **One pipeline endpoint (K11).** `PUT /api/pipeline` sets the chain and redraws the prediction layers. `/api/process` and `/api/pipeline/apply` keep working for one release as deprecated aliases (a logged warning and a `Deprecation` header). Applying from the pipeline builder now redraws the layers; it used to leave them on the old chain.
+  - **Raw data:**
+    - a neuroglancer-precomputed volume with several scales, such as `gs://…` datasets, is shown as its multi-resolution pyramid, so zooming out reads coarse levels and auto-contrast samples one. It used to show only full resolution;
+    - a precomputed path's scale is its last `/s<N>`. A path like `/groups/scicompsoft/…/s0` was cut at the first `/s` and crashed;
+    - a read that lies wholly outside the array returns padding, as a partly outside one does. It used to raise `IndexError`.
+    - `ImageDataInterface(volume, voxel_size=…)` on a precomputed volume reads the scale chosen for that voxel size, as for a zarr or N5 pyramid, instead of relabelling scale 0; `closest_raw_scale` answers for a precomputed volume instead of returning None. The scale is chosen from one read of the volume's `info`, so opening a `gs://` volume at a voxel size takes about 0.1 s;
+    - a single raw array whose contrast cannot be sampled is shown over its dtype's range (0–255 for uint8, 0–65535 for uint16) instead of always [-1, 1];
+    - a pyramid level whose voxel size is not a power-of-two multiple of the finest level's on every axis (a 12 nm level of an 8 nm pyramid, say) is left out of the raw layer with a warning. It used to be served in place of another level. The finest level is always shown;
+    - neuroglancer can zoom the raw layer out 64× past a pyramid's coarsest level, downsampled on the fly as for a single array, so a one-level pyramid is no longer drawn at full resolution when zoomed out.
+    - a zarr level read over http(s) or s3 that its group's multiscales don't list (`…/raw/s1` when `raw` lists only `s0`) is read from its own `resolution`/`offset`, as it is on disk. It used to get the group's first level's voxel size and translation;
+    - an N5 array with a voxel size but no offset (BigDataViewer/Paintera `pixelResolution`, or `resolution` alone) keeps that voxel size, at offset 0. It used to read as 1 nm. A value is taken from the group's multiscales only when the array lacks it;
+    - neuroglancer-style cloud precomputed sources, `precomputed://gs://…` and `precomputed://https://…`, open; they were read as local paths and failed. A `gs://` path ending in `.zarr`/`.n5` fails with a message pointing to its `https://storage.googleapis.com/…` URL, instead of being opened as precomputed;
+    - a dataset URL (http(s), s3, gs, `precomputed://<url>`) is no longer shell-unescaped (`\ ` to a space). Local paths still are.
+  - **Model configs:**
+    - a Fly model given only one of `input_size`/`output_size` is refused with a message asking for the other. It used to reset both to 178/56;
+    - a model config without a `name` falls back to float32 output instead of raising;
+    - a shape-mismatch error names the model's type;
+    - Hugging Face metadata that failed to load is fetched again after 60 s instead of being cached as empty for the whole run.
+  - **Blockwise routes:**
+    - a malformed validate/generate/precheck/submit body is answered with what is wrong (still a 200 with the failure flag the builder reads);
+    - validate now refuses pipelines missing a required setting, which used to fail later at submit;
+    - submit refuses a `yaml_paths` that is not a list of paths. A number there used to be opened as a file descriptor.
+  - **Blockwise:**
+    - a model that names its channels with `classes` or `channels_names` runs. Blockwise read only `channels` and failed with `AttributeError` before creating anything. A model that names none is refused with a `ConfigError`, unless the task's `output_channels` is a dict of indices;
+    - `load_config` (`cellmap_flow_yaml` and blockwise) refuses a task that is not a path (str, bytes or `os.PathLike`) with a `ConfigError`. A number was opened as a file descriptor, and closing it closed whatever the process had open there;
+    - a model that gives its channel names as one string (`channels = "mito"`, or `classes`/`channels_names`) has one channel of that name, not one per letter. Blockwise creates one output for it again, and the server's model info and the geometry cache report one name.
+  - **Dashboard tabs:**
+    - the Finetune tab stops polling a job once it is COMPLETED, FAILED or CANCELLED, or once the server answers 404, which also logs a line saying so;
+    - the Training Logs box keeps the last 1,000 lines, with a first line naming how many earlier lines are hidden and where the whole log is, so long jobs no longer slow the page. That note names the job's log file from the start, not only after the next line arrives;
+    - the Review tab's script is ES modules, with the same behaviour. Its Progress card refreshes on the shared poller: no requests while the page is hidden, one when it is shown again, and no request on top of an unanswered one;
+    - the pipeline builder opens on the live chain. Its normalizer and postprocessor nodes come from the chain as it was last set, from anywhere (a dashboard Submit, say). It used to open on its own last canvas, so its first edit sent the old steps back and undid the other change without a word. Inputs, outputs, models, edges and node positions are still the builder's own.
+  - **Dashboard (review fixes):**
+    - Submit on the Models tab no longer bkills a running finetune job: the job finetune adds to the dashboard's jobs is marked, and only the Finetune tab stops it;
+    - a `PUT /api/pipeline` that leaves the chain as the viewer already shows it (a node dragged in the builder, say) no longer redraws the viewer, so a hidden layer or a changed opacity stays as set; a model whose layer is missing still gets one;
+    - the pipeline builder opens a saved canvas with its positions and edges; only nodes with no saved position are laid out, and edges are rebuilt only when the chain gained or lost a step elsewhere. It reads an imported pipeline's models as it reads the page's own;
+    - the pipeline builder shows a refused apply as an error with the server's reason. A refused `PUT /api/pipeline` only reached the console, and a refused blockwise config import was reported as "updated";
+    - the Review tab's Next sends the shown instance's rank only to the queue it came from, so switching queues no longer skips the new queue's first ranks;
+    - the Flow Logs stream no longer dies when a record is logged while it replays the buffer, and shows a multi-line record (a traceback) whole;
+    - behind a reverse proxy, the bounding-box tool's viewer is loaded through the proxy; cancelling the tool while its viewer loads leaves no status poll running;
+    - the Review routes answer an index that has gone with a JSON 404 and an unusable one with a JSON 500, not Flask's HTML page; `/api/review/next?order=` means the first queue; a non-text `PUT /api/pipeline` step name is a 400; `/api/models`, `/update/equivalences` and `/api/bbx-generator` answer a bad body with the usual 400 `{"success": false, "error"}`, and a count of 2.5 is refused rather than cut to 2;
+    - removed, unused: `GET /api/review/current_pick`, and the pages' `op_schemas` page data with `pipeline_spec.op_schemas`.
+  - **Finetune jobs:**
+    - a job is shown as COMPLETED only once its export has been found. Before, it was COMPLETED first and turned FAILED if the export check then failed, so a poll in between showed a success that wasn't one;
+    - a finetune of a Fly model trains and serves at the model's own input and output sizes. The trainer used to get only the checkpoint and build it at 178/56;
+    - a finetuned model with no serving YAML, whose base has left the session, is registered in the pipeline builder on the model its run recorded. It used to be registered on a Fly model rebuilt at 178/56;
+    - a finetune whose export is on disk stays COMPLETED even when its `metadata.json` cannot be read, where it was shown as FAILED. The record is written atomically;
+    - the monitor reads each line of the training log once, and only once it is whole. It no longer re-reads the whole log every 3 s, and no longer announces an iteration under a name cut short mid-write (`m_fi`), so no layer, registered model or `metadata.json` entry gets such a name;
+    - the dashboard is told when a finetune's inference server comes up even if the log cannot be re-read at that moment. A failed read used to leave the server marked ready but never announced, so no layer was added;
+    - a finetune job's walltime is passed to the job manager (`submit_finetuning_job(walltime=)`), not read from `g`.
+    - a training log with a byte that is not UTF-8 (a user's print, a library) is followed to the end; the monitor used to stop at that byte, and the job ended FAILED;
+    - a job's record includes the log lines written just before it ended, even a last line without its newline. A job LSF said had finished but whose export was missing could be recorded without its last iteration's model and YAML;
+    - an iteration that could not write its serving YAML no longer inherits the previous iteration's. The pipeline builder registers the new model from the run's latest export. It used to register the new name on the previous iteration's weights;
+    - a finetune whose trainer exits with an error ends FAILED (training raised, a first iteration diverged, the inference server would not start). LSF used to see `tee`'s exit status, so such a job was DONE, and COMPLETED whenever an export was on disk;
+    - `restart_signal.json` and every dashboard-side write of `metadata.json` are written whole or not at all.
+  - **`cellmap_flow.utils` is dissolved** into the packages that own each piece: `io/`, `jobs/`, `serving/`, `config/yaml.py`, `models/registry`, `models/hf_catalog`, `models/geometry_cache`, `norm/safe_expression`, `dashboard/services/`, and `cellmap_flow.plugins` and `cellmap_flow.logging_setup` at the package root. The three names the docs used keep deprecated aliases for one release: `utils.bsub_utils.install_cleanup_handlers` (now `jobs.launch`), `utils.serialize_config.Config` (now `models.models_config.Config`), and `models.model_registry.list_huggingface_models`/`refresh_huggingface_models` (now `models.hf_catalog`). `python -m cellmap_flow.utils.doctor` is `python -m cellmap_flow.cli.doctor`.
+  - `finetune/finetune_job_manager.py` is the package `finetune/job_manager/`, and `finetune/virtual_dataset.py` is `finetune/data/`, both without aliases; nothing outside the package imported them.
+  - **Removed:** `lora_wrapper.merge_lora_into_base` (K19), unused and replaced by `adaptation.LoraStrategy.merge`.
+  - **Remote data (s3, gs, http):** see the new Data paths docs page.
+    - zarr v2, zarr v3 and N5 datasets are read at `gs://`, `s3://` and `http(s)://` URLs with the same metadata and voxels as the same files on disk, through tensorstore's own kvstores, with no new dependency. gs zarr/N5 raised an error before, and N5 and zarr v3 at a URL failed;
+    - arrays at `s3://` URLs can be read again: every s3 open failed, because the anonymous-credentials spec was one tensorstore no longer accepts. s3 is read anonymously first and with the AWS default credentials when a bucket refuses, so configured credentials never stop a public read; `AWS_ENDPOINT_URL`/`AWS_REGION` select an S3-compatible store. A `gs://` bucket that refuses your Google credentials is read at its public URL;
+    - a zarr v2 or N5 group path reads its first level on disk, as it did at a URL, instead of failing; a URL with no `.zarr`/`.n5` in it finds its container like a local path; an unreachable host fails after about 5 s instead of retrying for many minutes;
+    - reading a dataset whose voxel boundaries aren't whole nanometers (all OpenOrganelle data: 10.48 nm voxels, −2.62 nm corner) returns the voxels the read meant. Reading `idi.roi`, or any whole-nm box made from the grid, used to start one voxel early behind a voxel of padding, and so did a model's input on such a grid (served or blockwise with `resample: true`). Whole-nm grids such as Janelia's 8/16 nm with a −4 nm corner read exactly as before;
+    - only a path component that ends in `.zarr`/`.n5` ends a container, so names like `…chunk-1.zarr-v2` are no longer cut in two;
+    - with `wrap_raw: false`, a precomputed path naming one scale gives neuroglancer the volume, and a zarr URL without `.zarr` in it is given as `zarr://`, not `precomputed://`.
+  - **Added: optional resampling to a model's voxel size.** `resample: true` in a YAML, `cellmap_flow infer <type> --resample` and `cellmap_flow serve --resample` resample the data to the model's input voxel size when the dataset has no level at that size, each axis by its own factor: a block mean for whole factors, linear interpolation otherwise, the nearest voxel for label data. It reads the coarsest level no coarser than the target on any axis, and the resampled grid starts at the data's own corner. The default is unchanged: the nearest level is read as if it were at the model's voxel size, with a warning that now names the option. In Python it is `ImageDataInterface(..., on_voxel_size_mismatch="resample")`; blockwise reads with it too, and the server's `model_info` reports `input_resampled_from`.
+  - **Deprecated (K18):** `ImageDataInterface`'s `output_voxel_size` and `custom_fill_value` arguments warn; they still work this release. Use `on_voxel_size_mismatch="resample"` instead of `output_voxel_size`, which applied the z factor to every axis on a 0 nm grid. `concurrency_limit` stays, because the inference server uses it.
+  - **One `cellmap_flow` command (K1–K5, K21).** See the Command line page of the docs.
+    - `cellmap_flow` is one command with subcommands: `infer <type>`, `yaml`, `view`, `dashboard`, `serve`, `blockwise`, `finetune {train, export-merged, build-corrections}`, `models`, `plugins {register, unregister, list}` and `doctor`. The old console scripts (`cellmap_flow_yaml`, `_view`, `_blockwise`, `_blockwise_multiple`, `_app`, `_server`) and old subcommands (`list-models`, `register`, `unregister`, `list-plugins`, `cellmap_flow <type>`) keep working for one release, each printing a deprecation notice on stderr.
+    - `cellmap_flow finetune` now means the finetune tools group. A finetuned model is served with `cellmap_flow infer finetune`.
+    - `cellmap_flow blockwise` takes one YAML or several, replacing `cellmap_flow_blockwise_multiple`. `--client` takes exactly one. Workers run `cellmap_flow blockwise <yaml> --client`.
+    - `cellmap_flow run -m TYPE -c k=v` is hidden and deprecated. It prints the `cellmap_flow infer TYPE --k v` command it stands for, then runs it; an unknown key is refused as an unknown option.
+    - A model type's short flags go to its constructor arguments in signature order; an argument whose first letter is taken gets only its long flag (`script`: `-s` is `--script-path`, and `--scale` has none). They used to be reversed.
+    - `cellmap_flow --log-level` applies to every subcommand.
+    - The job cleanup handlers are installed just before a server starts, not on every invocation.
+    - `cellmap_flow dashboard [-n URL]` serves the dashboard alone, and Ctrl+C kills the models launched from it. `cellmap_flow_app --help` used to start a dashboard. `create_and_run_app` sets up logging at INFO when nothing has.
+    - **Plugins load when a command starts, not at `import cellmap_flow`.** Every command and alias loads them, as do the dashboard and the finetune job. A script that uses plugin types calls `cellmap_flow.plugins.load_plugins()` itself. An environment installed before 0.3.0 has old console-script wrappers that don't load plugins until it is reinstalled (`pixi install`, or `pip install -e .`).
+    - **Launchers start servers with `<CELLMAP_FLOW_SERVER_COMMAND> --model <JSON> -d <data>`**, where the JSON is `ModelConfig.launch_entry` (its `to_dict()` without None values), rebuilt by the server the way a YAML model entry is. `CELLMAP_FLOW_SERVER_COMMAND` defaults to `cellmap_flow serve`, and pixi's activation sets `pixi run cellmap_flow serve`. The old value `pixi run cellmap_flow_server` still works: that command accepts `--model` too, and keeps its per-type subcommands for one release.
+  - `cellmap_flow yaml` installs a YAML's `json_data` as the dashboard's chain the way Submit does, so the finetune manifest, the exported YAML and the pipeline builder see the steps as the YAML gives them. They used to see the built steps with every constructor default filled in (`MinMaxNormalizer` gained `"invert": false`). The chain that runs, and the layer URLs, are unchanged.
+  - **Global state (K16).** `cellmap_flow.globals.g` and `Flow` are deprecated and go in the release after 0.3.0. Every name `g` had still works and warns (`DeprecationWarning`, at the caller's line) with its replacement:
+    - the launcher settings (`queue`, `charge_group`, `walltime`, …, `save_server_config()`) are `cellmap_flow.jobs.settings.launcher_settings()`;
+    - the chain (`input_norms`, `postprocess`, `pipeline_spec`, `set_pipeline()`, …) is `cellmap_flow.process_chain.process_chain()`;
+    - the started jobs are `cellmap_flow.jobs.launch.started_jobs()`;
+    - everything else is the dashboard's `cellmap_flow.dashboard.state.get_session()`.
+
+    Nothing in the package uses `g` any more. Importing `cellmap_flow.server`, `cellmap_flow.inferencer` or `cellmap_flow.image_data_interface` no longer configures logging, so `--log-level` now holds for `cellmap_flow serve` and `cellmap_flow blockwise` instead of being reset to INFO; a script that imports these modules directly and wants log lines calls `cellmap_flow.logging_setup.configure_logging()`.
+
+    A script's `g.input_norms = [...]` still sets the process's chain, and `Flow()` returns `g`. Assigning a name `g` never had raises `AttributeError` instead of storing it. Importing `cellmap_flow.globals` no longer reads `~/.cellmap_flow/server_config.yaml`; a process reads it the first time it needs a setting. Moved without aliases: `globals.SERVER_CONFIG_PATH/DEFAULTS/KEYS` and `load_/save_server_config_cache` → `cellmap_flow.jobs.settings`, `LogHandler` → `cellmap_flow.dashboard.routes.logging_routes`, `get_blockwise_tasks_dir()` → `get_session().tasks_dir()`.
+  - **Finetune trainer:**
+    - the trainer's two startup probes run in eval mode. On a full finetune of a model with BatchNorm, the built-in-sigmoid probe (×100 noise) inflated the running variance about 7,000×, and the export and the served model carried it. A LoRA adapter with dropout now trains on different dropout masks;
+    - `save_adapter` exports the best checkpoint only if this run wrote it or resumed from it. With none (nothing supervised, or `num_epochs: 0`), it exports the last epoch's weights with a warning. It used to load whatever `best_checkpoint.pth` an earlier iteration left in the shared output directory, and failed after a rank change;
+    - a stop between epochs no longer records the skipped epoch as done, so `--resume` trains it;
+    - `--resume` from a checkpoint saved without loss scaling (bf16, fp32, or after the fp32 fallback) works in an fp16 trainer.
+  - **Finetune job (session loop):**
+    - a restart whose trainer cannot be built no longer swallows its reset: the next restart resets the model with its own LoRA rank, and the job logs what it is serving meanwhile;
+    - a restart refuses settings that cannot train (0 epochs, batch size or accumulation steps, a non-positive learning rate, offsets that aren't `[z, y, x]` lists): they are ignored with a warning, and the job keeps its setting;
+    - a served job whose training or export fails reports RESTART_FAILED, keeps serving and waits for the next restart, instead of exiting;
+    - a served job waits for a half-written `restart_signal.json` to be complete instead of exiting, and ignores a restart it has already applied (one that arrived over HTTP and as a file);
+    - the job replaces `metadata.json` whole, so the dashboard never reads it half-written;
+    - the job logs in the shared format (`<time> LEVEL logger: message`).
+  - **Finetune tab, submit and restart:**
+    - the restart route answers 404 for an unknown job and 409 for a job that cannot take a restart, before writing the form's settings into the session manifest or syncing MinIO; it used to rewrite the manifest, sync, then answer 500;
+    - a restart applies submit's loss and target adjustments, with sparsity read again after the sync (a distance model trains bce with no smoothing; mse on sparse annotations becomes margin with distillation 0.5; a distance model on a now-sparse session trains binary + margin; `mask_unannotated` follows the session). A restart from the unchanged form used to send a distance model the margin loss, and every iteration ended in RESTART_FAILED;
+    - submit pulls changed annotation chunks from MinIO (diff-only) before deciding whether the session is sparse. Strokes painted in the last ~30 s before Submit used to train as dense labels;
+    - submit's affinity autodetect reads channel names as `channel_names_of` does: a single channel named by a string (`"x_aff"`), or a geometry's `channel_names`, is detected as affinities instead of training as binary;
+    - a finetuned model's serving YAML no longer says `scale: s0`; the server picks the level of a multiscale `data_path` by the model's input voxel size, as the trainer did. A model trained on s1 used to be served s0;
+    - the tab shows Restart only while the job can take one (waiting for a restart, or RUNNING with its server ready). Once the status is final it stops saying "Serving – Ready", and a reload no longer restores a finished job as the live one;
+    - the tab names a created or resumed volume's layer `annotation_<id>`, the server's name, instead of `sparse_annotation_<id>`, so importing crops into it no longer adds a second writable layer over the same data.
+  - **Finetune sessions:**
+    - `POST /api/finetune/load-crops` reads a `yaml` value as a file only when it is one line ending in `.yaml`/`.yml`, through read-yaml's checks, and its validation errors no longer echo the input, so it can no longer return the contents of any file the dashboard user can read. A missing file and a refused one get the same 400 from both routes (read-yaml answered a missing `.yaml` with a 404). `build_corrections --crops` goes through the same reader, so it needs a `.yaml`/`.yml` file of at most 1 MB;
+    - resuming a session copies its `good_regions.json` and records whether it did in `loaded_from.json`. A resumed session used to show no good regions and train without rehearsal;
+    - instance-correction sync and cc3d accept the `zarr_path` create answered, including a reattached dated snapshot, and the re-seed refusal names the running MinIO's data directory;
+    - with several volumes in a session, a crop import goes into the last one registered, the volume good regions and training use. It went into the first;
+    - the annotation layers load-crops and instance corrections add have A/F bound to the brush and flood fill, and come selected with their panel open, as add-to-viewer's do;
+    - `create-instance-correction` with `reuse_existing` refuses, with a 400, a zarr whose attrs don't say `type: annotation_volume` (the legacy instance type is still converted).
+  - **Finetune data:**
+    - annotation patches are read in the volume's own dtype, so instance-correction ids above 255 no longer wrap modulo 256 (instance 256 read as background, 257 merged with 1);
+    - raw patches are cut as a box of raw voxels, so fractional voxel sizes (5.24 nm, 10.48 nm) get the full patch at the right place. They were one voxel short, started one voxel early, and failed the first batch. Whole-nm grids read exactly as before;
+    - when the only annotation is background-only imported crops, an epoch is one patch per chunk those crops cover, as for every other pool, instead of one patch whatever their size;
+    - `build_corrections`' `--patches-per-epoch`, `--jitter-voxels`, `--seed` and `--dense-to-sparse-ratio` win over the crops YAML when given; the YAML's apply otherwise. The YAML always won before, so `--seed` was always ignored;
+    - `build_corrections` builds crops with no foreground, which the trainer trains on, and warns instead of raising "No foreground voxel was imported".
+  - **Also changed in this PR, without a "Behaviour change:" commit of their own:**
+    - finetune trainer: `--resume` continues after the checkpoint's epoch; a NaN loss or gradient aborts the epoch before the optimizer step, and a full finetune's fp32 retry reloads its starting weights; TensorBoard steps continue across restarts; after an OOM rebuild the loader keeps its sampler and workers, which changes the patches drawn; an OOM at the first batch reports TRAINING_DIVERGED;
+    - finetune job: an inference server that fails to start ends the job with exit 1; a first iteration that diverges ends the job; a setup failure on restart keeps the job alive and reports RESTART_FAILED;
+    - blockwise: precheck checks every YAML and creates no arrays; submit runs the YAMLs precheck checked; the master runs under `sys.executable`;
+    - added: the dashboard's Review tab and the `review_index` CLI (from PR #102).
+
+- **Found in the first runs on the cluster (2026-10-01):**
+  - every server launched on LSF failed with "Invalid value for '--model': not JSON". LSF wraps a job's `bash -c` line in single quotes, and the `--model` JSON was single-quoted too. Every shell line given to LSF is now quoted with double quotes (`jobs.spec.shell_join`), and a line containing a single quote is refused;
+  - a finetune job started from inside another cellmap-flow checkout ran that checkout's trainer. The trainer and the blockwise master now run with `python -P`;
+  - **a server still starting when the launcher stops is killed too**, and so are all of them on SIGHUP (the terminal closed, or the interactive LSF session ended). Both left GPUs billing;
+  - **a painted patch is drawn by chunk, then by voxel**, so each place painted gets a like share of patches whatever the size of its strokes, and **a third are centred on painted foreground** (nnU-Net's foreground oversampling), so mostly-background sessions still train on their objects;
+  - **a distance model trained on scribbles asks only for the side of 0.5** (margin 0.5), with distillation of at least 0.5. The form's margin 0.3 sharpened its edges near strokes;
+  - the finetune log is streamed once, and its file is seen from the dashboard as soon as the trainer writes it (it was a minute late over NFS, and the loss plot with it);
+  - inference servers log each of their first 20 chunks' time, split into read, GPU wait, GPU, postprocess and encode;
+  - **a painted session anchors a quarter of its patches at random points of the volume**, held to the original model where unpainted, so a finetune no longer drifts into false positives where nothing was painted;
+  - **Resume Existing Volume refuses a session painted on another dataset** (409, naming both), and the session list shows each session's dataset;
+  - a new annotation layer's panel opens on its Draw tab, and the Finetune tab's help text is one line per field, with the rest in tooltips.
+
+Phase 4 will be added here as it lands.
+
+### Behaviour-change commits
+- `d378bc0e` anchor a painted session at random points of the volume
+- `5c12677a` resume a session only over the dataset it was painted on
+- `d2b7ddbc` centre a third of painted patches on painted foreground
+- `b814d19d` a distance model trained on scribbles asks only for the side of 0.5
+- `3dfd0705` draw a painted patch by chunk, then by voxel, and say what the patches centre on
+- `e6f4b862` kill a server still starting, and on SIGHUP, when the launcher stops
+- `b14499e` a whole-nm start just below a voxel boundary reads from that boundary
+- `9eeea9f` the unwrapped raw layer names a precomputed volume whole and an unsuffixed zarr URL as zarr
+- `a3963f3` a container ends at a path component ending in .zarr or .n5
+- `2499b1d` zarr and N5 metadata are read from their JSON through io.store, so a URL reads as the same files on disk
+- `7b9f67e` arrays at s3:// and gs:// URLs are opened through one kvstore module
+- `84ca6d1` importing the server, the Inferencer or ImageDataInterface no longer configures logging
+- `3215381` the Finetune tab's volume layer is annotation_<id>, the name the server gives it
+- `415d54a` the Finetune tab offers Restart only to a job that can take one
+- `b54bb23` a finetuned model's serving YAML names no scale
+- `992fded` read a model's channel names as channel_names_of does when detecting affinities
+- `9d2ba11` submit pulls the strokes from MinIO before deciding whether the session is sparse
+- `63f4fbf` a restart applies submit's loss and target adjustments
+- `7b7fff0` refuse a restart the job cannot take before writing the manifest or syncing
+- `34f4fdb` reattaching a zarr that is not an annotation volume is refused
+- `8086a91` load-crops and instance layers come with the draw tools bound, selected
+- `340bfc8` a crop import goes into the session's latest volume
+- `14c8d09` instance sync and cc3d accept the zarr_path create answers
+- `eb8cb06` resuming a session carries its good regions
+- `f73422a` load-crops reads only YAML files, and neither YAML route says which files exist
+- `17a5ca4` the finetune job logs in the shared format, and imports globals no more
+- `0b83a45` the finetune job replaces metadata.json whole
+- `f3d5606` a served job waits out a half-written restart signal, and takes each restart once
+- `eac9e46` a served job whose training fails keeps serving and waits for a restart
+- `ae4264e` a restart refuses settings that convert but cannot train
+- `57b9f24` a restart whose trainer cannot be built leaves its reset to the next restart
+- `0252c8f` the pipeline builder reads an imported pipeline as it reads the page's own
+- `863dc5a` /api/models, /update/equivalences and /api/bbx-generator refuse a bad body with a 400, and a count of 2.5 is refused
+- `1c1de37` the review and pipeline routes answer bad input with a JSON error that says why
+- `2e6f1c9` cancelling the box tool while its viewer loads starts no status poll
+- `4268e10` behind a reverse proxy, the box tool's viewer is loaded through it
+- `8cfe757` the pipeline builder shows a refused apply as an error, with the server's reason
+- `e71ba2a` the pipeline builder opens a saved canvas where it was left, with its edges
+- `8052b75` the Flow Logs stream no longer dies on a record logged while it replays, and shows a traceback whole
+- `06d96f1` the Review tab's Next skips the shown rank only in the queue it came from
+- `2264302` a PUT /api/pipeline that leaves the chain as drawn leaves the viewer alone
+- `0b94aa6` Submit on the Models tab no longer kills a running finetune job
+- `ea3abb1` resume a checkpoint saved without loss scaling
+- `4904db3` a stop between epochs no longer skips one on resume
+- `736352c` an epoch that supervised nothing is never the best
+- `ec7c925` run the startup probes in eval mode
+- `4a5caaf` a YAML's json_data is the dashboard's chain as written
+- `f3b3e79` build_corrections builds background-only crops instead of refusing them
+- `60acf1a` build_corrections' sampling flags win over the crops YAML
+- `ff468aa` a background-only imported crop gets a patch per annotated chunk, like any other pool
+- `5769548` read the raw patch as a box of raw voxels, so fractional voxel sizes get all of it
+- `c677cfa` read annotation patches in the volume's dtype, so instance ids past 255 survive
+- `73f74d8` read a string of channel names as one name in the affinity check
+- `c4720d2` post merged ids to the dashboard off the chunk request
+- `0016191` refuse Lambda expressions that ask for unbounded memory
+- `b7dc120` count chunk indices from the output grid's origin
+- `d4fbc4b` a restart signal is written whole or not at all
+- `cefdb5e` a finetune whose trainer fails ends FAILED
+- `d5f2226` a job's serving YAML is its latest iteration's, or none
+- `514cc6d` a job that has ended is recorded with the log lines the monitor had not read
+- `2f5375b` a byte in the training log that is not UTF-8 no longer stops the monitor
+- `389d542` a dataset URL is not unescaped
+- `c491ecf` precomputed://gs:// and precomputed://https:// are read as URLs
+- `2561f97` an N5 voxel size without an offset is kept
+- `a832eca` a remote level its group doesn't list reads its own attributes
+- `c5467ca` g refuses a name it never had
+- `c63c298` launchers start servers with `cellmap_flow serve --model` (K4)
+- `b2787a0` plugins load when a command starts, not at import (K21)
+- `3c8efc0` `cellmap_flow dashboard` serves the dashboard alone (K5)
+- `73a752c` `cellmap_flow run` is a deprecated alias of `infer` (K3)
+- `59e6f6a` one cellmap_flow command, with a subcommand per job (K2)
+- `420d9c8` short flags go to a model's arguments in signature order (K1)
+- `7e3b7b4` neuroglancer may zoom out 64x past a pyramid's coarsest level
+- `cc9d313` a pyramid level that is not a power-of-two downsampling is left out
+- `f8fd9e2` a single array's contrast falls back to its dtype's range
+- `6aa8c1c` a precomputed volume is read at the scale for the voxel size asked
+- `2d58c2d` load_config refuses a YAML that is not a path
+- `a1789b5` a model's channels given as one string name one channel
+- `fa870ff` the server is announced from what the monitor has read
+- `c798df0` the monitor reads each log line once, and only once it is whole
+- `a102b9a` a finished job whose record cannot be read stays COMPLETED
+- `4fbe8d9` without its YAML, a finetune is registered on the base its run recorded
+- `1dda6c9` a Fly model reaches the trainer as its entry, sizes and all
+- `e2d911c` blockwise refuses a task YAML that is not a path
+- `80fffa6` blockwise takes a model's channel names from its geometry
+- `32e6ecb` the pipeline builder opens on the live chain
+- `dc9b5ad` the Training Logs note names the log file from the start
+- `b0a0d31` the Review tab's progress refresh pauses while the page is hidden
+- `c06f2c1` a job is COMPLETED only once its export has been found
+- `7803360` the training logs keep the last 1,000 lines
+- `e6356e2` the finetune status poll stops at a final status or a 404
+- `04c339c` a read wholly outside the array is padding
+- `1fc77db` a precomputed volume of several scales is shown as their pyramid
+- `d5efd66` a precomputed path's scale is its last /s<N>
+- `e1af0bf` blockwise submit refuses a yaml_paths that is not a list of paths
+- `201c627` a malformed blockwise request is answered with what is wrong
+- `7061cac` one PUT /api/pipeline sets the chain and redraws the layers (K11)
+- `4828f57` a Hugging Face model's metadata is fetched again after a failure
+- `810d1c1` a shape mismatch names the model's type
+- `87997ef` a config with no name falls back to float32 output
+- `e512c7c` a Fly model given one of its sizes asks for the other
+- `fc98506` a malformed finetune request is refused before anything is done
+- `3851e5c` a restart that cannot change the rank records the rank kept
+- `4521218` a finetuned model's layer is the layer every model gets
+- `2105ef6` the dashboard's GPU queue poll pauses while the page is hidden
+- `73bd596` the pipeline builder's unload beacon only sends a change
+- `f9bff8a` the pipeline builder reads and writes its YAML with js-yaml
+- `f731cde` build the sampling pools in chunk order, not listing order
+- `340f62d` a missing path under a zarr v3 group is missing
+- `e07caeb` an N5 units string is every axis's unit
+- `b952b5c` the raw layer takes a pyramid's levels from its multiscales
+- `17ad6d7` a read starting off the grid before voxel 0 floors
+- `1cdf71e` pause the Finetune tab's model and progress polls while the page is hidden
+- `1f2525c` a LoRA job restarted at rank 0 keeps its adapter's alpha
+- `45d8e05` a bad model-form or set-data body is the settings forms' 400
+- `fc24da1` a model without a channel axis gets a 3-D overlay transform
+- `03bdfe4` draw a model's output where its server says it lies
+- `e44e503` a model started from the Models tab gets the layer Submit gives it
+- `b25aeb5` the startup viewer draws a labelling chain as segmentations
+- `db929cc` delete the Conv3d-only merge that `a7446d4` replaced
+- `a7446d4` fold every adapted layer in export_merged, through LoraStrategy.merge
+- `22abdc9` cut a crop's parallel slabs on the volume's chunk rows
+- `d5d7259` don't invent the geometry of a volume that lacks it
+- `b7fe6c9` count a new volume's voxels from the data, rounding up
+- `6a391c7` check a blockwise worker's first model on its warmup only
+- `ca6a6fc` check a served model's shapes on its warmup forward
+- `912abaf` skip a chunk whose client hung up before its turn on the GPU
+- `0796abe` let chunk requests use the GPU one at a time, in arrival order
+- `f488b69` behind a reverse proxy, load the viewer through the proxy
+- `8e3b134` pin the viewer's dimensions to the raw data's finest level
+- `6650a2c` name a blockwise run after the job name typed for it
+- `99d3948` separate the model and task names in a blockwise task id
+- `8e8c306` the blockwise master builds no Inferencers
+- `07fcdf5` a model type's name is its own cli_name, not an inherited one
+- `39ad12c` the dashboard's model form offers plugin model types
+- `75c17da` read a precomputed volume's voxel_offset as its position
+- `55a22d5` a forgotten job that finished an iteration is recorded as completed
+- `645779b` ask bjobs about a session's jobs at once, and record forgotten ones
+- `52c1451` back off how often a waiting launcher asks LSF
+- `279bc43` name the Submit layer blob by the chain's digest, not the time
+
+## 0.2.3 and earlier
+
+Not recorded here; see the git history.

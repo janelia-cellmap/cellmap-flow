@@ -1,21 +1,26 @@
+"""What the viewer shows of the annotations: a volume's editable layer, and
+boxes around the regions that have annotations in them.
+
+Routes: POST ``/api/finetune/add-to-viewer`` (a volume's paintable layer),
+POST ``/api/finetune/refresh-annotated-regions`` (redraw the boxes) and POST
+``/api/finetune/sync-annotations`` (pull the annotations from MinIO now).
+"""
+
 import json
 import logging
 import os
-import re
 
 import neuroglancer
 import numpy as np
-from flask import jsonify
+from flask import jsonify, request
 
-from cellmap_flow.dashboard.finetune_utils import (
-    sync_all_annotations_from_minio,
-    sync_annotation_from_minio,
-)
-from cellmap_flow.globals import g
+from cellmap_flow.dashboard.finetune_utils import sync_all_annotations_from_minio
+from cellmap_flow.dashboard.routes.finetune.blueprint import finetune_bp
+from cellmap_flow.dashboard.state import get_session
+from cellmap_flow.finetune.session.volume import volume_corner_nm
+from cellmap_flow.io.geometry import list_populated_chunks
 
 logger = logging.getLogger(__name__)
-
-_CHUNK_KEY_RE = re.compile(r"^\d+\.\d+\.\d+$")
 
 # What refresh_annotated_regions_layer() last wrote into the viewer.
 #
@@ -85,6 +90,42 @@ def _register_voxel_annotation_tools():
 _register_voxel_annotation_tools()
 
 
+def add_annotation_layer(viewer, layer_name, annotation_url, *, keep_existing=False):
+    """Add the writable layer that paints into a volume, and select it.
+
+    ``annotation_url`` is the volume's ``annotation`` group as MinIO serves
+    it. This is the one builder of that layer: add-to-viewer (after
+    create-volume and resume), load-crops and instance corrections all add
+    it here. So each gets the draw tools pre-bound (ANNOTATION_TOOL_BINDINGS)
+    and is selected with its panel open, ready to paint without hunting for
+    it in the layer list; load-crops and instance corrections used to build
+    their own, with neither. The panel opens on its Draw tab, where the
+    brush and flood fill are.
+
+    A layer of that name is replaced, unless ``keep_existing``: then it is
+    left as it is, selection included, and False is returned.
+    """
+    with viewer.txn() as s:
+        if keep_existing and layer_name in s.layers:
+            return False
+        layer = neuroglancer.SegmentationLayer(source={
+            "url": f"s3+{annotation_url}",
+            "subsources": {"default": {"writingEnabled": True}, "bounds": {}},
+        })
+        try:
+            layer.tool_bindings = dict(ANNOTATION_TOOL_BINDINGS)
+        except Exception as e:
+            # An older neuroglancer without tool_bindings should still get
+            # its layer; the keys just will not be pre-bound.
+            logger.warning(f"Could not pre-bind annotation tools: {e}")
+        # The tab's id in the neuroglancer build that has the voxel tools.
+        layer.tab = "Draw"
+        s.layers[layer_name] = layer
+        s.selected_layer.layer = layer_name
+        s.selected_layer.visible = True
+    return True
+
+
 def _chunk_outside_all_bboxes(
     chunk_lo_voxels: np.ndarray,
     chunk_hi_voxels: np.ndarray,
@@ -117,26 +158,29 @@ def _chunk_outside_all_bboxes(
 def refresh_annotated_regions_layer(corrections_path=None):
     """Draw a box around every region that has annotations in it.
 
-    Only ever called for something the user just did -- creating a volume,
-    importing crops, or clicking "Show Annotated Regions". Nothing calls this
-    on a timer: see the note on _last_annotated_regions for why a push the
-    user did not ask for is destructive.
+    Only ever called for something the user just did: creating a volume,
+    importing crops, resuming a session, clicking "Save Annotations to
+    Disk" or "Show Annotated Regions". Nothing calls this on a timer: see
+    the note on _last_annotated_regions for why a push the user did not ask
+    for is destructive.
     """
-    if not hasattr(g, "viewer") or g.viewer is None:
+    session = get_session()
+    viewer = session.viewer
+    if viewer is None:
         return 0
 
     scan_dirs = []
     if corrections_path:
         scan_dirs.append(corrections_path)
     else:
-        for volume in (getattr(g, "annotation_volumes", {}) or {}).values():
+        for volume in (session.annotation_volumes or {}).values():
             corrections_dir = volume.get("corrections_dir")
             if corrections_dir and corrections_dir not in scan_dirs:
                 scan_dirs.append(corrections_dir)
         # Also scan corrections dirs from active output sessions so
         # YAML-loaded crops show up even when no annotation_volume
         # has been registered for the session.
-        for session_path in (getattr(g, "output_sessions", {}) or {}).values():
+        for session_path in (session.output_sessions or {}).values():
             session_corrections = os.path.join(session_path, "corrections")
             if session_corrections not in scan_dirs and os.path.isdir(session_corrections):
                 scan_dirs.append(session_corrections)
@@ -148,28 +192,6 @@ def refresh_annotated_regions_layer(corrections_path=None):
         if not os.path.isdir(corrections_dir):
             continue
         for entry in sorted(os.listdir(corrections_dir)):
-            # Per-painted-chunk small boxes (the existing behavior).
-            if "_chunk_" in entry and entry.endswith(".zarr"):
-                zattrs_file = os.path.join(corrections_dir, entry, ".zattrs")
-                if not os.path.exists(zattrs_file):
-                    continue
-                try:
-                    with open(zattrs_file) as f:
-                        meta = json.load(f)
-                    roi = meta.get("roi", {})
-                    offset_vox = roi.get("annotation_offset")
-                    shape_vox = roi.get("annotation_shape")
-                    voxel = meta.get("annotation_voxel_size")
-                    if not (offset_vox and shape_vox and voxel):
-                        continue
-                    voxel_arr = np.array(voxel, dtype=np.float64)
-                    lo = np.array(offset_vox, dtype=np.float64) * voxel_arr
-                    hi = lo + np.array(shape_vox, dtype=np.float64) * voxel_arr
-                    boxes.append({"label": entry, "lo": lo.tolist(), "hi": hi.tolist()})
-                except Exception as e:
-                    logger.warning(f"Could not read chunk metadata for {entry}: {e}")
-                continue
-
             # Per-imported-YAML-crop large boxes (one per crop, read from the
             # annotation_volume.zarr's root attrs that the YAML loader writes)
             # plus per-painted-chunk small boxes for any populated chunk that
@@ -184,11 +206,12 @@ def refresh_annotated_regions_layer(corrections_path=None):
                     if vol_meta.get("type") != "annotation_volume":
                         continue
                     voxel = vol_meta.get("output_voxel_size")
-                    dataset_offset = vol_meta.get("dataset_offset_nm", [0, 0, 0])
+                    dataset_offset = vol_meta.get("dataset_offset_nm")
                     if not voxel:
                         continue
                     voxel_arr = np.array(voxel, dtype=np.float64)
-                    dataset_offset_arr = np.array(dataset_offset, dtype=np.float64)
+                    # Boxes are drawn from voxel edges, i.e. from the corner.
+                    corner_arr = volume_corner_nm(dataset_offset, voxel_arr)
 
                     # Pass 1: yellow boxes for each imported crop.
                     imported = vol_meta.get("imported_crops") or []
@@ -204,7 +227,7 @@ def refresh_annotated_regions_layer(corrections_path=None):
                         bbox_off_list.append(offset_arr)
                         bbox_end_list.append(offset_arr + shape_arr)
                         lo = (
-                            dataset_offset_arr
+                            corner_arr
                             + offset_arr.astype(np.float64) * voxel_arr
                         )
                         hi = lo + shape_arr.astype(np.float64) * voxel_arr
@@ -237,34 +260,24 @@ def refresh_annotated_regions_layer(corrections_path=None):
                     s0_path = os.path.join(corrections_dir, entry, "annotation", "s0")
                     if not os.path.isdir(s0_path):
                         continue
-                    crop_label = (
-                        os.path.basename(crop.get("path", "")).rstrip("/")
-                        if imported
-                        else "painted"
-                    )
-                    for chunk_name in os.listdir(s0_path):
-                        if not _CHUNK_KEY_RE.match(chunk_name):
-                            continue
-                        cz, cy, cx = (int(s) for s in chunk_name.split("."))
-                        chunk_lo_vox = (
-                            np.array([cz, cy, cx], dtype=np.int64) * chunk_size_arr
-                        )
+                    for index in list_populated_chunks(s0_path):
+                        chunk_lo_vox = np.array(index, dtype=np.int64) * chunk_size_arr
                         chunk_hi_vox = chunk_lo_vox + chunk_size_arr
                         if not _chunk_outside_all_bboxes(
                             chunk_lo_vox, chunk_hi_vox, bbox_offsets, bbox_ends
                         ):
                             continue
                         lo = (
-                            dataset_offset_arr
+                            corner_arr
                             + chunk_lo_vox.astype(np.float64) * voxel_arr
                         )
                         hi = (
-                            dataset_offset_arr
+                            corner_arr
                             + chunk_hi_vox.astype(np.float64) * voxel_arr
                         )
                         boxes.append(
                             {
-                                "label": f"painted:{chunk_name}",
+                                "label": "painted:" + ".".join(map(str, index)),
                                 "lo": lo.tolist(),
                                 "hi": hi.tolist(),
                             }
@@ -280,8 +293,8 @@ def refresh_annotated_regions_layer(corrections_path=None):
     if not boxes:
         try:
             # Only open a transaction if there is actually something to remove.
-            if layer_name in g.viewer.state.layers:
-                with g.viewer.txn() as s:
+            if layer_name in viewer.state.layers:
+                with viewer.txn() as s:
                     if layer_name in s.layers:
                         del s.layers[layer_name]
         except Exception:
@@ -291,8 +304,8 @@ def refresh_annotated_regions_layer(corrections_path=None):
 
     axes_names = ["z", "y", "x"]
     try:
-        if hasattr(g, "raw") and g.raw is not None:
-            source = getattr(g.raw, "source", None)
+        if session.raw is not None:
+            source = getattr(session.raw, "source", None)
             if source is not None and hasattr(source, "dimensions"):
                 axes_names = list(source.dimensions.names)
     except Exception:
@@ -315,13 +328,13 @@ def refresh_annotated_regions_layer(corrections_path=None):
         (tuple(box["lo"]), tuple(box["hi"]), box["label"]) for box in boxes
     ))
     try:
-        if signature == _last_annotated_regions and layer_name in g.viewer.state.layers:
+        if signature == _last_annotated_regions and layer_name in viewer.state.layers:
             return len(boxes)
     except Exception:
         pass
 
     try:
-        with g.viewer.txn() as s:
+        with viewer.txn() as s:
             # Whether the layer is shown is the user's call, not ours.
             #
             # This used to force visible=True on every refresh, and the
@@ -359,7 +372,8 @@ def refresh_annotated_regions_layer(corrections_path=None):
     return len(boxes)
 
 
-def refresh_annotated_regions_response(data):
+@finetune_bp.route("/api/finetune/refresh-annotated-regions", methods=["POST"])
+def refresh_annotated_regions():
     """Redraw the annotated-regions boxes because the user asked for it.
 
     This is the only way the boxes update during a session. It pushes viewer
@@ -367,39 +381,29 @@ def refresh_annotated_regions_response(data):
     button: you click it when you want to see where you have painted, not
     while you are in the middle of painting.
     """
+    data = request.get_json() or {}
     try:
-        if not hasattr(g, "viewer") or g.viewer is None:
+        if get_session().viewer is None:
             return jsonify({"success": False, "error": "Viewer not initialized"}), 400
-        count = refresh_annotated_regions_layer(
-            corrections_path=(data or {}).get("corrections_path")
-        )
+        count = refresh_annotated_regions_layer(corrections_path=data.get("corrections_path"))
         return jsonify({"success": True, "count": count})
     except Exception as e:
         logger.error(f"Error refreshing annotated regions: {e}", exc_info=True)
         return jsonify({"success": False, "error": str(e)}), 500
 
 
-def add_crop_to_viewer_response(data):
+@finetune_bp.route("/api/finetune/add-to-viewer", methods=["POST"])
+def add_crop_to_viewer():
+    data = request.get_json() or {}
     try:
         crop_id = data.get("crop_id")
         minio_url = data.get("minio_url")
-        if not hasattr(g, "viewer") or g.viewer is None:
+        viewer = get_session().viewer
+        if viewer is None:
             return jsonify({"success": False, "error": "Viewer not initialized"}), 400
 
-        with g.viewer.txn() as s:
-            layer_name = data.get("layer_name", f"annotation_{crop_id}")
-            source_config = {
-                "url": f"s3+{minio_url}",
-                "subsources": {"default": {"writingEnabled": True}, "bounds": {}},
-            }
-            layer = neuroglancer.SegmentationLayer(source=source_config)
-            try:
-                layer.tool_bindings = dict(ANNOTATION_TOOL_BINDINGS)
-            except Exception as e:
-                # An older neuroglancer without tool_bindings should still get
-                # its layer; the keys just will not be pre-bound.
-                logger.warning(f"Could not pre-bind annotation tools: {e}")
-            s.layers[layer_name] = layer
+        layer_name = data.get("layer_name", f"annotation_{crop_id}")
+        add_annotation_layer(viewer, layer_name, minio_url)
 
         return jsonify({"success": True, "message": "Layer added to viewer", "layer_name": layer_name})
     except Exception as e:
@@ -407,18 +411,11 @@ def add_crop_to_viewer_response(data):
         return jsonify({"success": False, "error": str(e)}), 500
 
 
-def sync_annotations_manually_response(data):
+@finetune_bp.route("/api/finetune/sync-annotations", methods=["POST"])
+def sync_annotations_manually():
+    data = request.get_json() or {}
     try:
-        crop_id = data.get("crop_id", None)
         force = data.get("force", True)
-
-        if crop_id:
-            success = sync_annotation_from_minio(crop_id, force=force)
-            refresh_annotated_regions_layer()
-            if success:
-                return jsonify({"success": True, "message": f"Synced annotation for {crop_id}"})
-            return jsonify({"success": False, "message": f"No updates to sync for {crop_id}"})
-
         synced = sync_all_annotations_from_minio(force=force)
         refresh_annotated_regions_layer()
         if synced == -1:

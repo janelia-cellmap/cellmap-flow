@@ -1,65 +1,42 @@
-"""
-Dynamic server CLI generator that automatically detects ModelConfig subclasses
-and creates server commands based on their __init__ parameters.
+"""The inference server: serve one model's predictions, on the node an
+inference job runs on.
+
+- ``cellmap_flow serve --model <entry> -d <data path>`` (``serve``), what
+  the launchers run since 0.3.0 (``serving.launch``). The entry is
+  ``ModelConfig.launch_entry`` as JSON, rebuilt as a YAML's model entry is
+  (``registry.build_model``).
+- ``cellmap_flow_server``, the server's program before 0.3.0, which goes in
+  the release after it. It takes ``--model`` too, for a deployment whose
+  CELLMAP_FLOW_SERVER_COMMAND still names it; and it keeps a command for
+  each model type, which a dashboard from before 0.3.0 launches: built
+  when click asks for it, with the type's constructor arguments as options
+  (``registry.click_options``, the ``ModelConfig.command`` form).
 """
 
 import click
+import json
 import logging
-from cellmap_flow.utils.logging_setup import configure_logging
-import inspect
 import sys
-from typing import Type, Dict, get_type_hints
+from typing import Type
 
+from cellmap_flow.cli.common import ModelTypeGroup, deprecation_notice, log_level_option, resample_option
+from cellmap_flow.config.yaml import ConfigError
+from cellmap_flow.models import registry
 from cellmap_flow.models.models_config import ModelConfig
-from cellmap_flow.utils.cli_utils import (
-    get_all_subclasses,
-    create_click_option_from_param,
-    process_constructor_args,
-    get_all_model_configs,
-    print_available_models,
-)
-from cellmap_flow.utils.plugin_manager import load_plugins
+from cellmap_flow.plugins import load_plugins
 
 
 logger = logging.getLogger(__name__)
 
 
-@click.group()
-@click.option(
-    "--log-level",
-    type=click.Choice(
-        ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"], case_sensitive=False
-    ),
-    default="INFO",
-    help="Set the logging level",
-)
-def cli(log_level):
-    """
-    CellMap Flow Server - Dynamic CLI for running inference servers.
-
-    Automatically generates server commands for all available ModelConfig subclasses.
-
-    Examples:
-        cellmap_flow_server dacapo -r my_run -i 100 -d /path/to/data
-        cellmap_flow_server script -s /path/to/script.py -d /path/to/data
-        cellmap_flow_server cellmap -f /path/to/model -n mymodel -d /path/to/data
-    """
-    configure_logging(getattr(logging, log_level.upper()))
-
-
-@cli.command(name="list-models")
-def list_models():
-    """List all available model configurations."""
-    print_available_models("cellmap_flow_server")
-
-
 def run_server(
-    model_config, data_path, debug=False, port=0, certfile=None, keyfile=None
+    model_config, data_path, debug=False, port=0, certfile=None, keyfile=None, resample=False
 ):
-    """Run the CellMapFlow server with the given configuration."""
+    """Run the CellMapFlow server with the given configuration; ``resample``
+    as CellMapFlowServer takes it."""
     from cellmap_flow.server import CellMapFlowServer
 
-    server = CellMapFlowServer(data_path, model_config)
+    server = CellMapFlowServer(data_path, model_config, resample=resample)
     server.run(
         debug=debug,
         port=port,
@@ -68,22 +45,81 @@ def run_server(
     )
 
 
+def serve_entry(model_json, data_path, debug=False, port=0, certfile=None, keyfile=None, resample=False):
+    """Build the model ``model_json`` describes, and serve it.
+
+    ``model_json`` is a model entry (``ModelConfig.launch_entry``) as JSON.
+    One that is not is a usage error; a model that cannot be built, or a
+    server that crashes, exits 1 with the traceback in the job's log.
+    """
+    try:
+        entry = json.loads(model_json)
+    except json.JSONDecodeError as e:
+        raise click.BadParameter(f"not JSON ({e})", param_hint="'--model'")
+    if not isinstance(entry, dict):
+        raise click.BadParameter(f"not a model entry: {model_json}", param_hint="'--model'")
+    try:
+        # The entry's own name, or none: the type's default, as launched.
+        model_config = registry.build_model(entry, entry.get("name"))
+    except ConfigError as e:
+        raise click.BadParameter(str(e), param_hint="'--model'")
+    except Exception:
+        logger.exception(
+            f"Failed to create the model {model_json} (likely a missing/mismatched "
+            "dependency for this model's framework)"
+        )
+        sys.exit(1)
+
+    try:
+        run_server(model_config, data_path, debug, port, certfile, keyfile, resample)
+    except Exception:
+        logger.exception(f"Server for {type(model_config).__name__} crashed")
+        sys.exit(1)
+
+
+def _serve_options(required):
+    """``--model`` and the server's own options, which ``serve`` requires
+    and ``cellmap_flow_server`` takes instead of a type's command."""
+    options = [
+        click.option("--model", "model_json", required=required,
+                     help="The model: its launch entry (ModelConfig.launch_entry), as JSON."),
+        click.option("-d", "--data-path", required=required, help="Path to the dataset"),
+        click.option("-p", "--port", default=0, type=int, help="Port to listen on"),
+        click.option("--debug", is_flag=True, help="Run in debug mode"),
+        click.option("--certfile", default=None, help="Path to SSL certificate file"),
+        click.option("--keyfile", default=None, help="Path to SSL private key file"),
+        # The launchers pass it on (serving.launch.server_argv).
+        resample_option(),
+    ]
+
+    def decorate(command_func):
+        for option in reversed(options):
+            command_func = option(command_func)
+        return command_func
+
+    return decorate
+
+
+@click.command()
+@_serve_options(required=True)
+def serve(model_json, data_path, port, debug, certfile, keyfile, resample):
+    """Serve one model's predictions, as an inference job does on its node.
+
+    The launchers (`infer`, `yaml`, the dashboard) run this for you, as
+    CELLMAP_FLOW_SERVER_COMMAND (by default `cellmap_flow serve`). The
+    model is a YAML model entry, as JSON:
+
+    \b
+      cellmap_flow serve -d /path/to/data.zarr/raw \\
+        --model '{"type": "script", "script_path": "/path/to/model.py"}'
+    """
+    serve_entry(model_json, data_path, debug, port, certfile, keyfile, resample)
+
+
 def create_dynamic_server_command(cli_name: str, config_class: Type[ModelConfig]):
     """
     Dynamically create a Click command for a ModelConfig subclass server.
     """
-    # Get constructor signature
-    sig = inspect.signature(config_class.__init__)
-
-    # Get type hints if available
-    try:
-        type_hints = get_type_hints(config_class.__init__)
-    except:
-        type_hints = {}
-
-    # Track used short names to avoid duplicates
-    used_short_names = set(["-d", "-p"])  # Reserved for common options
-
     # Create the command function
     def command_func(**kwargs):
         # Separate model config kwargs from server kwargs
@@ -100,7 +136,7 @@ def create_dynamic_server_command(cli_name: str, config_class: Type[ModelConfig]
                 model_kwargs[key] = value
 
         # Process constructor args (handle list/tuple conversions)
-        processed_kwargs = process_constructor_args(config_class, model_kwargs)
+        processed_kwargs = registry.coerce_cli_args(config_class, model_kwargs)
 
         # Create model config instance
         try:
@@ -152,58 +188,62 @@ def create_dynamic_server_command(cli_name: str, config_class: Type[ModelConfig]
         "--keyfile", default=None, type=str, help="Path to SSL private key file"
     )(command_func)
 
-    # Add model-specific options based on constructor parameters
-    for param_name, param_info in reversed(list(sig.parameters.items())):
-        option_config = create_click_option_from_param(param_name, param_info, used_short_names)
-        if option_config:
-            command_func = click.option(
-                *option_config.pop("param_decls"), **option_config
-            )(command_func)
+    # Add model-specific options based on constructor parameters; -d and -p
+    # are the command's own.
+    # Applied last to first, because each decorator puts its option before
+    # the ones already applied.
+    for option_config in reversed(registry.click_options(config_class, {"-d", "-p"})):
+        command_func = click.option(
+            *option_config.pop("param_decls"), **option_config
+        )(command_func)
 
-    # Register as a command
-    command_func = cli.command(name=cli_name)(command_func)
-
-    return command_func
+    return click.command(name=cli_name)(command_func)
 
 
-def register_all_server_commands():
+@click.group(cls=ModelTypeGroup, make_command=create_dynamic_server_command, invoke_without_command=True)
+@log_level_option(default="INFO")
+@_serve_options(required=False)
+@click.pass_context
+def cli(ctx, model_json, data_path, port, debug, certfile, keyfile, resample):
+    """The inference server before 0.3.0: deprecated, and goes in the release
+    after it. Use `cellmap_flow serve`.
+
+    With --model and -d it is `cellmap_flow serve`. Each model type's
+    command is the form launchers used before 0.3.0:
+
+    \b
+        cellmap_flow_server dacapo -r my_run -i 100 -d /path/to/data
+        cellmap_flow_server script -s /path/to/script.py -d /path/to/data
+        cellmap_flow_server cellmap -f /path/to/model -n mymodel -d /path/to/data
     """
-    Discover and register all ModelConfig subclasses as server CLI commands.
-    """
-    model_configs = get_all_model_configs()
-
-    for cli_name, config_class in model_configs.items():
-        try:
-            create_dynamic_server_command(cli_name, config_class)
-            logger.debug(f"Registered server command: {cli_name}")
-        except Exception as e:
-            logger.warning(f"Failed to register server command for {cli_name}: {e}")
-
-
-# Load user plugins before registering server commands
-load_plugins()
-
-# Register all commands at module load time
-register_all_server_commands()
+    if ctx.invoked_subcommand == "list-models":
+        deprecation_notice("cellmap_flow_server list-models", "cellmap_flow models")
+        return
+    if ctx.invoked_subcommand is not None:
+        if model_json is not None:
+            raise click.UsageError("--model is the model; give it or a model type's command, not both")
+        deprecation_notice(f"cellmap_flow_server {ctx.invoked_subcommand}", "cellmap_flow serve --model")
+        return
+    if model_json is None:
+        click.echo(ctx.get_help())
+        return
+    if data_path is None:
+        raise click.MissingParameter(param_hint="'-d' / '--data-path'", param_type="option")
+    deprecation_notice("cellmap_flow_server", "cellmap_flow serve")
+    serve_entry(model_json, data_path, debug, port, certfile, keyfile, resample)
 
 
-@cli.command()
-@click.option(
-    "-n", "--neuroglancer-url", required=True, type=str, help="Neuroglancer viewer URL."
-)
-@click.option(
-    "-i", "--inference-host", required=True, type=str, help="Inference host(s)."
-)
-def run_ui_server(neuroglancer_url, inference_host):
-    """Run the dashboard UI server."""
-    from cellmap_flow.dashboard.app import create_and_run_app
-
-    create_and_run_app(neuroglancer_url, inference_host)
+@cli.command(name="list-models")
+def list_models():
+    """List all available model configurations."""
+    registry.print_available_models("cellmap_flow_server")
 
 
 def main():
-    """Entry point for the server CLI."""
-    cli()
+    """The ``cellmap_flow_server`` console script: load the plugins, whose
+    model types have commands too, then run the command."""
+    load_plugins()
+    cli(prog_name="cellmap_flow_server")
 
 
 if __name__ == "__main__":

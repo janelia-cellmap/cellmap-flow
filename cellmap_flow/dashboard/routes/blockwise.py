@@ -1,261 +1,244 @@
+"""The pipeline builder's blockwise steps: validate, generate (the task YAML
+the blockwise CLI runs), precheck, and submit (the task's master, to LSF).
+
+Each answers 200 whatever happens, with "valid" (validate) or "success"
+false beside an "error" when it cannot go on: the builder reads that flag at
+each step and shows the error. A body a step cannot take is refused before
+anything is done (the requests.Blockwise* models); a failure after that,
+writing the YAML, a precheck or bsub, is answered the same way.
+"""
+
 import os
 import re
 import ast
 import logging
 import subprocess
+import sys
 import time
 from datetime import datetime
 
 import yaml
 from flask import Blueprint, request
 
-from cellmap_flow.globals import g
-from cellmap_flow.utils.web_utils import INPUT_NORM_DICT_KEY, POSTPROCESS_DICT_KEY
-from cellmap_flow.globals import get_blockwise_tasks_dir
+from cellmap_flow.dashboard.requests import (
+    BlockwiseGenerate,
+    BlockwisePrecheck,
+    BlockwiseSubmit,
+    BlockwiseValidate,
+    check,
+)
+from cellmap_flow.dashboard.state import get_session
+from cellmap_flow.jobs import lsf as jobs_lsf
+from cellmap_flow.jobs.site import current_site
+from cellmap_flow.jobs.spec import JobSpec
+from cellmap_flow.serving.protocol import INPUT_NORM_KEY, POSTPROCESS_KEY
 
 logger = logging.getLogger(__name__)
 
 blockwise_bp = Blueprint("blockwise", __name__)
 
 
+def _task_walltime():
+    """The LSF run limit for a blockwise task's master and its workers.
+
+    The dashboard's walltime setting, as for inference servers. Without -W a
+    GPU worker is killed at the queue's two-hour default.
+    """
+    return get_session().walltime or current_site().default_walltime
+
+
+def _sanitize_job_name(name) -> str:
+    """Reduce a user-typed job name to something safe for an LSF -J value, a
+    YAML filename, a daisy task id and a log name: keep [A-Za-z0-9_.-],
+    collapse everything else into single underscores."""
+    if not name:
+        return ""
+    cleaned = re.sub(r"[^A-Za-z0-9_.-]+", "_", str(name).strip())
+    cleaned = re.sub(r"_+", "_", cleaned).strip("_")
+    return cleaned
+
+
+def _make_task_name(requested_name: str, timestamp: str) -> str:
+    """Single source of truth for the blockwise run's identifier. It names the
+    generated YAML(s), the master LSF job (-J), the daisy task and therefore
+    the worker LSF jobs and their logs. The timestamp keeps it unique so
+    re-using a name never overwrites the YAML a running master's workers are
+    still reading."""
+    base = _sanitize_job_name(requested_name) or "cellmap_flow"
+    return f"{base}_{timestamp}"
+
+
+def _existing_task_paths(paths):
+    """``paths`` if there are some and each is a file, else None."""
+    if not paths or not all(os.path.isfile(p) for p in paths):
+        return None
+    return list(paths)
+
+
+def _read(model, flag):
+    """``(the request's body as model, None)``, or ``(None, the answer)`` to a
+    body it is not: a 200 with ``flag`` false and what is wrong, which is how
+    the builder learns a step failed (not requests.parse()'s 400)."""
+    body, error = check(model, request.get_json(silent=True))
+    return body, (None if error is None else {flag: False, "error": error})
+
+
 @blockwise_bp.route("/api/blockwise/validate", methods=["POST"])
 def validate_blockwise():
-    """Validate if pipeline is ready for blockwise processing"""
+    """Whether the builder's pipeline is ready for blockwise processing, as
+    requests.BlockwisePipeline describes it: {"valid": True, "message"}, or
+    {"valid": False, "error"}."""
+    _, refused = _read(BlockwiseValidate, "valid")
+    if refused:
+        return refused
+    logger.info("Pipeline validation passed")
+    return {"valid": True, "message": "Pipeline is ready for blockwise processing"}
+
+
+# A model's fields that are lists, which the builder's text fields may send
+# as the text typed.
+_LIST_FIELDS = ("channels", "input_size", "output_size", "input_voxel_size", "output_voxel_size")
+
+
+def _list_from_text(value):
+    """``value`` as a list when it is a list or tuple, or text that reads as
+    one: "[mito, er]" or "(1, 2)", perhaps in quotes, bare words taken as
+    strings. Anything else, and text that does not parse, is kept as it is."""
+    if isinstance(value, (list, tuple)):
+        return list(value)
+    if not isinstance(value, str):
+        return value
+    text = value.strip().strip("'\"")
+    if not (text.startswith(("[", "(")) and text.endswith(("]", ")"))):
+        return value
+    # Quote the bare words ([mito] -> ['mito']), then undo what that does to
+    # words already quoted (''mito'' -> 'mito').
+    text = re.sub(r"''+", "'", re.sub(r"\b([a-zA-Z_][a-zA-Z0-9_]*)\b", r"'\1'", text))
     try:
-        data = request.get_json()
-        pipeline = data.get("pipeline", {})
-
-        # Check required components
-        if not pipeline.get("inputs") or len(pipeline["inputs"]) == 0:
-            return {"valid": False, "error": "No input nodes defined"}
-
-        if not pipeline.get("outputs") or len(pipeline["outputs"]) == 0:
-            return {"valid": False, "error": "No output nodes defined"}
-
-        if not pipeline.get("models") or len(pipeline["models"]) == 0:
-            return {"valid": False, "error": "No models defined"}
-
-        # Check blockwise config
-        if not pipeline.get("blockwise_config") or len(pipeline["blockwise_config"]) == 0:
-            return {"valid": False, "error": "No blockwise configuration defined"}
-
-        # Check input has dataset_path
-        input_node = pipeline["inputs"][0]
-        if not input_node.get("params", {}).get("dataset_path"):
-            return {"valid": False, "error": "Input node missing dataset_path"}
-
-        # Check output has dataset_path
-        output_node = pipeline["outputs"][0]
-        if not output_node.get("params", {}).get("dataset_path"):
-            return {"valid": False, "error": "Output node missing dataset_path"}
-
-        logger.info("Pipeline validation passed")
-        return {"valid": True, "message": "Pipeline is ready for blockwise processing"}
-
+        parsed = ast.literal_eval(text)
     except Exception as e:
-        logger.error(f"Validation error: {str(e)}")
-        return {"valid": False, "error": str(e)}
+        logger.warning(f"Could not read {value!r} as a list: {e}")
+        return value
+    return list(parsed) if isinstance(parsed, (list, tuple)) else value
+
+
+def _model_entry(model):
+    """A model node's entry in the task YAML: its name, then its params (or,
+    without params, the config it was defined with), the list fields as lists."""
+    entry = {"name": model.name, **model.settings()}
+    for field in _LIST_FIELDS:
+        if field in entry:
+            entry[field] = _list_from_text(entry[field])
+    return entry
+
+
+def _chain_steps(steps):
+    """A chain in the task YAML's ordered form, ``[{name, **params}]``. (A dict
+    keyed by name kept only the last of two steps with the same name.) A node
+    without a name is left out."""
+    return [{"name": step.name, **(step.params or {})} for step in steps if step.name]
+
+
+def _task_text(task):
+    """The task YAML: keys in the order they were added, lists in block style."""
+    return yaml.dump(task, default_flow_style=False, allow_unicode=True, sort_keys=False)
+
+
+def _write_task(tasks_dir, task):
+    """Write ``task`` to <tasks_dir>/<its task_name>.yaml; the path."""
+    path = os.path.join(tasks_dir, f"{task['task_name']}.yaml")
+    with open(path, "w") as f:
+        f.write(_task_text(task))
+    logger.info(f"Generated blockwise task YAML at: {path}")
+    return path
+
+
+def _generate(pipeline, job_name):
+    """Write the task YAML(s) for ``pipeline`` (a requests.BlockwisePipeline);
+    generate's answer. A task named after ``job_name`` and the time."""
+    settings = pipeline.blockwise_config[0].params
+    input_params = pipeline.inputs[0].params
+    output_params = pipeline.outputs[0].params
+
+    # The output is a zarr: without a trailing slash, and with .zarr added
+    # when the path has none.
+    output_path = output_params["dataset_path"].rstrip("/\\")
+    if ".zarr" not in output_path:
+        output_path += ".zarr"
+
+    # The job name the user typed, if any, names the task: the YAML, the
+    # master job, the daisy task, the workers and the logs.
+    task_name = _make_task_name(job_name, datetime.now().strftime("%Y%m%d_%H%M%S"))
+    task = {
+        "data_path": input_params["dataset_path"],
+        "output_path": output_path,
+        "task_name": task_name,
+        "charge_group": settings.charge_group,
+        "queue": settings.queue,
+        "workers": settings.nb_workers,
+        "cpu_workers": settings.nb_cores_worker,
+        "tmp_dir": settings.tmp_dir,
+        # Each worker's -W; the master gets the same (see submit).
+        "walltime": _task_walltime(),
+        "models": [_model_entry(model) for model in pipeline.models],
+    }
+
+    bounding_boxes = input_params.get("bounding_boxes", [])
+    if bounding_boxes and isinstance(bounding_boxes, list):
+        task["bounding_boxes"] = bounding_boxes
+    separate_zarrs = input_params.get("separate_bounding_boxes_zarrs", False)
+    if separate_zarrs:
+        task["separate_bounding_boxes_zarrs"] = True
+    if len(pipeline.models) > 1 and pipeline.model_mode:
+        task["model_mode"] = pipeline.model_mode
+    if pipeline.normalizers or pipeline.postprocessors:
+        task["json_data"] = {
+            INPUT_NORM_KEY: _chain_steps(pipeline.normalizers),
+            POSTPROCESS_KEY: _chain_steps(pipeline.postprocessors),
+        }
+    output_channels = output_params.get("output_channels", [])
+    if output_channels and isinstance(output_channels, list):
+        task["output_channels"] = output_channels
+
+    tasks_dir = get_session().tasks_dir()
+    if separate_zarrs and bounding_boxes:
+        # One task per box, each writing its own box_<n> zarr in the output.
+        task_paths = [
+            _write_task(tasks_dir, {
+                **task,
+                "bounding_boxes": [bbox],
+                "output_path": os.path.join(output_path, f"box_{n}"),
+                "task_name": f"{task_name}_box{n}",
+            })
+            for n, bbox in enumerate(bounding_boxes, start=1)
+        ]
+    else:
+        task_paths = [_write_task(tasks_dir, task)]
+
+    return {
+        "success": True,
+        # The task before it is split per box, for the builder's console.
+        "task_yaml": _task_text(task),
+        "task_config": task,
+        "task_paths": task_paths,
+        "task_name": task_name,
+        "message": "Blockwise task generated successfully"
+    }
 
 
 @blockwise_bp.route("/api/blockwise/generate", methods=["POST"])
 def generate_blockwise_task():
-    """Generate blockwise task YAML files"""
+    """Write the task YAML the blockwise CLI runs, for the builder's pipeline;
+    one per bounding box when each box gets its own zarr.
+
+    {"success": True, "task_paths", "task_name", "task_yaml", "task_config",
+    "message"}, or {"success": False, "error"}.
+    """
+    body, refused = _read(BlockwiseGenerate, "success")
+    if refused:
+        return refused
     try:
-        data = request.get_json()
-        pipeline = data.get("pipeline", {})
-
-        # First validate
-        validation = validate_blockwise()
-        if not validation.get("valid"):
-            return {"success": False, "error": validation.get("error")}
-
-        # Get blockwise config
-        blockwise_config = pipeline["blockwise_config"][0]
-        input_node = pipeline["inputs"][0]
-        output_node = pipeline["outputs"][0]
-
-        # Get output path and ensure it ends with .zarr
-        output_path = output_node["params"]["dataset_path"]
-        if output_path:
-            # Remove trailing slashes
-            output_path = output_path.rstrip('/\\')
-            # Add .zarr if not already present
-            if '.zarr' not in output_path:
-                output_path = output_path + '.zarr'
-
-        # Create task YAML content
-        task_name = f"cellmap_flow_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-        task_yaml = {
-            "data_path": input_node["params"]["dataset_path"],
-            "output_path": output_path,
-            "task_name": task_name,
-            "charge_group": blockwise_config["params"]["charge_group"],
-            "queue": blockwise_config["params"]["queue"],
-            "workers": blockwise_config["params"]["nb_workers"],
-            "cpu_workers": blockwise_config["params"]["nb_cores_worker"],
-            "tmp_dir": blockwise_config["params"]["tmp_dir"],
-            "models": []
-        }
-
-        # Add bounding_boxes from INPUT node if they exist
-        bounding_boxes = input_node.get("params", {}).get("bounding_boxes", [])
-        if bounding_boxes and isinstance(bounding_boxes, list) and len(bounding_boxes) > 0:
-            task_yaml["bounding_boxes"] = bounding_boxes
-            logger.info(f"Adding bounding_boxes to YAML: {len(bounding_boxes)} box(es)")
-
-        # Add separate_bounding_boxes_zarrs flag from INPUT node if set
-        separate_zarrs = input_node.get("params", {}).get("separate_bounding_boxes_zarrs", False)
-        if separate_zarrs:
-            task_yaml["separate_bounding_boxes_zarrs"] = True
-            logger.info("Adding separate_bounding_boxes_zarrs: True")
-
-        # Add model_mode if multiple models are present and a merge mode is selected
-        model_count = len(pipeline.get("models", []))
-        model_mode = pipeline.get("model_mode", "")
-        if model_count > 1 and model_mode:
-            task_yaml["model_mode"] = model_mode
-            logger.info(f"Adding model_mode: {model_mode} for {model_count} models")
-
-        # Add models with full config
-        for model in pipeline.get("models", []):
-            model_entry = {
-                "name": model.get("name"),
-                **model.get("params", model.get("config", {}))
-            }
-            # Parse string representations of lists/tuples back to actual lists for specific fields
-            for field in ["channels", "input_size", "output_size", "input_voxel_size", "output_voxel_size"]:
-                if field in model_entry:
-                    value = model_entry[field]
-                    # If it's already a list, keep it
-                    if isinstance(value, (list, tuple)):
-                        model_entry[field] = list(value)
-                        logger.info(f"Field {field} is already a list: {model_entry[field]}")
-                    # If it's a string that looks like a list/tuple, parse it
-                    elif isinstance(value, str):
-                        value_stripped = value.strip().strip("'\"")  # Remove outer quotes
-                        if (value_stripped.startswith('[') or value_stripped.startswith('(')) and \
-                           (value_stripped.endswith(']') or value_stripped.endswith(')')):
-                            try:
-                                # Fix unquoted identifiers: convert [mito] to ['mito']
-                                fixed_value = re.sub(r'\b([a-zA-Z_][a-zA-Z0-9_]*)\b', r"'\1'", value_stripped)
-                                # Remove duplicate quotes: ''mito'' -> 'mito'
-                                fixed_value = re.sub(r"''+", "'", fixed_value)
-                                logger.info(f"Fixing {field}: {value_stripped!r} -> {fixed_value!r}")
-
-                                parsed = ast.literal_eval(fixed_value)
-                                if isinstance(parsed, (list, tuple)):
-                                    model_entry[field] = list(parsed)
-                                    logger.info(f"Parsed {field} from string {value!r} to list {model_entry[field]}")
-                            except Exception as e:
-                                logger.warning(f"Failed to parse {field}: {value}, error: {e}")
-
-            task_yaml["models"].append(model_entry)
-
-        # Serialize normalizers and postprocessors to json_data format
-        normalizers_list = pipeline.get("normalizers", [])
-        postprocessors_list = pipeline.get("postprocessors", [])
-
-        # Create json_data for blockwise processor - maintain order by using list iteration order
-        if normalizers_list or postprocessors_list:
-            try:
-                # Build normalizers dict - preserve insertion order from normalizers_list
-                norm_fns = {}
-                for norm in normalizers_list:
-                    if isinstance(norm, dict):
-                        norm_name = norm.get("name")
-                        norm_params = norm.get("params", {})
-                    else:
-                        continue
-                    if norm_name:
-                        norm_fns[norm_name] = norm_params
-
-                # Build postprocessors dict - preserve insertion order from postprocessors_list
-                post_fns = {}
-                for post in postprocessors_list:
-                    if isinstance(post, dict):
-                        post_name = post.get("name")
-                        post_params = post.get("params", {})
-                    else:
-                        continue
-                    if post_name:
-                        post_fns[post_name] = post_params
-
-                # Create json_data as dict (not JSON string) using the correct key constants
-                json_data_dict = {
-                    INPUT_NORM_DICT_KEY: norm_fns,
-                    POSTPROCESS_DICT_KEY: post_fns
-                }
-                # Store as dict (YAML will handle it properly)
-                task_yaml["json_data"] = json_data_dict
-                logger.info(f"Added json_data as dict with {len(normalizers_list)} normalizers and {len(postprocessors_list)} postprocessors")
-            except Exception as e:
-                logger.warning(f"Failed to create json_data: {e}")
-
-        # Add output_channels from OUTPUT node if configured
-        output_channels = output_node.get("params", {}).get("output_channels", [])
-        if output_channels and isinstance(output_channels, list) and len(output_channels) > 0:
-            task_yaml["output_channels"] = output_channels
-            logger.info(f"Adding output_channels to YAML: {output_channels}")
-
-        # Convert to YAML format with proper list handling
-        yaml_content = yaml.dump(task_yaml, default_flow_style=False, allow_unicode=True, sort_keys=False)
-
-        # Save to file
-        yaml_filename = f"{task_name}.yaml"
-        tasks_dir = get_blockwise_tasks_dir()
-        yaml_path = os.path.join(tasks_dir, yaml_filename)
-
-        # Check if we need to generate multiple YAMLs (one per bbox with separate output paths)
-        output_base_path = output_path
-        yaml_paths = []
-
-        if separate_zarrs and bounding_boxes and len(bounding_boxes) > 0:
-            # Generate separate YAML for each bounding box
-            logger.info(f"Generating separate YAMLs for {len(bounding_boxes)} bounding box(es)")
-            for bbox_idx, bbox in enumerate(bounding_boxes):
-                # Create a copy of task_yaml for this bbox
-                bbox_task_yaml = task_yaml.copy()
-
-                # Keep only this bbox in bounding_boxes
-                bbox_task_yaml["bounding_boxes"] = [bbox]
-
-                # Set output path to box_X subdirectory
-                bbox_output_path = os.path.join(output_base_path, f"box_{bbox_idx + 1}")
-                bbox_task_yaml["output_path"] = bbox_output_path
-
-                # Update task name to include bbox index
-                bbox_task_name = f"{task_name}_box{bbox_idx + 1}"
-                bbox_task_yaml["task_name"] = bbox_task_name
-
-                # Convert to YAML
-                bbox_yaml_content = yaml.dump(bbox_task_yaml, default_flow_style=False, allow_unicode=True, sort_keys=False)
-
-                # Save bbox YAML
-                bbox_yaml_filename = f"{bbox_task_name}.yaml"
-                bbox_yaml_path = os.path.join(tasks_dir, bbox_yaml_filename)
-                with open(bbox_yaml_path, 'w') as f:
-                    f.write(bbox_yaml_content)
-
-                yaml_paths.append(bbox_yaml_path)
-                logger.info(f"Generated bbox {bbox_idx + 1} YAML at: {bbox_yaml_path}")
-        else:
-            # Single YAML for all bboxes
-            with open(yaml_path, 'w') as f:
-                f.write(yaml_content)
-            yaml_paths = [yaml_path]
-            logger.info(f"Generated blockwise task YAML at: {yaml_path}")
-
-        logger.info(f"Task YAML content:\n{yaml_content}")
-
-        return {
-            "success": True,
-            "task_yaml": yaml_content,
-            "task_config": task_yaml,
-            "task_paths": yaml_paths,
-            "task_name": task_name,
-            "message": "Blockwise task generated successfully"
-        }
-
+        return _generate(body.pipeline, body.job_name)
     except Exception as e:
         logger.error(f"Task generation error: {str(e)}")
         return {"success": False, "error": str(e)}
@@ -263,92 +246,106 @@ def generate_blockwise_task():
 
 @blockwise_bp.route("/api/blockwise/precheck", methods=["POST"])
 def precheck_blockwise_task():
-    """Precheck blockwise task configuration using already-generated YAML"""
+    """Check the task YAMLs generate wrote, as blockwise_processor.precheck
+    does: {"success": True, "message": "success"}, or {"success": False,
+    "error"} with the first one's problem."""
+    body, refused = _read(BlockwisePrecheck, "success")
+    if refused:
+        return refused
     try:
-        from cellmap_flow.blockwise.blockwise_processor import CellMapFlowBlockwiseProcessor
+        # precheck() rather than constructing the processor: that created the
+        # output arrays, loaded every model into this process, and replaced
+        # the dashboard's live chain.
+        from cellmap_flow.blockwise.blockwise_processor import precheck
 
-        data = request.get_json()
-        yaml_paths = data.get("yaml_paths", [])
-
-        if not yaml_paths:
-            return {"success": False, "error": "No YAML paths provided. Please generate task first."}
-
-        # Try to instantiate the processor to validate configuration with the first YAML
-        try:
-            _ = CellMapFlowBlockwiseProcessor(yaml_paths[0], create=True)
-            logger.info(f"Blockwise precheck passed for: {yaml_paths[0]}")
-            return {
-                "success": True,
-                "message": "success"
-            }
-        except Exception as e:
-            logger.error(f"Blockwise precheck failed: {str(e)}")
-            return {"success": False, "error": str(e)}
+        for yaml_path in body.yaml_paths:
+            precheck(yaml_path)
+        logger.info(f"Blockwise precheck passed for: {', '.join(body.yaml_paths)}")
+        return {"success": True, "message": "success"}
 
     except Exception as e:
-        logger.error(f"Precheck error: {str(e)}")
+        logger.error(f"Blockwise precheck failed: {str(e)}")
         return {"success": False, "error": str(e)}
 
 
 @blockwise_bp.route("/api/blockwise/submit", methods=["POST"])
 def submit_blockwise_task():
-    """Submit blockwise task to LSF"""
+    """Submit the task's master to LSF, which runs the task's workers.
+
+    {"success": True, "job_id", "task_name", "task_paths", "log_path",
+    "command", "message"}, or {"success": False, "error"}; "job_id" is
+    "unknown" when bsub accepted the job without naming it.
+    """
+    body, refused = _read(BlockwiseSubmit, "success")
+    if refused:
+        return refused
     try:
-        data = request.get_json()
-        pipeline = data.get("pipeline", {})
-        job_name = data.get("job_name", f"cellmap_flow_{int(time.time())}")
-
-        # First validate
-        validation = validate_blockwise()
-        if not validation.get("valid"):
-            return {"success": False, "error": validation.get("error")}
-
-        # Generate task YAML
-        gen_result = generate_blockwise_task()
-        if not gen_result.get("success"):
-            return {"success": False, "error": gen_result.get("error")}
-
-        yaml_paths = gen_result.get("task_paths", [gen_result.get("task_path")])
-        blockwise_config = pipeline["blockwise_config"][0]
-
-        # Build bsub command
-        cores_master = blockwise_config["params"]["nb_cores_master"]
-        charge_group = blockwise_config["params"]["charge_group"]
-        queue = blockwise_config["params"]["queue"]
-
-        bsub_cmd = [
-            "bsub",
-            "-J", job_name,
-            "-n", str(cores_master),
-            "-P", charge_group,
-            # "-q", queue,
-            "python", "-m", "cellmap_flow.blockwise.multiple_cli",
-        ] + yaml_paths
-
-        logger.info(f"Submitting LSF job: {' '.join(bsub_cmd)}")
-
-        # Submit job - use same environment as parent process
-        result = subprocess.run(bsub_cmd, capture_output=True, text=True, env=os.environ)
-
-        if result.returncode == 0:
-            output = result.stdout.strip()
-            logger.info(f"Job submitted successfully: {output}")
-
-            # Extract job ID from bsub output (format: "Job <12345> is submitted")
-            match = re.search(r'<(\d+)>', output)
-            job_id = match.group(1) if match else "unknown"
-
-            return {
-                "success": True,
-                "job_id": job_id,
-                "task_paths": yaml_paths,
-                "command": " ".join(bsub_cmd),
-                "message": f"Task submitted as job {job_id}"
-                }
+        # Submit the YAMLs that /api/blockwise/generate wrote and
+        # /api/blockwise/precheck checked, when the client sends them back.
+        # Regenerating writes new files under a new task name, so what ran
+        # was not what had been checked.
+        requested = body.yaml_paths
+        yaml_paths = _existing_task_paths(requested)
+        # The name generate gave the YAMLs; the page sends it back with them.
+        task_name = body.task_name
+        if yaml_paths is not None:
+            logger.info(f"Submitting the given task YAML(s): {', '.join(yaml_paths)}")
         else:
-            error_msg = result.stderr or result.stdout
+            if requested:
+                logger.warning(
+                    f"Not every given task YAML exists ({requested}); generating new ones"
+                )
+            generated = _generate(body.pipeline, body.job_name)
+            yaml_paths, task_name = generated["task_paths"], generated["task_name"]
+        settings = body.pipeline.blockwise_config[0].params
+
+        # The master carries the task's name, so `bjobs -J <task>` is the
+        # master and `bjobs -J "predict_*_<task>*"` are its workers.
+        job_name = _sanitize_job_name(task_name or body.job_name) or (
+            f"cellmap_flow_{int(time.time())}"
+        )
+
+        # The master is a CPU job on the default queue (no -q, no -gpu); the
+        # configured queue is for the workers and travels in the YAML.
+        spec = JobSpec(
+            name=job_name,
+            # This interpreter, not whatever "python" is first on the PATH
+            # the job inherits: that is the environment cellmap_flow is in.
+            # Run as it stands: nothing in it needs a shell. -P keeps the
+            # job's working directory off sys.path, where another cellmap-flow
+            # checkout would shadow the installed one.
+            argv=(sys.executable, "-P", "-m", "cellmap_flow.blockwise.multiple_cli", *yaml_paths),
+            queue=None,
+            gpus=0,
+            cpus=settings.nb_cores_master,
+            charge_group=settings.charge_group,
+            walltime=_task_walltime(),
+            log_dir=get_session().tasks_dir(),
+        )
+        bsub_cmd = jobs_lsf.bsub_argv(spec)
+        log_pattern = str(jobs_lsf.log_pattern(spec))
+
+        try:
+            # No timeout: an over-ratio request is held for minutes before
+            # bsub answers, and the job still lands.
+            job_id = jobs_lsf.submit(spec, bsub_timeout=None).job_id
+        except jobs_lsf.JobIdMissingError as e:
+            logger.warning(f"Submitted, but bsub gave no job id: {e.output}")
+            job_id = "unknown"
+        except subprocess.CalledProcessError as e:
+            error_msg = e.stderr or e.stdout
             logger.error(f"LSF submission failed: {error_msg}")
             return {"success": False, "error": f"LSF error: {error_msg}"}
+
+        return {
+            "success": True,
+            "job_id": job_id,
+            "task_name": job_name,
+            "task_paths": yaml_paths,
+            "log_path": log_pattern.replace("%J", job_id),
+            "command": " ".join(bsub_cmd),
+            "message": f"Task {job_name} submitted as job {job_id}"
+        }
 
     except Exception as e:
         logger.error(f"Submission error: {str(e)}")

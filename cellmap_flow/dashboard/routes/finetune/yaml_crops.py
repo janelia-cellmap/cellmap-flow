@@ -14,82 +14,62 @@ Painted scribbles + imported GT crops therefore share one source of truth
 (the volume zarr). The user can paint over imports to fix GT errors or to
 add corrections in regions the GT doesn't cover. The trainer sees the
 union by construction.
+
+Routes: POST ``/api/finetune/load-crops`` (the import), GET
+``/api/finetune/load-crops-progress`` (how far an import has got) and GET
+``/api/finetune/read-yaml`` (a YAML file's text, for the editor).
 """
 
 import logging
-import os
-import threading
 import time
-import uuid
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime
 
-import numpy as np
-import zarr
-from flask import jsonify
+from flask import jsonify, request
 from pydantic import ValidationError
 
-from cellmap_flow.utils.model_geometry import resolve_model_geometry
-
-# Module-level progress tracker, keyed by load_id supplied by the client.
-# Each value is the most recent progress snapshot for that load + its
-# final result (or None while in progress). Old entries are evicted after
-# 5 minutes to bound memory.
-_PROGRESS: dict = {}
-_PROGRESS_LOCK = threading.Lock()
-_PROGRESS_TTL_SECONDS = 300
-
-
-def _set_progress(load_id, **fields):
-    if not load_id:
-        return
-    with _PROGRESS_LOCK:
-        entry = _PROGRESS.setdefault(load_id, {"created_at": time.time()})
-        entry.update(fields)
-        entry["updated_at"] = time.time()
-        now = time.time()
-        stale = [
-            k for k, v in _PROGRESS.items()
-            if now - v.get("updated_at", v.get("created_at", now)) > _PROGRESS_TTL_SECONDS
-        ]
-        for k in stale:
-            _PROGRESS.pop(k, None)
-
-
 from cellmap_flow.dashboard.finetune_utils import (
-    create_annotation_volume_zarr,
     ensure_minio_serving,
+    sync_annotation_volume_from_minio,
 )
+from cellmap_flow.dashboard.progress import Progress
+from cellmap_flow.dashboard.requests import LoadCrops, parse
 from cellmap_flow.dashboard.routes.finetune.annotation_core import (
     _get_selected_model_config,
-    _register_annotation_volume,
+    serve_new_volume,
 )
-from cellmap_flow.dashboard.routes.finetune.common import ensure_corrections_storage
-from cellmap_flow.dashboard.routes.finetune.overlay import refresh_annotated_regions_layer
+from cellmap_flow.dashboard.routes.finetune.blueprint import finetune_bp
+from cellmap_flow.dashboard.routes.finetune.common import (
+    current_chain,
+    ensure_corrections_storage,
+    session_store,
+)
+from cellmap_flow.dashboard.routes.finetune.overlay import (
+    add_annotation_layer,
+    refresh_annotated_regions_layer,
+)
+from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.finetune.crop_loader import (
-    _open_array,
-    _read_voxel_size_and_offset,
+    YamlFileRefused,
     parse_crops_yaml,
-    remap_labels,
+    read_yaml_file,
 )
-from cellmap_flow.finetune.virtual_dataset import write_manifest
-from cellmap_flow.globals import current_input_norm_config, current_postprocess_config, g
+from cellmap_flow.finetune.session.volume import (
+    build_manifest,
+    plan_volume,
+    write_crop_into_volume,
+)
+from cellmap_flow.finetune.session.manifest import write_manifest
+from cellmap_flow.models.geometry_cache import resolve_model_geometry
 
 logger = logging.getLogger(__name__)
+
+# Each import's progress, by the load_id the page sent with it: the phase,
+# the crop and tile it is on, and at the end what it imported.
+_PROGRESS = Progress()
 
 
 # ---------------------------------------------------------------------------
 # Volume bookkeeping
 # ---------------------------------------------------------------------------
-
-def _find_session_annotation_volume(corrections_dir):
-    """Return ``(volume_id, meta)`` for the annotation_volume in this corrections
-    dir, or ``(None, None)`` if none is registered yet."""
-    for vid, meta in (getattr(g, "annotation_volumes", {}) or {}).items():
-        if meta.get("corrections_dir") == corrections_dir:
-            return vid, meta
-    return None, None
-
 
 def _create_session_annotation_volume(
     *,
@@ -98,341 +78,53 @@ def _create_session_annotation_volume(
     model_name,
     config,
 ):
-    """Create a fresh annotation_volume.zarr in ``corrections_dir`` and register it.
+    """Create, serve and register a fresh volume in ``corrections_dir``.
 
-    Mirrors the body of ``create_annotation_volume_response`` minus the
-    HTTP-shaped response wrapping; returns the freshly-built ``(volume_id, meta)``.
+    What create-volume does, less the HTTP response: returns
+    ``(volume_id, record)``.
     """
-    from cellmap_flow.image_data_interface import ImageDataInterface
-    from cellmap_flow.utils.neuroglancer_utils import get_raw_closest_scale
-
-    read_shape = np.array(config.read_shape)
-    write_shape = np.array(config.write_shape)
-    claimed_input_voxel_size = np.array(config.input_voxel_size)
-    claimed_output_voxel_size = np.array(config.output_voxel_size)
-    output_size = (write_shape / claimed_output_voxel_size).astype(int)
-    input_size = (read_shape / claimed_input_voxel_size).astype(int)
-
-    try:
-        eff_output_vs = np.array(
-            get_raw_closest_scale(raw_dataset_path, tuple(claimed_output_voxel_size))
-            or claimed_output_voxel_size
-        )
-        eff_input_vs = np.array(
-            get_raw_closest_scale(raw_dataset_path, tuple(claimed_input_voxel_size))
-            or claimed_input_voxel_size
-        )
-    except Exception:
-        eff_output_vs = claimed_output_voxel_size
-        eff_input_vs = claimed_input_voxel_size
-
-    idi = ImageDataInterface(raw_dataset_path, voxel_size=eff_output_vs)
-    dataset_offset_nm = np.array(idi.roi.offset)
-    dataset_shape_nm = np.array(idi.roi.shape)
-    dataset_shape_voxels = (dataset_shape_nm / eff_output_vs).astype(int)
-    dataset_shape_voxels = (
-        np.ceil(dataset_shape_voxels / output_size).astype(int) * output_size
+    geometry = plan_volume(raw_dataset_path, config)
+    volume_id, zarr_path, minio_url = serve_new_volume(
+        geometry, corrections_dir, raw_dataset_path, model_name
     )
-
-    volume_id = (
-        f"vol-{uuid.uuid4().hex[:8]}-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
-    )
-    zarr_path = os.path.join(corrections_dir, f"{volume_id}.zarr")
-
-    success, info = create_annotation_volume_zarr(
-        zarr_path=zarr_path,
-        dataset_shape_voxels=dataset_shape_voxels,
-        output_voxel_size=eff_output_vs,
-        dataset_offset_nm=dataset_offset_nm,
-        chunk_size=output_size,
-        dataset_path=raw_dataset_path,
-        model_name=model_name,
-        input_size=input_size,
-        input_voxel_size=eff_input_vs,
-        claimed_output_voxel_size=claimed_output_voxel_size,
-        claimed_input_voxel_size=claimed_input_voxel_size,
-        # Snapshot whatever input_norm/postprocess the dashboard is currently
-        # using so the trainer can reproduce inference-side normalization and
-        # the generated finetuned yaml can reproduce output postprocessing.
-        input_norm_config=current_input_norm_config(),
-        postprocess_config=current_postprocess_config(),
-    )
-    if not success:
-        raise RuntimeError(f"create_annotation_volume_zarr failed: {info}")
-
-    minio_url = ensure_minio_serving(zarr_path, volume_id, output_base_dir=corrections_dir)
-    _register_annotation_volume(
+    record = session_store().register_volume(
         volume_id,
-        zarr_path=zarr_path,
-        model_name=model_name,
-        output_size=output_size.tolist(),
-        input_size=input_size.tolist(),
-        input_voxel_size=eff_input_vs.tolist(),
-        output_voxel_size=eff_output_vs.tolist(),
-        claimed_input_voxel_size=claimed_input_voxel_size.tolist(),
-        claimed_output_voxel_size=claimed_output_voxel_size.tolist(),
-        dataset_path=raw_dataset_path,
-        dataset_offset_nm=dataset_offset_nm.tolist(),
-        corrections_dir=corrections_dir,
         minio_url=minio_url,
+        **geometry.record(
+            zarr_path,
+            dataset_path=raw_dataset_path,
+            model_name=model_name,
+            corrections_dir=corrections_dir,
+        ),
     )
-    meta = g.annotation_volumes[volume_id]
-    return volume_id, meta
-
-
-def _ensure_editable_layer(volume_id, minio_url):
-    """Add the volume's MinIO-backed annotation layer to the viewer if absent."""
-    import neuroglancer
-
-    if not getattr(g, "viewer", None) or not minio_url:
-        return
-    layer_name = f"annotation_{volume_id}"
-    try:
-        with g.viewer.txn() as s:
-            if layer_name in s.layers:
-                return
-            source_config = {
-                "url": f"s3+{minio_url}/annotation",
-                "subsources": {"default": {"writingEnabled": True}, "bounds": {}},
-            }
-            s.layers[layer_name] = neuroglancer.SegmentationLayer(source=source_config)
-    except Exception as e:
-        logger.warning(f"Could not add editable layer for {volume_id}: {e}")
-
-
-# ---------------------------------------------------------------------------
-# Crop -> volume write
-# ---------------------------------------------------------------------------
-
-def _majority_vote_downsample(labels: np.ndarray, factors) -> np.ndarray:
-    """Downsample integer label data by exact per-axis block factors using
-    majority vote (mode) over each block.
-
-    Unlike single-point nearest-neighbor sampling (which always picks one
-    fixed corner of each block, e.g. scipy.ndimage.zoom's grid_mode=True
-    deterministically picks the block's *last* voxel on every axis), this
-    represents each output voxel by the value most common across its whole
-    footprint -- no systematic corner-bias, and fewer boundary voxels
-    flipped by picking an unrepresentative single sample.
-    """
-    factors = tuple(int(round(f)) for f in factors)
-    shape = labels.shape
-    trimmed_shape = tuple((s // f) * f for s, f in zip(shape, factors))
-    trimmed = labels[tuple(slice(0, s) for s in trimmed_shape)]
-    block_dims = tuple(s // f for s, f in zip(trimmed_shape, factors))
-    reshaped = trimmed.reshape(
-        block_dims[0], factors[0], block_dims[1], factors[1], block_dims[2], factors[2]
-    )
-    reshaped = reshaped.transpose(0, 2, 4, 1, 3, 5)
-    flat_blocks = reshaped.reshape(block_dims[0], block_dims[1], block_dims[2], -1)
-
-    best_count = np.zeros(block_dims, dtype=np.int32)
-    result = np.zeros(block_dims, dtype=labels.dtype)
-    for val in np.unique(labels):
-        count = (flat_blocks == val).sum(axis=-1)
-        better = count > best_count
-        result[better] = val
-        best_count[better] = count[better]
-    return result
-
-
-def _write_crop_into_volume(volume_meta, entry, *, progress_callback=None):
-    """Read a YAML crop's annotation, remap, and write it into volume[s0] at the
-    crop's physical offset. Returns the number of FG voxels written."""
-    t0 = time.time()
-    sub, src_voxel_size_nm, src_offset_nm = _read_voxel_size_and_offset(entry.path)
-    t_meta = time.time() - t0
-    t1 = time.time()
-    src_arr = _open_array(entry.path, sub)
-    src_data = src_arr[:]
-    t_read = time.time() - t1
-    if src_data.ndim != 3:
-        raise ValueError(
-            f"Crop {entry.path}: expected 3D (z, y, x), got shape {src_data.shape}"
-        )
-
-    eff_output_vs = np.array(volume_meta["output_voxel_size"], dtype=float)
-
-    t2 = time.time()
-    remapped = remap_labels(
-        src_data,
-        fg_ids=entry.fg_ids,
-        bg_ids=list(entry.bg_ids),
-        mode=entry.mode,
-        connected_components=entry.connected_components,
-    )
-    t_remap = time.time() - t2
-
-    if not np.allclose(src_voxel_size_nm, eff_output_vs):
-        scale_ratio = src_voxel_size_nm / eff_output_vs
-        logger.info(
-            f"Crop {entry.path} voxel size {tuple(src_voxel_size_nm)} != "
-            f"volume voxel size {tuple(eff_output_vs)}. Resampling by "
-            f"{tuple(scale_ratio)} before writing so the written data "
-            "occupies its true physical extent."
-        )
-
-        integer_factors = eff_output_vs / src_voxel_size_nm
-        if np.all(scale_ratio <= 1.0) and np.allclose(
-            integer_factors, np.round(integer_factors), atol=1e-6
-        ):
-            # Exact integer downsample: majority-vote (mode) over each
-            # block, rather than picking one arbitrary corner sample.
-            remapped = _majority_vote_downsample(remapped, integer_factors)
-        else:
-            from scipy.ndimage import zoom
-
-            # grid_mode=True aligns to pixel *centers* rather than the
-            # default's array-endpoint alignment (wrong, and increasingly
-            # so toward the edges) -- but it still samples a single fixed
-            # corner of each block, used here only as a fallback for
-            # non-integer ratios / upsampling where block-voting doesn't
-            # apply.
-            remapped = zoom(remapped, scale_ratio, order=0, grid_mode=True, mode="nearest")
-
-        # Collapsing multiple fine voxels into one coarse voxel shifts that
-        # coarse voxel's true center by half a *fine* voxel relative to the
-        # crop's own translate (which refers to fine voxel 0's center) --
-        # this is the same +scale_fine/2 accumulation OME-NGFF's own
-        # multiscale pyramids apply between levels (confirmed on this
-        # dataset's own zarr.json: s0->s1->s2 translations are
-        # 0 -> 4 -> 12nm). Omitting it introduces a systematic, one-sided
-        # sub-voxel offset -- confirmed by directly overlaying the written
-        # volume against the source crop in neuroglancer.
-        src_offset_nm = src_offset_nm + np.where(
-            scale_ratio < 1.0, src_voxel_size_nm / 2.0, 0.0
-        )
-
-    t3 = time.time()
-    n_fg = int(np.count_nonzero(remapped >= 2))
-    t_count = time.time() - t3
-    logger.info(
-        f"Crop {entry.path} prep: meta={t_meta:.2f}s read={t_read:.2f}s "
-        f"({src_data.nbytes/1e6:.1f} MB, dtype={src_data.dtype}, shape={src_data.shape}) "
-        f"remap={t_remap:.2f}s count_fg={t_count:.2f}s"
-    )
-
-    dataset_offset_nm = np.array(volume_meta["dataset_offset_nm"], dtype=float)
-    write_voxel_offset = np.round(
-        (src_offset_nm - dataset_offset_nm) / eff_output_vs
-    ).astype(int)
-    z0, y0, x0 = write_voxel_offset.tolist()
-    sz, sy, sx = remapped.shape
-
-    vol = zarr.open(volume_meta["zarr_path"], mode="r+")
-    arr = vol["annotation/s0"]
-    if (
-        z0 < 0 or y0 < 0 or x0 < 0
-        or z0 + sz > arr.shape[0]
-        or y0 + sy > arr.shape[1]
-        or x0 + sx > arr.shape[2]
-    ):
-        # The usual cause is not a bad translation but a crop belonging to a
-        # different dataset than the session: a crop annotated on a larger
-        # volume lands past the end of a smaller one, with everything about
-        # it internally consistent. Name the dataset this volume was built
-        # over so that is the first thing checked, since the path in the
-        # manifest often makes the mismatch obvious once it is put next to it.
-        raise ValueError(
-            f"Crop {entry.path} write region "
-            f"[{z0}:{z0+sz}, {y0}:{y0+sy}, {x0}:{x0+sx}] is outside the "
-            f"annotation volume, whose shape is {tuple(arr.shape)}. This "
-            f"volume was built over {volume_meta.get('dataset_path', 'an unknown dataset')}. "
-            "Check that the crop was annotated on that same dataset -- a crop "
-            "from a different one is the most common cause -- and otherwise "
-            "check its OME-NGFF translation against the dataset offset."
-        )
-
-    # Slice the crop into Z-aligned slabs and write them in parallel. Slabs
-    # are aligned to the underlying zarr chunk size so two slabs never
-    # touch the same chunk, making concurrent writes safe (zarr's chunk
-    # writes are per-chunk-file, no shared mutable state).
-    #
-    # Slab count tracks the LSF slot allocation so we always fully use what
-    # bsub gave us — capped by the number of chunk-aligned slabs we can
-    # actually produce.
-    from cellmap_flow.dashboard.finetune_utils import _get_sync_worker_count
-
-    chunk_z = max(int(arr.chunks[0]), 1)
-    max_chunk_slabs = int(np.ceil(sz / chunk_z))
-    n_slabs = max(1, min(_get_sync_worker_count(), max_chunk_slabs))
-    slab_size = int(np.ceil(sz / n_slabs / chunk_z) * chunk_z)
-    slabs = []
-    for s in range(n_slabs):
-        a = s * slab_size
-        b = min((s + 1) * slab_size, sz)
-        if a < b:
-            slabs.append((a, b))
-    n_slabs = len(slabs)
-
-    def _write_one(slab):
-        a, b = slab
-        arr[z0 + a : z0 + b, y0 : y0 + sy, x0 : x0 + sx] = remapped[a:b, :, :]
-
-    t4 = time.time()
-    written = 0
-    n_workers = max(1, n_slabs)
-    with ThreadPoolExecutor(max_workers=n_workers) as ex:
-        futures = [ex.submit(_write_one, s) for s in slabs]
-        for fut in as_completed(futures):
-            fut.result()  # surface any per-slab exception
-            written += 1
-            if progress_callback is not None:
-                progress_callback(written, n_slabs)
-    t_write = time.time() - t4
-    logger.info(
-        f"Crop {entry.path} write: {n_slabs} slabs, {n_workers} workers, "
-        f"{t_write:.2f}s total wall"
-    )
-
-    # Record this import in the volume's root attrs so the bounding-box
-    # overlay can surface it as a single yellow box per crop (vs. the
-    # per-chunk small boxes from painted scribbles).
-    vol_root = zarr.open(volume_meta["zarr_path"], mode="r+")
-    imported = list(vol_root.attrs.get("imported_crops", []))
-    imported.append(
-        {
-            "path": entry.path,
-            "name": entry.name,
-            "annotation_offset_voxels": [int(z0), int(y0), int(x0)],
-            "annotation_shape_voxels": [int(sz), int(sy), int(sx)],
-            "n_fg_voxels": int(n_fg),
-        }
-    )
-    vol_root.attrs["imported_crops"] = imported
-
-    return n_fg
+    return volume_id, record
 
 
 # ---------------------------------------------------------------------------
 # Endpoint
 # ---------------------------------------------------------------------------
 
-def load_crops_from_yaml_response(data):
+@finetune_bp.route("/api/finetune/load-crops", methods=["POST"])
+def load_crops_from_yaml():
     """Import crops from a YAML manifest into the session's annotation_volume.
 
-    Request JSON:
-        - ``model_name``: required
-        - ``output_path``: optional, base path for the session corrections dir
-        - ``yaml``: required, YAML text (or path to a YAML file)
-        - ``load_id``: optional UUID for live progress polling
+    Request JSON: see requests.LoadCrops.
     """
+    body, refused = parse(LoadCrops, request.get_json() or {})
+    if refused:
+        return refused
+    model_name, output_path, yaml_input, load_id = body.model_name, body.output_path, body.yaml, body.load_id
     try:
-        model_name = data.get("model_name")
-        output_path = data.get("output_path")
-        yaml_input = data.get("yaml")
-        load_id = data.get("load_id")
-        if load_id:
-            _set_progress(
-                load_id,
-                phase="starting",
-                current_path="",
-                tile_done=0,
-                tile_total=0,
-                crop_index=0,
-                n_crops=0,
-                done=False,
-            )
+        _PROGRESS.update(
+            load_id,
+            phase="starting",
+            current_path="",
+            tile_done=0,
+            tile_total=0,
+            crop_index=0,
+            n_crops=0,
+            done=False,
+        )
 
         started_at = time.time()
 
@@ -451,20 +143,19 @@ def load_crops_from_yaml_response(data):
             elapsed = time.time() - started_at
             stamped = f"[{elapsed:.0f}s] {message}"
             logger.info(stamped)
-            if load_id:
-                _set_progress(load_id, phase=phase, message=stamped, **extra)
-
-        if not yaml_input:
-            return jsonify({"success": False, "error": "Missing 'yaml' field"}), 400
-        if not model_name:
-            return jsonify({"success": False, "error": "Missing 'model_name' field"}), 400
+            _PROGRESS.update(load_id, phase=phase, message=stamped, **extra)
 
         step("setup", "Reading the crop manifest...")
         try:
             crops_config = parse_crops_yaml(yaml_input)
+        except YamlFileRefused as e:
+            return jsonify({"success": False, "error": str(e)}), 400
         except ValidationError as e:
+            # Only where and what: each error's "input" is the offending
+            # value, which for a top-level error is the whole document.
+            details = [{"loc": list(err["loc"]), "msg": err["msg"]} for err in e.errors()]
             return (
-                jsonify({"success": False, "error": "YAML validation failed", "details": e.errors()}),
+                jsonify({"success": False, "error": "YAML validation failed", "details": details}),
                 400,
             )
         except Exception as e:
@@ -484,7 +175,7 @@ def load_crops_from_yaml_response(data):
         if error_response is not None:
             return error_response
 
-        raw_dataset_path = getattr(g, "dataset_path", None)
+        raw_dataset_path = get_session().dataset_path
         if not raw_dataset_path:
             return jsonify({"success": False, "error": "No raw dataset path configured"}), 400
 
@@ -494,7 +185,7 @@ def load_crops_from_yaml_response(data):
         # Reuse the session's annotation_volume if the user already created one
         # (via "New Volume" or "Resume Existing"). Otherwise spin up a fresh one
         # so the YAML import has a destination.
-        volume_id, volume_meta = _find_session_annotation_volume(corrections_dir)
+        volume_id, volume_meta = session_store().session_volume(corrections_dir)
         created_volume = False
         if volume_meta is None:
             step(
@@ -517,39 +208,53 @@ def load_crops_from_yaml_response(data):
             "Serving the volume through MinIO and adding the editable layer...",
             n_crops=n_crops,
         )
-        _ensure_editable_layer(volume_id, volume_meta.get("minio_url"))
+        viewer, minio_url = get_session().viewer, volume_meta.get("minio_url")
+        if viewer is not None and minio_url:
+            try:
+                # Kept if there: it may be the layer the user is painting.
+                add_annotation_layer(viewer, f"annotation_{volume_id}", f"{minio_url}/annotation",
+                                     keep_existing=True)
+            except Exception as e:
+                logger.warning(f"Could not add editable layer for {volume_id}: {e}")
+
+        if not created_volume:
+            # The crops are written into the local chunks and then mirrored
+            # up over MinIO's. Pull what was painted since the last sync
+            # first, or those chunks go up without the strokes.
+            try:
+                sync_annotation_volume_from_minio(volume_id)
+            except Exception as e:
+                logger.warning(f"Could not pull painted chunks of {volume_id} before the import: {e}")
 
         errors = []
         total_fg_written = 0
         for crop_index, entry in enumerate(crops_config.crops):
-            if load_id:
-                _set_progress(
-                    load_id,
-                    phase="crop_start",
-                    crop_index=crop_index,
-                    n_crops=n_crops,
-                    current_path=entry.path,
-                    tile_done=0,
-                    tile_total=0,
-                    done=False,
-                )
+            _PROGRESS.update(
+                load_id,
+                phase="crop_start",
+                crop_index=crop_index,
+                n_crops=n_crops,
+                current_path=entry.path,
+                tile_done=0,
+                tile_total=0,
+                done=False,
+            )
             try:
                 def _cb(done, total, ci=crop_index, p=entry.path):
-                    if load_id:
-                        _set_progress(
-                            load_id,
-                            phase="tile",
-                            crop_index=ci,
-                            n_crops=n_crops,
-                            current_path=p,
-                            tile_done=int(done),
-                            tile_total=int(total),
-                            done=False,
-                        )
+                    _PROGRESS.update(
+                        load_id,
+                        phase="tile",
+                        crop_index=ci,
+                        n_crops=n_crops,
+                        current_path=p,
+                        tile_done=int(done),
+                        tile_total=int(total),
+                        done=False,
+                    )
 
-                n_fg = _write_crop_into_volume(
+                n_fg = write_crop_into_volume(
                     volume_meta, entry, progress_callback=_cb
-                )
+                )["n_fg_voxels"]
                 total_fg_written += n_fg
                 logger.info(f"Imported crop {entry.path}: {n_fg} FG voxels")
             except Exception as e:
@@ -571,31 +276,27 @@ def load_crops_from_yaml_response(data):
 
         # Manifest: trainer reads from this single volume zarr. The
         # ``input_norm`` block carries the dashboard's current normalization
-        # so VirtualPatchDataset (running in the LSF trainer process where
-        # g.input_norms is empty) can apply the same normalization the
+        # so VirtualPatchDataset (running in the LSF trainer process, which
+        # has no chain of the dashboard's) can apply the same normalization the
         # dashboard does at inference time. Without this the trainer feeds
         # the model raw uint8 while inference feeds it [-1, 1] -- the
         # trained adapter is then nonsense at inference time.
-        manifest = {
-            "kind": "volume_zarr_v1",
-            "volume_zarr_path": volume_meta["zarr_path"],
-            "raw_dataset_path": raw_dataset_path,
-            "input_size_voxels": list(volume_meta["input_size"]),
-            "output_size_voxels": list(volume_meta["output_size"]),
-            "input_voxel_size_nm": list(volume_meta["input_voxel_size"]),
-            "output_voxel_size_nm": list(volume_meta["output_voxel_size"]),
-            # patches_per_epoch=None tells VirtualPatchDataset to default to
-            # "one patch per populated chunk" (full coverage). Explicit ints
-            # in the YAML pass through verbatim.
-            "patches_per_epoch": crops_config.patches_per_epoch,
-            "jitter_voxels": crops_config.jitter_voxels,
-            "seed": crops_config.seed,
-            "input_norm": current_input_norm_config(),
-            "postprocess": current_postprocess_config(),
-            # None → auto-balance dense vs sparse pools (50/50 when both
-            # exist, else use the surviving pool).
-            "dense_to_sparse_ratio": crops_config.dense_to_sparse_ratio,
-        }
+        input_norm, postprocess = current_chain()
+        manifest = build_manifest(
+            volume_meta,
+            input_norm=input_norm,
+            postprocess=postprocess,
+            overrides={
+                "raw_dataset_path": raw_dataset_path,
+                # None tells VirtualPatchDataset "one patch per populated
+                # chunk" (full coverage); explicit ints pass through.
+                "patches_per_epoch": crops_config.patches_per_epoch,
+                "jitter_voxels": crops_config.jitter_voxels,
+                "seed": crops_config.seed,
+                # None -> auto-balance dense vs sparse pools.
+                "dense_to_sparse_ratio": crops_config.dense_to_sparse_ratio,
+            },
+        )
         write_manifest(corrections_dir, manifest)
 
         try:
@@ -603,16 +304,15 @@ def load_crops_from_yaml_response(data):
         except Exception as e:
             logger.warning(f"refresh_annotated_regions_layer failed: {e}")
 
-        if load_id:
-            _set_progress(
-                load_id,
-                phase="done",
-                done=True,
-                n_crops_imported=n_crops - len(errors),
-                n_errors=len(errors),
-                volume_id=volume_id,
-                fg_voxels_written=total_fg_written,
-            )
+        _PROGRESS.update(
+            load_id,
+            phase="done",
+            done=True,
+            n_crops_imported=n_crops - len(errors),
+            n_errors=len(errors),
+            volume_id=volume_id,
+            fg_voxels_written=total_fg_written,
+        )
 
         return jsonify(
             {
@@ -627,39 +327,32 @@ def load_crops_from_yaml_response(data):
             }
         )
     except Exception as e:
-        logger.exception("load_crops_from_yaml_response failed")
+        logger.exception("Loading crops from a YAML failed")
         return jsonify({"success": False, "error": str(e)}), 500
 
 
 # ---------------------------------------------------------------------------
-# Auxiliary endpoints (file read + progress polling) — unchanged behavior
+# Auxiliary endpoints (progress polling + file read)
 # ---------------------------------------------------------------------------
 
-def get_load_crops_progress_response(load_id):
+@finetune_bp.route("/api/finetune/load-crops-progress", methods=["GET"])
+def get_load_crops_progress():
     """Return current progress for an in-flight ``/api/finetune/load-crops`` call."""
-    if not load_id:
-        return jsonify({"success": False, "error": "Missing 'load_id' query param"}), 400
-    with _PROGRESS_LOCK:
-        snapshot = _PROGRESS.get(load_id)
-        snapshot = dict(snapshot) if snapshot else None
-    if snapshot is None:
-        return jsonify({"success": False, "error": f"Unknown load_id {load_id}"}), 404
-    return jsonify({"success": True, "progress": snapshot})
+    return _PROGRESS.response(request.args.get("load_id"))
 
 
-def read_yaml_file_response(path):
-    """Return the contents of a YAML file so the dashboard can preview/edit it."""
+@finetune_bp.route("/api/finetune/read-yaml", methods=["GET"])
+def read_yaml():
+    """Return the contents of a YAML file so the dashboard can preview/edit it.
+
+    :func:`~cellmap_flow.finetune.crop_loader.read_yaml_file` decides which
+    files may be read: the dashboard listens on every interface, and this
+    used to return any file the user could read.
+    """
+    path = request.args.get("path")
     if not path:
         return jsonify({"success": False, "error": "Missing 'path' query param"}), 400
-    if not os.path.exists(path):
-        return jsonify({"success": False, "error": f"File not found: {path}"}), 404
-    if not os.path.isfile(path):
-        return jsonify({"success": False, "error": f"Not a file: {path}"}), 400
-    if os.path.getsize(path) > 1_000_000:
-        return jsonify({"success": False, "error": "File exceeds 1 MB; paste it directly instead"}), 400
     try:
-        with open(path) as f:
-            text = f.read()
-        return jsonify({"success": True, "text": text})
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 500
+        return jsonify({"success": True, "text": read_yaml_file(path)})
+    except YamlFileRefused as e:
+        return jsonify({"success": False, "error": str(e)}), 400
