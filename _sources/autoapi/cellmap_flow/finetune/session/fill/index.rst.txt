@@ -46,6 +46,7 @@ Functions
    cellmap_flow.finetune.session.fill.open_served_labels
    cellmap_flow.finetune.session.fill.fill_unpainted
    cellmap_flow.finetune.session.fill.rewrite_foreground
+   cellmap_flow.finetune.session.fill.restore_box
 
 
 Module Contents
@@ -101,23 +102,34 @@ Module Contents
    The bucket key is ``<volume_id>.zarr``, as for the sync.
 
 
-.. py:function:: fill_unpainted(state, volume_id, lo, hi, labels_for, local_zarr_path=None)
+.. py:function:: fill_unpainted(state, volume_id, lo, hi, labels_for, local_zarr_path=None, undo=None)
 
    Write ``labels_for(existing)`` into the box ``[lo, hi)`` where the volume holds 0.
 
    ``labels_for`` gets the box as MinIO holds it and returns labels of the
    same shape (0 for "leave as it is"). Returns ``(n_foreground,
    n_background)``: how many voxels were filled with each. Nothing is
-   written when nothing would change.
+   written when nothing would change. ``undo``, a list, gets ``(lo, hi,
+   before, after)`` appended when something was written (``restore_box``).
 
 
-.. py:function:: rewrite_foreground(state, volume_id, lo, hi, relabel, local_zarr_path=None)
+.. py:function:: rewrite_foreground(state, volume_id, lo, hi, relabel, local_zarr_path=None, undo=None)
 
    Write ``relabel(existing)``'s labels over the box's foreground voxels.
 
    ``relabel`` gets the box as MinIO holds it and returns ``(labels,
    counts)`` (``relabel_objects``); only foreground voxels (2 and up) whose
    label changed are written, so a stroke painted meanwhile elsewhere in
-   the box is kept. Returns ``(n_changed, counts)``.
+   the box is kept. Returns ``(n_changed, counts)``. ``undo``: as for
+   ``fill_unpainted``.
+
+
+.. py:function:: restore_box(state, volume_id, lo, hi, before, after)
+
+   Put the box back to ``before`` where it still holds ``after``: an undo.
+
+   Only voxels the action changed and nobody has touched since go back, so
+   a stroke painted in the box after the action is kept. Returns how many
+   voxels were restored.
 
 

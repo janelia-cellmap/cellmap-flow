@@ -172,6 +172,9 @@ and the periodic sync has nothing to revert.</p>
 <tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.finetune.session.fill.rewrite_foreground" title="cellmap_flow.finetune.session.fill.rewrite_foreground"><code class="xref py py-obj docutils literal notranslate"><span class="pre">rewrite_foreground</span></code></a>(state, volume_id, lo, hi, relabel)</p></td>
 <td><p>Write <code class="docutils literal notranslate"><span class="pre">relabel(existing)</span></code>'s labels over the box's foreground voxels.</p></td>
 </tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.session.fill.restore_box" title="cellmap_flow.finetune.session.fill.restore_box"><code class="xref py py-obj docutils literal notranslate"><span class="pre">restore_box</span></code></a>(state, volume_id, lo, hi, before, after)</p></td>
+<td><p>Put the box back to <code class="docutils literal notranslate"><span class="pre">before</span></code> where it still holds <code class="docutils literal notranslate"><span class="pre">after</span></code>: an undo.</p></td>
+</tr>
 </tbody>
 </table>
 </section>
@@ -231,22 +234,33 @@ below it. <code class="docutils literal notranslate"><span class="pre">split</sp
 
 <dl class="py function">
 <dt class="sig sig-object py" id="cellmap_flow.finetune.session.fill.fill_unpainted">
-<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.session.fill.</span></span><span class="sig-name descname"><span class="pre">fill_unpainted</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">state</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">volume_id</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lo</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">hi</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">labels_for</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">local_zarr_path</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.finetune.session.fill.fill_unpainted" title="Link to this definition"></a></dt>
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.session.fill.</span></span><span class="sig-name descname"><span class="pre">fill_unpainted</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">state</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">volume_id</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lo</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">hi</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">labels_for</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">local_zarr_path</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">undo</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.finetune.session.fill.fill_unpainted" title="Link to this definition"></a></dt>
 <dd><p>Write <code class="docutils literal notranslate"><span class="pre">labels_for(existing)</span></code> into the box <code class="docutils literal notranslate"><span class="pre">[lo,</span> <span class="pre">hi)</span></code> where the volume holds 0.</p>
 <p><code class="docutils literal notranslate"><span class="pre">labels_for</span></code> gets the box as MinIO holds it and returns labels of the
 same shape (0 for “leave as it is”). Returns <code class="docutils literal notranslate"><span class="pre">(n_foreground,</span>
 <span class="pre">n_background)</span></code>: how many voxels were filled with each. Nothing is
-written when nothing would change.</p>
+written when nothing would change. <code class="docutils literal notranslate"><span class="pre">undo</span></code>, a list, gets <code class="docutils literal notranslate"><span class="pre">(lo,</span> <span class="pre">hi,</span>
+<span class="pre">before,</span> <span class="pre">after)</span></code> appended when something was written (<code class="docutils literal notranslate"><span class="pre">restore_box</span></code>).</p>
 </dd></dl>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="cellmap_flow.finetune.session.fill.rewrite_foreground">
-<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.session.fill.</span></span><span class="sig-name descname"><span class="pre">rewrite_foreground</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">state</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">volume_id</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lo</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">hi</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">relabel</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">local_zarr_path</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.finetune.session.fill.rewrite_foreground" title="Link to this definition"></a></dt>
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.session.fill.</span></span><span class="sig-name descname"><span class="pre">rewrite_foreground</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">state</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">volume_id</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lo</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">hi</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">relabel</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">local_zarr_path</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">undo</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.finetune.session.fill.rewrite_foreground" title="Link to this definition"></a></dt>
 <dd><p>Write <code class="docutils literal notranslate"><span class="pre">relabel(existing)</span></code>’s labels over the box’s foreground voxels.</p>
 <p><code class="docutils literal notranslate"><span class="pre">relabel</span></code> gets the box as MinIO holds it and returns <code class="docutils literal notranslate"><span class="pre">(labels,</span>
 <span class="pre">counts)</span></code> (<code class="docutils literal notranslate"><span class="pre">relabel_objects</span></code>); only foreground voxels (2 and up) whose
 label changed are written, so a stroke painted meanwhile elsewhere in
-the box is kept. Returns <code class="docutils literal notranslate"><span class="pre">(n_changed,</span> <span class="pre">counts)</span></code>.</p>
+the box is kept. Returns <code class="docutils literal notranslate"><span class="pre">(n_changed,</span> <span class="pre">counts)</span></code>. <code class="docutils literal notranslate"><span class="pre">undo</span></code>: as for
+<code class="docutils literal notranslate"><span class="pre">fill_unpainted</span></code>.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.session.fill.restore_box">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.session.fill.</span></span><span class="sig-name descname"><span class="pre">restore_box</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">state</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">volume_id</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lo</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">hi</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">before</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">after</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.finetune.session.fill.restore_box" title="Link to this definition"></a></dt>
+<dd><p>Put the box back to <code class="docutils literal notranslate"><span class="pre">before</span></code> where it still holds <code class="docutils literal notranslate"><span class="pre">after</span></code>: an undo.</p>
+<p>Only voxels the action changed and nobody has touched since go back, so
+a stroke painted in the box after the action is kept. Returns how many
+voxels were restored.</p>
 </dd></dl>
 
 </section>

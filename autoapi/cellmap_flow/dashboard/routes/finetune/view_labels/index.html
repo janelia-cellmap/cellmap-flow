@@ -158,6 +158,9 @@ viewer afterwards to show the new labels.</p>
 <tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.view_labels.PREDICTION_TIMEOUT_SECONDS" title="cellmap_flow.dashboard.routes.finetune.view_labels.PREDICTION_TIMEOUT_SECONDS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PREDICTION_TIMEOUT_SECONDS</span></code></a></p></td>
 <td><p></p></td>
 </tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.view_labels.UNDO_DEPTH" title="cellmap_flow.dashboard.routes.finetune.view_labels.UNDO_DEPTH"><code class="xref py py-obj docutils literal notranslate"><span class="pre">UNDO_DEPTH</span></code></a></p></td>
+<td><p></p></td>
+</tr>
 </tbody>
 </table>
 </section>
@@ -183,6 +186,9 @@ viewer afterwards to show the new labels.</p>
 <tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.view_labels.split_view_objects" title="cellmap_flow.dashboard.routes.finetune.view_labels.split_view_objects"><code class="xref py py-obj docutils literal notranslate"><span class="pre">split_view_objects</span></code></a>()</p></td>
 <td><p>Relabel the box on screen's foreground by connected component.</p></td>
 </tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.view_labels.undo_view_labels" title="cellmap_flow.dashboard.routes.finetune.view_labels.undo_view_labels"><code class="xref py py-obj docutils literal notranslate"><span class="pre">undo_view_labels</span></code></a>()</p></td>
+<td><p>Take back the last Seed, All Background or Split of the session's volume.</p></td>
+</tr>
 </tbody>
 </table>
 </section>
@@ -201,6 +207,11 @@ viewer afterwards to show the new labels.</p>
 <dl class="py data">
 <dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.view_labels.PREDICTION_TIMEOUT_SECONDS">
 <span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.view_labels.</span></span><span class="sig-name descname"><span class="pre">PREDICTION_TIMEOUT_SECONDS</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">120</span></span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.view_labels.PREDICTION_TIMEOUT_SECONDS" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.view_labels.UNDO_DEPTH">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.view_labels.</span></span><span class="sig-name descname"><span class="pre">UNDO_DEPTH</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">10</span></span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.view_labels.UNDO_DEPTH" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py function">
@@ -266,6 +277,15 @@ fewer voxels are background).</p>
 in every slice it spans, and click; the two sides get ids of their own
 (<code class="docutils literal notranslate"><span class="pre">fill.relabel_objects</span></code>). A stroke joining two objects merges them.
 JSON body, all optional: <code class="docutils literal notranslate"><span class="pre">size_nm</span></code> and <code class="docutils literal notranslate"><span class="pre">confirm</span></code>, as for seed.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.view_labels.undo_view_labels">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.view_labels.</span></span><span class="sig-name descname"><span class="pre">undo_view_labels</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.view_labels.undo_view_labels" title="Link to this definition"></a></dt>
+<dd><p>Take back the last Seed, All Background or Split of the session’s volume.</p>
+<p>The box goes back to what it held before, on the voxels still as that
+action left them: a stroke painted there since is kept. 409 when there
+is nothing to undo.</p>
 </dd></dl>
 
 </section>

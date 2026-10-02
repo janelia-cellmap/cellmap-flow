@@ -38,6 +38,7 @@ Attributes
    cellmap_flow.dashboard.routes.finetune.view_labels.logger
    cellmap_flow.dashboard.routes.finetune.view_labels.LARGE_BOX_VOXELS
    cellmap_flow.dashboard.routes.finetune.view_labels.PREDICTION_TIMEOUT_SECONDS
+   cellmap_flow.dashboard.routes.finetune.view_labels.UNDO_DEPTH
 
 
 Functions
@@ -51,6 +52,7 @@ Functions
    cellmap_flow.dashboard.routes.finetune.view_labels.seed_view_from_prediction
    cellmap_flow.dashboard.routes.finetune.view_labels.label_view_background
    cellmap_flow.dashboard.routes.finetune.view_labels.split_view_objects
+   cellmap_flow.dashboard.routes.finetune.view_labels.undo_view_labels
 
 
 Module Contents
@@ -64,6 +66,10 @@ Module Contents
 
 .. py:data:: PREDICTION_TIMEOUT_SECONDS
    :value: 120
+
+
+.. py:data:: UNDO_DEPTH
+   :value: 10
 
 
 .. py:function:: seed_sources()
@@ -129,5 +135,14 @@ Module Contents
    in every slice it spans, and click; the two sides get ids of their own
    (``fill.relabel_objects``). A stroke joining two objects merges them.
    JSON body, all optional: ``size_nm`` and ``confirm``, as for seed.
+
+
+.. py:function:: undo_view_labels()
+
+   Take back the last Seed, All Background or Split of the session's volume.
+
+   The box goes back to what it held before, on the voxels still as that
+   action left them: a stroke painted there since is kept. 409 when there
+   is nothing to undo.
 
 

@@ -40,5 +40,6 @@ Submodules
    /autoapi/cellmap_flow/jobs/settings/index
    /autoapi/cellmap_flow/jobs/site/index
    /autoapi/cellmap_flow/jobs/spec/index
+   /autoapi/cellmap_flow/jobs/synced_tee/index
 
 

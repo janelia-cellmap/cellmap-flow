@@ -32,6 +32,8 @@ Attributes
    cellmap_flow.finetune.job_manager.submit.logger
    cellmap_flow.finetune.job_manager.submit.TRAINABLE_MODEL_TYPES
    cellmap_flow.finetune.job_manager.submit.MODEL_ENTRY_TYPES
+   cellmap_flow.finetune.job_manager.submit.SYNCED_TEE
+   cellmap_flow.finetune.job_manager.submit.TEE_PYTHON
 
 
 Functions
@@ -110,6 +112,14 @@ Module Contents
    The manifest's raw_dataset_path first -- it is what the trainer reads
    -- and only then the first correction zarr's attrs, which a crop zarr
    may not have.
+
+
+.. py:data:: SYNCED_TEE
+   :value: ''
+
+
+.. py:data:: TEE_PYTHON
+   :value: '/opt/hostedtoolcache/Python/3.11.16/x64/bin/python'
 
 
 .. py:function:: build_command(*, model_config, model_type: str, checkpoint_path: Optional[pathlib.Path], corrections_path: pathlib.Path, output_dir: pathlib.Path, log_file: pathlib.Path, channels: List[str], input_voxel_size: List[int], output_voxel_size: List[int], lora_r: int, num_epochs: int, batch_size: int, learning_rate: float, loss_type: str, label_smoothing: float, distillation_lambda: Optional[float], distillation_scope: str, margin: float, auto_serve: bool, serve_data_path: Optional[str], mask_unannotated: bool, balance_classes: bool, augment: bool, output_type: str, select_channel: Optional[int], offsets: Optional[str], models_dir: Optional[pathlib.Path] = None, queue: Optional[str] = None, charge_group: Optional[str] = None) -> str

@@ -154,7 +154,7 @@ rather than being stored beside the real one:</p>
 <li><p>The pipeline builder’s last apply: <code class="docutils literal notranslate"><span class="pre">builder_state</span></code>,
 <code class="docutils literal notranslate"><span class="pre">builder_model_configs</span></code>.</p></li>
 <li><p>Blockwise’s <code class="docutils literal notranslate"><span class="pre">tmp_dir</span></code> and <code class="docutils literal notranslate"><span class="pre">blockwise_tasks_dir</span></code>, and <code class="docutils literal notranslate"><span class="pre">tasks_dir()</span></code>.</p></li>
-<li><p>The finetune tab’s MinIO and volumes: <code class="docutils literal notranslate"><span class="pre">minio_state</span></code>,
+<li><p>The finetune tab’s MinIO and volumes: <code class="docutils literal notranslate"><span class="pre">minio_state</span></code>, <code class="docutils literal notranslate"><span class="pre">label_undo</span></code>,
 <code class="docutils literal notranslate"><span class="pre">annotation_volumes</span></code>, <code class="docutils literal notranslate"><span class="pre">output_sessions</span></code>; its training jobs’
 <code class="docutils literal notranslate"><span class="pre">finetune_job_manager</span></code>; the Review tab’s <code class="docutils literal notranslate"><span class="pre">review</span></code>.</p></li>
 <li><p>The log panel’s <code class="docutils literal notranslate"><span class="pre">log_buffer</span></code> and <code class="docutils literal notranslate"><span class="pre">log_clients</span></code>; the box tool’s
@@ -271,6 +271,11 @@ module global: tests/conftest.py installs a fresh Session for every test.</p>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="cellmap_flow.dashboard.state.Session.review">
 <span class="sig-name descname"><span class="pre">review</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.dashboard.state.Session.review" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.state.Session.label_undo">
+<span class="sig-name descname"><span class="pre">label_undo</span></span><a class="headerlink" href="#cellmap_flow.dashboard.state.Session.label_undo" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py attribute">

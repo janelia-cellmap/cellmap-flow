@@ -38,7 +38,7 @@ cellmap_flow.dashboard.state
    - The pipeline builder's last apply: ``builder_state``,
      ``builder_model_configs``.
    - Blockwise's ``tmp_dir`` and ``blockwise_tasks_dir``, and ``tasks_dir()``.
-   - The finetune tab's MinIO and volumes: ``minio_state``,
+   - The finetune tab's MinIO and volumes: ``minio_state``, ``label_undo``,
      ``annotation_volumes``, ``output_sessions``; its training jobs'
      ``finetune_job_manager``; the Review tab's ``review``.
    - The log panel's ``log_buffer`` and ``log_clients``; the box tool's
@@ -136,6 +136,9 @@ Module Contents
    .. py:attribute:: review
       :value: None
 
+
+
+   .. py:attribute:: label_undo
 
 
    .. py:attribute:: log_buffer
