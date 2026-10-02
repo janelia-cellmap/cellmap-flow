@@ -1,0 +1,103 @@
+cellmap_flow.serving.client
+===========================
+
+.. py:module:: cellmap_flow.serving.client
+
+.. autoapi-nested-parse::
+
+   Ask a running inference server about the model it is serving.
+
+   The dashboard runs wherever the jobs were launched from, which is frequently a
+   node with no usable GPU -- or, on LSF, one holding a single GPU in
+   ``exclusive_process`` mode that something else already has a context on. Building
+   the model there just to read its output shape is both wasteful and unreliable:
+   for a script-defined model it means re-downloading weights and re-running
+   torch.export, and it fails outright when a CUDA context cannot be created.
+
+   The inference server already loaded the model, on the node the job was actually
+   submitted to. Ask it instead.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.serving.client.logger
+   cellmap_flow.serving.client.DEFAULT_TIMEOUT_SECONDS
+   cellmap_flow.serving.client.GEOMETRY_FIELDS
+   cellmap_flow.serving.client.OPTIONAL_FIELDS
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.serving.client.fetch_model_info
+   cellmap_flow.serving.client.model_geometry
+   cellmap_flow.serving.client.running_job_host
+   cellmap_flow.serving.client.geometry_stand_in
+   cellmap_flow.serving.client.model_geometry_config
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:data:: DEFAULT_TIMEOUT_SECONDS
+   :value: 3
+
+
+.. py:function:: fetch_model_info(host: str, timeout: float = DEFAULT_TIMEOUT_SECONDS) -> dict
+
+   Return the server's model info, or ``{"available": False, "reason": ...}``.
+
+   Never raises: an unreachable server is an ordinary state here (the job may
+   still be queued), not an error the caller should have to handle.
+
+
+.. py:function:: model_geometry(info: dict)
+
+   Pull the finetune tab's geometry out of a model_info payload.
+
+   Returns None when the payload has no geometry -- an older server, which
+   reported only the output activation.
+
+
+.. py:function:: running_job_host(model_name)
+
+   The host serving ``model_name``, if a job for it is up.
+
+
+.. py:data:: GEOMETRY_FIELDS
+   :value: ('read_shape', 'write_shape', 'input_voxel_size', 'output_voxel_size', 'output_channels')
+
+
+.. py:data:: OPTIONAL_FIELDS
+   :value: ('channels',)
+
+
+.. py:function:: geometry_stand_in(fields)
+
+   A stand-in for ``ModelConfig.config`` with the geometry in ``fields``, or None.
+
+   ``fields`` is a model_info payload or a geometry cache entry. The
+   stand-in has the config's attribute names, so callers that only read
+   shapes and voxel sizes, and ModelGeometry.from_config, take it as the
+   config. Every GEOMETRY_FIELDS entry, or nothing: callers use it as
+   ``stand_in or model_config.config``, and a SimpleNamespace missing one
+   attribute is still truthy, so a partial answer would defeat the fallback
+   and raise AttributeError deep in the caller instead.
+
+
+.. py:function:: model_geometry_config(model_name, timeout=DEFAULT_TIMEOUT_SECONDS)
+
+   The geometry of ``model_name``'s running server, as a geometry_stand_in.
+
+   None when no running server can answer, or an older one cannot report
+   all of it, leaving the caller to fall back.
+
+

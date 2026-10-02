@@ -10,7 +10,12 @@ Submodules
 .. toctree::
    :maxdepth: 1
 
+   /autoapi/cellmap_flow/cli/aliases/index
    /autoapi/cellmap_flow/cli/cli/index
+   /autoapi/cellmap_flow/cli/common/index
+   /autoapi/cellmap_flow/cli/doctor/index
+   /autoapi/cellmap_flow/cli/infer/index
+   /autoapi/cellmap_flow/cli/main/index
    /autoapi/cellmap_flow/cli/server_cli/index
    /autoapi/cellmap_flow/cli/viewer_cli/index
    /autoapi/cellmap_flow/cli/yaml_cli/index

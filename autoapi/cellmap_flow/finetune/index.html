@@ -10,7 +10,6 @@
       <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../../../_static/graphviz.css?v=4ae1632d" />
-      <link rel="stylesheet" type="text/css" href="../../../_static/mystnb.11b39860a7a0cbfd473a3ad8a317855267ff0bd372690045ca344a6b62be495e.css" />
       <link rel="stylesheet" type="text/css" href="../../../_static/css/custom.css" />
 
   
@@ -20,12 +19,11 @@
       <script src="../../../_static/documentation_options.js?v=5929fcd5"></script>
       <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
-      <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
     <script src="../../../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../../../genindex.html" />
     <link rel="search" title="Search" href="../../../search.html" />
-    <link rel="next" title="cellmap_flow.finetune.build_corrections" href="build_corrections/index.html" />
-    <link rel="prev" title="cellmap_flow.dashboard.routes.pipeline_builder_page" href="../dashboard/routes/pipeline_builder_page/index.html" /> 
+    <link rel="next" title="cellmap_flow.finetune.adaptation" href="adaptation/index.html" />
+    <link rel="prev" title="cellmap_flow.dashboard.state" href="../dashboard/state/index.html" /> 
 </head>
 
 <body class="wy-body-for-nav"> 
@@ -50,27 +48,44 @@
               <p class="caption" role="heading"><span class="caption-text">CellMap-Flow API:</span></p>
 <ul class="current">
 <li class="toctree-l1"><a class="reference internal" href="../../../install.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../cli.html">Command line</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../scripts.html">Python Scripts</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../yaml_config.html">YAML Configuration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../data_paths.html">Data paths</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../huggingface.html">HuggingFace Models</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../custom_script.html">Custom Model</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../post.html">PostProcessors</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../plugins.html">Plugins</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../review.html">Reviewing instances</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../viewer_api.html">Viewer layer API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../architecture.html">Architecture</a></li>
 <li class="toctree-l1 current"><a class="reference internal" href="../../index.html">API Reference</a><ul class="current">
 <li class="toctree-l2 current"><a class="reference internal" href="../index.html">cellmap_flow</a><ul class="current">
 <li class="toctree-l3 current"><a class="reference internal" href="../index.html#submodules">Submodules</a><ul class="current">
 <li class="toctree-l4"><a class="reference internal" href="../blockwise/index.html">cellmap_flow.blockwise</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../cli/index.html">cellmap_flow.cli</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../config/index.html">cellmap_flow.config</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../dashboard/index.html">cellmap_flow.dashboard</a></li>
 <li class="toctree-l4 current"><a class="current reference internal" href="#">cellmap_flow.finetune</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../globals/index.html">cellmap_flow.globals</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../image_data_interface/index.html">cellmap_flow.image_data_interface</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../inference/index.html">cellmap_flow.inference</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../inferencer/index.html">cellmap_flow.inferencer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../io/index.html">cellmap_flow.io</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../jobs/index.html">cellmap_flow.jobs</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../logging_setup/index.html">cellmap_flow.logging_setup</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../models/index.html">cellmap_flow.models</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../norm/index.html">cellmap_flow.norm</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../pipeline_spec/index.html">cellmap_flow.pipeline_spec</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../plugins/index.html">cellmap_flow.plugins</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../post/index.html">cellmap_flow.post</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../process_chain/index.html">cellmap_flow.process_chain</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../review/index.html">cellmap_flow.review</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../review_index/index.html">cellmap_flow.review_index</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../server/index.html">cellmap_flow.server</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../serving/index.html">cellmap_flow.serving</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../utils/index.html">cellmap_flow.utils</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../viewer/index.html">cellmap_flow.viewer</a></li>
 </ul>
 </li>
 </ul>
@@ -110,712 +125,35 @@
 <p>Human-in-the-loop finetuning for CellMap-Flow models.</p>
 <p>This package provides lightweight LoRA-based finetuning for pre-trained models
 using user corrections as training data.</p>
+<p>The names below are imported when first used (PEP 562): importing a light
+submodule – <code class="docutils literal notranslate"><span class="pre">markers</span></code> or <code class="docutils literal notranslate"><span class="pre">job_manager.tailer</span></code>, which the dashboard
+reads a training job’s log with – used to import torch, the trainer and the
+dataset code first.</p>
 <section id="submodules">
 <h2>Submodules<a class="headerlink" href="#submodules" title="Link to this heading"></a></h2>
 <div class="toctree-wrapper compound">
 <ul>
+<li class="toctree-l1"><a class="reference internal" href="adaptation/index.html">cellmap_flow.finetune.adaptation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="build_corrections/index.html">cellmap_flow.finetune.build_corrections</a></li>
+<li class="toctree-l1"><a class="reference internal" href="cli/index.html">cellmap_flow.finetune.cli</a></li>
 <li class="toctree-l1"><a class="reference internal" href="crop_loader/index.html">cellmap_flow.finetune.crop_loader</a></li>
+<li class="toctree-l1"><a class="reference internal" href="data/index.html">cellmap_flow.finetune.data</a></li>
 <li class="toctree-l1"><a class="reference internal" href="export_merged/index.html">cellmap_flow.finetune.export_merged</a></li>
 <li class="toctree-l1"><a class="reference internal" href="finetune_cli/index.html">cellmap_flow.finetune.finetune_cli</a></li>
-<li class="toctree-l1"><a class="reference internal" href="finetune_job_manager/index.html">cellmap_flow.finetune.finetune_job_manager</a></li>
 <li class="toctree-l1"><a class="reference internal" href="finetuned_model_templates/index.html">cellmap_flow.finetune.finetuned_model_templates</a></li>
+<li class="toctree-l1"><a class="reference internal" href="job_manager/index.html">cellmap_flow.finetune.job_manager</a></li>
+<li class="toctree-l1"><a class="reference internal" href="json_files/index.html">cellmap_flow.finetune.json_files</a></li>
 <li class="toctree-l1"><a class="reference internal" href="lora_trainer/index.html">cellmap_flow.finetune.lora_trainer</a></li>
 <li class="toctree-l1"><a class="reference internal" href="lora_wrapper/index.html">cellmap_flow.finetune.lora_wrapper</a></li>
+<li class="toctree-l1"><a class="reference internal" href="losses/index.html">cellmap_flow.finetune.losses</a></li>
+<li class="toctree-l1"><a class="reference internal" href="markers/index.html">cellmap_flow.finetune.markers</a></li>
+<li class="toctree-l1"><a class="reference internal" href="model_loading/index.html">cellmap_flow.finetune.model_loading</a></li>
+<li class="toctree-l1"><a class="reference internal" href="run_outputs/index.html">cellmap_flow.finetune.run_outputs</a></li>
+<li class="toctree-l1"><a class="reference internal" href="session/index.html">cellmap_flow.finetune.session</a></li>
+<li class="toctree-l1"><a class="reference internal" href="session_loop/index.html">cellmap_flow.finetune.session_loop</a></li>
 <li class="toctree-l1"><a class="reference internal" href="target_transforms/index.html">cellmap_flow.finetune.target_transforms</a></li>
-<li class="toctree-l1"><a class="reference internal" href="virtual_dataset/index.html">cellmap_flow.finetune.virtual_dataset</a></li>
 </ul>
 </div>
-</section>
-<section id="classes">
-<h2>Classes<a class="headerlink" href="#classes" title="Link to this heading"></a></h2>
-<table class="autosummary longtable docutils align-default">
-<tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.VirtualPatchDataset" title="cellmap_flow.finetune.VirtualPatchDataset"><code class="xref py py-obj docutils literal notranslate"><span class="pre">VirtualPatchDataset</span></code></a></p></td>
-<td><p>Yield random raw+annotation patches anchored on FG voxels in a volume zarr.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.finetune.LoRAFinetuner" title="cellmap_flow.finetune.LoRAFinetuner"><code class="xref py py-obj docutils literal notranslate"><span class="pre">LoRAFinetuner</span></code></a></p></td>
-<td><p>Trainer for finetuning models with LoRA adapters.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.DiceLoss" title="cellmap_flow.finetune.DiceLoss"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DiceLoss</span></code></a></p></td>
-<td><p>Dice Loss for segmentation tasks.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.finetune.CombinedLoss" title="cellmap_flow.finetune.CombinedLoss"><code class="xref py py-obj docutils literal notranslate"><span class="pre">CombinedLoss</span></code></a></p></td>
-<td><p>Combined Dice + BCE loss for better convergence.</p></td>
-</tr>
-</tbody>
-</table>
-</section>
-<section id="functions">
-<h2>Functions<a class="headerlink" href="#functions" title="Link to this heading"></a></h2>
-<table class="autosummary longtable docutils align-default">
-<tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.detect_adaptable_layers" title="cellmap_flow.finetune.detect_adaptable_layers"><code class="xref py py-obj docutils literal notranslate"><span class="pre">detect_adaptable_layers</span></code></a>(→ List[str])</p></td>
-<td><p>Automatically detect layers suitable for LoRA adaptation.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.finetune.wrap_model_with_lora" title="cellmap_flow.finetune.wrap_model_with_lora"><code class="xref py py-obj docutils literal notranslate"><span class="pre">wrap_model_with_lora</span></code></a>(→ torch.nn.Module)</p></td>
-<td><p>Wrap a PyTorch model with LoRA adapters using HuggingFace PEFT.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.print_lora_parameters" title="cellmap_flow.finetune.print_lora_parameters"><code class="xref py py-obj docutils literal notranslate"><span class="pre">print_lora_parameters</span></code></a>(model)</p></td>
-<td><p>Print statistics about trainable and total parameters in a LoRA model.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.finetune.load_lora_adapter" title="cellmap_flow.finetune.load_lora_adapter"><code class="xref py py-obj docutils literal notranslate"><span class="pre">load_lora_adapter</span></code></a>(→ torch.nn.Module)</p></td>
-<td><p>Load a pretrained LoRA adapter into a base model.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.save_lora_adapter" title="cellmap_flow.finetune.save_lora_adapter"><code class="xref py py-obj docutils literal notranslate"><span class="pre">save_lora_adapter</span></code></a>(model, output_path)</p></td>
-<td><p>Save only the LoRA adapter parameters (not the full model).</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.finetune.create_dataloader" title="cellmap_flow.finetune.create_dataloader"><code class="xref py py-obj docutils literal notranslate"><span class="pre">create_dataloader</span></code></a>(→ torch.utils.data.DataLoader)</p></td>
-<td><p>Build the training DataLoader for a corrections directory.</p></td>
-</tr>
-</tbody>
-</table>
-</section>
-<section id="package-contents">
-<h2>Package Contents<a class="headerlink" href="#package-contents" title="Link to this heading"></a></h2>
-<dl class="py function">
-<dt class="sig sig-object py" id="cellmap_flow.finetune.detect_adaptable_layers">
-<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.</span></span><span class="sig-name descname"><span class="pre">detect_adaptable_layers</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">torch.nn.Module</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">include_patterns</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">exclude_patterns</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">min_channels</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#cellmap_flow.finetune.detect_adaptable_layers" title="Link to this definition"></a></dt>
-<dd><p>Automatically detect layers suitable for LoRA adaptation.</p>
-<p>Searches for Conv2d, Conv3d, and Linear layers, filtering by name patterns.
-By default, only excludes batch/layer-norm style modules. Output/head
-layers are deliberately INCLUDED so the model can fully adapt its
-feature→output mapping for cross-domain finetuning. (Previously
-‘final’, ‘head’, ‘output’ were excluded; that left the output projection
-frozen, which prevented learning when the base model’s predictions on
-the target dataset were poor.)</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>model</strong> – PyTorch model to inspect</p></li>
-<li><p><strong>include_patterns</strong> – List of regex patterns for layer names to include
-If None, includes all Conv/Linear layers</p></li>
-<li><p><strong>exclude_patterns</strong> – List of substrings for layer names to exclude
-Default: [‘bn’, ‘norm’]</p></li>
-<li><p><strong>min_channels</strong> – Skip layers whose narrower side (in or out) is below
-this. 0 adapts everything. Narrow layers are where LoRA
-is expensive for nothing: PEFT builds lora_A as a
-full-kernel conv Cin -&gt; r, so on a 16-channel layer at
-full resolution the adapter is 4x the FLOPs of the layer
-it adapts and runs bandwidth-bound. On
-mito-aff-unet-setup-16 the seven layers under 96
-channels hold ~1% of the adapter’s parameters and cost
-41% of every training step (0.095 -&gt; 0.056 s at 178^3).</p></li>
-</ul>
-</dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>List of layer names suitable for LoRA adaptation</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py function">
-<dt class="sig sig-object py" id="cellmap_flow.finetune.wrap_model_with_lora">
-<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.</span></span><span class="sig-name descname"><span class="pre">wrap_model_with_lora</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">torch.nn.Module</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">target_modules</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lora_r</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">64</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lora_alpha</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">128</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lora_dropout</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">modules_to_save</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">task_type</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lora_min_channels</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">torch.nn.Module</span></span></span><a class="headerlink" href="#cellmap_flow.finetune.wrap_model_with_lora" title="Link to this definition"></a></dt>
-<dd><p>Wrap a PyTorch model with LoRA adapters using HuggingFace PEFT.</p>
-<p>This creates a PEFT model with LoRA adapters on specified layers.
-The base model is frozen, and only LoRA parameters are trainable.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>model</strong> – PyTorch model to wrap (e.g., UNet, CNN)</p></li>
-<li><p><strong>target_modules</strong> – List of layer names to adapt. If None, auto-detects.</p></li>
-<li><p><strong>lora_r</strong> – LoRA rank (number of low-rank dimensions)
-Higher = more capacity, more parameters
-Typical values: 4-32, default 8</p></li>
-<li><p><strong>lora_alpha</strong> – LoRA alpha (scaling factor)
-Controls strength of LoRA updates
-Typical: 2*r, default 16</p></li>
-<li><p><strong>lora_dropout</strong> – Dropout probability for LoRA layers (0.0-0.5, default 0.1)</p></li>
-<li><p><strong>lora_min_channels</strong> – When auto-detecting, skip layers narrower than this
-on either side; see detect_adaptable_layers. Ignored when
-target_modules is given explicitly. Default 0 (adapt all).</p></li>
-<li><p><strong>modules_to_save</strong> – Additional modules to make trainable (e.g., final layer)</p></li>
-<li><p><strong>task_type</strong> – PEFT task type. Options:
-- “FEATURE_EXTRACTION” (default, for general models)
-- “SEQ_CLS” (sequence classification)
-- “TOKEN_CLS” (token classification)
-- “CAUSAL_LM” (causal language modeling)</p></li>
-</ul>
-</dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>PEFT model with LoRA adapters</p>
-</dd>
-<dt class="field-odd">Raises<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>ImportError</strong> – If peft library is not installed</p></li>
-<li><p><strong>ValueError</strong> – If no adaptable layers found</p></li>
-</ul>
-</dd>
-</dl>
-<p class="rubric">Examples</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="c1"># Auto-detect and wrap all Conv/Linear layers</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">lora_model</span> <span class="o">=</span> <span class="n">wrap_model_with_lora</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">lora_r</span><span class="o">=</span><span class="mi">8</span><span class="p">)</span>
-</pre></div>
-</div>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="c1"># Wrap specific layers with custom config</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">lora_model</span> <span class="o">=</span> <span class="n">wrap_model_with_lora</span><span class="p">(</span>
-<span class="gp">... </span>    <span class="n">model</span><span class="p">,</span>
-<span class="gp">... </span>    <span class="n">target_modules</span><span class="o">=</span><span class="p">[</span><span class="s2">"encoder.conv1"</span><span class="p">,</span> <span class="s2">"encoder.conv2"</span><span class="p">],</span>
-<span class="gp">... </span>    <span class="n">lora_r</span><span class="o">=</span><span class="mi">16</span><span class="p">,</span>
-<span class="gp">... </span>    <span class="n">lora_alpha</span><span class="o">=</span><span class="mi">32</span><span class="p">,</span>
-<span class="gp">... </span>    <span class="n">modules_to_save</span><span class="o">=</span><span class="p">[</span><span class="s2">"final_conv"</span><span class="p">]</span>
-<span class="gp">... </span><span class="p">)</span>
-</pre></div>
-</div>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="c1"># Check trainable parameters</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">print_lora_parameters</span><span class="p">(</span><span class="n">lora_model</span><span class="p">)</span>
-</pre></div>
-</div>
-</dd></dl>
-
-<dl class="py function">
-<dt class="sig sig-object py" id="cellmap_flow.finetune.print_lora_parameters">
-<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.</span></span><span class="sig-name descname"><span class="pre">print_lora_parameters</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">torch.nn.Module</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.finetune.print_lora_parameters" title="Link to this definition"></a></dt>
-<dd><p>Print statistics about trainable and total parameters in a LoRA model.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>model</strong> – PEFT model with LoRA adapters</p>
-</dd>
-</dl>
-<p class="rubric">Examples</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">lora_model</span> <span class="o">=</span> <span class="n">wrap_model_with_lora</span><span class="p">(</span><span class="n">model</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">print_lora_parameters</span><span class="p">(</span><span class="n">lora_model</span><span class="p">)</span>
-<span class="go">Trainable params: 294,912 (1.2% of total)</span>
-<span class="go">Total params: 24,567,890</span>
-</pre></div>
-</div>
-</dd></dl>
-
-<dl class="py function">
-<dt class="sig sig-object py" id="cellmap_flow.finetune.load_lora_adapter">
-<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.</span></span><span class="sig-name descname"><span class="pre">load_lora_adapter</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">torch.nn.Module</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">adapter_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">is_trainable</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">torch.nn.Module</span></span></span><a class="headerlink" href="#cellmap_flow.finetune.load_lora_adapter" title="Link to this definition"></a></dt>
-<dd><p>Load a pretrained LoRA adapter into a base model.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>model</strong> – Base PyTorch model (without LoRA)</p></li>
-<li><p><strong>adapter_path</strong> – Path to saved LoRA adapter directory</p></li>
-<li><p><strong>is_trainable</strong> – If True, adapter parameters are trainable (for continued training)
-If False, adapter parameters are frozen (for inference)</p></li>
-</ul>
-</dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>PEFT model with loaded adapter</p>
-</dd>
-</dl>
-<p class="rubric">Examples</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="c1"># Load adapter for inference</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">model</span> <span class="o">=</span> <span class="n">load_lora_adapter</span><span class="p">(</span>
-<span class="gp">... </span>    <span class="n">base_model</span><span class="p">,</span>
-<span class="gp">... </span>    <span class="s2">"models/fly_organelles/v1.1.0/lora_adapter"</span>
-<span class="gp">... </span><span class="p">)</span>
-</pre></div>
-</div>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="c1"># Load adapter for continued training</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">model</span> <span class="o">=</span> <span class="n">load_lora_adapter</span><span class="p">(</span>
-<span class="gp">... </span>    <span class="n">base_model</span><span class="p">,</span>
-<span class="gp">... </span>    <span class="s2">"models/fly_organelles/v1.1.0/lora_adapter"</span><span class="p">,</span>
-<span class="gp">... </span>    <span class="n">is_trainable</span><span class="o">=</span><span class="kc">True</span>
-<span class="gp">... </span><span class="p">)</span>
-</pre></div>
-</div>
-</dd></dl>
-
-<dl class="py function">
-<dt class="sig sig-object py" id="cellmap_flow.finetune.save_lora_adapter">
-<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.</span></span><span class="sig-name descname"><span class="pre">save_lora_adapter</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">torch.nn.Module</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.finetune.save_lora_adapter" title="Link to this definition"></a></dt>
-<dd><p>Save only the LoRA adapter parameters (not the full model).</p>
-<p>This saves only the trained LoRA weights (~5-20 MB) rather than
-the entire model (~200-500 MB).</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>model</strong> – PEFT model with LoRA adapters</p></li>
-<li><p><strong>output_path</strong> – Directory to save adapter</p></li>
-</ul>
-</dd>
-</dl>
-<p class="rubric">Examples</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">save_lora_adapter</span><span class="p">(</span>
-<span class="gp">... </span>    <span class="n">lora_model</span><span class="p">,</span>
-<span class="gp">... </span>    <span class="s2">"models/fly_organelles/v1.1.0/lora_adapter"</span>
-<span class="gp">... </span><span class="p">)</span>
-</pre></div>
-</div>
-</dd></dl>
-
-<dl class="py class">
-<dt class="sig sig-object py" id="cellmap_flow.finetune.VirtualPatchDataset">
-<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.</span></span><span class="sig-name descname"><span class="pre">VirtualPatchDataset</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">volume_zarr_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">raw_dataset_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">input_size_voxels</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">int</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_size_voxels</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">int</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">input_voxel_size_nm</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">float</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_voxel_size_nm</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">float</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">patches_per_epoch</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">jitter_voxels</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">int</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">seed</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">input_norm_config</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dense_to_sparse_ratio</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">good_regions</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rehearsal_fraction</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">augment</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.finetune.VirtualPatchDataset" title="Link to this definition"></a></dt>
-<dd><p>Yield random raw+annotation patches anchored on FG voxels in a volume zarr.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>volume_zarr_path</strong> – path to the session’s <code class="docutils literal notranslate"><span class="pre">annotation_volume.zarr</span></code>.</p></li>
-<li><p><strong>raw_dataset_path</strong> – path to the raw EM zarr the volume is aligned to.</p></li>
-<li><p><strong>input_size_voxels</strong> – shape (Z, Y, X) of the raw patch returned per
-sample, in voxels at <code class="docutils literal notranslate"><span class="pre">input_voxel_size_nm</span></code>.</p></li>
-<li><p><strong>output_size_voxels</strong> – shape (Z, Y, X) of the annotation patch, in
-voxels at <code class="docutils literal notranslate"><span class="pre">output_voxel_size_nm</span></code>.</p></li>
-<li><p><strong>input_voxel_size_nm</strong> – voxel size for raw patches (the dataset’s
-closest scale to the model’s claimed input voxel size).</p></li>
-<li><p><strong>output_voxel_size_nm</strong> – voxel size for annotation patches.</p></li>
-<li><p><strong>patches_per_epoch</strong> – <code class="docutils literal notranslate"><span class="pre">len(self)</span></code>; controls how many random patches
-comprise one epoch. <code class="docutils literal notranslate"><span class="pre">None</span></code> (the default) means “auto:
-substitute the total populated-chunk count” — every populated
-chunk gets ~one patch per epoch on average.</p></li>
-<li><p><strong>jitter_voxels</strong> – half-range of the random offset applied to the patch
-center, in <strong>annotation voxels</strong>. Defaults to
-<code class="docutils literal notranslate"><span class="pre">output_size_voxels</span> <span class="pre">//</span> <span class="pre">4</span></code>.</p></li>
-<li><p><strong>seed</strong> – RNG seed; per-worker offset added so multi-worker dataloaders
-sample distinct streams.</p></li>
-<li><p><strong>dense_to_sparse_ratio</strong> – fraction in [0, 1] of patches drawn from
-the dense pool (FG voxels inside any imported_crops bbox).
-<code class="docutils literal notranslate"><span class="pre">None</span></code> (default) means auto: 0.5 if both pools have voxels,
-else 1.0 (use the non-empty pool exclusively).</p></li>
-</ul>
-</dd>
-</dl>
-<dl class="py attribute">
-<dt class="sig sig-object py" id="cellmap_flow.finetune.VirtualPatchDataset.augment">
-<span class="sig-name descname"><span class="pre">augment</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">False</span></span><a class="headerlink" href="#cellmap_flow.finetune.VirtualPatchDataset.augment" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="cellmap_flow.finetune.VirtualPatchDataset.volume_zarr_path">
-<span class="sig-name descname"><span class="pre">volume_zarr_path</span></span><a class="headerlink" href="#cellmap_flow.finetune.VirtualPatchDataset.volume_zarr_path" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="cellmap_flow.finetune.VirtualPatchDataset.raw_dataset_path">
-<span class="sig-name descname"><span class="pre">raw_dataset_path</span></span><a class="headerlink" href="#cellmap_flow.finetune.VirtualPatchDataset.raw_dataset_path" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="cellmap_flow.finetune.VirtualPatchDataset.input_size">
-<span class="sig-name descname"><span class="pre">input_size</span></span><a class="headerlink" href="#cellmap_flow.finetune.VirtualPatchDataset.input_size" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="cellmap_flow.finetune.VirtualPatchDataset.output_size">
-<span class="sig-name descname"><span class="pre">output_size</span></span><a class="headerlink" href="#cellmap_flow.finetune.VirtualPatchDataset.output_size" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="cellmap_flow.finetune.VirtualPatchDataset.input_voxel_size">
-<span class="sig-name descname"><span class="pre">input_voxel_size</span></span><a class="headerlink" href="#cellmap_flow.finetune.VirtualPatchDataset.input_voxel_size" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="cellmap_flow.finetune.VirtualPatchDataset.output_voxel_size">
-<span class="sig-name descname"><span class="pre">output_voxel_size</span></span><a class="headerlink" href="#cellmap_flow.finetune.VirtualPatchDataset.output_voxel_size" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="cellmap_flow.finetune.VirtualPatchDataset.patches_per_epoch">
-<span class="sig-name descname"><span class="pre">patches_per_epoch</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.finetune.VirtualPatchDataset.patches_per_epoch" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="cellmap_flow.finetune.VirtualPatchDataset.jitter">
-<span class="sig-name descname"><span class="pre">jitter</span></span><a class="headerlink" href="#cellmap_flow.finetune.VirtualPatchDataset.jitter" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="cellmap_flow.finetune.VirtualPatchDataset.seed">
-<span class="sig-name descname"><span class="pre">seed</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0</span></span><a class="headerlink" href="#cellmap_flow.finetune.VirtualPatchDataset.seed" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="cellmap_flow.finetune.VirtualPatchDataset.dense_to_sparse_ratio">
-<span class="sig-name descname"><span class="pre">dense_to_sparse_ratio</span></span><a class="headerlink" href="#cellmap_flow.finetune.VirtualPatchDataset.dense_to_sparse_ratio" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="cellmap_flow.finetune.VirtualPatchDataset.good_regions">
-<span class="sig-name descname"><span class="pre">good_regions</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">[]</span></span><a class="headerlink" href="#cellmap_flow.finetune.VirtualPatchDataset.good_regions" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="cellmap_flow.finetune.VirtualPatchDataset.rehearsal_fraction">
-<span class="sig-name descname"><span class="pre">rehearsal_fraction</span></span><a class="headerlink" href="#cellmap_flow.finetune.VirtualPatchDataset.rehearsal_fraction" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="cellmap_flow.finetune.VirtualPatchDataset.input_norm_config">
-<span class="sig-name descname"><span class="pre">input_norm_config</span></span><a class="headerlink" href="#cellmap_flow.finetune.VirtualPatchDataset.input_norm_config" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="cellmap_flow.finetune.VirtualPatchDataset.dataset_offset_nm">
-<span class="sig-name descname"><span class="pre">dataset_offset_nm</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">numpy.ndarray</span></span><a class="headerlink" href="#cellmap_flow.finetune.VirtualPatchDataset.dataset_offset_nm" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="cellmap_flow.finetune.VirtualPatchDataset.volume_shape_voxels">
-<span class="sig-name descname"><span class="pre">volume_shape_voxels</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">numpy.ndarray</span></span><a class="headerlink" href="#cellmap_flow.finetune.VirtualPatchDataset.volume_shape_voxels" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py property">
-<dt class="sig sig-object py" id="cellmap_flow.finetune.VirtualPatchDataset.emits_anchor">
-<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">emits_anchor</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></span><a class="headerlink" href="#cellmap_flow.finetune.VirtualPatchDataset.emits_anchor" title="Link to this definition"></a></dt>
-<dd><p>Whether __getitem__ yields the 3-tuple (raw, annotation, anchor).</p>
-<p>Only once there is something to anchor on. Without good regions the
-dataset keeps its original 2-tuple contract, so nothing about an
-existing run changes.</p>
-</dd></dl>
-
-</dd></dl>
-
-<dl class="py function">
-<dt class="sig sig-object py" id="cellmap_flow.finetune.create_dataloader">
-<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.</span></span><span class="sig-name descname"><span class="pre">create_dataloader</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">corrections_zarr_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">batch_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">patch_shape</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">int</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">augment</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_workers</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">4</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">shuffle</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">torch.utils.data.DataLoader</span></span></span><a class="headerlink" href="#cellmap_flow.finetune.create_dataloader" title="Link to this definition"></a></dt>
-<dd><p>Build the training DataLoader for a corrections directory.</p>
-<p>Requires a <code class="docutils literal notranslate"><span class="pre">_virtual_sources.json</span></code> manifest. This used to fall back to a
-per-chunk <code class="docutils literal notranslate"><span class="pre">CorrectionDataset</span></code> when the manifest was absent, but that
-dataset ignored good regions and the dense/sparse split, so the fallback
-silently trained on the wrong thing. Every path that creates a session now
-writes a manifest (volume creation, YAML import, training submit) and
-restarts backfill one, so a missing manifest means something upstream
-failed – which is worth an exception rather than a quiet downgrade.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>corrections_zarr_path</strong> – Session corrections directory.</p></li>
-<li><p><strong>batch_size</strong> – Clamped down to the dataset size when smaller.</p></li>
-<li><p><strong>patch_shape</strong> – Accepted for call-site compatibility; patch geometry comes
-from the manifest, so this is unused.</p></li>
-<li><p><strong>augment</strong> – Accepted for call-site compatibility. This dataset applies
-random patch-center jitter and nothing else; see the warning below.</p></li>
-<li><p><strong>num_workers</strong> – DataLoader workers. Spawned, not forked – tensorstore
-handles do not survive fork.</p></li>
-<li><p><strong>shuffle</strong> – Ignored; the dataset already samples randomly.</p></li>
-<li><p><strong>model_name</strong> – Accepted for call-site compatibility; unused.</p></li>
-</ul>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py class">
-<dt class="sig sig-object py" id="cellmap_flow.finetune.LoRAFinetuner">
-<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.</span></span><span class="sig-name descname"><span class="pre">LoRAFinetuner</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">torch.nn.Module</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dataloader</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">torch.utils.data.DataLoader</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_dir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">learning_rate</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.0001</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_epochs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">10</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">gradient_accumulation_steps</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_mixed_precision</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">loss_type</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'combined'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">select_channel</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mask_unannotated</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">label_smoothing</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">distillation_lambda</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">distillation_all_voxels</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">margin</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.3</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">balance_classes</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">target_transform</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tensorboard</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.finetune.LoRAFinetuner" title="Link to this definition"></a></dt>
-<dd><p>Trainer for finetuning models with LoRA adapters.</p>
-<p>Features:
-- Mixed precision (FP16) training for memory efficiency
-- Gradient accumulation to simulate larger batch sizes
-- Checkpointing with best model tracking
-- Progress logging
-- Partial annotation support (mask unannotated regions)</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>model</strong> – PEFT model with LoRA adapters</p></li>
-<li><p><strong>dataloader</strong> – DataLoader for training data</p></li>
-<li><p><strong>output_dir</strong> – Directory to save checkpoints and logs</p></li>
-<li><p><strong>learning_rate</strong> – Learning rate (default: 1e-4)</p></li>
-<li><p><strong>num_epochs</strong> – Number of training epochs (default: 10)</p></li>
-<li><p><strong>gradient_accumulation_steps</strong> – Steps to accumulate gradients (default: 1)</p></li>
-<li><p><strong>use_mixed_precision</strong> – Enable FP16 training (default: True)</p></li>
-<li><p><strong>loss_type</strong> – Loss function (“dice”, “bce”, or “combined”)</p></li>
-<li><p><strong>device</strong> – Training device (“cuda” or “cpu”, auto-detected if None)</p></li>
-<li><p><strong>select_channel</strong> – Optional channel index to select from multi-channel output (default: None)</p></li>
-<li><p><strong>mask_unannotated</strong> – If True (default), only compute loss on annotated regions (target &gt; 0).
-Targets are shifted down by 1 (e.g., 1-&gt;0, 2-&gt;1) after masking.
-This allows partial annotations where 0=unannotated, 1=background, 2=foreground, etc.
-Ignored if target_transform is provided.</p></li>
-<li><p><strong>target_transform</strong> – Optional TargetTransform instance that converts raw annotations
-to (target, mask) pairs. Overrides mask_unannotated when provided.
-See cellmap_flow.finetune.target_transforms.</p></li>
-</ul>
-</dd>
-</dl>
-<p class="rubric">Examples</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">lora_model</span> <span class="o">=</span> <span class="n">wrap_model_with_lora</span><span class="p">(</span><span class="n">model</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">dataloader</span> <span class="o">=</span> <span class="n">create_dataloader</span><span class="p">(</span><span class="s2">"corrections.zarr"</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">trainer</span> <span class="o">=</span> <span class="n">LoRAFinetuner</span><span class="p">(</span>
-<span class="gp">... </span>    <span class="n">lora_model</span><span class="p">,</span>
-<span class="gp">... </span>    <span class="n">dataloader</span><span class="p">,</span>
-<span class="gp">... </span>    <span class="n">output_dir</span><span class="o">=</span><span class="s2">"output/fly_organelles_v1.1"</span>
-<span class="gp">... </span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">trainer</span><span class="o">.</span><span class="n">train</span><span class="p">()</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">trainer</span><span class="o">.</span><span class="n">save_adapter</span><span class="p">()</span>
-</pre></div>
-</div>
-<dl class="py attribute">
-<dt class="sig sig-object py" id="cellmap_flow.finetune.LoRAFinetuner.model">
-<span class="sig-name descname"><span class="pre">model</span></span><a class="headerlink" href="#cellmap_flow.finetune.LoRAFinetuner.model" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="cellmap_flow.finetune.LoRAFinetuner.dataloader">
-<span class="sig-name descname"><span class="pre">dataloader</span></span><a class="headerlink" href="#cellmap_flow.finetune.LoRAFinetuner.dataloader" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="cellmap_flow.finetune.LoRAFinetuner.output_dir">
-<span class="sig-name descname"><span class="pre">output_dir</span></span><a class="headerlink" href="#cellmap_flow.finetune.LoRAFinetuner.output_dir" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="cellmap_flow.finetune.LoRAFinetuner.num_epochs">
-<span class="sig-name descname"><span class="pre">num_epochs</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">10</span></span><a class="headerlink" href="#cellmap_flow.finetune.LoRAFinetuner.num_epochs" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="cellmap_flow.finetune.LoRAFinetuner.gradient_accumulation_steps">
-<span class="sig-name descname"><span class="pre">gradient_accumulation_steps</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">1</span></span><a class="headerlink" href="#cellmap_flow.finetune.LoRAFinetuner.gradient_accumulation_steps" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="cellmap_flow.finetune.LoRAFinetuner.use_mixed_precision">
-<span class="sig-name descname"><span class="pre">use_mixed_precision</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">True</span></span><a class="headerlink" href="#cellmap_flow.finetune.LoRAFinetuner.use_mixed_precision" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="cellmap_flow.finetune.LoRAFinetuner.select_channel">
-<span class="sig-name descname"><span class="pre">select_channel</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.finetune.LoRAFinetuner.select_channel" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="cellmap_flow.finetune.LoRAFinetuner.mask_unannotated">
-<span class="sig-name descname"><span class="pre">mask_unannotated</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">True</span></span><a class="headerlink" href="#cellmap_flow.finetune.LoRAFinetuner.mask_unannotated" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="cellmap_flow.finetune.LoRAFinetuner.label_smoothing">
-<span class="sig-name descname"><span class="pre">label_smoothing</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0.0</span></span><a class="headerlink" href="#cellmap_flow.finetune.LoRAFinetuner.label_smoothing" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="cellmap_flow.finetune.LoRAFinetuner.distillation_lambda">
-<span class="sig-name descname"><span class="pre">distillation_lambda</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0.0</span></span><a class="headerlink" href="#cellmap_flow.finetune.LoRAFinetuner.distillation_lambda" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="cellmap_flow.finetune.LoRAFinetuner.distillation_all_voxels">
-<span class="sig-name descname"><span class="pre">distillation_all_voxels</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">False</span></span><a class="headerlink" href="#cellmap_flow.finetune.LoRAFinetuner.distillation_all_voxels" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="cellmap_flow.finetune.LoRAFinetuner.balance_classes">
-<span class="sig-name descname"><span class="pre">balance_classes</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">False</span></span><a class="headerlink" href="#cellmap_flow.finetune.LoRAFinetuner.balance_classes" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="cellmap_flow.finetune.LoRAFinetuner.target_transform">
-<span class="sig-name descname"><span class="pre">target_transform</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.finetune.LoRAFinetuner.target_transform" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="cellmap_flow.finetune.LoRAFinetuner.loss_type">
-<span class="sig-name descname"><span class="pre">loss_type</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'combined'</span></span><a class="headerlink" href="#cellmap_flow.finetune.LoRAFinetuner.loss_type" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="cellmap_flow.finetune.LoRAFinetuner.margin">
-<span class="sig-name descname"><span class="pre">margin</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0.3</span></span><a class="headerlink" href="#cellmap_flow.finetune.LoRAFinetuner.margin" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="cellmap_flow.finetune.LoRAFinetuner.learning_rate">
-<span class="sig-name descname"><span class="pre">learning_rate</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0.0001</span></span><a class="headerlink" href="#cellmap_flow.finetune.LoRAFinetuner.learning_rate" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="cellmap_flow.finetune.LoRAFinetuner.optimizer">
-<span class="sig-name descname"><span class="pre">optimizer</span></span><a class="headerlink" href="#cellmap_flow.finetune.LoRAFinetuner.optimizer" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="cellmap_flow.finetune.LoRAFinetuner.amp_dtype">
-<span class="sig-name descname"><span class="pre">amp_dtype</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">Ellipsis</span></span><a class="headerlink" href="#cellmap_flow.finetune.LoRAFinetuner.amp_dtype" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="cellmap_flow.finetune.LoRAFinetuner.scaler">
-<span class="sig-name descname"><span class="pre">scaler</span></span><a class="headerlink" href="#cellmap_flow.finetune.LoRAFinetuner.scaler" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="cellmap_flow.finetune.LoRAFinetuner.current_epoch">
-<span class="sig-name descname"><span class="pre">current_epoch</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0</span></span><a class="headerlink" href="#cellmap_flow.finetune.LoRAFinetuner.current_epoch" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="cellmap_flow.finetune.LoRAFinetuner.global_step">
-<span class="sig-name descname"><span class="pre">global_step</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0</span></span><a class="headerlink" href="#cellmap_flow.finetune.LoRAFinetuner.global_step" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="cellmap_flow.finetune.LoRAFinetuner.best_loss">
-<span class="sig-name descname"><span class="pre">best_loss</span></span><a class="headerlink" href="#cellmap_flow.finetune.LoRAFinetuner.best_loss" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="cellmap_flow.finetune.LoRAFinetuner.last_supervised_loss">
-<span class="sig-name descname"><span class="pre">last_supervised_loss</span></span><a class="headerlink" href="#cellmap_flow.finetune.LoRAFinetuner.last_supervised_loss" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="cellmap_flow.finetune.LoRAFinetuner.training_stats">
-<span class="sig-name descname"><span class="pre">training_stats</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">[]</span></span><a class="headerlink" href="#cellmap_flow.finetune.LoRAFinetuner.training_stats" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="cellmap_flow.finetune.LoRAFinetuner.tb">
-<span class="sig-name descname"><span class="pre">tb</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.finetune.LoRAFinetuner.tb" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="cellmap_flow.finetune.LoRAFinetuner.tb_dir">
-<span class="sig-name descname"><span class="pre">tb_dir</span></span><a class="headerlink" href="#cellmap_flow.finetune.LoRAFinetuner.tb_dir" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="cellmap_flow.finetune.LoRAFinetuner.tb_image_every">
-<span class="sig-name descname"><span class="pre">tb_image_every</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">5</span></span><a class="headerlink" href="#cellmap_flow.finetune.LoRAFinetuner.tb_image_every" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="cellmap_flow.finetune.LoRAFinetuner.train">
-<span class="sig-name descname"><span class="pre">train</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#cellmap_flow.finetune.LoRAFinetuner.train" title="Link to this definition"></a></dt>
-<dd><p>Run the training loop.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Returns<span class="colon">:</span></dt>
-<dd class="field-odd"><p><ul class="simple">
-<li><p>final_loss: Final epoch loss</p></li>
-<li><p>best_loss: Best loss achieved</p></li>
-<li><p>total_epochs: Number of epochs trained</p></li>
-<li><p>total_steps: Total training steps</p></li>
-</ul>
-</p>
-</dd>
-<dt class="field-even">Return type<span class="colon">:</span></dt>
-<dd class="field-even"><p>Training statistics dictionary with</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="cellmap_flow.finetune.LoRAFinetuner.save_checkpoint">
-<span class="sig-name descname"><span class="pre">save_checkpoint</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">is_best</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.finetune.LoRAFinetuner.save_checkpoint" title="Link to this definition"></a></dt>
-<dd><p>Save training checkpoint.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>is_best</strong> – If True, saves as “best_model.pth”</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="cellmap_flow.finetune.LoRAFinetuner.save_adapter">
-<span class="sig-name descname"><span class="pre">save_adapter</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">adapter_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.finetune.LoRAFinetuner.save_adapter" title="Link to this definition"></a></dt>
-<dd><p>Save only the LoRA adapter (not the full model).</p>
-<p>Automatically loads the best checkpoint weights before saving
-so the exported adapter reflects the best training epoch.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>adapter_path</strong> – Path to save adapter. If None, uses output_dir/lora_adapter</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="cellmap_flow.finetune.LoRAFinetuner.load_checkpoint">
-<span class="sig-name descname"><span class="pre">load_checkpoint</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">checkpoint_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.finetune.LoRAFinetuner.load_checkpoint" title="Link to this definition"></a></dt>
-<dd><p>Load training checkpoint to resume training.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>checkpoint_path</strong> – Path to checkpoint file</p>
-</dd>
-</dl>
-</dd></dl>
-
-</dd></dl>
-
-<dl class="py class">
-<dt class="sig sig-object py" id="cellmap_flow.finetune.DiceLoss">
-<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.</span></span><span class="sig-name descname"><span class="pre">DiceLoss</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">smooth</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1.0</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.finetune.DiceLoss" title="Link to this definition"></a></dt>
-<dd><p>Dice Loss for segmentation tasks.</p>
-<p>Dice loss is effective for imbalanced datasets where the target class
-may be sparse (e.g., mitochondria in EM images).</p>
-<p>Formula: 1 - (2 * <a href="#id1"><span class="problematic" id="id2">|X ∩ Y|</span></a> + smooth) / (<a href="#id3"><span class="problematic" id="id4">|X|</span></a> + <a href="#id5"><span class="problematic" id="id6">|Y|</span></a> + smooth)</p>
-<dl class="py attribute">
-<dt class="sig sig-object py" id="cellmap_flow.finetune.DiceLoss.smooth">
-<span class="sig-name descname"><span class="pre">smooth</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">1.0</span></span><a class="headerlink" href="#cellmap_flow.finetune.DiceLoss.smooth" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="cellmap_flow.finetune.DiceLoss.apply_sigmoid">
-<span class="sig-name descname"><span class="pre">apply_sigmoid</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">True</span></span><a class="headerlink" href="#cellmap_flow.finetune.DiceLoss.apply_sigmoid" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="cellmap_flow.finetune.DiceLoss.forward">
-<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">pred</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">torch.Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">target</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">torch.Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mask</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">torch.Tensor</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">torch.Tensor</span></span></span><a class="headerlink" href="#cellmap_flow.finetune.DiceLoss.forward" title="Link to this definition"></a></dt>
-<dd><p>Compute Dice loss.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>pred</strong> – Predictions (B, C, Z, Y, X) - raw logits or probabilities</p></li>
-<li><p><strong>target</strong> – Targets (B, C, Z, Y, X) - binary masks [0, 1]</p></li>
-<li><p><strong>mask</strong> – Optional mask (B, 1, Z, Y, X) - if provided, only compute loss on masked regions</p></li>
-</ul>
-</dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>Dice loss value (scalar)</p>
-</dd>
-</dl>
-</dd></dl>
-
-</dd></dl>
-
-<dl class="py class">
-<dt class="sig sig-object py" id="cellmap_flow.finetune.CombinedLoss">
-<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.</span></span><span class="sig-name descname"><span class="pre">CombinedLoss</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dice_weight</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.5</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bce_weight</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.5</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.finetune.CombinedLoss" title="Link to this definition"></a></dt>
-<dd><p>Combined Dice + BCE loss for better convergence.</p>
-<p>Uses both Dice loss (for overlap) and BCE loss (for pixel-wise accuracy).</p>
-<dl class="py attribute">
-<dt class="sig sig-object py" id="cellmap_flow.finetune.CombinedLoss.dice_loss">
-<span class="sig-name descname"><span class="pre">dice_loss</span></span><a class="headerlink" href="#cellmap_flow.finetune.CombinedLoss.dice_loss" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="cellmap_flow.finetune.CombinedLoss.bce_loss">
-<span class="sig-name descname"><span class="pre">bce_loss</span></span><a class="headerlink" href="#cellmap_flow.finetune.CombinedLoss.bce_loss" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="cellmap_flow.finetune.CombinedLoss.dice_weight">
-<span class="sig-name descname"><span class="pre">dice_weight</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0.5</span></span><a class="headerlink" href="#cellmap_flow.finetune.CombinedLoss.dice_weight" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="cellmap_flow.finetune.CombinedLoss.bce_weight">
-<span class="sig-name descname"><span class="pre">bce_weight</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0.5</span></span><a class="headerlink" href="#cellmap_flow.finetune.CombinedLoss.bce_weight" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="cellmap_flow.finetune.CombinedLoss.forward">
-<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">pred</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">torch.Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">target</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">torch.Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mask</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">torch.Tensor</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">torch.Tensor</span></span></span><a class="headerlink" href="#cellmap_flow.finetune.CombinedLoss.forward" title="Link to this definition"></a></dt>
-<dd><p>Compute combined loss.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>pred</strong> – Predictions (B, C, Z, Y, X) - raw logits</p></li>
-<li><p><strong>target</strong> – Targets (B, C, Z, Y, X) - binary masks [0, 1]</p></li>
-<li><p><strong>mask</strong> – Optional mask (B, 1, Z, Y, X) - if provided, only compute loss on masked regions</p></li>
-</ul>
-</dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>Combined loss value (scalar)</p>
-</dd>
-</dl>
-</dd></dl>
-
-</dd></dl>
-
 </section>
 </section>
 
@@ -823,8 +161,8 @@ may be sparse (e.g., mitochondria in EM images).</p>
            </div>
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
-        <a href="../dashboard/routes/pipeline_builder_page/index.html" class="btn btn-neutral float-left" title="cellmap_flow.dashboard.routes.pipeline_builder_page" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
-        <a href="build_corrections/index.html" class="btn btn-neutral float-right" title="cellmap_flow.finetune.build_corrections" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="../dashboard/state/index.html" class="btn btn-neutral float-left" title="cellmap_flow.dashboard.state" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="adaptation/index.html" class="btn btn-neutral float-right" title="cellmap_flow.finetune.adaptation" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>

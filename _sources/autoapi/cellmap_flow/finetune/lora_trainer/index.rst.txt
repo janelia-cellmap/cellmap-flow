@@ -5,7 +5,7 @@ cellmap_flow.finetune.lora_trainer
 
 .. autoapi-nested-parse::
 
-   LoRA finetuning trainer for CellMap-Flow models.
+   Finetuning trainer for CellMap-Flow models: a LoRA adapter, or every weight.
 
    This module provides a trainer class for finetuning models using user
    corrections with mixed-precision training and gradient accumulation.
@@ -25,175 +25,64 @@ Classes
 
 .. autoapisummary::
 
-   cellmap_flow.finetune.lora_trainer.DiceLoss
-   cellmap_flow.finetune.lora_trainer.CombinedLoss
-   cellmap_flow.finetune.lora_trainer.MarginLoss
    cellmap_flow.finetune.lora_trainer.LoRAFinetuner
-
-
-Functions
----------
-
-.. autoapisummary::
-
-   cellmap_flow.finetune.lora_trainer.as_probabilities
-   cellmap_flow.finetune.lora_trainer.soft_target_entropy
 
 
 Module Contents
 ---------------
 
-.. py:function:: as_probabilities(pred, model_has_sigmoid)
-
-   The model's output as probabilities.
-
-   Left alone when the model already ends in a sigmoid (the cellmap
-   *_distance_* UNets do); a second sigmoid would squash [0, 1] into
-   [0.5, 0.73] and make a well-fitting prediction look like a constant.
-
-
-.. py:function:: soft_target_entropy(target, eps=1e-07)
-
-   Per-voxel BCE that a perfectly calibrated prediction still pays.
-
-   -(t log t + (1-t) log(1-t)): zero for hard 0/1 targets, log 2 at
-   t = 0.5. On soft targets (distance, smoothed labels) this is the floor
-   of the BCE curve, and it moves with the batch, so a "flat" BCE can be a
-   model sitting on its floor. Report the loss minus this instead.
-
-
 .. py:data:: logger
 
-.. py:class:: DiceLoss(smooth: float = 1.0)
+.. py:class:: LoRAFinetuner(model: torch.nn.Module, dataloader: torch.utils.data.DataLoader, output_dir: str, learning_rate: float = 0.0001, num_epochs: int = 10, gradient_accumulation_steps: int = 1, use_mixed_precision: bool = True, loss_type: str = 'combined', device: Optional[str] = None, select_channel: Optional[int] = None, mask_unannotated: bool = True, label_smoothing: float = 0.0, distillation_lambda: Optional[float] = None, distillation_all_voxels: bool = False, margin: float = 0.3, balance_classes: bool = False, target_transform=None, tensorboard: bool = True, teacher_model: Optional[torch.nn.Module] = None, initial_state: Optional[Dict[str, torch.Tensor]] = None, tb_start_step: int = 0, tb_start_epoch: int = 0)
 
+   Trainer for finetuning a model on user corrections: a LoRA adapter, or
+   every weight (a full finetune).
 
-
-   Dice Loss for segmentation tasks.
-
-   Dice loss is effective for imbalanced datasets where the target class
-   may be sparse (e.g., mitochondria in EM images).
-
-   Formula: 1 - (2 * |X ∩ Y| + smooth) / (|X| + |Y| + smooth)
-
-
-   .. py:attribute:: smooth
-      :value: 1.0
-
-
-
-   .. py:attribute:: apply_sigmoid
-      :value: True
-
-
-
-   .. py:method:: forward(pred: torch.Tensor, target: torch.Tensor, mask: Optional[torch.Tensor] = None) -> torch.Tensor
-
-      Compute Dice loss.
-
-      :param pred: Predictions (B, C, Z, Y, X) - raw logits or probabilities
-      :param target: Targets (B, C, Z, Y, X) - binary masks [0, 1]
-      :param mask: Optional mask (B, 1, Z, Y, X) - if provided, only compute loss on masked regions
-
-      :returns: Dice loss value (scalar)
-
-
-
-.. py:class:: CombinedLoss(dice_weight: float = 0.5, bce_weight: float = 0.5)
-
-
-
-   Combined Dice + BCE loss for better convergence.
-
-   Uses both Dice loss (for overlap) and BCE loss (for pixel-wise accuracy).
-
-
-   .. py:attribute:: dice_loss
-
-
-   .. py:attribute:: bce_loss
-
-
-   .. py:attribute:: dice_weight
-      :value: 0.5
-
-
-
-   .. py:attribute:: bce_weight
-      :value: 0.5
-
-
-
-   .. py:method:: forward(pred: torch.Tensor, target: torch.Tensor, mask: Optional[torch.Tensor] = None) -> torch.Tensor
-
-      Compute combined loss.
-
-      :param pred: Predictions (B, C, Z, Y, X) - raw logits
-      :param target: Targets (B, C, Z, Y, X) - binary masks [0, 1]
-      :param mask: Optional mask (B, 1, Z, Y, X) - if provided, only compute loss on masked regions
-
-      :returns: Combined loss value (scalar)
-
-
-
-.. py:class:: MarginLoss(margin: float = 0.3, balance_classes: bool = False)
-
-
-
-   Margin-based loss for sparse/scribble annotations.
-
-   Only penalizes predictions on the wrong side of a margin threshold.
-   For post-sigmoid outputs in [0, 1]:
-   - Foreground (target=1): loss = relu(threshold - pred)^2, threshold = 1 - margin
-   - Background (target=0): loss = relu(pred - margin)^2
-   - No loss when prediction is already correct with sufficient confidence.
-
-
-   .. py:attribute:: margin
-      :value: 0.3
-
-
-
-   .. py:attribute:: balance_classes
-      :value: False
-
-
-
-   .. py:attribute:: apply_sigmoid
-      :value: True
-
-
-
-   .. py:method:: forward(pred: torch.Tensor, target: torch.Tensor, mask: Optional[torch.Tensor] = None) -> torch.Tensor
-
-
-.. py:class:: LoRAFinetuner(model: torch.nn.Module, dataloader: torch.utils.data.DataLoader, output_dir: str, learning_rate: float = 0.0001, num_epochs: int = 10, gradient_accumulation_steps: int = 1, use_mixed_precision: bool = True, loss_type: str = 'combined', device: Optional[str] = None, select_channel: Optional[int] = None, mask_unannotated: bool = True, label_smoothing: float = 0.0, distillation_lambda: float = 0.0, distillation_all_voxels: bool = False, margin: float = 0.3, balance_classes: bool = False, target_transform=None, tensorboard: bool = True)
-
-   Trainer for finetuning models with LoRA adapters.
+   Which of the two the model decides: a PEFT model trains its adapter, a
+   plain module trains in full (see adaptation.strategy_for).
 
    Features:
-   - Mixed precision (FP16) training for memory efficiency
+   - Mixed precision on CUDA: bf16 where the GPU has it, else fp16 with a
+     GradScaler; it falls back to fp32 when the model NaNs under either
    - Gradient accumulation to simulate larger batch sizes
-   - Checkpointing with best model tracking
-   - Progress logging
    - Partial annotation support (mask unannotated regions)
+   - Distillation toward the starting model, on unlabeled voxels, on all
+     voxels, or on the good regions' rehearsal patches
+   - A best checkpoint, chosen by the supervised loss alone; the export
+     loads it first
+   - Recovery from an OOM (halve the batch, then drop distillation) and
+     from a NaN under mixed precision (restart in fp32)
+   - TensorBoard logging, continuing across a job's iterations
 
-   :param model: PEFT model with LoRA adapters
+   :param model: The model to train: a PEFT model (LoRA) or a plain module (full finetune)
    :param dataloader: DataLoader for training data
    :param output_dir: Directory to save checkpoints and logs
    :param learning_rate: Learning rate (default: 1e-4)
    :param num_epochs: Number of training epochs (default: 10)
    :param gradient_accumulation_steps: Steps to accumulate gradients (default: 1)
-   :param use_mixed_precision: Enable FP16 training (default: True)
-   :param loss_type: Loss function ("dice", "bce", or "combined")
+   :param use_mixed_precision: Enable mixed precision on CUDA (default: True; off on the CPU)
+   :param loss_type: Loss function: "dice", "bce", "combined" (Dice + BCE), "mse" or "margin"
    :param device: Training device ("cuda" or "cpu", auto-detected if None)
    :param select_channel: Optional channel index to select from multi-channel output (default: None)
    :param mask_unannotated: If True (default), only compute loss on annotated regions (target > 0).
                             Targets are shifted down by 1 (e.g., 1->0, 2->1) after masking.
                             This allows partial annotations where 0=unannotated, 1=background, 2=foreground, etc.
                             Ignored if target_transform is provided.
+   :param label_smoothing: s moves the targets to s/2 and 1 - s/2 (default: 0; forced to 0 for margin)
+   :param distillation_lambda: Weight of the distillation term. None means 1.0 when the
+                               dataset has good regions and 0 otherwise; an explicit 0 is honoured.
+   :param distillation_all_voxels: Distil on every voxel, not only the unlabeled ones
+                                   (no effect when the dataset has good regions: they decide where)
+   :param margin: The margin of the "margin" loss (default: 0.3)
+   :param balance_classes: Weight foreground and background voxels equally
    :param target_transform: Optional TargetTransform instance that converts raw annotations
                             to (target, mask) pairs. Overrides mask_unannotated when provided.
                             See cellmap_flow.finetune.target_transforms.
+   :param tensorboard: Write TensorBoard logs to output_dir/tensorboard (default: True)
+   :param teacher_model: A full finetune's frozen teacher from a previous iteration, to reuse
+   :param initial_state: A full finetune's starting weights, to reset to; copied from the model if None
+   :param tb_start_step: Where the previous iteration's TensorBoard curves ended
+   :param tb_start_epoch: Where the previous iteration's TensorBoard curves ended
 
    .. rubric:: Examples
 
@@ -248,7 +137,7 @@ Module Contents
 
 
    .. py:attribute:: distillation_lambda
-      :value: 0.0
+      :value: None
 
 
 
@@ -280,6 +169,12 @@ Module Contents
    .. py:attribute:: learning_rate
       :value: 0.0001
 
+
+
+   .. py:attribute:: strategy
+
+
+   .. py:attribute:: initial_state
 
 
    .. py:attribute:: optimizer
@@ -327,6 +222,22 @@ Module Contents
 
 
 
+   .. py:property:: teacher_model
+      :type: Optional[torch.nn.Module]
+
+
+      A full finetune's distillation teacher, the frozen copy of its starting weights; else None.
+
+      The CLI hands it to the next iteration's trainer. Setting it to None
+      frees it (the OOM handler does, with distillation).
+
+
+   .. py:method:: close()
+
+      Close the TensorBoard writer; the CLI calls this when an iteration is done.
+
+
+
    .. py:method:: train() -> Dict[str, Any]
 
       Run the training loop.
@@ -345,18 +256,28 @@ Module Contents
 
       Save training checkpoint.
 
-      :param is_best: If True, saves as "best_model.pth"
+      :param is_best: If True, saves as "best_checkpoint.pth", which save_adapter
+                      exports; otherwise as "checkpoint_epoch_<N>.pth"
 
 
 
-   .. py:method:: save_adapter(adapter_path: Optional[str] = None)
+   .. py:method:: save_adapter(adapter_path: Optional[str] = None, export_dir: Optional[str] = None)
 
-      Save only the LoRA adapter (not the full model).
+      Export the finetune: only the LoRA adapter, or a full finetune's weights.
 
       Automatically loads the best checkpoint weights before saving
-      so the exported adapter reflects the best training epoch.
+      so the exported adapter reflects the best training epoch. Without one
+      from this run -- no epoch supervised anything, or none ran -- it
+      exports the weights as they are, those of the last epoch.
 
-      :param adapter_path: Path to save adapter. If None, uses output_dir/lora_adapter
+      :param adapter_path: Path to save adapter. If None, uses output_dir/lora_adapter.
+                           A full finetune ignores it and writes output_dir/full_finetune.
+      :param export_dir: Instead, the directory to export into: the adapter
+                         goes to export_dir/lora_adapter, full weights to
+                         export_dir/full_finetune/model_state_dict.pt. The CLI gives
+                         every iteration its own.
+
+      :returns: The adapter directory, or the full-finetune weights file.
 
 
 

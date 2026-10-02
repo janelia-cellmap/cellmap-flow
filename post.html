@@ -10,7 +10,6 @@
       <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="_static/graphviz.css?v=4ae1632d" />
-      <link rel="stylesheet" type="text/css" href="_static/mystnb.11b39860a7a0cbfd473a3ad8a317855267ff0bd372690045ca344a6b62be495e.css" />
       <link rel="stylesheet" type="text/css" href="_static/css/custom.css" />
 
   
@@ -20,7 +19,6 @@
       <script src="_static/documentation_options.js?v=5929fcd5"></script>
       <script src="_static/doctools.js?v=fd6eb6e6"></script>
       <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
-      <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
     <script src="_static/js/theme.js"></script>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
@@ -50,8 +48,10 @@
               <p class="caption" role="heading"><span class="caption-text">CellMap-Flow API:</span></p>
 <ul class="current">
 <li class="toctree-l1"><a class="reference internal" href="install.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="cli.html">Command line</a></li>
 <li class="toctree-l1"><a class="reference internal" href="scripts.html">Python Scripts</a></li>
 <li class="toctree-l1"><a class="reference internal" href="yaml_config.html">YAML Configuration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="data_paths.html">Data paths</a></li>
 <li class="toctree-l1"><a class="reference internal" href="huggingface.html">HuggingFace Models</a></li>
 <li class="toctree-l1"><a class="reference internal" href="custom_script.html">Custom Model</a></li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">PostProcessors</a><ul>
@@ -107,6 +107,9 @@
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="plugins.html">Plugins</a></li>
+<li class="toctree-l1"><a class="reference internal" href="review.html">Reviewing instances</a></li>
+<li class="toctree-l1"><a class="reference internal" href="viewer_api.html">Viewer layer API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="architecture.html">Architecture</a></li>
 <li class="toctree-l1"><a class="reference internal" href="autoapi/index.html">API Reference</a></li>
 </ul>
 
@@ -289,7 +292,10 @@
 
 <p>Applies a user-defined lambda expression to each data point.</p>
 <ul class="simple">
-<li><p><cite>expression</cite>: Python expression to apply to the data (e.g., <cite>“x * 2”</cite>)</p></li>
+<li><p><cite>expression</cite>: A numpy expression in <cite>x</cite> (e.g., <cite>“x * 2”</cite>, <cite>“np.clip(x, 0, 1)”</cite>). Arithmetic, comparisons,
+indexing, <cite>abs</cite>, whitelisted <cite>np.*</cite> functions and dtypes, and a few array methods such as <cite>astype</cite> and <cite>clip</cite>
+are allowed, with the keyword arguments <cite>axis</cite>, <cite>keepdims</cite>, <cite>dtype</cite>, <cite>a_min</cite> and <cite>a_max</cite>. Anything else,
+including repeating a list (<cite>[x] * n</cite>), is rejected, because expressions arrive in layer URLs.</p></li>
 </ul>
 </section>
 </section>

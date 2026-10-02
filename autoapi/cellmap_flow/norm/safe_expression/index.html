@@ -1,0 +1,289 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>cellmap_flow.norm.safe_expression &mdash; CellMap Flow  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=4ae1632d" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css" />
+
+  
+    <link rel="shortcut icon" href="../../../../_static/favicon.ico"/>
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link rel="next" title="cellmap_flow.pipeline_spec" href="../../pipeline_spec/index.html" />
+    <link rel="prev" title="cellmap_flow.norm.input_normalize" href="../input_normalize/index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            CellMap Flow
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">CellMap-Flow API:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../../../../install.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../cli.html">Command line</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../scripts.html">Python Scripts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../yaml_config.html">YAML Configuration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../data_paths.html">Data paths</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../huggingface.html">HuggingFace Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../custom_script.html">Custom Model</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../post.html">PostProcessors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../plugins.html">Plugins</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../review.html">Reviewing instances</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../viewer_api.html">Viewer layer API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../architecture.html">Architecture</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../../../index.html">API Reference</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="../../index.html">cellmap_flow</a><ul class="current">
+<li class="toctree-l3 current"><a class="reference internal" href="../../index.html#submodules">Submodules</a><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="../../blockwise/index.html">cellmap_flow.blockwise</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../cli/index.html">cellmap_flow.cli</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../config/index.html">cellmap_flow.config</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../dashboard/index.html">cellmap_flow.dashboard</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../finetune/index.html">cellmap_flow.finetune</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../globals/index.html">cellmap_flow.globals</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../image_data_interface/index.html">cellmap_flow.image_data_interface</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../inference/index.html">cellmap_flow.inference</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../inferencer/index.html">cellmap_flow.inferencer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../io/index.html">cellmap_flow.io</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../jobs/index.html">cellmap_flow.jobs</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../logging_setup/index.html">cellmap_flow.logging_setup</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../models/index.html">cellmap_flow.models</a></li>
+<li class="toctree-l4 current"><a class="reference internal" href="../index.html">cellmap_flow.norm</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../pipeline_spec/index.html">cellmap_flow.pipeline_spec</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../plugins/index.html">cellmap_flow.plugins</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../post/index.html">cellmap_flow.post</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../process_chain/index.html">cellmap_flow.process_chain</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../review/index.html">cellmap_flow.review</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../review_index/index.html">cellmap_flow.review_index</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../server/index.html">cellmap_flow.server</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../serving/index.html">cellmap_flow.serving</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../utils/index.html">cellmap_flow.utils</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../viewer/index.html">cellmap_flow.viewer</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">CellMap Flow</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">API Reference</a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">cellmap_flow</a></li>
+          <li class="breadcrumb-item"><a href="../index.html">cellmap_flow.norm</a></li>
+      <li class="breadcrumb-item active">cellmap_flow.norm.safe_expression</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../../../../_sources/autoapi/cellmap_flow/norm/safe_expression/index.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-cellmap_flow.norm.safe_expression">
+<span id="cellmap-flow-norm-safe-expression"></span><h1>cellmap_flow.norm.safe_expression<a class="headerlink" href="#module-cellmap_flow.norm.safe_expression" title="Link to this heading"></a></h1>
+<p>Evaluate the small array expressions behind LambdaNormalizer and LambdaPostprocessor.</p>
+<p>These expressions arrive inside neuroglancer layer URLs and dashboard requests,
+and inference servers listen on every interface, so evaluating them with a bare
+eval() let anyone who could reach a server run code on it. An expression is now
+parsed once and every node is checked against a whitelist before anything runs:</p>
+<ul class="simple">
+<li><p>the array <code class="docutils literal notranslate"><span class="pre">x</span></code>, numbers, and numeric dtype names as strings (<code class="docutils literal notranslate"><span class="pre">x.astype(&quot;uint8&quot;)</span></code>);</p></li>
+<li><p>arithmetic, comparison and boolean operators, and <code class="docutils literal notranslate"><span class="pre">a</span> <span class="pre">if</span> <span class="pre">cond</span> <span class="pre">else</span> <span class="pre">b</span></code>;</p></li>
+<li><p>indexing and slicing (<code class="docutils literal notranslate"><span class="pre">x[...,</span> <span class="pre">0]</span></code>);</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">np.&lt;name&gt;</span></code> for the numpy functions, dtypes and constants listed below;</p></li>
+<li><p>a few array methods and attributes (<code class="docutils literal notranslate"><span class="pre">x.astype</span></code>, <code class="docutils literal notranslate"><span class="pre">x.clip</span></code>, <code class="docutils literal notranslate"><span class="pre">x.shape</span></code>, …);</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">abs</span></code>.</p></li>
+</ul>
+<p>Anything else (other names, other attributes, dunders, lambdas, comprehensions,
+<code class="docutils literal notranslate"><span class="pre">**kwargs</span></code>) raises ValueError. So does what would let a short expression
+allocate without bound: exponents must be literal numbers of modest size (no
+<code class="docutils literal notranslate"><span class="pre">x</span> <span class="pre">**</span> <span class="pre">10**10</span></code>), a list or tuple cannot be repeated (no <code class="docutils literal notranslate"><span class="pre">[x]</span> <span class="pre">*</span> <span class="pre">10**5</span></code>), keyword
+arguments are only those in <code class="docutils literal notranslate"><span class="pre">KEYWORDS</span></code> (no <code class="docutils literal notranslate"><span class="pre">shape=</span></code>), and the <code class="docutils literal notranslate"><span class="pre">*_like</span></code>
+functions take no positional shape either.</p>
+<p>That bounds what a whitelisted call can be asked for, not what arithmetic can
+produce: broadcasting arrays given new axes (<code class="docutils literal notranslate"><span class="pre">x[...,</span> <span class="pre">None]</span> <span class="pre">*</span> <span class="pre">x[None]</span></code>) still
+multiplies a chunk’s size, so the whitelist is not a memory limit.</p>
+<section id="attributes">
+<h2>Attributes<a class="headerlink" href="#attributes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.norm.safe_expression.NUMPY_FUNCTIONS" title="cellmap_flow.norm.safe_expression.NUMPY_FUNCTIONS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">NUMPY_FUNCTIONS</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.norm.safe_expression.NUMPY_DTYPES" title="cellmap_flow.norm.safe_expression.NUMPY_DTYPES"><code class="xref py py-obj docutils literal notranslate"><span class="pre">NUMPY_DTYPES</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.norm.safe_expression.NUMPY_CONSTANTS" title="cellmap_flow.norm.safe_expression.NUMPY_CONSTANTS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">NUMPY_CONSTANTS</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.norm.safe_expression.ARRAY_METHODS" title="cellmap_flow.norm.safe_expression.ARRAY_METHODS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ARRAY_METHODS</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.norm.safe_expression.ARRAY_ATTRIBUTES" title="cellmap_flow.norm.safe_expression.ARRAY_ATTRIBUTES"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ARRAY_ATTRIBUTES</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.norm.safe_expression.DTYPE_STRINGS" title="cellmap_flow.norm.safe_expression.DTYPE_STRINGS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DTYPE_STRINGS</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.norm.safe_expression.KEYWORDS" title="cellmap_flow.norm.safe_expression.KEYWORDS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">KEYWORDS</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.norm.safe_expression.MAX_POSITIONAL" title="cellmap_flow.norm.safe_expression.MAX_POSITIONAL"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MAX_POSITIONAL</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.norm.safe_expression.MAX_LENGTH" title="cellmap_flow.norm.safe_expression.MAX_LENGTH"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MAX_LENGTH</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.norm.safe_expression.MAX_EXPONENT" title="cellmap_flow.norm.safe_expression.MAX_EXPONENT"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MAX_EXPONENT</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="functions">
+<h2>Functions<a class="headerlink" href="#functions" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.norm.safe_expression.compile_expression" title="cellmap_flow.norm.safe_expression.compile_expression"><code class="xref py py-obj docutils literal notranslate"><span class="pre">compile_expression</span></code></a>(→ Callable[[numpy.ndarray], ...)</p></td>
+<td><p>Check <code class="docutils literal notranslate"><span class="pre">expression</span></code> against the whitelist and return a function of <code class="docutils literal notranslate"><span class="pre">x</span></code>.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="module-contents">
+<h2>Module Contents<a class="headerlink" href="#module-contents" title="Link to this heading"></a></h2>
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.norm.safe_expression.NUMPY_FUNCTIONS">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.norm.safe_expression.</span></span><span class="sig-name descname"><span class="pre">NUMPY_FUNCTIONS</span></span><a class="headerlink" href="#cellmap_flow.norm.safe_expression.NUMPY_FUNCTIONS" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.norm.safe_expression.NUMPY_DTYPES">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.norm.safe_expression.</span></span><span class="sig-name descname"><span class="pre">NUMPY_DTYPES</span></span><a class="headerlink" href="#cellmap_flow.norm.safe_expression.NUMPY_DTYPES" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.norm.safe_expression.NUMPY_CONSTANTS">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.norm.safe_expression.</span></span><span class="sig-name descname"><span class="pre">NUMPY_CONSTANTS</span></span><a class="headerlink" href="#cellmap_flow.norm.safe_expression.NUMPY_CONSTANTS" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.norm.safe_expression.ARRAY_METHODS">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.norm.safe_expression.</span></span><span class="sig-name descname"><span class="pre">ARRAY_METHODS</span></span><a class="headerlink" href="#cellmap_flow.norm.safe_expression.ARRAY_METHODS" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.norm.safe_expression.ARRAY_ATTRIBUTES">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.norm.safe_expression.</span></span><span class="sig-name descname"><span class="pre">ARRAY_ATTRIBUTES</span></span><a class="headerlink" href="#cellmap_flow.norm.safe_expression.ARRAY_ATTRIBUTES" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.norm.safe_expression.DTYPE_STRINGS">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.norm.safe_expression.</span></span><span class="sig-name descname"><span class="pre">DTYPE_STRINGS</span></span><a class="headerlink" href="#cellmap_flow.norm.safe_expression.DTYPE_STRINGS" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.norm.safe_expression.KEYWORDS">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.norm.safe_expression.</span></span><span class="sig-name descname"><span class="pre">KEYWORDS</span></span><a class="headerlink" href="#cellmap_flow.norm.safe_expression.KEYWORDS" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.norm.safe_expression.MAX_POSITIONAL">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.norm.safe_expression.</span></span><span class="sig-name descname"><span class="pre">MAX_POSITIONAL</span></span><a class="headerlink" href="#cellmap_flow.norm.safe_expression.MAX_POSITIONAL" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.norm.safe_expression.MAX_LENGTH">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.norm.safe_expression.</span></span><span class="sig-name descname"><span class="pre">MAX_LENGTH</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">500</span></span><a class="headerlink" href="#cellmap_flow.norm.safe_expression.MAX_LENGTH" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.norm.safe_expression.MAX_EXPONENT">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.norm.safe_expression.</span></span><span class="sig-name descname"><span class="pre">MAX_EXPONENT</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">64</span></span><a class="headerlink" href="#cellmap_flow.norm.safe_expression.MAX_EXPONENT" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.norm.safe_expression.compile_expression">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.norm.safe_expression.</span></span><span class="sig-name descname"><span class="pre">compile_expression</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">expression</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Callable</span><span class="p"><span class="pre">[</span></span><span class="p"><span class="pre">[</span></span><span class="pre">numpy.ndarray</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">numpy.ndarray</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#cellmap_flow.norm.safe_expression.compile_expression" title="Link to this definition"></a></dt>
+<dd><p>Check <code class="docutils literal notranslate"><span class="pre">expression</span></code> against the whitelist and return a function of <code class="docutils literal notranslate"><span class="pre">x</span></code>.</p>
+<p>Raises ValueError, naming the offending construct, if the expression is
+not allowed.</p>
+</dd></dl>
+
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../input_normalize/index.html" class="btn btn-neutral float-left" title="cellmap_flow.norm.input_normalize" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../../pipeline_spec/index.html" class="btn btn-neutral float-right" title="cellmap_flow.pipeline_spec" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, David Ackerman,  Marwan Zouinkhi, Jeff Rhoades, Larissa Heinrich, Aubrey Weigel.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

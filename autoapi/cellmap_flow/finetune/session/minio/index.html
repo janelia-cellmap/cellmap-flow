@@ -1,0 +1,361 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>cellmap_flow.finetune.session.minio &mdash; CellMap Flow  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../../_static/graphviz.css?v=4ae1632d" />
+      <link rel="stylesheet" type="text/css" href="../../../../../_static/css/custom.css" />
+
+  
+    <link rel="shortcut icon" href="../../../../../_static/favicon.ico"/>
+      <script src="../../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../../../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../search.html" />
+    <link rel="next" title="cellmap_flow.finetune.session.store" href="../store/index.html" />
+    <link rel="prev" title="cellmap_flow.finetune.session.manifest" href="../manifest/index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../../index.html" class="icon icon-home">
+            CellMap Flow
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">CellMap-Flow API:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../../../../../install.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../cli.html">Command line</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../scripts.html">Python Scripts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../yaml_config.html">YAML Configuration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../data_paths.html">Data paths</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../huggingface.html">HuggingFace Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../custom_script.html">Custom Model</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../post.html">PostProcessors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../plugins.html">Plugins</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../review.html">Reviewing instances</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../viewer_api.html">Viewer layer API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../architecture.html">Architecture</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../../../../index.html">API Reference</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="../../../index.html">cellmap_flow</a><ul class="current">
+<li class="toctree-l3 current"><a class="reference internal" href="../../../index.html#submodules">Submodules</a><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="../../../blockwise/index.html">cellmap_flow.blockwise</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../cli/index.html">cellmap_flow.cli</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../config/index.html">cellmap_flow.config</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../dashboard/index.html">cellmap_flow.dashboard</a></li>
+<li class="toctree-l4 current"><a class="reference internal" href="../../index.html">cellmap_flow.finetune</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../globals/index.html">cellmap_flow.globals</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../image_data_interface/index.html">cellmap_flow.image_data_interface</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../inference/index.html">cellmap_flow.inference</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../inferencer/index.html">cellmap_flow.inferencer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../io/index.html">cellmap_flow.io</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../jobs/index.html">cellmap_flow.jobs</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../logging_setup/index.html">cellmap_flow.logging_setup</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../models/index.html">cellmap_flow.models</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../norm/index.html">cellmap_flow.norm</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../pipeline_spec/index.html">cellmap_flow.pipeline_spec</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../plugins/index.html">cellmap_flow.plugins</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../post/index.html">cellmap_flow.post</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../process_chain/index.html">cellmap_flow.process_chain</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../review/index.html">cellmap_flow.review</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../review_index/index.html">cellmap_flow.review_index</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../server/index.html">cellmap_flow.server</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../serving/index.html">cellmap_flow.serving</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../utils/index.html">cellmap_flow.utils</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../viewer/index.html">cellmap_flow.viewer</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../../index.html">CellMap Flow</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../../index.html">API Reference</a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">cellmap_flow</a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">cellmap_flow.finetune</a></li>
+          <li class="breadcrumb-item"><a href="../index.html">cellmap_flow.finetune.session</a></li>
+      <li class="breadcrumb-item active">cellmap_flow.finetune.session.minio</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../../../../../_sources/autoapi/cellmap_flow/finetune/session/minio/index.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-cellmap_flow.finetune.session.minio">
+<span id="cellmap-flow-finetune-session-minio"></span><h1>cellmap_flow.finetune.session.minio<a class="headerlink" href="#module-cellmap_flow.finetune.session.minio" title="Link to this heading"></a></h1>
+<p>The dashboard’s MinIO: the local S3 server annotation volumes are painted through.</p>
+<p>Neuroglancer reads and writes a volume’s chunks straight from MinIO; the
+volume on disk is mirrored up when it is served and pulled back by
+<code class="docutils literal notranslate"><span class="pre">session.sync</span></code>. The server’s state – process, address, bucket, data
+directory, sync thread – lives in the dict a <code class="docutils literal notranslate"><span class="pre">MinioServer</span></code> is given (the
+dashboard’s <code class="docutils literal notranslate"><span class="pre">minio_state</span></code>), never here, so any number of them over the
+same dict agree.</p>
+<section id="attributes">
+<h2>Attributes<a class="headerlink" href="#attributes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.session.minio.logger" title="cellmap_flow.finetune.session.minio.logger"><code class="xref py py-obj docutils literal notranslate"><span class="pre">logger</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.finetune.session.minio.MC_ALIAS" title="cellmap_flow.finetune.session.minio.MC_ALIAS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MC_ALIAS</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.session.minio.MINIO_READY_TIMEOUT" title="cellmap_flow.finetune.session.minio.MINIO_READY_TIMEOUT"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MINIO_READY_TIMEOUT</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.finetune.session.minio.MINIO_PROXY_URL_ENV" title="cellmap_flow.finetune.session.minio.MINIO_PROXY_URL_ENV"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MINIO_PROXY_URL_ENV</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="classes">
+<h2>Classes<a class="headerlink" href="#classes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.session.minio.MinioServer" title="cellmap_flow.finetune.session.minio.MinioServer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MinioServer</span></code></a></p></td>
+<td><p>Starts MinIO once, then serves annotation volumes through it.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="functions">
+<h2>Functions<a class="headerlink" href="#functions" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.session.minio.get_local_ip" title="cellmap_flow.finetune.session.minio.get_local_ip"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_local_ip</span></code></a>()</p></td>
+<td><p>This machine's address on its outgoing interface, else 127.0.0.1.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.finetune.session.minio.find_available_port" title="cellmap_flow.finetune.session.minio.find_available_port"><code class="xref py py-obj docutils literal notranslate"><span class="pre">find_available_port</span></code></a>([start_port])</p></td>
+<td><p>A free port whose next one is free too: MinIO's API and console.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.session.minio.minio_root" title="cellmap_flow.finetune.session.minio.minio_root"><code class="xref py py-obj docutils literal notranslate"><span class="pre">minio_root</span></code></a>(→ pathlib.Path)</p></td>
+<td><p>Where MinIO started for <code class="docutils literal notranslate"><span class="pre">output_base_dir</span></code> keeps its data.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.finetune.session.minio.wait_for_ready" title="cellmap_flow.finetune.session.minio.wait_for_ready"><code class="xref py py-obj docutils literal notranslate"><span class="pre">wait_for_ready</span></code></a>(→ bool)</p></td>
+<td><p>Poll MinIO's readiness endpoint until it answers 200, the process exits, or time runs out.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.session.minio.make_s3_filesystem" title="cellmap_flow.finetune.session.minio.make_s3_filesystem"><code class="xref py py-obj docutils literal notranslate"><span class="pre">make_s3_filesystem</span></code></a>(state)</p></td>
+<td><p>An s3fs filesystem pointed at the MinIO <code class="docutils literal notranslate"><span class="pre">state</span></code> describes.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.finetune.session.minio.proxied_url" title="cellmap_flow.finetune.session.minio.proxied_url"><code class="xref py py-obj docutils literal notranslate"><span class="pre">proxied_url</span></code></a>(minio_url[, request])</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">minio_url</span></code> as a browser behind a reverse proxy can reach it.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="module-contents">
+<h2>Module Contents<a class="headerlink" href="#module-contents" title="Link to this heading"></a></h2>
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.session.minio.logger">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.session.minio.</span></span><span class="sig-name descname"><span class="pre">logger</span></span><a class="headerlink" href="#cellmap_flow.finetune.session.minio.logger" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.session.minio.MC_ALIAS">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.session.minio.</span></span><span class="sig-name descname"><span class="pre">MC_ALIAS</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'myserver'</span></span><a class="headerlink" href="#cellmap_flow.finetune.session.minio.MC_ALIAS" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.session.minio.MINIO_READY_TIMEOUT">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.session.minio.</span></span><span class="sig-name descname"><span class="pre">MINIO_READY_TIMEOUT</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">30.0</span></span><a class="headerlink" href="#cellmap_flow.finetune.session.minio.MINIO_READY_TIMEOUT" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.session.minio.MINIO_PROXY_URL_ENV">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.session.minio.</span></span><span class="sig-name descname"><span class="pre">MINIO_PROXY_URL_ENV</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'CELLMAP_FLOW_MINIO_PROXY_URL'</span></span><a class="headerlink" href="#cellmap_flow.finetune.session.minio.MINIO_PROXY_URL_ENV" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.session.minio.get_local_ip">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.session.minio.</span></span><span class="sig-name descname"><span class="pre">get_local_ip</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.finetune.session.minio.get_local_ip" title="Link to this definition"></a></dt>
+<dd><p>This machine’s address on its outgoing interface, else 127.0.0.1.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.session.minio.find_available_port">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.session.minio.</span></span><span class="sig-name descname"><span class="pre">find_available_port</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">start_port</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">9000</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.finetune.session.minio.find_available_port" title="Link to this definition"></a></dt>
+<dd><p>A free port whose next one is free too: MinIO’s API and console.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.session.minio.minio_root">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.session.minio.</span></span><span class="sig-name descname"><span class="pre">minio_root</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">output_base_dir</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">pathlib.Path</span></span></span><a class="headerlink" href="#cellmap_flow.finetune.session.minio.minio_root" title="Link to this definition"></a></dt>
+<dd><p>Where MinIO started for <code class="docutils literal notranslate"><span class="pre">output_base_dir</span></code> keeps its data.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.session.minio.wait_for_ready">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.session.minio.</span></span><span class="sig-name descname"><span class="pre">wait_for_ready</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ip</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">port</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">process</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">timeout</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">MINIO_READY_TIMEOUT</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#cellmap_flow.finetune.session.minio.wait_for_ready" title="Link to this definition"></a></dt>
+<dd><p>Poll MinIO’s readiness endpoint until it answers 200, the process exits, or time runs out.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.session.minio.make_s3_filesystem">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.session.minio.</span></span><span class="sig-name descname"><span class="pre">make_s3_filesystem</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">state</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.finetune.session.minio.make_s3_filesystem" title="Link to this definition"></a></dt>
+<dd><p>An s3fs filesystem pointed at the MinIO <code class="docutils literal notranslate"><span class="pre">state</span></code> describes.</p>
+<p>Both cache opt-outs are load-bearing, not tuning knobs.</p>
+<p>fsspec caches filesystem <em>instances</em> keyed on their constructor
+arguments, so every call here would otherwise hand back the same object
+– and with it the same <code class="docutils literal notranslate"><span class="pre">dircache</span></code>. s3fs fills <code class="docutils literal notranslate"><span class="pre">dircache</span></code> on <code class="docutils literal notranslate"><span class="pre">ls()</span></code>
+and never expires it by default. The periodic sync thread starts with
+MinIO, when the first volume is served, so its first listing of
+<code class="docutils literal notranslate"><span class="pre">annotation/s0</span></code> runs before the user has painted anything and would
+cache a chunk-less listing. Every later sync would reuse that stale
+listing, <code class="docutils literal notranslate"><span class="pre">diff_and_sync_chunks</span></code> would see no chunk keys, and painted
+scribbles would never reach disk – while <code class="docutils literal notranslate"><span class="pre">sync_zarr_group_metadata</span></code>
+would keep working, because <code class="docutils literal notranslate"><span class="pre">cat()</span></code>/<code class="docutils literal notranslate"><span class="pre">exists()</span></code> address objects
+directly and bypass the cache. The symptom: every sync logs “no changes”
+however much is painted, and training finds a volume with no populated
+chunks.</p>
+<p>Listings here are small and served by a local MinIO, so not caching them
+costs nothing.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.session.minio.proxied_url">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.session.minio.</span></span><span class="sig-name descname"><span class="pre">proxied_url</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">minio_url</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">request</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.finetune.session.minio.proxied_url" title="Link to this definition"></a></dt>
+<dd><p><code class="docutils literal notranslate"><span class="pre">minio_url</span></code> as a browser behind a reverse proxy can reach it.</p>
+<p>A browser that loaded the dashboard over a proxy’s HTTPS cannot fetch
+<code class="docutils literal notranslate"><span class="pre">http://&lt;node&gt;:&lt;port&gt;/...</span></code> chunks from MinIO: the node may not be
+reachable, and the page blocks the mixed content. When
+CELLMAP_FLOW_MINIO_PROXY_URL is set and <code class="docutils literal notranslate"><span class="pre">request</span></code> (anything with
+<code class="docutils literal notranslate"><span class="pre">headers</span></code> and <code class="docutils literal notranslate"><span class="pre">scheme</span></code>) came through a proxy, the URL’s path is put
+under that URL instead.</p>
+<p>Only a request carrying X-Forwarded-Host came through a proxy; the Host
+header is there for every browser, including one that reaches the
+dashboard directly. The scheme is X-Forwarded-Proto’s, else the
+request’s own. Otherwise, and with no request, the URL is returned
+unchanged.</p>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.session.minio.MinioServer">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.session.minio.</span></span><span class="sig-name descname"><span class="pre">MinioServer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">state</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">preflight</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">volumes</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.finetune.session.minio.MinioServer" title="Link to this definition"></a></dt>
+<dd><p>Starts MinIO once, then serves annotation volumes through it.</p>
+<p><code class="docutils literal notranslate"><span class="pre">state</span></code> is the dashboard’s <code class="docutils literal notranslate"><span class="pre">minio_state</span></code> dict (<code class="docutils literal notranslate"><span class="pre">process</span></code>, <code class="docutils literal notranslate"><span class="pre">ip</span></code>,
+<code class="docutils literal notranslate"><span class="pre">port</span></code>, <code class="docutils literal notranslate"><span class="pre">bucket</span></code>, <code class="docutils literal notranslate"><span class="pre">output_base</span></code>, <code class="docutils literal notranslate"><span class="pre">log_path</span></code>, <code class="docutils literal notranslate"><span class="pre">sync_thread</span></code>):
+it is read and written in place. <code class="docutils literal notranslate"><span class="pre">volumes</span></code> is the volume registry the
+sync keeps its per-chunk state in. <code class="docutils literal notranslate"><span class="pre">preflight</span></code>, if given, runs before
+anything else, e.g. a check that the binaries are installed.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.session.minio.MinioServer.state">
+<span class="sig-name descname"><span class="pre">state</span></span><a class="headerlink" href="#cellmap_flow.finetune.session.minio.MinioServer.state" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.session.minio.MinioServer.preflight">
+<span class="sig-name descname"><span class="pre">preflight</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.finetune.session.minio.MinioServer.preflight" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.session.minio.MinioServer.volumes">
+<span class="sig-name descname"><span class="pre">volumes</span></span><a class="headerlink" href="#cellmap_flow.finetune.session.minio.MinioServer.volumes" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.session.minio.MinioServer.running">
+<span class="sig-name descname"><span class="pre">running</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#cellmap_flow.finetune.session.minio.MinioServer.running" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.session.minio.MinioServer.mc_env">
+<span class="sig-name descname"><span class="pre">mc_env</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span></span></span><a class="headerlink" href="#cellmap_flow.finetune.session.minio.MinioServer.mc_env" title="Link to this definition"></a></dt>
+<dd><p>The environment for an <cite>mc</cite> call that addresses this server as MC_ALIAS.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.session.minio.MinioServer.url_for">
+<span class="sig-name descname"><span class="pre">url_for</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">zarr_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#cellmap_flow.finetune.session.minio.MinioServer.url_for" title="Link to this definition"></a></dt>
+<dd><p>The URL a browser reads <code class="docutils literal notranslate"><span class="pre">&lt;bucket&gt;/&lt;zarr_name&gt;</span></code> at, before any proxy.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.session.minio.MinioServer.ensure_serving">
+<span class="sig-name descname"><span class="pre">ensure_serving</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">zarr_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">volume_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_base_dir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mc_target_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#cellmap_flow.finetune.session.minio.MinioServer.ensure_serving" title="Link to this definition"></a></dt>
+<dd><p>Start MinIO if needed, then upload the volume at <code class="docutils literal notranslate"><span class="pre">zarr_path</span></code>; returns its MinIO URL.</p>
+<p><code class="docutils literal notranslate"><span class="pre">volume_id</span></code> is how the sync finds its chunks: the bucket key without
+“.zarr”. <code class="docutils literal notranslate"><span class="pre">mc_target_name</span></code> is that key when it is not
+<code class="docutils literal notranslate"><span class="pre">basename(zarr_path)</span></code>: instance corrections keep one key per ROI
+whichever snapshot on disk is served. A MinIO that has to start keeps
+its data in <code class="docutils literal notranslate"><span class="pre">&lt;output_base_dir&gt;/.minio</span></code>; a running one keeps its own.</p>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../manifest/index.html" class="btn btn-neutral float-left" title="cellmap_flow.finetune.session.manifest" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../store/index.html" class="btn btn-neutral float-right" title="cellmap_flow.finetune.session.store" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, David Ackerman,  Marwan Zouinkhi, Jeff Rhoades, Larissa Heinrich, Aubrey Weigel.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

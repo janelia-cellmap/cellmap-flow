@@ -10,7 +10,6 @@
       <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="_static/graphviz.css?v=4ae1632d" />
-      <link rel="stylesheet" type="text/css" href="_static/mystnb.11b39860a7a0cbfd473a3ad8a317855267ff0bd372690045ca344a6b62be495e.css" />
       <link rel="stylesheet" type="text/css" href="_static/css/custom.css" />
 
   
@@ -20,7 +19,6 @@
       <script src="_static/documentation_options.js?v=5929fcd5"></script>
       <script src="_static/doctools.js?v=fd6eb6e6"></script>
       <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
-      <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
     <script src="_static/js/theme.js"></script>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
@@ -50,8 +48,10 @@
               <p class="caption" role="heading"><span class="caption-text">CellMap-Flow API:</span></p>
 <ul class="current">
 <li class="toctree-l1"><a class="reference internal" href="install.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="cli.html">Command line</a></li>
 <li class="toctree-l1"><a class="reference internal" href="scripts.html">Python Scripts</a></li>
 <li class="toctree-l1"><a class="reference internal" href="yaml_config.html">YAML Configuration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="data_paths.html">Data paths</a></li>
 <li class="toctree-l1"><a class="reference internal" href="huggingface.html">HuggingFace Models</a></li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">Custom Model</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="#overview">Overview</a></li>
@@ -66,6 +66,9 @@
 </li>
 <li class="toctree-l1"><a class="reference internal" href="post.html">PostProcessors</a></li>
 <li class="toctree-l1"><a class="reference internal" href="plugins.html">Plugins</a></li>
+<li class="toctree-l1"><a class="reference internal" href="review.html">Reviewing instances</a></li>
+<li class="toctree-l1"><a class="reference internal" href="viewer_api.html">Viewer layer API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="architecture.html">Architecture</a></li>
 <li class="toctree-l1"><a class="reference internal" href="autoapi/index.html">API Reference</a></li>
 </ul>
 
@@ -106,13 +109,13 @@
 <li><p>Use the CLI to launch the pipeline.</p></li>
 </ol>
 <p>The CLI command looks like:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>cellmap_flow<span class="w"> </span>script<span class="w"> </span>-s<span class="w"> </span>/path/to/your_script.py<span class="w"> </span>-d<span class="w"> </span>/path/to/input_data.zarr<span class="w"> </span>-q<span class="w"> </span>gpu_h100<span class="w"> </span>-P<span class="w"> </span>cellmap
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>cellmap_flow<span class="w"> </span>infer<span class="w"> </span>script<span class="w"> </span>-s<span class="w"> </span>/path/to/your_script.py<span class="w"> </span>-d<span class="w"> </span>/path/to/input_data.zarr<span class="w"> </span>-q<span class="w"> </span>gpu_h100<span class="w"> </span>-P<span class="w"> </span>cellmap
 </pre></div>
 </div>
 </section>
 <section id="minimum-requirements-for-custom-scripts">
 <h2>Minimum Requirements for Custom Scripts<a class="headerlink" href="#minimum-requirements-for-custom-scripts" title="Link to this heading"></a></h2>
-<p>When using <cite>cellmap_flow script</cite>, your Python script <strong>must define</strong> a configuration object (typically the global scope) that satisfies the following:</p>
+<p>When using <cite>cellmap_flow infer script</cite>, your Python script <strong>must define</strong> a configuration object (typically the global scope) that satisfies the following:</p>
 <section id="required-attributes">
 <h3>Required Attributes<a class="headerlink" href="#required-attributes" title="Link to this heading"></a></h3>
 <p>Your script must define the following <strong>global-level</strong> variables or attributes:</p>
@@ -131,10 +134,12 @@
 <section id="testing-your-script">
 <h2>Testing Your Script<a class="headerlink" href="#testing-your-script" title="Link to this heading"></a></h2>
 <p>You can test your script locally using:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>cellmap_flow<span class="w"> </span>script-server-check<span class="w"> </span>-s<span class="w"> </span>/path/to/your_script.py<span class="w"> </span>-d<span class="w"> </span>/path/to/input.zarr
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>cellmap_flow<span class="w"> </span>infer<span class="w"> </span>script<span class="w"> </span>--script-path<span class="w"> </span>/path/to/your_script.py<span class="w"> </span>-d<span class="w"> </span>/path/to/input.zarr<span class="w"> </span>--server-check
 </pre></div>
 </div>
-<p>This will simulate a small 2x2x2 chunk to ensure your setup works correctly.</p>
+<p>This loads the script and runs the model on a single output chunk (chunk index
+2, 2, 2) in the current process, without submitting a job, and prints
+<code class="docutils literal notranslate"><span class="pre">Server</span> <span class="pre">check</span> <span class="pre">passed</span></code> when the chunk comes back.</p>
 </section>
 <section id="basic-script-template-pytorch">
 <h2>Basic Script Template (PyTorch)<a class="headerlink" href="#basic-script-template-pytorch" title="Link to this heading"></a></h2>

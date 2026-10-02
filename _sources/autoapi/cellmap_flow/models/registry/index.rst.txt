@@ -1,0 +1,199 @@
+cellmap_flow.models.registry
+============================
+
+.. py:module:: cellmap_flow.models.registry
+
+.. autoapi-nested-parse::
+
+   The model types cellmap-flow knows, and how a model config is built from strings.
+
+   Every ModelConfig subclass is a model type: the built-in ones in
+   ``models/configs`` (imported from models_config) and any that a plugin
+   defines. The model CLIs
+   (``cellmap_flow infer``, ``cellmap_flow serve``, ``cellmap_flow yaml``), YAML
+   configs, the dashboard's model form and the finetune CLI's model entries
+   all look types up here, so a plugin type is a type everywhere.
+
+   Nothing is cached. Plugins are loaded when ``cellmap_flow`` is imported, and
+   a plugin or a test can define a type at any time, so each call walks the
+   subclasses as they are at that moment.
+
+   Strings become constructor arguments in three ways, kept apart on purpose
+   because each reproduces what its caller has always done:
+
+   - ``coerce_cli_args``: click's strings. ``"8,8,8"`` for a tuple becomes
+     ``(8, 8, 8)``, ints.
+   - ``coerce_form_params``: the dashboard form's strings. JSON, or
+     ``"8,8,8"`` becomes ``(8.0, 8.0, 8.0)``, floats; ``instantiate_model_config``
+     builds the form's model with them.
+   - ``build_model``: YAML values, after ``YAML_ALIASES`` and the voxel-size
+     shorthands, then ``coerce_cli_args``; ``build_models`` for a YAML's whole
+     ``models``.
+
+   A bad YAML entry or type name is a ``config.yaml.ConfigError``.
+
+   Importing this module imports neither torch, flask, huggingface_hub nor
+   ``cellmap_flow.globals``. The model config classes, which bring numpy and
+   funlib (most of a second), are imported only when a function needs them.
+   ``describe_types`` reads constructor signatures only, so it never imports
+   bioimageio, dacapo or cellmap_models either.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.models.registry.logger
+   cellmap_flow.models.registry.YAML_ALIASES
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.models.registry.cli_name_of
+   cellmap_flow.models.registry.model_types
+   cellmap_flow.models.registry.model_type
+   cellmap_flow.models.registry.model_classes
+   cellmap_flow.models.registry.required_params
+   cellmap_flow.models.registry.build_model
+   cellmap_flow.models.registry.build_models
+   cellmap_flow.models.registry.coerce_cli_args
+   cellmap_flow.models.registry.click_options
+   cellmap_flow.models.registry.print_available_models
+   cellmap_flow.models.registry.coerce_form_params
+   cellmap_flow.models.registry.instantiate_model_config
+   cellmap_flow.models.registry.parameter_info
+   cellmap_flow.models.registry.describe_types
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:data:: YAML_ALIASES
+
+.. py:function:: cli_name_of(cls: type) -> str
+
+   The name ``cls`` is registered under: its own ``cli_name``, else one from its class name.
+
+   Only a ``cli_name`` the class sets itself counts. A plugin's
+   ``class MyScript(ScriptModelConfig)`` inherits ``cli_name = "script"``;
+   taking that as its name would either replace the script type or lose
+   the name clash and leave MyScript without a type, and its ``command``
+   would ask the server for a plain ScriptModelConfig. It is "myscript".
+
+
+.. py:function:: model_types() -> Dict[str, type]
+
+   Every model type, by the name the CLIs and YAML ``type:`` use.
+
+   Plugins included, subclasses of subclasses too. When two classes claim a
+   name the first one found keeps it, and the other is left out with a
+   warning.
+
+
+.. py:function:: model_type(name: str) -> type
+
+   The class registered as ``name``, matched as a YAML ``type:`` is.
+
+   :raises ConfigError: no type has that name; the message lists the valid ones.
+
+
+.. py:function:: model_classes() -> Dict[str, type]
+
+   Every model type by class name (``"ScriptModelConfig"``), plugins included.
+
+
+.. py:function:: required_params(cls) -> List[str]
+
+   The constructor arguments a user must give: no default, and not name or scale.
+
+
+.. py:function:: build_model(entry: Dict[str, Any], name: str)
+
+   A model config from a YAML model entry; ``name`` is its key in the YAML.
+
+   :raises ConfigError: the entry does not describe a model that can be built.
+
+
+.. py:function:: build_models(model_entries) -> list
+
+   The model configs for a YAML's ``models``: ``build_model`` for each entry.
+
+   ``model_entries`` maps each model's name to its entry, or is a list of
+   entries that each have a ``name``::
+
+       models:
+         my_model_1:
+           type: cellmap
+           checkpoint_path: /path/to/checkpoint
+         my_model_2:
+           type: dacapo
+           run_name: my_run
+           iteration: 50000
+
+   :raises ConfigError: an entry does not describe a model that can be built.
+
+
+.. py:function:: coerce_cli_args(cls, kwargs: Dict[str, Any]) -> Dict[str, Any]
+
+   ``kwargs`` from the command line, as constructor arguments for ``cls``.
+
+   Only list and tuple arguments given as strings are converted (from
+   comma-separated values); None values and names ``cls`` does not take
+   are dropped, and everything else is passed through as it is.
+
+
+.. py:function:: click_options(cls, reserved_short) -> List[dict]
+
+   The ``click.option`` arguments for each of ``cls``'s constructor arguments.
+
+   In signature order, which is also the order short flags are handed out
+   in: an argument gets its first letter unless an earlier argument has it
+   already (``script -s`` is ``--script-path``, and ``--scale`` has no short
+   flag). ``reserved_short`` holds the command's own short flags (``-d`` and
+   so on), which no argument gets.
+
+
+.. py:function:: print_available_models(cli_command_name: str = 'cellmap_flow')
+
+   Print every model type and its constructor arguments, for ``list-models``.
+
+   ``cli_command_name`` is the command the closing hint names.
+
+
+.. py:function:: coerce_form_params(cls, params: Dict[str, Any]) -> Dict[str, Any]
+
+   The model form's values, as constructor arguments for ``cls``.
+
+   :raises ValueError: a required argument is missing or empty.
+
+
+.. py:function:: instantiate_model_config(class_name: str, params: Dict[str, Any]) -> Any
+
+   The model config the dashboard's model form describes.
+
+   ``class_name`` is a model type's class name (``"ScriptModelConfig"``),
+   plugins' included, and ``params`` the form's values
+   (``coerce_form_params``).
+
+   :raises ValueError: the class is unknown, or the values do not build one.
+
+
+.. py:function:: parameter_info(cls) -> Dict[str, Any]
+
+   Each constructor argument of ``cls``: name, required, description, type and default.
+
+
+.. py:function:: describe_types(classes=None) -> Dict[str, Dict[str, Any]]
+
+   What the dashboard's model form offers, by class name.
+
+   ``classes`` (class name -> class) defaults to ``model_classes()``.
+
+

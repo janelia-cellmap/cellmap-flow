@@ -1,0 +1,63 @@
+cellmap_flow.viewer.bootstrap
+=============================
+
+.. py:module:: cellmap_flow.viewer.bootstrap
+
+.. autoapi-nested-parse::
+
+   A new viewer on a dataset: ``new_viewer()``.
+
+   The viewers the dashboard serves are made here: the CLIs' startup viewer
+   (dashboard.services.startup.generate_neuroglancer_url), /api/set-data, and the
+   bounding-box tool. ``cellmap_flow view`` (cli/viewer_cli.py) still builds its
+   own. It never starts the dashboard.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.viewer.bootstrap.logger
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.viewer.bootstrap.raw_dimensions
+   cellmap_flow.viewer.bootstrap.new_viewer
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:function:: raw_dimensions(dataset_path)
+
+   The viewer's dimensions for ``dataset_path``: the axes and voxel size
+   of the finest level of its pyramid (of the array itself, if it is none).
+
+   Set before any layer is added, so that the raw data decides the viewer's
+   coordinate space rather than whichever layer neuroglancer takes it from,
+   such as an extra layer at another voxel size. None if it cannot be read.
+
+
+.. py:function:: new_viewer(dataset_path, *, scales=None, raw=None, raw_name='data', layers=None)
+
+   A viewer showing the raw data at ``dataset_path``, then ``layers``.
+
+   - ``scales``: the viewer's dimensions, z, y, x in nm. None takes them from
+     the raw (raw_dimensions), or leaves them to neuroglancer if it cannot
+     be read.
+   - ``raw``: the raw data's layer, if the caller built it (raw_layer);
+     shown as ``raw_name``.
+   - ``layers``: ``{name: layer}``, added after the raw in their order.
+
+   Its server binds every interface: the browser is rarely on the machine
+   the viewer runs on.
+
+

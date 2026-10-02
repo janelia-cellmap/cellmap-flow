@@ -1,8 +1,8 @@
 YAML Configuration
 ===================
 
-``cellmap_flow_yaml`` lets you define and run multiple models from a single YAML file.
-It is the recommended way to launch inference jobs, and the same YAML format is used by the blockwise processor (``cellmap_flow_blockwise``).
+``cellmap_flow yaml`` lets you define and run multiple models from a single YAML file.
+It is the recommended way to launch inference jobs, and the same YAML format is used by the blockwise processor (``cellmap_flow blockwise``).
 
 Usage
 -----
@@ -10,16 +10,16 @@ Usage
 .. code-block:: bash
 
     # Run inference
-    cellmap_flow_yaml config.yaml
+    cellmap_flow yaml config.yaml
 
     # Validate without running
-    cellmap_flow_yaml config.yaml --validate-only
+    cellmap_flow yaml config.yaml --validate-only
 
     # List available model types
-    cellmap_flow_yaml --list-types
+    cellmap_flow yaml --list-types
 
     # Set log level
-    cellmap_flow_yaml config.yaml --log-level DEBUG
+    cellmap_flow yaml config.yaml --log-level DEBUG
 
 YAML Structure
 --------------
@@ -35,7 +35,8 @@ A configuration file has the following top-level fields:
      - Description
    * - ``data_path``
      - Yes
-     - Path to the input dataset (zarr/n5).
+     - Path to the input dataset: zarr, N5 or precomputed, on disk or at an
+       ``http(s)://``, ``s3://`` or ``gs://`` URL (see :doc:`data_paths`).
    * - ``charge_group``
      - Yes
      - Project billing group.
@@ -51,6 +52,12 @@ A configuration file has the following top-level fields:
    * - ``wrap_raw``
      - No
      - Wrap raw data in neuroglancer (default: ``true``).
+   * - ``resample``
+     - No
+     - ``true`` resamples the data to each model's input voxel size when it has no level at that size (default: ``false``; see :ref:`resampling`).
+   * - ``extra_layers``
+     - No
+     - More volumes to show in the viewer beside the raw data (see below).
    * - ``output_path``
      - No
      - Output zarr path (used by blockwise processing).
@@ -72,12 +79,15 @@ A configuration file has the following top-level fields:
    * - ``separate_bounding_boxes_zarrs``
      - No
      - Write each bounding box to a separate zarr (blockwise).
+   * - ``output_channels``
+     - No
+     - Which model channels blockwise writes, and to which outputs (see :ref:`output-channels`).
 
 Model Entries
 -------------
 
 Each model entry requires a ``type`` field and the parameters for that model type.
-Use ``cellmap_flow_yaml --list-types`` to see all available types and their required parameters.
+Use ``cellmap_flow yaml --list-types`` to see all available types and their required parameters.
 
 Models can be specified as a **dict** (keys become model names) or a **list** (each entry must include a ``name`` field).
 
@@ -140,6 +150,23 @@ Available Model Types
 
 Common optional parameters: ``name``, ``scale``.
 
+.. _channel-names:
+
+Channel Names
+~~~~~~~~~~~~~
+
+A model names its output channels, in order, with one of:
+
+- ``channels``: a list in a model script, or a ``fly`` entry's parameter. In a ``fly`` entry, ``classes`` is the same parameter under another name, so give one of them; a ``fly`` entry may also give its names as one comma-separated string, ``classes: mito,er``.
+- ``channels_names``: read from the ``metadata.json`` of a ``huggingface`` or ``cellmap`` model.
+- ``classes``: a list in a model script.
+
+A DaCapo model takes its names from its run's task. A ``bio`` model names none.
+
+When a model gives more than one of these, the first that is not empty wins, in the order ``channels``, ``channels_names``, ``classes``. In a model script a single string is one name: ``channels = "mito"`` is one channel called ``mito``.
+
+The inference server reports the names with the model's geometry, and blockwise names its outputs by them (see :ref:`output-channels`). A model that names no channels still serves; blockwise then needs ``output_channels`` as a mapping of channel indices.
+
 Normalizers and Postprocessors
 ------------------------------
 
@@ -166,6 +193,61 @@ Define input normalization and output postprocessing under ``json_data``:
 
 Normalizers are applied in order before inference. Postprocessors are applied in order after inference.
 
+.. _resampling:
+
+Data at Another Voxel Size
+--------------------------
+
+A model reads the level of ``data_path`` at its input voxel size. When there is no such level, what happens depends on ``resample``:
+
+- **Left out, or** ``resample: false``: the level closest to the model's voxel size that is not coarser on any axis (the finest level, when every one is) is read *as if* it were at the model's voxel size, voxel for voxel, with a warning. The model then sees data at the wrong scale, and its predictions are drawn where that level really is, at a proportionally different voxel size.
+- ``resample: true``: a level is resampled to the model's voxel size, axis by axis, and the model sees the data at the size it was trained at. Its predictions are at its declared output voxel size.
+
+.. code-block:: yaml
+
+    data_path: /nrs/cellmap/data/my_dataset/my_dataset.zarr/recon-1/em/fibsem-uint8
+    charge_group: cellmap
+    resample: true   # levels 8x8x40, 16x16x80 ... nm; the model wants 16x16x16
+
+    models:
+      my_model:
+        type: dacapo
+        run_name: my_run
+        iteration: 50000
+
+How the data is resampled:
+
+- **Which level.** The coarsest level that is no coarser than the model's voxel size on any axis, so every axis is downsampled from as close as the pyramid allows; when every level is coarser on some axis, the finest level. A level at exactly the model's voxel size is read as it is.
+- **Each axis by its own factor.** By a whole number of voxels (8 nm to 16 nm), each voxel is the mean of the voxels it covers. Otherwise (40 nm to 16 nm, or 12 nm to 16 nm), it is a linear interpolation between the two nearest voxels. Label data (bool, or integers of 32 bits or more) takes the nearest voxel instead, so no label is invented. Intensities stay in their dtype (uint8 stays uint8, rounded), and go through ``json_data``'s normalizers after resampling, as a stored level would.
+- **Where.** The resampled grid starts at the level's own corner, so the predictions lie over the data. Chunks are resampled on their own, and each gives exactly the voxels a read of the whole volume would.
+
+``cellmap_flow yaml`` starts each server with ``--resample``, and ``cellmap_flow blockwise`` reads the data resampled the same way. ``cellmap_flow infer <type> --resample`` is the same for one model (:doc:`cli`).
+
+Extra Layers
+------------
+
+``cellmap_flow yaml`` can show more volumes in the viewer beside the raw data and the predictions, for instance an earlier prediction or an instance segmentation. Each is read as stored, without the input normalizers:
+
+.. code-block:: yaml
+
+    extra_layers:
+      - name: base_mito
+        path: /nrs/cellmap/predictions/mito.zarr/mito
+        shader: |                      # optional, image layers only
+          void main() { emitRGB(vec3(0, toNormalized(getDataValue()), 0)); }
+        blend: additive                # optional, image layers only
+      - name: instances
+        path: /nrs/cellmap/predictions/instances.zarr/s0
+        layer_type: segmentation       # default: image
+        disable_meshes: true           # optional; no meshes computed when a segment is picked
+
+A volume that cannot be opened is logged and left out. ``--validate-only`` checks that every entry has a unique ``name`` and a ``path``, and a known ``layer_type``.
+
+Behind a Reverse Proxy
+----------------------
+
+When the dashboard is reached through a reverse proxy that sets ``X-Forwarded-Host``, the page loads the neuroglancer viewer from the same path on the proxy's host, so the proxy must route ``/v/`` on to the viewer. Inference servers are addressed as they report themselves (``http://<node>:<port>``) unless ``CELLMAP_FLOW_SERVER_URL_TEMPLATE`` is set in the dashboard's environment, for example to ``https://proxy.example.org/inf-{port}``; ``{url}``, ``{host}`` and ``{port}`` are the reported address and its parts.
+
 Bounding Boxes
 --------------
 
@@ -180,6 +262,32 @@ For blockwise processing, you can specify regions of interest:
         shape: [11626, 12405, 26847]
 
 Set ``separate_bounding_boxes_zarrs: true`` to write each bounding box to its own zarr subdirectory (``box_1``, ``box_2``, etc).
+
+.. _output-channels:
+
+Output Channels
+---------------
+
+Blockwise writes each output to its own group, ``<output_path>/<output name>/s0``. ``output_channels`` says which of the model's channels go to which output:
+
+- **Left out**: one output per model channel, named by the model's channel names (see :ref:`channel-names`).
+- **A list of channel names** (or one name): one output for each, holding that model channel.
+
+  .. code-block:: yaml
+
+      output_channels: [mito, er]
+
+- **A mapping of output names to channel indices**, counted from 0. An index, or a list of one, gives an output holding that channel. A list of several gives one output with those channels stacked, in the list's order, on a leading channel axis ``c``: its axes are ``c, z, y, x``.
+
+  .. code-block:: yaml
+
+      output_channels:
+        affinities: [0, 1, 2]   # c, z, y, x: channels 0, 1 and 2
+        mito: 3                 # z, y, x: channel 3
+
+  A mapping names the outputs itself and picks channels by index, so it also works for a model that names no channels.
+
+Outputs are named uniquely: a list naming a channel twice is refused.
 
 Examples
 --------
@@ -280,5 +388,5 @@ Run blockwise processing with:
 
 .. code-block:: bash
 
-    cellmap_flow_blockwise config.yaml
-    cellmap_flow_blockwise config.yaml --log-level DEBUG
+    cellmap_flow blockwise config.yaml
+    cellmap_flow blockwise config.yaml --log-level DEBUG

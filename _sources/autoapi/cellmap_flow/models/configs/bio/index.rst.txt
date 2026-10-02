@@ -1,0 +1,105 @@
+cellmap_flow.models.configs.bio
+===============================
+
+.. py:module:: cellmap_flow.models.configs.bio
+
+.. autoapi-nested-parse::
+
+   ``BioModelConfig``: a bioimage.io model, run through ``bioimageio.core``.
+
+   The shapes come from the model's test input and output. A 2-D model's
+   batch axis stands in for z. Chunks go through ``process_chunk_bioimage``,
+   bound onto the built Config, whose output ``format_output_bioimage``
+   puts channels first and scales to uint8.
+
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.models.configs.bio.BioModelConfig
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.models.configs.bio.concat_along_c
+   cellmap_flow.models.configs.bio.reorder_axes
+   cellmap_flow.models.configs.bio.process_chunk_bioimage
+   cellmap_flow.models.configs.bio.format_output_bioimage
+
+
+Module Contents
+---------------
+
+.. py:class:: BioModelConfig(model_name: str, voxel_size, edge_length_to_process=None, name=None, scale=None)
+
+
+
+   .. py:attribute:: cli_name
+      :value: 'bioimage'
+
+
+
+   .. py:attribute:: model_name
+
+
+   .. py:attribute:: voxel_size
+      :value: None
+
+
+
+   .. py:attribute:: name
+      :value: None
+
+
+
+   .. py:attribute:: scale
+      :value: None
+
+
+
+   .. py:attribute:: voxels_to_process
+      :value: None
+
+
+
+   .. py:method:: load_input_information(model)
+
+
+   .. py:method:: load_output_information(model)
+
+
+   .. py:method:: get_axes_and_dims(sample)
+
+
+   .. py:method:: get_spatial_dims(axes, dims)
+
+
+   .. py:method:: get_input_slicer(input_axes)
+
+
+   .. py:method:: to_dict()
+
+      This config as a model entry, which ``registry.build_model`` rebuilds.
+
+
+
+.. py:function:: concat_along_c(arrs, axes_list, channel_axis_name='c')
+
+   Concatenate arrays along the channel axis, adding channel dim if missing.
+
+
+.. py:function:: reorder_axes(arr: numpy.ndarray, axes: list[str], desired_order: list[str] = ['z', 'y', 'x', 'c']) -> tuple[numpy.ndarray, list[str]]
+
+   Reorder/remove axes to match desired_order, removing size-1 unwanted axes.
+
+
+.. py:function:: process_chunk_bioimage(self, idi: cellmap_flow.image_data_interface.ImageDataInterface, input_roi: funlib.geometry.Roi)
+
+.. py:function:: format_output_bioimage(self, output_sample, output_names=None, output_axes=None)
+

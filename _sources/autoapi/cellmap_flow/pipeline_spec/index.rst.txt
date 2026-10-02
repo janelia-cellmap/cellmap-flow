@@ -1,0 +1,187 @@
+cellmap_flow.pipeline_spec
+==========================
+
+.. py:module:: cellmap_flow.pipeline_spec
+
+.. autoapi-nested-parse::
+
+   One description of a normalization + postprocessing chain.
+
+   A chain travels as data far more often than it runs: in every layer URL's
+   args blob (read by inference servers that may be older or newer than the
+   dashboard), in model YAMLs' ``json_data``, in the finetune manifest, and in
+   what the dashboard remembers between requests. Each of those used to build
+   and read the ``{"input_norm": [...], "postprocess": [...]}`` form on its own.
+   ``PipelineSpec`` is that form, with the readers for every shape it arrives
+   in.
+
+   A step is a flat ``{"name": <class name>, **constructor arguments}`` dict,
+   kept as given: values are not coerced (the dashboard's forms send strings,
+   and the constructors parse them), and the step is never nested as
+   ``{"name", "params"}`` on the wire, because older servers pass every key
+   but ``name`` straight to the constructor.
+
+   Importing this module is cheap: the op classes (and the libraries some of
+   them need) are imported only when a spec is built.
+
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.pipeline_spec.PipelineSpec
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.pipeline_spec.normalize_steps
+   cellmap_flow.pipeline_spec.builder_steps
+   cellmap_flow.pipeline_spec.chain_output_dtype
+   cellmap_flow.pipeline_spec.chain_num_channels
+   cellmap_flow.pipeline_spec.chain_is_segmentation
+
+
+Module Contents
+---------------
+
+.. py:function:: normalize_steps(steps) -> tuple
+
+   A chain in the ordered ``({"name", **params}, ...)`` form.
+
+   Accepts the ordered list (copied; each step dict is copied too), the
+   older ``{Name: {params}}`` dict (one step per key, in the dict's order),
+   or nothing (``None``, ``{}``, ``[]``). In the dict form the key names the
+   class, as it did for the reader that dict was written for, so it wins
+   over a ``name`` inside the params.
+
+   A list element that is not a dict is kept as it is; the op readers skip
+   it with a warning, as before.
+
+
+.. py:function:: builder_steps(nodes) -> tuple
+
+   Steps from the pipeline builder's ``[{"name", "params", ...}]`` nodes.
+
+   Built as ``{**params, "name": name}``, the key order
+   ``/api/pipeline/apply`` has always stored. Nodes that are not dicts or
+   have no name are skipped; the builder's own validation rejects those
+   before they get here.
+
+
+.. py:class:: PipelineSpec
+
+   An input-normalization chain and a postprocessing chain, as data.
+
+   Both are tuples of step dicts in the order they run. Build the live op
+   instances with ``build()``; those can hold state (SimpleBlockwiseMerger's
+   equivalences), so a spec is never a substitute for the instances a
+   server or the dashboard already has.
+
+
+   .. py:attribute:: input_norm
+      :type:  tuple
+      :value: ()
+
+
+
+   .. py:attribute:: postprocess
+      :type:  tuple
+      :value: ()
+
+
+
+   .. py:method:: from_json_data(data, strict: bool = False) -> PipelineSpec
+      :classmethod:
+
+
+      From a ``json_data`` dict (or its JSON text).
+
+      Either chain may be in the list or the legacy dict form. By default a
+      missing or null chain is empty. ``strict`` instead requires both keys
+      (KeyError) and a list or dict under each (ValueError), which is what
+      the readers before PipelineSpec enforced, and what the blockwise
+      precheck relies on to reject a misspelt ``json_data``.
+
+
+
+   .. py:method:: from_steps(input_norms=(), postprocess=()) -> PipelineSpec
+      :classmethod:
+
+
+      From live normalizer/postprocessor instances, via their to_dict().
+
+
+
+   .. py:method:: from_builder(input_normalizers=(), postprocessors=()) -> PipelineSpec
+      :classmethod:
+
+
+      From the pipeline builder's normalizer and postprocessor nodes.
+
+
+
+   .. py:method:: from_url_blob(blob: str)
+      :classmethod:
+
+
+      ``(spec, extras)`` from a layer URL's args blob.
+
+      ``extras`` is every other key the blob carries (``dashboard_url``,
+      ``digest``, and ``time`` from older dashboards).
+
+
+
+   .. py:method:: to_json_data() -> dict
+
+      ``{"input_norm": [...], "postprocess": [...]}``, in that order.
+
+
+
+   .. py:method:: to_url_blob(**extras) -> str
+
+      The args blob for a layer URL. Extras follow the two chains.
+
+
+
+   .. py:method:: digest() -> str
+
+      A short hash of the chains' content, stable across processes.
+
+      Keys are sorted, so two specs that differ only in the order of a
+      step's parameters share a digest; the order of the steps counts.
+
+
+
+   .. py:method:: build()
+
+      ``(input_norms, postprocess)``: new op instances for both chains.
+
+
+
+   .. py:method:: is_empty() -> bool
+
+
+.. py:function:: chain_output_dtype(postprocess, model_dtype)
+
+   The dtype the client receives: the last step's that declares one,
+   else the model's own.
+
+
+.. py:function:: chain_num_channels(postprocess, model_channels) -> int
+
+   How many channels the client receives, after e.g. ChannelSelection.
+
+
+.. py:function:: chain_is_segmentation(postprocess) -> Optional[bool]
+
+   Whether the output is labels: the last step's that says.
+
+   False for an empty chain (raw model output is never labels), None when
+   steps are present but none of them says.
+
+

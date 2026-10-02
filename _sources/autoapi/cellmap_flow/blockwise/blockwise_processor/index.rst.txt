@@ -25,6 +25,8 @@ Functions
 
 .. autoapisummary::
 
+   cellmap_flow.blockwise.blockwise_processor.precheck
+   cellmap_flow.blockwise.blockwise_processor.progress_marker
    cellmap_flow.blockwise.blockwise_processor.check_block
    cellmap_flow.blockwise.blockwise_processor.spawn_worker
 
@@ -33,6 +35,24 @@ Module Contents
 ---------------
 
 .. py:data:: logger
+
+.. py:function:: precheck(yaml_config: str) -> dict
+
+   Check a blockwise task YAML without side effects.
+
+   Loads no model, writes nothing, and leaves ``g`` alone -- unlike
+   constructing CellMapFlowBlockwiseProcessor, which the dashboard used to
+   do for this: that created the output arrays, loaded every model's weights
+   into the dashboard process (onto its GPU, if it had one), and replaced the
+   dashboard's live normalization and postprocessing with the task's.
+
+   Checks the settings, that every model entry builds a model config, that
+   json_data builds its normalizers and postprocessors, and that a local
+   data_path exists. What needs the model's geometry (output shapes, the
+   channels) is left to the run itself.
+
+   :raises ConfigError: with the reason, when the file is not usable.
+
 
 .. py:class:: CellMapFlowBlockwiseProcessor(yaml_config: str, create=False)
 
@@ -63,15 +83,19 @@ Module Contents
    .. py:attribute:: cpu_workers
 
 
+   .. py:attribute:: walltime
+
+
    .. py:attribute:: track_progress
 
 
    .. py:attribute:: models
-      :value: []
-
 
 
    .. py:attribute:: model_mode_str
+
+
+   .. py:attribute:: model_merger
 
 
    .. py:attribute:: process_only
@@ -102,9 +126,13 @@ Module Contents
 
 
    .. py:attribute:: inferencers
+      :value: []
+
 
 
    .. py:attribute:: inferencer
+      :value: None
+
 
 
    .. py:attribute:: idi_raw
@@ -113,6 +141,12 @@ Module Contents
    .. py:attribute:: output_arrays
       :value: []
 
+
+
+   .. py:attribute:: grid_origin
+
+
+   .. py:attribute:: full_output_roi
 
 
    .. py:attribute:: bounding_boxes
@@ -127,10 +161,37 @@ Module Contents
    .. py:method:: client()
 
 
-   .. py:method:: run()
+   .. py:method:: run() -> bool
+
+      Process every ROI; True only if every block of every ROI succeeded.
+
+
+
+.. py:function:: progress_marker(tmp_dir, block: daisy.Block) -> pathlib.Path
+
+   The file that records ``block`` as done: <tmp_dir>/<task>/<write ROI>.
+
+   One directory per daisy task, and named by the block's write ROI rather
+   than its index. The index is only unique within a task -- daisy counts it
+   from each task's own total_roi, and every bounding box is its own task --
+   so with one shared directory, finishing ROI 1 marked ROI 2's blocks with
+   the same indices as done. An index also names a different region once the
+   block size changes; a write ROI does not.
 
 
 .. py:function:: check_block(tmp_dir, block: daisy.Block) -> bool
 
-.. py:function:: spawn_worker(name, yaml_config, charge_group, queue, ncpu=12)
+.. py:function:: spawn_worker(name, yaml_config, charge_group, queue, ncpu=12, walltime=None, log_dir=None)
+
+   A daisy spawn function that submits one blockwise worker to LSF.
+
+   Goes through jobs.launch.submit_bsub_job, so each worker gets a run limit
+   (-W; the GPU queues' own default is two hours), its own log file named
+   after its job id, and a submission that fails loudly: a bsub error
+   raises here, and daisy stops the run, rather than the master waiting
+   forever for a worker that never started.
+
+   Logs go to ``log_dir``, by default ./daisy_logs as before, resolved now so
+   that every worker writes to the same place.
+
 

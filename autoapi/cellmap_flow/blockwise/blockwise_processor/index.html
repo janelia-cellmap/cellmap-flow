@@ -10,7 +10,6 @@
       <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=4ae1632d" />
-      <link rel="stylesheet" type="text/css" href="../../../../_static/mystnb.11b39860a7a0cbfd473a3ad8a317855267ff0bd372690045ca344a6b62be495e.css" />
       <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css" />
 
   
@@ -20,7 +19,6 @@
       <script src="../../../../_static/documentation_options.js?v=5929fcd5"></script>
       <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
-      <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
     <script src="../../../../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../../../../genindex.html" />
     <link rel="search" title="Search" href="../../../../search.html" />
@@ -50,27 +48,44 @@
               <p class="caption" role="heading"><span class="caption-text">CellMap-Flow API:</span></p>
 <ul class="current">
 <li class="toctree-l1"><a class="reference internal" href="../../../../install.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../cli.html">Command line</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../scripts.html">Python Scripts</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../yaml_config.html">YAML Configuration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../data_paths.html">Data paths</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../huggingface.html">HuggingFace Models</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../custom_script.html">Custom Model</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../post.html">PostProcessors</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../plugins.html">Plugins</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../review.html">Reviewing instances</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../viewer_api.html">Viewer layer API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../architecture.html">Architecture</a></li>
 <li class="toctree-l1 current"><a class="reference internal" href="../../../index.html">API Reference</a><ul class="current">
 <li class="toctree-l2 current"><a class="reference internal" href="../../index.html">cellmap_flow</a><ul class="current">
 <li class="toctree-l3 current"><a class="reference internal" href="../../index.html#submodules">Submodules</a><ul class="current">
 <li class="toctree-l4 current"><a class="reference internal" href="../index.html">cellmap_flow.blockwise</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../cli/index.html">cellmap_flow.cli</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../config/index.html">cellmap_flow.config</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../dashboard/index.html">cellmap_flow.dashboard</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../finetune/index.html">cellmap_flow.finetune</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../globals/index.html">cellmap_flow.globals</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../image_data_interface/index.html">cellmap_flow.image_data_interface</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../inference/index.html">cellmap_flow.inference</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../inferencer/index.html">cellmap_flow.inferencer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../io/index.html">cellmap_flow.io</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../jobs/index.html">cellmap_flow.jobs</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../logging_setup/index.html">cellmap_flow.logging_setup</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../models/index.html">cellmap_flow.models</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../norm/index.html">cellmap_flow.norm</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../pipeline_spec/index.html">cellmap_flow.pipeline_spec</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../plugins/index.html">cellmap_flow.plugins</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../post/index.html">cellmap_flow.post</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../process_chain/index.html">cellmap_flow.process_chain</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../review/index.html">cellmap_flow.review</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../review_index/index.html">cellmap_flow.review_index</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../server/index.html">cellmap_flow.server</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../serving/index.html">cellmap_flow.serving</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../utils/index.html">cellmap_flow.utils</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../viewer/index.html">cellmap_flow.viewer</a></li>
 </ul>
 </li>
 </ul>
@@ -132,11 +147,17 @@
 <h2>Functions<a class="headerlink" href="#functions" title="Link to this heading"></a></h2>
 <table class="autosummary longtable docutils align-default">
 <tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.blockwise.blockwise_processor.precheck" title="cellmap_flow.blockwise.blockwise_processor.precheck"><code class="xref py py-obj docutils literal notranslate"><span class="pre">precheck</span></code></a>(→ dict)</p></td>
+<td><p>Check a blockwise task YAML without side effects.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.blockwise.blockwise_processor.progress_marker" title="cellmap_flow.blockwise.blockwise_processor.progress_marker"><code class="xref py py-obj docutils literal notranslate"><span class="pre">progress_marker</span></code></a>(→ pathlib.Path)</p></td>
+<td><p>The file that records <code class="docutils literal notranslate"><span class="pre">block</span></code> as done: &lt;tmp_dir&gt;/&lt;task&gt;/&lt;write ROI&gt;.</p></td>
+</tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.blockwise.blockwise_processor.check_block" title="cellmap_flow.blockwise.blockwise_processor.check_block"><code class="xref py py-obj docutils literal notranslate"><span class="pre">check_block</span></code></a>(→ bool)</p></td>
 <td><p></p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.blockwise.blockwise_processor.spawn_worker" title="cellmap_flow.blockwise.blockwise_processor.spawn_worker"><code class="xref py py-obj docutils literal notranslate"><span class="pre">spawn_worker</span></code></a>(name, yaml_config, charge_group, queue[, ...])</p></td>
-<td><p></p></td>
+<td><p>A daisy spawn function that submits one blockwise worker to LSF.</p></td>
 </tr>
 </tbody>
 </table>
@@ -147,6 +168,26 @@
 <dt class="sig sig-object py" id="cellmap_flow.blockwise.blockwise_processor.logger">
 <span class="sig-prename descclassname"><span class="pre">cellmap_flow.blockwise.blockwise_processor.</span></span><span class="sig-name descname"><span class="pre">logger</span></span><a class="headerlink" href="#cellmap_flow.blockwise.blockwise_processor.logger" title="Link to this definition"></a></dt>
 <dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.blockwise.blockwise_processor.precheck">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.blockwise.blockwise_processor.</span></span><span class="sig-name descname"><span class="pre">precheck</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">yaml_config</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span></span></span><a class="headerlink" href="#cellmap_flow.blockwise.blockwise_processor.precheck" title="Link to this definition"></a></dt>
+<dd><p>Check a blockwise task YAML without side effects.</p>
+<p>Loads no model, writes nothing, and leaves <code class="docutils literal notranslate"><span class="pre">g</span></code> alone – unlike
+constructing CellMapFlowBlockwiseProcessor, which the dashboard used to
+do for this: that created the output arrays, loaded every model’s weights
+into the dashboard process (onto its GPU, if it had one), and replaced the
+dashboard’s live normalization and postprocessing with the task’s.</p>
+<p>Checks the settings, that every model entry builds a model config, that
+json_data builds its normalizers and postprocessors, and that a local
+data_path exists. What needs the model’s geometry (output shapes, the
+channels) is left to the run itself.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference internal" href="../../config/yaml/index.html#cellmap_flow.config.yaml.ConfigError" title="cellmap_flow.config.yaml.ConfigError"><strong>ConfigError</strong></a> – with the reason, when the file is not usable.</p>
+</dd>
+</dl>
+</dd></dl>
 
 <dl class="py class">
 <dt class="sig sig-object py" id="cellmap_flow.blockwise.blockwise_processor.CellMapFlowBlockwiseProcessor">
@@ -197,18 +238,28 @@
 <dd></dd></dl>
 
 <dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.blockwise.blockwise_processor.CellMapFlowBlockwiseProcessor.walltime">
+<span class="sig-name descname"><span class="pre">walltime</span></span><a class="headerlink" href="#cellmap_flow.blockwise.blockwise_processor.CellMapFlowBlockwiseProcessor.walltime" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
 <dt class="sig sig-object py" id="cellmap_flow.blockwise.blockwise_processor.CellMapFlowBlockwiseProcessor.track_progress">
 <span class="sig-name descname"><span class="pre">track_progress</span></span><a class="headerlink" href="#cellmap_flow.blockwise.blockwise_processor.CellMapFlowBlockwiseProcessor.track_progress" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py attribute">
 <dt class="sig sig-object py" id="cellmap_flow.blockwise.blockwise_processor.CellMapFlowBlockwiseProcessor.models">
-<span class="sig-name descname"><span class="pre">models</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">[]</span></span><a class="headerlink" href="#cellmap_flow.blockwise.blockwise_processor.CellMapFlowBlockwiseProcessor.models" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">models</span></span><a class="headerlink" href="#cellmap_flow.blockwise.blockwise_processor.CellMapFlowBlockwiseProcessor.models" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py attribute">
 <dt class="sig sig-object py" id="cellmap_flow.blockwise.blockwise_processor.CellMapFlowBlockwiseProcessor.model_mode_str">
 <span class="sig-name descname"><span class="pre">model_mode_str</span></span><a class="headerlink" href="#cellmap_flow.blockwise.blockwise_processor.CellMapFlowBlockwiseProcessor.model_mode_str" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.blockwise.blockwise_processor.CellMapFlowBlockwiseProcessor.model_merger">
+<span class="sig-name descname"><span class="pre">model_merger</span></span><a class="headerlink" href="#cellmap_flow.blockwise.blockwise_processor.CellMapFlowBlockwiseProcessor.model_merger" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py attribute">
@@ -258,12 +309,12 @@
 
 <dl class="py attribute">
 <dt class="sig sig-object py" id="cellmap_flow.blockwise.blockwise_processor.CellMapFlowBlockwiseProcessor.inferencers">
-<span class="sig-name descname"><span class="pre">inferencers</span></span><a class="headerlink" href="#cellmap_flow.blockwise.blockwise_processor.CellMapFlowBlockwiseProcessor.inferencers" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">inferencers</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">[]</span></span><a class="headerlink" href="#cellmap_flow.blockwise.blockwise_processor.CellMapFlowBlockwiseProcessor.inferencers" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py attribute">
 <dt class="sig sig-object py" id="cellmap_flow.blockwise.blockwise_processor.CellMapFlowBlockwiseProcessor.inferencer">
-<span class="sig-name descname"><span class="pre">inferencer</span></span><a class="headerlink" href="#cellmap_flow.blockwise.blockwise_processor.CellMapFlowBlockwiseProcessor.inferencer" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">inferencer</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.blockwise.blockwise_processor.CellMapFlowBlockwiseProcessor.inferencer" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py attribute">
@@ -274,6 +325,16 @@
 <dl class="py attribute">
 <dt class="sig sig-object py" id="cellmap_flow.blockwise.blockwise_processor.CellMapFlowBlockwiseProcessor.output_arrays">
 <span class="sig-name descname"><span class="pre">output_arrays</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">[]</span></span><a class="headerlink" href="#cellmap_flow.blockwise.blockwise_processor.CellMapFlowBlockwiseProcessor.output_arrays" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.blockwise.blockwise_processor.CellMapFlowBlockwiseProcessor.grid_origin">
+<span class="sig-name descname"><span class="pre">grid_origin</span></span><a class="headerlink" href="#cellmap_flow.blockwise.blockwise_processor.CellMapFlowBlockwiseProcessor.grid_origin" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.blockwise.blockwise_processor.CellMapFlowBlockwiseProcessor.full_output_roi">
+<span class="sig-name descname"><span class="pre">full_output_roi</span></span><a class="headerlink" href="#cellmap_flow.blockwise.blockwise_processor.CellMapFlowBlockwiseProcessor.full_output_roi" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py attribute">
@@ -298,9 +359,22 @@
 
 <dl class="py method">
 <dt class="sig sig-object py" id="cellmap_flow.blockwise.blockwise_processor.CellMapFlowBlockwiseProcessor.run">
-<span class="sig-name descname"><span class="pre">run</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.blockwise.blockwise_processor.CellMapFlowBlockwiseProcessor.run" title="Link to this definition"></a></dt>
-<dd></dd></dl>
+<span class="sig-name descname"><span class="pre">run</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#cellmap_flow.blockwise.blockwise_processor.CellMapFlowBlockwiseProcessor.run" title="Link to this definition"></a></dt>
+<dd><p>Process every ROI; True only if every block of every ROI succeeded.</p>
+</dd></dl>
 
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.blockwise.blockwise_processor.progress_marker">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.blockwise.blockwise_processor.</span></span><span class="sig-name descname"><span class="pre">progress_marker</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tmp_dir</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">block</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">daisy.Block</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">pathlib.Path</span></span></span><a class="headerlink" href="#cellmap_flow.blockwise.blockwise_processor.progress_marker" title="Link to this definition"></a></dt>
+<dd><p>The file that records <code class="docutils literal notranslate"><span class="pre">block</span></code> as done: &lt;tmp_dir&gt;/&lt;task&gt;/&lt;write ROI&gt;.</p>
+<p>One directory per daisy task, and named by the block’s write ROI rather
+than its index. The index is only unique within a task – daisy counts it
+from each task’s own total_roi, and every bounding box is its own task –
+so with one shared directory, finishing ROI 1 marked ROI 2’s blocks with
+the same indices as done. An index also names a different region once the
+block size changes; a write ROI does not.</p>
 </dd></dl>
 
 <dl class="py function">
@@ -310,8 +384,16 @@
 
 <dl class="py function">
 <dt class="sig sig-object py" id="cellmap_flow.blockwise.blockwise_processor.spawn_worker">
-<span class="sig-prename descclassname"><span class="pre">cellmap_flow.blockwise.blockwise_processor.</span></span><span class="sig-name descname"><span class="pre">spawn_worker</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">yaml_config</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">charge_group</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">queue</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ncpu</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">12</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.blockwise.blockwise_processor.spawn_worker" title="Link to this definition"></a></dt>
-<dd></dd></dl>
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.blockwise.blockwise_processor.</span></span><span class="sig-name descname"><span class="pre">spawn_worker</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">yaml_config</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">charge_group</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">queue</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ncpu</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">12</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">walltime</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">log_dir</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.blockwise.blockwise_processor.spawn_worker" title="Link to this definition"></a></dt>
+<dd><p>A daisy spawn function that submits one blockwise worker to LSF.</p>
+<p>Goes through jobs.launch.submit_bsub_job, so each worker gets a run limit
+(-W; the GPU queues’ own default is two hours), its own log file named
+after its job id, and a submission that fails loudly: a bsub error
+raises here, and daisy stops the run, rather than the master waiting
+forever for a worker that never started.</p>
+<p>Logs go to <code class="docutils literal notranslate"><span class="pre">log_dir</span></code>, by default ./daisy_logs as before, resolved now so
+that every worker writes to the same place.</p>
+</dd></dl>
 
 </section>
 </section>

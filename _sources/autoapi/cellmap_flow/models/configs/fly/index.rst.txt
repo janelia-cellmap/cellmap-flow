@@ -1,0 +1,95 @@
+cellmap_flow.models.configs.fly
+===============================
+
+.. py:module:: cellmap_flow.models.configs.fly
+
+.. autoapi-nested-parse::
+
+   ``FlyModelConfig``: a fly_organelles checkpoint.
+
+   The checkpoint holds no geometry, so the constructor takes the voxel sizes
+   and the input and output sizes, as a pair: 178 and 56 voxels a side when
+   neither is given, and an error when only one is. A TorchScript file
+   (``.ts``) or a ``StandardUnet`` state dict gets a sigmoid on top; a whole
+   pickled model (``model.pt``) is used as it is, and only when
+   ``CELLMAP_FLOW_ALLOW_PICKLE`` allows it.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.models.configs.fly.logger
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.models.configs.fly.FlyModelConfig
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:class:: FlyModelConfig(checkpoint_path: str, channels: list[str], input_voxel_size: tuple, output_voxel_size: tuple, name: str = None, input_size=None, output_size=None, scale=None)
+
+
+
+   .. py:attribute:: cli_name
+      :value: 'fly'
+
+
+
+   .. py:attribute:: name
+      :value: None
+
+
+
+   .. py:attribute:: checkpoint_path
+
+
+   .. py:attribute:: channels
+
+
+   .. py:attribute:: input_voxel_size
+
+
+   .. py:attribute:: output_voxel_size
+
+
+   .. py:attribute:: scale
+      :value: None
+
+
+
+   .. py:attribute:: input_size
+      :value: None
+
+
+
+   .. py:attribute:: output_size
+      :value: None
+
+
+
+   .. py:method:: load_eval_model(num_channels, checkpoint_path)
+
+      Load evaluation model from checkpoint (TorchScript or PyTorch).
+
+
+
+   .. py:property:: model
+
+
+   .. py:method:: to_dict()
+
+      This config as a model entry, which ``registry.build_model`` rebuilds.
+
+
+

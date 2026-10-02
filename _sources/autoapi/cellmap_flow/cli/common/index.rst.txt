@@ -1,0 +1,113 @@
+cellmap_flow.cli.common
+=======================
+
+.. py:module:: cellmap_flow.cli.common
+
+.. autoapi-nested-parse::
+
+   What the ``cellmap_flow`` subcommands share.
+
+   - ``log_level_option``: ``--log-level``, which sets the level as soon as it
+     is parsed.
+   - ``ModelTypeGroup``: a group with one subcommand per model type, built
+     from the registry when asked for.
+   - ``deprecated``: a command under the name it had before 0.3.0, which says
+     what replaces it and then runs it.
+   - ``resample_option``: ``--resample``, of ``infer <type>`` and ``serve``.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.cli.common.LOG_LEVELS
+   cellmap_flow.cli.common.REMOVED_IN
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.cli.common.ModelTypeGroup
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.cli.common.log_level_option
+   cellmap_flow.cli.common.resample_option
+   cellmap_flow.cli.common.deprecation_notice
+   cellmap_flow.cli.common.deprecated
+
+
+Module Contents
+---------------
+
+.. py:data:: LOG_LEVELS
+   :value: ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL']
+
+
+.. py:data:: REMOVED_IN
+   :value: 'the release after 0.3.0'
+
+
+.. py:function:: log_level_option(default=None, help='Set the logging level')
+
+   ``--log-level``, applied when it is parsed rather than passed on.
+
+   The ``cellmap_flow`` group's defaults to INFO. A subcommand that had its
+   own before 0.3.0 (yaml, view, blockwise) keeps it, defaulting to None, so
+   that ``cellmap_flow --log-level DEBUG yaml c.yaml`` is not reset to INFO
+   by the subcommand's default. Run on its own (``python -m``, as the
+   dashboard's blockwise tab runs blockwise), such a subcommand logs at
+   INFO unless told otherwise.
+
+
+.. py:function:: resample_option()
+
+   ``--resample``: read the dataset resampled to the model's input voxel
+   size when it has no level at that size (ImageDataInterface's
+   ``on_voxel_size_mismatch="resample"``). Without it, the level chosen is
+   read as if it were at the model's voxel size, with a warning.
+
+
+.. py:class:: ModelTypeGroup(*args, make_command, **kwargs)
+
+
+
+   A group with a subcommand for each model type, besides its own.
+
+   ``make_command(name, config_class)`` builds a type's command when click
+   asks for it, from the registry as it is at that moment: a type a plugin
+   defines has its command, and nothing is built at import.
+
+
+   .. py:method:: list_commands(ctx)
+
+      Returns a list of subcommand names in the order they should appear.
+
+
+
+   .. py:method:: get_command(ctx, name)
+
+      Given a context and a command name, this returns a :class:`Command`
+      object if it exists or returns ``None``.
+
+
+
+.. py:function:: deprecation_notice(old: str, new: str) -> None
+
+   Tell the user, on stderr, that ``old`` is going and ``new`` replaces it.
+
+
+.. py:function:: deprecated(command: click.Command, old_name: str, old: str, new: str) -> click.Command
+
+   ``command`` as ``old_name``, its name before 0.3.0: hidden from --help,
+   and saying that ``new`` replaces ``old`` each time before it runs.
+
+

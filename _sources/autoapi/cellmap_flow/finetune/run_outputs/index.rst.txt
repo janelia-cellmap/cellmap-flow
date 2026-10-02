@@ -1,0 +1,99 @@
+cellmap_flow.finetune.run_outputs
+=================================
+
+.. py:module:: cellmap_flow.finetune.run_outputs
+
+.. autoapi-nested-parse::
+
+   What each iteration of a finetune run leaves behind, and where.
+
+   For a run with output directory ``<run>`` (a dashboard run's is
+   ``<session>/runs/<name>``):
+
+   - ``<run>/iterations/NNN_<ts>/lora_adapter/`` or ``.../full_finetune/``: the
+     iteration's export (``iteration_dir``), so the YAML written for it keeps
+     serving its weights after the next restart;
+   - ``<run>/lora_adapter`` or ``<run>/full_finetune``: a relative symlink to
+     the newest export (``point_latest_export``);
+   - ``<models>/<name>_finetuned_<ts>.yaml``: the YAML that serves it
+     (``write_serving_yaml``), in the session's ``models/`` (``models_dir``).
+
+   The job manager and the dashboard read these, and a job outlives a
+   dashboard upgrade, so the layout only ever changes compatibly.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.run_outputs.logger
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.run_outputs.finetuned_model_name
+   cellmap_flow.finetune.run_outputs.iteration_dir
+   cellmap_flow.finetune.run_outputs.models_dir
+   cellmap_flow.finetune.run_outputs.point_latest_export
+   cellmap_flow.finetune.run_outputs.write_serving_yaml
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:function:: finetuned_model_name(model_config, timestamp) -> str
+
+   The name the model trained from ``model_config`` is served under.
+
+
+.. py:function:: iteration_dir(output_dir, iteration: int, timestamp: str) -> pathlib.Path
+
+   The directory iteration ``iteration`` (from 1) exports into.
+
+
+.. py:function:: models_dir(args) -> pathlib.Path
+
+   Where the served-model YAMLs go: --models-dir, else the session's models/.
+
+   A dashboard run's output directory is <session>/runs/<name>, so the
+   session is two levels up: three put the YAMLs in <base>/models, outside
+   the session and shared by all of them, and turned a headless
+   --output-dir /nrs/x/run into /models, a permission error after training
+   had succeeded. A run that is not under a runs/ directory keeps its YAMLs
+   in its own models/.
+
+
+.. py:function:: point_latest_export(output_dir: pathlib.Path, export_dir: pathlib.Path, name: str) -> None
+
+   Make <output_dir>/<name> the latest iteration's export.
+
+   ``name`` is the strategy's export_name: lora_adapter or full_finetune.
+
+   The old names stay, as relative symlinks to the newest export, for
+   whatever reads them: finetune_export_kwargs, the completion check, and
+   anyone who built <run>/lora_adapter by hand. A real directory there,
+   from a run before per-iteration exports, is moved into iterations/
+   first rather than deleted.
+
+
+.. py:function:: write_serving_yaml(args, model_config, timestamp, *, is_lora: bool, export_dir)
+
+   Write the YAML that serves this iteration's export; its (model name, path).
+
+   :param args: the job's flags.
+   :param model_config: the model the run trained.
+   :param timestamp: the iteration's, as in its export directory.
+   :param is_lora: whether the export is a LoRA adapter (else full weights).
+                   Pass what the model is: ``args.lora_r`` can be changed by a
+                   restart without changing the model.
+   :param export_dir: the directory this iteration exported into
+                      (iteration_dir); the YAML points there.
+
+

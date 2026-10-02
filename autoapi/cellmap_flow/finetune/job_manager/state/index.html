@@ -1,0 +1,409 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>cellmap_flow.finetune.job_manager.state &mdash; CellMap Flow  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../../_static/graphviz.css?v=4ae1632d" />
+      <link rel="stylesheet" type="text/css" href="../../../../../_static/css/custom.css" />
+
+  
+    <link rel="shortcut icon" href="../../../../../_static/favicon.ico"/>
+      <script src="../../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../../../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../search.html" />
+    <link rel="next" title="cellmap_flow.finetune.job_manager.submit" href="../submit/index.html" />
+    <link rel="prev" title="cellmap_flow.finetune.job_manager.restart" href="../restart/index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../../index.html" class="icon icon-home">
+            CellMap Flow
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">CellMap-Flow API:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../../../../../install.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../cli.html">Command line</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../scripts.html">Python Scripts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../yaml_config.html">YAML Configuration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../data_paths.html">Data paths</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../huggingface.html">HuggingFace Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../custom_script.html">Custom Model</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../post.html">PostProcessors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../plugins.html">Plugins</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../review.html">Reviewing instances</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../viewer_api.html">Viewer layer API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../architecture.html">Architecture</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../../../../index.html">API Reference</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="../../../index.html">cellmap_flow</a><ul class="current">
+<li class="toctree-l3 current"><a class="reference internal" href="../../../index.html#submodules">Submodules</a><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="../../../blockwise/index.html">cellmap_flow.blockwise</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../cli/index.html">cellmap_flow.cli</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../config/index.html">cellmap_flow.config</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../dashboard/index.html">cellmap_flow.dashboard</a></li>
+<li class="toctree-l4 current"><a class="reference internal" href="../../index.html">cellmap_flow.finetune</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../globals/index.html">cellmap_flow.globals</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../image_data_interface/index.html">cellmap_flow.image_data_interface</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../inference/index.html">cellmap_flow.inference</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../inferencer/index.html">cellmap_flow.inferencer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../io/index.html">cellmap_flow.io</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../jobs/index.html">cellmap_flow.jobs</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../logging_setup/index.html">cellmap_flow.logging_setup</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../models/index.html">cellmap_flow.models</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../norm/index.html">cellmap_flow.norm</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../pipeline_spec/index.html">cellmap_flow.pipeline_spec</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../plugins/index.html">cellmap_flow.plugins</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../post/index.html">cellmap_flow.post</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../process_chain/index.html">cellmap_flow.process_chain</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../review/index.html">cellmap_flow.review</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../review_index/index.html">cellmap_flow.review_index</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../server/index.html">cellmap_flow.server</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../serving/index.html">cellmap_flow.serving</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../utils/index.html">cellmap_flow.utils</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../viewer/index.html">cellmap_flow.viewer</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../../index.html">CellMap Flow</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../../index.html">API Reference</a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">cellmap_flow</a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">cellmap_flow.finetune</a></li>
+          <li class="breadcrumb-item"><a href="../index.html">cellmap_flow.finetune.job_manager</a></li>
+      <li class="breadcrumb-item active">cellmap_flow.finetune.job_manager.state</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../../../../../_sources/autoapi/cellmap_flow/finetune/job_manager/state/index.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-cellmap_flow.finetune.job_manager.state">
+<span id="cellmap-flow-finetune-job-manager-state"></span><h1>cellmap_flow.finetune.job_manager.state<a class="headerlink" href="#module-cellmap_flow.finetune.job_manager.state" title="Link to this heading"></a></h1>
+<p>A finetune job’s record, its statuses, and what moves a job between them.</p>
+<p>A job moves on:
+- what the scheduler (LSF, or the local process) says of it, which the</p>
+<blockquote>
+<div><p>monitor asks every few seconds: <code class="docutils literal notranslate"><span class="pre">on_scheduler_status</span></code>. A job the
+scheduler says has completed becomes COMPLETED only once the monitor has
+found its export (monitor.complete_job), and FAILED if it has not;</p>
+</div></blockquote>
+<ul class="simple">
+<li><p>the status markers the trainer prints in its log: <code class="docutils literal notranslate"><span class="pre">on_status_marker</span></code>;</p></li>
+<li><p>the dashboard: a restart, which only a job that <code class="docutils literal notranslate"><span class="pre">can_restart</span></code> takes
+(<code class="docutils literal notranslate"><span class="pre">start_iteration</span></code>), and a cancel (FinetuneJobManager.cancel_job).</p></li>
+</ul>
+<p>Once a job’s status is final (<code class="docutils literal notranslate"><span class="pre">TERMINAL_STATUSES</span></code>), neither the scheduler
+nor the log moves it again.</p>
+<section id="attributes">
+<h2>Attributes<a class="headerlink" href="#attributes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.job_manager.state.logger" title="cellmap_flow.finetune.job_manager.state.logger"><code class="xref py py-obj docutils literal notranslate"><span class="pre">logger</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.finetune.job_manager.state.TERMINAL_STATUSES" title="cellmap_flow.finetune.job_manager.state.TERMINAL_STATUSES"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TERMINAL_STATUSES</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="classes">
+<h2>Classes<a class="headerlink" href="#classes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.job_manager.state.JobStatus" title="cellmap_flow.finetune.job_manager.state.JobStatus"><code class="xref py py-obj docutils literal notranslate"><span class="pre">JobStatus</span></code></a></p></td>
+<td><p>Status of a finetuning job.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.finetune.job_manager.state.FinetuneJob" title="cellmap_flow.finetune.job_manager.state.FinetuneJob"><code class="xref py py-obj docutils literal notranslate"><span class="pre">FinetuneJob</span></code></a></p></td>
+<td><p>Track a finetuning job with metadata, status, and training progress.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="functions">
+<h2>Functions<a class="headerlink" href="#functions" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.job_manager.state.on_scheduler_status" title="cellmap_flow.finetune.job_manager.state.on_scheduler_status"><code class="xref py py-obj docutils literal notranslate"><span class="pre">on_scheduler_status</span></code></a>(→ Optional[JobStatus])</p></td>
+<td><p>Move <code class="docutils literal notranslate"><span class="pre">job</span></code> on what its scheduler says of it; once it has ended, how.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.finetune.job_manager.state.on_status_marker" title="cellmap_flow.finetune.job_manager.state.on_status_marker"><code class="xref py py-obj docutils literal notranslate"><span class="pre">on_status_marker</span></code></a>(→ None)</p></td>
+<td><p>Move <code class="docutils literal notranslate"><span class="pre">job</span></code> on one of the trainer's status markers</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.job_manager.state.can_restart" title="cellmap_flow.finetune.job_manager.state.can_restart"><code class="xref py py-obj docutils literal notranslate"><span class="pre">can_restart</span></code></a>(→ bool)</p></td>
+<td><p>Whether <code class="docutils literal notranslate"><span class="pre">job</span></code>'s trainer can take a restart request.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.finetune.job_manager.state.start_iteration" title="cellmap_flow.finetune.job_manager.state.start_iteration"><code class="xref py py-obj docutils literal notranslate"><span class="pre">start_iteration</span></code></a>(→ None)</p></td>
+<td><p>A new training iteration starts: its progress from zero, and its server</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="module-contents">
+<h2>Module Contents<a class="headerlink" href="#module-contents" title="Link to this heading"></a></h2>
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.job_manager.state.logger">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.job_manager.state.</span></span><span class="sig-name descname"><span class="pre">logger</span></span><a class="headerlink" href="#cellmap_flow.finetune.job_manager.state.logger" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.job_manager.state.JobStatus">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.job_manager.state.</span></span><span class="sig-name descname"><span class="pre">JobStatus</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwds</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.finetune.job_manager.state.JobStatus" title="Link to this definition"></a></dt>
+<dd><p>Status of a finetuning job.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.job_manager.state.JobStatus.PENDING">
+<span class="sig-name descname"><span class="pre">PENDING</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'PENDING'</span></span><a class="headerlink" href="#cellmap_flow.finetune.job_manager.state.JobStatus.PENDING" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.job_manager.state.JobStatus.RUNNING">
+<span class="sig-name descname"><span class="pre">RUNNING</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'RUNNING'</span></span><a class="headerlink" href="#cellmap_flow.finetune.job_manager.state.JobStatus.RUNNING" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.job_manager.state.JobStatus.COMPLETED">
+<span class="sig-name descname"><span class="pre">COMPLETED</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'COMPLETED'</span></span><a class="headerlink" href="#cellmap_flow.finetune.job_manager.state.JobStatus.COMPLETED" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.job_manager.state.JobStatus.FAILED">
+<span class="sig-name descname"><span class="pre">FAILED</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'FAILED'</span></span><a class="headerlink" href="#cellmap_flow.finetune.job_manager.state.JobStatus.FAILED" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.job_manager.state.JobStatus.CANCELLED">
+<span class="sig-name descname"><span class="pre">CANCELLED</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'CANCELLED'</span></span><a class="headerlink" href="#cellmap_flow.finetune.job_manager.state.JobStatus.CANCELLED" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.job_manager.state.JobStatus.WAITING_FOR_RESTART">
+<span class="sig-name descname"><span class="pre">WAITING_FOR_RESTART</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'WAITING_FOR_RESTART'</span></span><a class="headerlink" href="#cellmap_flow.finetune.job_manager.state.JobStatus.WAITING_FOR_RESTART" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.job_manager.state.TERMINAL_STATUSES">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.job_manager.state.</span></span><span class="sig-name descname"><span class="pre">TERMINAL_STATUSES</span></span><a class="headerlink" href="#cellmap_flow.finetune.job_manager.state.TERMINAL_STATUSES" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.job_manager.state.FinetuneJob">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.job_manager.state.</span></span><span class="sig-name descname"><span class="pre">FinetuneJob</span></span><a class="headerlink" href="#cellmap_flow.finetune.job_manager.state.FinetuneJob" title="Link to this definition"></a></dt>
+<dd><p>Track a finetuning job with metadata, status, and training progress.</p>
+<p>Manages lifecycle from submission through completion, including inference
+server state.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.job_manager.state.FinetuneJob.job_id">
+<span class="sig-name descname"><span class="pre">job_id</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></span><a class="headerlink" href="#cellmap_flow.finetune.job_manager.state.FinetuneJob.job_id" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.job_manager.state.FinetuneJob.lsf_job">
+<span class="sig-name descname"><span class="pre">lsf_job</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="../../../jobs/lsf/index.html#cellmap_flow.jobs.lsf.LSFJob" title="cellmap_flow.jobs.lsf.LSFJob"><span class="pre">cellmap_flow.jobs.lsf.LSFJob</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.finetune.job_manager.state.FinetuneJob.lsf_job" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.job_manager.state.FinetuneJob.model_name">
+<span class="sig-name descname"><span class="pre">model_name</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></span><a class="headerlink" href="#cellmap_flow.finetune.job_manager.state.FinetuneJob.model_name" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.job_manager.state.FinetuneJob.output_dir">
+<span class="sig-name descname"><span class="pre">output_dir</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">pathlib.Path</span></span><a class="headerlink" href="#cellmap_flow.finetune.job_manager.state.FinetuneJob.output_dir" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.job_manager.state.FinetuneJob.params">
+<span class="sig-name descname"><span class="pre">params</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span><a class="headerlink" href="#cellmap_flow.finetune.job_manager.state.FinetuneJob.params" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.job_manager.state.FinetuneJob.status">
+<span class="sig-name descname"><span class="pre">status</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="#cellmap_flow.finetune.job_manager.state.JobStatus" title="cellmap_flow.finetune.job_manager.state.JobStatus"><span class="pre">JobStatus</span></a></span><a class="headerlink" href="#cellmap_flow.finetune.job_manager.state.FinetuneJob.status" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.job_manager.state.FinetuneJob.created_at">
+<span class="sig-name descname"><span class="pre">created_at</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">datetime.datetime</span></span><a class="headerlink" href="#cellmap_flow.finetune.job_manager.state.FinetuneJob.created_at" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.job_manager.state.FinetuneJob.log_file">
+<span class="sig-name descname"><span class="pre">log_file</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">pathlib.Path</span></span><a class="headerlink" href="#cellmap_flow.finetune.job_manager.state.FinetuneJob.log_file" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.job_manager.state.FinetuneJob.finetuned_model_name">
+<span class="sig-name descname"><span class="pre">finetuned_model_name</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.finetune.job_manager.state.FinetuneJob.finetuned_model_name" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.job_manager.state.FinetuneJob.model_yaml_path">
+<span class="sig-name descname"><span class="pre">model_yaml_path</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">pathlib.Path</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.finetune.job_manager.state.FinetuneJob.model_yaml_path" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.job_manager.state.FinetuneJob.current_epoch">
+<span class="sig-name descname"><span class="pre">current_epoch</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0</span></span><a class="headerlink" href="#cellmap_flow.finetune.job_manager.state.FinetuneJob.current_epoch" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.job_manager.state.FinetuneJob.total_epochs">
+<span class="sig-name descname"><span class="pre">total_epochs</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">10</span></span><a class="headerlink" href="#cellmap_flow.finetune.job_manager.state.FinetuneJob.total_epochs" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.job_manager.state.FinetuneJob.latest_loss">
+<span class="sig-name descname"><span class="pre">latest_loss</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">float</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.finetune.job_manager.state.FinetuneJob.latest_loss" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.job_manager.state.FinetuneJob.inference_server_url">
+<span class="sig-name descname"><span class="pre">inference_server_url</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.finetune.job_manager.state.FinetuneJob.inference_server_url" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.job_manager.state.FinetuneJob.inference_server_ready">
+<span class="sig-name descname"><span class="pre">inference_server_ready</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">False</span></span><a class="headerlink" href="#cellmap_flow.finetune.job_manager.state.FinetuneJob.inference_server_ready" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.job_manager.state.FinetuneJob.corrections_path">
+<span class="sig-name descname"><span class="pre">corrections_path</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">pathlib.Path</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.finetune.job_manager.state.FinetuneJob.corrections_path" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.job_manager.state.FinetuneJob.cancel_requested">
+<span class="sig-name descname"><span class="pre">cancel_requested</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">False</span></span><a class="headerlink" href="#cellmap_flow.finetune.job_manager.state.FinetuneJob.cancel_requested" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.job_manager.state.FinetuneJob.to_dict">
+<span class="sig-name descname"><span class="pre">to_dict</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#cellmap_flow.finetune.job_manager.state.FinetuneJob.to_dict" title="Link to this definition"></a></dt>
+<dd><p>Convert to dictionary for JSON serialization.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.job_manager.state.on_scheduler_status">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.job_manager.state.</span></span><span class="sig-name descname"><span class="pre">on_scheduler_status</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">job</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#cellmap_flow.finetune.job_manager.state.FinetuneJob" title="cellmap_flow.finetune.job_manager.state.FinetuneJob"><span class="pre">FinetuneJob</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">lsf_status</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#cellmap_flow.finetune.job_manager.state.JobStatus" title="cellmap_flow.finetune.job_manager.state.JobStatus"><span class="pre">JobStatus</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#cellmap_flow.finetune.job_manager.state.on_scheduler_status" title="Link to this definition"></a></dt>
+<dd><p>Move <code class="docutils literal notranslate"><span class="pre">job</span></code> on what its scheduler says of it; once it has ended, how.</p>
+<p><code class="docutils literal notranslate"><span class="pre">lsf_status</span></code> is a jobs.spec.JobStatus. Returns None while the job
+lives, else the status it ended with. A job whose cancel was asked for
+has been cancelled however its end is reported. RUNNING moves a pending
+job on and leaves one waiting for a restart waiting; PENDING makes it
+pending.</p>
+<p>COMPLETED is returned but not set: the finetune tab stops polling, and
+the log stream says done, at the first final status they see, so the
+job keeps its status until the monitor has checked what it exported.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.job_manager.state.on_status_marker">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.job_manager.state.</span></span><span class="sig-name descname"><span class="pre">on_status_marker</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">job</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#cellmap_flow.finetune.job_manager.state.FinetuneJob" title="cellmap_flow.finetune.job_manager.state.FinetuneJob"><span class="pre">FinetuneJob</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">marker</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#cellmap_flow.finetune.job_manager.state.on_status_marker" title="Link to this definition"></a></dt>
+<dd><p>Move <code class="docutils literal notranslate"><span class="pre">job</span></code> on one of the trainer’s status markers
+(markers.STATUS_MARKER_RE), unless its status is final.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.job_manager.state.can_restart">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.job_manager.state.</span></span><span class="sig-name descname"><span class="pre">can_restart</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">job</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#cellmap_flow.finetune.job_manager.state.FinetuneJob" title="cellmap_flow.finetune.job_manager.state.FinetuneJob"><span class="pre">FinetuneJob</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#cellmap_flow.finetune.job_manager.state.can_restart" title="Link to this definition"></a></dt>
+<dd><p>Whether <code class="docutils literal notranslate"><span class="pre">job</span></code>’s trainer can take a restart request.</p>
+<p>Only a trainer that is alive and waiting can take a restart. A
+COMPLETED job has exited: nothing reads the request, and the monitor
+that would have seen it through has stopped, so it used to sit at
+RUNNING forever. WAITING_FOR_RESTART also covers a later iteration
+that diverged: its server is up but not marked ready, and the
+restart the user needed was refused. A RUNNING job whose server is
+up is a trainer that predates the WAITING_FOR_RESTART marker.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.job_manager.state.start_iteration">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.job_manager.state.</span></span><span class="sig-name descname"><span class="pre">start_iteration</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">job</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#cellmap_flow.finetune.job_manager.state.FinetuneJob" title="cellmap_flow.finetune.job_manager.state.FinetuneJob"><span class="pre">FinetuneJob</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#cellmap_flow.finetune.job_manager.state.start_iteration" title="Link to this definition"></a></dt>
+<dd><p>A new training iteration starts: its progress from zero, and its server
+not ready again until it completes. The server’s URL is kept.</p>
+</dd></dl>
+
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../restart/index.html" class="btn btn-neutral float-left" title="cellmap_flow.finetune.job_manager.restart" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../submit/index.html" class="btn btn-neutral float-right" title="cellmap_flow.finetune.job_manager.submit" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, David Ackerman,  Marwan Zouinkhi, Jeff Rhoades, Larissa Heinrich, Aubrey Weigel.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

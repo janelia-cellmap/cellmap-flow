@@ -19,6 +19,7 @@ Attributes
 .. autoapisummary::
 
    cellmap_flow.cli.yaml_cli.logger
+   cellmap_flow.cli.yaml_cli.EXTRA_LAYER_TYPES
 
 
 Functions
@@ -26,6 +27,8 @@ Functions
 
 .. autoapisummary::
 
+   cellmap_flow.cli.yaml_cli.extra_layer_entries
+   cellmap_flow.cli.yaml_cli.build_extra_layers
    cellmap_flow.cli.yaml_cli.run_multiple
    cellmap_flow.cli.yaml_cli.main
 
@@ -35,7 +38,32 @@ Module Contents
 
 .. py:data:: logger
 
-.. py:function:: run_multiple(models: List[cellmap_flow.models.models_config.ModelConfig], dataset_path: str, charge_group: str, queue: str, wrap_raw: bool = True) -> None
+.. py:data:: EXTRA_LAYER_TYPES
+   :value: ('image', 'segmentation')
+
+
+.. py:function:: extra_layer_entries(config) -> list
+
+   The YAML's ``extra_layers``, checked; [] when there are none.
+
+   Each entry is ``{name, path, layer_type?, shader?, blend?,
+   disable_meshes?}``: a volume shown beside the raw data under ``name``.
+
+   :raises ConfigError: an entry lacks a name or path, repeats a name or uses
+       the raw layer's ("data"), or has an unknown layer_type.
+
+
+.. py:function:: build_extra_layers(entries) -> dict
+
+   ``{name: neuroglancer layer}`` for extra_layers entries.
+
+   Read as stored, without the input normalizers. An image entry's
+   ``shader`` and ``blend`` are applied to its layer; a segmentation colours
+   its ids itself, and has no blend. An entry whose volume cannot be opened
+   is logged and left out, rather than stopping the dashboard.
+
+
+.. py:function:: run_multiple(models: List[cellmap_flow.models.models_config.ModelConfig], dataset_path: str, charge_group: str, queue: str, wrap_raw: bool = True, resample: bool = False) -> None
 
    Submit multiple model inference jobs.
 
@@ -43,9 +71,10 @@ Module Contents
    :param dataset_path: Base path to the dataset
    :param charge_group: Billing/chargeback group
    :param queue: Job queue name
+   :param resample: start each server with --resample (the YAML's ``resample``)
 
 
-.. py:function:: main(config_path: str, log_level: str, list_types: bool, validate_only: bool)
+.. py:function:: main(ctx, config_path: str, list_types: bool, validate_only: bool)
 
    Run multiple model inference jobs from a YAML configuration file.
 
@@ -61,6 +90,17 @@ Module Contents
    cycle_gpu_queues: true # optional; false pins the job to `queue` above
                           # instead of falling back to a queue with capacity.
    wrap_raw: true         # optional; false serves raw straight from the file
+   resample: false        # optional; true resamples the data to each model's
+                          # input voxel size when it has no level at it.
+   extra_layers:          # optional; more volumes to show beside the raw data
+     - name: mito_pred
+       path: /path/to/pred.zarr/mito
+       shader: "..."      # optional, image layers only
+       blend: additive    # optional, image layers only
+     - name: instances
+       path: /path/to/instances.zarr/s0
+       layer_type: segmentation  # default: image
+       disable_meshes: true      # optional; no meshes computed on a pick
    json_data:             # optional; normalization and postprocessing
      input_norm:
        MinMaxNormalizer: {min_value: 0, max_value: 255}
@@ -94,9 +134,9 @@ Module Contents
    Examples:
 
    
-       cellmap_flow_yaml config.yaml
-       cellmap_flow_yaml config.yaml --log-level DEBUG
-       cellmap_flow_yaml --list-types
-       cellmap_flow_yaml config.yaml --validate-only
+       cellmap_flow yaml config.yaml
+       cellmap_flow yaml config.yaml --log-level DEBUG
+       cellmap_flow yaml --list-types
+       cellmap_flow yaml config.yaml --validate-only
 
 

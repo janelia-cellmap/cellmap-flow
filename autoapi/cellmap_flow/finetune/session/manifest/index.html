@@ -1,0 +1,290 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>cellmap_flow.finetune.session.manifest &mdash; CellMap Flow  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../../_static/graphviz.css?v=4ae1632d" />
+      <link rel="stylesheet" type="text/css" href="../../../../../_static/css/custom.css" />
+
+  
+    <link rel="shortcut icon" href="../../../../../_static/favicon.ico"/>
+      <script src="../../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../../../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../search.html" />
+    <link rel="next" title="cellmap_flow.finetune.session.minio" href="../minio/index.html" />
+    <link rel="prev" title="cellmap_flow.finetune.session.instance" href="../instance/index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../../index.html" class="icon icon-home">
+            CellMap Flow
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">CellMap-Flow API:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../../../../../install.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../cli.html">Command line</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../scripts.html">Python Scripts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../yaml_config.html">YAML Configuration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../data_paths.html">Data paths</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../huggingface.html">HuggingFace Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../custom_script.html">Custom Model</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../post.html">PostProcessors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../plugins.html">Plugins</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../review.html">Reviewing instances</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../viewer_api.html">Viewer layer API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../architecture.html">Architecture</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../../../../index.html">API Reference</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="../../../index.html">cellmap_flow</a><ul class="current">
+<li class="toctree-l3 current"><a class="reference internal" href="../../../index.html#submodules">Submodules</a><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="../../../blockwise/index.html">cellmap_flow.blockwise</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../cli/index.html">cellmap_flow.cli</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../config/index.html">cellmap_flow.config</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../dashboard/index.html">cellmap_flow.dashboard</a></li>
+<li class="toctree-l4 current"><a class="reference internal" href="../../index.html">cellmap_flow.finetune</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../globals/index.html">cellmap_flow.globals</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../image_data_interface/index.html">cellmap_flow.image_data_interface</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../inference/index.html">cellmap_flow.inference</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../inferencer/index.html">cellmap_flow.inferencer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../io/index.html">cellmap_flow.io</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../jobs/index.html">cellmap_flow.jobs</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../logging_setup/index.html">cellmap_flow.logging_setup</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../models/index.html">cellmap_flow.models</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../norm/index.html">cellmap_flow.norm</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../pipeline_spec/index.html">cellmap_flow.pipeline_spec</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../plugins/index.html">cellmap_flow.plugins</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../post/index.html">cellmap_flow.post</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../process_chain/index.html">cellmap_flow.process_chain</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../review/index.html">cellmap_flow.review</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../review_index/index.html">cellmap_flow.review_index</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../server/index.html">cellmap_flow.server</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../serving/index.html">cellmap_flow.serving</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../utils/index.html">cellmap_flow.utils</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../viewer/index.html">cellmap_flow.viewer</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../../index.html">CellMap Flow</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../../index.html">API Reference</a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">cellmap_flow</a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">cellmap_flow.finetune</a></li>
+          <li class="breadcrumb-item"><a href="../index.html">cellmap_flow.finetune.session</a></li>
+      <li class="breadcrumb-item active">cellmap_flow.finetune.session.manifest</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../../../../../_sources/autoapi/cellmap_flow/finetune/session/manifest/index.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-cellmap_flow.finetune.session.manifest">
+<span id="cellmap-flow-finetune-session-manifest"></span><h1>cellmap_flow.finetune.session.manifest<a class="headerlink" href="#module-cellmap_flow.finetune.session.manifest" title="Link to this heading"></a></h1>
+<p>The files a session is trained from, besides the volume itself.</p>
+<p><code class="docutils literal notranslate"><span class="pre">_virtual_sources.json</span></code> in <code class="docutils literal notranslate"><span class="pre">corrections/</span></code> points the trainer at the
+annotation volume and carries the patch geometry and normalization;
+<code class="docutils literal notranslate"><span class="pre">good_regions.json</span></code>, one level up, lists the regions the user marked as
+already right. <code class="docutils literal notranslate"><span class="pre">has_painted_annotations</span></code> says whether a volume holds
+scribbles as well as imported crops.</p>
+<section id="attributes">
+<h2>Attributes<a class="headerlink" href="#attributes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.session.manifest.logger" title="cellmap_flow.finetune.session.manifest.logger"><code class="xref py py-obj docutils literal notranslate"><span class="pre">logger</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.finetune.session.manifest.VIRTUAL_MANIFEST_FILENAME" title="cellmap_flow.finetune.session.manifest.VIRTUAL_MANIFEST_FILENAME"><code class="xref py py-obj docutils literal notranslate"><span class="pre">VIRTUAL_MANIFEST_FILENAME</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.session.manifest.GOOD_REGIONS_FILENAME" title="cellmap_flow.finetune.session.manifest.GOOD_REGIONS_FILENAME"><code class="xref py py-obj docutils literal notranslate"><span class="pre">GOOD_REGIONS_FILENAME</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="functions">
+<h2>Functions<a class="headerlink" href="#functions" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.session.manifest.write_manifest" title="cellmap_flow.finetune.session.manifest.write_manifest"><code class="xref py py-obj docutils literal notranslate"><span class="pre">write_manifest</span></code></a>(→ str)</p></td>
+<td><p>Persist a manifest sentinel that <code class="docutils literal notranslate"><span class="pre">create_dataloader</span></code> looks for.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.finetune.session.manifest.read_manifest" title="cellmap_flow.finetune.session.manifest.read_manifest"><code class="xref py py-obj docutils literal notranslate"><span class="pre">read_manifest</span></code></a>(→ Optional[dict])</p></td>
+<td><p>Return the manifest if present, else <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.session.manifest.good_regions_path" title="cellmap_flow.finetune.session.manifest.good_regions_path"><code class="xref py py-obj docutils literal notranslate"><span class="pre">good_regions_path</span></code></a>(→ Optional[str])</p></td>
+<td><p>Where the good regions of the session owning <code class="docutils literal notranslate"><span class="pre">corrections_dir</span></code> live:</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.finetune.session.manifest.load_good_regions" title="cellmap_flow.finetune.session.manifest.load_good_regions"><code class="xref py py-obj docutils literal notranslate"><span class="pre">load_good_regions</span></code></a>(→ list)</p></td>
+<td><p>The regions stored at <code class="docutils literal notranslate"><span class="pre">path</span></code>; [] when there are none or they can't be read.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.session.manifest.save_good_regions" title="cellmap_flow.finetune.session.manifest.save_good_regions"><code class="xref py py-obj docutils literal notranslate"><span class="pre">save_good_regions</span></code></a>(→ bool)</p></td>
+<td><p>Replace the regions at <code class="docutils literal notranslate"><span class="pre">path</span></code> atomically; False if it could not be written.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.finetune.session.manifest.load_good_regions_for" title="cellmap_flow.finetune.session.manifest.load_good_regions_for"><code class="xref py py-obj docutils literal notranslate"><span class="pre">load_good_regions_for</span></code></a>(→ list)</p></td>
+<td><p>Read the session's good regions, if any were marked.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.session.manifest.voxels_inside_any_bbox" title="cellmap_flow.finetune.session.manifest.voxels_inside_any_bbox"><code class="xref py py-obj docutils literal notranslate"><span class="pre">voxels_inside_any_bbox</span></code></a>(→ numpy.ndarray)</p></td>
+<td><p>Return a boolean mask: <code class="docutils literal notranslate"><span class="pre">True</span></code> where <code class="docutils literal notranslate"><span class="pre">voxels[i]</span></code> lies inside any</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.finetune.session.manifest.has_painted_annotations" title="cellmap_flow.finetune.session.manifest.has_painted_annotations"><code class="xref py py-obj docutils literal notranslate"><span class="pre">has_painted_annotations</span></code></a>(→ bool)</p></td>
+<td><p>Whether the volume holds annotations outside its imported crops.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="module-contents">
+<h2>Module Contents<a class="headerlink" href="#module-contents" title="Link to this heading"></a></h2>
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.session.manifest.logger">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.session.manifest.</span></span><span class="sig-name descname"><span class="pre">logger</span></span><a class="headerlink" href="#cellmap_flow.finetune.session.manifest.logger" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.session.manifest.VIRTUAL_MANIFEST_FILENAME">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.session.manifest.</span></span><span class="sig-name descname"><span class="pre">VIRTUAL_MANIFEST_FILENAME</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'_virtual_sources.json'</span></span><a class="headerlink" href="#cellmap_flow.finetune.session.manifest.VIRTUAL_MANIFEST_FILENAME" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.session.manifest.GOOD_REGIONS_FILENAME">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.session.manifest.</span></span><span class="sig-name descname"><span class="pre">GOOD_REGIONS_FILENAME</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'good_regions.json'</span></span><a class="headerlink" href="#cellmap_flow.finetune.session.manifest.GOOD_REGIONS_FILENAME" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.session.manifest.write_manifest">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.session.manifest.</span></span><span class="sig-name descname"><span class="pre">write_manifest</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">corrections_dir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">manifest</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#cellmap_flow.finetune.session.manifest.write_manifest" title="Link to this definition"></a></dt>
+<dd><p>Persist a manifest sentinel that <code class="docutils literal notranslate"><span class="pre">create_dataloader</span></code> looks for.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.session.manifest.read_manifest">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.session.manifest.</span></span><span class="sig-name descname"><span class="pre">read_manifest</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">corrections_dir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#cellmap_flow.finetune.session.manifest.read_manifest" title="Link to this definition"></a></dt>
+<dd><p>Return the manifest if present, else <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.session.manifest.good_regions_path">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.session.manifest.</span></span><span class="sig-name descname"><span class="pre">good_regions_path</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">corrections_dir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#cellmap_flow.finetune.session.manifest.good_regions_path" title="Link to this definition"></a></dt>
+<dd><p>Where the good regions of the session owning <code class="docutils literal notranslate"><span class="pre">corrections_dir</span></code> live:
+beside it, in the session directory. None without a corrections dir.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.session.manifest.load_good_regions">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.session.manifest.</span></span><span class="sig-name descname"><span class="pre">load_good_regions</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">list</span></span></span><a class="headerlink" href="#cellmap_flow.finetune.session.manifest.load_good_regions" title="Link to this definition"></a></dt>
+<dd><p>The regions stored at <code class="docutils literal notranslate"><span class="pre">path</span></code>; [] when there are none or they can’t be read.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.session.manifest.save_good_regions">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.session.manifest.</span></span><span class="sig-name descname"><span class="pre">save_good_regions</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">regions</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#cellmap_flow.finetune.session.manifest.save_good_regions" title="Link to this definition"></a></dt>
+<dd><p>Replace the regions at <code class="docutils literal notranslate"><span class="pre">path</span></code> atomically; False if it could not be written.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.session.manifest.load_good_regions_for">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.session.manifest.</span></span><span class="sig-name descname"><span class="pre">load_good_regions_for</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">corrections_dir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">list</span></span></span><a class="headerlink" href="#cellmap_flow.finetune.session.manifest.load_good_regions_for" title="Link to this definition"></a></dt>
+<dd><p>Read the session’s good regions, if any were marked.</p>
+<p>Deliberately read here rather than snapshotted into the manifest: the
+manifest is written when crops are imported, and regions get marked
+afterwards, for as long as the user keeps browsing. Reading at training
+time means the run uses every region marked up to the moment it started.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.session.manifest.voxels_inside_any_bbox">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.session.manifest.</span></span><span class="sig-name descname"><span class="pre">voxels_inside_any_bbox</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">voxels</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">numpy.ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bbox_offsets</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">numpy.ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bbox_ends</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">numpy.ndarray</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">numpy.ndarray</span></span></span><a class="headerlink" href="#cellmap_flow.finetune.session.manifest.voxels_inside_any_bbox" title="Link to this definition"></a></dt>
+<dd><p>Return a boolean mask: <code class="docutils literal notranslate"><span class="pre">True</span></code> where <code class="docutils literal notranslate"><span class="pre">voxels[i]</span></code> lies inside any
+<code class="docutils literal notranslate"><span class="pre">[bbox_offsets[j],</span> <span class="pre">bbox_ends[j])</span></code> half-open box.</p>
+<p>voxels: (N, 3) int. bbox_offsets, bbox_ends: (M, 3) int. Vectorized
+over both: builds an (N, M) inside-test matrix and reduces along M.
+For typical M ~ 1-10 the temporary stays small.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.session.manifest.has_painted_annotations">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.session.manifest.</span></span><span class="sig-name descname"><span class="pre">has_painted_annotations</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">volume_zarr_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#cellmap_flow.finetune.session.manifest.has_painted_annotations" title="Link to this definition"></a></dt>
+<dd><p>Whether the volume holds annotations outside its imported crops.</p>
+<p>Those are painted: scribbles, sparse by construction, with unannotated
+voxels all around them. Chunks entirely inside a crop are not read.</p>
+</dd></dl>
+
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../instance/index.html" class="btn btn-neutral float-left" title="cellmap_flow.finetune.session.instance" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../minio/index.html" class="btn btn-neutral float-right" title="cellmap_flow.finetune.session.minio" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, David Ackerman,  Marwan Zouinkhi, Jeff Rhoades, Larissa Heinrich, Aubrey Weigel.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

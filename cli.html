@@ -1,0 +1,295 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Command line &mdash; CellMap Flow  documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="_static/graphviz.css?v=4ae1632d" />
+      <link rel="stylesheet" type="text/css" href="_static/css/custom.css" />
+
+  
+    <link rel="shortcut icon" href="_static/favicon.ico"/>
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Python Scripts" href="scripts.html" />
+    <link rel="prev" title="Installation" href="install.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            CellMap Flow
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">CellMap-Flow API:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="install.html">Installation</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Command line</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#commands">Commands</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#starting-a-server">Starting a server</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#plugins">Plugins</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#deprecated-names">Deprecated names</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#reference">Reference</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="scripts.html">Python Scripts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="yaml_config.html">YAML Configuration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="data_paths.html">Data paths</a></li>
+<li class="toctree-l1"><a class="reference internal" href="huggingface.html">HuggingFace Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="custom_script.html">Custom Model</a></li>
+<li class="toctree-l1"><a class="reference internal" href="post.html">PostProcessors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plugins.html">Plugins</a></li>
+<li class="toctree-l1"><a class="reference internal" href="review.html">Reviewing instances</a></li>
+<li class="toctree-l1"><a class="reference internal" href="viewer_api.html">Viewer layer API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="architecture.html">Architecture</a></li>
+<li class="toctree-l1"><a class="reference internal" href="autoapi/index.html">API Reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">CellMap Flow</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Command line</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/cli.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="command-line">
+<h1>Command line<a class="headerlink" href="#command-line" title="Link to this heading"></a></h1>
+<p>CellMap Flow has one command, <code class="docutils literal notranslate"><span class="pre">cellmap_flow</span></code>, with a subcommand for each
+job. <code class="docutils literal notranslate"><span class="pre">cellmap_flow</span> <span class="pre">&lt;command&gt;</span> <span class="pre">--help</span></code> lists a command’s options, and
+<code class="docutils literal notranslate"><span class="pre">--log-level</span></code> before the command sets how much it logs (INFO by default):</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>cellmap_flow<span class="w"> </span>view<span class="w"> </span>-d<span class="w"> </span>/path/to/data.zarr
+cellmap_flow<span class="w"> </span>--log-level<span class="w"> </span>DEBUG<span class="w"> </span>yaml<span class="w"> </span>config.yaml
+</pre></div>
+</div>
+<p>Before 0.3.0 most of these were separate programs (<code class="docutils literal notranslate"><span class="pre">cellmap_flow_yaml</span></code> and
+the rest). Those names still work in 0.3.0; see <a class="reference internal" href="#deprecated-names">Deprecated names</a>.</p>
+<section id="commands">
+<h2>Commands<a class="headerlink" href="#commands" title="Link to this heading"></a></h2>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 30.0%" />
+<col style="width: 70.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Command</p></th>
+<th class="head"><p>What it does</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">infer</span> <span class="pre">&lt;type&gt;</span></code></p></td>
+<td><p>Start one model’s inference server, then open the viewer on its
+predictions and serve the dashboard. There is a subcommand for each
+model type (<code class="docutils literal notranslate"><span class="pre">cellmap_flow</span> <span class="pre">models</span></code> lists them) whose options are the
+type’s constructor arguments: <code class="docutils literal notranslate"><span class="pre">cellmap_flow</span> <span class="pre">infer</span> <span class="pre">script</span> <span class="pre">-s</span> <span class="pre">model.py</span>
+<span class="pre">-d</span> <span class="pre">data.zarr/raw</span></code>. Short flags go to the arguments in the order the
+constructor takes them, so an argument whose first letter an earlier
+one has has only its long flag (<code class="docutils literal notranslate"><span class="pre">script</span></code>’s <code class="docutils literal notranslate"><span class="pre">--scale</span></code>). <code class="docutils literal notranslate"><span class="pre">-d</span></code>,
+<code class="docutils literal notranslate"><span class="pre">-q</span></code> (queue), <code class="docutils literal notranslate"><span class="pre">-P</span></code> (billing project), <code class="docutils literal notranslate"><span class="pre">--resample</span></code> and
+<code class="docutils literal notranslate"><span class="pre">--server-check</span></code> are the command’s own. <code class="docutils literal notranslate"><span class="pre">--resample</span></code> reads the
+data resampled to the model’s input voxel size when it has no level
+at that size, instead of reading a level as if it were at that size
+(<a class="reference internal" href="yaml_config.html#resampling"><span class="std std-ref">Data at Another Voxel Size</span></a>).</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">yaml</span> <span class="pre">CONFIG</span></code></p></td>
+<td><p>The same for every model a YAML file lists, with its normalization
+and postprocessing (<a class="reference internal" href="yaml_config.html"><span class="doc">YAML Configuration</span></a>). <code class="docutils literal notranslate"><span class="pre">--validate-only</span></code> checks
+the file; <code class="docutils literal notranslate"><span class="pre">--list-types</span></code> lists the model types.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">view</span> <span class="pre">-d</span> <span class="pre">DATA</span></code></p></td>
+<td><p>Open a dataset in the viewer and serve the dashboard, where models are
+picked and submitted. <code class="docutils literal notranslate"><span class="pre">-P</span></code> bills them to a project; by default it is
+the launching job’s own (<code class="docutils literal notranslate"><span class="pre">LSB_PROJECT_NAME</span></code>).</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">dashboard</span></code></p></td>
+<td><p>Serve the dashboard on its own, for a viewer already running
+(<code class="docutils literal notranslate"><span class="pre">-n</span></code> names the viewer the page embeds).</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">blockwise</span> <span class="pre">YAML...</span></code></p></td>
+<td><p>Run a model over a whole volume, block by block, writing its
+predictions to disk (<a class="reference internal" href="yaml_config.html"><span class="doc">YAML Configuration</span></a>). Several YAMLs run one after
+another; the command fails at the end if any left blocks unprocessed.
+<code class="docutils literal notranslate"><span class="pre">--client</span></code> runs one worker, which the run submits itself.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">serve</span> <span class="pre">--model</span> <span class="pre">ENTRY</span> <span class="pre">-d</span> <span class="pre">DATA</span></code></p></td>
+<td><p>Serve one model’s predictions. The launchers (<code class="docutils literal notranslate"><span class="pre">infer</span></code>, <code class="docutils literal notranslate"><span class="pre">yaml</span></code>, the
+dashboard) run it on a GPU node for you; see <a class="reference internal" href="#starting-a-server">Starting a server</a>.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">finetune</span> <span class="pre">train</span></code>, <code class="docutils literal notranslate"><span class="pre">export-merged</span></code>, <code class="docutils literal notranslate"><span class="pre">build-corrections</span></code></p></td>
+<td><p>The finetune tools (<code class="docutils literal notranslate"><span class="pre">docs/finetuning.md</span></code> in the repository). The
+dashboard’s finetune tab runs <code class="docutils literal notranslate"><span class="pre">train</span></code> for you; each takes the flags of
+<code class="docutils literal notranslate"><span class="pre">python</span> <span class="pre">-m</span> <span class="pre">cellmap_flow.finetune.&lt;module&gt;</span></code>, which <code class="docutils literal notranslate"><span class="pre">--help</span></code> lists.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">models</span></code></p></td>
+<td><p>List the model types and the arguments each takes.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">plugins</span> <span class="pre">register</span> <span class="pre">FILE</span></code>, <code class="docutils literal notranslate"><span class="pre">unregister</span> <span class="pre">NAME</span></code>, <code class="docutils literal notranslate"><span class="pre">list</span></code></p></td>
+<td><p>Manage plugins (<a class="reference internal" href="plugins.html"><span class="doc">Plugins</span></a>).</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">doctor</span></code></p></td>
+<td><p>Check the environment: what is installed, what is missing, and the
+command that fixes each gap. <code class="docutils literal notranslate"><span class="pre">--core-only</span></code> skips the finetune checks.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="starting-a-server">
+<h2>Starting a server<a class="headerlink" href="#starting-a-server" title="Link to this heading"></a></h2>
+<p>A launcher starts each model’s server as an LSF job (or a local process
+where there is no <code class="docutils literal notranslate"><span class="pre">bsub</span></code>) with:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$CELLMAP_FLOW_SERVER_COMMAND --model '&lt;entry&gt;' -d &lt;data path&gt;
+</pre></div>
+</div>
+<p>The entry is the model as a YAML model entry, in JSON
+(<code class="docutils literal notranslate"><span class="pre">ModelConfig.launch_entry</span></code>), and the server builds the model from it as
+<code class="docutils literal notranslate"><span class="pre">cellmap_flow</span> <span class="pre">yaml</span></code> builds a YAML’s models:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>cellmap_flow<span class="w"> </span>serve<span class="w"> </span>-d<span class="w"> </span>/path/to/data.zarr/raw<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--model<span class="w"> </span><span class="s1">'{"type": "script", "script_path": "/path/to/model.py", "name": "mito"}'</span>
+</pre></div>
+</div>
+<p>A launcher asked to resample (<code class="docutils literal notranslate"><span class="pre">infer</span> <span class="pre">--resample</span></code>, or <code class="docutils literal notranslate"><span class="pre">resample:</span> <span class="pre">true</span></code>
+in a YAML) adds <code class="docutils literal notranslate"><span class="pre">--resample</span></code>; see <a class="reference internal" href="yaml_config.html#resampling"><span class="std std-ref">Data at Another Voxel Size</span></a>.</p>
+<p><code class="docutils literal notranslate"><span class="pre">CELLMAP_FLOW_SERVER_COMMAND</span></code> is <code class="docutils literal notranslate"><span class="pre">cellmap_flow</span> <span class="pre">serve</span></code> by default. A
+deployment whose environment is not on the compute nodes’ <code class="docutils literal notranslate"><span class="pre">PATH</span></code> sets it:
+the pixi environment sets <code class="docutils literal notranslate"><span class="pre">pixi</span> <span class="pre">run</span> <span class="pre">cellmap_flow</span> <span class="pre">serve</span></code>
+(<a class="reference internal" href="install.html"><span class="doc">Installation</span></a>). The value before 0.3.0, <code class="docutils literal notranslate"><span class="pre">pixi</span> <span class="pre">run</span> <span class="pre">cellmap_flow_server</span></code>,
+still works, since <code class="docutils literal notranslate"><span class="pre">cellmap_flow_server</span></code> takes <code class="docutils literal notranslate"><span class="pre">--model</span></code> too.</p>
+</section>
+<section id="plugins">
+<h2>Plugins<a class="headerlink" href="#plugins" title="Link to this heading"></a></h2>
+<p>Every command loads the registered plugins (<code class="docutils literal notranslate"><span class="pre">~/.cellmap_flow/plugins/</span></code>)
+when it starts, so a plugin’s model type has its <code class="docutils literal notranslate"><span class="pre">infer</span></code> and <code class="docutils literal notranslate"><span class="pre">serve</span></code>
+form and its normalizers and postprocessors are offered in the dashboard.
+Importing <code class="docutils literal notranslate"><span class="pre">cellmap_flow</span></code> does not load them: a script that uses a plugin’s
+classes calls <code class="docutils literal notranslate"><span class="pre">cellmap_flow.plugins.load_plugins()</span></code> first.</p>
+</section>
+<section id="deprecated-names">
+<h2>Deprecated names<a class="headerlink" href="#deprecated-names" title="Link to this heading"></a></h2>
+<p>These still work in 0.3.0 and go in the release after it. Each prints, on
+stderr, <code class="docutils literal notranslate"><span class="pre">`&lt;old&gt;`</span> <span class="pre">is</span> <span class="pre">deprecated</span> <span class="pre">and</span> <span class="pre">goes</span> <span class="pre">in</span> <span class="pre">the</span> <span class="pre">release</span> <span class="pre">after</span> <span class="pre">0.3.0;</span> <span class="pre">use</span>
+<span class="pre">`&lt;new&gt;`.</span></code> and then does what <code class="docutils literal notranslate"><span class="pre">&lt;new&gt;</span></code> does.</p>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 50.0%" />
+<col style="width: 50.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Before 0.3.0</p></th>
+<th class="head"><p>Since 0.3.0</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">cellmap_flow_yaml</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">cellmap_flow</span> <span class="pre">yaml</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">cellmap_flow_view</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">cellmap_flow</span> <span class="pre">view</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">cellmap_flow_blockwise</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">cellmap_flow</span> <span class="pre">blockwise</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">cellmap_flow_blockwise_multiple</span> <span class="pre">A.yaml</span> <span class="pre">B.yaml</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">cellmap_flow</span> <span class="pre">blockwise</span> <span class="pre">A.yaml</span> <span class="pre">B.yaml</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">cellmap_flow_app</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">cellmap_flow</span> <span class="pre">dashboard</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">cellmap_flow_server</span> <span class="pre">&lt;type&gt;</span> <span class="pre">...</span></code>, <code class="docutils literal notranslate"><span class="pre">cellmap_flow_server</span> <span class="pre">--model</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">cellmap_flow</span> <span class="pre">serve</span> <span class="pre">--model</span></code> (launchers before 0.3.0 still start
+servers with the per-type form)</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">cellmap_flow_server</span> <span class="pre">list-models</span></code>, <code class="docutils literal notranslate"><span class="pre">cellmap_flow</span> <span class="pre">list-models</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">cellmap_flow</span> <span class="pre">models</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">cellmap_flow</span> <span class="pre">&lt;type&gt;</span> <span class="pre">...</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">cellmap_flow</span> <span class="pre">infer</span> <span class="pre">&lt;type&gt;</span> <span class="pre">...</span></code>. The <code class="docutils literal notranslate"><span class="pre">finetune</span></code> type is the
+exception: <code class="docutils literal notranslate"><span class="pre">cellmap_flow</span> <span class="pre">finetune</span></code> is now the finetune tools, so a
+finetuned model is served with <code class="docutils literal notranslate"><span class="pre">cellmap_flow</span> <span class="pre">infer</span> <span class="pre">finetune</span></code>.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">cellmap_flow</span> <span class="pre">run</span> <span class="pre">-m</span> <span class="pre">TYPE</span> <span class="pre">-c</span> <span class="pre">key=value</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">cellmap_flow</span> <span class="pre">infer</span> <span class="pre">TYPE</span> <span class="pre">--key</span> <span class="pre">value</span></code>; <code class="docutils literal notranslate"><span class="pre">run</span></code> prints the exact
+command its arguments stand for.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">cellmap_flow</span> <span class="pre">register</span></code>, <code class="docutils literal notranslate"><span class="pre">unregister</span></code>, <code class="docutils literal notranslate"><span class="pre">list-plugins</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">cellmap_flow</span> <span class="pre">plugins</span> <span class="pre">register</span></code>, <code class="docutils literal notranslate"><span class="pre">unregister</span></code>, <code class="docutils literal notranslate"><span class="pre">list</span></code></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="reference">
+<h2>Reference<a class="headerlink" href="#reference" title="Link to this heading"></a></h2>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="install.html" class="btn btn-neutral float-left" title="Installation" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="scripts.html" class="btn btn-neutral float-right" title="Python Scripts" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, David Ackerman,  Marwan Zouinkhi, Jeff Rhoades, Larissa Heinrich, Aubrey Weigel.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

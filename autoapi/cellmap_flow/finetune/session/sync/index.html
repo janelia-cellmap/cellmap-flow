@@ -1,0 +1,358 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>cellmap_flow.finetune.session.sync &mdash; CellMap Flow  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../../_static/graphviz.css?v=4ae1632d" />
+      <link rel="stylesheet" type="text/css" href="../../../../../_static/css/custom.css" />
+
+  
+    <link rel="shortcut icon" href="../../../../../_static/favicon.ico"/>
+      <script src="../../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../../../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../search.html" />
+    <link rel="next" title="cellmap_flow.finetune.session.volume" href="../volume/index.html" />
+    <link rel="prev" title="cellmap_flow.finetune.session.store" href="../store/index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../../index.html" class="icon icon-home">
+            CellMap Flow
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">CellMap-Flow API:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../../../../../install.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../cli.html">Command line</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../scripts.html">Python Scripts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../yaml_config.html">YAML Configuration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../data_paths.html">Data paths</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../huggingface.html">HuggingFace Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../custom_script.html">Custom Model</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../post.html">PostProcessors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../plugins.html">Plugins</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../review.html">Reviewing instances</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../viewer_api.html">Viewer layer API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../architecture.html">Architecture</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../../../../index.html">API Reference</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="../../../index.html">cellmap_flow</a><ul class="current">
+<li class="toctree-l3 current"><a class="reference internal" href="../../../index.html#submodules">Submodules</a><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="../../../blockwise/index.html">cellmap_flow.blockwise</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../cli/index.html">cellmap_flow.cli</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../config/index.html">cellmap_flow.config</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../dashboard/index.html">cellmap_flow.dashboard</a></li>
+<li class="toctree-l4 current"><a class="reference internal" href="../../index.html">cellmap_flow.finetune</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../globals/index.html">cellmap_flow.globals</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../image_data_interface/index.html">cellmap_flow.image_data_interface</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../inference/index.html">cellmap_flow.inference</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../inferencer/index.html">cellmap_flow.inferencer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../io/index.html">cellmap_flow.io</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../jobs/index.html">cellmap_flow.jobs</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../logging_setup/index.html">cellmap_flow.logging_setup</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../models/index.html">cellmap_flow.models</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../norm/index.html">cellmap_flow.norm</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../pipeline_spec/index.html">cellmap_flow.pipeline_spec</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../plugins/index.html">cellmap_flow.plugins</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../post/index.html">cellmap_flow.post</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../process_chain/index.html">cellmap_flow.process_chain</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../review/index.html">cellmap_flow.review</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../review_index/index.html">cellmap_flow.review_index</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../server/index.html">cellmap_flow.server</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../serving/index.html">cellmap_flow.serving</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../utils/index.html">cellmap_flow.utils</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../viewer/index.html">cellmap_flow.viewer</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../../index.html">CellMap Flow</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../../index.html">API Reference</a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">cellmap_flow</a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">cellmap_flow.finetune</a></li>
+          <li class="breadcrumb-item"><a href="../index.html">cellmap_flow.finetune.session</a></li>
+      <li class="breadcrumb-item active">cellmap_flow.finetune.session.sync</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../../../../../_sources/autoapi/cellmap_flow/finetune/session/sync/index.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-cellmap_flow.finetune.session.sync">
+<span id="cellmap-flow-finetune-session-sync"></span><h1>cellmap_flow.finetune.session.sync<a class="headerlink" href="#module-cellmap_flow.finetune.session.sync" title="Link to this heading"></a></h1>
+<p>Bringing painted chunks from MinIO back to the volumes on disk.</p>
+<p>The browser paints into MinIO; the trainer reads the volume on disk. A sync
+lists a volume’s chunks in the bucket with their ETags, copies the ones that
+changed since the last sync into the volume’s own zarr, and records what it
+saw in the volume’s registry record (<code class="docutils literal notranslate"><span class="pre">chunk_sync_state</span></code>). Local disk is the
+source of truth: nothing on disk is ever deleted because MinIO lacks it.</p>
+<p><code class="docutils literal notranslate"><span class="pre">state</span></code> is the dashboard’s <code class="docutils literal notranslate"><span class="pre">minio_state</span></code> and <code class="docutils literal notranslate"><span class="pre">volumes</span></code> its volume
+registry, passed to every call; only the lock and the failure counter of
+the periodic sync are kept here.</p>
+<section id="attributes">
+<h2>Attributes<a class="headerlink" href="#attributes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.session.sync.logger" title="cellmap_flow.finetune.session.sync.logger"><code class="xref py py-obj docutils literal notranslate"><span class="pre">logger</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.finetune.session.sync.SYNC_PERIOD_SECONDS" title="cellmap_flow.finetune.session.sync.SYNC_PERIOD_SECONDS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SYNC_PERIOD_SECONDS</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.session.sync.SYNC_FAILURE_WARNING_INTERVAL" title="cellmap_flow.finetune.session.sync.SYNC_FAILURE_WARNING_INTERVAL"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SYNC_FAILURE_WARNING_INTERVAL</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="functions">
+<h2>Functions<a class="headerlink" href="#functions" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.session.sync.worker_count" title="cellmap_flow.finetune.session.sync.worker_count"><code class="xref py py-obj docutils literal notranslate"><span class="pre">worker_count</span></code></a>(→ int)</p></td>
+<td><p>How many threads chunk copies and writes may use.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.finetune.session.sync.chunk_version" title="cellmap_flow.finetune.session.sync.chunk_version"><code class="xref py py-obj docutils literal notranslate"><span class="pre">chunk_version</span></code></a>(→ str)</p></td>
+<td><p>What identifies one version of a remote chunk: its ETag, from a listing.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.session.sync.copy_chunks_parallel" title="cellmap_flow.finetune.session.sync.copy_chunks_parallel"><code class="xref py py-obj docutils literal notranslate"><span class="pre">copy_chunks_parallel</span></code></a>(→ set)</p></td>
+<td><p>Copy <code class="docutils literal notranslate"><span class="pre">(src,</span> <span class="pre">dst)</span></code> chunk files from MinIO in parallel.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.finetune.session.sync.sync_zarr_group_metadata" title="cellmap_flow.finetune.session.sync.sync_zarr_group_metadata"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sync_zarr_group_metadata</span></code></a>(→ set)</p></td>
+<td><p>Sync a zarr group's structure and metadata from MinIO to local disk.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.session.sync.diff_and_sync_chunks" title="cellmap_flow.finetune.session.sync.diff_and_sync_chunks"><code class="xref py py-obj docutils literal notranslate"><span class="pre">diff_and_sync_chunks</span></code></a>(→ tuple)</p></td>
+<td><p>Copy the chunks of MinIO's <code class="docutils literal notranslate"><span class="pre">s0_path</span></code> that changed since <code class="docutils literal notranslate"><span class="pre">known_state</span></code> to disk.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.finetune.session.sync.volume_record" title="cellmap_flow.finetune.session.sync.volume_record"><code class="xref py py-obj docutils literal notranslate"><span class="pre">volume_record</span></code></a>(volume_id[, zarr_path])</p></td>
+<td><p>The registry record of <code class="docutils literal notranslate"><span class="pre">volume_id</span></code>, rebuilt from <code class="docutils literal notranslate"><span class="pre">zarr_path</span></code> if need be.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.session.sync.sync_volume" title="cellmap_flow.finetune.session.sync.sync_volume"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sync_volume</span></code></a>(→ bool)</p></td>
+<td><p>Pull an annotation volume's changed chunks from MinIO to local disk.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.finetune.session.sync.sync_all" title="cellmap_flow.finetune.session.sync.sync_all"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sync_all</span></code></a>(→ int)</p></td>
+<td><p>Sync every annotation volume in MinIO to local disk.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.session.sync.periodic_sync_once" title="cellmap_flow.finetune.session.sync.periodic_sync_once"><code class="xref py py-obj docutils literal notranslate"><span class="pre">periodic_sync_once</span></code></a>(→ None)</p></td>
+<td><p>One round of the periodic sync; failures are warned about, not hidden.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.finetune.session.sync.periodic_sync" title="cellmap_flow.finetune.session.sync.periodic_sync"><code class="xref py py-obj docutils literal notranslate"><span class="pre">periodic_sync</span></code></a>(→ None)</p></td>
+<td><p>The periodic sync thread's loop: a round every SYNC_PERIOD_SECONDS, forever.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.session.sync.start_periodic_sync" title="cellmap_flow.finetune.session.sync.start_periodic_sync"><code class="xref py py-obj docutils literal notranslate"><span class="pre">start_periodic_sync</span></code></a>(→ None)</p></td>
+<td><p>Start the periodic annotation sync thread if not already running.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="module-contents">
+<h2>Module Contents<a class="headerlink" href="#module-contents" title="Link to this heading"></a></h2>
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.session.sync.logger">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.session.sync.</span></span><span class="sig-name descname"><span class="pre">logger</span></span><a class="headerlink" href="#cellmap_flow.finetune.session.sync.logger" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.session.sync.SYNC_PERIOD_SECONDS">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.session.sync.</span></span><span class="sig-name descname"><span class="pre">SYNC_PERIOD_SECONDS</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">30</span></span><a class="headerlink" href="#cellmap_flow.finetune.session.sync.SYNC_PERIOD_SECONDS" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.session.sync.SYNC_FAILURE_WARNING_INTERVAL">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.session.sync.</span></span><span class="sig-name descname"><span class="pre">SYNC_FAILURE_WARNING_INTERVAL</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">300</span></span><a class="headerlink" href="#cellmap_flow.finetune.session.sync.SYNC_FAILURE_WARNING_INTERVAL" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.session.sync.worker_count">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.session.sync.</span></span><span class="sig-name descname"><span class="pre">worker_count</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">int</span></span></span><a class="headerlink" href="#cellmap_flow.finetune.session.sync.worker_count" title="Link to this definition"></a></dt>
+<dd><p>How many threads chunk copies and writes may use.</p>
+<p>The CPU count the scheduler gave the job (LSF’s <code class="docutils literal notranslate"><span class="pre">bsub</span> <span class="pre">-n</span></code>, SGE, SLURM,
+OpenMP) first, else the CPUs this process may run on.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.session.sync.chunk_version">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.session.sync.</span></span><span class="sig-name descname"><span class="pre">chunk_version</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">entry</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#cellmap_flow.finetune.session.sync.chunk_version" title="Link to this definition"></a></dt>
+<dd><p>What identifies one version of a remote chunk: its ETag, from a listing.</p>
+<p>The ETag changes with the content. LastModified has one-second
+resolution: two brush strokes to the same chunk within a second, with a
+sync between them, would leave the second stroke unsynced for good.
+LastModified and size are only the fallback for a store that lists no
+ETag.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.session.sync.copy_chunks_parallel">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.session.sync.</span></span><span class="sig-name descname"><span class="pre">copy_chunks_parallel</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">s3</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">copy_pairs</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">set</span></span></span><a class="headerlink" href="#cellmap_flow.finetune.session.sync.copy_chunks_parallel" title="Link to this definition"></a></dt>
+<dd><p>Copy <code class="docutils literal notranslate"><span class="pre">(src,</span> <span class="pre">dst)</span></code> chunk files from MinIO in parallel.</p>
+<p>Each chunk is downloaded to a temporary file beside its destination and
+moved into place with os.replace, so a reader – the trainer on its LSF
+node reads this same volume – sees the old chunk or the new one, never
+a half-written file (which blosc rejects).</p>
+<p>Returns the source paths that could not be copied. Their chunks keep
+what was on disk, and the caller must not record them as synced.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.session.sync.sync_zarr_group_metadata">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.session.sync.</span></span><span class="sig-name descname"><span class="pre">sync_zarr_group_metadata</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">s3</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">src_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dst_path</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">set</span></span></span><a class="headerlink" href="#cellmap_flow.finetune.session.sync.sync_zarr_group_metadata" title="Link to this definition"></a></dt>
+<dd><p>Sync a zarr group’s structure and metadata from MinIO to local disk.</p>
+<p>Creates the arrays of <code class="docutils literal notranslate"><span class="pre">src_path</span></code> that <code class="docutils literal notranslate"><span class="pre">dst_path</span></code> does not have yet,
+and copies the attrs. An array that exists locally with a different
+shape, chunking or dtype is left alone and reported: re-creating it
+would delete every local chunk of that array, which the “never delete
+on-disk chunks” rule of diff_and_sync_chunks exists to prevent.</p>
+<p>Returns the keys of the arrays whose local layout does not match
+MinIO’s. The caller must not copy chunks into those, since they would
+not fit.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.session.sync.diff_and_sync_chunks">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.session.sync.</span></span><span class="sig-name descname"><span class="pre">diff_and_sync_chunks</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">s3</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">s0_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dst_s0_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">known_state</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">force</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">tuple</span></span></span><a class="headerlink" href="#cellmap_flow.finetune.session.sync.diff_and_sync_chunks" title="Link to this definition"></a></dt>
+<dd><p>Copy the chunks of MinIO’s <code class="docutils literal notranslate"><span class="pre">s0_path</span></code> that changed since <code class="docutils literal notranslate"><span class="pre">known_state</span></code> to disk.</p>
+<p>Local disk is the source of truth: YAML imports are written locally
+first and only later mirrored to MinIO, and painted scribbles flow
+MinIO -&gt; local through this function. Nothing on disk is ever deleted
+because MinIO lacks it: a chunk absent from a listing is almost always a
+transient (a truncated page, an <code class="docutils literal notranslate"><span class="pre">mc</span> <span class="pre">mirror</span></code> in flight, a server
+restart, a network blip), not a real erase, since painting background
+over a chunk in neuroglancer rewrites the chunk file rather than
+removing it. Trusting one bad listing once wiped 3456 chunks of a
+session from disk.</p>
+<p>Returns <code class="docutils literal notranslate"><span class="pre">(changed_keys,</span> <span class="pre">remote_state)</span></code>: the chunks copied, and the
+state to record as synced. A chunk that failed to copy is left out of
+<code class="docutils literal notranslate"><span class="pre">changed_keys</span></code> and keeps its previous state (or none) in
+<code class="docutils literal notranslate"><span class="pre">remote_state</span></code>, so the next sync tries it again.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.session.sync.volume_record">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.session.sync.</span></span><span class="sig-name descname"><span class="pre">volume_record</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">volume_id</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">zarr_path</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">volumes</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.finetune.session.sync.volume_record" title="Link to this definition"></a></dt>
+<dd><p>The registry record of <code class="docutils literal notranslate"><span class="pre">volume_id</span></code>, rebuilt from <code class="docutils literal notranslate"><span class="pre">zarr_path</span></code> if need be.</p>
+<p>When the registry has none yet (after a dashboard restart, say), the
+record is rebuilt from <code class="docutils literal notranslate"><span class="pre">zarr_path</span></code>’s attrs and registered. None if
+neither gives one.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.session.sync.sync_volume">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.session.sync.</span></span><span class="sig-name descname"><span class="pre">sync_volume</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">volume_id</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">force</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">zarr_path</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">state</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">volumes</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#cellmap_flow.finetune.session.sync.sync_volume" title="Link to this definition"></a></dt>
+<dd><p>Pull an annotation volume’s changed chunks from MinIO to local disk.</p>
+<p>Syncs the annotation group’s metadata, then diffs MinIO’s chunk listing
+against what was last synced and copies the chunks that changed. The
+trainer reads the volume itself, through the session’s manifest.
+Returns True if any chunk was pulled.</p>
+<p>The chunks go to the volume’s own zarr: <code class="docutils literal notranslate"><span class="pre">zarr_path</span></code> (a resumed copy),
+else the registered one, else – only for a volume this dashboard has no
+record of – <code class="docutils literal notranslate"><span class="pre">&lt;output_base&gt;/&lt;volume_id&gt;.zarr</span></code>. output_base is fixed by
+the first ensure_serving of the dashboard’s life, so a volume created
+under another output path would have its strokes land in the first
+session’s directory, where its trainer never looks.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.session.sync.sync_all">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.session.sync.</span></span><span class="sig-name descname"><span class="pre">sync_all</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">force</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">state</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">volumes</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">int</span></span></span><a class="headerlink" href="#cellmap_flow.finetune.session.sync.sync_all" title="Link to this definition"></a></dt>
+<dd><p>Sync every annotation volume in MinIO to local disk.</p>
+<p>Returns the number of volumes that had changed chunks, or -1 if MinIO
+is not initialized.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.session.sync.periodic_sync_once">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.session.sync.</span></span><span class="sig-name descname"><span class="pre">periodic_sync_once</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">state</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">volumes</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#cellmap_flow.finetune.session.sync.periodic_sync_once" title="Link to this definition"></a></dt>
+<dd><p>One round of the periodic sync; failures are warned about, not hidden.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.session.sync.periodic_sync">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.session.sync.</span></span><span class="sig-name descname"><span class="pre">periodic_sync</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">state</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">volumes</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#cellmap_flow.finetune.session.sync.periodic_sync" title="Link to this definition"></a></dt>
+<dd><p>The periodic sync thread’s loop: a round every SYNC_PERIOD_SECONDS, forever.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.session.sync.start_periodic_sync">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.session.sync.</span></span><span class="sig-name descname"><span class="pre">start_periodic_sync</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">state</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">volumes</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#cellmap_flow.finetune.session.sync.start_periodic_sync" title="Link to this definition"></a></dt>
+<dd><p>Start the periodic annotation sync thread if not already running.</p>
+</dd></dl>
+
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../store/index.html" class="btn btn-neutral float-left" title="cellmap_flow.finetune.session.store" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../volume/index.html" class="btn btn-neutral float-right" title="cellmap_flow.finetune.session.volume" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, David Ackerman,  Marwan Zouinkhi, Jeff Rhoades, Larissa Heinrich, Aubrey Weigel.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

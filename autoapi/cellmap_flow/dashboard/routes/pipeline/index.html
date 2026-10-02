@@ -10,7 +10,6 @@
       <link rel="stylesheet" type="text/css" href="../../../../../_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="../../../../../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../../../../../_static/graphviz.css?v=4ae1632d" />
-      <link rel="stylesheet" type="text/css" href="../../../../../_static/mystnb.11b39860a7a0cbfd473a3ad8a317855267ff0bd372690045ca344a6b62be495e.css" />
       <link rel="stylesheet" type="text/css" href="../../../../../_static/css/custom.css" />
 
   
@@ -20,7 +19,6 @@
       <script src="../../../../../_static/documentation_options.js?v=5929fcd5"></script>
       <script src="../../../../../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
-      <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
     <script src="../../../../../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../../../../../genindex.html" />
     <link rel="search" title="Search" href="../../../../../search.html" />
@@ -50,27 +48,44 @@
               <p class="caption" role="heading"><span class="caption-text">CellMap-Flow API:</span></p>
 <ul class="current">
 <li class="toctree-l1"><a class="reference internal" href="../../../../../install.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../cli.html">Command line</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../../scripts.html">Python Scripts</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../../yaml_config.html">YAML Configuration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../data_paths.html">Data paths</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../../huggingface.html">HuggingFace Models</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../../custom_script.html">Custom Model</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../../post.html">PostProcessors</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../../plugins.html">Plugins</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../review.html">Reviewing instances</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../viewer_api.html">Viewer layer API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../architecture.html">Architecture</a></li>
 <li class="toctree-l1 current"><a class="reference internal" href="../../../../index.html">API Reference</a><ul class="current">
 <li class="toctree-l2 current"><a class="reference internal" href="../../../index.html">cellmap_flow</a><ul class="current">
 <li class="toctree-l3 current"><a class="reference internal" href="../../../index.html#submodules">Submodules</a><ul class="current">
 <li class="toctree-l4"><a class="reference internal" href="../../../blockwise/index.html">cellmap_flow.blockwise</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../../cli/index.html">cellmap_flow.cli</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../config/index.html">cellmap_flow.config</a></li>
 <li class="toctree-l4 current"><a class="reference internal" href="../../index.html">cellmap_flow.dashboard</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../../finetune/index.html">cellmap_flow.finetune</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../../globals/index.html">cellmap_flow.globals</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../../image_data_interface/index.html">cellmap_flow.image_data_interface</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../inference/index.html">cellmap_flow.inference</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../../inferencer/index.html">cellmap_flow.inferencer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../io/index.html">cellmap_flow.io</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../jobs/index.html">cellmap_flow.jobs</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../logging_setup/index.html">cellmap_flow.logging_setup</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../../models/index.html">cellmap_flow.models</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../../norm/index.html">cellmap_flow.norm</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../pipeline_spec/index.html">cellmap_flow.pipeline_spec</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../plugins/index.html">cellmap_flow.plugins</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../../post/index.html">cellmap_flow.post</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../process_chain/index.html">cellmap_flow.process_chain</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../review/index.html">cellmap_flow.review</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../review_index/index.html">cellmap_flow.review_index</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../../server/index.html">cellmap_flow.server</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../serving/index.html">cellmap_flow.serving</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../../utils/index.html">cellmap_flow.utils</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../viewer/index.html">cellmap_flow.viewer</a></li>
 </ul>
 </li>
 </ul>
@@ -109,6 +124,15 @@
              
   <section id="module-cellmap_flow.dashboard.routes.pipeline">
 <span id="cellmap-flow-dashboard-routes-pipeline"></span><h1>cellmap_flow.dashboard.routes.pipeline<a class="headerlink" href="#module-cellmap_flow.dashboard.routes.pipeline" title="Link to this heading"></a></h1>
+<p>The dashboard’s chain, and the settings the pipeline builder keeps here.</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">PUT</span> <span class="pre">/api/pipeline</span></code>: set the chain and redraw the viewer through it (the
+dashboard page’s Submit, and the pipeline builder after each edit).</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">POST</span> <span class="pre">/api/process</span></code> and <code class="docutils literal notranslate"><span class="pre">POST</span> <span class="pre">/api/pipeline/apply</span></code>: the two routes it
+replaced, kept for one release as its deprecated aliases.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">/api/blockwise-config</span></code>: the builder’s blockwise settings.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">/update/equivalences</span></code>: a segmentation layer’s merged ids.</p></li>
+</ul>
 <section id="attributes">
 <h2>Attributes<a class="headerlink" href="#attributes" title="Link to this heading"></a></h2>
 <table class="autosummary longtable docutils align-default">
@@ -122,36 +146,40 @@
 </tbody>
 </table>
 </section>
+<section id="classes">
+<h2>Classes<a class="headerlink" href="#classes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.pipeline.BuilderCanvas" title="cellmap_flow.dashboard.routes.pipeline.BuilderCanvas"><code class="xref py py-obj docutils literal notranslate"><span class="pre">BuilderCanvas</span></code></a></p></td>
+<td><p>The pipeline builder's canvas as it sends it: its nodes by type, and</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.pipeline.PipelineUpdate" title="cellmap_flow.dashboard.routes.pipeline.PipelineUpdate"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PipelineUpdate</span></code></a></p></td>
+<td><p>The body of PUT /api/pipeline.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
 <section id="functions">
 <h2>Functions<a class="headerlink" href="#functions" title="Link to this heading"></a></h2>
 <table class="autosummary longtable docutils align-default">
 <tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.pipeline.is_output_segmentation" title="cellmap_flow.dashboard.routes.pipeline.is_output_segmentation"><code class="xref py py-obj docutils literal notranslate"><span class="pre">is_output_segmentation</span></code></a>()</p></td>
-<td><p></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.pipeline.validate_pipeline_config" title="cellmap_flow.dashboard.routes.pipeline.validate_pipeline_config"><code class="xref py py-obj docutils literal notranslate"><span class="pre">validate_pipeline_config</span></code></a>(config)</p></td>
+<td><p>/api/pipeline/apply's check of the builder's nodes: <code class="docutils literal notranslate"><span class="pre">{&quot;valid&quot;:</span> <span class="pre">True}</span></code>,</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.pipeline.validate_pipeline_config" title="cellmap_flow.dashboard.routes.pipeline.validate_pipeline_config"><code class="xref py py-obj docutils literal notranslate"><span class="pre">validate_pipeline_config</span></code></a>(config)</p></td>
-<td><p>Helper function to validate pipeline configuration</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.pipeline.update_equivalences" title="cellmap_flow.dashboard.routes.pipeline.update_equivalences"><code class="xref py py-obj docutils literal notranslate"><span class="pre">update_equivalences</span></code></a>()</p></td>
+<td><p>Show a merging postprocessor's merged ids (an Equivalences) in its</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.pipeline.update_equivalences" title="cellmap_flow.dashboard.routes.pipeline.update_equivalences"><code class="xref py py-obj docutils literal notranslate"><span class="pre">update_equivalences</span></code></a>()</p></td>
-<td><p></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.pipeline.put_pipeline" title="cellmap_flow.dashboard.routes.pipeline.put_pipeline"><code class="xref py py-obj docutils literal notranslate"><span class="pre">put_pipeline</span></code></a>()</p></td>
+<td><p>Set the chain, and redraw the viewer through it.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.pipeline.process" title="cellmap_flow.dashboard.routes.pipeline.process"><code class="xref py py-obj docutils literal notranslate"><span class="pre">process</span></code></a>()</p></td>
-<td><p></p></td>
+<td><p>Submit's route before PUT /api/pipeline.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.pipeline.validate_pipeline" title="cellmap_flow.dashboard.routes.pipeline.validate_pipeline"><code class="xref py py-obj docutils literal notranslate"><span class="pre">validate_pipeline</span></code></a>()</p></td>
-<td><p>Validate a pipeline configuration</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.pipeline.apply_pipeline" title="cellmap_flow.dashboard.routes.pipeline.apply_pipeline"><code class="xref py py-obj docutils literal notranslate"><span class="pre">apply_pipeline</span></code></a>()</p></td>
+<td><p>The pipeline builder's route before PUT /api/pipeline, answering as it did.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.pipeline.dataset_path_api" title="cellmap_flow.dashboard.routes.pipeline.dataset_path_api"><code class="xref py py-obj docutils literal notranslate"><span class="pre">dataset_path_api</span></code></a>()</p></td>
-<td><p>Get or set the dataset path in globals</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.pipeline.blockwise_config_api" title="cellmap_flow.dashboard.routes.pipeline.blockwise_config_api"><code class="xref py py-obj docutils literal notranslate"><span class="pre">blockwise_config_api</span></code></a>()</p></td>
-<td><p>Get or set blockwise configuration in globals</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.pipeline.apply_pipeline" title="cellmap_flow.dashboard.routes.pipeline.apply_pipeline"><code class="xref py py-obj docutils literal notranslate"><span class="pre">apply_pipeline</span></code></a>()</p></td>
-<td><p>Apply a pipeline configuration to the current inference</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.pipeline.shaders_api" title="cellmap_flow.dashboard.routes.pipeline.shaders_api"><code class="xref py py-obj docutils literal notranslate"><span class="pre">shaders_api</span></code></a>()</p></td>
-<td><p>Get or update stored shader strings and shaderControls.</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.pipeline.blockwise_config_api" title="cellmap_flow.dashboard.routes.pipeline.blockwise_config_api"><code class="xref py py-obj docutils literal notranslate"><span class="pre">blockwise_config_api</span></code></a>()</p></td>
+<td><p>Get or set the blockwise settings.</p></td>
 </tr>
 </tbody>
 </table>
@@ -169,59 +197,129 @@
 <dd></dd></dl>
 
 <dl class="py function">
-<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.pipeline.is_output_segmentation">
-<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.pipeline.</span></span><span class="sig-name descname"><span class="pre">is_output_segmentation</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.routes.pipeline.is_output_segmentation" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py function">
 <dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.pipeline.validate_pipeline_config">
 <span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.pipeline.</span></span><span class="sig-name descname"><span class="pre">validate_pipeline_config</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.routes.pipeline.validate_pipeline_config" title="Link to this definition"></a></dt>
-<dd><p>Helper function to validate pipeline configuration</p>
+<dd><p>/api/pipeline/apply’s check of the builder’s nodes: <code class="docutils literal notranslate"><span class="pre">{&quot;valid&quot;:</span> <span class="pre">True}</span></code>,
+or <code class="docutils literal notranslate"><span class="pre">{&quot;valid&quot;:</span> <span class="pre">False,</span> <span class="pre">&quot;error&quot;}</span></code> for the first node that names no
+registered op, or for a body it cannot read.</p>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.pipeline.BuilderCanvas">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.pipeline.</span></span><span class="sig-name descname"><span class="pre">BuilderCanvas</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">/</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">**data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.routes.pipeline.BuilderCanvas" title="Link to this definition"></a></dt>
+<dd><p>The pipeline builder’s canvas as it sends it: its nodes by type, and
+its edges, each a list (a missing one is empty). The dashboard keeps it
+for the builder’s next load, and each model node’s <code class="docutils literal notranslate"><span class="pre">config</span></code> for a
+model node that comes back without one; the chain is not read from it.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.pipeline.BuilderCanvas.inputs">
+<span class="sig-name descname"><span class="pre">inputs</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">dict</span><span class="p"><span class="pre">]</span></span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">[]</span></span><a class="headerlink" href="#cellmap_flow.dashboard.routes.pipeline.BuilderCanvas.inputs" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.pipeline.BuilderCanvas.outputs">
+<span class="sig-name descname"><span class="pre">outputs</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">dict</span><span class="p"><span class="pre">]</span></span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">[]</span></span><a class="headerlink" href="#cellmap_flow.dashboard.routes.pipeline.BuilderCanvas.outputs" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.pipeline.BuilderCanvas.edges">
+<span class="sig-name descname"><span class="pre">edges</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">dict</span><span class="p"><span class="pre">]</span></span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">[]</span></span><a class="headerlink" href="#cellmap_flow.dashboard.routes.pipeline.BuilderCanvas.edges" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.pipeline.BuilderCanvas.normalizers">
+<span class="sig-name descname"><span class="pre">normalizers</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">dict</span><span class="p"><span class="pre">]</span></span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">[]</span></span><a class="headerlink" href="#cellmap_flow.dashboard.routes.pipeline.BuilderCanvas.normalizers" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.pipeline.BuilderCanvas.models">
+<span class="sig-name descname"><span class="pre">models</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">dict</span><span class="p"><span class="pre">]</span></span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">[]</span></span><a class="headerlink" href="#cellmap_flow.dashboard.routes.pipeline.BuilderCanvas.models" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.pipeline.BuilderCanvas.postprocessors">
+<span class="sig-name descname"><span class="pre">postprocessors</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">dict</span><span class="p"><span class="pre">]</span></span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">[]</span></span><a class="headerlink" href="#cellmap_flow.dashboard.routes.pipeline.BuilderCanvas.postprocessors" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.pipeline.PipelineUpdate">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.pipeline.</span></span><span class="sig-name descname"><span class="pre">PipelineUpdate</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">/</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">**data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.routes.pipeline.PipelineUpdate" title="Link to this definition"></a></dt>
+<dd><p>The body of PUT /api/pipeline.</p>
+<p><code class="docutils literal notranslate"><span class="pre">input_norm</span></code> and <code class="docutils literal notranslate"><span class="pre">postprocess</span></code> are the two chains, each a list of
+<code class="docutils literal notranslate"><span class="pre">{&quot;name&quot;:</span> <span class="pre">&lt;op</span> <span class="pre">class&gt;,</span> <span class="pre">**its</span> <span class="pre">parameters}</span></code> steps in the order they run
+(pipeline_spec’s form). Both are required, <code class="docutils literal notranslate"><span class="pre">[]</span></code> for none, and every
+step must name a registered op of its kind. <code class="docutils literal notranslate"><span class="pre">builder</span></code> is the pipeline
+builder’s canvas (BuilderCanvas); only the builder sends it.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.pipeline.PipelineUpdate.input_norm">
+<span class="sig-name descname"><span class="pre">input_norm</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">dict</span><span class="p"><span class="pre">]</span></span></span><a class="headerlink" href="#cellmap_flow.dashboard.routes.pipeline.PipelineUpdate.input_norm" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.pipeline.PipelineUpdate.postprocess">
+<span class="sig-name descname"><span class="pre">postprocess</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">dict</span><span class="p"><span class="pre">]</span></span></span><a class="headerlink" href="#cellmap_flow.dashboard.routes.pipeline.PipelineUpdate.postprocess" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.pipeline.PipelineUpdate.builder">
+<span class="sig-name descname"><span class="pre">builder</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="#cellmap_flow.dashboard.routes.pipeline.BuilderCanvas" title="cellmap_flow.dashboard.routes.pipeline.BuilderCanvas"><span class="pre">BuilderCanvas</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.dashboard.routes.pipeline.PipelineUpdate.builder" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
 </dd></dl>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.pipeline.update_equivalences">
 <span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.pipeline.</span></span><span class="sig-name descname"><span class="pre">update_equivalences</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.routes.pipeline.update_equivalences" title="Link to this definition"></a></dt>
-<dd></dd></dl>
+<dd><p>Show a merging postprocessor’s merged ids (an Equivalences) in its
+segmentation layer. Its inference server posts them as it merges.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.pipeline.put_pipeline">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.pipeline.</span></span><span class="sig-name descname"><span class="pre">put_pipeline</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.routes.pipeline.put_pipeline" title="Link to this definition"></a></dt>
+<dd><p>Set the chain, and redraw the viewer through it.</p>
+<p>The body is a PipelineUpdate. The answer is <code class="docutils literal notranslate"><span class="pre">{&quot;success&quot;:</span> <span class="pre">true,</span>
+<span class="pre">&quot;pipeline&quot;:</span> <span class="pre">{&quot;input_norm&quot;,</span> <span class="pre">&quot;postprocess&quot;},</span> <span class="pre">&quot;digest&quot;,</span> <span class="pre">&quot;layers&quot;}</span></code>: the
+chain as it is now configured, its digest (which names the layers’
+source, so the same chain sent again leaves neuroglancer’s chunks and
+each server’s built chain as they are), and the prediction layers drawn.
+A body that is not a PipelineUpdate, or a step its op’s class refuses,
+is a 400 <code class="docutils literal notranslate"><span class="pre">{&quot;success&quot;:</span> <span class="pre">false,</span> <span class="pre">&quot;error&quot;}</span></code> that changes nothing.</p>
+</dd></dl>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.pipeline.process">
 <span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.pipeline.</span></span><span class="sig-name descname"><span class="pre">process</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.routes.pipeline.process" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py function">
-<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.pipeline.validate_pipeline">
-<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.pipeline.</span></span><span class="sig-name descname"><span class="pre">validate_pipeline</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.routes.pipeline.validate_pipeline" title="Link to this definition"></a></dt>
-<dd><p>Validate a pipeline configuration</p>
-</dd></dl>
-
-<dl class="py function">
-<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.pipeline.dataset_path_api">
-<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.pipeline.</span></span><span class="sig-name descname"><span class="pre">dataset_path_api</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.routes.pipeline.dataset_path_api" title="Link to this definition"></a></dt>
-<dd><p>Get or set the dataset path in globals</p>
-</dd></dl>
-
-<dl class="py function">
-<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.pipeline.blockwise_config_api">
-<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.pipeline.</span></span><span class="sig-name descname"><span class="pre">blockwise_config_api</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.routes.pipeline.blockwise_config_api" title="Link to this definition"></a></dt>
-<dd><p>Get or set blockwise configuration in globals</p>
+<dd><p>Submit’s route before PUT /api/pipeline.</p>
+<p>The body is <code class="docutils literal notranslate"><span class="pre">{&quot;input_norm&quot;,</span> <span class="pre">&quot;postprocess&quot;}</span></code>, either chain in the list
+or the older dict form. The answer is <code class="docutils literal notranslate"><span class="pre">{&quot;message&quot;,</span> <span class="pre">&quot;received_data&quot;}</span></code>,
+the body with the dashboard’s address and the chain’s digest added; the
+older answer’s <code class="docutils literal notranslate"><span class="pre">found_custom_normalizer</span></code> and <code class="docutils literal notranslate"><span class="pre">received_data.time</span></code>,
+which nothing read, are gone. An op it does not know is kept in the
+chain and skipped where it is built; a body without both chains, or a
+step its class refuses, is a 500.</p>
 </dd></dl>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.pipeline.apply_pipeline">
 <span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.pipeline.</span></span><span class="sig-name descname"><span class="pre">apply_pipeline</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.routes.pipeline.apply_pipeline" title="Link to this definition"></a></dt>
-<dd><p>Apply a pipeline configuration to the current inference</p>
+<dd><p>The pipeline builder’s route before PUT /api/pipeline, answering as it did.</p>
+<p>The body is the builder’s nodes by type (<code class="docutils literal notranslate"><span class="pre">input_normalizers</span></code>,
+<code class="docutils literal notranslate"><span class="pre">postprocessors</span></code>, <code class="docutils literal notranslate"><span class="pre">models</span></code>, <code class="docutils literal notranslate"><span class="pre">inputs</span></code>, <code class="docutils literal notranslate"><span class="pre">outputs</span></code>) and its
+<code class="docutils literal notranslate"><span class="pre">edges</span></code>. The chain is taken from the normalizer and postprocessor
+nodes, each <code class="docutils literal notranslate"><span class="pre">{&quot;name&quot;,</span> <span class="pre">&quot;params&quot;}</span></code>; everything is kept as the builder’s
+canvas. The answer is <code class="docutils literal notranslate"><span class="pre">{&quot;message&quot;,</span> <span class="pre">&quot;normalizers_applied&quot;,</span>
+<span class="pre">&quot;postprocessors_applied&quot;}</span></code>. A node that names no registered op is a 400
+<code class="docutils literal notranslate"><span class="pre">{&quot;valid&quot;:</span> <span class="pre">false,</span> <span class="pre">&quot;error&quot;}</span></code>, and anything else that goes wrong a 500
+<code class="docutils literal notranslate"><span class="pre">{&quot;error&quot;}</span></code>.</p>
 </dd></dl>
 
 <dl class="py function">
-<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.pipeline.shaders_api">
-<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.pipeline.</span></span><span class="sig-name descname"><span class="pre">shaders_api</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.routes.pipeline.shaders_api" title="Link to this definition"></a></dt>
-<dd><p>Get or update stored shader strings and shaderControls.</p>
-<p>GET  -&gt; returns current g.shaders and g.shader_controls
-POST -&gt; merges incoming {“shaders”: {…}, “shader_controls”: {…}} into globals</p>
-<blockquote>
-<div><p>(also accepts flat {layer_name: shader_str} for backwards compat)</p>
-</div></blockquote>
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.pipeline.blockwise_config_api">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.pipeline.</span></span><span class="sig-name descname"><span class="pre">blockwise_config_api</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.routes.pipeline.blockwise_config_api" title="Link to this definition"></a></dt>
+<dd><p>Get or set the blockwise settings.</p>
 </dd></dl>
 
 </section>

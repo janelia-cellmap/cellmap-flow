@@ -3,6 +3,18 @@ cellmap_flow.dashboard.routes.pipeline
 
 .. py:module:: cellmap_flow.dashboard.routes.pipeline
 
+.. autoapi-nested-parse::
+
+   The dashboard's chain, and the settings the pipeline builder keeps here.
+
+   - ``PUT /api/pipeline``: set the chain and redraw the viewer through it (the
+     dashboard page's Submit, and the pipeline builder after each edit).
+   - ``POST /api/process`` and ``POST /api/pipeline/apply``: the two routes it
+     replaced, kept for one release as its deprecated aliases.
+   - ``/api/blockwise-config``: the builder's blockwise settings.
+   - ``/update/equivalences``: a segmentation layer's merged ids.
+
+
 
 Attributes
 ----------
@@ -13,20 +25,26 @@ Attributes
    cellmap_flow.dashboard.routes.pipeline.pipeline_bp
 
 
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.routes.pipeline.BuilderCanvas
+   cellmap_flow.dashboard.routes.pipeline.PipelineUpdate
+
+
 Functions
 ---------
 
 .. autoapisummary::
 
-   cellmap_flow.dashboard.routes.pipeline.is_output_segmentation
    cellmap_flow.dashboard.routes.pipeline.validate_pipeline_config
    cellmap_flow.dashboard.routes.pipeline.update_equivalences
+   cellmap_flow.dashboard.routes.pipeline.put_pipeline
    cellmap_flow.dashboard.routes.pipeline.process
-   cellmap_flow.dashboard.routes.pipeline.validate_pipeline
-   cellmap_flow.dashboard.routes.pipeline.dataset_path_api
-   cellmap_flow.dashboard.routes.pipeline.blockwise_config_api
    cellmap_flow.dashboard.routes.pipeline.apply_pipeline
-   cellmap_flow.dashboard.routes.pipeline.shaders_api
+   cellmap_flow.dashboard.routes.pipeline.blockwise_config_api
 
 
 Module Contents
@@ -36,43 +54,134 @@ Module Contents
 
 .. py:data:: pipeline_bp
 
-.. py:function:: is_output_segmentation()
-
 .. py:function:: validate_pipeline_config(config)
 
-   Helper function to validate pipeline configuration
+   /api/pipeline/apply's check of the builder's nodes: ``{"valid": True}``,
+   or ``{"valid": False, "error"}`` for the first node that names no
+   registered op, or for a body it cannot read.
+
+
+.. py:class:: BuilderCanvas(/, **data: Any)
+
+
+
+   The pipeline builder's canvas as it sends it: its nodes by type, and
+   its edges, each a list (a missing one is empty). The dashboard keeps it
+   for the builder's next load, and each model node's ``config`` for a
+   model node that comes back without one; the chain is not read from it.
+
+
+   .. py:attribute:: inputs
+      :type:  list[dict]
+      :value: []
+
+
+
+   .. py:attribute:: outputs
+      :type:  list[dict]
+      :value: []
+
+
+
+   .. py:attribute:: edges
+      :type:  list[dict]
+      :value: []
+
+
+
+   .. py:attribute:: normalizers
+      :type:  list[dict]
+      :value: []
+
+
+
+   .. py:attribute:: models
+      :type:  list[dict]
+      :value: []
+
+
+
+   .. py:attribute:: postprocessors
+      :type:  list[dict]
+      :value: []
+
+
+
+.. py:class:: PipelineUpdate(/, **data: Any)
+
+
+
+   The body of PUT /api/pipeline.
+
+   ``input_norm`` and ``postprocess`` are the two chains, each a list of
+   ``{"name": <op class>, **its parameters}`` steps in the order they run
+   (pipeline_spec's form). Both are required, ``[]`` for none, and every
+   step must name a registered op of its kind. ``builder`` is the pipeline
+   builder's canvas (BuilderCanvas); only the builder sends it.
+
+
+   .. py:attribute:: input_norm
+      :type:  list[dict]
+
+
+   .. py:attribute:: postprocess
+      :type:  list[dict]
+
+
+   .. py:attribute:: builder
+      :type:  Optional[BuilderCanvas]
+      :value: None
+
 
 
 .. py:function:: update_equivalences()
 
+   Show a merging postprocessor's merged ids (an Equivalences) in its
+   segmentation layer. Its inference server posts them as it merges.
+
+
+.. py:function:: put_pipeline()
+
+   Set the chain, and redraw the viewer through it.
+
+   The body is a PipelineUpdate. The answer is ``{"success": true,
+   "pipeline": {"input_norm", "postprocess"}, "digest", "layers"}``: the
+   chain as it is now configured, its digest (which names the layers'
+   source, so the same chain sent again leaves neuroglancer's chunks and
+   each server's built chain as they are), and the prediction layers drawn.
+   A body that is not a PipelineUpdate, or a step its op's class refuses,
+   is a 400 ``{"success": false, "error"}`` that changes nothing.
+
+
 .. py:function:: process()
 
-.. py:function:: validate_pipeline()
+   Submit's route before PUT /api/pipeline.
 
-   Validate a pipeline configuration
-
-
-.. py:function:: dataset_path_api()
-
-   Get or set the dataset path in globals
-
-
-.. py:function:: blockwise_config_api()
-
-   Get or set blockwise configuration in globals
+   The body is ``{"input_norm", "postprocess"}``, either chain in the list
+   or the older dict form. The answer is ``{"message", "received_data"}``,
+   the body with the dashboard's address and the chain's digest added; the
+   older answer's ``found_custom_normalizer`` and ``received_data.time``,
+   which nothing read, are gone. An op it does not know is kept in the
+   chain and skipped where it is built; a body without both chains, or a
+   step its class refuses, is a 500.
 
 
 .. py:function:: apply_pipeline()
 
-   Apply a pipeline configuration to the current inference
+   The pipeline builder's route before PUT /api/pipeline, answering as it did.
+
+   The body is the builder's nodes by type (``input_normalizers``,
+   ``postprocessors``, ``models``, ``inputs``, ``outputs``) and its
+   ``edges``. The chain is taken from the normalizer and postprocessor
+   nodes, each ``{"name", "params"}``; everything is kept as the builder's
+   canvas. The answer is ``{"message", "normalizers_applied",
+   "postprocessors_applied"}``. A node that names no registered op is a 400
+   ``{"valid": false, "error"}``, and anything else that goes wrong a 500
+   ``{"error"}``.
 
 
-.. py:function:: shaders_api()
+.. py:function:: blockwise_config_api()
 
-   Get or update stored shader strings and shaderControls.
-
-   GET  -> returns current g.shaders and g.shader_controls
-   POST -> merges incoming {"shaders": {...}, "shader_controls": {...}} into globals
-          (also accepts flat {layer_name: shader_str} for backwards compat)
+   Get or set the blockwise settings.
 
 

@@ -10,7 +10,6 @@
       <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=4ae1632d" />
-      <link rel="stylesheet" type="text/css" href="../../../../_static/mystnb.11b39860a7a0cbfd473a3ad8a317855267ff0bd372690045ca344a6b62be495e.css" />
       <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css" />
 
   
@@ -20,7 +19,6 @@
       <script src="../../../../_static/documentation_options.js?v=5929fcd5"></script>
       <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
-      <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
     <script src="../../../../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../../../../genindex.html" />
     <link rel="search" title="Search" href="../../../../search.html" />
@@ -50,27 +48,44 @@
               <p class="caption" role="heading"><span class="caption-text">CellMap-Flow API:</span></p>
 <ul class="current">
 <li class="toctree-l1"><a class="reference internal" href="../../../../install.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../cli.html">Command line</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../scripts.html">Python Scripts</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../yaml_config.html">YAML Configuration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../data_paths.html">Data paths</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../huggingface.html">HuggingFace Models</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../custom_script.html">Custom Model</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../post.html">PostProcessors</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../plugins.html">Plugins</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../review.html">Reviewing instances</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../viewer_api.html">Viewer layer API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../architecture.html">Architecture</a></li>
 <li class="toctree-l1 current"><a class="reference internal" href="../../../index.html">API Reference</a><ul class="current">
 <li class="toctree-l2 current"><a class="reference internal" href="../../index.html">cellmap_flow</a><ul class="current">
 <li class="toctree-l3 current"><a class="reference internal" href="../../index.html#submodules">Submodules</a><ul class="current">
 <li class="toctree-l4"><a class="reference internal" href="../../blockwise/index.html">cellmap_flow.blockwise</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../cli/index.html">cellmap_flow.cli</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../config/index.html">cellmap_flow.config</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../dashboard/index.html">cellmap_flow.dashboard</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../finetune/index.html">cellmap_flow.finetune</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../globals/index.html">cellmap_flow.globals</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../image_data_interface/index.html">cellmap_flow.image_data_interface</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../inference/index.html">cellmap_flow.inference</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../inferencer/index.html">cellmap_flow.inferencer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../io/index.html">cellmap_flow.io</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../jobs/index.html">cellmap_flow.jobs</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../logging_setup/index.html">cellmap_flow.logging_setup</a></li>
 <li class="toctree-l4 current"><a class="reference internal" href="../index.html">cellmap_flow.models</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../norm/index.html">cellmap_flow.norm</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../pipeline_spec/index.html">cellmap_flow.pipeline_spec</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../plugins/index.html">cellmap_flow.plugins</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../post/index.html">cellmap_flow.post</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../process_chain/index.html">cellmap_flow.process_chain</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../review/index.html">cellmap_flow.review</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../review_index/index.html">cellmap_flow.review_index</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../server/index.html">cellmap_flow.server</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../serving/index.html">cellmap_flow.serving</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../utils/index.html">cellmap_flow.utils</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../viewer/index.html">cellmap_flow.viewer</a></li>
 </ul>
 </li>
 </ul>
@@ -108,159 +123,11 @@
              
   <section id="module-cellmap_flow.models.model_registry">
 <span id="cellmap-flow-models-model-registry"></span><h1>cellmap_flow.models.model_registry<a class="headerlink" href="#module-cellmap_flow.models.model_registry" title="Link to this heading"></a></h1>
-<p>Registry and introspection tools for ModelConfig subclasses.</p>
-<section id="attributes">
-<h2>Attributes<a class="headerlink" href="#attributes" title="Link to this heading"></a></h2>
-<table class="autosummary longtable docutils align-default">
-<tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.models.model_registry.MODEL_CONFIG_CLASSES" title="cellmap_flow.models.model_registry.MODEL_CONFIG_CLASSES"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MODEL_CONFIG_CLASSES</span></code></a></p></td>
-<td><p></p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.models.model_registry.HUGGING_FACE_ORGS_NAME" title="cellmap_flow.models.model_registry.HUGGING_FACE_ORGS_NAME"><code class="xref py py-obj docutils literal notranslate"><span class="pre">HUGGING_FACE_ORGS_NAME</span></code></a></p></td>
-<td><p></p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.models.model_registry.HF_CACHE_DIR" title="cellmap_flow.models.model_registry.HF_CACHE_DIR"><code class="xref py py-obj docutils literal notranslate"><span class="pre">HF_CACHE_DIR</span></code></a></p></td>
-<td><p></p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.models.model_registry.HF_CACHE_FILE" title="cellmap_flow.models.model_registry.HF_CACHE_FILE"><code class="xref py py-obj docutils literal notranslate"><span class="pre">HF_CACHE_FILE</span></code></a></p></td>
-<td><p></p></td>
-</tr>
-</tbody>
-</table>
-</section>
-<section id="functions">
-<h2>Functions<a class="headerlink" href="#functions" title="Link to this heading"></a></h2>
-<table class="autosummary longtable docutils align-default">
-<tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.models.model_registry.get_parameter_info" title="cellmap_flow.models.model_registry.get_parameter_info"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_parameter_info</span></code></a>(→ Dict[str, Any])</p></td>
-<td><p>Extract parameter information from a ModelConfig subclass __init__ method.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.models.model_registry.get_all_model_configs" title="cellmap_flow.models.model_registry.get_all_model_configs"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_all_model_configs</span></code></a>(→ Dict[str, Dict[str, Any]])</p></td>
-<td><p>Get metadata for all available ModelConfig subclasses.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.models.model_registry.instantiate_model_config" title="cellmap_flow.models.model_registry.instantiate_model_config"><code class="xref py py-obj docutils literal notranslate"><span class="pre">instantiate_model_config</span></code></a>(→ Any)</p></td>
-<td><p>Instantiate a ModelConfig subclass with the provided parameters.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.models.model_registry.list_huggingface_models" title="cellmap_flow.models.model_registry.list_huggingface_models"><code class="xref py py-obj docutils literal notranslate"><span class="pre">list_huggingface_models</span></code></a>(→ Dict[str, Any])</p></td>
-<td><p>List available Hugging Face models, using cache if available.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.models.model_registry.refresh_huggingface_models" title="cellmap_flow.models.model_registry.refresh_huggingface_models"><code class="xref py py-obj docutils literal notranslate"><span class="pre">refresh_huggingface_models</span></code></a>(→ Dict[str, Any])</p></td>
-<td><p>Force refresh the Hugging Face models cache.</p></td>
-</tr>
-</tbody>
-</table>
-</section>
-<section id="module-contents">
-<h2>Module Contents<a class="headerlink" href="#module-contents" title="Link to this heading"></a></h2>
-<dl class="py data">
-<dt class="sig sig-object py" id="cellmap_flow.models.model_registry.MODEL_CONFIG_CLASSES">
-<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.model_registry.</span></span><span class="sig-name descname"><span class="pre">MODEL_CONFIG_CLASSES</span></span><a class="headerlink" href="#cellmap_flow.models.model_registry.MODEL_CONFIG_CLASSES" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py data">
-<dt class="sig sig-object py" id="cellmap_flow.models.model_registry.HUGGING_FACE_ORGS_NAME">
-<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.model_registry.</span></span><span class="sig-name descname"><span class="pre">HUGGING_FACE_ORGS_NAME</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'cellmap'</span></span><a class="headerlink" href="#cellmap_flow.models.model_registry.HUGGING_FACE_ORGS_NAME" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py data">
-<dt class="sig sig-object py" id="cellmap_flow.models.model_registry.HF_CACHE_DIR">
-<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.model_registry.</span></span><span class="sig-name descname"><span class="pre">HF_CACHE_DIR</span></span><a class="headerlink" href="#cellmap_flow.models.model_registry.HF_CACHE_DIR" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py data">
-<dt class="sig sig-object py" id="cellmap_flow.models.model_registry.HF_CACHE_FILE">
-<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.model_registry.</span></span><span class="sig-name descname"><span class="pre">HF_CACHE_FILE</span></span><a class="headerlink" href="#cellmap_flow.models.model_registry.HF_CACHE_FILE" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py function">
-<dt class="sig sig-object py" id="cellmap_flow.models.model_registry.get_parameter_info">
-<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.model_registry.</span></span><span class="sig-name descname"><span class="pre">get_parameter_info</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">cls</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#cellmap_flow.models.model_registry.get_parameter_info" title="Link to this definition"></a></dt>
-<dd><p>Extract parameter information from a ModelConfig subclass __init__ method.</p>
-<p>Returns a dict with parameter names as keys and info dicts with:
-- ‘type’: the type hint (str, int, list, tuple, etc.)
-- ‘required’: whether the parameter is required (no default value)
-- ‘default’: the default value if provided
-- ‘description’: parameter name for UI labels</p>
-</dd></dl>
-
-<dl class="py function">
-<dt class="sig sig-object py" id="cellmap_flow.models.model_registry.get_all_model_configs">
-<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.model_registry.</span></span><span class="sig-name descname"><span class="pre">get_all_model_configs</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#cellmap_flow.models.model_registry.get_all_model_configs" title="Link to this definition"></a></dt>
-<dd><p>Get metadata for all available ModelConfig subclasses.</p>
-<p>Returns a dict like:
-{</p>
-<blockquote>
-<div><dl>
-<dt>‘ScriptModelConfig’: {</dt><dd><p>‘display_name’: ‘Script Model’,
-‘description’: ‘Load model from Python script’,
-‘parameters’: {</p>
-<blockquote>
-<div><dl class="simple">
-<dt>‘script_path’: {</dt><dd><p>‘name’: ‘script_path’,
-‘type’: ‘string’,
-‘required’: True,
-‘description’: ‘Script Path’,
-‘input_type’: ‘file’</p>
-</dd>
-</dl>
-<p>},
-‘name’: {</p>
-<blockquote>
-<div><p>‘name’: ‘name’,
-‘type’: ‘string’,
-‘required’: False,
-‘description’: ‘Name’,
-‘default’: None</p>
-</div></blockquote>
-</div></blockquote>
-<p>}</p>
-</dd>
-</dl>
-</div></blockquote>
-<p>}</p>
-</dd></dl>
-
-<dl class="py function">
-<dt class="sig sig-object py" id="cellmap_flow.models.model_registry.instantiate_model_config">
-<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.model_registry.</span></span><span class="sig-name descname"><span class="pre">instantiate_model_config</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">class_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">params</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Any</span></span></span><a class="headerlink" href="#cellmap_flow.models.model_registry.instantiate_model_config" title="Link to this definition"></a></dt>
-<dd><p>Instantiate a ModelConfig subclass with the provided parameters.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>class_name</strong> – Name of the ModelConfig subclass (e.g., ‘ScriptModelConfig’)</p></li>
-<li><p><strong>params</strong> – Dictionary of parameters to pass to __init__</p></li>
-</ul>
-</dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>An instance of the ModelConfig subclass</p>
-</dd>
-<dt class="field-odd">Raises<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>ValueError</strong> – If class_name is not recognized or params are invalid</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py function">
-<dt class="sig sig-object py" id="cellmap_flow.models.model_registry.list_huggingface_models">
-<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.model_registry.</span></span><span class="sig-name descname"><span class="pre">list_huggingface_models</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">org_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">HUGGING_FACE_ORGS_NAME</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#cellmap_flow.models.model_registry.list_huggingface_models" title="Link to this definition"></a></dt>
-<dd><p>List available Hugging Face models, using cache if available.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>org_name</strong> – Hugging Face organization name to filter models (default: “cellmap”)</p>
-</dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>A dict mapping model IDs to their metadata</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py function">
-<dt class="sig sig-object py" id="cellmap_flow.models.model_registry.refresh_huggingface_models">
-<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.model_registry.</span></span><span class="sig-name descname"><span class="pre">refresh_huggingface_models</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">org_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">HUGGING_FACE_ORGS_NAME</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#cellmap_flow.models.model_registry.refresh_huggingface_models" title="Link to this definition"></a></dt>
-<dd><p>Force refresh the Hugging Face models cache.</p>
-</dd></dl>
-
-</section>
+<p>Deprecated: the Hugging Face listing is <code class="docutils literal notranslate"><span class="pre">cellmap_flow.models.hf_catalog</span></code>.</p>
+<p>Kept only for <code class="docutils literal notranslate"><span class="pre">list_huggingface_models</span></code> and <code class="docutils literal notranslate"><span class="pre">refresh_huggingface_models</span></code>,
+which docs/source/huggingface.rst imported from here; they warn, and go in
+the release after 0.3.0. The model form’s helpers are
+<code class="docutils literal notranslate"><span class="pre">cellmap_flow.models.registry</span></code>’s.</p>
 </section>
 
 

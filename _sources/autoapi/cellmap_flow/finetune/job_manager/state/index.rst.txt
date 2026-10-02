@@ -1,0 +1,236 @@
+cellmap_flow.finetune.job_manager.state
+=======================================
+
+.. py:module:: cellmap_flow.finetune.job_manager.state
+
+.. autoapi-nested-parse::
+
+   A finetune job's record, its statuses, and what moves a job between them.
+
+   A job moves on:
+   - what the scheduler (LSF, or the local process) says of it, which the
+     monitor asks every few seconds: ``on_scheduler_status``. A job the
+     scheduler says has completed becomes COMPLETED only once the monitor has
+     found its export (monitor.complete_job), and FAILED if it has not;
+   - the status markers the trainer prints in its log: ``on_status_marker``;
+   - the dashboard: a restart, which only a job that ``can_restart`` takes
+     (``start_iteration``), and a cancel (FinetuneJobManager.cancel_job).
+
+   Once a job's status is final (``TERMINAL_STATUSES``), neither the scheduler
+   nor the log moves it again.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.job_manager.state.logger
+   cellmap_flow.finetune.job_manager.state.TERMINAL_STATUSES
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.job_manager.state.JobStatus
+   cellmap_flow.finetune.job_manager.state.FinetuneJob
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.job_manager.state.on_scheduler_status
+   cellmap_flow.finetune.job_manager.state.on_status_marker
+   cellmap_flow.finetune.job_manager.state.can_restart
+   cellmap_flow.finetune.job_manager.state.start_iteration
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:class:: JobStatus(*args, **kwds)
+
+
+
+   Status of a finetuning job.
+
+
+   .. py:attribute:: PENDING
+      :value: 'PENDING'
+
+
+
+   .. py:attribute:: RUNNING
+      :value: 'RUNNING'
+
+
+
+   .. py:attribute:: COMPLETED
+      :value: 'COMPLETED'
+
+
+
+   .. py:attribute:: FAILED
+      :value: 'FAILED'
+
+
+
+   .. py:attribute:: CANCELLED
+      :value: 'CANCELLED'
+
+
+
+   .. py:attribute:: WAITING_FOR_RESTART
+      :value: 'WAITING_FOR_RESTART'
+
+
+
+.. py:data:: TERMINAL_STATUSES
+
+.. py:class:: FinetuneJob
+
+   Track a finetuning job with metadata, status, and training progress.
+
+   Manages lifecycle from submission through completion, including inference
+   server state.
+
+
+   .. py:attribute:: job_id
+      :type:  str
+
+
+   .. py:attribute:: lsf_job
+      :type:  Optional[cellmap_flow.jobs.lsf.LSFJob]
+
+
+   .. py:attribute:: model_name
+      :type:  str
+
+
+   .. py:attribute:: output_dir
+      :type:  pathlib.Path
+
+
+   .. py:attribute:: params
+      :type:  Dict[str, Any]
+
+
+   .. py:attribute:: status
+      :type:  JobStatus
+
+
+   .. py:attribute:: created_at
+      :type:  datetime.datetime
+
+
+   .. py:attribute:: log_file
+      :type:  pathlib.Path
+
+
+   .. py:attribute:: finetuned_model_name
+      :type:  Optional[str]
+      :value: None
+
+
+
+   .. py:attribute:: model_yaml_path
+      :type:  Optional[pathlib.Path]
+      :value: None
+
+
+
+   .. py:attribute:: current_epoch
+      :type:  int
+      :value: 0
+
+
+
+   .. py:attribute:: total_epochs
+      :type:  int
+      :value: 10
+
+
+
+   .. py:attribute:: latest_loss
+      :type:  Optional[float]
+      :value: None
+
+
+
+   .. py:attribute:: inference_server_url
+      :type:  Optional[str]
+      :value: None
+
+
+
+   .. py:attribute:: inference_server_ready
+      :type:  bool
+      :value: False
+
+
+
+   .. py:attribute:: corrections_path
+      :type:  Optional[pathlib.Path]
+      :value: None
+
+
+
+   .. py:attribute:: cancel_requested
+      :type:  bool
+      :value: False
+
+
+
+   .. py:method:: to_dict() -> Dict[str, Any]
+
+      Convert to dictionary for JSON serialization.
+
+
+
+.. py:function:: on_scheduler_status(job: FinetuneJob, lsf_status) -> Optional[JobStatus]
+
+   Move ``job`` on what its scheduler says of it; once it has ended, how.
+
+   ``lsf_status`` is a jobs.spec.JobStatus. Returns None while the job
+   lives, else the status it ended with. A job whose cancel was asked for
+   has been cancelled however its end is reported. RUNNING moves a pending
+   job on and leaves one waiting for a restart waiting; PENDING makes it
+   pending.
+
+   COMPLETED is returned but not set: the finetune tab stops polling, and
+   the log stream says done, at the first final status they see, so the
+   job keeps its status until the monitor has checked what it exported.
+
+
+.. py:function:: on_status_marker(job: FinetuneJob, marker: str) -> None
+
+   Move ``job`` on one of the trainer's status markers
+   (markers.STATUS_MARKER_RE), unless its status is final.
+
+
+.. py:function:: can_restart(job: FinetuneJob) -> bool
+
+   Whether ``job``'s trainer can take a restart request.
+
+   Only a trainer that is alive and waiting can take a restart. A
+   COMPLETED job has exited: nothing reads the request, and the monitor
+   that would have seen it through has stopped, so it used to sit at
+   RUNNING forever. WAITING_FOR_RESTART also covers a later iteration
+   that diverged: its server is up but not marked ready, and the
+   restart the user needed was refused. A RUNNING job whose server is
+   up is a trainer that predates the WAITING_FOR_RESTART marker.
+
+
+.. py:function:: start_iteration(job: FinetuneJob) -> None
+
+   A new training iteration starts: its progress from zero, and its server
+   not ready again until it completes. The server's URL is kept.
+
+

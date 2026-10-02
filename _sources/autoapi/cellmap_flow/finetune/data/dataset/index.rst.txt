@@ -1,0 +1,132 @@
+cellmap_flow.finetune.data.dataset
+==================================
+
+.. py:module:: cellmap_flow.finetune.data.dataset
+
+.. autoapi-nested-parse::
+
+   The finetune training dataset: random patch pairs out of a session's annotation volume.
+
+   There is exactly one source of truth per session: an
+   ``annotation_volume.zarr`` (sparse, full-dataset extent, OME-NGFF) that
+   holds **every** annotation -- painted scribbles plus any imported YAML
+   crops, all merged at their physical offsets. Patches are read straight out
+   of it: no per-tile materialization, no parallel source list to keep in sync.
+
+   A patch is a centre drawn from the pools (sampler.py: dense crops, sparse
+   scribbles, rehearsal regions), the annotation and raw read around it
+   (reader.py), and, when asked for, augmentation (augment.py).
+
+   Contract with the trainer:
+
+   - ``len(self)`` is ``patches_per_epoch``, the epoch length; it has no fixed
+     relation to the number of populated chunks.
+   - An item is ``(raw, annotation)``, float32 tensors of shape
+     ``(1, Z, Y, X)``, and a third, the anchor mask, once the session has a
+     usable good region (``emits_anchor``).
+   - Loader workers are spawned, and each gets the dataset as a pickle, by its
+     class path. The pools go with it; the arrays are opened in the worker.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.data.dataset.logger
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.data.dataset.VirtualPatchDataset
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:class:: VirtualPatchDataset(volume_zarr_path: str, raw_dataset_path: str, input_size_voxels: Tuple[int, int, int], output_size_voxels: Tuple[int, int, int], input_voxel_size_nm: Tuple[float, float, float], output_voxel_size_nm: Tuple[float, float, float], patches_per_epoch: Optional[int] = None, jitter_voxels: Optional[Tuple[int, int, int]] = None, seed: int = 0, input_norm_config: Optional[dict] = None, dense_to_sparse_ratio: Optional[float] = None, good_regions: Optional[list] = None, rehearsal_fraction: Optional[float] = None, anchor_fraction: Optional[float] = None, augment: bool = False)
+
+
+
+   Yield random raw+annotation patches anchored on annotated voxels in a volume zarr.
+
+   :param volume_zarr_path: path to the session's ``annotation_volume.zarr``.
+   :param raw_dataset_path: path to the raw EM zarr the volume is aligned to.
+   :param input_size_voxels: shape (Z, Y, X) of the raw patch returned per
+                             sample, in voxels at ``input_voxel_size_nm``.
+   :param output_size_voxels: shape (Z, Y, X) of the annotation patch, in
+                              voxels at ``output_voxel_size_nm``.
+   :param input_voxel_size_nm: voxel size for raw patches (the dataset's
+                               closest scale to the model's claimed input voxel size).
+   :param output_voxel_size_nm: voxel size for annotation patches.
+   :param patches_per_epoch: ``len(self)``; controls how many random patches
+                             comprise one epoch. ``None`` (the default) means "auto:
+                             substitute the number of annotated chunks" -- every annotated
+                             chunk gets ~one patch per epoch on average.
+   :param jitter_voxels: half-range of the random offset applied to the patch
+                         center, in **annotation voxels**. Defaults to
+                         ``output_size_voxels // 4``.
+   :param seed: RNG seed; per-worker offset added so multi-worker dataloaders
+                sample distinct streams.
+   :param input_norm_config: the session's input normalization, applied to
+                             every raw patch (see reader.input_normalizers).
+   :param dense_to_sparse_ratio: fraction in [0, 1] of patches drawn from
+                                 the dense pool (FG voxels inside any imported_crops bbox).
+                                 ``None`` (default) means auto: 0.5 if both pools have voxels,
+                                 else 1.0 (use the non-empty pool exclusively).
+   :param good_regions: the session's good regions, ``{"offset_nm",
+                        "shape_nm"}`` boxes to hold the model to its teacher in.
+   :param rehearsal_fraction: the share of patches centred on a good region.
+                              ``None`` (default) means a quarter, when any region is usable.
+   :param anchor_fraction: the share of the other patches centred at a random
+                           point of the volume and held to the teacher there. ``None``
+                           (default) means a quarter for a painted session, none otherwise.
+   :param augment: flips, XY rotations, brightness and noise (augment.py).
+
+
+   .. py:attribute:: volume_zarr_path
+
+
+   .. py:attribute:: raw_dataset_path
+
+
+   .. py:attribute:: augment
+      :value: False
+
+
+
+   .. py:attribute:: seed
+      :value: 0
+
+
+
+   .. py:attribute:: sampler
+
+
+   .. py:attribute:: reader
+
+
+   .. py:attribute:: augmentation
+
+
+   .. py:attribute:: patches_per_epoch
+      :type:  int
+
+
+   .. py:property:: emits_anchor
+      :type: bool
+
+
+      Whether __getitem__ yields the 3-tuple (raw, annotation, anchor).
+
+      Only once there is something to anchor on: good regions, or random
+      anchors (a painted session's default). Otherwise the dataset keeps
+      its original 2-tuple contract.
+
+

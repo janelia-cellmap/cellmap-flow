@@ -1,0 +1,77 @@
+cellmap_flow.models.configs.huggingface
+=======================================
+
+.. py:module:: cellmap_flow.models.configs.huggingface
+
+.. autoapi-nested-parse::
+
+   ``HuggingFaceModelConfig``: a cellmap_models export on the Hugging Face Hub.
+
+   It is downloaded, then built as a ``CellMapModelConfig``. ``to_dict()``
+   adds the repo's ``metadata.json`` for the pipeline builder; building a
+   launch command never downloads it.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.models.configs.huggingface.logger
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.models.configs.huggingface.HuggingFaceModelConfig
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:class:: HuggingFaceModelConfig(repo, revision=None, name=None, scale=None)
+
+
+
+   Configuration class for a Hugging Face model.
+
+
+   .. py:attribute:: cli_name
+      :value: 'huggingface'
+
+
+
+   .. py:attribute:: METADATA_RETRY_SECONDS
+      :value: 60
+
+
+
+   .. py:attribute:: repo
+
+
+   .. py:attribute:: revision
+      :value: None
+
+
+
+   .. py:attribute:: name
+      :value: None
+
+
+
+   .. py:attribute:: scale
+      :value: None
+
+
+
+   .. py:method:: to_dict()
+
+      This config as a model entry, which ``registry.build_model`` rebuilds.
+
+
+

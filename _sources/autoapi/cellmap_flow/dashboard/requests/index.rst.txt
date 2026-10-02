@@ -1,0 +1,684 @@
+cellmap_flow.dashboard.requests
+===============================
+
+.. py:module:: cellmap_flow.dashboard.requests
+
+.. autoapi-nested-parse::
+
+   The typed bodies of the dashboard's POST routes, and how a bad one is answered.
+
+   ``parse(Model, body)`` gives ``(request, None)``, or ``(None, response)``
+   where the response is the 400 every route answers a bad body with,
+   ``{"success": False, "error": <message>}``, before anything is changed. The
+   message names what is wrong: a body that is not a JSON object is "expected a
+   JSON object", a count that is not a whole number says so and shows what was
+   sent (the settings forms show it as it stands), and any other field's
+   message is pydantic's, after the field's name.
+
+   - ``ServerConfigUpdate``: POST /api/server-config
+   - ``BlockwiseSettings``: POST /api/blockwise-config
+   - ``CreateModelConfig``: POST /api/create-model-config
+   - ``SetData``: POST /api/set-data
+   - ``SubmitModels``: POST /api/models
+   - ``Equivalences``: POST /update/equivalences
+   - ``BbxGenerator``: POST /api/bbx-generator
+   - ``FinetuneSubmit``: POST /api/finetune/submit
+   - ``FinetuneRestart``: POST /api/finetune/job/<job_id>/restart
+   - ``CreateVolume``: POST /api/finetune/create-volume
+   - ``LoadCrops``: POST /api/finetune/load-crops
+   - ``BlockwiseValidate``, ``BlockwiseGenerate``, ``BlockwisePrecheck`` and
+     ``BlockwiseSubmit``: POST /api/blockwise/{validate,generate,precheck,submit},
+     which answer through ``check`` instead (see there)
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.requests.WholeNumber
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.requests.ServerConfigUpdate
+   cellmap_flow.dashboard.requests.BlockwiseSettings
+   cellmap_flow.dashboard.requests.CreateModelConfig
+   cellmap_flow.dashboard.requests.SetData
+   cellmap_flow.dashboard.requests.SubmitModels
+   cellmap_flow.dashboard.requests.Equivalences
+   cellmap_flow.dashboard.requests.BoundingBox
+   cellmap_flow.dashboard.requests.BbxGenerator
+   cellmap_flow.dashboard.requests.FinetuneSubmit
+   cellmap_flow.dashboard.requests.FinetuneRestart
+   cellmap_flow.dashboard.requests.CreateVolume
+   cellmap_flow.dashboard.requests.LoadCrops
+   cellmap_flow.dashboard.requests.PipelineNode
+   cellmap_flow.dashboard.requests.ChainNode
+   cellmap_flow.dashboard.requests.ModelNode
+   cellmap_flow.dashboard.requests.BlockwiseTaskSettings
+   cellmap_flow.dashboard.requests.BlockwiseConfigNode
+   cellmap_flow.dashboard.requests.BlockwisePipeline
+   cellmap_flow.dashboard.requests.BlockwiseValidate
+   cellmap_flow.dashboard.requests.BlockwiseGenerate
+   cellmap_flow.dashboard.requests.BlockwisePrecheck
+   cellmap_flow.dashboard.requests.BlockwiseSubmit
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.requests.parse
+   cellmap_flow.dashboard.requests.check
+
+
+Module Contents
+---------------
+
+.. py:data:: WholeNumber
+
+.. py:function:: parse(model, body)
+
+   ``(model instance, None)`` for a valid ``body``; else ``(None, the 400 response)``.
+
+
+.. py:class:: ServerConfigUpdate(/, **data: Any)
+
+
+
+   Any of the saved settings (jobs.settings.SERVER_CONFIG_DEFAULTS); only those
+   sent change. The counts must be whole numbers; the rest are kept as sent,
+   and keys that are not settings are ignored.
+
+
+   .. py:attribute:: model_config
+
+      Configuration for the model, should be a dictionary conforming to [`ConfigDict`][pydantic.config.ConfigDict].
+
+
+   .. py:attribute:: nb_cores_master
+      :type:  WholeNumber
+      :value: None
+
+
+
+   .. py:attribute:: nb_cores_worker
+      :type:  WholeNumber
+      :value: None
+
+
+
+   .. py:attribute:: nb_workers
+      :type:  WholeNumber
+      :value: None
+
+
+
+   .. py:method:: updates() -> dict
+
+      {setting: value} for each setting the request sent.
+
+
+
+.. py:class:: BlockwiseSettings(/, **data: Any)
+
+
+
+   The pipeline builder's blockwise settings. All three counts are
+   required, as whole numbers; a missing one is reported as None.
+
+
+   .. py:attribute:: queue
+      :type:  Any
+      :value: None
+
+
+
+   .. py:attribute:: charge_group
+      :type:  Any
+      :value: None
+
+
+
+   .. py:attribute:: nb_cores_master
+      :type:  WholeNumber
+      :value: None
+
+
+
+   .. py:attribute:: nb_cores_worker
+      :type:  WholeNumber
+      :value: None
+
+
+
+   .. py:attribute:: nb_workers
+      :type:  WholeNumber
+      :value: None
+
+
+
+   .. py:attribute:: tmp_dir
+      :type:  Any
+      :value: None
+
+
+
+   .. py:attribute:: blockwise_tasks_dir
+      :type:  Any
+      :value: None
+
+
+
+.. py:class:: CreateModelConfig(/, **data: Any)
+
+
+
+   A ModelConfig subclass's name and its constructor's parameters, as the
+   builder's model form sends them (registry.coerce_form_params parses them).
+
+
+   .. py:attribute:: class_name
+      :type:  Annotated[str, _required('class_name')]
+      :value: None
+
+
+
+   .. py:attribute:: params
+      :type:  dict
+
+
+.. py:class:: SetData(/, **data: Any)
+
+
+
+   The dataset to open a new viewer on.
+
+
+   .. py:attribute:: dataset_path
+      :type:  Annotated[str, _required('dataset_path', strip=True)]
+      :value: None
+
+
+
+.. py:class:: SubmitModels(/, **data: Any)
+
+
+
+   The Models tab's Submit: the catalog models and Hugging Face repos to
+   run. Every other running model is stopped (services.launch).
+
+
+   .. py:attribute:: selected_models
+      :type:  list[str]
+      :value: []
+
+
+
+   .. py:attribute:: selected_hf_models
+      :type:  list[str]
+      :value: []
+
+
+
+.. py:class:: Equivalences(/, **data: Any)
+
+
+
+   A merging postprocessor's merged ids, from its inference server, for
+   the segmentation layer whose source ends in ``dataset``: each list is a
+   set of ids shown as one.
+
+
+   .. py:attribute:: dataset
+      :type:  str
+
+
+   .. py:attribute:: equivalences
+      :type:  list[list[int]]
+
+
+.. py:class:: BoundingBox(/, **data: Any)
+
+
+
+   A box drawn or loaded on an INPUT node: its corner and its size.
+
+
+   .. py:attribute:: offset
+      :type:  _Triple
+      :value: [0, 0, 0]
+
+
+
+   .. py:attribute:: shape
+      :type:  _Triple
+      :value: [1, 1, 1]
+
+
+
+.. py:class:: BbxGenerator(/, **data: Any)
+
+
+
+   The box tool's viewer on ``dataset_path``, showing the boxes the
+   INPUT node has; ``num_boxes`` is how many the dialog counts up to.
+
+
+   .. py:attribute:: dataset_path
+      :type:  Annotated[str, _required('dataset_path', message='Dataset path is required')]
+      :value: None
+
+
+
+   .. py:attribute:: num_boxes
+      :type:  WholeNumber
+      :value: 1
+
+
+
+   .. py:attribute:: existing_bounding_boxes
+      :type:  Optional[list[BoundingBox]]
+      :value: []
+
+
+
+.. py:class:: FinetuneSubmit(/, **data: Any)
+
+
+
+   A new training job: ``model_name`` trained on the corrections at
+   ``corrections_path``, a session's corrections directory or the base
+   output path of its sessions.
+
+   The defaults are the form's. The rest of the fields are passed on as
+   sent, and the route adjusts the loss for painted annotations and for a
+   distance target.
+
+
+   .. py:attribute:: model_name
+      :type:  Annotated[str, _required('model_name')]
+      :value: None
+
+
+
+   .. py:attribute:: corrections_path
+      :type:  Annotated[str, _required('corrections_path', message='corrections_path is required. Please specify the output path where annotation crops are saved.')]
+      :value: None
+
+
+
+   .. py:attribute:: lora_r
+      :type:  _form_number(int, 8)
+
+
+   .. py:attribute:: num_epochs
+      :type:  _form_number(int, 10)
+
+
+   .. py:attribute:: batch_size
+      :type:  _form_number(int, 2)
+
+
+   .. py:attribute:: learning_rate
+      :type:  _form_number(float, 0.0001)
+
+
+   .. py:attribute:: loss_type
+      :type:  Any
+      :value: 'mse'
+
+
+
+   .. py:attribute:: label_smoothing
+      :type:  _form_number(float, 0.1)
+
+
+   .. py:attribute:: distillation_lambda
+      :type:  _form_number(float, None)
+
+
+   .. py:attribute:: distillation_scope
+      :type:  Any
+      :value: 'unlabeled'
+
+
+
+   .. py:attribute:: margin
+      :type:  _form_number(float, 0.3)
+
+
+   .. py:attribute:: balance_classes
+      :type:  Any
+      :value: False
+
+
+
+   .. py:attribute:: augment
+      :type:  Any
+      :value: False
+
+
+
+   .. py:attribute:: output_type
+      :type:  Any
+      :value: None
+
+
+
+   .. py:attribute:: offsets
+      :type:  Any
+      :value: None
+
+
+
+   .. py:attribute:: select_channel
+      :type:  _form_number(int, None)
+
+
+   .. py:attribute:: checkpoint_path
+      :type:  Any
+      :value: None
+
+
+
+   .. py:attribute:: auto_serve
+      :type:  Any
+      :value: True
+
+
+
+   .. py:attribute:: queue
+      :type:  Any
+      :value: None
+
+
+
+   .. py:attribute:: charge_group
+      :type:  Any
+      :value: None
+
+
+
+.. py:class:: FinetuneRestart(/, **data: Any)
+
+
+
+   The next iteration of a job: the manifest overrides, and the training
+   settings to change (common.build_restart_params picks those; the
+   trainer checks them).
+
+
+.. py:class:: CreateVolume(/, **data: Any)
+
+
+
+   A new, empty annotation volume for ``model_name``, in a new session
+   under ``output_path`` (by default ~/.cellmap_flow/corrections).
+
+
+   .. py:attribute:: model_name
+      :type:  Annotated[str, _required('model_name')]
+      :value: None
+
+
+
+   .. py:attribute:: output_path
+      :type:  Any
+      :value: None
+
+
+
+.. py:class:: LoadCrops(/, **data: Any)
+
+
+
+   Crops imported into the session's annotation volume for ``model_name``:
+   ``yaml`` is the YAML's text or its path, ``output_path`` as for
+   CreateVolume, and ``load_id`` names the import's progress.
+
+
+   .. py:attribute:: yaml
+      :type:  Annotated[str, _required('yaml', message="Missing 'yaml' field")]
+      :value: None
+
+
+
+   .. py:attribute:: model_name
+      :type:  Annotated[str, _required('model_name', message="Missing 'model_name' field")]
+      :value: None
+
+
+
+   .. py:attribute:: output_path
+      :type:  Any
+      :value: None
+
+
+
+   .. py:attribute:: load_id
+      :type:  Any
+      :value: None
+
+
+
+.. py:function:: check(model, body)
+
+   ``(model instance, None)`` for a valid ``body``; else ``(None, what is
+   wrong)``, the message parse() would answer with.
+
+
+.. py:class:: PipelineNode(/, **data: Any)
+
+
+
+   A node of the builder's pipeline (state.js), ``{id, name, params,
+   position}``, of which the routes read the name and the params.
+
+
+   .. py:attribute:: name
+      :type:  Any
+      :value: None
+
+
+
+   .. py:attribute:: params
+      :type:  dict
+
+
+.. py:class:: ChainNode(/, **data: Any)
+
+
+
+   A normalizer or postprocessor node, whose params may be null for none.
+
+
+   .. py:attribute:: params
+      :type:  Optional[dict]
+      :value: None
+
+
+
+.. py:class:: ModelNode(/, **data: Any)
+
+
+
+   A model node. It may carry the config the model was defined with (its
+   ModelConfig.to_dict()), which stands in for params when it has none.
+
+
+   .. py:attribute:: config
+      :type:  dict
+
+
+   .. py:method:: settings() -> dict
+
+      Its params, or its config when it was sent without params.
+
+
+
+.. py:class:: BlockwiseTaskSettings(/, **data: Any)
+
+
+
+   A blockwise-config node's params: what a task and its master are
+   submitted with. Each is required, and taken as sent (precheck checks
+   the task's).
+
+
+   .. py:attribute:: charge_group
+      :type:  Any
+
+
+   .. py:attribute:: queue
+      :type:  Any
+
+
+   .. py:attribute:: nb_workers
+      :type:  Any
+
+
+   .. py:attribute:: nb_cores_worker
+      :type:  Any
+
+
+   .. py:attribute:: nb_cores_master
+      :type:  Any
+
+
+   .. py:attribute:: tmp_dir
+      :type:  Any
+
+
+.. py:class:: BlockwiseConfigNode(/, **data: Any)
+
+
+
+   A node of the builder's pipeline (state.js), ``{id, name, params,
+   position}``, of which the routes read the name and the params.
+
+
+   .. py:attribute:: params
+      :type:  BlockwiseTaskSettings
+
+
+.. py:class:: BlockwisePipeline(/, **data: Any)
+
+
+
+   The builder's pipeline, one list of nodes per node type, as the
+   blockwise routes read it: the first input, output and blockwise-config
+   node are the ones used, and the models are run on the chain the
+   normalizers and postprocessors make. The four lists must have a node, and
+   the input and output a dataset_path, checked in that order.
+
+
+   .. py:attribute:: inputs
+      :type:  Annotated[list[PipelineNode], _required('inputs', message='No input nodes defined')]
+      :value: None
+
+
+
+   .. py:attribute:: outputs
+      :type:  Annotated[list[PipelineNode], _required('outputs', message='No output nodes defined')]
+      :value: None
+
+
+
+   .. py:attribute:: models
+      :type:  Annotated[list[ModelNode], _required('models', message='No models defined')]
+      :value: None
+
+
+
+   .. py:attribute:: blockwise_config
+      :type:  Annotated[list[BlockwiseConfigNode], _required('blockwise_config', message='No blockwise configuration defined')]
+      :value: None
+
+
+
+   .. py:attribute:: normalizers
+      :type:  list[ChainNode]
+      :value: []
+
+
+
+   .. py:attribute:: postprocessors
+      :type:  list[ChainNode]
+      :value: []
+
+
+
+   .. py:attribute:: model_mode
+      :type:  Any
+      :value: ''
+
+
+
+.. py:class:: BlockwiseValidate(/, **data: Any)
+
+
+
+   Whether ``pipeline`` is ready to run blockwise.
+
+
+   .. py:attribute:: pipeline
+      :type:  BlockwisePipeline
+      :value: None
+
+
+
+.. py:class:: BlockwiseGenerate(/, **data: Any)
+
+
+
+   The task YAML(s) for ``pipeline``; ``job_name`` names the task.
+
+
+   .. py:attribute:: job_name
+      :type:  Any
+      :value: ''
+
+
+
+.. py:class:: BlockwisePrecheck(/, **data: Any)
+
+
+
+   The task YAMLs generate wrote, to check.
+
+
+   .. py:attribute:: yaml_paths
+      :type:  Annotated[list[str], _required('yaml_paths', message='No YAML paths provided. Please generate task first.')]
+      :value: None
+
+
+
+.. py:class:: BlockwiseSubmit(/, **data: Any)
+
+
+
+   The task to submit: the YAMLs precheck passed and the name generate gave
+   them, or else, when none are given or they are not all there,
+   ``pipeline``'s, generated anew. ``yaml_paths`` is a list of paths, as for
+   precheck.
+
+
+   .. py:attribute:: yaml_paths
+      :type:  Optional[list[str]]
+      :value: None
+
+
+
+   .. py:attribute:: task_name
+      :type:  Any
+      :value: None
+
+
+

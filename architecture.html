@@ -1,0 +1,1206 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Architecture &mdash; CellMap Flow  documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="_static/graphviz.css?v=4ae1632d" />
+      <link rel="stylesheet" type="text/css" href="_static/css/custom.css" />
+
+  
+    <link rel="shortcut icon" href="_static/favicon.ico"/>
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="API Reference" href="autoapi/index.html" />
+    <link rel="prev" title="Viewer layer API" href="viewer_api.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            CellMap Flow
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">CellMap-Flow API:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="install.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="cli.html">Command line</a></li>
+<li class="toctree-l1"><a class="reference internal" href="scripts.html">Python Scripts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="yaml_config.html">YAML Configuration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="data_paths.html">Data paths</a></li>
+<li class="toctree-l1"><a class="reference internal" href="huggingface.html">HuggingFace Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="custom_script.html">Custom Model</a></li>
+<li class="toctree-l1"><a class="reference internal" href="post.html">PostProcessors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plugins.html">Plugins</a></li>
+<li class="toctree-l1"><a class="reference internal" href="review.html">Reviewing instances</a></li>
+<li class="toctree-l1"><a class="reference internal" href="viewer_api.html">Viewer layer API</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Architecture</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#module-map">Module map</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#reading-data-and-running-a-model">Reading data and running a model</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#models">Models</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#serving-and-jobs">Serving and jobs</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#the-viewer-and-the-dashboard">The viewer and the dashboard</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#blockwise-and-finetuning">Blockwise and finetuning</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#entry-points-and-process-wide-modules">Entry points and process-wide modules</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#request-flows">Request flows</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#a-chunk-served-to-neuroglancer">A chunk served to Neuroglancer</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#submit-or-put-api-pipeline-and-the-layers">Submit, or <code class="docutils literal notranslate"><span class="pre">PUT</span> <span class="pre">/api/pipeline</span></code>, and the layers</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#launching-a-model-server">Launching a model server</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#a-blockwise-run">A blockwise run</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#a-finetune-job">A finetune job</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#annotation-volumes-and-minio-sync">Annotation volumes and MinIO sync</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#where-state-lives">Where state lives</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#its-owners">Its owners</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#the-dashboard-s-session">The dashboard’s <code class="docutils literal notranslate"><span class="pre">Session</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#the-deprecated-g">The deprecated <code class="docutils literal notranslate"><span class="pre">g</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#on-disk">On disk</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#conventions">Conventions</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#an-ome-translation-is-voxel-0-s-centre">An OME translation is voxel 0’s centre</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#the-chain-format">The chain format</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#behaviour-change-commits">“Behaviour change:” commits</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#tests">Tests</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#the-dashboard-s-javascript">The dashboard’s JavaScript</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#the-deployability-contract">The deployability contract</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#deprecated-in-0-3-0">Deprecated in 0.3.0</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="autoapi/index.html">API Reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">CellMap Flow</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Architecture</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/architecture.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="architecture">
+<h1>Architecture<a class="headerlink" href="#architecture" title="Link to this heading"></a></h1>
+<p>This page is for whoever maintains cellmap-flow. It says what each module is
+for, how the main requests travel through them, where state is kept, and the
+conventions a change has to keep. It describes the package as the 0.3.0
+cleanup (PR #103) leaves it. Each module’s docstring says more about it, and
+<code class="docutils literal notranslate"><span class="pre">CHANGELOG.md</span></code> at the repository root says what changed and why.</p>
+<p>Paths below are relative to <code class="docutils literal notranslate"><span class="pre">cellmap_flow/</span></code>.</p>
+<nav class="contents local" id="on-this-page">
+<p class="topic-title">On this page</p>
+<ul class="simple">
+<li><p><a class="reference internal" href="#module-map" id="id1">Module map</a></p></li>
+<li><p><a class="reference internal" href="#request-flows" id="id2">Request flows</a></p></li>
+<li><p><a class="reference internal" href="#where-state-lives" id="id3">Where state lives</a></p></li>
+<li><p><a class="reference internal" href="#conventions" id="id4">Conventions</a></p></li>
+<li><p><a class="reference internal" href="#deprecated-in-0-3-0" id="id5">Deprecated in 0.3.0</a></p></li>
+</ul>
+</nav>
+<section id="module-map">
+<h2><a class="toc-backref" href="#id1" role="doc-backlink">Module map</a><a class="headerlink" href="#module-map" title="Link to this heading"></a></h2>
+<section id="reading-data-and-running-a-model">
+<h3>Reading data and running a model<a class="headerlink" href="#reading-data-and-running-a-model" title="Link to this heading"></a></h3>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 28.0%" />
+<col style="width: 72.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Module</p></th>
+<th class="head"><p>What it is for</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">io/</span></code></p></td>
+<td><p>Reading datasets. It imports nothing from the rest of the package (no
+<code class="docutils literal notranslate"><span class="pre">globals</span></code>, Flask, neuroglancer or torch). Import the submodule you
+need:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">paths</span></code>: where a container ends, and which format a path is;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">metadata</span></code>: <code class="docutils literal notranslate"><span class="pre">read_array_meta</span></code>, one <code class="docutils literal notranslate"><span class="pre">ArrayMeta</span></code> for zarr v2
+and v3, N5 and precomputed; <code class="docutils literal notranslate"><span class="pre">list_levels</span></code> for a pyramid;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">multiscale</span></code>: the pyramid level for a voxel size, and
+<code class="docutils literal notranslate"><span class="pre">closest_raw_scale</span></code>;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">geometry</span></code>: <code class="docutils literal notranslate"><span class="pre">Grid</span></code> and <code class="docutils literal notranslate"><span class="pre">Box</span></code>, world nanometres to voxels and
+back; <code class="docutils literal notranslate"><span class="pre">list_populated_chunks</span></code>;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">source</span></code>: <code class="docutils literal notranslate"><span class="pre">open_array</span></code> and <code class="docutils literal notranslate"><span class="pre">read_padded</span></code>, tensorstore reads
+that pad what lies outside the array;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">ome</span></code>: OME-NGFF translation to corner and back, and the
+<code class="docutils literal notranslate"><span class="pre">multiscales</span></code> attributes writers use.</p></li>
+</ul>
+</td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">image_data_interface.py</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">ImageDataInterface</span></code>: a dataset read in world coordinates through the
+input chain. It picks the level, keeps the grid and the array, and pads
+reads. Model scripts use it, so its path is public.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">norm/</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">input_normalize</span></code>: the input normalizers (<code class="docutils literal notranslate"><span class="pre">InputNormalizer</span></code>
+subclasses) and <code class="docutils literal notranslate"><span class="pre">SerializableInterface</span></code>. <code class="docutils literal notranslate"><span class="pre">safe_expression</span></code>: the
+whitelist that Lambda normalizer and postprocessor expressions are
+checked against.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">post/</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">postprocessors</span></code>: the postprocessors (<code class="docutils literal notranslate"><span class="pre">PostProcessor</span></code> subclasses).</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">pipeline_spec.py</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">PipelineSpec</span></code>: the normalization and postprocessing chain as data,
+with a reader for every form it travels in (layer URL blob, YAML
+<code class="docutils literal notranslate"><span class="pre">json_data</span></code>, finetune manifest, pipeline-builder nodes), its
+<code class="docutils literal notranslate"><span class="pre">digest()</span></code> and <code class="docutils literal notranslate"><span class="pre">build()</span></code>. Also <code class="docutils literal notranslate"><span class="pre">chain_output_dtype</span></code>,
+<code class="docutils literal notranslate"><span class="pre">chain_num_channels</span></code> and <code class="docutils literal notranslate"><span class="pre">chain_is_segmentation</span></code>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">process_chain.py</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">process_chain()</span></code>: the process’s chain, its live steps and their
+configured <code class="docutils literal notranslate"><span class="pre">spec</span></code>, changed only by <code class="docutils literal notranslate"><span class="pre">set()</span></code>. See <a class="reference internal" href="#where-state-lives">Where state lives</a>.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">inference/runner.py</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">ModelRunner</span></code>: a model on its device, the warmup forward (which
+checks the declared shapes, probes the output range and decides on
+fp16), and <code class="docutils literal notranslate"><span class="pre">predict</span></code> of an output region as <code class="docutils literal notranslate"><span class="pre">(C,</span> <span class="pre">*spatial)</span></code>, with
+no postprocessing and no process-wide state. <code class="docutils literal notranslate"><span class="pre">DeviceSlots</span></code>: how many
+chunks may use the device at once, in arrival order.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">inferencer.py</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">Inferencer</span></code>: a <code class="docutils literal notranslate"><span class="pre">ModelRunner</span></code> that also applies a chain
+(<code class="docutils literal notranslate"><span class="pre">process_chunk</span></code>). <code class="docutils literal notranslate"><span class="pre">predict</span></code> and <code class="docutils literal notranslate"><span class="pre">apply_postprocess</span></code> stay
+importable here for model scripts.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="models">
+<h3>Models<a class="headerlink" href="#models" title="Link to this heading"></a></h3>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 28.0%" />
+<col style="width: 72.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Module</p></th>
+<th class="head"><p>What it is for</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">models/configs/</span></code></p></td>
+<td><p>One module per model type. <code class="docutils literal notranslate"><span class="pre">base</span></code> has <code class="docutils literal notranslate"><span class="pre">ModelConfig</span></code> (its
+<code class="docutils literal notranslate"><span class="pre">config</span></code>, <code class="docutils literal notranslate"><span class="pre">geometry</span></code>, <code class="docutils literal notranslate"><span class="pre">to_dict()</span></code> and <code class="docutils literal notranslate"><span class="pre">command</span></code>) and
+<code class="docutils literal notranslate"><span class="pre">Config</span></code>; then <code class="docutils literal notranslate"><span class="pre">script</span></code>, <code class="docutils literal notranslate"><span class="pre">dacapo</span></code>, <code class="docutils literal notranslate"><span class="pre">fly</span></code>, <code class="docutils literal notranslate"><span class="pre">bio</span></code>,
+<code class="docutils literal notranslate"><span class="pre">cellmap</span></code>, <code class="docutils literal notranslate"><span class="pre">finetune</span></code> and <code class="docutils literal notranslate"><span class="pre">huggingface</span></code>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">models/models_config.py</span></code></p></td>
+<td><p>The classes’ public import path, which the docs and plugins use, and
+<code class="docutils literal notranslate"><span class="pre">Config</span></code>.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">models/registry.py</span></code></p></td>
+<td><p>The model types (every <code class="docutils literal notranslate"><span class="pre">ModelConfig</span></code> subclass, a plugin’s included)
+and how a config is built from a YAML entry, command-line strings or
+the dashboard’s form: <code class="docutils literal notranslate"><span class="pre">model_types</span></code>, <code class="docutils literal notranslate"><span class="pre">build_model(s)</span></code>,
+<code class="docutils literal notranslate"><span class="pre">coerce_cli_args</span></code>, <code class="docutils literal notranslate"><span class="pre">coerce_form_params</span></code>, <code class="docutils literal notranslate"><span class="pre">click_options</span></code>,
+<code class="docutils literal notranslate"><span class="pre">instantiate_model_config</span></code>, <code class="docutils literal notranslate"><span class="pre">describe_types</span></code>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">models/geometry.py</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">ModelGeometry</span></code>: a model’s shapes and voxel sizes, read once from its
+config, with the context and block shape derived.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">models/geometry_cache.py</span></code></p></td>
+<td><p>A model’s geometry without building the model: from a running
+server’s <code class="docutils literal notranslate"><span class="pre">model_info</span></code>, else a cache file, else a build.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">models/hf_catalog.py</span></code></p></td>
+<td><p>The cellmap models on the Hugging Face Hub, for the Models tab.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">models/model_merger.py</span></code></p></td>
+<td><p>Merging several models’ outputs in a blockwise run (<code class="docutils literal notranslate"><span class="pre">model_mode</span></code>).</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">models/models.yaml</span></code></p></td>
+<td><p>The Models tab’s catalog.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">models/model_registry.py</span></code></p></td>
+<td><p>A deprecated alias; see <a class="reference internal" href="#deprecated-in-0-3-0">Deprecated in 0.3.0</a>.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="serving-and-jobs">
+<h3>Serving and jobs<a class="headerlink" href="#serving-and-jobs" title="Link to this heading"></a></h3>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 28.0%" />
+<col style="width: 72.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Module</p></th>
+<th class="head"><p>What it is for</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">server.py</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">CellMapFlowServer</span></code>, the inference server: one model’s output served
+as a zarr, plus <code class="docutils literal notranslate"><span class="pre">/__control__/model_info</span></code> and
+<code class="docutils literal notranslate"><span class="pre">/__control__/restart</span></code>. It prints its address and writes the ready
+file.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">serving/launch.py</span></code></p></td>
+<td><p>The one place a server’s command line is built (<code class="docutils literal notranslate"><span class="pre">server_argv</span></code>,
+<code class="docutils literal notranslate"><span class="pre">server_argv_for</span></code>, <code class="docutils literal notranslate"><span class="pre">server_command</span></code>).</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">serving/protocol.py</span></code></p></td>
+<td><p>What a layer URL carries to a server: <code class="docutils literal notranslate"><span class="pre">ARGS_KEY</span></code>,
+<code class="docutils literal notranslate"><span class="pre">encode_to_str</span></code>, <code class="docutils literal notranslate"><span class="pre">decode_to_json</span></code>, <code class="docutils literal notranslate"><span class="pre">split_dataset_url</span></code>; and
+<code class="docutils literal notranslate"><span class="pre">IP_PATTERN</span></code>, the markers a server prints its address between.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">serving/virtual_zarr.py</span></code></p></td>
+<td><p>The served zarr’s metadata and chunk-key arithmetic, with no Flask.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">serving/client.py</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">fetch_model_info</span></code>: ask a running server about its model.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">serving/probe.py</span></code></p></td>
+<td><p>What a model’s output range says about the postprocessing it needs.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">serving/restart_token.py</span></code></p></td>
+<td><p>The secret a finetune job’s server takes a restart with.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">jobs/</span></code></p></td>
+<td><p>Running jobs on LSF or on this machine, without importing <code class="docutils literal notranslate"><span class="pre">globals</span></code>,
+Flask or torch at module level:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">spec</span></code>: <code class="docutils literal notranslate"><span class="pre">JobSpec</span></code>, <code class="docutils literal notranslate"><span class="pre">Job</span></code>, <code class="docutils literal notranslate"><span class="pre">JobStatus</span></code>, <code class="docutils literal notranslate"><span class="pre">JobStartError</span></code>;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">lsf</span></code>: <code class="docutils literal notranslate"><span class="pre">bsub_argv</span></code> (the one place a bsub line is built),
+<code class="docutils literal notranslate"><span class="pre">submit</span></code>, <code class="docutils literal notranslate"><span class="pre">LSFJob</span></code>, <code class="docutils literal notranslate"><span class="pre">statuses</span></code> (one bjobs call for many jobs);</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">local</span></code>: <code class="docutils literal notranslate"><span class="pre">LocalJob</span></code>, for when there is no LSF;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">queues</span></code>: which GPU queues are usable, and the order to try them;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">site</span></code>: <code class="docutils literal notranslate"><span class="pre">SiteProfile</span></code>, the cluster’s numbers (queues, cores,
+walltime, timeouts); only <code class="docutils literal notranslate"><span class="pre">JANELIA</span></code> exists;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">settings</span></code>: <code class="docutils literal notranslate"><span class="pre">launcher_settings()</span></code>, the settings saved in
+<code class="docutils literal notranslate"><span class="pre">~/.cellmap_flow/server_config.yaml</span></code> (queue, charge group,
+walltime, …), with their defaults;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">ready</span></code>: the file a server writes once it knows its address;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">launch</span></code>: <code class="docutils literal notranslate"><span class="pre">start_hosts</span></code> (the policy over the others),
+<code class="docutils literal notranslate"><span class="pre">submit_bsub_job</span></code>, <code class="docutils literal notranslate"><span class="pre">started_jobs</span></code>, <code class="docutils literal notranslate"><span class="pre">install_cleanup_handlers</span></code>,
+<code class="docutils literal notranslate"><span class="pre">SERVER_COMMAND</span></code> and <code class="docutils literal notranslate"><span class="pre">SERVER_LOG_DIR</span></code>.</p></li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="the-viewer-and-the-dashboard">
+<h3>The viewer and the dashboard<a class="headerlink" href="#the-viewer-and-the-dashboard" title="Link to this heading"></a></h3>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 28.0%" />
+<col style="width: 72.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Module</p></th>
+<th class="head"><p>What it is for</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">viewer/</span></code></p></td>
+<td><p>The neuroglancer viewer. It never imports or starts the dashboard;
+callers pass what a layer needs. (The raw layer is read through
+<code class="docutils literal notranslate"><span class="pre">ImageDataInterface</span></code>, and so through the process’s input chain,
+<code class="docutils literal notranslate"><span class="pre">process_chain()</span></code>.)</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">bootstrap</span></code>: <code class="docutils literal notranslate"><span class="pre">new_viewer()</span></code>;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">layers</span></code>: <code class="docutils literal notranslate"><span class="pre">prediction_layer</span></code>, <code class="docutils literal notranslate"><span class="pre">prediction_source</span></code>,
+<code class="docutils literal notranslate"><span class="pre">prediction_shader_for</span></code>, <code class="docutils literal notranslate"><span class="pre">prediction_voxel_override</span></code> and
+<code class="docutils literal notranslate"><span class="pre">raw_layer</span></code>, which every path that shows a layer builds it with;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">raw</span></code>: <code class="docutils literal notranslate"><span class="pre">get_raw_layer</span></code> (a pyramid as one <code class="docutils literal notranslate"><span class="pre">ScalePyramid</span></code>), and
+the shaders.</p></li>
+</ul>
+</td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">dashboard/app.py</span></code></p></td>
+<td><p>The Flask app: its blueprints, the log panel’s handler, and
+<code class="docutils literal notranslate"><span class="pre">create_and_run_app</span></code>.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">dashboard/state.py</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">Session</span></code> and <code class="docutils literal notranslate"><span class="pre">get_session()</span></code>; see <a class="reference internal" href="#where-state-lives">Where state lives</a>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">dashboard/requests.py</span></code></p></td>
+<td><p>The typed bodies of the POST routes (pydantic), and <code class="docutils literal notranslate"><span class="pre">parse</span></code>, which
+answers a bad body with a 400 <code class="docutils literal notranslate"><span class="pre">{&quot;success&quot;:</span> <span class="pre">false,</span> <span class="pre">&quot;error&quot;}</span></code> before
+anything changes.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">dashboard/progress.py</span></code></p></td>
+<td><p>How far a long request has got (a YAML crop import, a resume), under
+the <code class="docutils literal notranslate"><span class="pre">load_id</span></code> the page polls with.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">dashboard/finetune_layers.py</span></code></p></td>
+<td><p>The job manager’s listener: a finetuned model’s viewer layer, and its
+<code class="docutils literal notranslate"><span class="pre">FinetuneModelConfig</span></code> among the session’s models.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">dashboard/finetune_utils.py</span></code></p></td>
+<td><p>Hands the session’s MinIO state and volume records to
+<code class="docutils literal notranslate"><span class="pre">finetune.session</span></code>’s MinIO and sync functions.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">dashboard/services/</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">launch</span></code>: start the Models tab’s picks and show them.
+<code class="docutils literal notranslate"><span class="pre">startup</span></code>: <code class="docutils literal notranslate"><span class="pre">generate_neuroglancer_url</span></code>, the CLIs’ last step (the
+viewer with their models, then the dashboard).</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">dashboard/routes/</span></code></p></td>
+<td><p>One blueprint per area:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">index_page</span></code>: <code class="docutils literal notranslate"><span class="pre">/</span></code> and <code class="docutils literal notranslate"><span class="pre">/api/set-data</span></code>;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">pipeline</span></code>: <code class="docutils literal notranslate"><span class="pre">PUT</span> <span class="pre">/api/pipeline</span></code>, its two deprecated aliases,
+<code class="docutils literal notranslate"><span class="pre">/api/blockwise-config</span></code>, <code class="docutils literal notranslate"><span class="pre">/update/equivalences</span></code>;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">pipeline_builder_page</span></code>: <code class="docutils literal notranslate"><span class="pre">/pipeline-builder</span></code>;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">models</span></code>: the model form, the catalog and Hugging Face picks, the
+saved settings, GPU queues, job logs, <code class="docutils literal notranslate"><span class="pre">/api/export-config</span></code>;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">model_advice</span></code>, <code class="docutils literal notranslate"><span class="pre">blockwise</span></code>, <code class="docutils literal notranslate"><span class="pre">bbx_generator</span></code> (the box tool),
+<code class="docutils literal notranslate"><span class="pre">logging_routes</span></code> (the log stream), <code class="docutils literal notranslate"><span class="pre">review_routes</span></code>;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">finetune/</span></code>: <code class="docutils literal notranslate"><span class="pre">training</span></code>, <code class="docutils literal notranslate"><span class="pre">annotation_core</span></code>,
+<code class="docutils literal notranslate"><span class="pre">annotation_sessions</span></code>, <code class="docutils literal notranslate"><span class="pre">yaml_crops</span></code>, <code class="docutils literal notranslate"><span class="pre">overlay</span></code>,
+<code class="docutils literal notranslate"><span class="pre">good_regions</span></code>, <code class="docutils literal notranslate"><span class="pre">instance_correction</span></code> and <code class="docutils literal notranslate"><span class="pre">layers</span></code>, all on the
+blueprint in <code class="docutils literal notranslate"><span class="pre">finetune/blueprint.py</span></code>, with shared helpers in
+<code class="docutils literal notranslate"><span class="pre">finetune/common.py</span></code>.</p></li>
+</ul>
+</td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">dashboard/templates/</span></code>, <code class="docutils literal notranslate"><span class="pre">dashboard/static/</span></code></p></td>
+<td><p>The two pages; below.</p></td>
+</tr>
+</tbody>
+</table>
+<p>The pages are ES modules served as they are, with no bundler:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>dashboard/templates/
+  index.html               the dashboard page; includes _dashboard.html and the
+                           _input_tab, _output_tab, _models_tab, _finetune_tab
+                           and _review_tab partials
+  pipeline_builder_v2.html the pipeline builder
+  bbox_json_template.html
+dashboard/static/css/      tokens.css (the palette), dark.css, pipeline_builder.css
+dashboard/static/js/
+  lib/                     api, dom, page-data, poll, sortable, sse: know no page
+  shared/                  gpu-queues, op-chain, server-config: used by both pages
+  dashboard/               main.js (the page's entry), connect, models-tab,
+                           model-advice; finetune/ and review/, each an index.js
+                           that wires one module per part of its tab
+  pipeline-builder/        main.js (the entry), state, canvas, nodes, palette,
+                           io, blockwise, bbx, dialogs, log-panel, messages,
+                           model-config-modal, output-channels
+  vendor/js-yaml.js
+</pre></div>
+</div>
+<p>A template hands its scripts data as JSON, in
+<code class="docutils literal notranslate"><span class="pre">&lt;script</span> <span class="pre">type=&quot;application/json&quot;</span> <span class="pre">id=&quot;page-data&quot;&gt;</span></code>, which
+<code class="docutils literal notranslate"><span class="pre">lib/page-data.js</span></code> reads. Nothing is put on <code class="docutils literal notranslate"><span class="pre">window</span></code> and no markup has an
+inline handler. Build DOM with <code class="docutils literal notranslate"><span class="pre">lib/dom.js</span></code>’s <code class="docutils literal notranslate"><span class="pre">h()</span></code> rather than HTML
+strings, so that names from a file or a server never run as script.</p>
+</section>
+<section id="blockwise-and-finetuning">
+<h3>Blockwise and finetuning<a class="headerlink" href="#blockwise-and-finetuning" title="Link to this heading"></a></h3>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 28.0%" />
+<col style="width: 72.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Module</p></th>
+<th class="head"><p>What it is for</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">blockwise/</span></code></p></td>
+<td><p>Running models over a whole volume, to disk, with daisy.
+<code class="docutils literal notranslate"><span class="pre">blockwise_processor</span></code>: <code class="docutils literal notranslate"><span class="pre">CellMapFlowBlockwiseProcessor</span></code> (the master
+plans the blocks and creates the outputs; each worker runs blocks),
+<code class="docutils literal notranslate"><span class="pre">precheck</span></code> and <code class="docutils literal notranslate"><span class="pre">spawn_worker</span></code>. <code class="docutils literal notranslate"><span class="pre">cli</span></code>: <code class="docutils literal notranslate"><span class="pre">cellmap_flow</span>
+<span class="pre">blockwise</span></code>, task YAMLs in turn as master or, with <code class="docutils literal notranslate"><span class="pre">--client</span></code>, one
+as worker. <code class="docutils literal notranslate"><span class="pre">multiple_cli</span></code>: the <code class="docutils literal notranslate"><span class="pre">python</span> <span class="pre">-m</span></code> path the dashboard’s
+blockwise tab runs, the same command.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">finetune/finetune_cli.py</span></code></p></td>
+<td><p>The training job’s entry point, <code class="docutils literal notranslate"><span class="pre">python</span> <span class="pre">-m</span>
+<span class="pre">cellmap_flow.finetune.finetune_cli</span></code>. The job manager runs this path,
+and a running job outlives a dashboard upgrade, so its path, flags and
+output change only compatibly.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">finetune/cli.py</span></code></p></td>
+<td><p>The trainer’s flags (<code class="docutils literal notranslate"><span class="pre">build_arg_parser</span></code>, <code class="docutils literal notranslate"><span class="pre">parse_args</span></code>), the model
+and target they describe, and <code class="docutils literal notranslate"><span class="pre">RESTARTABLE_ARGS</span></code> with
+<code class="docutils literal notranslate"><span class="pre">apply_restart_params</span></code>: what a restart may change.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">finetune/session_loop.py</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">TrainingSession</span></code>, the job’s loop: train, export, serve, wait for a
+restart, reset, again. <code class="docutils literal notranslate"><span class="pre">RestartController</span></code>.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">finetune/run_outputs.py</span></code></p></td>
+<td><p>What each iteration leaves: <code class="docutils literal notranslate"><span class="pre">iterations/NNN_&lt;ts&gt;/</span></code>, the symlink to
+the newest export, and the serving YAML in the session’s <code class="docutils literal notranslate"><span class="pre">models/</span></code>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">finetune/markers.py</span></code></p></td>
+<td><p>The lines the trainer prints for the job manager to find in its log.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">finetune/adaptation.py</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">LoraStrategy</span></code> and <code class="docutils literal notranslate"><span class="pre">FullStrategy</span></code>: everything that differs between
+a LoRA adapter and a full finetune (prepare, teacher, reset, restart,
+checkpoint, export, merge).</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">finetune/losses.py</span></code>, <code class="docutils literal notranslate"><span class="pre">finetune/target_transforms.py</span></code></p></td>
+<td><p>The masked losses; annotations (0 unannotated, 1 background, 2 and up
+objects) as training targets and masks.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">finetune/lora_trainer.py</span></code>, <code class="docutils literal notranslate"><span class="pre">finetune/lora_wrapper.py</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">LoRAFinetuner</span></code>, the training loop; wrapping a model’s layers with
+PEFT adapters.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">finetune/model_loading.py</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">load_trainable_model</span></code>, which the trainer and
+<code class="docutils literal notranslate"><span class="pre">FinetuneModelConfig</span></code> share, so a model is trained and served as the
+same module tree.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">finetune/data/</span></code></p></td>
+<td><p>What the trainer trains on: <code class="docutils literal notranslate"><span class="pre">dataset</span></code> (<code class="docutils literal notranslate"><span class="pre">VirtualPatchDataset</span></code>),
+<code class="docutils literal notranslate"><span class="pre">sampler</span></code> (the dense, sparse and rehearsal pools), <code class="docutils literal notranslate"><span class="pre">reader</span></code>,
+<code class="docutils literal notranslate"><span class="pre">augment</span></code>, <code class="docutils literal notranslate"><span class="pre">loader</span></code>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">finetune/session/</span></code></p></td>
+<td><p>A finetune session on disk, with no Flask, neuroglancer, torch or
+<code class="docutils literal notranslate"><span class="pre">globals</span></code>; the dashboard passes its state in. <code class="docutils literal notranslate"><span class="pre">manifest</span></code>
+(<code class="docutils literal notranslate"><span class="pre">_virtual_sources.json</span></code>, <code class="docutils literal notranslate"><span class="pre">good_regions.json</span></code>), <code class="docutils literal notranslate"><span class="pre">volume</span></code>
+(annotation volumes), <code class="docutils literal notranslate"><span class="pre">store</span></code> (<code class="docutils literal notranslate"><span class="pre">SessionStore</span></code>), <code class="docutils literal notranslate"><span class="pre">minio</span></code>
+(<code class="docutils literal notranslate"><span class="pre">MinioServer</span></code>), <code class="docutils literal notranslate"><span class="pre">sync</span></code>, <code class="docutils literal notranslate"><span class="pre">instance</span></code> (instance corrections).</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">finetune/job_manager/</span></code></p></td>
+<td><p>Finetune jobs from the dashboard’s side: <code class="docutils literal notranslate"><span class="pre">manager</span></code>
+(<code class="docutils literal notranslate"><span class="pre">FinetuneJobManager</span></code>, what the routes call), <code class="docutils literal notranslate"><span class="pre">state</span></code> (a job’s
+record and status transitions), <code class="docutils literal notranslate"><span class="pre">submit</span></code> (the command line, and
+launching it), <code class="docutils literal notranslate"><span class="pre">persistence</span></code> (<code class="docutils literal notranslate"><span class="pre">metadata.json</span></code>, and finding jobs
+again after a dashboard restart), <code class="docutils literal notranslate"><span class="pre">monitor</span></code>, <code class="docutils literal notranslate"><span class="pre">tailer</span></code>,
+<code class="docutils literal notranslate"><span class="pre">listener</span></code>, <code class="docutils literal notranslate"><span class="pre">restart</span></code>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">finetune/crop_loader.py</span></code>, <code class="docutils literal notranslate"><span class="pre">finetune/build_corrections.py</span></code></p></td>
+<td><p>The schema of a YAML crops manifest; building a corrections directory
+from one without a dashboard.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">finetune/export_merged.py</span></code></p></td>
+<td><p>Folding a finetune into the base weights and re-exporting it at a
+larger tile.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">finetune/finetuned_model_templates.py</span></code></p></td>
+<td><p>The YAML that serves a finetuned model.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="entry-points-and-process-wide-modules">
+<h3>Entry points and process-wide modules<a class="headerlink" href="#entry-points-and-process-wide-modules" title="Link to this heading"></a></h3>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 28.0%" />
+<col style="width: 72.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Module</p></th>
+<th class="head"><p>What it is for</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">cli/</span></code></p></td>
+<td><p>The <code class="docutils literal notranslate"><span class="pre">cellmap_flow</span></code> command (<a class="reference internal" href="cli.html"><span class="doc">Command line</span></a>). <code class="docutils literal notranslate"><span class="pre">main</span></code>: the group, its
+<code class="docutils literal notranslate"><span class="pre">main()</span></code> (loads the plugins, then runs it), <code class="docutils literal notranslate"><span class="pre">dashboard</span></code>,
+<code class="docutils literal notranslate"><span class="pre">models</span></code>, <code class="docutils literal notranslate"><span class="pre">plugins</span></code> and the <code class="docutils literal notranslate"><span class="pre">finetune</span></code> tools. <code class="docutils literal notranslate"><span class="pre">infer</span></code>:
+<code class="docutils literal notranslate"><span class="pre">infer</span> <span class="pre">&lt;type&gt;</span></code>, a command per model type built on request, and
+<code class="docutils literal notranslate"><span class="pre">run</span></code>. <code class="docutils literal notranslate"><span class="pre">yaml_cli</span></code> (<code class="docutils literal notranslate"><span class="pre">yaml</span></code>, and <code class="docutils literal notranslate"><span class="pre">run_multiple</span></code>),
+<code class="docutils literal notranslate"><span class="pre">viewer_cli</span></code> (<code class="docutils literal notranslate"><span class="pre">view</span></code>, a viewer and dashboard with no models),
+<code class="docutils literal notranslate"><span class="pre">server_cli</span></code> (<code class="docutils literal notranslate"><span class="pre">serve</span></code>, the inference server on its node, and
+<code class="docutils literal notranslate"><span class="pre">cellmap_flow_server</span></code>), <code class="docutils literal notranslate"><span class="pre">doctor</span></code>. <code class="docutils literal notranslate"><span class="pre">common</span></code>: <code class="docutils literal notranslate"><span class="pre">--log-level</span></code>,
+<code class="docutils literal notranslate"><span class="pre">ModelTypeGroup</span></code> and the deprecation notice; <code class="docutils literal notranslate"><span class="pre">aliases</span></code>: the
+console scripts before 0.3.0. <code class="docutils literal notranslate"><span class="pre">blockwise</span></code> is in <code class="docutils literal notranslate"><span class="pre">blockwise/</span></code>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">config/yaml.py</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">load_config</span></code> and <code class="docutils literal notranslate"><span class="pre">ConfigError</span></code> for a <code class="docutils literal notranslate"><span class="pre">cellmap_flow</span> <span class="pre">yaml</span></code> or
+blockwise YAML, and <code class="docutils literal notranslate"><span class="pre">resolve_data_path</span></code>, the one rule for a model’s
+<code class="docutils literal notranslate"><span class="pre">data_path</span></code> and <code class="docutils literal notranslate"><span class="pre">scale</span></code>.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">plugins.py</span></code></p></td>
+<td><p>Plugins in <code class="docutils literal notranslate"><span class="pre">~/.cellmap_flow/plugins/</span></code>: registering them, and
+<code class="docutils literal notranslate"><span class="pre">load_plugins</span></code>, which the commands, the dashboard
+(<code class="docutils literal notranslate"><span class="pre">create_and_run_app</span></code>) and the finetune job call when they start;
+<code class="docutils literal notranslate"><span class="pre">import</span> <span class="pre">cellmap_flow</span></code> does not. Also
+<code class="docutils literal notranslate"><span class="pre">analyze_script</span></code>, the safety check a plugin or a model script
+passes.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">logging_setup.py</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">configure_logging</span></code>: the one log format, applied with <code class="docutils literal notranslate"><span class="pre">force=True</span></code>.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">globals.py</span></code></p></td>
+<td><p>Deprecated, and gone after 0.3.0: <code class="docutils literal notranslate"><span class="pre">g</span></code> (and its type <code class="docutils literal notranslate"><span class="pre">Flow</span></code>), which
+forwards each name it had to that name’s owner with a
+<code class="docutils literal notranslate"><span class="pre">DeprecationWarning</span></code>. Importing it configures logging, as it always
+has, so nothing in the package imports it. See <a class="reference internal" href="#where-state-lives">Where state lives</a>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">review.py</span></code>, <code class="docutils literal notranslate"><span class="pre">review_index.py</span></code></p></td>
+<td><p>The Review tab’s SQLite index: reading it, and building one
+(<code class="docutils literal notranslate"><span class="pre">python</span> <span class="pre">-m</span> <span class="pre">cellmap_flow.review_index</span></code>). See <a class="reference internal" href="review.html"><span class="doc">Reviewing instances</span></a>.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">utils/</span></code></p></td>
+<td><p>Two deprecated aliases and nothing else.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+<section id="request-flows">
+<h2><a class="toc-backref" href="#id2" role="doc-backlink">Request flows</a><a class="headerlink" href="#request-flows" title="Link to this heading"></a></h2>
+<section id="a-chunk-served-to-neuroglancer">
+<h3>A chunk served to Neuroglancer<a class="headerlink" href="#a-chunk-served-to-neuroglancer" title="Link to this heading"></a></h3>
+<ol class="arabic simple">
+<li><p>A prediction layer’s source is
+<code class="docutils literal notranslate"><span class="pre">zarr://&lt;server&gt;/&lt;model&gt;__CFLOW_ARGS__&lt;blob&gt;__CFLOW_ARGS__</span></code>
+(<code class="docutils literal notranslate"><span class="pre">viewer.layers.prediction_source</span></code>). The blob is the layer’s chain,
+<code class="docutils literal notranslate"><span class="pre">PipelineSpec.to_url_blob(...)</span></code>: minified JSON in URL-safe base64
+(<code class="docutils literal notranslate"><span class="pre">serving.protocol.encode_to_str</span></code>). Every request Neuroglancer makes for
+the layer carries it.</p></li>
+<li><p>Neuroglancer asks the model’s <code class="docutils literal notranslate"><span class="pre">CellMapFlowServer</span></code> for
+<code class="docutils literal notranslate"><span class="pre">&lt;dataset&gt;/.zattrs</span></code>, <code class="docutils literal notranslate"><span class="pre">&lt;dataset&gt;/s0/.zarray</span></code>, then chunks
+<code class="docutils literal notranslate"><span class="pre">&lt;dataset&gt;/s0/&lt;z&gt;.&lt;y&gt;.&lt;x&gt;[.&lt;c&gt;]</span></code>. <code class="docutils literal notranslate"><span class="pre">serving.virtual_zarr</span></code> works out
+each answer: the OME attributes, the array’s shape and dtype under the
+chain, and the world ROI of a chunk key.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">CellMapFlowServer.chain_for</span></code> finds the blob
+(<code class="docutils literal notranslate"><span class="pre">serving.protocol.split_dataset_url</span></code>), decodes it and builds its steps
+(<code class="docutils literal notranslate"><span class="pre">PipelineSpec.from_json_data(...,</span> <span class="pre">strict=True).build()</span></code>), once per URL;
+the last 32 chains are kept. A URL without a blob gets the process’s chain,
+<code class="docutils literal notranslate"><span class="pre">process_chain()</span></code>, which is empty in a server started from the command
+line; the log then warns that the model is fed raw voxel values.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">Inferencer.process_chunk</span></code> points the server’s <code class="docutils literal notranslate"><span class="pre">ImageDataInterface</span></code> at
+the layer’s normalizers (<code class="docutils literal notranslate"><span class="pre">with_input_norms</span></code>) and asks
+<code class="docutils literal notranslate"><span class="pre">ModelRunner.predict</span></code> for the chunk. The runner grows the ROI by the
+model’s context and reads it with <code class="docutils literal notranslate"><span class="pre">ImageDataInterface.to_ndarray_ts</span></code>:
+<code class="docutils literal notranslate"><span class="pre">io.geometry.Grid.world_to_box</span></code> turns the world ROI into voxels, and
+<code class="docutils literal notranslate"><span class="pre">io.source.read_padded</span></code> reads them through the input chain, padding
+what lies outside the array. A config with its own <code class="docutils literal notranslate"><span class="pre">process_chunk</span></code>
+(TensorFlow, ONNX, cellpose, bioimage.io) runs that instead.</p></li>
+<li><p>The forward runs inside a <code class="docutils literal notranslate"><span class="pre">DeviceSlots</span></code> slot: by default one chunk at a
+time on the GPU, first come first served (<code class="docutils literal notranslate"><span class="pre">CELLMAP_FLOW_GPU_SLOTS</span></code>). A
+chunk whose client hung up before its turn is answered 499 without being
+computed.</p></li>
+<li><p>The <code class="docutils literal notranslate"><span class="pre">(C,</span> <span class="pre">*spatial)</span></code> output goes through the layer’s postprocessors
+(<code class="docutils literal notranslate"><span class="pre">inferencer.apply_postprocess</span></code>), is put in the zarr’s axis order, cast
+to the dtype the chain declares (<code class="docutils literal notranslate"><span class="pre">pipeline_spec.chain_output_dtype</span></code>) and
+encoded. A postprocessor that merges segments across chunks posts its
+equivalences to <code class="docutils literal notranslate"><span class="pre">&lt;dashboard_url&gt;/update/equivalences</span></code>, at most every
+5 s.</p></li>
+</ol>
+</section>
+<section id="submit-or-put-api-pipeline-and-the-layers">
+<h3>Submit, or <code class="docutils literal notranslate"><span class="pre">PUT</span> <span class="pre">/api/pipeline</span></code>, and the layers<a class="headerlink" href="#submit-or-put-api-pipeline-and-the-layers" title="Link to this heading"></a></h3>
+<ol class="arabic simple">
+<li><p>The dashboard page’s Submit reads the ticked ops of the Input and
+Postprocess tabs (<code class="docutils literal notranslate"><span class="pre">static/js/shared/op-chain.js</span></code>) and sends
+<code class="docutils literal notranslate"><span class="pre">PUT</span> <span class="pre">/api/pipeline</span></code> with <code class="docutils literal notranslate"><span class="pre">{input_norm,</span> <span class="pre">postprocess}</span></code>
+(<code class="docutils literal notranslate"><span class="pre">static/js/dashboard/main.js</span></code>). The pipeline builder sends the same,
+and its canvas as <code class="docutils literal notranslate"><span class="pre">builder</span></code>, 2 s after its last edit
+(<code class="docutils literal notranslate"><span class="pre">static/js/pipeline-builder/state.js</span></code>).</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">dashboard/routes/pipeline.put_pipeline</span></code> parses the body as a
+<code class="docutils literal notranslate"><span class="pre">PipelineUpdate</span></code> through <code class="docutils literal notranslate"><span class="pre">dashboard.requests.parse</span></code> (an unknown op is a
+400), then builds the steps (a value an op’s class refuses is a 400).
+Nothing has changed yet.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">_set_chain_and_redraw</span></code> makes it the chain with
+<code class="docutils literal notranslate"><span class="pre">Session.set_pipeline</span></code>, which sets the live steps and their config
+together, and keeps the canvas if one was sent. With no viewer yet (no
+dataset opened) it stops there.</p></li>
+<li><p>The layers’ source is named by the chain’s digest,
+<code class="docutils literal notranslate"><span class="pre">spec.to_url_blob(dashboard_url=...,</span> <span class="pre">digest=spec.digest())</span></code>. The same
+chain sent again gives the same URL, so Neuroglancer keeps the chunks it
+has, and each server reuses the chain it built.</p></li>
+<li><p>It keeps the shaders the user set in the viewer, dropping a layer’s
+contrast range when its chain changed. Then, in one <code class="docutils literal notranslate"><span class="pre">viewer.txn()</span></code>, it
+rebuilds the raw layer (<code class="docutils literal notranslate"><span class="pre">viewer.layers.raw_layer</span></code>) and a prediction
+layer for each job that has a host (<code class="docutils literal notranslate"><span class="pre">viewer.layers.prediction_layer</span></code>,
+given the server’s <code class="docutils literal notranslate"><span class="pre">model_info</span></code> from <code class="docutils literal notranslate"><span class="pre">serving.client.fetch_model_info</span></code>).
+A chain that ends in labels gives a segmentation layer, and the server’s
+<code class="docutils literal notranslate"><span class="pre">effective_output_voxel_size</span></code> places the layer.</p></li>
+<li><p>The answer is <code class="docutils literal notranslate"><span class="pre">{&quot;success&quot;:</span> <span class="pre">true,</span> <span class="pre">&quot;pipeline&quot;,</span> <span class="pre">&quot;digest&quot;,</span> <span class="pre">&quot;layers&quot;}</span></code>; see
+<a class="reference internal" href="viewer_api.html"><span class="doc">Viewer layer API</span></a>. The layers’ next chunk requests carry the new blob.</p></li>
+</ol>
+</section>
+<section id="launching-a-model-server">
+<h3>Launching a model server<a class="headerlink" href="#launching-a-model-server" title="Link to this heading"></a></h3>
+<ol class="arabic simple">
+<li><p>A model config comes from <code class="docutils literal notranslate"><span class="pre">cellmap_flow</span> <span class="pre">infer</span> <span class="pre">&lt;type&gt;</span></code> (<code class="docutils literal notranslate"><span class="pre">cli/infer.py</span></code>:
+a command per type in <code class="docutils literal notranslate"><span class="pre">models.registry.model_types()</span></code>, its options from
+<code class="docutils literal notranslate"><span class="pre">registry.click_options</span></code>, its strings through <code class="docutils literal notranslate"><span class="pre">coerce_cli_args</span></code>), or
+from a YAML (<code class="docutils literal notranslate"><span class="pre">cli/yaml_cli.py</span></code>: <code class="docutils literal notranslate"><span class="pre">config.yaml.load_config</span></code>,
+<code class="docutils literal notranslate"><span class="pre">registry.build_models</span></code>). The Models tab’s catalog and Hugging Face
+picks (<code class="docutils literal notranslate"><span class="pre">POST</span> <span class="pre">/api/models</span></code>, <code class="docutils literal notranslate"><span class="pre">dashboard/services/launch.py</span></code>) need no
+config for the command, only a type and its arguments.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">serving.launch</span></code> builds the command line: the words of
+<code class="docutils literal notranslate"><span class="pre">jobs.launch.SERVER_COMMAND</span></code> (<code class="docutils literal notranslate"><span class="pre">cellmap_flow</span> <span class="pre">serve</span></code> by default), then
+<code class="docutils literal notranslate"><span class="pre">--model</span></code> and the model’s entry as JSON (<code class="docutils literal notranslate"><span class="pre">ModelConfig.launch_entry</span></code>,
+<code class="docutils literal notranslate"><span class="pre">to_dict()</span></code> without None, in <code class="docutils literal notranslate"><span class="pre">server_argv</span></code>; or the type and
+arguments, in <code class="docutils literal notranslate"><span class="pre">server_argv_for</span></code>), then <code class="docutils literal notranslate"><span class="pre">-d</span> <span class="pre">&lt;data</span> <span class="pre">path&gt;</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">jobs.launch.start_hosts</span></code> submits it to LSF with one GPU
+(<code class="docutils literal notranslate"><span class="pre">submit_bsub_job</span></code>, then <code class="docutils literal notranslate"><span class="pre">jobs.lsf.submit</span></code> and <code class="docutils literal notranslate"><span class="pre">bsub_argv</span></code>). When a
+queue does not start the job it tries the next of
+<code class="docutils literal notranslate"><span class="pre">jobs.queues.candidates</span></code>. The caller gives the queue and charge group
+(the CLIs default to the saved settings); the walltime is the caller’s,
+else the saved setting (<code class="docutils literal notranslate"><span class="pre">jobs.settings.launcher_settings()</span></code>), else
+<code class="docutils literal notranslate"><span class="pre">jobs.site</span></code>’s. It runs the server
+on this machine (<code class="docutils literal notranslate"><span class="pre">jobs.local</span></code>) only when bsub is not installed; when
+bsub is there and every queue fails, it raises <code class="docutils literal notranslate"><span class="pre">JobStartError</span></code>.</p></li>
+<li><p>It waits for the server’s address: from the ready file named in the
+job’s environment (<code class="docutils literal notranslate"><span class="pre">jobs.ready</span></code>), else from the
+<code class="docutils literal notranslate"><span class="pre">CELLMAP_FLOW_SERVER_IP(...)</span></code> marker in the job’s output, through
+bpeek. Then it adds the job to <code class="docutils literal notranslate"><span class="pre">jobs.launch.started_jobs()</span></code>.</p></li>
+<li><p>On the GPU node, <code class="docutils literal notranslate"><span class="pre">cellmap_flow</span> <span class="pre">serve</span> <span class="pre">--model</span> <span class="pre">&lt;entry&gt;</span> <span class="pre">-d</span> <span class="pre">&lt;data</span> <span class="pre">path&gt;</span></code>
+(<code class="docutils literal notranslate"><span class="pre">cli/server_cli.py</span></code>) rebuilds the config with <code class="docutils literal notranslate"><span class="pre">registry.build_model</span></code>,
+as a YAML’s model entry is rebuilt, and starts <code class="docutils literal notranslate"><span class="pre">CellMapFlowServer</span></code>. Its <code class="docutils literal notranslate"><span class="pre">Inferencer</span></code> loads the model, and the
+warmup forward checks the declared shapes, probes the output range (for
+<code class="docutils literal notranslate"><span class="pre">model_info</span></code>) and keeps fp16 only if it agrees with fp32
+(<code class="docutils literal notranslate"><span class="pre">CELLMAP_FLOW_HALF_PRECISION</span></code>). <code class="docutils literal notranslate"><span class="pre">run()</span></code> prints the address marker,
+writes the ready file and serves.</p></li>
+<li><p>The launcher adds the model’s layer (<code class="docutils literal notranslate"><span class="pre">viewer.layers.prediction_layer</span></code>).
+The CLIs do it in <code class="docutils literal notranslate"><span class="pre">dashboard.services.startup.generate_neuroglancer_url</span></code>,
+which then serves the dashboard and does not return.</p></li>
+</ol>
+</section>
+<section id="a-blockwise-run">
+<h3>A blockwise run<a class="headerlink" href="#a-blockwise-run" title="Link to this heading"></a></h3>
+<ol class="arabic simple">
+<li><p>The pipeline builder’s blockwise steps post to <code class="docutils literal notranslate"><span class="pre">/api/blockwise/validate</span></code>,
+<code class="docutils literal notranslate"><span class="pre">/generate</span></code>, <code class="docutils literal notranslate"><span class="pre">/precheck</span></code> and <code class="docutils literal notranslate"><span class="pre">/submit</span></code> (<code class="docutils literal notranslate"><span class="pre">dashboard/routes/blockwise.py</span></code>).
+Each answers 200, with <code class="docutils literal notranslate"><span class="pre">valid</span></code> or <code class="docutils literal notranslate"><span class="pre">success</span></code> false and an <code class="docutils literal notranslate"><span class="pre">error</span></code> when
+it cannot go on. Generate writes the task YAML (one per box when each box
+gets its own zarr) under <code class="docutils literal notranslate"><span class="pre">blockwise_tasks_dir</span></code>; precheck is
+<code class="docutils literal notranslate"><span class="pre">blockwise_processor.precheck</span></code>, which loads no model and writes
+nothing. Submit sends the master to LSF as a CPU job:
+<code class="docutils literal notranslate"><span class="pre">python</span> <span class="pre">-m</span> <span class="pre">cellmap_flow.blockwise.multiple_cli</span> <span class="pre">&lt;task</span> <span class="pre">YAMLs&gt;</span></code>. From a
+shell, <code class="docutils literal notranslate"><span class="pre">cellmap_flow</span> <span class="pre">blockwise</span> <span class="pre">&lt;task.yaml&gt;</span></code> runs one master.</p></li>
+<li><p>The master, <code class="docutils literal notranslate"><span class="pre">CellMapFlowBlockwiseProcessor(yaml,</span> <span class="pre">create=True)</span></code>, reads
+the YAML (<code class="docutils literal notranslate"><span class="pre">config.yaml.load_config</span></code>, <code class="docutils literal notranslate"><span class="pre">registry.build_models</span></code>,
+<code class="docutils literal notranslate"><span class="pre">resolve_data_path</span></code>), builds no <code class="docutils literal notranslate"><span class="pre">Inferencer</span></code> (it needs the geometry
+only), and creates the output arrays, with OME attributes from
+<code class="docutils literal notranslate"><span class="pre">io.ome.singlescale_attrs</span></code>, on a grid that starts at the corner of the
+raw level the model reads.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">run()</span></code> makes one daisy task per region (the whole extent, or each
+bounding box), with the id <code class="docutils literal notranslate"><span class="pre">predict_&lt;model&gt;_&lt;task&gt;</span></code>. Daisy spawns the
+workers through <code class="docutils literal notranslate"><span class="pre">spawn_worker</span></code>: each is an LSF job, submitted with
+<code class="docutils literal notranslate"><span class="pre">jobs.launch.submit_bsub_job</span></code>, that runs
+<code class="docutils literal notranslate"><span class="pre">cellmap_flow</span> <span class="pre">blockwise</span> <span class="pre">&lt;task.yaml&gt;</span> <span class="pre">--client</span></code>, with a walltime and its
+own log.</p></li>
+<li><p>A worker builds an <code class="docutils literal notranslate"><span class="pre">Inferencer</span></code> per model, takes blocks from daisy and
+runs <code class="docutils literal notranslate"><span class="pre">Inferencer.process_chunk</span></code> on each, merging several models with
+<code class="docutils literal notranslate"><span class="pre">models.model_merger</span></code>. With <code class="docutils literal notranslate"><span class="pre">track_progress</span></code> it writes a marker per
+finished block under <code class="docutils literal notranslate"><span class="pre">tmp_dir</span></code>, and a resumed run skips the blocks that
+have one.</p></li>
+<li><p>The master exits 1 if any block failed or never ran.</p></li>
+</ol>
+</section>
+<section id="a-finetune-job">
+<h3>A finetune job<a class="headerlink" href="#a-finetune-job" title="Link to this heading"></a></h3>
+<ol class="arabic simple">
+<li><p>The Finetune tab posts <code class="docutils literal notranslate"><span class="pre">/api/finetune/submit</span></code>.
+<code class="docutils literal notranslate"><span class="pre">dashboard/routes/finetune/training.py</span></code> parses it
+(<code class="docutils literal notranslate"><span class="pre">requests.FinetuneSubmit</span></code>), brings the session’s
+<code class="docutils literal notranslate"><span class="pre">_virtual_sources.json</span></code> up to date, settles the loss and target type
+(painted, sparse annotations change them), has the viewer’s listener
+follow the manager (<code class="docutils literal notranslate"><span class="pre">finetune_layers.follow_jobs</span></code>), and calls
+<code class="docutils literal notranslate"><span class="pre">FinetuneJobManager.submit_finetuning_job</span></code>.</p></li>
+<li><p>The manager (<code class="docutils literal notranslate"><span class="pre">finetune/job_manager/manager.py</span></code>) works out what to run
+with <code class="docutils literal notranslate"><span class="pre">submit</span></code> (the model type, checkpoint, corrections, channels and
+voxel sizes), makes the run’s directory <code class="docutils literal notranslate"><span class="pre">&lt;session&gt;/runs/&lt;model&gt;_&lt;ts&gt;/</span></code>
+with its <code class="docutils literal notranslate"><span class="pre">restart_token</span></code> and <code class="docutils literal notranslate"><span class="pre">metadata.json</span></code> (<code class="docutils literal notranslate"><span class="pre">persistence</span></code>), and
+launches <code class="docutils literal notranslate"><span class="pre">submit.build_command</span></code>’s line with <code class="docutils literal notranslate"><span class="pre">submit.launch</span></code>: on LSF
+with one GPU, or here without bsub. The line runs
+<code class="docutils literal notranslate"><span class="pre">python</span> <span class="pre">-m</span> <span class="pre">cellmap_flow.finetune.finetune_cli</span></code> and pipes it through
+<code class="docutils literal notranslate"><span class="pre">tee</span></code> into the run’s <code class="docutils literal notranslate"><span class="pre">training_log.txt</span></code>. A monitor thread follows the
+job.</p></li>
+<li><p>The trainer (<code class="docutils literal notranslate"><span class="pre">finetune_cli.main</span></code>) parses its flags (<code class="docutils literal notranslate"><span class="pre">finetune.cli</span></code>),
+loads the model (<code class="docutils literal notranslate"><span class="pre">model_loading.load_trainable_model</span></code>), prepares it
+(<code class="docutils literal notranslate"><span class="pre">adaptation</span></code>), and runs <code class="docutils literal notranslate"><span class="pre">session_loop.TrainingSession</span></code>. Each
+iteration trains on <code class="docutils literal notranslate"><span class="pre">finetune.data</span></code>’s patches with <code class="docutils literal notranslate"><span class="pre">lora_trainer</span></code>,
+exports into <code class="docutils literal notranslate"><span class="pre">iterations/NNN_&lt;ts&gt;/</span></code> and writes a serving YAML
+(<code class="docutils literal notranslate"><span class="pre">run_outputs</span></code>), and prints <code class="docutils literal notranslate"><span class="pre">FINETUNED_MODEL_YAML</span></code> and
+<code class="docutils literal notranslate"><span class="pre">TRAINING_ITERATION_COMPLETE</span></code> (<code class="docutils literal notranslate"><span class="pre">markers.emit</span></code>). Without
+<code class="docutils literal notranslate"><span class="pre">--auto-serve</span></code> the job ends there. With it, the job starts a
+<code class="docutils literal notranslate"><span class="pre">CellMapFlowServer</span></code> on the model it trained, in the same process (its
+address marker goes into the same log), prints <code class="docutils literal notranslate"><span class="pre">WAITING_FOR_RESTART</span></code>, and
+waits for <code class="docutils literal notranslate"><span class="pre">/__control__/restart</span></code> or a <code class="docutils literal notranslate"><span class="pre">restart_signal.json</span></code>.</p></li>
+<li><p>Every 3 s the monitor (<code class="docutils literal notranslate"><span class="pre">job_manager/monitor.py</span></code>) asks the scheduler
+about the job (<code class="docutils literal notranslate"><span class="pre">state.on_scheduler_status</span></code>) and reads the log’s new
+lines (<code class="docutils literal notranslate"><span class="pre">tailer.LogTailer</span></code>): epochs and loss, status markers
+(<code class="docutils literal notranslate"><span class="pre">state.on_status_marker</span></code>), the server’s address and each finished
+iteration. It records each change in <code class="docutils literal notranslate"><span class="pre">metadata.json</span></code>. A job the
+scheduler says has completed is COMPLETED only once its export is found
+(<code class="docutils literal notranslate"><span class="pre">monitor.complete_job</span></code>), and FAILED if it is not.</p></li>
+<li><p>The monitor tells the listeners <code class="docutils literal notranslate"><span class="pre">on_server_ready</span></code> and
+<code class="docutils literal notranslate"><span class="pre">on_iteration_complete</span></code>. The dashboard’s <code class="docutils literal notranslate"><span class="pre">FinetuneLayerListener</span></code>
+(<code class="docutils literal notranslate"><span class="pre">dashboard/finetune_layers.py</span></code>) answers with the model’s layer, served
+by the job’s server, and a <code class="docutils literal notranslate"><span class="pre">FinetuneModelConfig</span></code> among the session’s
+models, so the pipeline builder offers it.</p></li>
+<li><p>The tab polls <code class="docutils literal notranslate"><span class="pre">/api/finetune/job/&lt;id&gt;/status</span></code> and streams
+<code class="docutils literal notranslate"><span class="pre">.../logs/stream</span></code> (server-sent events, <code class="docutils literal notranslate"><span class="pre">static/js/lib/sse.js</span></code>), and
+stops at a final status. A restart (<code class="docutils literal notranslate"><span class="pre">.../restart</span></code>) syncs the
+annotations from MinIO, then <code class="docutils literal notranslate"><span class="pre">job_manager/restart.py</span></code> POSTs the new
+settings to the job’s <code class="docutils literal notranslate"><span class="pre">/__control__/restart</span></code> with the run’s token in
+<code class="docutils literal notranslate"><span class="pre">X-Restart-Token</span></code>, or writes them to <code class="docutils literal notranslate"><span class="pre">restart_signal.json</span></code> when the
+server can’t be reached. A dashboard started later finds a session’s jobs
+again from their <code class="docutils literal notranslate"><span class="pre">metadata.json</span></code> and one bjobs call
+(<code class="docutils literal notranslate"><span class="pre">persistence.rehydrate</span></code>).</p></li>
+</ol>
+</section>
+<section id="annotation-volumes-and-minio-sync">
+<h3>Annotation volumes and MinIO sync<a class="headerlink" href="#annotation-volumes-and-minio-sync" title="Link to this heading"></a></h3>
+<ol class="arabic simple">
+<li><p>New Volume posts <code class="docutils literal notranslate"><span class="pre">/api/finetune/create-volume</span></code>
+(<code class="docutils literal notranslate"><span class="pre">routes/finetune/annotation_core.py</span></code>). The model’s geometry comes from
+<code class="docutils literal notranslate"><span class="pre">models.geometry_cache.resolve_model_geometry</span></code>: its running server,
+else the cache, else a build. <code class="docutils literal notranslate"><span class="pre">finetune.session.volume.plan_volume</span></code> sizes
+the volume over the whole raw dataset, one chunk per model output, and
+<code class="docutils literal notranslate"><span class="pre">create_volume_zarr</span></code> writes <code class="docutils literal notranslate"><span class="pre">&lt;id&gt;.zarr</span></code> into the session’s
+<code class="docutils literal notranslate"><span class="pre">corrections/</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">dashboard.finetune_utils.ensure_minio_serving</span></code> calls
+<code class="docutils literal notranslate"><span class="pre">finetune.session.minio.MinioServer.ensure_serving</span></code>. It starts
+<code class="docutils literal notranslate"><span class="pre">minio</span> <span class="pre">server</span></code> if none is running, with the bucket <code class="docutils literal notranslate"><span class="pre">annotations</span></code> open
+to anonymous access and the periodic sync thread. Then it pulls any
+chunks painted since the last sync, and mirrors the volume up with
+<code class="docutils literal notranslate"><span class="pre">mc</span> <span class="pre">mirror</span></code>. The volume is registered in the session’s
+<code class="docutils literal notranslate"><span class="pre">annotation_volumes</span></code> (<code class="docutils literal notranslate"><span class="pre">session.store.SessionStore</span></code>), and its
+<code class="docutils literal notranslate"><span class="pre">_virtual_sources.json</span></code> is written (<code class="docutils literal notranslate"><span class="pre">session.volume.build_manifest</span></code>,
+<code class="docutils literal notranslate"><span class="pre">session.manifest.write_manifest</span></code>); the trainer finds the volume only
+through that file.</p></li>
+<li><p>The page then posts <code class="docutils literal notranslate"><span class="pre">/api/finetune/add-to-viewer</span></code>
+(<code class="docutils literal notranslate"><span class="pre">routes/finetune/overlay.py</span></code>): a writable segmentation layer on
+<code class="docutils literal notranslate"><span class="pre">s3+&lt;MinIO</span> <span class="pre">URL&gt;</span></code>, selected, with the painting tools bound. The browser
+paints into MinIO directly.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">finetune.session.sync</span></code> brings the painted chunks back to the volume on
+disk: every 30 s, on Save (<code class="docutils literal notranslate"><span class="pre">/api/finetune/sync-annotations</span></code>), before a
+restart, and before each mirror. It lists the volume’s chunks in the
+bucket with their ETags and copies those that changed (through <code class="docutils literal notranslate"><span class="pre">.part</span></code>
+files), recording what it saw in the volume’s <code class="docutils literal notranslate"><span class="pre">chunk_sync_state</span></code>.
+Nothing on disk is deleted because MinIO lacks it.</p></li>
+<li><p>The trainer reads the volume on disk, never MinIO. Volumes are also
+filled by a YAML crop import (<code class="docutils literal notranslate"><span class="pre">/api/finetune/load-crops</span></code>,
+<code class="docutils literal notranslate"><span class="pre">session.volume.write_crop_into_volume</span></code>), resumed from an earlier
+session (<code class="docutils literal notranslate"><span class="pre">annotation_sessions</span></code>), seeded from a segmentation
+(<code class="docutils literal notranslate"><span class="pre">session.instance</span></code>), or built without a dashboard
+(<code class="docutils literal notranslate"><span class="pre">python</span> <span class="pre">-m</span> <span class="pre">cellmap_flow.finetune.build_corrections</span></code>).</p></li>
+</ol>
+</section>
+</section>
+<section id="where-state-lives">
+<h2><a class="toc-backref" href="#id3" role="doc-backlink">Where state lives</a><a class="headerlink" href="#where-state-lives" title="Link to this heading"></a></h2>
+<section id="its-owners">
+<h3>Its owners<a class="headerlink" href="#its-owners" title="Link to this heading"></a></h3>
+<p>Four objects hold what a process shares. Each is read through a function, at
+call time and never into a module global, because <code class="docutils literal notranslate"><span class="pre">tests/conftest.py</span></code>
+swaps in fresh ones for every test (<code class="docutils literal notranslate"><span class="pre">_fresh_process_state</span></code>).</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">jobs.settings.launcher_settings()</span></code>: the launcher settings, one attribute
+per key of <code class="docutils literal notranslate"><span class="pre">SERVER_CONFIG_DEFAULTS</span></code> (<code class="docutils literal notranslate"><span class="pre">queue</span></code>, <code class="docutils literal notranslate"><span class="pre">charge_group</span></code>,
+<code class="docutils literal notranslate"><span class="pre">walltime</span></code>, …), loaded from <code class="docutils literal notranslate"><span class="pre">~/.cellmap_flow/server_config.yaml</span></code> the
+first time the process asks, and <code class="docutils literal notranslate"><span class="pre">save()</span></code>. The CLIs and
+<code class="docutils literal notranslate"><span class="pre">/api/server-config</span></code> write them; <code class="docutils literal notranslate"><span class="pre">start_hosts</span></code>, blockwise and the
+dashboard’s finetune submit read them.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">process_chain.process_chain()</span></code>: the process’s chain. <code class="docutils literal notranslate"><span class="pre">input_norms</span></code>
+and <code class="docutils literal notranslate"><span class="pre">postprocess</span></code> are the live steps, which can hold state;
+<code class="docutils literal notranslate"><span class="pre">input_norm_config</span></code> and <code class="docutils literal notranslate"><span class="pre">postprocess_config</span></code> the steps as the dashboard
+received them; <code class="docutils literal notranslate"><span class="pre">spec</span></code> the chain as data, from the configs or else the
+live steps; <code class="docutils literal notranslate"><span class="pre">set(spec,</span> <span class="pre">built=None)</span></code> the one way to change it. In the
+dashboard it is the chain the user submitted. In a server or a blockwise
+worker it is the fallback for a layer URL or model script that gives no
+chain.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">jobs.launch.started_jobs()</span></code>: the servers this process started, which
+<code class="docutils literal notranslate"><span class="pre">start_hosts</span></code> appends to, <code class="docutils literal notranslate"><span class="pre">cleanup_handler</span></code> kills, and
+<code class="docutils literal notranslate"><span class="pre">serving.client.running_job_host</span></code> looks a model’s host up in.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">dashboard.state.get_session()</span></code>: the dashboard’s own state (below).</p></li>
+</ul>
+</section>
+<section id="the-dashboard-s-session">
+<h3>The dashboard’s <code class="docutils literal notranslate"><span class="pre">Session</span></code><a class="headerlink" href="#the-dashboard-s-session" title="Link to this heading"></a></h3>
+<p>Dashboard code reads and writes its state through
+<code class="docutils literal notranslate"><span class="pre">dashboard.state.get_session()</span></code>, a module registry rather than Flask’s
+<code class="docutils literal notranslate"><span class="pre">app.extensions</span></code>: the CLIs fill it before <code class="docutils literal notranslate"><span class="pre">dashboard.app</span></code> is imported,
+and launch threads, job monitors, the MinIO sync thread and the log panel’s
+handler run without an app context. It holds:</p>
+<ul class="simple">
+<li><p>the dataset and the viewer: <code class="docutils literal notranslate"><span class="pre">dataset_path</span></code>, <code class="docutils literal notranslate"><span class="pre">viewer</span></code>, <code class="docutils literal notranslate"><span class="pre">raw</span></code>,
+<code class="docutils literal notranslate"><span class="pre">shaders</span></code>, <code class="docutils literal notranslate"><span class="pre">shader_controls</span></code>, <code class="docutils literal notranslate"><span class="pre">extra_layers</span></code>, <code class="docutils literal notranslate"><span class="pre">neuroglancer_url</span></code>;</p></li>
+<li><p>the models: <code class="docutils literal notranslate"><span class="pre">models_config</span></code>, <code class="docutils literal notranslate"><span class="pre">model_catalog</span></code>;</p></li>
+<li><p>the pipeline builder’s last apply: <code class="docutils literal notranslate"><span class="pre">builder_state</span></code>,
+<code class="docutils literal notranslate"><span class="pre">builder_model_configs</span></code>;</p></li>
+<li><p>blockwise’s <code class="docutils literal notranslate"><span class="pre">tmp_dir</span></code> and <code class="docutils literal notranslate"><span class="pre">blockwise_tasks_dir</span></code>, and <code class="docutils literal notranslate"><span class="pre">tasks_dir()</span></code>;</p></li>
+<li><p>the finetune and review tabs: <code class="docutils literal notranslate"><span class="pre">minio_state</span></code>, <code class="docutils literal notranslate"><span class="pre">annotation_volumes</span></code>,
+<code class="docutils literal notranslate"><span class="pre">output_sessions</span></code>, <code class="docutils literal notranslate"><span class="pre">finetune_job_manager</span></code> (made when first asked for),
+<code class="docutils literal notranslate"><span class="pre">review</span></code>;</p></li>
+<li><p>the log panel’s <code class="docutils literal notranslate"><span class="pre">log_buffer</span></code> and <code class="docutils literal notranslate"><span class="pre">log_clients</span></code>, and the box tool’s
+<code class="docutils literal notranslate"><span class="pre">bbx_generator_state</span></code>.</p></li>
+</ul>
+<p>It forwards the rest to the owners above: each setting, <code class="docutils literal notranslate"><span class="pre">settings</span></code>,
+<code class="docutils literal notranslate"><span class="pre">server_config</span></code> and <code class="docutils literal notranslate"><span class="pre">save_server_config()</span></code>; <code class="docutils literal notranslate"><span class="pre">input_norms</span></code> and
+<code class="docutils literal notranslate"><span class="pre">postprocess</span></code> (read-only), <code class="docutils literal notranslate"><span class="pre">pipeline_spec</span></code> and <code class="docutils literal notranslate"><span class="pre">set_pipeline(spec)</span></code>;
+and <code class="docutils literal notranslate"><span class="pre">jobs</span></code>, whose assignment replaces the started list’s contents. It has
+<code class="docutils literal notranslate"><span class="pre">__slots__</span></code>, so a misspelt attribute raises instead of being stored.</p>
+</section>
+<section id="the-deprecated-g">
+<h3>The deprecated <code class="docutils literal notranslate"><span class="pre">g</span></code><a class="headerlink" href="#the-deprecated-g" title="Link to this heading"></a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">cellmap_flow.globals.g</span></code> stays for one release, for scripts and plugins.
+Each name it had forwards to its owner with a <code class="docutils literal notranslate"><span class="pre">DeprecationWarning</span></code> that
+names the replacement. The warnings are silent in the servers and the
+dashboard, whose code is not <code class="docutils literal notranslate"><span class="pre">__main__</span></code>, and show under pytest.</p>
+<p>Nothing in the package imports <code class="docutils literal notranslate"><span class="pre">globals</span></code>, and <code class="docutils literal notranslate"><span class="pre">test_import_targets</span></code>
+checks it. Importing <code class="docutils literal notranslate"><span class="pre">globals</span></code> also configures logging, so a module that
+imported it reset a CLI’s <code class="docutils literal notranslate"><span class="pre">--log-level</span></code> to INFO whenever the CLI imported
+that module after parsing the flag, as <code class="docutils literal notranslate"><span class="pre">cellmap_flow_server</span></code> imports the
+server. New code uses the owners:</p>
+<ul class="simple">
+<li><p>no <code class="docutils literal notranslate"><span class="pre">import</span> <span class="pre">cellmap_flow.globals</span></code>, and no <code class="docutils literal notranslate"><span class="pre">g.x</span></code>;</p></li>
+<li><p>dashboard code reads state through <code class="docutils literal notranslate"><span class="pre">get_session()</span></code>;</p></li>
+<li><p>everything else takes what it needs as arguments, as <code class="docutils literal notranslate"><span class="pre">finetune.session</span></code>
+does: its MinIO and sync functions are given the dashboard’s
+<code class="docutils literal notranslate"><span class="pre">minio_state</span></code> and volume records, and keep none of their own.</p></li>
+</ul>
+</section>
+<section id="on-disk">
+<h3>On disk<a class="headerlink" href="#on-disk" title="Link to this heading"></a></h3>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 40.0%" />
+<col style="width: 60.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Where</p></th>
+<th class="head"><p>What</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">~/.cellmap_flow/server_config.yaml</span></code></p></td>
+<td><p>The saved job settings: read by <code class="docutils literal notranslate"><span class="pre">launcher_settings()</span></code> the first time
+a process asks, and by <code class="docutils literal notranslate"><span class="pre">config.yaml.load_config</span></code>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">~/.cellmap_flow/plugins/</span></code></p></td>
+<td><p>Registered plugins.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">~/.cellmap_flow/server_logs/</span></code></p></td>
+<td><p>Inference-server job logs and ready files (<code class="docutils literal notranslate"><span class="pre">jobs.launch.SERVER_LOG_DIR</span></code>).</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">~/.cellmap_flow/model_geometry_cache.json</span></code>, <code class="docutils literal notranslate"><span class="pre">~/.cellmap_flow/hugging_face/</span></code></p></td>
+<td><p>The geometry cache and the Hugging Face listing.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">~/.cellmap_flow/blockwise_tasks/</span></code>, <code class="docutils literal notranslate"><span class="pre">~/.cellmap_flow/blockwise_tmp/</span></code></p></td>
+<td><p>The dashboard’s blockwise task YAMLs and master logs, and its default
+<code class="docutils literal notranslate"><span class="pre">tmp_dir</span></code> for progress markers.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">~/.cellmap_flow/user_prefs.json</span></code>, <code class="docutils literal notranslate"><span class="pre">~/.cellmap_flow/corrections/</span></code></p></td>
+<td><p>The Finetune tab’s saved form, and the corrections directory used when
+no output path is given.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">&lt;base&gt;/&lt;YYYYmmdd_HHMMSS&gt;/</span></code>, a finetune session</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">corrections/</span></code> (the volumes, <code class="docutils literal notranslate"><span class="pre">_virtual_sources.json</span></code>, MinIO’s
+<code class="docutils literal notranslate"><span class="pre">.minio</span></code>), <code class="docutils literal notranslate"><span class="pre">good_regions.json</span></code>, <code class="docutils literal notranslate"><span class="pre">runs/&lt;model&gt;_&lt;ts&gt;/</span></code> (per job:
+<code class="docutils literal notranslate"><span class="pre">metadata.json</span></code>, <code class="docutils literal notranslate"><span class="pre">training_log.txt</span></code>, <code class="docutils literal notranslate"><span class="pre">restart_token</span></code>,
+<code class="docutils literal notranslate"><span class="pre">iterations/</span></code>), and <code class="docutils literal notranslate"><span class="pre">models/</span></code> (the serving YAMLs).</p></td>
+</tr>
+</tbody>
+</table>
+<p>The session layout, <code class="docutils literal notranslate"><span class="pre">metadata.json</span></code>, the markers and the annotation volume
+format are read by dashboards older and newer than whatever wrote them, so
+they change only compatibly.</p>
+</section>
+</section>
+<section id="conventions">
+<h2><a class="toc-backref" href="#id4" role="doc-backlink">Conventions</a><a class="headerlink" href="#conventions" title="Link to this heading"></a></h2>
+<section id="an-ome-translation-is-voxel-0-s-centre">
+<h3>An OME translation is voxel 0’s centre<a class="headerlink" href="#an-ome-translation-is-voxel-0-s-centre" title="Link to this heading"></a></h3>
+<p>OME-NGFF, and Neuroglancer, put <code class="docutils literal notranslate"><span class="pre">translation</span></code> at the centre of voxel 0.
+Everything inside cellmap-flow works with the lower corner of voxel 0
+(<code class="docutils literal notranslate"><span class="pre">ArrayMeta.translation</span></code>, <code class="docutils literal notranslate"><span class="pre">io.geometry.Grid</span></code>). Readers convert with
+<code class="docutils literal notranslate"><span class="pre">io.ome.ome_corner</span></code> and writers with <code class="docutils literal notranslate"><span class="pre">io.ome.ome_translation</span></code> (or
+<code class="docutils literal notranslate"><span class="pre">multiscales_attrs</span></code> and <code class="docutils literal notranslate"><span class="pre">singlescale_attrs</span></code>, which use it); no other code
+adds or subtracts half a voxel. Janelia pyramids have
+<code class="docutils literal notranslate"><span class="pre">translation</span> <span class="pre">=</span> <span class="pre">scale/2</span> <span class="pre">−</span> <span class="pre">4</span></code> nm, so every level’s corner is at −4 nm. The
+served zarr and the blockwise output start at the corner of the raw level the
+model reads. The legacy
+<code class="docutils literal notranslate"><span class="pre">resolution</span></code>/<code class="docutils literal notranslate"><span class="pre">offset</span></code> and N5 <code class="docutils literal notranslate"><span class="pre">transform</span></code> attributes keep their old
+meaning. An annotation volume’s root attribute <code class="docutils literal notranslate"><span class="pre">dataset_offset_nm</span></code> is voxel
+0’s centre, and <code class="docutils literal notranslate"><span class="pre">session.volume.volume_corner_nm</span></code> gives the corner.</p>
+</section>
+<section id="the-chain-format">
+<h3>The chain format<a class="headerlink" href="#the-chain-format" title="Link to this heading"></a></h3>
+<p>A chain is <code class="docutils literal notranslate"><span class="pre">{&quot;input_norm&quot;:</span> <span class="pre">[...],</span> <span class="pre">&quot;postprocess&quot;:</span> <span class="pre">[...]}</span></code>, each an ordered
+list of steps, each step a flat <code class="docutils literal notranslate"><span class="pre">{&quot;name&quot;:</span> <span class="pre">&lt;op</span> <span class="pre">class&gt;,</span> <span class="pre">**constructor</span>
+<span class="pre">arguments}</span></code>. It is the same in layer URL blobs, exported YAMLs, blockwise
+task YAMLs’ <code class="docutils literal notranslate"><span class="pre">json_data</span></code> and finetune manifests, and it is read and written
+through <code class="docutils literal notranslate"><span class="pre">pipeline_spec.PipelineSpec</span></code>. A step is never nested as
+<code class="docutils literal notranslate"><span class="pre">{&quot;name&quot;,</span> <span class="pre">&quot;params&quot;}</span></code> on the wire, because older servers pass every key but
+<code class="docutils literal notranslate"><span class="pre">name</span></code> to the constructor. Values are kept as given: the dashboard’s forms
+send strings and the constructors parse them. Files may still hold the older
+<code class="docutils literal notranslate"><span class="pre">{Name:</span> <span class="pre">{params}}</span></code> dict, which the readers accept (it can’t hold the same
+op twice); <code class="docutils literal notranslate"><span class="pre">PUT</span> <span class="pre">/api/pipeline</span></code> refuses it.</p>
+</section>
+<section id="behaviour-change-commits">
+<h3>“Behaviour change:” commits<a class="headerlink" href="#behaviour-change-commits" title="Link to this heading"></a></h3>
+<p>A change to anything a user, a file or another version of cellmap-flow sees
+(served data or metadata, files written, HTTP answers, the CLI, training
+results) is its own commit, whose subject starts <code class="docutils literal notranslate"><span class="pre">Behaviour</span> <span class="pre">change:</span></code>. It
+carries a test that fails on its parent, and it is listed under
+“Behaviour-change commits” in <code class="docutils literal notranslate"><span class="pre">CHANGELOG.md</span></code>. A refactor leaves every guard
+below unchanged, so that a behaviour change can be reviewed, reverted or
+dropped on its own.</p>
+</section>
+<section id="tests">
+<h3>Tests<a class="headerlink" href="#tests" title="Link to this heading"></a></h3>
+<ul>
+<li><p><strong>One test module per public module</strong>, next to its subject in
+<code class="docutils literal notranslate"><span class="pre">tests/utils/</span></code> (most of the package, whatever its package),
+<code class="docutils literal notranslate"><span class="pre">tests/cli/</span></code>, <code class="docutils literal notranslate"><span class="pre">tests/finetune/</span></code> or <code class="docutils literal notranslate"><span class="pre">tests/blockwise/</span></code>, and tested
+through its public interface: nothing on private helpers, and no test that
+would fail only because of an internal rename.</p></li>
+<li><p><strong>Tables with readable row ids</strong>: near-duplicates are one parametrized
+test, each <code class="docutils literal notranslate"><span class="pre">pytest.param(...,</span> <span class="pre">id=&quot;...&quot;)</span></code> named for its case, and a test’s
+name says the behaviour it protects.</p></li>
+<li><p><strong>Shared fixtures</strong> are in the conftest files. <code class="docutils literal notranslate"><span class="pre">tests/conftest.py</span></code>
+points <code class="docutils literal notranslate"><span class="pre">HOME</span></code> at a temporary directory before anything imports
+cellmap_flow, gives every test fresh owners of the process’s state
+(<code class="docutils literal notranslate"><span class="pre">_fresh_process_state</span></code>), restores the root logger after it, and has
+<code class="docutils literal notranslate"><span class="pre">raw_zarr</span></code>, <code class="docutils literal notranslate"><span class="pre">ome_pyramid</span></code>, <code class="docutils literal notranslate"><span class="pre">write_array</span></code>, <code class="docutils literal notranslate"><span class="pre">model_script</span></code>,
+<code class="docutils literal notranslate"><span class="pre">fake_lsf</span></code>, <code class="docutils literal notranslate"><span class="pre">viewer</span></code> and <code class="docutils literal notranslate"><span class="pre">dashboard</span></code>. <code class="docutils literal notranslate"><span class="pre">tests/finetune/conftest.py</span></code>
+and <code class="docutils literal notranslate"><span class="pre">tests/blockwise/conftest.py</span></code> have their areas’ fixtures.</p></li>
+<li><p><strong>Characterization snapshots are the guards.</strong> Each pins, as literals in
+the test, something another party reads:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">test_cli_surface</span></code>: the CLIs’ commands and flags, each type’s
+<code class="docutils literal notranslate"><span class="pre">to_dict()</span></code> and <code class="docutils literal notranslate"><span class="pre">command</span></code>, and the model form;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">test_url_map</span></code>: every dashboard URL and its methods;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">test_served_metadata_snapshot</span></code>: what a server answers;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">test_layer_sources_snapshot</span></code>: the layers every path puts in the
+viewer;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">test_bsub_argv_snapshot</span></code>: every bsub and local command line;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">test_blockwise_routes</span></code>: the task YAMLs generate writes;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">test_training_snapshot</span></code>, <code class="docutils literal notranslate"><span class="pre">test_dataset_draws_snapshot</span></code>,
+<code class="docutils literal notranslate"><span class="pre">test_volume_snapshot</span></code>: training’s numbers, markers and layout, the
+patches drawn, and the annotation volume format;</p></li>
+<li><p>the rehydration snapshot in <code class="docutils literal notranslate"><span class="pre">test_finetune_job_manager</span></code>;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">test_deployability</span></code>, <code class="docutils literal notranslate"><span class="pre">test_import_hygiene</span></code> and
+<code class="docutils literal notranslate"><span class="pre">test_import_targets</span></code> (every <code class="docutils literal notranslate"><span class="pre">from</span> <span class="pre">cellmap_flow...</span> <span class="pre">import</span></code> in the
+package and the tests resolves).</p></li>
+</ul>
+<p>A refactor starts with the characterization test, which must pass on the
+code before it.</p>
+</li>
+<li><p><strong>Patch where the name is used.</strong> A test that monkeypatches a name patches
+it on the module that calls it, and asserts its fake was called, so a move
+can’t turn it into a test of nothing, or of real bsub or <code class="docutils literal notranslate"><span class="pre">mc</span></code>.</p></li>
+<li><p><strong>Markers</strong>: <code class="docutils literal notranslate"><span class="pre">finetune</span></code> (needs peft, skipped without it), <code class="docutils literal notranslate"><span class="pre">gpu</span></code>,
+<code class="docutils literal notranslate"><span class="pre">lsf</span></code>, <code class="docutils literal notranslate"><span class="pre">minio</span></code>, <code class="docutils literal notranslate"><span class="pre">network</span></code> (opt in with
+<code class="docutils literal notranslate"><span class="pre">CELLMAP_FLOW_NETWORK_TESTS=1</span></code>) and <code class="docutils literal notranslate"><span class="pre">slow</span></code>. CI runs
+<code class="docutils literal notranslate"><span class="pre">pytest</span> <span class="pre">-m</span> <span class="pre">&quot;not</span> <span class="pre">gpu</span> <span class="pre">and</span> <span class="pre">not</span> <span class="pre">lsf</span> <span class="pre">and</span> <span class="pre">not</span> <span class="pre">minio</span> <span class="pre">and</span> <span class="pre">not</span> <span class="pre">network&quot;</span></code> with and
+without the <code class="docutils literal notranslate"><span class="pre">finetune</span></code> extra.</p></li>
+<li><p><strong>Import hygiene</strong>: what jobs, servers, finetune runs and the dashboard’s
+request threads import must not drag in the dashboard or a model. No
+module imports <code class="docutils literal notranslate"><span class="pre">globals</span></code> (<code class="docutils literal notranslate"><span class="pre">test_import_targets</span></code>). A new module imports
+Flask, neuroglancer, huggingface_hub and peft only where it needs them,
+never at module level, and torch likewise outside <code class="docutils literal notranslate"><span class="pre">finetune/</span></code> and
+<code class="docutils literal notranslate"><span class="pre">inference/</span></code>. <code class="docutils literal notranslate"><span class="pre">test_import_hygiene</span></code> checks it in a fresh interpreter
+per group: <code class="docutils literal notranslate"><span class="pre">jobs/</span></code> and the job manager, <code class="docutils literal notranslate"><span class="pre">io/</span></code>, <code class="docutils literal notranslate"><span class="pre">serving/</span></code> (with
+<code class="docutils literal notranslate"><span class="pre">models.geometry</span></code>, <code class="docutils literal notranslate"><span class="pre">geometry_cache</span></code>, <code class="docutils literal notranslate"><span class="pre">inference.runner</span></code>, the
+<code class="docutils literal notranslate"><span class="pre">Inferencer</span></code> and <code class="docutils literal notranslate"><span class="pre">ImageDataInterface</span></code>), the registry (with
+<code class="docutils literal notranslate"><span class="pre">config.yaml</span></code> and <code class="docutils literal notranslate"><span class="pre">serving.launch</span></code>), <code class="docutils literal notranslate"><span class="pre">pipeline_spec</span></code> and
+<code class="docutils literal notranslate"><span class="pre">process_chain</span></code>, the state’s owners, <code class="docutils literal notranslate"><span class="pre">finetune/session/</span></code>, <code class="docutils literal notranslate"><span class="pre">review</span></code>
+and <code class="docutils literal notranslate"><span class="pre">viewer/</span></code>; that importing <code class="docutils literal notranslate"><span class="pre">server.py</span></code> or <code class="docutils literal notranslate"><span class="pre">blockwise/</span></code> leaves
+logging alone; and that <code class="docutils literal notranslate"><span class="pre">import</span> <span class="pre">cellmap_flow</span></code> writes nothing under
+<code class="docutils literal notranslate"><span class="pre">HOME</span></code>.</p></li>
+</ul>
+</section>
+<section id="the-dashboard-s-javascript">
+<h3>The dashboard’s JavaScript<a class="headerlink" href="#the-dashboard-s-javascript" title="Link to this heading"></a></h3>
+<p>The repository has no JavaScript test runner. CI checks that every file in
+<code class="docutils literal notranslate"><span class="pre">static/js</span></code> parses as an ES module (<code class="docutils literal notranslate"><span class="pre">node</span> <span class="pre">--input-type=module</span> <span class="pre">--check</span></code>;
+plain <code class="docutils literal notranslate"><span class="pre">node</span> <span class="pre">--check</span></code> passes a module with a syntax error), and pytest
+checks what it can without a browser: what the two pages hand their scripts
+(<code class="docutils literal notranslate"><span class="pre">test_dashboard_pages</span></code>), that every element id the builder’s and the
+tabs’ scripts look up is on the page (<code class="docutils literal notranslate"><span class="pre">test_builder_page</span></code>,
+<code class="docutils literal notranslate"><span class="pre">test_dashboard_tab_scripts</span></code>), and that every static file ships and every
+import resolves (<code class="docutils literal notranslate"><span class="pre">test_static_assets</span></code>).</p>
+<p>What a page does was checked during the cleanup with a headless-Chrome
+harness. It renders each page from the tree with Flask’s test client and
+loads it in <code class="docutils literal notranslate"><span class="pre">chrome-headless-shell</span></code> with the tree’s own scripts and styles.
+<code class="docutils literal notranslate"><span class="pre">fetch</span></code>, <code class="docutils literal notranslate"><span class="pre">EventSource</span></code> and the dialogs are stubbed, timers run on
+virtual time, and scripted scenarios drive the page. Each scenario records
+every request (method, URL, body, headers and the script that sent it),
+every error and alert, and a signature of each rendered element;
+<code class="docutils literal notranslate"><span class="pre">compare.py</span></code> diffs a run on the base against one on the change, and a
+refactor must show no difference. The harness is not in the repository: it
+is kept with the cleanup’s working notes, in
+<code class="docutils literal notranslate"><span class="pre">cleanup_review/tools/fe_harness/</span></code> (<code class="docutils literal notranslate"><span class="pre">harness.py</span></code>, <code class="docutils literal notranslate"><span class="pre">compare.py</span></code>, the
+<code class="docutils literal notranslate"><span class="pre">*_scenarios.py</span></code> files and <code class="docutils literal notranslate"><span class="pre">libcheck/</span></code>), with one machine’s Chrome and
+node paths written into it.</p>
+</section>
+<section id="the-deployability-contract">
+<h3>The deployability contract<a class="headerlink" href="#the-deployability-contract" title="Link to this heading"></a></h3>
+<p>Fileglancer runs cellmap-flow from this repository with pixi, and
+<code class="docutils literal notranslate"><span class="pre">tests/utils/test_deployability.py</span></code> pins what that needs:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">runnables.yaml</span></code> runs <code class="docutils literal notranslate"><span class="pre">pixi</span> <span class="pre">run</span> <span class="pre">&lt;console</span> <span class="pre">script&gt;</span> <span class="pre">[&lt;subcommand&gt;]</span></code> for
+scripts in <code class="docutils literal notranslate"><span class="pre">[project.scripts]</span></code>, with flags they accept (<code class="docutils literal notranslate"><span class="pre">-d</span></code> for
+<code class="docutils literal notranslate"><span class="pre">cellmap_flow</span> <span class="pre">view</span></code>, a positional config for <code class="docutils literal notranslate"><span class="pre">cellmap_flow</span> <span class="pre">yaml</span></code>). A
+change to a command’s name or flags changes the manifest in the same
+commit.</p></li>
+<li><p>The dashboard binds a free port with a threaded server, prints its URL, and
+writes it to the file named by <code class="docutils literal notranslate"><span class="pre">SERVICE_URL_PATH</span></code> when that is set.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">jobs.launch.SERVER_COMMAND</span></code> comes from <code class="docutils literal notranslate"><span class="pre">CELLMAP_FLOW_SERVER_COMMAND</span></code>,
+which pixi’s activation sets to <code class="docutils literal notranslate"><span class="pre">pixi</span> <span class="pre">run</span> <span class="pre">cellmap_flow</span> <span class="pre">serve</span></code>. It is
+read at import and used at call time; no other module keeps a copy of it.
+The value before 0.3.0, <code class="docutils literal notranslate"><span class="pre">pixi</span> <span class="pre">run</span> <span class="pre">cellmap_flow_server</span></code>, still takes the
+<code class="docutils literal notranslate"><span class="pre">--model</span></code> the launchers pass.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">cellmap_flow</span> <span class="pre">view</span></code> bills the models it launches to <code class="docutils literal notranslate"><span class="pre">LSB_PROJECT_NAME</span></code>,
+the Fileglancer job’s project, unless <code class="docutils literal notranslate"><span class="pre">-P</span></code> is given.</p></li>
+<li><p>CI runs <code class="docutils literal notranslate"><span class="pre">pixi</span> <span class="pre">lock</span> <span class="pre">--check</span></code>, so a change to the environment is re-locked
+in the same commit.</p></li>
+</ul>
+<p>See <a class="reference internal" href="install.html"><span class="doc">Installation</span></a> for running from pixi.</p>
+</section>
+</section>
+<section id="deprecated-in-0-3-0">
+<h2><a class="toc-backref" href="#id5" role="doc-backlink">Deprecated in 0.3.0</a><a class="headerlink" href="#deprecated-in-0-3-0" title="Link to this heading"></a></h2>
+<p>Each of these still works in 0.3.0, warns, and goes in the next release.
+<code class="docutils literal notranslate"><span class="pre">CHANGELOG.md</span></code> has the details.</p>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 45.0%" />
+<col style="width: 55.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Deprecated</p></th>
+<th class="head"><p>Use instead</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>The separate console scripts (<code class="docutils literal notranslate"><span class="pre">cellmap_flow_yaml</span></code>,
+<code class="docutils literal notranslate"><span class="pre">cellmap_flow_view</span></code>, <code class="docutils literal notranslate"><span class="pre">cellmap_flow_server</span></code>, the blockwise scripts,
+<code class="docutils literal notranslate"><span class="pre">cellmap_flow_app</span></code>), and <code class="docutils literal notranslate"><span class="pre">cellmap_flow</span> <span class="pre">&lt;type&gt;</span></code>, <code class="docutils literal notranslate"><span class="pre">run</span></code> and the
+plugin commands</p></td>
+<td><p>The subcommands of the one <code class="docutils literal notranslate"><span class="pre">cellmap_flow</span></code> command (K2, K3); servers
+start with <code class="docutils literal notranslate"><span class="pre">cellmap_flow</span> <span class="pre">serve</span> <span class="pre">--model</span></code> (K4). The old names stay
+for one release as aliases that say so. <a class="reference internal" href="cli.html"><span class="doc">Command line</span></a> lists each one
+and its replacement.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">POST</span> <span class="pre">/api/process</span></code> and <code class="docutils literal notranslate"><span class="pre">POST</span> <span class="pre">/api/pipeline/apply</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">PUT</span> <span class="pre">/api/pipeline</span></code> (K11), which also redraws the layers. The old
+routes answer as they did, log a warning, and send a
+<code class="docutils literal notranslate"><span class="pre">Deprecation</span></code> header and a <code class="docutils literal notranslate"><span class="pre">Link</span></code> to the new route. See
+<a class="reference internal" href="viewer_api.html"><span class="doc">Viewer layer API</span></a>.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">cellmap_flow.utils.bsub_utils.install_cleanup_handlers</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">cellmap_flow.jobs.launch.install_cleanup_handlers</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">cellmap_flow.utils.serialize_config.Config</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">cellmap_flow.models.models_config.Config</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">cellmap_flow.models.model_registry.list_huggingface_models</span></code> and
+<code class="docutils literal notranslate"><span class="pre">refresh_huggingface_models</span></code></p></td>
+<td><p>The same names in <code class="docutils literal notranslate"><span class="pre">cellmap_flow.models.hf_catalog</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">ImageDataInterface(output_voxel_size=...)</span></code> (K18)</p></td>
+<td><p>Read at the dataset’s voxel size and resample what is read.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">ImageDataInterface(custom_fill_value=...)</span></code> (K18)</p></td>
+<td><p>Read within the dataset’s ROI and pad what is read.
+<code class="docutils literal notranslate"><span class="pre">concurrency_limit</span></code> is not deprecated: the inference server uses it.</p></td>
+</tr>
+</tbody>
+</table>
+<p>Using a name through one of the three alias modules raises a
+<code class="docutils literal notranslate"><span class="pre">DeprecationWarning</span></code> that names its new path;
+<code class="docutils literal notranslate"><span class="pre">tests/utils/test_deprecated_imports.py</span></code> checks that each name still gives
+the very same object. These went in 0.3.0 without an alias; nothing in the
+docs or the examples used them:</p>
+<ul class="simple">
+<li><p>the rest of <code class="docutils literal notranslate"><span class="pre">cellmap_flow.utils</span></code>, dissolved into <code class="docutils literal notranslate"><span class="pre">io/</span></code>, <code class="docutils literal notranslate"><span class="pre">jobs/</span></code>,
+<code class="docutils literal notranslate"><span class="pre">serving/</span></code>, <code class="docutils literal notranslate"><span class="pre">config/yaml.py</span></code>, <code class="docutils literal notranslate"><span class="pre">models/</span></code>, <code class="docutils literal notranslate"><span class="pre">norm/safe_expression</span></code>,
+<code class="docutils literal notranslate"><span class="pre">dashboard/services/</span></code>, <code class="docutils literal notranslate"><span class="pre">plugins</span></code> and <code class="docutils literal notranslate"><span class="pre">logging_setup</span></code>;
+<code class="docutils literal notranslate"><span class="pre">python</span> <span class="pre">-m</span> <span class="pre">cellmap_flow.utils.doctor</span></code> is
+<code class="docutils literal notranslate"><span class="pre">python</span> <span class="pre">-m</span> <span class="pre">cellmap_flow.cli.doctor</span></code>;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">finetune/finetune_job_manager.py</span></code>, now <code class="docutils literal notranslate"><span class="pre">finetune/job_manager/</span></code>, and
+<code class="docutils literal notranslate"><span class="pre">finetune/virtual_dataset.py</span></code>, now <code class="docutils literal notranslate"><span class="pre">finetune/data/</span></code>;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">lora_wrapper.merge_lora_into_base</span></code> (K19), replaced by
+<code class="docutils literal notranslate"><span class="pre">adaptation.LoraStrategy.merge</span></code>.</p></li>
+</ul>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="viewer_api.html" class="btn btn-neutral float-left" title="Viewer layer API" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="autoapi/index.html" class="btn btn-neutral float-right" title="API Reference" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, David Ackerman,  Marwan Zouinkhi, Jeff Rhoades, Larissa Heinrich, Aubrey Weigel.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

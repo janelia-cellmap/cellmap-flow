@@ -1,0 +1,56 @@
+cellmap_flow.dashboard.services.launch
+======================================
+
+.. py:module:: cellmap_flow.dashboard.services.launch
+
+.. autoapi-nested-parse::
+
+   Start the models picked on the Models tab, and show each in the viewer.
+
+   - ``update_run_models()``: stop and forget the models no longer picked,
+     start the ones newly picked, each in its own thread. A finetune job's
+     server is the Finetune tab's to stop, never this one's.
+   - ``run_model()`` / ``run_hf_model()``: start one catalog or Hugging Face
+     model's inference server (``start_hosts``, which records the job) and add
+     its layer, the one Submit would give it.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.services.launch.logger
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.services.launch.run_model
+   cellmap_flow.dashboard.services.launch.run_hf_model
+   cellmap_flow.dashboard.services.launch.kill_n_remove_from_neuroglancer
+   cellmap_flow.dashboard.services.launch.update_run_models
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:function:: run_model(model_path, name, st_data)
+
+.. py:function:: run_hf_model(repo, name, st_data)
+
+   Run a Hugging Face model by repo ID.
+
+
+.. py:function:: kill_n_remove_from_neuroglancer(jobs, s)
+
+   Kill ``jobs`` and drop their layers from the viewer state ``s``.
+
+
+.. py:function:: update_run_models(names: List[str], hf_repos: List[str] = None)
+

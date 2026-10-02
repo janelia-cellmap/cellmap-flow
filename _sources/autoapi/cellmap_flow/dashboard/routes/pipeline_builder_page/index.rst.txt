@@ -30,6 +30,17 @@ Module Contents
 
 .. py:function:: pipeline_builder()
 
-   Render the drag-and-drop pipeline builder interface with current state from globals
+   The pipeline builder, starting from the dashboard's live chain.
+
+   The pipeline the page starts from (its page data's ``pipeline``) comes
+   from two places. Its normalizer and postprocessor nodes are the live
+   chain, ``session.pipeline_spec``, however that was last set: by the
+   builder's own apply, Submit on the dashboard page, a YAML, or any other
+   PUT /api/pipeline. The page sends the chain back with its first edit,
+   so nodes taken from anywhere else would undo whatever set the chain
+   since. Everything else is the builder's last canvas
+   (``session.builder_state``): the INPUT and OUTPUT nodes with their
+   paths, boxes and channels, the model nodes, the edges, and each node's
+   position. _chain_nodes says how the chain's nodes reuse the canvas's.
 
 

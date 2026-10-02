@@ -1,0 +1,221 @@
+cellmap_flow.dashboard.state
+============================
+
+.. py:module:: cellmap_flow.dashboard.state
+
+.. autoapi-nested-parse::
+
+   The dashboard's state, read and written through one object: ``get_session()``.
+
+   One Session per process, made at import and filled by the CLIs,
+   ``services/startup`` and ``create_and_run_app``. It lives in this module
+   rather than in Flask's ``app.extensions`` because the CLIs fill it before
+   ``dashboard.app`` is imported (they import it lazily so ``--help`` stays
+   fast); because launch threads, job-monitor listeners, the MinIO sync thread
+   and the log panel's handler run with no app context; and so that this module
+   imports without Flask.
+
+   The Session forwards three parts to their owners, which also serve processes
+   that have no dashboard:
+
+   - The launcher settings in ~/.cellmap_flow/server_config.yaml, one
+     attribute per key of ``jobs.settings.SERVER_CONFIG_DEFAULTS`` (``queue``,
+     ``charge_group``, ``walltime``, ...), and ``settings``, ``server_config``,
+     ``server_config_cached`` and ``save_server_config()``:
+     ``jobs.settings.launcher_settings()``.
+   - The chain: ``input_norms`` and ``postprocess`` (the live steps, read-only),
+     ``pipeline_spec`` (the same as data), and ``set_pipeline()``, the one way
+     to change them: ``process_chain.process_chain()``.
+   - ``jobs``, the running inference servers' jobs: ``jobs.launch.started_jobs()``.
+
+   The rest it stores itself, in ``__slots__``, so a misspelt attribute raises
+   rather than being stored beside the real one:
+
+   - The data and the viewer: ``dataset_path``, ``viewer``, ``raw``,
+     ``neuroglancer_url``, ``shaders``, ``shader_controls``, ``extra_layers``.
+   - The models: ``models_config``, ``model_catalog``.
+   - The pipeline builder's last apply: ``builder_state``,
+     ``builder_model_configs``.
+   - Blockwise's ``tmp_dir`` and ``blockwise_tasks_dir``, and ``tasks_dir()``.
+   - The finetune tab's MinIO and volumes: ``minio_state``,
+     ``annotation_volumes``, ``output_sessions``; its training jobs'
+     ``finetune_job_manager``; the Review tab's ``review``.
+   - The log panel's ``log_buffer`` and ``log_clients``; the box tool's
+     ``bbx_generator_state``.
+
+   Read the session through ``get_session()`` when it is needed, never into a
+   module global: tests/conftest.py installs a fresh Session for every test.
+
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.state.Session
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.state.get_session
+
+
+Module Contents
+---------------
+
+.. py:class:: Session
+
+   The dashboard's state; see the module docstring.
+
+
+   .. py:attribute:: dataset_path
+      :value: None
+
+
+
+   .. py:attribute:: viewer
+      :value: None
+
+
+
+   .. py:attribute:: raw
+      :value: None
+
+
+
+   .. py:attribute:: neuroglancer_url
+      :value: None
+
+
+
+   .. py:attribute:: shaders
+
+
+   .. py:attribute:: shader_controls
+
+
+   .. py:attribute:: extra_layers
+
+
+   .. py:attribute:: models_config
+      :value: []
+
+
+
+   .. py:attribute:: model_catalog
+
+
+   .. py:attribute:: builder_model_configs
+
+
+   .. py:attribute:: tmp_dir
+
+
+   .. py:attribute:: blockwise_tasks_dir
+
+
+   .. py:attribute:: minio_state
+
+
+   .. py:attribute:: annotation_volumes
+
+
+   .. py:attribute:: output_sessions
+
+
+   .. py:attribute:: review
+      :value: None
+
+
+
+   .. py:attribute:: log_buffer
+
+
+   .. py:attribute:: log_clients
+      :value: []
+
+
+
+   .. py:attribute:: bbx_generator_state
+
+
+   .. py:property:: jobs
+
+      The running inference servers' jobs, each with its model_name and
+      host: jobs.launch.started_jobs(). Assigning replaces the list's
+      contents, so start_hosts and cleanup_handler keep seeing it.
+
+
+   .. py:property:: input_norms
+
+      The live input normalizers. Changed only by set_pipeline().
+
+
+   .. py:property:: postprocess
+
+      The live postprocessors. Changed only by set_pipeline().
+
+
+   .. py:property:: pipeline_spec
+
+      The chain as data (PipelineSpec), derived on every read.
+
+
+   .. py:method:: set_pipeline(spec, built=None)
+
+      Replace the chain; see ProcessChain.set.
+
+
+
+   .. py:property:: builder_state
+
+      ``{inputs, outputs,
+      edges, normalizers, models, postprocessors}``, each a list of its
+      nodes, all empty until the first apply. A new dict on every read.
+
+      :type: What the builder last applied, as it sent it
+
+
+   .. py:property:: settings
+
+      The launcher settings themselves (jobs.settings.LauncherSettings).
+
+
+   .. py:property:: server_config
+
+      value} of the saved settings.
+
+      :type: {key
+
+
+   .. py:property:: server_config_cached
+
+      Whether the settings came from, or were saved to, the file.
+
+
+   .. py:method:: save_server_config()
+
+      Write the settings to ~/.cellmap_flow/server_config.yaml.
+
+
+
+   .. py:method:: tasks_dir() -> str
+
+      ``blockwise_tasks_dir``, made if it is missing.
+
+
+
+   .. py:property:: finetune_job_manager
+
+      The training jobs' FinetuneJobManager, made when first asked for.
+
+
+.. py:function:: get_session() -> Session
+
+   The dashboard's session.
+
+

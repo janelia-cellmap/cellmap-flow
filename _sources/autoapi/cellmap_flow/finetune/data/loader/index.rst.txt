@@ -1,0 +1,91 @@
+cellmap_flow.finetune.data.loader
+=================================
+
+.. py:module:: cellmap_flow.finetune.data.loader
+
+.. autoapi-nested-parse::
+
+   The DataLoaders the finetune trainer reads its patches through.
+
+   ``create_dataloader`` builds one from a session's corrections directory (its
+   ``_virtual_sources.json`` manifest); ``make_training_loader`` and
+   ``rebuild_loader`` make sure every loader the trainer uses, the OOM
+   fallback's included, keeps its workers from one epoch to the next.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.data.loader.logger
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.data.loader.dataset_from_manifest
+   cellmap_flow.finetune.data.loader.create_dataloader
+   cellmap_flow.finetune.data.loader.make_training_loader
+   cellmap_flow.finetune.data.loader.rebuild_loader
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:function:: dataset_from_manifest(manifest: dict, corrections_dir: Optional[str] = None, augment: Optional[bool] = None) -> cellmap_flow.finetune.data.dataset.VirtualPatchDataset
+
+   Instantiate a :class:`VirtualPatchDataset` from a manifest dict.
+
+   Recognized manifest kinds:
+     - ``volume_zarr_v1`` (current): trainer reads the session's
+       annotation_volume.zarr directly. Field ``volume_zarr_path``.
+
+   ``corrections_dir`` is where the session's good regions are looked up;
+   omit it and the dataset simply trains without rehearsal anchors.
+
+
+.. py:function:: create_dataloader(corrections_zarr_path: str, batch_size: int = 2, augment: bool = True, num_workers: int = 4) -> torch.utils.data.DataLoader
+
+   Build the training DataLoader for a corrections directory.
+
+   Requires a ``_virtual_sources.json`` manifest. Every path that creates a
+   session writes one (volume creation, YAML import, training submit) and
+   restarts backfill one, so a missing manifest means something upstream
+   failed -- which is worth an exception rather than training on anything
+   else. The patch geometry comes from the manifest, and the dataset
+   samples randomly, so there is no patch shape or shuffle to pass.
+
+   :param corrections_zarr_path: Session corrections directory.
+   :param batch_size: Clamped down to the dataset size when smaller.
+   :param augment: Flips, XY rotations, brightness and noise, on top of the
+                   patch-centre jitter that is always applied. It overrides the
+                   manifest's stored preference.
+   :param num_workers: DataLoader workers. Spawned, not forked -- tensorstore
+                       handles do not survive fork.
+
+
+.. py:function:: make_training_loader(dataset, batch_size: int, num_workers: int) -> torch.utils.data.DataLoader
+
+   The DataLoader the trainer reads patches through.
+
+   Persistent, spawned workers: each keeps its copy of the dataset, and so its
+   RNG, from one epoch to the next. Non-persistent workers are re-spawned
+   every epoch from a fresh pickle of the dataset -- RNG unset, same seed --
+   so every epoch would draw the identical patches and augmentations.
+
+
+.. py:function:: rebuild_loader(loader: torch.utils.data.DataLoader, batch_size: int) -> torch.utils.data.DataLoader
+
+   ``loader`` again with a different batch size and everything else kept.
+
+   The OOM fallback in the trainer used to rebuild its loader with only some
+   of the original arguments; losing persistent_workers made every epoch
+   after an OOM repeat the same patches (see make_training_loader).
+
+

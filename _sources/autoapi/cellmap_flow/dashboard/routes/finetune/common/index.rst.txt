@@ -13,6 +13,16 @@ Attributes
    cellmap_flow.dashboard.routes.finetune.common.USER_PREFS_FILE
    cellmap_flow.dashboard.routes.finetune.common.LOG_FILTER_PATTERNS
    cellmap_flow.dashboard.routes.finetune.common.RESTART_PASSTHROUGH_KEYS
+   cellmap_flow.dashboard.routes.finetune.common.SIGN_ONLY_MARGIN
+   cellmap_flow.dashboard.routes.finetune.common.SPARSE_MSE_NOTE
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.routes.finetune.common.TrainingSettings
 
 
 Functions
@@ -21,15 +31,19 @@ Functions
 .. autoapisummary::
 
    cellmap_flow.dashboard.routes.finetune.common.find_model_config
+   cellmap_flow.dashboard.routes.finetune.common.current_chain
    cellmap_flow.dashboard.routes.finetune.common.viewer_position_and_scales
+   cellmap_flow.dashboard.routes.finetune.common.session_store
    cellmap_flow.dashboard.routes.finetune.common.ensure_corrections_storage
    cellmap_flow.dashboard.routes.finetune.common.load_user_prefs
    cellmap_flow.dashboard.routes.finetune.common.save_user_prefs
    cellmap_flow.dashboard.routes.finetune.common.resolve_finetune_session
    cellmap_flow.dashboard.routes.finetune.common.detect_sparse_annotations
    cellmap_flow.dashboard.routes.finetune.common.autodetect_output_type
+   cellmap_flow.dashboard.routes.finetune.common.training_settings
    cellmap_flow.dashboard.routes.finetune.common.build_restart_params
    cellmap_flow.dashboard.routes.finetune.common.get_lsf_job_id
+   cellmap_flow.dashboard.routes.finetune.common.rewrite_minio_url_for_proxy
    cellmap_flow.dashboard.routes.finetune.common.write_volume_manifest
 
 
@@ -50,7 +64,21 @@ Module Contents
 
 .. py:function:: find_model_config(model_name)
 
+.. py:function:: current_chain()
+
+   The dashboard's chains as step lists, ``(input_norm, postprocess)``.
+
+   A new volume and a training manifest record them, so that the trainer
+   normalizes its input as inference does, and the finetuned model's YAML
+   postprocesses as the dashboard does.
+
+
 .. py:function:: viewer_position_and_scales()
+
+.. py:function:: session_store()
+
+   The dashboard's sessions and volume registry (its session's dicts).
+
 
 .. py:function:: ensure_corrections_storage(output_path)
 
@@ -62,29 +90,110 @@ Module Contents
 
 .. py:function:: detect_sparse_annotations(corrections_path)
 
+   Whether the session trains on painted (sparse) annotations.
+
+   Read from the volume the manifest points at: annotated voxels outside
+   its imported crops are painted. This looked for per-chunk extracts
+   marked source == "sparse_volume", which are only written when there is
+   no manifest -- and every session has one now -- so it was always False:
+   the margin + distillation switch and the distance-model scribble guard in
+   submit never fired, and mask_unannotated was never set. A session
+   without a manifest cannot be trained, so it is not sparse either.
+
+
 .. py:function:: autodetect_output_type(model_config, output_type, offsets)
+
+.. py:class:: TrainingSettings
+
+
+
+   The target and loss a job trains with (see ``training_settings``).
+
+
+   .. py:attribute:: output_type
+      :type:  str
+
+
+   .. py:attribute:: loss_type
+      :type:  str
+
+
+   .. py:attribute:: label_smoothing
+      :type:  float
+
+
+   .. py:attribute:: distillation_lambda
+      :type:  float
+
+
+   .. py:attribute:: mask_unannotated
+      :type:  bool
+
+
+   .. py:attribute:: margin
+      :type:  float
+      :value: None
+
+
+
+   .. py:attribute:: note
+      :type:  str
+      :value: None
+
+
+
+.. py:data:: SIGN_ONLY_MARGIN
+   :value: 0.5
+
+
+.. py:data:: SPARSE_MSE_NOTE
+   :value: 'Auto-switched to margin loss + distillation (lambda=0.5) for sparse annotations'
+
+
+.. py:function:: training_settings(*, output_type, loss_type, label_smoothing, distillation_lambda, sparse)
+
+   What a job trains with, from what was asked for and whether its session is sparse.
+
+   Some combinations cannot train, or would train the wrong thing, so they
+   are replaced here, where the user sees it in the answer, rather than
+   failing on the cluster:
+   - sparse annotations with mse: margin loss, with distillation to the
+     base model at 0.5, which is how sparse annotations train (see the
+     distance case below);
+   - a distance target with sparse annotations: a binary target with margin
+     loss instead, at margin 0.5 and distillation of at least 0.5 (see
+     below);
+   - a distance target otherwise: bce, without label smoothing.
+   A sparse session also masks its unannotated voxels out of the loss.
+
 
 .. py:function:: build_restart_params(data)
 
 .. py:function:: get_lsf_job_id(finetune_job)
 
+.. py:function:: rewrite_minio_url_for_proxy(minio_url, request=None)
+
+   ``minio_url`` as the browser can reach it through a reverse proxy.
+
+   ``session.minio.proxied_url``, for ``request`` or else the Flask request
+   being handled. Unless CELLMAP_FLOW_MINIO_PROXY_URL is set and the
+   request came through a proxy (X-Forwarded-Host), and outside a request
+   (a background import, a script), the URL is returned unchanged.
+
+
 .. py:function:: write_volume_manifest(volume)
 
-   Mark a browser-painted annotation volume as trainable by the new path.
+   Mark an annotation volume as trainable by writing its manifest.
 
    ``create_dataloader`` requires this manifest: it is what points the
    trainer at the volume zarr to stream patches from, and it carries the
-   good regions, the dense/sparse ratio and the patch geometry. Without
-   one, training now raises rather than falling back -- the old per-chunk
-   dataset that used to serve that case honoured none of the above.
-
-   Only the YAML crop importer used to write one, so every session where
-   you painted scribbles in the browser trained on the legacy path and
-   silently ignored the regions you marked. Both volume-creating routes now
-   call this.
+   patch geometry, the dense/sparse ratio and the dashboard's chains. The
+   good regions beside it are honoured through the same dataset. Without
+   one, training raises rather than fall back to anything.
 
    Returns the manifest path, or None when the volume record is too
    incomplete to describe (a resumed session whose .zattrs predates these
-   fields, say) -- in which case the legacy path still applies, as before.
+   fields, say). Nothing is guessed: such a session cannot be trained, and
+   submit refuses it.
 
 

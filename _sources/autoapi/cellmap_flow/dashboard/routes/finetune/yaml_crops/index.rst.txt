@@ -22,6 +22,10 @@ cellmap_flow.dashboard.routes.finetune.yaml_crops
    add corrections in regions the GT doesn't cover. The trainer sees the
    union by construction.
 
+   Routes: POST ``/api/finetune/load-crops`` (the import), GET
+   ``/api/finetune/load-crops-progress`` (how far an import has got) and GET
+   ``/api/finetune/read-yaml`` (a YAML file's text, for the editor).
+
 
 
 Attributes
@@ -37,9 +41,9 @@ Functions
 
 .. autoapisummary::
 
-   cellmap_flow.dashboard.routes.finetune.yaml_crops.load_crops_from_yaml_response
-   cellmap_flow.dashboard.routes.finetune.yaml_crops.get_load_crops_progress_response
-   cellmap_flow.dashboard.routes.finetune.yaml_crops.read_yaml_file_response
+   cellmap_flow.dashboard.routes.finetune.yaml_crops.load_crops_from_yaml
+   cellmap_flow.dashboard.routes.finetune.yaml_crops.get_load_crops_progress
+   cellmap_flow.dashboard.routes.finetune.yaml_crops.read_yaml
 
 
 Module Contents
@@ -47,24 +51,24 @@ Module Contents
 
 .. py:data:: logger
 
-.. py:function:: load_crops_from_yaml_response(data)
+.. py:function:: load_crops_from_yaml()
 
    Import crops from a YAML manifest into the session's annotation_volume.
 
-   Request JSON:
-       - ``model_name``: required
-       - ``output_path``: optional, base path for the session corrections dir
-       - ``yaml``: required, YAML text (or path to a YAML file)
-       - ``load_id``: optional UUID for live progress polling
+   Request JSON: see requests.LoadCrops.
 
 
-.. py:function:: get_load_crops_progress_response(load_id)
+.. py:function:: get_load_crops_progress()
 
    Return current progress for an in-flight ``/api/finetune/load-crops`` call.
 
 
-.. py:function:: read_yaml_file_response(path)
+.. py:function:: read_yaml()
 
    Return the contents of a YAML file so the dashboard can preview/edit it.
+
+   :func:`~cellmap_flow.finetune.crop_loader.read_yaml_file` decides which
+   files may be read: the dashboard listens on every interface, and this
+   used to return any file the user could read.
 
 

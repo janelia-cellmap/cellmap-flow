@@ -3,6 +3,23 @@ cellmap_flow.image_data_interface
 
 .. py:module:: cellmap_flow.image_data_interface
 
+.. autoapi-nested-parse::
+
+   A dataset to read in world coordinates, through the input chain.
+
+   ``ImageDataInterface(path, voxel_size)`` picks the level of a multiscale
+   group or precomputed volume for ``voxel_size`` (``io.multiscale``), reads
+   its metadata (``io.metadata``) and keeps its voxel grid (``io.geometry``)
+   and the array (``io.source``). A read of a world ROI is the grid's box of voxels, read
+   with padding where it runs past the array. With
+   ``on_voxel_size_mismatch="resample"``, a dataset with no level at
+   ``voxel_size`` is resampled to it (``io.resample``); the deprecated
+   ``output_voxel_size`` resamples what is read, crudely. What is read goes through the input
+   chain on the way: the normalizers and ChannelSelector given as
+   ``input_norms``, else the process's chain (``process_chain().input_norms``)
+   as it is at read time, which user ``process_chunk`` scripts rely on.
+
+
 
 Attributes
 ----------
@@ -10,6 +27,8 @@ Attributes
 .. autoapisummary::
 
    cellmap_flow.image_data_interface.logger
+   cellmap_flow.image_data_interface.ON_VOXEL_SIZE_MISMATCH
+   cellmap_flow.image_data_interface.RESAMPLE_HINT
 
 
 Classes
@@ -18,6 +37,18 @@ Classes
 .. autoapisummary::
 
    cellmap_flow.image_data_interface.ImageDataInterface
+   cellmap_flow.image_data_interface.LazyNormalization
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.image_data_interface.legacy_meta
+   cellmap_flow.image_data_interface.apply_norms
+   cellmap_flow.image_data_interface.selected_channel
+   cellmap_flow.image_data_interface.select_channel
 
 
 Module Contents
@@ -25,12 +56,59 @@ Module Contents
 
 .. py:data:: logger
 
-.. py:class:: ImageDataInterface(dataset_path, voxel_size=None, mode='r', output_voxel_size=None, custom_fill_value=None, concurrency_limit=1, normalize=True)
+.. py:data:: ON_VOXEL_SIZE_MISMATCH
+   :value: ('relabel', 'resample', 'error')
+
+
+.. py:data:: RESAMPLE_HINT
+   :value: 'on_voxel_size_mismatch="resample" (`resample: true` in a YAML, `--resample` on the command...
+
+
+.. py:function:: legacy_meta(meta: cellmap_flow.io.metadata.ArrayMeta)
+
+   ``(voxel_size, offset, chunk_shape, shape, axes_names, filetype)``, the
+   tuple the old readers returned, from an ArrayMeta: spatial axes only,
+   voxel size and offset as lists of nanometer floats.
+
+   The zarr v2/N5 reader always took the *last* n axes (n spatial ones)
+   and called them z, y, x, whatever the metadata said, on disk; a URL now
+   reads the same. The others take the spatial axes by name. Both are kept.
+
+
+.. py:class:: ImageDataInterface(dataset_path, voxel_size=None, mode='r', output_voxel_size=None, custom_fill_value=None, concurrency_limit=1, normalize=True, input_norms=None, on_voxel_size_mismatch='relabel', cache_bytes=0)
 
    .. py:attribute:: path
 
 
+   .. py:attribute:: input_norms
+      :value: None
+
+
+
+   .. py:attribute:: actual_voxel_size
+      :value: None
+
+
+
+   .. py:attribute:: requested_voxel_size
+      :value: None
+
+
+
+   .. py:attribute:: shape
+
+
+   .. py:attribute:: voxel_size
+      :value: None
+
+
+
    .. py:attribute:: offset
+      :value: None
+
+
+
+   .. py:attribute:: roi
 
 
    .. py:attribute:: custom_fill_value
@@ -43,17 +121,130 @@ Module Contents
 
 
 
+   .. py:attribute:: cache_bytes
+      :value: 0
+
+
+
+   .. py:attribute:: source
+
+
    .. py:attribute:: normalize
       :value: True
 
 
 
+   .. py:property:: resampled
+      :type: bool
+
+
+      Whether reads are resampled from ``actual_voxel_size`` to
+      ``voxel_size``: the data then really is at ``voxel_size``. When the
+      two differ and this is False, the level was relabelled, and the data
+      really lies at ``actual_voxel_size``.
+
+
    .. py:property:: ts
+
+      The dataset seen through the input chain (one channel, normalized).
+
+      With ``normalize=False`` this is the plain tensorstore of the selected
+      channel, as it always was.
+
+      A resampled dataset has none: its voxels exist only as
+      ``to_ndarray_ts`` computes them. ``source.ts`` is the level as stored.
+
+
+   .. py:method:: with_input_norms(input_norms)
+
+      This dataset, read through ``input_norms`` instead of the process's chain.
+
+      Shares the opened tensorstore, so it is cheap to make one per request.
+
 
 
    .. py:property:: info
 
 
    .. py:method:: to_ndarray_ts(roi=None)
+
+      ``roi`` (world nm; all of the array when None) read through the
+      input chain, as a numpy array.
+
+      Where the ROI runs past the array it is padded with
+      ``custom_fill_value`` (0 when unset; "edge" repeats the border
+      voxels), after the chain: padding is never normalized.
+
+      A resampled dataset (``resampled``) is read at ``voxel_size`` by
+      ``io.resample``: the stored voxels are resampled, then go through the
+      chain, as a stored level at ``voxel_size`` would. A ROI is read at
+      the deprecated ``output_voxel_size`` when that differs from the voxel
+      size (see ``_read_resampled``); the whole array never is.
+
+
+
+.. py:function:: apply_norms(data, input_norms=None)
+
+   Read ``data`` if it is a tensorstore view and run it through the chain.
+
+   ``input_norms=None`` means the process's chain, ``process_chain().input_norms``.
+
+
+.. py:function:: selected_channel(input_norms) -> int
+
+   The input channel a chain asks for: its first ChannelSelector, else 0.
+
+
+.. py:function:: select_channel(ts_dataset, channel=0, spatial_ndim=3)
+
+   Index one channel out of a multichannel tensorstore.
+
+   The channel axis is the one labelled c/c^/channel when the store labels its
+   dimensions, and otherwise the first one (the OME-Zarr convention).
+   Arrays with no more than ``spatial_ndim`` dimensions are returned as is.
+
+
+.. py:class:: LazyNormalization(ts_dataset, input_norms=None, normalize=True, spatial_ndim=3)
+
+   A tensorstore seen through the input chain, for neuroglancer to index.
+
+   The channel and the normalizers are looked up on every access rather than
+   fixed when the store was opened: a server that has already read one chunk
+   must still follow a ChannelSelector that changes afterwards.
+
+   ``input_norms=None`` follows the process's chain,
+   ``process_chain().input_norms``, as it is at each access: a worker that
+   unpickles one reads its own chain, not the sender's.
+   ``normalize=False`` selects the channel but applies no normalizers.
+
+
+   .. py:attribute:: ts_dataset
+
+
+   .. py:attribute:: input_norms
+      :value: None
+
+
+
+   .. py:attribute:: normalize
+      :value: True
+
+
+
+   .. py:attribute:: spatial_ndim
+      :value: 3
+
+
+
+   .. py:method:: chain()
+
+
+   .. py:method:: norms_to_apply()
+
+
+   .. py:method:: selected()
+
+      The raw (unnormalized) tensorstore for the channel the chain selects.
+
 
 

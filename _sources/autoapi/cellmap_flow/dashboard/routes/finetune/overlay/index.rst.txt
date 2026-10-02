@@ -3,6 +3,16 @@ cellmap_flow.dashboard.routes.finetune.overlay
 
 .. py:module:: cellmap_flow.dashboard.routes.finetune.overlay
 
+.. autoapi-nested-parse::
+
+   What the viewer shows of the annotations: a volume's editable layer, and
+   boxes around the regions that have annotations in them.
+
+   Routes: POST ``/api/finetune/add-to-viewer`` (a volume's paintable layer),
+   POST ``/api/finetune/refresh-annotated-regions`` (redraw the boxes) and POST
+   ``/api/finetune/sync-annotations`` (pull the annotations from MinIO now).
+
+
 
 Attributes
 ----------
@@ -18,10 +28,11 @@ Functions
 
 .. autoapisummary::
 
+   cellmap_flow.dashboard.routes.finetune.overlay.add_annotation_layer
    cellmap_flow.dashboard.routes.finetune.overlay.refresh_annotated_regions_layer
-   cellmap_flow.dashboard.routes.finetune.overlay.refresh_annotated_regions_response
-   cellmap_flow.dashboard.routes.finetune.overlay.add_crop_to_viewer_response
-   cellmap_flow.dashboard.routes.finetune.overlay.sync_annotations_manually_response
+   cellmap_flow.dashboard.routes.finetune.overlay.refresh_annotated_regions
+   cellmap_flow.dashboard.routes.finetune.overlay.add_crop_to_viewer
+   cellmap_flow.dashboard.routes.finetune.overlay.sync_annotations_manually
 
 
 Module Contents
@@ -31,17 +42,35 @@ Module Contents
 
 .. py:data:: ANNOTATION_TOOL_BINDINGS
 
+.. py:function:: add_annotation_layer(viewer, layer_name, annotation_url, *, keep_existing=False)
+
+   Add the writable layer that paints into a volume, and select it.
+
+   ``annotation_url`` is the volume's ``annotation`` group as MinIO serves
+   it. This is the one builder of that layer: add-to-viewer (after
+   create-volume and resume), load-crops and instance corrections all add
+   it here. So each gets the draw tools pre-bound (ANNOTATION_TOOL_BINDINGS)
+   and is selected with its panel open, ready to paint without hunting for
+   it in the layer list; load-crops and instance corrections used to build
+   their own, with neither. The panel opens on its Draw tab, where the
+   brush and flood fill are.
+
+   A layer of that name is replaced, unless ``keep_existing``: then it is
+   left as it is, selection included, and False is returned.
+
+
 .. py:function:: refresh_annotated_regions_layer(corrections_path=None)
 
    Draw a box around every region that has annotations in it.
 
-   Only ever called for something the user just did -- creating a volume,
-   importing crops, or clicking "Show Annotated Regions". Nothing calls this
-   on a timer: see the note on _last_annotated_regions for why a push the
-   user did not ask for is destructive.
+   Only ever called for something the user just did: creating a volume,
+   importing crops, resuming a session, clicking "Save Annotations to
+   Disk" or "Show Annotated Regions". Nothing calls this on a timer: see
+   the note on _last_annotated_regions for why a push the user did not ask
+   for is destructive.
 
 
-.. py:function:: refresh_annotated_regions_response(data)
+.. py:function:: refresh_annotated_regions()
 
    Redraw the annotated-regions boxes because the user asked for it.
 
@@ -51,7 +80,7 @@ Module Contents
    while you are in the middle of painting.
 
 
-.. py:function:: add_crop_to_viewer_response(data)
+.. py:function:: add_crop_to_viewer()
 
-.. py:function:: sync_annotations_manually_response(data)
+.. py:function:: sync_annotations_manually()
 

@@ -1,0 +1,86 @@
+cellmap_flow.serving.virtual_zarr
+=================================
+
+.. py:module:: cellmap_flow.serving.virtual_zarr
+
+.. autoapi-nested-parse::
+
+   The zarr v2 array an inference server makes up, as data.
+
+   A server serves one model's output as ``<dataset>/.zattrs``,
+   ``<dataset>/s0/.zarray`` and ``<dataset>/s0/<z>.<y>.<x>[.<c>]`` chunks, which
+   neuroglancer reads as an OME-NGFF 0.4 group with one level. What those say,
+   and which region each chunk key is, is plain arithmetic on the model's
+   geometry and the raw data's; these functions are that arithmetic, with no
+   Flask and no process-wide state, so the server's routes only call them.
+
+   Every client reads this format, including dashboards older than the server,
+   so it changes only additively.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.serving.virtual_zarr.logger
+   cellmap_flow.serving.virtual_zarr.BLOSC
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.serving.virtual_zarr.zattrs
+   cellmap_flow.serving.virtual_zarr.zarray
+   cellmap_flow.serving.virtual_zarr.served_spatial_shape
+   cellmap_flow.serving.virtual_zarr.chunk_roi
+   cellmap_flow.serving.virtual_zarr.reorder_to_zarr_axes
+   cellmap_flow.serving.virtual_zarr.chunk_encoder
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:data:: BLOSC
+
+.. py:function:: zattrs(axes, output_voxel_size, origin, has_channel: bool, name: str) -> dict
+
+   The group's OME-NGFF attributes: one level, s0, at the output voxel size.
+
+   ``axes`` are the spatial axes, ``origin`` the lower corner of output
+   voxel 0 in nm; OME writes voxel 0's centre, so neuroglancer draws voxel 0
+   at the origin. A channel axis comes last, with scale 1 and translation 0.
+
+
+.. py:function:: zarray(shape, chunks, dtype) -> dict
+
+   The array's zarr v2 metadata. ``dtype`` is anything np.dtype takes;
+   its typestr is written ("<f4", "|u1", ...).
+
+
+.. py:function:: served_spatial_shape(raw_offset, raw_shape, raw_voxel_size, origin, output_voxel_size) -> list
+
+   Output voxels from ``origin`` to the end of the raw data, rounded up.
+
+
+.. py:function:: chunk_roi(index, spatial_block, output_voxel_size, origin) -> funlib.geometry.Roi
+
+   The region (nm) chunk ``index`` covers: ``spatial_block`` output voxels
+   per chunk, the grid starting at ``origin``.
+
+
+.. py:function:: reorder_to_zarr_axes(data, model_axes, spatial_axes) -> numpy.ndarray
+
+   ``data``, laid out as ``model_axes``, in zarr's order: the spatial axes, then "c".
+
+
+.. py:function:: chunk_encoder() -> numcodecs.Blosc
+
+   The codec for the chunks, as ``BLOSC`` describes it.
+
+

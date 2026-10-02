@@ -1,0 +1,149 @@
+cellmap_flow.io.geometry
+========================
+
+.. py:module:: cellmap_flow.io.geometry
+
+.. autoapi-nested-parse::
+
+   Where an array's voxels are in the world, and boxes of voxels.
+
+   World coordinates are nanometers. A ``Grid`` is an array's voxel size and
+   the lower corner of its voxel 0 (``ArrayMeta.voxel_size``/``translation``
+   on the spatial axes): voxel ``i`` covers ``[corner + i*vs, corner +
+   (i+1)*vs)``. Voxel sizes can be fractional (5.24 nm) and a corner need not
+   lie on the grid (Janelia raw is at -4 nm with 8 nm voxels), so nothing here
+   goes through funlib's ``Coordinate``, which truncates both. A ``Box`` is a
+   range of voxel indices, which may start before the array or run past it.
+
+   - ``Grid.world_to_box(roi)``: the voxels a read of a world ``Roi`` returns.
+   - ``Grid.box_to_world(box)``: the whole-nm ``Roi`` around a box, which
+     ``world_to_box`` maps back to the same box.
+   - ``coordinate_or_floats``: a voxel size or offset as a ``Coordinate`` when
+     it is whole, else as floats.
+   - ``list_populated_chunks``: the chunks of a local zarr v2 array that have a
+     file, by index.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.io.geometry.logger
+   cellmap_flow.io.geometry.CHUNK_KEY_RE
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.io.geometry.Box
+   cellmap_flow.io.geometry.Grid
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.io.geometry.coordinate_or_floats
+   cellmap_flow.io.geometry.list_populated_chunks
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:data:: CHUNK_KEY_RE
+
+.. py:class:: Box
+
+   Voxel indices ``begin`` up to ``begin + shape``, per axis.
+
+
+   .. py:attribute:: begin
+      :type:  Tuple[int, ...]
+
+
+   .. py:attribute:: shape
+      :type:  Tuple[int, ...]
+
+
+   .. py:property:: end
+      :type: Tuple[int, ...]
+
+
+
+.. py:class:: Grid
+
+   ``voxel_size`` and the lower corner of voxel 0 (``translation``),
+   nanometer floats, one per axis.
+
+
+   .. py:attribute:: voxel_size
+      :type:  Tuple[float, ...]
+
+
+   .. py:attribute:: translation
+      :type:  Tuple[float, ...]
+
+
+   .. py:method:: world_to_box(roi: funlib.geometry.Roi) -> Box
+
+      The voxels a read of ``roi`` returns: as many whole voxels as fit in
+      ``roi.shape``, from the one ``roi.begin`` is in.
+
+      That is the voxel below an off-grid start on either side of voxel 0:
+      half a voxel before the array starts at voxel -1. Float noise from
+      the division (9.9999999 voxels) counts as the whole number it is.
+
+      A start less than 1 nm below a voxel boundary (and nearer it than
+      half a voxel) is read from that boundary. A Roi holds whole
+      nanometers, so it cannot start on a boundary that is not one:
+      OpenOrganelle's voxel 0 starts at -2.62 nm (10.48 nm voxels), and
+      both ``box_to_world`` (which floors) and the served and blockwise
+      output grids (which round) start it at -3 nm. Read from the voxel
+      -3 nm is in, the array's own roi came back as a voxel of padding
+      and then voxels 0 to n-2, and a model reading such a grid (resampled
+      to 8 nm, say) got its input a voxel early. On a whole-nm grid (8 and
+      16 nm, a -4 nm corner) every whole-nm start is on a boundary or at
+      least 1 nm past one, so nothing changes there.
+
+
+
+   .. py:method:: box_to_world(box: Box) -> funlib.geometry.Roi
+
+      The integer-nm ``Roi`` covering ``box``: exactly its extent when
+      that is whole nanometers, else rounded out to them (a Roi holds
+      integers).
+
+      ``world_to_box`` maps it back to ``box`` when the voxels are 2 nm or
+      more. On a finer grid whose boundaries are not whole nanometers
+      (1 nm voxels centred on whole nm), each nanometer the rounding adds
+      can be half a voxel, and the box reads back with a voxel of padding.
+
+
+
+.. py:function:: coordinate_or_floats(values, what='voxel size', where='')
+
+   A Coordinate when every value is a whole number, else a tuple of floats.
+
+   Coordinate truncates: Coordinate(5.24) is 5, and a dataset at 5.24 nm
+   then read 5% of the wrong voxels. Non-integer values are kept as floats
+   (with a one-time warning) instead.
+
+
+.. py:function:: list_populated_chunks(array_dir) -> List[Tuple[int, ...]]
+
+   The indices of the chunks of a local zarr v2 array that have a file.
+
+   ``array_dir`` is the array's directory; its chunk files are the names
+   ``CHUNK_KEY_RE`` matches, and ``.zarray`` and the rest are not chunks.
+   In index order, not ``os.listdir``'s: that order differs between
+   filesystems (ext4 orders names by a per-filesystem hash), so the same
+   seed would draw different patches on another machine.
+
+

@@ -1,0 +1,517 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>cellmap_flow.io.metadata &mdash; CellMap Flow  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=4ae1632d" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css" />
+
+  
+    <link rel="shortcut icon" href="../../../../_static/favicon.ico"/>
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link rel="next" title="cellmap_flow.io.multiscale" href="../multiscale/index.html" />
+    <link rel="prev" title="cellmap_flow.io.geometry" href="../geometry/index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            CellMap Flow
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">CellMap-Flow API:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../../../../install.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../cli.html">Command line</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../scripts.html">Python Scripts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../yaml_config.html">YAML Configuration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../data_paths.html">Data paths</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../huggingface.html">HuggingFace Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../custom_script.html">Custom Model</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../post.html">PostProcessors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../plugins.html">Plugins</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../review.html">Reviewing instances</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../viewer_api.html">Viewer layer API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../architecture.html">Architecture</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../../../index.html">API Reference</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="../../index.html">cellmap_flow</a><ul class="current">
+<li class="toctree-l3 current"><a class="reference internal" href="../../index.html#submodules">Submodules</a><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="../../blockwise/index.html">cellmap_flow.blockwise</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../cli/index.html">cellmap_flow.cli</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../config/index.html">cellmap_flow.config</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../dashboard/index.html">cellmap_flow.dashboard</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../finetune/index.html">cellmap_flow.finetune</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../globals/index.html">cellmap_flow.globals</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../image_data_interface/index.html">cellmap_flow.image_data_interface</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../inference/index.html">cellmap_flow.inference</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../inferencer/index.html">cellmap_flow.inferencer</a></li>
+<li class="toctree-l4 current"><a class="reference internal" href="../index.html">cellmap_flow.io</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../jobs/index.html">cellmap_flow.jobs</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../logging_setup/index.html">cellmap_flow.logging_setup</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../models/index.html">cellmap_flow.models</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../norm/index.html">cellmap_flow.norm</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../pipeline_spec/index.html">cellmap_flow.pipeline_spec</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../plugins/index.html">cellmap_flow.plugins</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../post/index.html">cellmap_flow.post</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../process_chain/index.html">cellmap_flow.process_chain</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../review/index.html">cellmap_flow.review</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../review_index/index.html">cellmap_flow.review_index</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../server/index.html">cellmap_flow.server</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../serving/index.html">cellmap_flow.serving</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../utils/index.html">cellmap_flow.utils</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../viewer/index.html">cellmap_flow.viewer</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">CellMap Flow</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">API Reference</a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">cellmap_flow</a></li>
+          <li class="breadcrumb-item"><a href="../index.html">cellmap_flow.io</a></li>
+      <li class="breadcrumb-item active">cellmap_flow.io.metadata</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../../../../_sources/autoapi/cellmap_flow/io/metadata/index.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-cellmap_flow.io.metadata">
+<span id="cellmap-flow-io-metadata"></span><h1>cellmap_flow.io.metadata<a class="headerlink" href="#module-cellmap_flow.io.metadata" title="Link to this heading"></a></h1>
+<p>Array metadata for every format cellmap-flow reads, as one <code class="docutils literal notranslate"><span class="pre">ArrayMeta</span></code>.</p>
+<p><code class="docutils literal notranslate"><span class="pre">read_array_meta(path)</span></code> reads zarr v2 and v3, N5 and neuroglancer
+precomputed, on disk or at an http(s), s3 or gs URL: every document is read
+through <code class="docutils literal notranslate"><span class="pre">io.store</span></code>, so a URL reads as the same files on disk do. Every axis is
+kept, in the array’s own (C) order; sizes and translations are nanometer
+floats, and the translation is the lower corner of voxel 0 – an OME
+translation (voxel 0’s centre) is converted exactly, with no rounding onto
+the voxel grid. <code class="docutils literal notranslate"><span class="pre">.spatial()</span></code> drops the channel/time axes.</p>
+<p>Four parsers produce it:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">_ome</span></code>: an OME-NGFF multiscales entry (v2 <code class="docutils literal notranslate"><span class="pre">.zattrs</span></code> and v3
+<code class="docutils literal notranslate"><span class="pre">zarr.json</span></code> alike), matched on <code class="docutils literal notranslate"><span class="pre">datasets[].path</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">_n5</span></code>: the N5/funlib attribute search – <code class="docutils literal notranslate"><span class="pre">resolution</span></code>, <code class="docutils literal notranslate"><span class="pre">scale</span></code>,
+<code class="docutils literal notranslate"><span class="pre">pixelResolution</span></code> x <code class="docutils literal notranslate"><span class="pre">downsamplingFactors</span></code>, <code class="docutils literal notranslate"><span class="pre">transform</span></code>, <code class="docutils literal notranslate"><span class="pre">offset</span></code>,
+<code class="docutils literal notranslate"><span class="pre">units</span></code> – on an array and its parent group, with the axis reversal N5
+needs. zarr v2 arrays without OME metadata go through it too, and keep
+its rounding of the offset onto the voxel grid (<code class="docutils literal notranslate"><span class="pre">regularize_offset</span></code>).</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">legacy_attrs</span></code>: <code class="docutils literal notranslate"><span class="pre">transform</span></code> or <code class="docutils literal notranslate"><span class="pre">resolution</span></code>/<code class="docutils literal notranslate"><span class="pre">offset</span></code> on a v3
+array itself (and on crops), taken as written.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">_precomputed</span></code>: the volume’s <code class="docutils literal notranslate"><span class="pre">info</span></code> JSON, as tensorstore reads it.</p></li>
+</ul>
+<p><code class="docutils literal notranslate"><span class="pre">list_levels(path)</span></code> gives the levels of an OME multiscale group, or the
+scales of a precomputed volume.</p>
+<p>Each format’s reader keeps the lookup order and fallbacks of the
+per-format reader it replaced; tests/utils/test_io_metadata.py pins them.</p>
+<section id="attributes">
+<h2>Attributes<a class="headerlink" href="#attributes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.io.metadata.logger" title="cellmap_flow.io.metadata.logger"><code class="xref py py-obj docutils literal notranslate"><span class="pre">logger</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.io.metadata.NANOMETER" title="cellmap_flow.io.metadata.NANOMETER"><code class="xref py py-obj docutils literal notranslate"><span class="pre">NANOMETER</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="classes">
+<h2>Classes<a class="headerlink" href="#classes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.io.metadata.ArrayMeta" title="cellmap_flow.io.metadata.ArrayMeta"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ArrayMeta</span></code></a></p></td>
+<td><p>What one array is, independent of its format.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="functions">
+<h2>Functions<a class="headerlink" href="#functions" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.io.metadata.nm_per_unit" title="cellmap_flow.io.metadata.nm_per_unit"><code class="xref py py-obj docutils literal notranslate"><span class="pre">nm_per_unit</span></code></a>(→ float)</p></td>
+<td><p>How many nanometers one <code class="docutils literal notranslate"><span class="pre">unit</span></code> is; 1 for a missing or unknown unit.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.io.metadata.to_nm" title="cellmap_flow.io.metadata.to_nm"><code class="xref py py-obj docutils literal notranslate"><span class="pre">to_nm</span></code></a>(→ Tuple[float, ...])</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">values</span></code> (one per axis) in nanometers; <code class="docutils literal notranslate"><span class="pre">units</span></code> None means nm.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.io.metadata.spatial_axes" title="cellmap_flow.io.metadata.spatial_axes"><code class="xref py py-obj docutils literal notranslate"><span class="pre">spatial_axes</span></code></a>(axes)</p></td>
+<td><p>Indices, names and units of the spatial axes of an OME <code class="docutils literal notranslate"><span class="pre">axes</span></code> list.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.io.metadata.snap_integral" title="cellmap_flow.io.metadata.snap_integral"><code class="xref py py-obj docutils literal notranslate"><span class="pre">snap_integral</span></code></a>(values)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">values</span></code> as floats, with near-whole numbers made exactly whole.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.io.metadata.is_integral" title="cellmap_flow.io.metadata.is_integral"><code class="xref py py-obj docutils literal notranslate"><span class="pre">is_integral</span></code></a>(→ bool)</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.io.metadata.regularize_offset" title="cellmap_flow.io.metadata.regularize_offset"><code class="xref py py-obj docutils literal notranslate"><span class="pre">regularize_offset</span></code></a>(voxel_size_float, offset_float)</p></td>
+<td><p>offset is not a multiple of voxel_size. This is often due to someone defining</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.io.metadata.match_dataset" title="cellmap_flow.io.metadata.match_dataset"><code class="xref py py-obj docutils literal notranslate"><span class="pre">match_dataset</span></code></a>(→ Optional[dict])</p></td>
+<td><p>The <code class="docutils literal notranslate"><span class="pre">datasets</span></code> entry of one multiscales item whose path is</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.io.metadata.dataset_transforms" title="cellmap_flow.io.metadata.dataset_transforms"><code class="xref py py-obj docutils literal notranslate"><span class="pre">dataset_transforms</span></code></a>(entry)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">(scale,</span> <span class="pre">translation)</span></code> of an OME <code class="docutils literal notranslate"><span class="pre">datasets</span></code> entry as written, each</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.io.metadata.n5_voxel_size" title="cellmap_flow.io.metadata.n5_voxel_size"><code class="xref py py-obj docutils literal notranslate"><span class="pre">n5_voxel_size</span></code></a>(items, order)</p></td>
+<td><p>The voxel size in the first of <code class="docutils literal notranslate"><span class="pre">items</span></code> (array attrs, then its</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.io.metadata.n5_offset" title="cellmap_flow.io.metadata.n5_offset"><code class="xref py py-obj docutils literal notranslate"><span class="pre">n5_offset</span></code></a>(items, order)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">offset</span></code>, or <code class="docutils literal notranslate"><span class="pre">transform.translate</span></code>, as <code class="docutils literal notranslate"><span class="pre">n5_voxel_size</span></code> finds it.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.io.metadata.n5_units" title="cellmap_flow.io.metadata.n5_units"><code class="xref py py-obj docutils literal notranslate"><span class="pre">n5_units</span></code></a>(items, order, ndim)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">units</span></code>, <code class="docutils literal notranslate"><span class="pre">pixelResolution.unit</span></code> or <code class="docutils literal notranslate"><span class="pre">transform.units</span></code>, one per</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.io.metadata.legacy_attrs" title="cellmap_flow.io.metadata.legacy_attrs"><code class="xref py py-obj docutils literal notranslate"><span class="pre">legacy_attrs</span></code></a>(→ Tuple[List[float], List[float]])</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">(voxel_size,</span> <span class="pre">offset)</span></code> from an array's own <code class="docutils literal notranslate"><span class="pre">transform</span></code> or</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.io.metadata.read_zarr_json" title="cellmap_flow.io.metadata.read_zarr_json"><code class="xref py py-obj docutils literal notranslate"><span class="pre">read_zarr_json</span></code></a>(→ dict)</p></td>
+<td><p>The <code class="docutils literal notranslate"><span class="pre">zarr.json</span></code> of the v3 node at <code class="docutils literal notranslate"><span class="pre">path</span></code>; FileNotFoundError when</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.io.metadata.attrs_from_meta" title="cellmap_flow.io.metadata.attrs_from_meta"><code class="xref py py-obj docutils literal notranslate"><span class="pre">attrs_from_meta</span></code></a>(→ dict)</p></td>
+<td><p>Merge OME-NGFF 0.5's nested <code class="docutils literal notranslate"><span class="pre">attributes.ome</span></code> with the top-level</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.io.metadata.multiscales_from_group" title="cellmap_flow.io.metadata.multiscales_from_group"><code class="xref py py-obj docutils literal notranslate"><span class="pre">multiscales_from_group</span></code></a>(→ Optional[dict])</p></td>
+<td><p>The first multiscales item of a v3 group, or None (also for an array).</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.io.metadata.node_type" title="cellmap_flow.io.metadata.node_type"><code class="xref py py-obj docutils literal notranslate"><span class="pre">node_type</span></code></a>(→ Tuple[str, str])</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">(node,</span> <span class="pre">&quot;group&quot;</span> <span class="pre">or</span> <span class="pre">&quot;array&quot;)</span></code>: the zarr v2, v3 or N5 node that</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.io.metadata.read_array_meta" title="cellmap_flow.io.metadata.read_array_meta"><code class="xref py py-obj docutils literal notranslate"><span class="pre">read_array_meta</span></code></a>(→ ArrayMeta)</p></td>
+<td><p>Metadata of the array at <code class="docutils literal notranslate"><span class="pre">path</span></code> (see the module docstring). A path at</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.io.metadata.list_levels" title="cellmap_flow.io.metadata.list_levels"><code class="xref py py-obj docutils literal notranslate"><span class="pre">list_levels</span></code></a>(→ List[Tuple[str, ArrayMeta]])</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">[(dataset</span> <span class="pre">path,</span> <span class="pre">ArrayMeta)]</span></code> for each level of the OME multiscale</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="module-contents">
+<h2>Module Contents<a class="headerlink" href="#module-contents" title="Link to this heading"></a></h2>
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.io.metadata.logger">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.io.metadata.</span></span><span class="sig-name descname"><span class="pre">logger</span></span><a class="headerlink" href="#cellmap_flow.io.metadata.logger" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.io.metadata.NANOMETER">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.io.metadata.</span></span><span class="sig-name descname"><span class="pre">NANOMETER</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'nanometer'</span></span><a class="headerlink" href="#cellmap_flow.io.metadata.NANOMETER" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.io.metadata.nm_per_unit">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.io.metadata.</span></span><span class="sig-name descname"><span class="pre">nm_per_unit</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">unit</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">float</span></span></span><a class="headerlink" href="#cellmap_flow.io.metadata.nm_per_unit" title="Link to this definition"></a></dt>
+<dd><p>How many nanometers one <code class="docutils literal notranslate"><span class="pre">unit</span></code> is; 1 for a missing or unknown unit.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.io.metadata.to_nm">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.io.metadata.</span></span><span class="sig-name descname"><span class="pre">to_nm</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">values</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">units</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#cellmap_flow.io.metadata.to_nm" title="Link to this definition"></a></dt>
+<dd><p><code class="docutils literal notranslate"><span class="pre">values</span></code> (one per axis) in nanometers; <code class="docutils literal notranslate"><span class="pre">units</span></code> None means nm.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.io.metadata.spatial_axes">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.io.metadata.</span></span><span class="sig-name descname"><span class="pre">spatial_axes</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">axes</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.io.metadata.spatial_axes" title="Link to this definition"></a></dt>
+<dd><p>Indices, names and units of the spatial axes of an OME <code class="docutils literal notranslate"><span class="pre">axes</span></code> list.</p>
+<p>Returns <code class="docutils literal notranslate"><span class="pre">(None,</span> <span class="pre">None,</span> <span class="pre">None)</span></code> when there is no axes list. Axes typed
+“space” are spatial; untyped ones are unless named like a channel or time
+axis (OME 0.3 lists bare names).</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.io.metadata.snap_integral">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.io.metadata.</span></span><span class="sig-name descname"><span class="pre">snap_integral</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">values</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.io.metadata.snap_integral" title="Link to this definition"></a></dt>
+<dd><p><code class="docutils literal notranslate"><span class="pre">values</span></code> as floats, with near-whole numbers made exactly whole.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.io.metadata.is_integral">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.io.metadata.</span></span><span class="sig-name descname"><span class="pre">is_integral</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">values</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#cellmap_flow.io.metadata.is_integral" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.io.metadata.regularize_offset">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.io.metadata.</span></span><span class="sig-name descname"><span class="pre">regularize_offset</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">voxel_size_float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">offset_float</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.io.metadata.regularize_offset" title="Link to this definition"></a></dt>
+<dd><blockquote>
+<div><p>offset is not a multiple of voxel_size. This is often due to someone defining
+offset to the point source of each array element i.e. the center of the rendered
+voxel, vs the offset to the corner of the voxel.
+apparently this can be a heated discussion. See here for arguments against
+the convention we are using: <a class="reference external" href="http://alvyray.com/Memos/CG/Microsoft/6_pixel.pdf">http://alvyray.com/Memos/CG/Microsoft/6_pixel.pdf</a></p>
+</div></blockquote>
+<p>Only the legacy (non-OME) attributes go through this; an OME translation
+is converted to a corner exactly instead.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>voxel_size_float</strong> (<em>[</em><em>float</em><em>]</em>) – float voxel size list</p></li>
+<li><p><strong>offset_float</strong> (<em>[</em><em>float</em><em>]</em>) – float offset list</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>returned offset size that is multiple of voxel size.
+For a non-integer voxel size, two tuples of floats instead (the same
+rounding, without truncating the voxel size to an integer first).</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>(Coordinate, Coordinate))</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="cellmap_flow.io.metadata.ArrayMeta">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.io.metadata.</span></span><span class="sig-name descname"><span class="pre">ArrayMeta</span></span><a class="headerlink" href="#cellmap_flow.io.metadata.ArrayMeta" title="Link to this definition"></a></dt>
+<dd><p>What one array is, independent of its format.</p>
+<p>Every per-axis tuple has one entry per array dimension, in the array’s
+(C) order. <code class="docutils literal notranslate"><span class="pre">units[i]</span></code> is “nanometer” on a spatial axis – its
+<code class="docutils literal notranslate"><span class="pre">voxel_size</span></code> and <code class="docutils literal notranslate"><span class="pre">translation</span></code> have been converted to nm – and None
+on a channel or time axis, where <code class="docutils literal notranslate"><span class="pre">voxel_size</span></code> is 1.0 and
+<code class="docutils literal notranslate"><span class="pre">translation</span></code> 0.0. <code class="docutils literal notranslate"><span class="pre">translation</span></code> is the lower corner of voxel 0.
+An axis nobody named has the name “”.</p>
+<p><code class="docutils literal notranslate"><span class="pre">format</span></code> is “zarr2”, “zarr3”, “n5” or “precomputed”.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.io.metadata.ArrayMeta.path">
+<span class="sig-name descname"><span class="pre">path</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></span><a class="headerlink" href="#cellmap_flow.io.metadata.ArrayMeta.path" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.io.metadata.ArrayMeta.format">
+<span class="sig-name descname"><span class="pre">format</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></span><a class="headerlink" href="#cellmap_flow.io.metadata.ArrayMeta.format" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.io.metadata.ArrayMeta.shape">
+<span class="sig-name descname"><span class="pre">shape</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span></span><a class="headerlink" href="#cellmap_flow.io.metadata.ArrayMeta.shape" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.io.metadata.ArrayMeta.dtype">
+<span class="sig-name descname"><span class="pre">dtype</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">numpy.dtype</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.io.metadata.ArrayMeta.dtype" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.io.metadata.ArrayMeta.chunk_shape">
+<span class="sig-name descname"><span class="pre">chunk_shape</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span></span><a class="headerlink" href="#cellmap_flow.io.metadata.ArrayMeta.chunk_shape" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.io.metadata.ArrayMeta.axes">
+<span class="sig-name descname"><span class="pre">axes</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span></span><a class="headerlink" href="#cellmap_flow.io.metadata.ArrayMeta.axes" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.io.metadata.ArrayMeta.units">
+<span class="sig-name descname"><span class="pre">units</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span></span><a class="headerlink" href="#cellmap_flow.io.metadata.ArrayMeta.units" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.io.metadata.ArrayMeta.voxel_size">
+<span class="sig-name descname"><span class="pre">voxel_size</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span></span><a class="headerlink" href="#cellmap_flow.io.metadata.ArrayMeta.voxel_size" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.io.metadata.ArrayMeta.translation">
+<span class="sig-name descname"><span class="pre">translation</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span></span><a class="headerlink" href="#cellmap_flow.io.metadata.ArrayMeta.translation" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.io.metadata.ArrayMeta.fill_value">
+<span class="sig-name descname"><span class="pre">fill_value</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">object</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.io.metadata.ArrayMeta.fill_value" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cellmap_flow.io.metadata.ArrayMeta.spatial_indices">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">spatial_indices</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span></span><a class="headerlink" href="#cellmap_flow.io.metadata.ArrayMeta.spatial_indices" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cellmap_flow.io.metadata.ArrayMeta.channel_axis">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">channel_axis</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.io.metadata.ArrayMeta.channel_axis" title="Link to this definition"></a></dt>
+<dd><p>The first non-spatial axis that is not time, or None.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.io.metadata.ArrayMeta.spatial">
+<span class="sig-name descname"><span class="pre">spatial</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#cellmap_flow.io.metadata.ArrayMeta" title="cellmap_flow.io.metadata.ArrayMeta"><span class="pre">ArrayMeta</span></a></span></span><a class="headerlink" href="#cellmap_flow.io.metadata.ArrayMeta.spatial" title="Link to this definition"></a></dt>
+<dd><p>This array’s metadata with only its spatial axes.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.io.metadata.match_dataset">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.io.metadata.</span></span><span class="sig-name descname"><span class="pre">match_dataset</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">multiscale</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dataset_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#cellmap_flow.io.metadata.match_dataset" title="Link to this definition"></a></dt>
+<dd><p>The <code class="docutils literal notranslate"><span class="pre">datasets</span></code> entry of one multiscales item whose path is
+<code class="docutils literal notranslate"><span class="pre">dataset_path</span></code> (leading and trailing “/” ignored), or None.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.io.metadata.dataset_transforms">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.io.metadata.</span></span><span class="sig-name descname"><span class="pre">dataset_transforms</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">entry</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.io.metadata.dataset_transforms" title="Link to this definition"></a></dt>
+<dd><p><code class="docutils literal notranslate"><span class="pre">(scale,</span> <span class="pre">translation)</span></code> of an OME <code class="docutils literal notranslate"><span class="pre">datasets</span></code> entry as written, each
+None when the entry has none.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.io.metadata.n5_voxel_size">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.io.metadata.</span></span><span class="sig-name descname"><span class="pre">n5_voxel_size</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">items</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Sequence</span><span class="p"><span class="pre">[</span></span><span class="pre">dict</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">order</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.io.metadata.n5_voxel_size" title="Link to this definition"></a></dt>
+<dd><p>The voxel size in the first of <code class="docutils literal notranslate"><span class="pre">items</span></code> (array attrs, then its
+parent’s) that has one: <code class="docutils literal notranslate"><span class="pre">resolution</span></code>, <code class="docutils literal notranslate"><span class="pre">scale</span></code>, <code class="docutils literal notranslate"><span class="pre">pixelResolution</span></code>
+times <code class="docutils literal notranslate"><span class="pre">downsamplingFactors</span></code>, or <code class="docutils literal notranslate"><span class="pre">transform.scale</span></code>.</p>
+<p><code class="docutils literal notranslate"><span class="pre">order</span></code> is the axis order the caller reads in (“C”, or “F” for N5).
+<code class="docutils literal notranslate"><span class="pre">transform</span></code> states its own <code class="docutils literal notranslate"><span class="pre">ordering</span></code> (C unless it says otherwise:
+Davis writes C order whatever the store) and is reversed to <code class="docutils literal notranslate"><span class="pre">order</span></code>.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.io.metadata.n5_offset">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.io.metadata.</span></span><span class="sig-name descname"><span class="pre">n5_offset</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">items</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Sequence</span><span class="p"><span class="pre">[</span></span><span class="pre">dict</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">order</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.io.metadata.n5_offset" title="Link to this definition"></a></dt>
+<dd><p><code class="docutils literal notranslate"><span class="pre">offset</span></code>, or <code class="docutils literal notranslate"><span class="pre">transform.translate</span></code>, as <code class="docutils literal notranslate"><span class="pre">n5_voxel_size</span></code> finds it.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.io.metadata.n5_units">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.io.metadata.</span></span><span class="sig-name descname"><span class="pre">n5_units</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">items</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Sequence</span><span class="p"><span class="pre">[</span></span><span class="pre">dict</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">order</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ndim</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.io.metadata.n5_units" title="Link to this definition"></a></dt>
+<dd><p><code class="docutils literal notranslate"><span class="pre">units</span></code>, <code class="docutils literal notranslate"><span class="pre">pixelResolution.unit</span></code> or <code class="docutils literal notranslate"><span class="pre">transform.units</span></code>, one per
+axis (see _per_axis); <code class="docutils literal notranslate"><span class="pre">ndim</span></code> “pixels” when there are none.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.io.metadata.legacy_attrs">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.io.metadata.</span></span><span class="sig-name descname"><span class="pre">legacy_attrs</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">attrs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ndim</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#cellmap_flow.io.metadata.legacy_attrs" title="Link to this definition"></a></dt>
+<dd><p><code class="docutils literal notranslate"><span class="pre">(voxel_size,</span> <span class="pre">offset)</span></code> from an array’s own <code class="docutils literal notranslate"><span class="pre">transform</span></code> or
+<code class="docutils literal notranslate"><span class="pre">resolution</span></code>/<code class="docutils literal notranslate"><span class="pre">offset</span></code> attributes, as written; 1 and 0 without them.</p>
+<p>For zarr v3 plain arrays and imported crops, which never went through
+the N5 search: no parent lookup, no units, no rounding.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.io.metadata.read_zarr_json">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.io.metadata.</span></span><span class="sig-name descname"><span class="pre">read_zarr_json</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span></span></span><a class="headerlink" href="#cellmap_flow.io.metadata.read_zarr_json" title="Link to this definition"></a></dt>
+<dd><p>The <code class="docutils literal notranslate"><span class="pre">zarr.json</span></code> of the v3 node at <code class="docutils literal notranslate"><span class="pre">path</span></code>; FileNotFoundError when
+there is none.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.io.metadata.attrs_from_meta">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.io.metadata.</span></span><span class="sig-name descname"><span class="pre">attrs_from_meta</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">meta</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span></span></span><a class="headerlink" href="#cellmap_flow.io.metadata.attrs_from_meta" title="Link to this definition"></a></dt>
+<dd><p>Merge OME-NGFF 0.5’s nested <code class="docutils literal notranslate"><span class="pre">attributes.ome</span></code> with the top-level
+<code class="docutils literal notranslate"><span class="pre">attributes</span></code> dict (some writers emit OME metadata unnested).</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.io.metadata.multiscales_from_group">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.io.metadata.</span></span><span class="sig-name descname"><span class="pre">multiscales_from_group</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">group_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#cellmap_flow.io.metadata.multiscales_from_group" title="Link to this definition"></a></dt>
+<dd><p>The first multiscales item of a v3 group, or None (also for an array).</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.io.metadata.node_type">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.io.metadata.</span></span><span class="sig-name descname"><span class="pre">node_type</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#cellmap_flow.io.metadata.node_type" title="Link to this definition"></a></dt>
+<dd><p><code class="docutils literal notranslate"><span class="pre">(node,</span> <span class="pre">&quot;group&quot;</span> <span class="pre">or</span> <span class="pre">&quot;array&quot;)</span></code>: the zarr v2, v3 or N5 node that
+answers for <code class="docutils literal notranslate"><span class="pre">path</span></code> and what it is. The node is <code class="docutils literal notranslate"><span class="pre">path</span></code> itself, except
+on disk under a v3 node (<code class="docutils literal notranslate"><span class="pre">_v3_node</span></code>). FileNotFoundError when there is
+none.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.io.metadata.read_array_meta">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.io.metadata.</span></span><span class="sig-name descname"><span class="pre">read_array_meta</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#cellmap_flow.io.metadata.ArrayMeta" title="cellmap_flow.io.metadata.ArrayMeta"><span class="pre">ArrayMeta</span></a></span></span><a class="headerlink" href="#cellmap_flow.io.metadata.read_array_meta" title="Link to this definition"></a></dt>
+<dd><p>Metadata of the array at <code class="docutils literal notranslate"><span class="pre">path</span></code> (see the module docstring). A path at
+a group reads its first level: the first its multiscales list, else its
+first array (<code class="docutils literal notranslate"><span class="pre">_child_names</span></code>).</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.io.metadata.list_levels">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.io.metadata.</span></span><span class="sig-name descname"><span class="pre">list_levels</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">group_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="#cellmap_flow.io.metadata.ArrayMeta" title="cellmap_flow.io.metadata.ArrayMeta"><span class="pre">ArrayMeta</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#cellmap_flow.io.metadata.list_levels" title="Link to this definition"></a></dt>
+<dd><p><code class="docutils literal notranslate"><span class="pre">[(dataset</span> <span class="pre">path,</span> <span class="pre">ArrayMeta)]</span></code> for each level of the OME multiscale
+group at <code class="docutils literal notranslate"><span class="pre">group_path</span></code>, in the order its <code class="docutils literal notranslate"><span class="pre">datasets</span></code> list them, or of
+the precomputed volume there (<code class="docutils literal notranslate"><span class="pre">_precomputed_levels</span></code>).</p>
+<p>Raises when there is no such group (KeyError for a v2 group without
+multiscales, ValueError for a v3 one).</p>
+</dd></dl>
+
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../geometry/index.html" class="btn btn-neutral float-left" title="cellmap_flow.io.geometry" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../multiscale/index.html" class="btn btn-neutral float-right" title="cellmap_flow.io.multiscale" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, David Ackerman,  Marwan Zouinkhi, Jeff Rhoades, Larissa Heinrich, Aubrey Weigel.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

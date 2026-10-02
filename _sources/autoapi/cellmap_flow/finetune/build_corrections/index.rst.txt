@@ -67,13 +67,17 @@ Module Contents
    out_channels, channels_names, model_name) from a repo's metadata.json.
 
 
-.. py:function:: build_corrections(*, raw_dataset_path, crops_yaml, output_dir, repo=None, revision=None, input_shape=None, output_shape=None, input_voxel_size=None, output_voxel_size=None, model_name=None, patches_per_epoch=None, jitter_voxels=None, seed=0, dense_to_sparse_ratio=None, input_norm=None, postprocess=None, extra_record=None)
+.. py:function:: build_corrections(*, raw_dataset_path, crops_yaml, output_dir, repo=None, revision=None, input_shape=None, output_shape=None, input_voxel_size=None, output_voxel_size=None, model_name=None, patches_per_epoch=None, jitter_voxels=None, seed=None, dense_to_sparse_ratio=None, input_norm=None, postprocess=None, extra_record=None)
 
    Create ``output_dir`` with the annotation volume, imported crops and
    trainer manifest. Returns the build record (also written to disk).
 
    ``output_dir`` must not already contain a volume: this builds from
    scratch so the record describes everything in it.
+
+   ``patches_per_epoch``, ``jitter_voxels``, ``seed`` and
+   ``dense_to_sparse_ratio`` are the CLI's flags: each one given (not None)
+   wins over the crops YAML's own setting, which applies otherwise.
 
 
 .. py:function:: main(argv=None)

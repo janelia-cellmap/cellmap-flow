@@ -1,0 +1,108 @@
+cellmap_flow.jobs.site
+======================
+
+.. py:module:: cellmap_flow.jobs.site
+
+.. autoapi-nested-parse::
+
+   The numbers that are about the cluster, not about cellmap-flow.
+
+   Which GPU queues to offer, how many cores a job asks for, how long it may
+   run, and how long to wait on LSF: all of it is Janelia's, and it was spread
+   through the launch code as literals. It lives here so that the reasons sit
+   next to the numbers, and so that another site means another profile rather
+   than a search for "gpu_h100".
+
+   Only ``JANELIA`` exists. ``current_site()`` is the one place that will pick
+   between profiles once there is more than one.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.jobs.site.JANELIA
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.jobs.site.SiteProfile
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.jobs.site.current_site
+
+
+Module Contents
+---------------
+
+.. py:class:: SiteProfile
+
+   .. py:attribute:: gpu_queues
+      :type:  Tuple[Tuple[str, str, str], ...]
+
+
+   .. py:attribute:: default_queue
+      :type:  str
+      :value: 'gpu_h100'
+
+
+
+   .. py:attribute:: default_charge_group
+      :type:  str
+      :value: 'cellmap'
+
+
+
+   .. py:attribute:: default_walltime
+      :type:  str
+      :value: '08:00'
+
+
+
+   .. py:attribute:: server_cpus
+      :type:  int
+      :value: 4
+
+
+
+   .. py:attribute:: worker_cpus
+      :type:  int
+      :value: 12
+
+
+
+   .. py:attribute:: pending_fallback_seconds
+      :type:  int
+      :value: 180
+
+
+
+   .. py:attribute:: startup_timeout_seconds
+      :type:  int
+      :value: 300
+
+
+
+   .. py:attribute:: bsub_timeout_seconds
+      :type:  int
+      :value: 30
+
+
+
+.. py:data:: JANELIA
+
+.. py:function:: current_site() -> SiteProfile
+
+   The profile of the cluster this process submits to.
+
+

@@ -1,0 +1,396 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>cellmap_flow.finetune.session.volume &mdash; CellMap Flow  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../../_static/graphviz.css?v=4ae1632d" />
+      <link rel="stylesheet" type="text/css" href="../../../../../_static/css/custom.css" />
+
+  
+    <link rel="shortcut icon" href="../../../../../_static/favicon.ico"/>
+      <script src="../../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../../../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../search.html" />
+    <link rel="next" title="cellmap_flow.finetune.session_loop" href="../../session_loop/index.html" />
+    <link rel="prev" title="cellmap_flow.finetune.session.sync" href="../sync/index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../../index.html" class="icon icon-home">
+            CellMap Flow
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">CellMap-Flow API:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../../../../../install.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../cli.html">Command line</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../scripts.html">Python Scripts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../yaml_config.html">YAML Configuration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../data_paths.html">Data paths</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../huggingface.html">HuggingFace Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../custom_script.html">Custom Model</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../post.html">PostProcessors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../plugins.html">Plugins</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../review.html">Reviewing instances</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../viewer_api.html">Viewer layer API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../architecture.html">Architecture</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../../../../index.html">API Reference</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="../../../index.html">cellmap_flow</a><ul class="current">
+<li class="toctree-l3 current"><a class="reference internal" href="../../../index.html#submodules">Submodules</a><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="../../../blockwise/index.html">cellmap_flow.blockwise</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../cli/index.html">cellmap_flow.cli</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../config/index.html">cellmap_flow.config</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../dashboard/index.html">cellmap_flow.dashboard</a></li>
+<li class="toctree-l4 current"><a class="reference internal" href="../../index.html">cellmap_flow.finetune</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../globals/index.html">cellmap_flow.globals</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../image_data_interface/index.html">cellmap_flow.image_data_interface</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../inference/index.html">cellmap_flow.inference</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../inferencer/index.html">cellmap_flow.inferencer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../io/index.html">cellmap_flow.io</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../jobs/index.html">cellmap_flow.jobs</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../logging_setup/index.html">cellmap_flow.logging_setup</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../models/index.html">cellmap_flow.models</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../norm/index.html">cellmap_flow.norm</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../pipeline_spec/index.html">cellmap_flow.pipeline_spec</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../plugins/index.html">cellmap_flow.plugins</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../post/index.html">cellmap_flow.post</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../process_chain/index.html">cellmap_flow.process_chain</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../review/index.html">cellmap_flow.review</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../review_index/index.html">cellmap_flow.review_index</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../server/index.html">cellmap_flow.server</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../serving/index.html">cellmap_flow.serving</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../utils/index.html">cellmap_flow.utils</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../viewer/index.html">cellmap_flow.viewer</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../../index.html">CellMap Flow</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../../index.html">API Reference</a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">cellmap_flow</a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">cellmap_flow.finetune</a></li>
+          <li class="breadcrumb-item"><a href="../index.html">cellmap_flow.finetune.session</a></li>
+      <li class="breadcrumb-item active">cellmap_flow.finetune.session.volume</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../../../../../_sources/autoapi/cellmap_flow/finetune/session/volume/index.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-cellmap_flow.finetune.session.volume">
+<span id="cellmap-flow-finetune-session-volume"></span><h1>cellmap_flow.finetune.session.volume<a class="headerlink" href="#module-cellmap_flow.finetune.session.volume" title="Link to this heading"></a></h1>
+<p>Annotation volumes: planning, creating, reading and writing crops into them.</p>
+<p>An annotation volume is a zarr v2 group <code class="docutils literal notranslate"><span class="pre">&lt;id&gt;.zarr</span></code> whose
+<code class="docutils literal notranslate"><span class="pre">annotation/s0</span></code> holds the labels: 0 unannotated, 1 background, 2 and up
+foreground (instance ids, for instance corrections). It covers the whole raw
+dataset on the grid predictions are made on, with one chunk per model output,
+so each chunk is one training sample. Only painted or imported chunks exist
+on disk. MinIO and neuroglancer write chunks straight into it, so its layout
+– uint8 unless the labels are instance ids, “.” separated chunk keys, Blosc
+zstd level 3 – and its root attrs are a format.</p>
+<p>The root attr <code class="docutils literal notranslate"><span class="pre">dataset_offset_nm</span></code> is voxel 0’s <em>centre</em> and is also the
+OME translation, since that is where Neuroglancer draws voxel 0 while it is
+painted; <code class="docutils literal notranslate"><span class="pre">volume_corner_nm</span></code> gives the corner.</p>
+<section id="attributes">
+<h2>Attributes<a class="headerlink" href="#attributes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.session.volume.logger" title="cellmap_flow.finetune.session.volume.logger"><code class="xref py py-obj docutils literal notranslate"><span class="pre">logger</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.finetune.session.volume.GEOMETRY_ATTRS" title="cellmap_flow.finetune.session.volume.GEOMETRY_ATTRS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">GEOMETRY_ATTRS</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="exceptions">
+<h2>Exceptions<a class="headerlink" href="#exceptions" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.session.volume.NotAnAnnotationVolume" title="cellmap_flow.finetune.session.volume.NotAnAnnotationVolume"><code class="xref py py-obj docutils literal notranslate"><span class="pre">NotAnAnnotationVolume</span></code></a></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">read_volume</span></code> was given a zarr whose root <code class="docutils literal notranslate"><span class="pre">type</span></code> is not annotation_volume.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="classes">
+<h2>Classes<a class="headerlink" href="#classes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.session.volume.VolumeGeometry" title="cellmap_flow.finetune.session.volume.VolumeGeometry"><code class="xref py py-obj docutils literal notranslate"><span class="pre">VolumeGeometry</span></code></a></p></td>
+<td><p>Where a volume lies and what model it is for; see <code class="docutils literal notranslate"><span class="pre">plan_volume</span></code>.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="functions">
+<h2>Functions<a class="headerlink" href="#functions" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.session.volume.new_volume_id" title="cellmap_flow.finetune.session.volume.new_volume_id"><code class="xref py py-obj docutils literal notranslate"><span class="pre">new_volume_id</span></code></a>(→ str)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">vol-&lt;8</span> <span class="pre">hex&gt;-&lt;YYYYmmdd-HHMMSS&gt;</span></code>; the volume's zarr and bucket key are <code class="docutils literal notranslate"><span class="pre">&lt;id&gt;.zarr</span></code>.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.finetune.session.volume.volume_corner_nm" title="cellmap_flow.finetune.session.volume.volume_corner_nm"><code class="xref py py-obj docutils literal notranslate"><span class="pre">volume_corner_nm</span></code></a>(→ numpy.ndarray)</p></td>
+<td><p>The world position of an annotation volume's voxel-0 lower corner, in nm.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.session.volume.plan_volume" title="cellmap_flow.finetune.session.volume.plan_volume"><code class="xref py py-obj docutils literal notranslate"><span class="pre">plan_volume</span></code></a>(→ VolumeGeometry)</p></td>
+<td><p>Where a new volume over <code class="docutils literal notranslate"><span class="pre">raw_dataset_path</span></code> lies, for a model.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.finetune.session.volume.create_volume_zarr" title="cellmap_flow.finetune.session.volume.create_volume_zarr"><code class="xref py py-obj docutils literal notranslate"><span class="pre">create_volume_zarr</span></code></a>(→ str)</p></td>
+<td><p>Write an empty volume: its metadata only, no chunks. Returns <code class="docutils literal notranslate"><span class="pre">zarr_path</span></code>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.session.volume.read_volume" title="cellmap_flow.finetune.session.volume.read_volume"><code class="xref py py-obj docutils literal notranslate"><span class="pre">read_volume</span></code></a>(→ dict)</p></td>
+<td><p>The registry record of the annotation volume at <code class="docutils literal notranslate"><span class="pre">zarr_path</span></code>, from its attrs.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.finetune.session.volume.build_manifest" title="cellmap_flow.finetune.session.volume.build_manifest"><code class="xref py py-obj docutils literal notranslate"><span class="pre">build_manifest</span></code></a>(→ dict)</p></td>
+<td><p>The <code class="docutils literal notranslate"><span class="pre">_virtual_sources.json</span></code> that trains on the volume a record describes.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.session.volume.majority_vote_downsample" title="cellmap_flow.finetune.session.volume.majority_vote_downsample"><code class="xref py py-obj docutils literal notranslate"><span class="pre">majority_vote_downsample</span></code></a>(→ numpy.ndarray)</p></td>
+<td><p>Downsample integer labels by whole per-axis factors: the majority vote of each block.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.finetune.session.volume.write_crop_into_volume" title="cellmap_flow.finetune.session.volume.write_crop_into_volume"><code class="xref py py-obj docutils literal notranslate"><span class="pre">write_crop_into_volume</span></code></a>(→ dict)</p></td>
+<td><p>Write a YAML crop's labels into the volume at the crop's physical place.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="module-contents">
+<h2>Module Contents<a class="headerlink" href="#module-contents" title="Link to this heading"></a></h2>
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.session.volume.logger">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.session.volume.</span></span><span class="sig-name descname"><span class="pre">logger</span></span><a class="headerlink" href="#cellmap_flow.finetune.session.volume.logger" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.session.volume.GEOMETRY_ATTRS">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.session.volume.</span></span><span class="sig-name descname"><span class="pre">GEOMETRY_ATTRS</span></span><a class="headerlink" href="#cellmap_flow.finetune.session.volume.GEOMETRY_ATTRS" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py exception">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.session.volume.NotAnAnnotationVolume">
+<span class="property"><span class="k"><span class="pre">exception</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.session.volume.</span></span><span class="sig-name descname"><span class="pre">NotAnAnnotationVolume</span></span><a class="headerlink" href="#cellmap_flow.finetune.session.volume.NotAnAnnotationVolume" title="Link to this definition"></a></dt>
+<dd><p><code class="docutils literal notranslate"><span class="pre">read_volume</span></code> was given a zarr whose root <code class="docutils literal notranslate"><span class="pre">type</span></code> is not annotation_volume.</p>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.session.volume.VolumeGeometry">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.session.volume.</span></span><span class="sig-name descname"><span class="pre">VolumeGeometry</span></span><a class="headerlink" href="#cellmap_flow.finetune.session.volume.VolumeGeometry" title="Link to this definition"></a></dt>
+<dd><p>Where a volume lies and what model it is for; see <code class="docutils literal notranslate"><span class="pre">plan_volume</span></code>.</p>
+<p>Sequences become tuples of the numbers given, ints kept ints, since the
+root attrs are written from them as they are.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.session.volume.VolumeGeometry.output_voxel_size">
+<span class="sig-name descname"><span class="pre">output_voxel_size</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">tuple</span></span><a class="headerlink" href="#cellmap_flow.finetune.session.volume.VolumeGeometry.output_voxel_size" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.session.volume.VolumeGeometry.input_voxel_size">
+<span class="sig-name descname"><span class="pre">input_voxel_size</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">tuple</span></span><a class="headerlink" href="#cellmap_flow.finetune.session.volume.VolumeGeometry.input_voxel_size" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.session.volume.VolumeGeometry.claimed_output_voxel_size">
+<span class="sig-name descname"><span class="pre">claimed_output_voxel_size</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">tuple</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.finetune.session.volume.VolumeGeometry.claimed_output_voxel_size" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.session.volume.VolumeGeometry.claimed_input_voxel_size">
+<span class="sig-name descname"><span class="pre">claimed_input_voxel_size</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">tuple</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.finetune.session.volume.VolumeGeometry.claimed_input_voxel_size" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.session.volume.VolumeGeometry.chunk_size">
+<span class="sig-name descname"><span class="pre">chunk_size</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">tuple</span></span><a class="headerlink" href="#cellmap_flow.finetune.session.volume.VolumeGeometry.chunk_size" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.session.volume.VolumeGeometry.input_size">
+<span class="sig-name descname"><span class="pre">input_size</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">tuple</span></span><a class="headerlink" href="#cellmap_flow.finetune.session.volume.VolumeGeometry.input_size" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.session.volume.VolumeGeometry.dataset_offset_nm">
+<span class="sig-name descname"><span class="pre">dataset_offset_nm</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">tuple</span></span><a class="headerlink" href="#cellmap_flow.finetune.session.volume.VolumeGeometry.dataset_offset_nm" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.session.volume.VolumeGeometry.dataset_shape_voxels">
+<span class="sig-name descname"><span class="pre">dataset_shape_voxels</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">tuple</span></span><a class="headerlink" href="#cellmap_flow.finetune.session.volume.VolumeGeometry.dataset_shape_voxels" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.session.volume.VolumeGeometry.record">
+<span class="sig-name descname"><span class="pre">record</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">zarr_path</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">dataset_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">corrections_dir</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span></span></span><a class="headerlink" href="#cellmap_flow.finetune.session.volume.VolumeGeometry.record" title="Link to this definition"></a></dt>
+<dd><p>The registry record of a volume at <code class="docutils literal notranslate"><span class="pre">zarr_path</span></code> with this geometry.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.session.volume.new_volume_id">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.session.volume.</span></span><span class="sig-name descname"><span class="pre">new_volume_id</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#cellmap_flow.finetune.session.volume.new_volume_id" title="Link to this definition"></a></dt>
+<dd><p><code class="docutils literal notranslate"><span class="pre">vol-&lt;8</span> <span class="pre">hex&gt;-&lt;YYYYmmdd-HHMMSS&gt;</span></code>; the volume’s zarr and bucket key are <code class="docutils literal notranslate"><span class="pre">&lt;id&gt;.zarr</span></code>.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.session.volume.volume_corner_nm">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.session.volume.</span></span><span class="sig-name descname"><span class="pre">volume_corner_nm</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dataset_offset_nm</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_voxel_size</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">numpy.ndarray</span></span></span><a class="headerlink" href="#cellmap_flow.finetune.session.volume.volume_corner_nm" title="Link to this definition"></a></dt>
+<dd><p>The world position of an annotation volume’s voxel-0 lower corner, in nm.</p>
+<p><code class="docutils literal notranslate"><span class="pre">dataset_offset_nm</span></code> (a root attr of every volume) is also written as the
+volume’s OME-NGFF translation, and a translation is voxel 0’s <em>centre</em>.
+Neuroglancer drew the volume that way while it was painted, so that is
+where the labels are: read as a corner, the value puts every label half
+an annotation voxel away from where it was drawn.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.session.volume.plan_volume">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.session.volume.</span></span><span class="sig-name descname"><span class="pre">plan_volume</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">raw_dataset_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model_geometry</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#cellmap_flow.finetune.session.volume.VolumeGeometry" title="cellmap_flow.finetune.session.volume.VolumeGeometry"><span class="pre">VolumeGeometry</span></a></span></span><a class="headerlink" href="#cellmap_flow.finetune.session.volume.plan_volume" title="Link to this definition"></a></dt>
+<dd><p>Where a new volume over <code class="docutils literal notranslate"><span class="pre">raw_dataset_path</span></code> lies, for a model.</p>
+<p><code class="docutils literal notranslate"><span class="pre">model_geometry</span></code> has <code class="docutils literal notranslate"><span class="pre">input_voxel_size</span></code> and <code class="docutils literal notranslate"><span class="pre">output_voxel_size</span></code>,
+and either <code class="docutils literal notranslate"><span class="pre">input_shape</span></code>/<code class="docutils literal notranslate"><span class="pre">output_shape</span></code> in voxels or
+<code class="docutils literal notranslate"><span class="pre">read_shape</span></code>/<code class="docutils literal notranslate"><span class="pre">write_shape</span></code> in nm, which is what a server reports.
+Each voxel size is snapped to the raw level closest to it (the model’s
+own is kept as the claimed one); the volume lies on the output level’s
+grid from its corner, one chunk per model output, and covers the data
+padded to whole chunks.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.session.volume.create_volume_zarr">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.session.volume.</span></span><span class="sig-name descname"><span class="pre">create_volume_zarr</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">zarr_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">geometry</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#cellmap_flow.finetune.session.volume.VolumeGeometry" title="cellmap_flow.finetune.session.volume.VolumeGeometry"><span class="pre">VolumeGeometry</span></a></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">dataset_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">input_norm</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">postprocess</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">annotation_dtype</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'uint8'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">annotation_type</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'annotation_volume'</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#cellmap_flow.finetune.session.volume.create_volume_zarr" title="Link to this definition"></a></dt>
+<dd><p>Write an empty volume: its metadata only, no chunks. Returns <code class="docutils literal notranslate"><span class="pre">zarr_path</span></code>.</p>
+<p><code class="docutils literal notranslate"><span class="pre">input_norm</span></code> and <code class="docutils literal notranslate"><span class="pre">postprocess</span></code> are the dashboard’s chains when the
+volume was made, as YAML-style lists: a resumed session inherits the
+normalization, and a model finetuned on the volume is served with the
+postprocessing. <code class="docutils literal notranslate"><span class="pre">annotation_dtype</span></code> is uint16 or uint32 when the labels
+are instance ids.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.session.volume.read_volume">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.session.volume.</span></span><span class="sig-name descname"><span class="pre">read_volume</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">zarr_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">require_geometry</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span></span></span><a class="headerlink" href="#cellmap_flow.finetune.session.volume.read_volume" title="Link to this definition"></a></dt>
+<dd><p>The registry record of the annotation volume at <code class="docutils literal notranslate"><span class="pre">zarr_path</span></code>, from its attrs.</p>
+<p>Nothing missing is guessed (it used to be 56^3 chunks, a 178^3 input and
+16 nm voxels). Raises ValueError naming the geometry attrs the volume
+lacks, unless <code class="docutils literal notranslate"><span class="pre">require_geometry</span></code> is False, when they are None in the
+record: serving and syncing a volume need none of them. Raises
+NotAnAnnotationVolume (a ValueError) if it is not an annotation volume
+at all.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.session.volume.build_manifest">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.session.volume.</span></span><span class="sig-name descname"><span class="pre">build_manifest</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">volume_meta</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">input_norm</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">postprocess</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">overrides</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span></span></span><a class="headerlink" href="#cellmap_flow.finetune.session.volume.build_manifest" title="Link to this definition"></a></dt>
+<dd><p>The <code class="docutils literal notranslate"><span class="pre">_virtual_sources.json</span></code> that trains on the volume a record describes.</p>
+<p><code class="docutils literal notranslate"><span class="pre">input_norm</span></code> and <code class="docutils literal notranslate"><span class="pre">postprocess</span></code> travel in it because the trainer runs
+on LSF, where the dashboard’s chains are not: without the normalization
+it would feed the model raw uint8 while inference feeds it [-1, 1].
+<code class="docutils literal notranslate"><span class="pre">overrides</span></code> replaces any key, e.g. a crops manifest’s
+patches_per_epoch. Raises ValueError naming what the record lacks
+(the geometry read_volume reads, the zarr path, the raw dataset).</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.session.volume.majority_vote_downsample">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.session.volume.</span></span><span class="sig-name descname"><span class="pre">majority_vote_downsample</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">labels</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">numpy.ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">factors</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">numpy.ndarray</span></span></span><a class="headerlink" href="#cellmap_flow.finetune.session.volume.majority_vote_downsample" title="Link to this definition"></a></dt>
+<dd><p>Downsample integer labels by whole per-axis factors: the majority vote of each block.</p>
+<p>Nearest-neighbour sampling always picks one fixed corner of each block
+(scipy.ndimage.zoom with grid_mode=True picks the block’s <em>last</em> voxel on
+every axis). Here each output voxel is the value most common across its
+whole footprint: no systematic corner bias, and fewer boundary voxels
+flipped by an unrepresentative single sample.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.session.volume.write_crop_into_volume">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.session.volume.</span></span><span class="sig-name descname"><span class="pre">write_crop_into_volume</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">volume_meta</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">entry</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">progress_callback</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span></span></span><a class="headerlink" href="#cellmap_flow.finetune.session.volume.write_crop_into_volume" title="Link to this definition"></a></dt>
+<dd><p>Write a YAML crop’s labels into the volume at the crop’s physical place.</p>
+<p>The labels are remapped to 1 background and 2+ foreground, resampled to
+the volume’s voxel size if it differs, and written into <code class="docutils literal notranslate"><span class="pre">annotation/s0</span></code>
+in parallel slabs; <code class="docutils literal notranslate"><span class="pre">progress_callback(done,</span> <span class="pre">total)</span></code> follows the slabs.
+The import is appended to the volume’s <code class="docutils literal notranslate"><span class="pre">imported_crops</span></code> attr (the
+trainer’s dense pool and the overlay’s boxes), and returned.</p>
+</dd></dl>
+
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../sync/index.html" class="btn btn-neutral float-left" title="cellmap_flow.finetune.session.sync" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../../session_loop/index.html" class="btn btn-neutral float-right" title="cellmap_flow.finetune.session_loop" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, David Ackerman,  Marwan Zouinkhi, Jeff Rhoades, Larissa Heinrich, Aubrey Weigel.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

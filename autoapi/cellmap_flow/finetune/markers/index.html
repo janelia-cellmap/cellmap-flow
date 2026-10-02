@@ -1,0 +1,305 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>cellmap_flow.finetune.markers &mdash; CellMap Flow  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=4ae1632d" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css" />
+
+  
+    <link rel="shortcut icon" href="../../../../_static/favicon.ico"/>
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link rel="next" title="cellmap_flow.finetune.model_loading" href="../model_loading/index.html" />
+    <link rel="prev" title="cellmap_flow.finetune.losses" href="../losses/index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            CellMap Flow
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">CellMap-Flow API:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../../../../install.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../cli.html">Command line</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../scripts.html">Python Scripts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../yaml_config.html">YAML Configuration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../data_paths.html">Data paths</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../huggingface.html">HuggingFace Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../custom_script.html">Custom Model</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../post.html">PostProcessors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../plugins.html">Plugins</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../review.html">Reviewing instances</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../viewer_api.html">Viewer layer API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../architecture.html">Architecture</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../../../index.html">API Reference</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="../../index.html">cellmap_flow</a><ul class="current">
+<li class="toctree-l3 current"><a class="reference internal" href="../../index.html#submodules">Submodules</a><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="../../blockwise/index.html">cellmap_flow.blockwise</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../cli/index.html">cellmap_flow.cli</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../config/index.html">cellmap_flow.config</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../dashboard/index.html">cellmap_flow.dashboard</a></li>
+<li class="toctree-l4 current"><a class="reference internal" href="../index.html">cellmap_flow.finetune</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../globals/index.html">cellmap_flow.globals</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../image_data_interface/index.html">cellmap_flow.image_data_interface</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../inference/index.html">cellmap_flow.inference</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../inferencer/index.html">cellmap_flow.inferencer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../io/index.html">cellmap_flow.io</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../jobs/index.html">cellmap_flow.jobs</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../logging_setup/index.html">cellmap_flow.logging_setup</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../models/index.html">cellmap_flow.models</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../norm/index.html">cellmap_flow.norm</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../pipeline_spec/index.html">cellmap_flow.pipeline_spec</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../plugins/index.html">cellmap_flow.plugins</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../post/index.html">cellmap_flow.post</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../process_chain/index.html">cellmap_flow.process_chain</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../review/index.html">cellmap_flow.review</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../review_index/index.html">cellmap_flow.review_index</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../server/index.html">cellmap_flow.server</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../serving/index.html">cellmap_flow.serving</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../utils/index.html">cellmap_flow.utils</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../viewer/index.html">cellmap_flow.viewer</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">CellMap Flow</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">API Reference</a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">cellmap_flow</a></li>
+          <li class="breadcrumb-item"><a href="../index.html">cellmap_flow.finetune</a></li>
+      <li class="breadcrumb-item active">cellmap_flow.finetune.markers</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../../../../_sources/autoapi/cellmap_flow/finetune/markers/index.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-cellmap_flow.finetune.markers">
+<span id="cellmap-flow-finetune-markers"></span><h1>cellmap_flow.finetune.markers<a class="headerlink" href="#module-cellmap_flow.finetune.markers" title="Link to this heading"></a></h1>
+<p>The lines the trainer prints for the job manager to find in its log.</p>
+<p>The training job’s loop (session_loop) and lora_trainer print these to
+stdout, which tee copies into training_log.txt; the job manager reads them
+back from there to follow the job, and the finetune tab reads the log it
+streams. The two sides can be different versions – a training job
+outlives a dashboard upgrade – so these only ever change compatibly.</p>
+<p>The patterns are the ones the job manager has always used, unchanged.</p>
+<section id="attributes">
+<h2>Attributes<a class="headerlink" href="#attributes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.markers.FINETUNED_MODEL_YAML" title="cellmap_flow.finetune.markers.FINETUNED_MODEL_YAML"><code class="xref py py-obj docutils literal notranslate"><span class="pre">FINETUNED_MODEL_YAML</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.finetune.markers.TRAINING_ITERATION_COMPLETE" title="cellmap_flow.finetune.markers.TRAINING_ITERATION_COMPLETE"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TRAINING_ITERATION_COMPLETE</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.markers.RESTART_FAILED" title="cellmap_flow.finetune.markers.RESTART_FAILED"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RESTART_FAILED</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.finetune.markers.INFERENCE_SERVER_FAILED" title="cellmap_flow.finetune.markers.INFERENCE_SERVER_FAILED"><code class="xref py py-obj docutils literal notranslate"><span class="pre">INFERENCE_SERVER_FAILED</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.markers.RESTART_STATUS" title="cellmap_flow.finetune.markers.RESTART_STATUS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RESTART_STATUS</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.finetune.markers.TRAINING_DIVERGED" title="cellmap_flow.finetune.markers.TRAINING_DIVERGED"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TRAINING_DIVERGED</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.markers.RESTARTING_TRAINING" title="cellmap_flow.finetune.markers.RESTARTING_TRAINING"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RESTARTING_TRAINING</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.finetune.markers.WAITING_FOR_RESTART" title="cellmap_flow.finetune.markers.WAITING_FOR_RESTART"><code class="xref py py-obj docutils literal notranslate"><span class="pre">WAITING_FOR_RESTART</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.markers.EPOCH_START_RE" title="cellmap_flow.finetune.markers.EPOCH_START_RE"><code class="xref py py-obj docutils literal notranslate"><span class="pre">EPOCH_START_RE</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.finetune.markers.EPOCH_SUMMARY_RE" title="cellmap_flow.finetune.markers.EPOCH_SUMMARY_RE"><code class="xref py py-obj docutils literal notranslate"><span class="pre">EPOCH_SUMMARY_RE</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.markers.ITERATION_COMPLETE_RE" title="cellmap_flow.finetune.markers.ITERATION_COMPLETE_RE"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ITERATION_COMPLETE_RE</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.finetune.markers.MODEL_YAML_RE" title="cellmap_flow.finetune.markers.MODEL_YAML_RE"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MODEL_YAML_RE</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.markers.STATUS_MARKER_RE" title="cellmap_flow.finetune.markers.STATUS_MARKER_RE"><code class="xref py py-obj docutils literal notranslate"><span class="pre">STATUS_MARKER_RE</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.finetune.markers.SERVER_URL_RE" title="cellmap_flow.finetune.markers.SERVER_URL_RE"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SERVER_URL_RE</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="functions">
+<h2>Functions<a class="headerlink" href="#functions" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.markers.emit" title="cellmap_flow.finetune.markers.emit"><code class="xref py py-obj docutils literal notranslate"><span class="pre">emit</span></code></a>(→ None)</p></td>
+<td><p>Print <code class="docutils literal notranslate"><span class="pre">marker</span></code> (and its value) as a line of its own, at once.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="module-contents">
+<h2>Module Contents<a class="headerlink" href="#module-contents" title="Link to this heading"></a></h2>
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.markers.FINETUNED_MODEL_YAML">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.markers.</span></span><span class="sig-name descname"><span class="pre">FINETUNED_MODEL_YAML</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'FINETUNED_MODEL_YAML:'</span></span><a class="headerlink" href="#cellmap_flow.finetune.markers.FINETUNED_MODEL_YAML" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.markers.TRAINING_ITERATION_COMPLETE">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.markers.</span></span><span class="sig-name descname"><span class="pre">TRAINING_ITERATION_COMPLETE</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'TRAINING_ITERATION_COMPLETE:'</span></span><a class="headerlink" href="#cellmap_flow.finetune.markers.TRAINING_ITERATION_COMPLETE" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.markers.RESTART_FAILED">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.markers.</span></span><span class="sig-name descname"><span class="pre">RESTART_FAILED</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'RESTART_FAILED:'</span></span><a class="headerlink" href="#cellmap_flow.finetune.markers.RESTART_FAILED" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.markers.INFERENCE_SERVER_FAILED">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.markers.</span></span><span class="sig-name descname"><span class="pre">INFERENCE_SERVER_FAILED</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'INFERENCE_SERVER_FAILED:'</span></span><a class="headerlink" href="#cellmap_flow.finetune.markers.INFERENCE_SERVER_FAILED" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.markers.RESTART_STATUS">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.markers.</span></span><span class="sig-name descname"><span class="pre">RESTART_STATUS</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'RESTART_STATUS:'</span></span><a class="headerlink" href="#cellmap_flow.finetune.markers.RESTART_STATUS" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.markers.TRAINING_DIVERGED">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.markers.</span></span><span class="sig-name descname"><span class="pre">TRAINING_DIVERGED</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'TRAINING_DIVERGED'</span></span><a class="headerlink" href="#cellmap_flow.finetune.markers.TRAINING_DIVERGED" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.markers.RESTARTING_TRAINING">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.markers.</span></span><span class="sig-name descname"><span class="pre">RESTARTING_TRAINING</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'RESTARTING_TRAINING'</span></span><a class="headerlink" href="#cellmap_flow.finetune.markers.RESTARTING_TRAINING" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.markers.WAITING_FOR_RESTART">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.markers.</span></span><span class="sig-name descname"><span class="pre">WAITING_FOR_RESTART</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'WAITING_FOR_RESTART'</span></span><a class="headerlink" href="#cellmap_flow.finetune.markers.WAITING_FOR_RESTART" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.markers.EPOCH_START_RE">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.markers.</span></span><span class="sig-name descname"><span class="pre">EPOCH_START_RE</span></span><a class="headerlink" href="#cellmap_flow.finetune.markers.EPOCH_START_RE" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.markers.EPOCH_SUMMARY_RE">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.markers.</span></span><span class="sig-name descname"><span class="pre">EPOCH_SUMMARY_RE</span></span><a class="headerlink" href="#cellmap_flow.finetune.markers.EPOCH_SUMMARY_RE" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.markers.ITERATION_COMPLETE_RE">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.markers.</span></span><span class="sig-name descname"><span class="pre">ITERATION_COMPLETE_RE</span></span><a class="headerlink" href="#cellmap_flow.finetune.markers.ITERATION_COMPLETE_RE" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.markers.MODEL_YAML_RE">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.markers.</span></span><span class="sig-name descname"><span class="pre">MODEL_YAML_RE</span></span><a class="headerlink" href="#cellmap_flow.finetune.markers.MODEL_YAML_RE" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.markers.STATUS_MARKER_RE">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.markers.</span></span><span class="sig-name descname"><span class="pre">STATUS_MARKER_RE</span></span><a class="headerlink" href="#cellmap_flow.finetune.markers.STATUS_MARKER_RE" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.markers.SERVER_URL_RE">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.markers.</span></span><span class="sig-name descname"><span class="pre">SERVER_URL_RE</span></span><a class="headerlink" href="#cellmap_flow.finetune.markers.SERVER_URL_RE" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.markers.emit">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.markers.</span></span><span class="sig-name descname"><span class="pre">emit</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">marker</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">value</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#cellmap_flow.finetune.markers.emit" title="Link to this definition"></a></dt>
+<dd><p>Print <code class="docutils literal notranslate"><span class="pre">marker</span></code> (and its value) as a line of its own, at once.</p>
+<p>Flushed, because the job manager is reading the log while the job runs.</p>
+</dd></dl>
+
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../losses/index.html" class="btn btn-neutral float-left" title="cellmap_flow.finetune.losses" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../model_loading/index.html" class="btn btn-neutral float-right" title="cellmap_flow.finetune.model_loading" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, David Ackerman,  Marwan Zouinkhi, Jeff Rhoades, Larissa Heinrich, Aubrey Weigel.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

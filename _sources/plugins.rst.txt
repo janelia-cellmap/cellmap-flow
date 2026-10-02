@@ -3,7 +3,7 @@ Plugins
 
 CellMap Flow supports user-defined **plugins** — custom normalizers, postprocessors, and model configurations that you can register once and use everywhere (CLI, dashboard, YAML pipelines).
 
-Plugins are Python files stored in ``~/.cellmap_flow/plugins/`` and loaded automatically every time CellMap Flow starts.
+Plugins are Python files stored in ``~/.cellmap_flow/plugins/`` and loaded every time a ``cellmap_flow`` command or the dashboard starts. Importing ``cellmap_flow`` does not load them: a Python script that uses a plugin's classes calls ``cellmap_flow.plugins.load_plugins()`` first.
 
 CLI Commands
 ------------
@@ -13,7 +13,7 @@ Register a plugin
 
 .. code-block:: bash
 
-    cellmap_flow register /path/to/my_plugin.py
+    cellmap_flow plugins register /path/to/my_plugin.py
 
 This copies the file to ``~/.cellmap_flow/plugins/my_plugin.py``. A basic safety check is performed to reject scripts that import ``os``, ``subprocess``, ``sys`` or call ``eval``/``exec``.
 
@@ -21,14 +21,14 @@ To overwrite an existing plugin with the same filename:
 
 .. code-block:: bash
 
-    cellmap_flow register /path/to/my_plugin.py --force
+    cellmap_flow plugins register /path/to/my_plugin.py --force
 
 List registered plugins
 ~~~~~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: bash
 
-    cellmap_flow list-plugins
+    cellmap_flow plugins list
 
 Output:
 
@@ -44,7 +44,7 @@ Unregister a plugin
 
 .. code-block:: bash
 
-    cellmap_flow unregister my_normalizer
+    cellmap_flow plugins unregister my_normalizer
 
 The ``.py`` extension is optional. This deletes the file from the plugins directory.
 
@@ -170,7 +170,9 @@ Another example — connected-component filtering by size:
 Custom ModelConfig
 ~~~~~~~~~~~~~~~~~~
 
-Subclass ``ModelConfig`` and implement ``_get_config``, ``command``, and ``to_dict``.
+Subclass ``ModelConfig`` and implement ``_get_config``.
+
+``command`` (how a server is launched for this config) and ``to_dict`` (how it is exported to a YAML) have defaults, built from the constructor arguments the config was created with. Override them only if the config needs something else. The type is named by ``cli_name`` when the class sets one, otherwise by its class name without ``ModelConfig``, lower-cased (``ONNXModelConfig`` is ``onnx``). That name is what ``type:`` in a YAML and the ``cellmap_flow`` subcommand use.
 
 The ``_get_config`` method must return a ``Config`` object with the following attributes:
 ``model`` (or ``predict``), ``read_shape``, ``write_shape``, ``input_voxel_size``,
@@ -181,8 +183,7 @@ The ``_get_config`` method must return a ``Config`` object with the following at
     import numpy as np
     import torch
     from funlib.geometry import Coordinate
-    from cellmap_flow.models.models_config import ModelConfig
-    from cellmap_flow.utils.serialize_config import Config
+    from cellmap_flow.models.models_config import Config, ModelConfig
 
 
     class ONNXModelConfig(ModelConfig):
@@ -209,10 +210,6 @@ The ``_get_config`` method must return a ``Config`` object with the following at
             self.name = name
             self.scale = scale
 
-        @property
-        def command(self):
-            return f"onnx --onnx-path {self.onnx_path}"
-
         def _get_config(self):
             import onnxruntime as ort
 
@@ -228,19 +225,6 @@ The ``_get_config`` method must return a ``Config`` object with the following at
             )
             return config
 
-        def to_dict(self):
-            return {
-                "type": "onnx",
-                "onnx_path": self.onnx_path,
-                "input_voxel_size": ",".join(str(v) for v in self._input_voxel_size),
-                "output_voxel_size": ",".join(str(v) for v in self._output_voxel_size),
-                "input_shape": ",".join(str(v) for v in self._input_shape),
-                "output_shape": ",".join(str(v) for v in self._output_shape),
-                "output_channels": self._output_channels,
-                "name": self.name,
-                "scale": self.scale,
-            }
-
 Quick Start
 -----------
 
@@ -249,13 +233,13 @@ Quick Start
 
    .. code-block:: bash
 
-       cellmap_flow register my_normalizer.py
+       cellmap_flow plugins register my_normalizer.py
 
 3. Open the dashboard — your plugin appears in the normalizers/postprocessors/models list:
 
    .. code-block:: bash
 
-       cellmap_flow_app
+       cellmap_flow view -d /path/to/data.zarr
 
 4. Or use it in a YAML pipeline:
 
@@ -275,4 +259,4 @@ Notes
 - Plugin filenames must be unique. Use ``--force`` to overwrite.
 - Plugins are checked for unsafe imports (``os``, ``subprocess``, ``sys``) and function calls (``eval``, ``exec``) before registration.
 - ``__init__`` parameters should use simple types (``float``, ``int``, ``str``, ``bool``) for dashboard and YAML compatibility.
-- Registered ``ModelConfig`` subclasses automatically get their own CLI command under ``cellmap_flow``.
+- Registered ``ModelConfig`` subclasses automatically get their own CLI command, ``cellmap_flow infer <type>``.

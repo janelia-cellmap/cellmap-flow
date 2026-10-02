@@ -18,7 +18,6 @@ Functions
 
 .. autoapisummary::
 
-   cellmap_flow.dashboard.routes.models.get_available_models
    cellmap_flow.dashboard.routes.models.get_model_config_types
    cellmap_flow.dashboard.routes.models.create_model_config
    cellmap_flow.dashboard.routes.models.get_huggingface_models
@@ -37,11 +36,6 @@ Module Contents
 .. py:data:: logger
 
 .. py:data:: models_bp
-
-.. py:function:: get_available_models()
-
-   Get available models from the model catalog
-
 
 .. py:function:: get_model_config_types()
 
@@ -64,6 +58,10 @@ Module Contents
 
 
 .. py:function:: submit_models()
+
+   Run the models the Models tab has ticked (a SubmitModels), and stop
+   the others: services.launch.update_run_models.
+
 
 .. py:function:: job_logs()
 
@@ -91,7 +89,7 @@ Module Contents
 
    Export the dashboard's current live config (models, normalization,
    postprocessing, queue/charge_group) as a downloadable YAML file that can
-   be reloaded later with `cellmap_flow_yaml`.
+   be reloaded later with `cellmap_flow yaml`.
 
 
 .. py:function:: update_server_config()

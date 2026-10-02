@@ -1,0 +1,509 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>cellmap_flow.jobs.spec &mdash; CellMap Flow  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=4ae1632d" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css" />
+
+  
+    <link rel="shortcut icon" href="../../../../_static/favicon.ico"/>
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link rel="next" title="cellmap_flow.logging_setup" href="../../logging_setup/index.html" />
+    <link rel="prev" title="cellmap_flow.jobs.site" href="../site/index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            CellMap Flow
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">CellMap-Flow API:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../../../../install.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../cli.html">Command line</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../scripts.html">Python Scripts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../yaml_config.html">YAML Configuration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../data_paths.html">Data paths</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../huggingface.html">HuggingFace Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../custom_script.html">Custom Model</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../post.html">PostProcessors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../plugins.html">Plugins</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../review.html">Reviewing instances</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../viewer_api.html">Viewer layer API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../architecture.html">Architecture</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../../../index.html">API Reference</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="../../index.html">cellmap_flow</a><ul class="current">
+<li class="toctree-l3 current"><a class="reference internal" href="../../index.html#submodules">Submodules</a><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="../../blockwise/index.html">cellmap_flow.blockwise</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../cli/index.html">cellmap_flow.cli</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../config/index.html">cellmap_flow.config</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../dashboard/index.html">cellmap_flow.dashboard</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../finetune/index.html">cellmap_flow.finetune</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../globals/index.html">cellmap_flow.globals</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../image_data_interface/index.html">cellmap_flow.image_data_interface</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../inference/index.html">cellmap_flow.inference</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../inferencer/index.html">cellmap_flow.inferencer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../io/index.html">cellmap_flow.io</a></li>
+<li class="toctree-l4 current"><a class="reference internal" href="../index.html">cellmap_flow.jobs</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../logging_setup/index.html">cellmap_flow.logging_setup</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../models/index.html">cellmap_flow.models</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../norm/index.html">cellmap_flow.norm</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../pipeline_spec/index.html">cellmap_flow.pipeline_spec</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../plugins/index.html">cellmap_flow.plugins</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../post/index.html">cellmap_flow.post</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../process_chain/index.html">cellmap_flow.process_chain</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../review/index.html">cellmap_flow.review</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../review_index/index.html">cellmap_flow.review_index</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../server/index.html">cellmap_flow.server</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../serving/index.html">cellmap_flow.serving</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../utils/index.html">cellmap_flow.utils</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../viewer/index.html">cellmap_flow.viewer</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">CellMap Flow</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">API Reference</a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">cellmap_flow</a></li>
+          <li class="breadcrumb-item"><a href="../index.html">cellmap_flow.jobs</a></li>
+      <li class="breadcrumb-item active">cellmap_flow.jobs.spec</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../../../../_sources/autoapi/cellmap_flow/jobs/spec/index.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-cellmap_flow.jobs.spec">
+<span id="cellmap-flow-jobs-spec"></span><h1>cellmap_flow.jobs.spec<a class="headerlink" href="#module-cellmap_flow.jobs.spec" title="Link to this heading"></a></h1>
+<p>What a job is, whichever backend runs it.</p>
+<p><code class="docutils literal notranslate"><span class="pre">JobSpec</span></code> says what to run and with what resources; a backend
+(<code class="docutils literal notranslate"><span class="pre">jobs.lsf</span></code> or <code class="docutils literal notranslate"><span class="pre">jobs.local</span></code>) turns it into a running <code class="docutils literal notranslate"><span class="pre">Job</span></code>. The rest
+is shared by both: the statuses, the host marker a server prints, a log
+file’s tail, and a filesystem-safe stem for its name.</p>
+<section id="attributes">
+<h2>Attributes<a class="headerlink" href="#attributes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.jobs.spec.logger" title="cellmap_flow.jobs.spec.logger"><code class="xref py py-obj docutils literal notranslate"><span class="pre">logger</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.jobs.spec.IP_PATTERN" title="cellmap_flow.jobs.spec.IP_PATTERN"><code class="xref py py-obj docutils literal notranslate"><span class="pre">IP_PATTERN</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.jobs.spec.SERVER_URL_TEMPLATE_ENV" title="cellmap_flow.jobs.spec.SERVER_URL_TEMPLATE_ENV"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SERVER_URL_TEMPLATE_ENV</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="exceptions">
+<h2>Exceptions<a class="headerlink" href="#exceptions" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.jobs.spec.JobStartError" title="cellmap_flow.jobs.spec.JobStartError"><code class="xref py py-obj docutils literal notranslate"><span class="pre">JobStartError</span></code></a></p></td>
+<td><p>A job was asked for and no usable one came of it.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="classes">
+<h2>Classes<a class="headerlink" href="#classes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.jobs.spec.JobSpec" title="cellmap_flow.jobs.spec.JobSpec"><code class="xref py py-obj docutils literal notranslate"><span class="pre">JobSpec</span></code></a></p></td>
+<td><p>One job to submit.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.jobs.spec.JobStatus" title="cellmap_flow.jobs.spec.JobStatus"><code class="xref py py-obj docutils literal notranslate"><span class="pre">JobStatus</span></code></a></p></td>
+<td><p>Enumeration of possible job statuses.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.jobs.spec.Job" title="cellmap_flow.jobs.spec.Job"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Job</span></code></a></p></td>
+<td><p>Abstract base class for jobs across different execution environments.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="functions">
+<h2>Functions<a class="headerlink" href="#functions" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.jobs.spec.shell_quote" title="cellmap_flow.jobs.spec.shell_quote"><code class="xref py py-obj docutils literal notranslate"><span class="pre">shell_quote</span></code></a>(→ str)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">part</span></code> as one shell word, quoted without ever emitting a single quote.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.jobs.spec.shell_join" title="cellmap_flow.jobs.spec.shell_join"><code class="xref py py-obj docutils literal notranslate"><span class="pre">shell_join</span></code></a>(→ str)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">argv</span></code> as a shell line for a job's <code class="docutils literal notranslate"><span class="pre">shell</span></code> (<code class="docutils literal notranslate"><span class="pre">shell_quote</span></code>'s words).</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.jobs.spec.default_log_dir" title="cellmap_flow.jobs.spec.default_log_dir"><code class="xref py py-obj docutils literal notranslate"><span class="pre">default_log_dir</span></code></a>(→ pathlib.Path)</p></td>
+<td><p>Where job logs go unless the spec says otherwise.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.jobs.spec.exists_now" title="cellmap_flow.jobs.spec.exists_now"><code class="xref py py-obj docutils literal notranslate"><span class="pre">exists_now</span></code></a>(→ bool)</p></td>
+<td><p>Whether <code class="docutils literal notranslate"><span class="pre">path</span></code> exists, when another host may have just created it.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.jobs.spec.tail" title="cellmap_flow.jobs.spec.tail"><code class="xref py py-obj docutils literal notranslate"><span class="pre">tail</span></code></a>(→ Optional[str])</p></td>
+<td><p>Read the tail of a log file, for surfacing crash output. Returns None if unreadable/empty.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.jobs.spec.log_stem" title="cellmap_flow.jobs.spec.log_stem"><code class="xref py py-obj docutils literal notranslate"><span class="pre">log_stem</span></code></a>(→ str)</p></td>
+<td><p>A filesystem-safe stem for this job's log file.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.jobs.spec.extract_host_from_output" title="cellmap_flow.jobs.spec.extract_host_from_output"><code class="xref py py-obj docutils literal notranslate"><span class="pre">extract_host_from_output</span></code></a>(→ Optional[str])</p></td>
+<td><p>Extract host/URL from command output using configured patterns.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.jobs.spec.public_server_url" title="cellmap_flow.jobs.spec.public_server_url"><code class="xref py py-obj docutils literal notranslate"><span class="pre">public_server_url</span></code></a>(→ Optional[str])</p></td>
+<td><p>The address to use for a server that reported <code class="docutils literal notranslate"><span class="pre">url</span></code>: <code class="docutils literal notranslate"><span class="pre">url</span></code> itself,</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="module-contents">
+<h2>Module Contents<a class="headerlink" href="#module-contents" title="Link to this heading"></a></h2>
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.jobs.spec.logger">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.jobs.spec.</span></span><span class="sig-name descname"><span class="pre">logger</span></span><a class="headerlink" href="#cellmap_flow.jobs.spec.logger" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.jobs.spec.IP_PATTERN">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.jobs.spec.</span></span><span class="sig-name descname"><span class="pre">IP_PATTERN</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">['CELLMAP_FLOW_SERVER_IP(',</span> <span class="pre">')CELLMAP_FLOW_SERVER_IP']</span></span><a class="headerlink" href="#cellmap_flow.jobs.spec.IP_PATTERN" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.jobs.spec.SERVER_URL_TEMPLATE_ENV">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.jobs.spec.</span></span><span class="sig-name descname"><span class="pre">SERVER_URL_TEMPLATE_ENV</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'CELLMAP_FLOW_SERVER_URL_TEMPLATE'</span></span><a class="headerlink" href="#cellmap_flow.jobs.spec.SERVER_URL_TEMPLATE_ENV" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.jobs.spec.shell_quote">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.jobs.spec.</span></span><span class="sig-name descname"><span class="pre">shell_quote</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">part</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#cellmap_flow.jobs.spec.shell_quote" title="Link to this definition"></a></dt>
+<dd><p><code class="docutils literal notranslate"><span class="pre">part</span></code> as one shell word, quoted without ever emitting a single quote.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.jobs.spec.shell_join">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.jobs.spec.</span></span><span class="sig-name descname"><span class="pre">shell_join</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">argv</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#cellmap_flow.jobs.spec.shell_join" title="Link to this definition"></a></dt>
+<dd><p><code class="docutils literal notranslate"><span class="pre">argv</span></code> as a shell line for a job’s <code class="docutils literal notranslate"><span class="pre">shell</span></code> (<code class="docutils literal notranslate"><span class="pre">shell_quote</span></code>’s words).</p>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="cellmap_flow.jobs.spec.JobSpec">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.jobs.spec.</span></span><span class="sig-name descname"><span class="pre">JobSpec</span></span><a class="headerlink" href="#cellmap_flow.jobs.spec.JobSpec" title="Link to this definition"></a></dt>
+<dd><p>One job to submit.</p>
+<p>Exactly one of <code class="docutils literal notranslate"><span class="pre">argv</span></code> and <code class="docutils literal notranslate"><span class="pre">shell</span></code> is given. <code class="docutils literal notranslate"><span class="pre">argv</span></code> is run as it
+stands. <code class="docutils literal notranslate"><span class="pre">shell</span></code> is a command line run by <code class="docutils literal notranslate"><span class="pre">bash</span> <span class="pre">-c</span></code>, which is what
+servers, finetune runs and blockwise workers have always been given; the
+finetune command needs it, since it sets LD_LIBRARY_PATH and pipes
+through tee.</p>
+<p><code class="docutils literal notranslate"><span class="pre">queue</span></code> None asks for none (<code class="docutils literal notranslate"><span class="pre">-q</span></code> is left out, so LSF’s default
+queue), and <code class="docutils literal notranslate"><span class="pre">gpus</span></code> 0 asks for no GPU. <code class="docutils literal notranslate"><span class="pre">walltime</span></code> is LSF’s
+<code class="docutils literal notranslate"><span class="pre">[hours:]minutes</span></code>; None leaves the queue’s default. <code class="docutils literal notranslate"><span class="pre">log_dir</span></code> None is
+<code class="docutils literal notranslate"><span class="pre">jobs.launch.SERVER_LOG_DIR</span></code>, read when the job is submitted. <code class="docutils literal notranslate"><span class="pre">env</span></code> is
+added to this process’s environment, which the job inherits either way.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.jobs.spec.JobSpec.name">
+<span class="sig-name descname"><span class="pre">name</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></span><a class="headerlink" href="#cellmap_flow.jobs.spec.JobSpec.name" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.jobs.spec.JobSpec.argv">
+<span class="sig-name descname"><span class="pre">argv</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.jobs.spec.JobSpec.argv" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.jobs.spec.JobSpec.shell">
+<span class="sig-name descname"><span class="pre">shell</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.jobs.spec.JobSpec.shell" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.jobs.spec.JobSpec.queue">
+<span class="sig-name descname"><span class="pre">queue</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.jobs.spec.JobSpec.queue" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.jobs.spec.JobSpec.charge_group">
+<span class="sig-name descname"><span class="pre">charge_group</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.jobs.spec.JobSpec.charge_group" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.jobs.spec.JobSpec.gpus">
+<span class="sig-name descname"><span class="pre">gpus</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">1</span></span><a class="headerlink" href="#cellmap_flow.jobs.spec.JobSpec.gpus" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.jobs.spec.JobSpec.cpus">
+<span class="sig-name descname"><span class="pre">cpus</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">4</span></span><a class="headerlink" href="#cellmap_flow.jobs.spec.JobSpec.cpus" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.jobs.spec.JobSpec.walltime">
+<span class="sig-name descname"><span class="pre">walltime</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.jobs.spec.JobSpec.walltime" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.jobs.spec.JobSpec.log_dir">
+<span class="sig-name descname"><span class="pre">log_dir</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">pathlib.Path</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.jobs.spec.JobSpec.log_dir" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.jobs.spec.JobSpec.env">
+<span class="sig-name descname"><span class="pre">env</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Mapping</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.jobs.spec.JobSpec.env" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.jobs.spec.default_log_dir">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.jobs.spec.</span></span><span class="sig-name descname"><span class="pre">default_log_dir</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">pathlib.Path</span></span></span><a class="headerlink" href="#cellmap_flow.jobs.spec.default_log_dir" title="Link to this definition"></a></dt>
+<dd><p>Where job logs go unless the spec says otherwise.</p>
+<p><code class="docutils literal notranslate"><span class="pre">jobs.launch.SERVER_LOG_DIR</span></code>, read at call time rather than copied: it
+is the one setting of it (tests and deployments point it elsewhere).
+Imported here because launch imports this module.</p>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="cellmap_flow.jobs.spec.JobStatus">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.jobs.spec.</span></span><span class="sig-name descname"><span class="pre">JobStatus</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwds</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.jobs.spec.JobStatus" title="Link to this definition"></a></dt>
+<dd><p>Enumeration of possible job statuses.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.jobs.spec.JobStatus.PENDING">
+<span class="sig-name descname"><span class="pre">PENDING</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'pending'</span></span><a class="headerlink" href="#cellmap_flow.jobs.spec.JobStatus.PENDING" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.jobs.spec.JobStatus.RUNNING">
+<span class="sig-name descname"><span class="pre">RUNNING</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'running'</span></span><a class="headerlink" href="#cellmap_flow.jobs.spec.JobStatus.RUNNING" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.jobs.spec.JobStatus.COMPLETED">
+<span class="sig-name descname"><span class="pre">COMPLETED</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'completed'</span></span><a class="headerlink" href="#cellmap_flow.jobs.spec.JobStatus.COMPLETED" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.jobs.spec.JobStatus.FAILED">
+<span class="sig-name descname"><span class="pre">FAILED</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'failed'</span></span><a class="headerlink" href="#cellmap_flow.jobs.spec.JobStatus.FAILED" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.jobs.spec.JobStatus.KILLED">
+<span class="sig-name descname"><span class="pre">KILLED</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'killed'</span></span><a class="headerlink" href="#cellmap_flow.jobs.spec.JobStatus.KILLED" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py exception">
+<dt class="sig sig-object py" id="cellmap_flow.jobs.spec.JobStartError">
+<span class="property"><span class="k"><span class="pre">exception</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.jobs.spec.</span></span><span class="sig-name descname"><span class="pre">JobStartError</span></span><a class="headerlink" href="#cellmap_flow.jobs.spec.JobStartError" title="Link to this definition"></a></dt>
+<dd><p>A job was asked for and no usable one came of it.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.jobs.spec.exists_now">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.jobs.spec.</span></span><span class="sig-name descname"><span class="pre">exists_now</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#cellmap_flow.jobs.spec.exists_now" title="Link to this definition"></a></dt>
+<dd><p>Whether <code class="docutils literal notranslate"><span class="pre">path</span></code> exists, when another host may have just created it.</p>
+<p>A job writes its log and ready file on the node it runs on, and the
+launcher looks for them from another one. Over NFS that host caches “no
+such file” for a name it looked up, until the directory’s attributes
+time out (acdirmax, 60 s by default; /groups and /nrs are mounted
+without actimeo). So a log the trainer had been writing for a minute
+still did not exist for the dashboard, which meanwhile showed bpeek’s
+delayed output. Reading the directory makes the client revalidate it,
+which drops those cached misses; it is only done when the name is not
+found, so a file already seen costs one stat.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.jobs.spec.tail">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.jobs.spec.</span></span><span class="sig-name descname"><span class="pre">tail</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">pathlib.Path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_chars</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">4000</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#cellmap_flow.jobs.spec.tail" title="Link to this definition"></a></dt>
+<dd><p>Read the tail of a log file, for surfacing crash output. Returns None if unreadable/empty.</p>
+<p>Seeks to the end rather than reading the whole file. An inference server
+log can run to hundreds of megabytes, and this is called from the polling
+loop in <code class="docutils literal notranslate"><span class="pre">wait_for_host</span></code> while the caller is blocked.</p>
+<p>Reads 4 bytes per requested character so a multi-byte sequence split at
+the seek boundary still leaves at least <code class="docutils literal notranslate"><span class="pre">max_chars</span></code> intact; the leading
+partial character decodes to a replacement char and is sliced off.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.jobs.spec.log_stem">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.jobs.spec.</span></span><span class="sig-name descname"><span class="pre">log_stem</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">job_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#cellmap_flow.jobs.spec.log_stem" title="Link to this definition"></a></dt>
+<dd><p>A filesystem-safe stem for this job’s log file.</p>
+<p><code class="docutils literal notranslate"><span class="pre">job_name</span></code> arrives from model names, YAML and HuggingFace repo ids, so
+it can carry a path separator or <code class="docutils literal notranslate"><span class="pre">..</span></code>. Interpolated straight into a
+path, that writes the log outside the log directory – or, more quietly,
+makes the path we read back afterwards differ from the one we handed
+bsub, so a crashed job looks like it produced no output at all.</p>
+<p>Both the <code class="docutils literal notranslate"><span class="pre">-o</span></code> pattern and the path reconstructed after submission are
+built from this one value, so they cannot drift apart.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.jobs.spec.extract_host_from_output">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.jobs.spec.</span></span><span class="sig-name descname"><span class="pre">extract_host_from_output</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">output</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#cellmap_flow.jobs.spec.extract_host_from_output" title="Link to this definition"></a></dt>
+<dd><p>Extract host/URL from command output using configured patterns.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>output</strong> – String output to search</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Host URL if found, None otherwise</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.jobs.spec.public_server_url">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.jobs.spec.</span></span><span class="sig-name descname"><span class="pre">public_server_url</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">url</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#cellmap_flow.jobs.spec.public_server_url" title="Link to this definition"></a></dt>
+<dd><p>The address to use for a server that reported <code class="docutils literal notranslate"><span class="pre">url</span></code>: <code class="docutils literal notranslate"><span class="pre">url</span></code> itself,
+or <code class="docutils literal notranslate"><span class="pre">url</span></code> put through $CELLMAP_FLOW_SERVER_URL_TEMPLATE when that is
+set (see SERVER_URL_TEMPLATE_ENV). Read at call time.</p>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="cellmap_flow.jobs.spec.Job">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.jobs.spec.</span></span><span class="sig-name descname"><span class="pre">Job</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.jobs.spec.Job" title="Link to this definition"></a></dt>
+<dd><p>Abstract base class for jobs across different execution environments.</p>
+<p>Subclasses should implement:
+- kill(): Terminate the job
+- get_status(): Get current job status
+- wait_for_host(): Wait for and extract host information</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.jobs.spec.Job.model_name">
+<span class="sig-name descname"><span class="pre">model_name</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.jobs.spec.Job.model_name" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.jobs.spec.Job.status">
+<span class="sig-name descname"><span class="pre">status</span></span><a class="headerlink" href="#cellmap_flow.jobs.spec.Job.status" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.jobs.spec.Job.host">
+<span class="sig-name descname"><span class="pre">host</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.jobs.spec.Job.host" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.jobs.spec.Job.queue">
+<span class="sig-name descname"><span class="pre">queue</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.jobs.spec.Job.queue" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.jobs.spec.Job.kill">
+<span class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">kill</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#cellmap_flow.jobs.spec.Job.kill" title="Link to this definition"></a></dt>
+<dd><p>Terminate the job.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.jobs.spec.Job.get_status">
+<span class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">get_status</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#cellmap_flow.jobs.spec.JobStatus" title="cellmap_flow.jobs.spec.JobStatus"><span class="pre">JobStatus</span></a></span></span><a class="headerlink" href="#cellmap_flow.jobs.spec.Job.get_status" title="Link to this definition"></a></dt>
+<dd><p>Get the current status of the job.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.jobs.spec.Job.wait_for_host">
+<span class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">wait_for_host</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">timeout</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">300</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#cellmap_flow.jobs.spec.Job.wait_for_host" title="Link to this definition"></a></dt>
+<dd><p>Wait for the job to provide host information.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>timeout</strong> – Maximum time to wait in seconds</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Host URL if found, None otherwise</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.jobs.spec.Job.peek">
+<span class="sig-name descname"><span class="pre">peek</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">max_chars</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">4000</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#cellmap_flow.jobs.spec.Job.peek" title="Link to this definition"></a></dt>
+<dd><p>The tail of this job’s own output, or None if it cannot be read.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.jobs.spec.Job.is_running">
+<span class="sig-name descname"><span class="pre">is_running</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#cellmap_flow.jobs.spec.Job.is_running" title="Link to this definition"></a></dt>
+<dd><p>Check if the job is currently running.</p>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../site/index.html" class="btn btn-neutral float-left" title="cellmap_flow.jobs.site" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../../logging_setup/index.html" class="btn btn-neutral float-right" title="cellmap_flow.logging_setup" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, David Ackerman,  Marwan Zouinkhi, Jeff Rhoades, Larissa Heinrich, Aubrey Weigel.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

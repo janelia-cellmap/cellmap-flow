@@ -54,8 +54,35 @@ Module Contents
 
    .. py:method:: to_dict()
 
+      ``{"name": <class name>, **constructor arguments}``.
+
+      Exactly what ``type(self)(**params)`` needs to rebuild this step. The
+      public attributes are not that: constructors parse their arguments
+      (a neighborhood string becomes a list, "0,1" becomes [0, 1]) and add
+      state of their own, so feeding the attributes back in raised TypeError
+      or built a different step.
+
+      Each argument is reported with its real type: when the constructor
+      stored it under its own name as a plain number, bool or string, that
+      stored value is used (0.5, not the "0.5" a form sent); anything it
+      parsed into something else keeps the argument as given.
+
+
 
    .. py:property:: dtype
+
+
+   .. py:method:: output_info(dtype, channels)
+
+      ``(dtype, channels, is_segmentation)`` of what this step returns.
+
+      ``dtype`` and ``channels`` describe what it is given. By default the
+      step's declared ``dtype`` replaces the incoming one (``None`` keeps
+      it), a ``num_channels`` attribute (only steps that change the count
+      have one) replaces the channel count, and ``is_segmentation`` is the
+      step's own, where ``None`` means it does not say. A step whose output
+      depends on its input in some other way overrides this.
+
 
 
 .. py:class:: InputNormalizer
@@ -84,12 +111,12 @@ Module Contents
 
 
 
+   .. py:attribute:: type
+      :value: 'edt'
+
+
+
    .. py:attribute:: anisotropy
-
-
-   .. py:attribute:: black_border
-      :value: True
-
 
 
    .. py:attribute:: parallel

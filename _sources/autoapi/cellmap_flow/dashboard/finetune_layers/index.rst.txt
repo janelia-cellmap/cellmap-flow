@@ -1,0 +1,103 @@
+cellmap_flow.dashboard.finetune_layers
+======================================
+
+.. py:module:: cellmap_flow.dashboard.finetune_layers
+
+.. autoapi-nested-parse::
+
+   What the dashboard shows of a finetune job's model as it trains.
+
+   The job manager (finetune.job_manager) knows nothing of the viewer:
+   it tells its listeners when a job's inference server is up and when an
+   iteration finishes (FinetuneJobListener). The dashboard's listener,
+   ``FinetuneLayerListener``, answers each event with the dashboard's two
+   views of the model:
+
+   - ``add_finetuned_layer()``: its viewer layer, served by the job's server,
+     replacing the previous iteration's; and its job among the session's jobs;
+   - ``register_finetuned_model()``: its FinetuneModelConfig among the
+     session's models, so the pipeline builder offers it.
+
+   ``follow_jobs(manager)`` has the listener told of a manager's jobs; the
+   routes that put jobs into the manager (submit, and finding the jobs of an
+   earlier dashboard) call it first.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.finetune_layers.logger
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.finetune_layers.FinetuneLayerListener
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.finetune_layers.add_finetuned_layer
+   cellmap_flow.dashboard.finetune_layers.register_finetuned_model
+   cellmap_flow.dashboard.finetune_layers.follow_jobs
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:function:: add_finetuned_layer(job, model_name)
+
+   Add (or replace) the layer of ``job``'s model, ``model_name``.
+
+   The layer is the one every model gets (viewer.layers.prediction_layer),
+   over the job's inference server, in red; the previous iteration's layer
+   (``job.finetuned_model_name``) goes. The session's jobs get a job for
+   the server in place of any earlier iteration's, so Submit and the
+   pipeline builder see the model as running. Nothing is added before the
+   server is up.
+
+
+.. py:function:: register_finetuned_model(job, model_name)
+
+   Put a FinetuneModelConfig for ``job``'s model ``model_name`` among the
+   session's models, in place of any earlier iteration's, so the pipeline
+   builder offers it with its parameters filled in.
+
+
+.. py:class:: FinetuneLayerListener
+
+
+
+   The dashboard's listener: on each event, the model's layer and its
+   pipeline-builder model. Either failing is logged, and does not stop the
+   other.
+
+
+   .. py:method:: on_server_ready(job, url, model_name)
+
+      The job's inference server is up at ``url``, serving ``model_name``.
+
+
+
+   .. py:method:: on_iteration_complete(job, model_name)
+
+      The job finished a training iteration and named its model ``model_name``.
+
+
+
+.. py:function:: follow_jobs(manager)
+
+   Have the dashboard's listener told of ``manager``'s jobs, once however
+   often this is called (request threads call it concurrently).
+
+

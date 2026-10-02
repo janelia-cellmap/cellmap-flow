@@ -11,5 +11,6 @@ Submodules
    :maxdepth: 1
 
    /autoapi/cellmap_flow/norm/input_normalize/index
+   /autoapi/cellmap_flow/norm/safe_expression/index
 
 

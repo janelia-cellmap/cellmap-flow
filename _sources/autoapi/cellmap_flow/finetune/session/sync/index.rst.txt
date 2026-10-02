@@ -1,0 +1,178 @@
+cellmap_flow.finetune.session.sync
+==================================
+
+.. py:module:: cellmap_flow.finetune.session.sync
+
+.. autoapi-nested-parse::
+
+   Bringing painted chunks from MinIO back to the volumes on disk.
+
+   The browser paints into MinIO; the trainer reads the volume on disk. A sync
+   lists a volume's chunks in the bucket with their ETags, copies the ones that
+   changed since the last sync into the volume's own zarr, and records what it
+   saw in the volume's registry record (``chunk_sync_state``). Local disk is the
+   source of truth: nothing on disk is ever deleted because MinIO lacks it.
+
+   ``state`` is the dashboard's ``minio_state`` and ``volumes`` its volume
+   registry, passed to every call; only the lock and the failure counter of
+   the periodic sync are kept here.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.session.sync.logger
+   cellmap_flow.finetune.session.sync.SYNC_PERIOD_SECONDS
+   cellmap_flow.finetune.session.sync.SYNC_FAILURE_WARNING_INTERVAL
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.session.sync.worker_count
+   cellmap_flow.finetune.session.sync.chunk_version
+   cellmap_flow.finetune.session.sync.copy_chunks_parallel
+   cellmap_flow.finetune.session.sync.sync_zarr_group_metadata
+   cellmap_flow.finetune.session.sync.diff_and_sync_chunks
+   cellmap_flow.finetune.session.sync.volume_record
+   cellmap_flow.finetune.session.sync.sync_volume
+   cellmap_flow.finetune.session.sync.sync_all
+   cellmap_flow.finetune.session.sync.periodic_sync_once
+   cellmap_flow.finetune.session.sync.periodic_sync
+   cellmap_flow.finetune.session.sync.start_periodic_sync
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:data:: SYNC_PERIOD_SECONDS
+   :value: 30
+
+
+.. py:data:: SYNC_FAILURE_WARNING_INTERVAL
+   :value: 300
+
+
+.. py:function:: worker_count() -> int
+
+   How many threads chunk copies and writes may use.
+
+   The CPU count the scheduler gave the job (LSF's ``bsub -n``, SGE, SLURM,
+   OpenMP) first, else the CPUs this process may run on.
+
+
+.. py:function:: chunk_version(entry) -> str
+
+   What identifies one version of a remote chunk: its ETag, from a listing.
+
+   The ETag changes with the content. LastModified has one-second
+   resolution: two brush strokes to the same chunk within a second, with a
+   sync between them, would leave the second stroke unsynced for good.
+   LastModified and size are only the fallback for a store that lists no
+   ETag.
+
+
+.. py:function:: copy_chunks_parallel(s3, copy_pairs) -> set
+
+   Copy ``(src, dst)`` chunk files from MinIO in parallel.
+
+   Each chunk is downloaded to a temporary file beside its destination and
+   moved into place with os.replace, so a reader -- the trainer on its LSF
+   node reads this same volume -- sees the old chunk or the new one, never
+   a half-written file (which blosc rejects).
+
+   Returns the source paths that could not be copied. Their chunks keep
+   what was on disk, and the caller must not record them as synced.
+
+
+.. py:function:: sync_zarr_group_metadata(s3, src_path, dst_path) -> set
+
+   Sync a zarr group's structure and metadata from MinIO to local disk.
+
+   Creates the arrays of ``src_path`` that ``dst_path`` does not have yet,
+   and copies the attrs. An array that exists locally with a different
+   shape, chunking or dtype is left alone and reported: re-creating it
+   would delete every local chunk of that array, which the "never delete
+   on-disk chunks" rule of diff_and_sync_chunks exists to prevent.
+
+   Returns the keys of the arrays whose local layout does not match
+   MinIO's. The caller must not copy chunks into those, since they would
+   not fit.
+
+
+.. py:function:: diff_and_sync_chunks(s3, s0_path, dst_s0_path, known_state, force=False) -> tuple
+
+   Copy the chunks of MinIO's ``s0_path`` that changed since ``known_state`` to disk.
+
+   Local disk is the source of truth: YAML imports are written locally
+   first and only later mirrored to MinIO, and painted scribbles flow
+   MinIO -> local through this function. Nothing on disk is ever deleted
+   because MinIO lacks it: a chunk absent from a listing is almost always a
+   transient (a truncated page, an ``mc mirror`` in flight, a server
+   restart, a network blip), not a real erase, since painting background
+   over a chunk in neuroglancer rewrites the chunk file rather than
+   removing it. Trusting one bad listing once wiped 3456 chunks of a
+   session from disk.
+
+   Returns ``(changed_keys, remote_state)``: the chunks copied, and the
+   state to record as synced. A chunk that failed to copy is left out of
+   ``changed_keys`` and keeps its previous state (or none) in
+   ``remote_state``, so the next sync tries it again.
+
+
+.. py:function:: volume_record(volume_id, zarr_path=None, *, volumes)
+
+   The registry record of ``volume_id``, rebuilt from ``zarr_path`` if need be.
+
+   When the registry has none yet (after a dashboard restart, say), the
+   record is rebuilt from ``zarr_path``'s attrs and registered. None if
+   neither gives one.
+
+
+.. py:function:: sync_volume(volume_id, force=False, zarr_path=None, *, state, volumes) -> bool
+
+   Pull an annotation volume's changed chunks from MinIO to local disk.
+
+   Syncs the annotation group's metadata, then diffs MinIO's chunk listing
+   against what was last synced and copies the chunks that changed. The
+   trainer reads the volume itself, through the session's manifest.
+   Returns True if any chunk was pulled.
+
+   The chunks go to the volume's own zarr: ``zarr_path`` (a resumed copy),
+   else the registered one, else -- only for a volume this dashboard has no
+   record of -- ``<output_base>/<volume_id>.zarr``. output_base is fixed by
+   the first ensure_serving of the dashboard's life, so a volume created
+   under another output path would have its strokes land in the first
+   session's directory, where its trainer never looks.
+
+
+.. py:function:: sync_all(force: bool = True, *, state, volumes) -> int
+
+   Sync every annotation volume in MinIO to local disk.
+
+   Returns the number of volumes that had changed chunks, or -1 if MinIO
+   is not initialized.
+
+
+.. py:function:: periodic_sync_once(*, state, volumes) -> None
+
+   One round of the periodic sync; failures are warned about, not hidden.
+
+
+.. py:function:: periodic_sync(*, state, volumes) -> None
+
+   The periodic sync thread's loop: a round every SYNC_PERIOD_SECONDS, forever.
+
+
+.. py:function:: start_periodic_sync(state, volumes) -> None
+
+   Start the periodic annotation sync thread if not already running.
+
+

@@ -3,6 +3,20 @@ cellmap_flow.dashboard.routes.finetune.training
 
 .. py:module:: cellmap_flow.dashboard.routes.finetune.training
 
+.. autoapi-nested-parse::
+
+   Training jobs: submitting one, restarting it, and following it.
+
+   Routes:
+   - POST ``/api/finetune/submit``: a job for a model over a session's corrections;
+   - POST ``/api/finetune/job/<job_id>/restart``: the next iteration, with new settings;
+   - GET ``/api/finetune/jobs``: every job, including those a dashboard before
+     this one started (they are looked for first);
+   - GET ``/api/finetune/job/<job_id>/status`` and ``.../logs``;
+   - GET ``/api/finetune/job/<job_id>/logs/stream``: the log as server-sent events;
+   - POST ``/api/finetune/job/<job_id>/cancel`` and ``.../stop-early``.
+
+
 
 Attributes
 ----------
@@ -17,15 +31,14 @@ Functions
 
 .. autoapisummary::
 
-   cellmap_flow.dashboard.routes.finetune.training.list_finetuning_jobs_response
-   cellmap_flow.dashboard.routes.finetune.training.get_job_status_response
-   cellmap_flow.dashboard.routes.finetune.training.get_job_logs_response
-   cellmap_flow.dashboard.routes.finetune.training.submit_finetuning_response
-   cellmap_flow.dashboard.routes.finetune.training.stream_job_logs_response
-   cellmap_flow.dashboard.routes.finetune.training.cancel_job_response
-   cellmap_flow.dashboard.routes.finetune.training.stop_training_early_response
-   cellmap_flow.dashboard.routes.finetune.training.get_inference_server_status_response
-   cellmap_flow.dashboard.routes.finetune.training.restart_finetuning_job_response
+   cellmap_flow.dashboard.routes.finetune.training.get_finetuning_jobs
+   cellmap_flow.dashboard.routes.finetune.training.get_job_status
+   cellmap_flow.dashboard.routes.finetune.training.get_job_logs
+   cellmap_flow.dashboard.routes.finetune.training.submit_finetuning
+   cellmap_flow.dashboard.routes.finetune.training.stream_job_logs
+   cellmap_flow.dashboard.routes.finetune.training.cancel_job
+   cellmap_flow.dashboard.routes.finetune.training.stop_training_early
+   cellmap_flow.dashboard.routes.finetune.training.restart_finetuning_job
 
 
 Module Contents
@@ -33,21 +46,31 @@ Module Contents
 
 .. py:data:: logger
 
-.. py:function:: list_finetuning_jobs_response()
+.. py:function:: get_finetuning_jobs()
 
-.. py:function:: get_job_status_response(job_id)
+.. py:function:: get_job_status(job_id)
 
-.. py:function:: get_job_logs_response(job_id)
+.. py:function:: get_job_logs(job_id)
 
-.. py:function:: submit_finetuning_response(data)
+.. py:function:: submit_finetuning()
 
-.. py:function:: stream_job_logs_response(job_id)
+.. py:function:: stream_job_logs(job_id)
 
-.. py:function:: cancel_job_response(job_id)
+   Server-sent log stream.
 
-.. py:function:: stop_training_early_response(job_id)
+   Every block of lines carries ``id: <byte offset>``, the position in the
+   log after it, and a (re)connection resumes from the client's
+   Last-Event-ID -- which EventSource sends by itself when it reconnects --
+   or from ``?offset=``. The stream ends with ``event: done`` once the job
+   is finished. It used to send the whole log on every connection and just
+   stop at the end, so the browser's automatic reconnect replayed the whole
+   log, plus "=== Training COMPLETED ===", every few seconds for as long as
+   the page stayed open.
 
-.. py:function:: get_inference_server_status_response(job_id)
 
-.. py:function:: restart_finetuning_job_response(job_id, data)
+.. py:function:: cancel_job(job_id)
+
+.. py:function:: stop_training_early(job_id)
+
+.. py:function:: restart_finetuning_job(job_id)
 

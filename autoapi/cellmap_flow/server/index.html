@@ -10,7 +10,6 @@
       <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../../../_static/graphviz.css?v=4ae1632d" />
-      <link rel="stylesheet" type="text/css" href="../../../_static/mystnb.11b39860a7a0cbfd473a3ad8a317855267ff0bd372690045ca344a6b62be495e.css" />
       <link rel="stylesheet" type="text/css" href="../../../_static/css/custom.css" />
 
   
@@ -20,12 +19,11 @@
       <script src="../../../_static/documentation_options.js?v=5929fcd5"></script>
       <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
-      <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
     <script src="../../../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../../../genindex.html" />
     <link rel="search" title="Search" href="../../../search.html" />
-    <link rel="next" title="cellmap_flow.utils" href="../utils/index.html" />
-    <link rel="prev" title="cellmap_flow.post.postprocessors" href="../post/postprocessors/index.html" /> 
+    <link rel="next" title="cellmap_flow.serving" href="../serving/index.html" />
+    <link rel="prev" title="cellmap_flow.review_index" href="../review_index/index.html" /> 
 </head>
 
 <body class="wy-body-for-nav"> 
@@ -50,27 +48,44 @@
               <p class="caption" role="heading"><span class="caption-text">CellMap-Flow API:</span></p>
 <ul class="current">
 <li class="toctree-l1"><a class="reference internal" href="../../../install.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../cli.html">Command line</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../scripts.html">Python Scripts</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../yaml_config.html">YAML Configuration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../data_paths.html">Data paths</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../huggingface.html">HuggingFace Models</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../custom_script.html">Custom Model</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../post.html">PostProcessors</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../plugins.html">Plugins</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../review.html">Reviewing instances</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../viewer_api.html">Viewer layer API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../architecture.html">Architecture</a></li>
 <li class="toctree-l1 current"><a class="reference internal" href="../../index.html">API Reference</a><ul class="current">
 <li class="toctree-l2 current"><a class="reference internal" href="../index.html">cellmap_flow</a><ul class="current">
 <li class="toctree-l3 current"><a class="reference internal" href="../index.html#submodules">Submodules</a><ul class="current">
 <li class="toctree-l4"><a class="reference internal" href="../blockwise/index.html">cellmap_flow.blockwise</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../cli/index.html">cellmap_flow.cli</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../config/index.html">cellmap_flow.config</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../dashboard/index.html">cellmap_flow.dashboard</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../finetune/index.html">cellmap_flow.finetune</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../globals/index.html">cellmap_flow.globals</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../image_data_interface/index.html">cellmap_flow.image_data_interface</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../inference/index.html">cellmap_flow.inference</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../inferencer/index.html">cellmap_flow.inferencer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../io/index.html">cellmap_flow.io</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../jobs/index.html">cellmap_flow.jobs</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../logging_setup/index.html">cellmap_flow.logging_setup</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../models/index.html">cellmap_flow.models</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../norm/index.html">cellmap_flow.norm</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../pipeline_spec/index.html">cellmap_flow.pipeline_spec</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../plugins/index.html">cellmap_flow.plugins</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../post/index.html">cellmap_flow.post</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../process_chain/index.html">cellmap_flow.process_chain</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../review/index.html">cellmap_flow.review</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../review_index/index.html">cellmap_flow.review_index</a></li>
 <li class="toctree-l4 current"><a class="current reference internal" href="#">cellmap_flow.server</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../serving/index.html">cellmap_flow.serving</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../utils/index.html">cellmap_flow.utils</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../viewer/index.html">cellmap_flow.viewer</a></li>
 </ul>
 </li>
 </ul>
@@ -114,6 +129,24 @@
 <tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.server.logger" title="cellmap_flow.server.logger"><code class="xref py py-obj docutils literal notranslate"><span class="pre">logger</span></code></a></p></td>
 <td><p></p></td>
 </tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.server.CHAIN_CACHE_SIZE" title="cellmap_flow.server.CHAIN_CACHE_SIZE"><code class="xref py py-obj docutils literal notranslate"><span class="pre">CHAIN_CACHE_SIZE</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.server.EQUIVALENCES_TIMEOUT_SECONDS" title="cellmap_flow.server.EQUIVALENCES_TIMEOUT_SECONDS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">EQUIVALENCES_TIMEOUT_SECONDS</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.server.RAW_CACHE_BYTES_ENV" title="cellmap_flow.server.RAW_CACHE_BYTES_ENV"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RAW_CACHE_BYTES_ENV</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.server.RAW_CACHE_BYTES_DEFAULT" title="cellmap_flow.server.RAW_CACHE_BYTES_DEFAULT"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RAW_CACHE_BYTES_DEFAULT</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.server.RAW_READ_CONCURRENCY_ENV" title="cellmap_flow.server.RAW_READ_CONCURRENCY_ENV"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RAW_READ_CONCURRENCY_ENV</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.server.HALF_PRECISION_ENV" title="cellmap_flow.server.HALF_PRECISION_ENV"><code class="xref py py-obj docutils literal notranslate"><span class="pre">HALF_PRECISION_ENV</span></code></a></p></td>
+<td><p></p></td>
+</tr>
 </tbody>
 </table>
 </section>
@@ -121,8 +154,24 @@
 <h2>Classes<a class="headerlink" href="#classes" title="Link to this heading"></a></h2>
 <table class="autosummary longtable docutils align-default">
 <tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.server.CellMapFlowServer" title="cellmap_flow.server.CellMapFlowServer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">CellMapFlowServer</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.server.ServedChain" title="cellmap_flow.server.ServedChain"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ServedChain</span></code></a></p></td>
+<td><p>The normalization/postprocessing a layer URL asks for.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.server.CellMapFlowServer" title="cellmap_flow.server.CellMapFlowServer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">CellMapFlowServer</span></code></a></p></td>
 <td><p>Flask application hosting a &quot;virtual Zarr&quot; for Neuroglancer.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="functions">
+<h2>Functions<a class="headerlink" href="#functions" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.server.get_free_port" title="cellmap_flow.server.get_free_port"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_free_port</span></code></a>()</p></td>
+<td><p>A TCP port free on this machine now, for a server to bind.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.server.get_public_ip" title="cellmap_flow.server.get_public_ip"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_public_ip</span></code></a>()</p></td>
+<td><p>Return the local/private IP address in use on this machine</p></td>
 </tr>
 </tbody>
 </table>
@@ -134,14 +183,90 @@
 <span class="sig-prename descclassname"><span class="pre">cellmap_flow.server.</span></span><span class="sig-name descname"><span class="pre">logger</span></span><a class="headerlink" href="#cellmap_flow.server.logger" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.server.CHAIN_CACHE_SIZE">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.server.</span></span><span class="sig-name descname"><span class="pre">CHAIN_CACHE_SIZE</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">32</span></span><a class="headerlink" href="#cellmap_flow.server.CHAIN_CACHE_SIZE" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.server.EQUIVALENCES_TIMEOUT_SECONDS">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.server.</span></span><span class="sig-name descname"><span class="pre">EQUIVALENCES_TIMEOUT_SECONDS</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">10</span></span><a class="headerlink" href="#cellmap_flow.server.EQUIVALENCES_TIMEOUT_SECONDS" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.server.RAW_CACHE_BYTES_ENV">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.server.</span></span><span class="sig-name descname"><span class="pre">RAW_CACHE_BYTES_ENV</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'CELLMAP_FLOW_RAW_CACHE_BYTES'</span></span><a class="headerlink" href="#cellmap_flow.server.RAW_CACHE_BYTES_ENV" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.server.RAW_CACHE_BYTES_DEFAULT">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.server.</span></span><span class="sig-name descname"><span class="pre">RAW_CACHE_BYTES_DEFAULT</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">1073741824</span></span><a class="headerlink" href="#cellmap_flow.server.RAW_CACHE_BYTES_DEFAULT" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.server.RAW_READ_CONCURRENCY_ENV">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.server.</span></span><span class="sig-name descname"><span class="pre">RAW_READ_CONCURRENCY_ENV</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'CELLMAP_FLOW_RAW_READ_CONCURRENCY'</span></span><a class="headerlink" href="#cellmap_flow.server.RAW_READ_CONCURRENCY_ENV" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.server.HALF_PRECISION_ENV">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.server.</span></span><span class="sig-name descname"><span class="pre">HALF_PRECISION_ENV</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'CELLMAP_FLOW_HALF_PRECISION'</span></span><a class="headerlink" href="#cellmap_flow.server.HALF_PRECISION_ENV" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.server.get_free_port">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.server.</span></span><span class="sig-name descname"><span class="pre">get_free_port</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.server.get_free_port" title="Link to this definition"></a></dt>
+<dd><p>A TCP port free on this machine now, for a server to bind.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.server.get_public_ip">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.server.</span></span><span class="sig-name descname"><span class="pre">get_public_ip</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.server.get_public_ip" title="Link to this definition"></a></dt>
+<dd><p>Return the local/private IP address in use on this machine
+(e.g., 10.x.x.x or 192.168.x.x if behind NAT).
+This <em>does not</em> return the real Internet-facing public IP
+if you’re behind NAT.</p>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="cellmap_flow.server.ServedChain">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.server.</span></span><span class="sig-name descname"><span class="pre">ServedChain</span></span><a class="headerlink" href="#cellmap_flow.server.ServedChain" title="Link to this definition"></a></dt>
+<dd><p>The normalization/postprocessing a layer URL asks for.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.server.ServedChain.dashboard_url">
+<span class="sig-name descname"><span class="pre">dashboard_url</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.server.ServedChain.dashboard_url" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.server.ServedChain.input_norms">
+<span class="sig-name descname"><span class="pre">input_norms</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">list</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.server.ServedChain.input_norms" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.server.ServedChain.postprocess">
+<span class="sig-name descname"><span class="pre">postprocess</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">list</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.server.ServedChain.postprocess" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.server.ServedChain.effective_postprocess">
+<span class="sig-name descname"><span class="pre">effective_postprocess</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.server.ServedChain.effective_postprocess" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
 <dl class="py class">
 <dt class="sig sig-object py" id="cellmap_flow.server.CellMapFlowServer">
-<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.server.</span></span><span class="sig-name descname"><span class="pre">CellMapFlowServer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dataset_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model_config</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../models/models_config/index.html#cellmap_flow.models.models_config.ModelConfig" title="cellmap_flow.models.models_config.ModelConfig"><span class="pre">cellmap_flow.models.models_config.ModelConfig</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">restart_callback</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.server.CellMapFlowServer" title="Link to this definition"></a></dt>
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.server.</span></span><span class="sig-name descname"><span class="pre">CellMapFlowServer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dataset_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model_config</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../models/models_config/index.html#cellmap_flow.models.models_config.ModelConfig" title="cellmap_flow.models.models_config.ModelConfig"><span class="pre">cellmap_flow.models.models_config.ModelConfig</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">restart_callback</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">restart_token</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">resample</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.server.CellMapFlowServer" title="Link to this definition"></a></dt>
 <dd><p>Flask application hosting a “virtual Zarr” for Neuroglancer.
 All routes are defined via Flask decorators for convenience.</p>
 <dl class="py attribute">
-<dt class="sig sig-object py" id="cellmap_flow.server.CellMapFlowServer.zarr_block_shape">
-<span class="sig-name descname"><span class="pre">zarr_block_shape</span></span><a class="headerlink" href="#cellmap_flow.server.CellMapFlowServer.zarr_block_shape" title="Link to this definition"></a></dt>
+<dt class="sig sig-object py" id="cellmap_flow.server.CellMapFlowServer.inferencer">
+<span class="sig-name descname"><span class="pre">inferencer</span></span><a class="headerlink" href="#cellmap_flow.server.CellMapFlowServer.inferencer" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.server.CellMapFlowServer.geometry">
+<span class="sig-name descname"><span class="pre">geometry</span></span><a class="headerlink" href="#cellmap_flow.server.CellMapFlowServer.geometry" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py attribute">
@@ -165,28 +290,23 @@ All routes are defined via Flask decorators for convenience.</p>
 <dd></dd></dl>
 
 <dl class="py attribute">
-<dt class="sig sig-object py" id="cellmap_flow.server.CellMapFlowServer.model_output_axes">
-<span class="sig-name descname"><span class="pre">model_output_axes</span></span><a class="headerlink" href="#cellmap_flow.server.CellMapFlowServer.model_output_axes" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="cellmap_flow.server.CellMapFlowServer.model_config">
-<span class="sig-name descname"><span class="pre">model_config</span></span><a class="headerlink" href="#cellmap_flow.server.CellMapFlowServer.model_config" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="cellmap_flow.server.CellMapFlowServer.inferencer">
-<span class="sig-name descname"><span class="pre">inferencer</span></span><a class="headerlink" href="#cellmap_flow.server.CellMapFlowServer.inferencer" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
 <dt class="sig sig-object py" id="cellmap_flow.server.CellMapFlowServer.restart_callback">
 <span class="sig-name descname"><span class="pre">restart_callback</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.server.CellMapFlowServer.restart_callback" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.server.CellMapFlowServer.restart_token">
+<span class="sig-name descname"><span class="pre">restart_token</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.server.CellMapFlowServer.restart_token" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
 <dt class="sig sig-object py" id="cellmap_flow.server.CellMapFlowServer.idi_raw">
 <span class="sig-name descname"><span class="pre">idi_raw</span></span><a class="headerlink" href="#cellmap_flow.server.CellMapFlowServer.idi_raw" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.server.CellMapFlowServer.origin">
+<span class="sig-name descname"><span class="pre">origin</span></span><a class="headerlink" href="#cellmap_flow.server.CellMapFlowServer.origin" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py attribute">
@@ -210,11 +330,6 @@ All routes are defined via Flask decorators for convenience.</p>
 <dd></dd></dl>
 
 <dl class="py attribute">
-<dt class="sig sig-object py" id="cellmap_flow.server.CellMapFlowServer.vol_shape">
-<span class="sig-name descname"><span class="pre">vol_shape</span></span><a class="headerlink" href="#cellmap_flow.server.CellMapFlowServer.vol_shape" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
 <dt class="sig sig-object py" id="cellmap_flow.server.CellMapFlowServer.chunk_encoder">
 <span class="sig-name descname"><span class="pre">chunk_encoder</span></span><a class="headerlink" href="#cellmap_flow.server.CellMapFlowServer.chunk_encoder" title="Link to this definition"></a></dt>
 <dd></dd></dl>
@@ -225,8 +340,16 @@ All routes are defined via Flask decorators for convenience.</p>
 <dd></dd></dl>
 
 <dl class="py method">
-<dt class="sig sig-object py" id="cellmap_flow.server.CellMapFlowServer.refresh_dataset">
-<span class="sig-name descname"><span class="pre">refresh_dataset</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dataset</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.server.CellMapFlowServer.refresh_dataset" title="Link to this definition"></a></dt>
+<dt class="sig sig-object py" id="cellmap_flow.server.CellMapFlowServer.chain_for">
+<span class="sig-name descname"><span class="pre">chain_for</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dataset</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#cellmap_flow.server.ServedChain" title="cellmap_flow.server.ServedChain"><span class="pre">ServedChain</span></a></span></span><a class="headerlink" href="#cellmap_flow.server.CellMapFlowServer.chain_for" title="Link to this definition"></a></dt>
+<dd><p>The chain the requested layer URL carries, built once per URL.</p>
+<p>A URL without an args block gets the process’s chain
+(<code class="docutils literal notranslate"><span class="pre">process_chain()</span></code>, empty in a server started from the CLI).</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.server.CellMapFlowServer.CHUNKS_TIMED_AT_INFO">
+<span class="sig-name descname"><span class="pre">CHUNKS_TIMED_AT_INFO</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">20</span></span><a class="headerlink" href="#cellmap_flow.server.CellMapFlowServer.CHUNKS_TIMED_AT_INFO" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
@@ -244,8 +367,8 @@ All routes are defined via Flask decorators for convenience.</p>
            </div>
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
-        <a href="../post/postprocessors/index.html" class="btn btn-neutral float-left" title="cellmap_flow.post.postprocessors" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
-        <a href="../utils/index.html" class="btn btn-neutral float-right" title="cellmap_flow.utils" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="../review_index/index.html" class="btn btn-neutral float-left" title="cellmap_flow.review_index" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../serving/index.html" class="btn btn-neutral float-right" title="cellmap_flow.serving" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>

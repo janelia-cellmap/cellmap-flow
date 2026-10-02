@@ -1,0 +1,835 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>cellmap_flow.dashboard.requests &mdash; CellMap Flow  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=4ae1632d" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css" />
+
+  
+    <link rel="shortcut icon" href="../../../../_static/favicon.ico"/>
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link rel="next" title="cellmap_flow.dashboard.routes" href="../routes/index.html" />
+    <link rel="prev" title="cellmap_flow.dashboard.progress" href="../progress/index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            CellMap Flow
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">CellMap-Flow API:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../../../../install.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../cli.html">Command line</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../scripts.html">Python Scripts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../yaml_config.html">YAML Configuration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../data_paths.html">Data paths</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../huggingface.html">HuggingFace Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../custom_script.html">Custom Model</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../post.html">PostProcessors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../plugins.html">Plugins</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../review.html">Reviewing instances</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../viewer_api.html">Viewer layer API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../architecture.html">Architecture</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../../../index.html">API Reference</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="../../index.html">cellmap_flow</a><ul class="current">
+<li class="toctree-l3 current"><a class="reference internal" href="../../index.html#submodules">Submodules</a><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="../../blockwise/index.html">cellmap_flow.blockwise</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../cli/index.html">cellmap_flow.cli</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../config/index.html">cellmap_flow.config</a></li>
+<li class="toctree-l4 current"><a class="reference internal" href="../index.html">cellmap_flow.dashboard</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../finetune/index.html">cellmap_flow.finetune</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../globals/index.html">cellmap_flow.globals</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../image_data_interface/index.html">cellmap_flow.image_data_interface</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../inference/index.html">cellmap_flow.inference</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../inferencer/index.html">cellmap_flow.inferencer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../io/index.html">cellmap_flow.io</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../jobs/index.html">cellmap_flow.jobs</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../logging_setup/index.html">cellmap_flow.logging_setup</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../models/index.html">cellmap_flow.models</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../norm/index.html">cellmap_flow.norm</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../pipeline_spec/index.html">cellmap_flow.pipeline_spec</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../plugins/index.html">cellmap_flow.plugins</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../post/index.html">cellmap_flow.post</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../process_chain/index.html">cellmap_flow.process_chain</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../review/index.html">cellmap_flow.review</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../review_index/index.html">cellmap_flow.review_index</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../server/index.html">cellmap_flow.server</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../serving/index.html">cellmap_flow.serving</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../utils/index.html">cellmap_flow.utils</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../viewer/index.html">cellmap_flow.viewer</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">CellMap Flow</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">API Reference</a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">cellmap_flow</a></li>
+          <li class="breadcrumb-item"><a href="../index.html">cellmap_flow.dashboard</a></li>
+      <li class="breadcrumb-item active">cellmap_flow.dashboard.requests</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../../../../_sources/autoapi/cellmap_flow/dashboard/requests/index.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-cellmap_flow.dashboard.requests">
+<span id="cellmap-flow-dashboard-requests"></span><h1>cellmap_flow.dashboard.requests<a class="headerlink" href="#module-cellmap_flow.dashboard.requests" title="Link to this heading"></a></h1>
+<p>The typed bodies of the dashboard’s POST routes, and how a bad one is answered.</p>
+<p><code class="docutils literal notranslate"><span class="pre">parse(Model,</span> <span class="pre">body)</span></code> gives <code class="docutils literal notranslate"><span class="pre">(request,</span> <span class="pre">None)</span></code>, or <code class="docutils literal notranslate"><span class="pre">(None,</span> <span class="pre">response)</span></code>
+where the response is the 400 every route answers a bad body with,
+<code class="docutils literal notranslate"><span class="pre">{&quot;success&quot;:</span> <span class="pre">False,</span> <span class="pre">&quot;error&quot;:</span> <span class="pre">&lt;message&gt;}</span></code>, before anything is changed. The
+message names what is wrong: a body that is not a JSON object is “expected a
+JSON object”, a count that is not a whole number says so and shows what was
+sent (the settings forms show it as it stands), and any other field’s
+message is pydantic’s, after the field’s name.</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">ServerConfigUpdate</span></code>: POST /api/server-config</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">BlockwiseSettings</span></code>: POST /api/blockwise-config</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">CreateModelConfig</span></code>: POST /api/create-model-config</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">SetData</span></code>: POST /api/set-data</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">SubmitModels</span></code>: POST /api/models</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">Equivalences</span></code>: POST /update/equivalences</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">BbxGenerator</span></code>: POST /api/bbx-generator</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">FinetuneSubmit</span></code>: POST /api/finetune/submit</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">FinetuneRestart</span></code>: POST /api/finetune/job/&lt;job_id&gt;/restart</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">CreateVolume</span></code>: POST /api/finetune/create-volume</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">LoadCrops</span></code>: POST /api/finetune/load-crops</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">BlockwiseValidate</span></code>, <code class="docutils literal notranslate"><span class="pre">BlockwiseGenerate</span></code>, <code class="docutils literal notranslate"><span class="pre">BlockwisePrecheck</span></code> and
+<code class="docutils literal notranslate"><span class="pre">BlockwiseSubmit</span></code>: POST /api/blockwise/{validate,generate,precheck,submit},
+which answer through <code class="docutils literal notranslate"><span class="pre">check</span></code> instead (see there)</p></li>
+</ul>
+<section id="attributes">
+<h2>Attributes<a class="headerlink" href="#attributes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.requests.WholeNumber" title="cellmap_flow.dashboard.requests.WholeNumber"><code class="xref py py-obj docutils literal notranslate"><span class="pre">WholeNumber</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="classes">
+<h2>Classes<a class="headerlink" href="#classes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.requests.ServerConfigUpdate" title="cellmap_flow.dashboard.requests.ServerConfigUpdate"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ServerConfigUpdate</span></code></a></p></td>
+<td><p>Any of the saved settings (jobs.settings.SERVER_CONFIG_DEFAULTS); only those</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.requests.BlockwiseSettings" title="cellmap_flow.dashboard.requests.BlockwiseSettings"><code class="xref py py-obj docutils literal notranslate"><span class="pre">BlockwiseSettings</span></code></a></p></td>
+<td><p>The pipeline builder's blockwise settings. All three counts are</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.requests.CreateModelConfig" title="cellmap_flow.dashboard.requests.CreateModelConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">CreateModelConfig</span></code></a></p></td>
+<td><p>A ModelConfig subclass's name and its constructor's parameters, as the</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.requests.SetData" title="cellmap_flow.dashboard.requests.SetData"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SetData</span></code></a></p></td>
+<td><p>The dataset to open a new viewer on.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.requests.SubmitModels" title="cellmap_flow.dashboard.requests.SubmitModels"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SubmitModels</span></code></a></p></td>
+<td><p>The Models tab's Submit: the catalog models and Hugging Face repos to</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.requests.Equivalences" title="cellmap_flow.dashboard.requests.Equivalences"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Equivalences</span></code></a></p></td>
+<td><p>A merging postprocessor's merged ids, from its inference server, for</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.requests.BoundingBox" title="cellmap_flow.dashboard.requests.BoundingBox"><code class="xref py py-obj docutils literal notranslate"><span class="pre">BoundingBox</span></code></a></p></td>
+<td><p>A box drawn or loaded on an INPUT node: its corner and its size.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.requests.BbxGenerator" title="cellmap_flow.dashboard.requests.BbxGenerator"><code class="xref py py-obj docutils literal notranslate"><span class="pre">BbxGenerator</span></code></a></p></td>
+<td><p>The box tool's viewer on <code class="docutils literal notranslate"><span class="pre">dataset_path</span></code>, showing the boxes the</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.requests.FinetuneSubmit" title="cellmap_flow.dashboard.requests.FinetuneSubmit"><code class="xref py py-obj docutils literal notranslate"><span class="pre">FinetuneSubmit</span></code></a></p></td>
+<td><p>A new training job: <code class="docutils literal notranslate"><span class="pre">model_name</span></code> trained on the corrections at</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.requests.FinetuneRestart" title="cellmap_flow.dashboard.requests.FinetuneRestart"><code class="xref py py-obj docutils literal notranslate"><span class="pre">FinetuneRestart</span></code></a></p></td>
+<td><p>The next iteration of a job: the manifest overrides, and the training</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.requests.CreateVolume" title="cellmap_flow.dashboard.requests.CreateVolume"><code class="xref py py-obj docutils literal notranslate"><span class="pre">CreateVolume</span></code></a></p></td>
+<td><p>A new, empty annotation volume for <code class="docutils literal notranslate"><span class="pre">model_name</span></code>, in a new session</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.requests.LoadCrops" title="cellmap_flow.dashboard.requests.LoadCrops"><code class="xref py py-obj docutils literal notranslate"><span class="pre">LoadCrops</span></code></a></p></td>
+<td><p>Crops imported into the session's annotation volume for <code class="docutils literal notranslate"><span class="pre">model_name</span></code>:</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.requests.PipelineNode" title="cellmap_flow.dashboard.requests.PipelineNode"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PipelineNode</span></code></a></p></td>
+<td><p>A node of the builder's pipeline (state.js), <a href="#id1"><span class="problematic" id="id2">``</span></a>{id, name, params,</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.requests.ChainNode" title="cellmap_flow.dashboard.requests.ChainNode"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ChainNode</span></code></a></p></td>
+<td><p>A normalizer or postprocessor node, whose params may be null for none.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.requests.ModelNode" title="cellmap_flow.dashboard.requests.ModelNode"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ModelNode</span></code></a></p></td>
+<td><p>A model node. It may carry the config the model was defined with (its</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.requests.BlockwiseTaskSettings" title="cellmap_flow.dashboard.requests.BlockwiseTaskSettings"><code class="xref py py-obj docutils literal notranslate"><span class="pre">BlockwiseTaskSettings</span></code></a></p></td>
+<td><p>A blockwise-config node's params: what a task and its master are</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.requests.BlockwiseConfigNode" title="cellmap_flow.dashboard.requests.BlockwiseConfigNode"><code class="xref py py-obj docutils literal notranslate"><span class="pre">BlockwiseConfigNode</span></code></a></p></td>
+<td><p>A node of the builder's pipeline (state.js), <a href="#id3"><span class="problematic" id="id4">``</span></a>{id, name, params,</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.requests.BlockwisePipeline" title="cellmap_flow.dashboard.requests.BlockwisePipeline"><code class="xref py py-obj docutils literal notranslate"><span class="pre">BlockwisePipeline</span></code></a></p></td>
+<td><p>The builder's pipeline, one list of nodes per node type, as the</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.requests.BlockwiseValidate" title="cellmap_flow.dashboard.requests.BlockwiseValidate"><code class="xref py py-obj docutils literal notranslate"><span class="pre">BlockwiseValidate</span></code></a></p></td>
+<td><p>Whether <code class="docutils literal notranslate"><span class="pre">pipeline</span></code> is ready to run blockwise.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.requests.BlockwiseGenerate" title="cellmap_flow.dashboard.requests.BlockwiseGenerate"><code class="xref py py-obj docutils literal notranslate"><span class="pre">BlockwiseGenerate</span></code></a></p></td>
+<td><p>The task YAML(s) for <code class="docutils literal notranslate"><span class="pre">pipeline</span></code>; <code class="docutils literal notranslate"><span class="pre">job_name</span></code> names the task.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.requests.BlockwisePrecheck" title="cellmap_flow.dashboard.requests.BlockwisePrecheck"><code class="xref py py-obj docutils literal notranslate"><span class="pre">BlockwisePrecheck</span></code></a></p></td>
+<td><p>The task YAMLs generate wrote, to check.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.requests.BlockwiseSubmit" title="cellmap_flow.dashboard.requests.BlockwiseSubmit"><code class="xref py py-obj docutils literal notranslate"><span class="pre">BlockwiseSubmit</span></code></a></p></td>
+<td><p>The task to submit: the YAMLs precheck passed and the name generate gave</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="functions">
+<h2>Functions<a class="headerlink" href="#functions" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.requests.parse" title="cellmap_flow.dashboard.requests.parse"><code class="xref py py-obj docutils literal notranslate"><span class="pre">parse</span></code></a>(model, body)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">(model</span> <span class="pre">instance,</span> <span class="pre">None)</span></code> for a valid <code class="docutils literal notranslate"><span class="pre">body</span></code>; else <code class="docutils literal notranslate"><span class="pre">(None,</span> <span class="pre">the</span> <span class="pre">400</span> <span class="pre">response)</span></code>.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.requests.check" title="cellmap_flow.dashboard.requests.check"><code class="xref py py-obj docutils literal notranslate"><span class="pre">check</span></code></a>(model, body)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">(model</span> <span class="pre">instance,</span> <span class="pre">None)</span></code> for a valid <code class="docutils literal notranslate"><span class="pre">body</span></code>; else <a href="#id5"><span class="problematic" id="id6">``</span></a>(None, what is</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="module-contents">
+<h2>Module Contents<a class="headerlink" href="#module-contents" title="Link to this heading"></a></h2>
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.requests.WholeNumber">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.requests.</span></span><span class="sig-name descname"><span class="pre">WholeNumber</span></span><a class="headerlink" href="#cellmap_flow.dashboard.requests.WholeNumber" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.requests.parse">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.requests.</span></span><span class="sig-name descname"><span class="pre">parse</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">body</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.requests.parse" title="Link to this definition"></a></dt>
+<dd><p><code class="docutils literal notranslate"><span class="pre">(model</span> <span class="pre">instance,</span> <span class="pre">None)</span></code> for a valid <code class="docutils literal notranslate"><span class="pre">body</span></code>; else <code class="docutils literal notranslate"><span class="pre">(None,</span> <span class="pre">the</span> <span class="pre">400</span> <span class="pre">response)</span></code>.</p>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.requests.ServerConfigUpdate">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.requests.</span></span><span class="sig-name descname"><span class="pre">ServerConfigUpdate</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">/</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">**data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.requests.ServerConfigUpdate" title="Link to this definition"></a></dt>
+<dd><p>Any of the saved settings (jobs.settings.SERVER_CONFIG_DEFAULTS); only those
+sent change. The counts must be whole numbers; the rest are kept as sent,
+and keys that are not settings are ignored.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.requests.ServerConfigUpdate.model_config">
+<span class="sig-name descname"><span class="pre">model_config</span></span><a class="headerlink" href="#cellmap_flow.dashboard.requests.ServerConfigUpdate.model_config" title="Link to this definition"></a></dt>
+<dd><p>Configuration for the model, should be a dictionary conforming to [<cite>ConfigDict</cite>][pydantic.config.ConfigDict].</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.requests.ServerConfigUpdate.nb_cores_master">
+<span class="sig-name descname"><span class="pre">nb_cores_master</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="#cellmap_flow.dashboard.requests.WholeNumber" title="cellmap_flow.dashboard.requests.WholeNumber"><span class="pre">WholeNumber</span></a></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.dashboard.requests.ServerConfigUpdate.nb_cores_master" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.requests.ServerConfigUpdate.nb_cores_worker">
+<span class="sig-name descname"><span class="pre">nb_cores_worker</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="#cellmap_flow.dashboard.requests.WholeNumber" title="cellmap_flow.dashboard.requests.WholeNumber"><span class="pre">WholeNumber</span></a></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.dashboard.requests.ServerConfigUpdate.nb_cores_worker" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.requests.ServerConfigUpdate.nb_workers">
+<span class="sig-name descname"><span class="pre">nb_workers</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="#cellmap_flow.dashboard.requests.WholeNumber" title="cellmap_flow.dashboard.requests.WholeNumber"><span class="pre">WholeNumber</span></a></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.dashboard.requests.ServerConfigUpdate.nb_workers" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.requests.ServerConfigUpdate.updates">
+<span class="sig-name descname"><span class="pre">updates</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span></span></span><a class="headerlink" href="#cellmap_flow.dashboard.requests.ServerConfigUpdate.updates" title="Link to this definition"></a></dt>
+<dd><p>{setting: value} for each setting the request sent.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.requests.BlockwiseSettings">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.requests.</span></span><span class="sig-name descname"><span class="pre">BlockwiseSettings</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">/</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">**data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.requests.BlockwiseSettings" title="Link to this definition"></a></dt>
+<dd><p>The pipeline builder’s blockwise settings. All three counts are
+required, as whole numbers; a missing one is reported as None.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.requests.BlockwiseSettings.queue">
+<span class="sig-name descname"><span class="pre">queue</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Any</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.dashboard.requests.BlockwiseSettings.queue" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.requests.BlockwiseSettings.charge_group">
+<span class="sig-name descname"><span class="pre">charge_group</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Any</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.dashboard.requests.BlockwiseSettings.charge_group" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.requests.BlockwiseSettings.nb_cores_master">
+<span class="sig-name descname"><span class="pre">nb_cores_master</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="#cellmap_flow.dashboard.requests.WholeNumber" title="cellmap_flow.dashboard.requests.WholeNumber"><span class="pre">WholeNumber</span></a></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.dashboard.requests.BlockwiseSettings.nb_cores_master" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.requests.BlockwiseSettings.nb_cores_worker">
+<span class="sig-name descname"><span class="pre">nb_cores_worker</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="#cellmap_flow.dashboard.requests.WholeNumber" title="cellmap_flow.dashboard.requests.WholeNumber"><span class="pre">WholeNumber</span></a></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.dashboard.requests.BlockwiseSettings.nb_cores_worker" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.requests.BlockwiseSettings.nb_workers">
+<span class="sig-name descname"><span class="pre">nb_workers</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="#cellmap_flow.dashboard.requests.WholeNumber" title="cellmap_flow.dashboard.requests.WholeNumber"><span class="pre">WholeNumber</span></a></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.dashboard.requests.BlockwiseSettings.nb_workers" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.requests.BlockwiseSettings.tmp_dir">
+<span class="sig-name descname"><span class="pre">tmp_dir</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Any</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.dashboard.requests.BlockwiseSettings.tmp_dir" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.requests.BlockwiseSettings.blockwise_tasks_dir">
+<span class="sig-name descname"><span class="pre">blockwise_tasks_dir</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Any</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.dashboard.requests.BlockwiseSettings.blockwise_tasks_dir" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.requests.CreateModelConfig">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.requests.</span></span><span class="sig-name descname"><span class="pre">CreateModelConfig</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">/</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">**data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.requests.CreateModelConfig" title="Link to this definition"></a></dt>
+<dd><p>A ModelConfig subclass’s name and its constructor’s parameters, as the
+builder’s model form sends them (registry.coerce_form_params parses them).</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.requests.CreateModelConfig.class_name">
+<span class="sig-name descname"><span class="pre">class_name</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Annotated</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">_required</span><span class="p"><span class="pre">(</span></span><span class="s"><span class="pre">'class_name'</span></span><span class="p"><span class="pre">)</span></span><span class="p"><span class="pre">]</span></span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.dashboard.requests.CreateModelConfig.class_name" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.requests.CreateModelConfig.params">
+<span class="sig-name descname"><span class="pre">params</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">dict</span></span><a class="headerlink" href="#cellmap_flow.dashboard.requests.CreateModelConfig.params" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.requests.SetData">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.requests.</span></span><span class="sig-name descname"><span class="pre">SetData</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">/</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">**data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.requests.SetData" title="Link to this definition"></a></dt>
+<dd><p>The dataset to open a new viewer on.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.requests.SetData.dataset_path">
+<span class="sig-name descname"><span class="pre">dataset_path</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Annotated</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">_required</span><span class="p"><span class="pre">(</span></span><span class="s"><span class="pre">'dataset_path'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="n"><span class="pre">strip</span></span><span class="o"><span class="pre">=</span></span><span class="k"><span class="pre">True</span></span><span class="p"><span class="pre">)</span></span><span class="p"><span class="pre">]</span></span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.dashboard.requests.SetData.dataset_path" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.requests.SubmitModels">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.requests.</span></span><span class="sig-name descname"><span class="pre">SubmitModels</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">/</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">**data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.requests.SubmitModels" title="Link to this definition"></a></dt>
+<dd><p>The Models tab’s Submit: the catalog models and Hugging Face repos to
+run. Every other running model is stopped (services.launch).</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.requests.SubmitModels.selected_models">
+<span class="sig-name descname"><span class="pre">selected_models</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">[]</span></span><a class="headerlink" href="#cellmap_flow.dashboard.requests.SubmitModels.selected_models" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.requests.SubmitModels.selected_hf_models">
+<span class="sig-name descname"><span class="pre">selected_hf_models</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">[]</span></span><a class="headerlink" href="#cellmap_flow.dashboard.requests.SubmitModels.selected_hf_models" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.requests.Equivalences">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.requests.</span></span><span class="sig-name descname"><span class="pre">Equivalences</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">/</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">**data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.requests.Equivalences" title="Link to this definition"></a></dt>
+<dd><p>A merging postprocessor’s merged ids, from its inference server, for
+the segmentation layer whose source ends in <code class="docutils literal notranslate"><span class="pre">dataset</span></code>: each list is a
+set of ids shown as one.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.requests.Equivalences.dataset">
+<span class="sig-name descname"><span class="pre">dataset</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></span><a class="headerlink" href="#cellmap_flow.dashboard.requests.Equivalences.dataset" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.requests.Equivalences.equivalences">
+<span class="sig-name descname"><span class="pre">equivalences</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><a class="headerlink" href="#cellmap_flow.dashboard.requests.Equivalences.equivalences" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.requests.BoundingBox">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.requests.</span></span><span class="sig-name descname"><span class="pre">BoundingBox</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">/</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">**data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.requests.BoundingBox" title="Link to this definition"></a></dt>
+<dd><p>A box drawn or loaded on an INPUT node: its corner and its size.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.requests.BoundingBox.offset">
+<span class="sig-name descname"><span class="pre">offset</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">_Triple</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">[0,</span> <span class="pre">0,</span> <span class="pre">0]</span></span><a class="headerlink" href="#cellmap_flow.dashboard.requests.BoundingBox.offset" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.requests.BoundingBox.shape">
+<span class="sig-name descname"><span class="pre">shape</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">_Triple</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">[1,</span> <span class="pre">1,</span> <span class="pre">1]</span></span><a class="headerlink" href="#cellmap_flow.dashboard.requests.BoundingBox.shape" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.requests.BbxGenerator">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.requests.</span></span><span class="sig-name descname"><span class="pre">BbxGenerator</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">/</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">**data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.requests.BbxGenerator" title="Link to this definition"></a></dt>
+<dd><p>The box tool’s viewer on <code class="docutils literal notranslate"><span class="pre">dataset_path</span></code>, showing the boxes the
+INPUT node has; <code class="docutils literal notranslate"><span class="pre">num_boxes</span></code> is how many the dialog counts up to.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.requests.BbxGenerator.dataset_path">
+<span class="sig-name descname"><span class="pre">dataset_path</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Annotated</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">_required</span><span class="p"><span class="pre">(</span></span><span class="s"><span class="pre">'dataset_path'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="n"><span class="pre">message</span></span><span class="o"><span class="pre">=</span></span><span class="s"><span class="pre">'Dataset</span> <span class="pre">path</span> <span class="pre">is</span> <span class="pre">required'</span></span><span class="p"><span class="pre">)</span></span><span class="p"><span class="pre">]</span></span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.dashboard.requests.BbxGenerator.dataset_path" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.requests.BbxGenerator.num_boxes">
+<span class="sig-name descname"><span class="pre">num_boxes</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="#cellmap_flow.dashboard.requests.WholeNumber" title="cellmap_flow.dashboard.requests.WholeNumber"><span class="pre">WholeNumber</span></a></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">1</span></span><a class="headerlink" href="#cellmap_flow.dashboard.requests.BbxGenerator.num_boxes" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.requests.BbxGenerator.existing_bounding_boxes">
+<span class="sig-name descname"><span class="pre">existing_bounding_boxes</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#cellmap_flow.dashboard.requests.BoundingBox" title="cellmap_flow.dashboard.requests.BoundingBox"><span class="pre">BoundingBox</span></a><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">[]</span></span><a class="headerlink" href="#cellmap_flow.dashboard.requests.BbxGenerator.existing_bounding_boxes" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.requests.FinetuneSubmit">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.requests.</span></span><span class="sig-name descname"><span class="pre">FinetuneSubmit</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">/</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">**data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.requests.FinetuneSubmit" title="Link to this definition"></a></dt>
+<dd><p>A new training job: <code class="docutils literal notranslate"><span class="pre">model_name</span></code> trained on the corrections at
+<code class="docutils literal notranslate"><span class="pre">corrections_path</span></code>, a session’s corrections directory or the base
+output path of its sessions.</p>
+<p>The defaults are the form’s. The rest of the fields are passed on as
+sent, and the route adjusts the loss for painted annotations and for a
+distance target.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.requests.FinetuneSubmit.model_name">
+<span class="sig-name descname"><span class="pre">model_name</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Annotated</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">_required</span><span class="p"><span class="pre">(</span></span><span class="s"><span class="pre">'model_name'</span></span><span class="p"><span class="pre">)</span></span><span class="p"><span class="pre">]</span></span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.dashboard.requests.FinetuneSubmit.model_name" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.requests.FinetuneSubmit.corrections_path">
+<span class="sig-name descname"><span class="pre">corrections_path</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Annotated</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">_required</span><span class="p"><span class="pre">(</span></span><span class="s"><span class="pre">'corrections_path'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="n"><span class="pre">message</span></span><span class="o"><span class="pre">=</span></span><span class="s"><span class="pre">'corrections_path</span> <span class="pre">is</span> <span class="pre">required.</span> <span class="pre">Please</span> <span class="pre">specify</span> <span class="pre">the</span> <span class="pre">output</span> <span class="pre">path</span> <span class="pre">where</span> <span class="pre">annotation</span> <span class="pre">crops</span> <span class="pre">are</span> <span class="pre">saved.'</span></span><span class="p"><span class="pre">)</span></span><span class="p"><span class="pre">]</span></span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.dashboard.requests.FinetuneSubmit.corrections_path" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.requests.FinetuneSubmit.lora_r">
+<span class="sig-name descname"><span class="pre">lora_r</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">_form_number</span><span class="p"><span class="pre">(</span></span><span class="pre">int</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="m"><span class="pre">8</span></span><span class="p"><span class="pre">)</span></span></span><a class="headerlink" href="#cellmap_flow.dashboard.requests.FinetuneSubmit.lora_r" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.requests.FinetuneSubmit.num_epochs">
+<span class="sig-name descname"><span class="pre">num_epochs</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">_form_number</span><span class="p"><span class="pre">(</span></span><span class="pre">int</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="m"><span class="pre">10</span></span><span class="p"><span class="pre">)</span></span></span><a class="headerlink" href="#cellmap_flow.dashboard.requests.FinetuneSubmit.num_epochs" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.requests.FinetuneSubmit.batch_size">
+<span class="sig-name descname"><span class="pre">batch_size</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">_form_number</span><span class="p"><span class="pre">(</span></span><span class="pre">int</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="m"><span class="pre">2</span></span><span class="p"><span class="pre">)</span></span></span><a class="headerlink" href="#cellmap_flow.dashboard.requests.FinetuneSubmit.batch_size" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.requests.FinetuneSubmit.learning_rate">
+<span class="sig-name descname"><span class="pre">learning_rate</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">_form_number</span><span class="p"><span class="pre">(</span></span><span class="pre">float</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">0.0001</span><span class="p"><span class="pre">)</span></span></span><a class="headerlink" href="#cellmap_flow.dashboard.requests.FinetuneSubmit.learning_rate" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.requests.FinetuneSubmit.loss_type">
+<span class="sig-name descname"><span class="pre">loss_type</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Any</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'mse'</span></span><a class="headerlink" href="#cellmap_flow.dashboard.requests.FinetuneSubmit.loss_type" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.requests.FinetuneSubmit.label_smoothing">
+<span class="sig-name descname"><span class="pre">label_smoothing</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">_form_number</span><span class="p"><span class="pre">(</span></span><span class="pre">float</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">0.1</span><span class="p"><span class="pre">)</span></span></span><a class="headerlink" href="#cellmap_flow.dashboard.requests.FinetuneSubmit.label_smoothing" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.requests.FinetuneSubmit.distillation_lambda">
+<span class="sig-name descname"><span class="pre">distillation_lambda</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">_form_number</span><span class="p"><span class="pre">(</span></span><span class="pre">float</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">None</span><span class="p"><span class="pre">)</span></span></span><a class="headerlink" href="#cellmap_flow.dashboard.requests.FinetuneSubmit.distillation_lambda" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.requests.FinetuneSubmit.distillation_scope">
+<span class="sig-name descname"><span class="pre">distillation_scope</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Any</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'unlabeled'</span></span><a class="headerlink" href="#cellmap_flow.dashboard.requests.FinetuneSubmit.distillation_scope" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.requests.FinetuneSubmit.margin">
+<span class="sig-name descname"><span class="pre">margin</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">_form_number</span><span class="p"><span class="pre">(</span></span><span class="pre">float</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">0.3</span><span class="p"><span class="pre">)</span></span></span><a class="headerlink" href="#cellmap_flow.dashboard.requests.FinetuneSubmit.margin" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.requests.FinetuneSubmit.balance_classes">
+<span class="sig-name descname"><span class="pre">balance_classes</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Any</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">False</span></span><a class="headerlink" href="#cellmap_flow.dashboard.requests.FinetuneSubmit.balance_classes" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.requests.FinetuneSubmit.augment">
+<span class="sig-name descname"><span class="pre">augment</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Any</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">False</span></span><a class="headerlink" href="#cellmap_flow.dashboard.requests.FinetuneSubmit.augment" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.requests.FinetuneSubmit.output_type">
+<span class="sig-name descname"><span class="pre">output_type</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Any</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.dashboard.requests.FinetuneSubmit.output_type" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.requests.FinetuneSubmit.offsets">
+<span class="sig-name descname"><span class="pre">offsets</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Any</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.dashboard.requests.FinetuneSubmit.offsets" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.requests.FinetuneSubmit.select_channel">
+<span class="sig-name descname"><span class="pre">select_channel</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">_form_number</span><span class="p"><span class="pre">(</span></span><span class="pre">int</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">None</span><span class="p"><span class="pre">)</span></span></span><a class="headerlink" href="#cellmap_flow.dashboard.requests.FinetuneSubmit.select_channel" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.requests.FinetuneSubmit.checkpoint_path">
+<span class="sig-name descname"><span class="pre">checkpoint_path</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Any</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.dashboard.requests.FinetuneSubmit.checkpoint_path" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.requests.FinetuneSubmit.auto_serve">
+<span class="sig-name descname"><span class="pre">auto_serve</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Any</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">True</span></span><a class="headerlink" href="#cellmap_flow.dashboard.requests.FinetuneSubmit.auto_serve" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.requests.FinetuneSubmit.queue">
+<span class="sig-name descname"><span class="pre">queue</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Any</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.dashboard.requests.FinetuneSubmit.queue" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.requests.FinetuneSubmit.charge_group">
+<span class="sig-name descname"><span class="pre">charge_group</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Any</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.dashboard.requests.FinetuneSubmit.charge_group" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.requests.FinetuneRestart">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.requests.</span></span><span class="sig-name descname"><span class="pre">FinetuneRestart</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">/</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">**data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.requests.FinetuneRestart" title="Link to this definition"></a></dt>
+<dd><p>The next iteration of a job: the manifest overrides, and the training
+settings to change (common.build_restart_params picks those; the
+trainer checks them).</p>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.requests.CreateVolume">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.requests.</span></span><span class="sig-name descname"><span class="pre">CreateVolume</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">/</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">**data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.requests.CreateVolume" title="Link to this definition"></a></dt>
+<dd><p>A new, empty annotation volume for <code class="docutils literal notranslate"><span class="pre">model_name</span></code>, in a new session
+under <code class="docutils literal notranslate"><span class="pre">output_path</span></code> (by default ~/.cellmap_flow/corrections).</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.requests.CreateVolume.model_name">
+<span class="sig-name descname"><span class="pre">model_name</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Annotated</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">_required</span><span class="p"><span class="pre">(</span></span><span class="s"><span class="pre">'model_name'</span></span><span class="p"><span class="pre">)</span></span><span class="p"><span class="pre">]</span></span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.dashboard.requests.CreateVolume.model_name" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.requests.CreateVolume.output_path">
+<span class="sig-name descname"><span class="pre">output_path</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Any</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.dashboard.requests.CreateVolume.output_path" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.requests.LoadCrops">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.requests.</span></span><span class="sig-name descname"><span class="pre">LoadCrops</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">/</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">**data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.requests.LoadCrops" title="Link to this definition"></a></dt>
+<dd><p>Crops imported into the session’s annotation volume for <code class="docutils literal notranslate"><span class="pre">model_name</span></code>:
+<code class="docutils literal notranslate"><span class="pre">yaml</span></code> is the YAML’s text or its path, <code class="docutils literal notranslate"><span class="pre">output_path</span></code> as for
+CreateVolume, and <code class="docutils literal notranslate"><span class="pre">load_id</span></code> names the import’s progress.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.requests.LoadCrops.yaml">
+<span class="sig-name descname"><span class="pre">yaml</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Annotated</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">_required</span><span class="p"><span class="pre">(</span></span><span class="s"><span class="pre">'yaml'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="n"><span class="pre">message</span></span><span class="o"><span class="pre">=</span></span><span class="s"><span class="pre">&quot;Missing</span> <span class="pre">'yaml'</span> <span class="pre">field&quot;</span></span><span class="p"><span class="pre">)</span></span><span class="p"><span class="pre">]</span></span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.dashboard.requests.LoadCrops.yaml" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.requests.LoadCrops.model_name">
+<span class="sig-name descname"><span class="pre">model_name</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Annotated</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">_required</span><span class="p"><span class="pre">(</span></span><span class="s"><span class="pre">'model_name'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="n"><span class="pre">message</span></span><span class="o"><span class="pre">=</span></span><span class="s"><span class="pre">&quot;Missing</span> <span class="pre">'model_name'</span> <span class="pre">field&quot;</span></span><span class="p"><span class="pre">)</span></span><span class="p"><span class="pre">]</span></span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.dashboard.requests.LoadCrops.model_name" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.requests.LoadCrops.output_path">
+<span class="sig-name descname"><span class="pre">output_path</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Any</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.dashboard.requests.LoadCrops.output_path" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.requests.LoadCrops.load_id">
+<span class="sig-name descname"><span class="pre">load_id</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Any</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.dashboard.requests.LoadCrops.load_id" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.requests.check">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.requests.</span></span><span class="sig-name descname"><span class="pre">check</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">body</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.requests.check" title="Link to this definition"></a></dt>
+<dd><p><code class="docutils literal notranslate"><span class="pre">(model</span> <span class="pre">instance,</span> <span class="pre">None)</span></code> for a valid <code class="docutils literal notranslate"><span class="pre">body</span></code>; else <code class="docutils literal notranslate"><span class="pre">(None,</span> <span class="pre">what</span> <span class="pre">is</span>
+<span class="pre">wrong)</span></code>, the message parse() would answer with.</p>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.requests.PipelineNode">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.requests.</span></span><span class="sig-name descname"><span class="pre">PipelineNode</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">/</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">**data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.requests.PipelineNode" title="Link to this definition"></a></dt>
+<dd><p>A node of the builder’s pipeline (state.js), <code class="docutils literal notranslate"><span class="pre">{id,</span> <span class="pre">name,</span> <span class="pre">params,</span>
+<span class="pre">position}</span></code>, of which the routes read the name and the params.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.requests.PipelineNode.name">
+<span class="sig-name descname"><span class="pre">name</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Any</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.dashboard.requests.PipelineNode.name" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.requests.PipelineNode.params">
+<span class="sig-name descname"><span class="pre">params</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">dict</span></span><a class="headerlink" href="#cellmap_flow.dashboard.requests.PipelineNode.params" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.requests.ChainNode">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.requests.</span></span><span class="sig-name descname"><span class="pre">ChainNode</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">/</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">**data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.requests.ChainNode" title="Link to this definition"></a></dt>
+<dd><p>A normalizer or postprocessor node, whose params may be null for none.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.requests.ChainNode.params">
+<span class="sig-name descname"><span class="pre">params</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">dict</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.dashboard.requests.ChainNode.params" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.requests.ModelNode">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.requests.</span></span><span class="sig-name descname"><span class="pre">ModelNode</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">/</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">**data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.requests.ModelNode" title="Link to this definition"></a></dt>
+<dd><p>A model node. It may carry the config the model was defined with (its
+ModelConfig.to_dict()), which stands in for params when it has none.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.requests.ModelNode.config">
+<span class="sig-name descname"><span class="pre">config</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">dict</span></span><a class="headerlink" href="#cellmap_flow.dashboard.requests.ModelNode.config" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.requests.ModelNode.settings">
+<span class="sig-name descname"><span class="pre">settings</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span></span></span><a class="headerlink" href="#cellmap_flow.dashboard.requests.ModelNode.settings" title="Link to this definition"></a></dt>
+<dd><p>Its params, or its config when it was sent without params.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.requests.BlockwiseTaskSettings">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.requests.</span></span><span class="sig-name descname"><span class="pre">BlockwiseTaskSettings</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">/</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">**data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.requests.BlockwiseTaskSettings" title="Link to this definition"></a></dt>
+<dd><p>A blockwise-config node’s params: what a task and its master are
+submitted with. Each is required, and taken as sent (precheck checks
+the task’s).</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.requests.BlockwiseTaskSettings.charge_group">
+<span class="sig-name descname"><span class="pre">charge_group</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Any</span></span><a class="headerlink" href="#cellmap_flow.dashboard.requests.BlockwiseTaskSettings.charge_group" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.requests.BlockwiseTaskSettings.queue">
+<span class="sig-name descname"><span class="pre">queue</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Any</span></span><a class="headerlink" href="#cellmap_flow.dashboard.requests.BlockwiseTaskSettings.queue" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.requests.BlockwiseTaskSettings.nb_workers">
+<span class="sig-name descname"><span class="pre">nb_workers</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Any</span></span><a class="headerlink" href="#cellmap_flow.dashboard.requests.BlockwiseTaskSettings.nb_workers" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.requests.BlockwiseTaskSettings.nb_cores_worker">
+<span class="sig-name descname"><span class="pre">nb_cores_worker</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Any</span></span><a class="headerlink" href="#cellmap_flow.dashboard.requests.BlockwiseTaskSettings.nb_cores_worker" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.requests.BlockwiseTaskSettings.nb_cores_master">
+<span class="sig-name descname"><span class="pre">nb_cores_master</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Any</span></span><a class="headerlink" href="#cellmap_flow.dashboard.requests.BlockwiseTaskSettings.nb_cores_master" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.requests.BlockwiseTaskSettings.tmp_dir">
+<span class="sig-name descname"><span class="pre">tmp_dir</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Any</span></span><a class="headerlink" href="#cellmap_flow.dashboard.requests.BlockwiseTaskSettings.tmp_dir" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.requests.BlockwiseConfigNode">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.requests.</span></span><span class="sig-name descname"><span class="pre">BlockwiseConfigNode</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">/</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">**data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.requests.BlockwiseConfigNode" title="Link to this definition"></a></dt>
+<dd><p>A node of the builder’s pipeline (state.js), <code class="docutils literal notranslate"><span class="pre">{id,</span> <span class="pre">name,</span> <span class="pre">params,</span>
+<span class="pre">position}</span></code>, of which the routes read the name and the params.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.requests.BlockwiseConfigNode.params">
+<span class="sig-name descname"><span class="pre">params</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="#cellmap_flow.dashboard.requests.BlockwiseTaskSettings" title="cellmap_flow.dashboard.requests.BlockwiseTaskSettings"><span class="pre">BlockwiseTaskSettings</span></a></span><a class="headerlink" href="#cellmap_flow.dashboard.requests.BlockwiseConfigNode.params" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.requests.BlockwisePipeline">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.requests.</span></span><span class="sig-name descname"><span class="pre">BlockwisePipeline</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">/</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">**data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.requests.BlockwisePipeline" title="Link to this definition"></a></dt>
+<dd><p>The builder’s pipeline, one list of nodes per node type, as the
+blockwise routes read it: the first input, output and blockwise-config
+node are the ones used, and the models are run on the chain the
+normalizers and postprocessors make. The four lists must have a node, and
+the input and output a dataset_path, checked in that order.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.requests.BlockwisePipeline.inputs">
+<span class="sig-name descname"><span class="pre">inputs</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Annotated</span><span class="p"><span class="pre">[</span></span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#cellmap_flow.dashboard.requests.PipelineNode" title="cellmap_flow.dashboard.requests.PipelineNode"><span class="pre">PipelineNode</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">_required</span><span class="p"><span class="pre">(</span></span><span class="s"><span class="pre">'inputs'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="n"><span class="pre">message</span></span><span class="o"><span class="pre">=</span></span><span class="s"><span class="pre">'No</span> <span class="pre">input</span> <span class="pre">nodes</span> <span class="pre">defined'</span></span><span class="p"><span class="pre">)</span></span><span class="p"><span class="pre">]</span></span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.dashboard.requests.BlockwisePipeline.inputs" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.requests.BlockwisePipeline.outputs">
+<span class="sig-name descname"><span class="pre">outputs</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Annotated</span><span class="p"><span class="pre">[</span></span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#cellmap_flow.dashboard.requests.PipelineNode" title="cellmap_flow.dashboard.requests.PipelineNode"><span class="pre">PipelineNode</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">_required</span><span class="p"><span class="pre">(</span></span><span class="s"><span class="pre">'outputs'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="n"><span class="pre">message</span></span><span class="o"><span class="pre">=</span></span><span class="s"><span class="pre">'No</span> <span class="pre">output</span> <span class="pre">nodes</span> <span class="pre">defined'</span></span><span class="p"><span class="pre">)</span></span><span class="p"><span class="pre">]</span></span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.dashboard.requests.BlockwisePipeline.outputs" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.requests.BlockwisePipeline.models">
+<span class="sig-name descname"><span class="pre">models</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Annotated</span><span class="p"><span class="pre">[</span></span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#cellmap_flow.dashboard.requests.ModelNode" title="cellmap_flow.dashboard.requests.ModelNode"><span class="pre">ModelNode</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">_required</span><span class="p"><span class="pre">(</span></span><span class="s"><span class="pre">'models'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="n"><span class="pre">message</span></span><span class="o"><span class="pre">=</span></span><span class="s"><span class="pre">'No</span> <span class="pre">models</span> <span class="pre">defined'</span></span><span class="p"><span class="pre">)</span></span><span class="p"><span class="pre">]</span></span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.dashboard.requests.BlockwisePipeline.models" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.requests.BlockwisePipeline.blockwise_config">
+<span class="sig-name descname"><span class="pre">blockwise_config</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Annotated</span><span class="p"><span class="pre">[</span></span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#cellmap_flow.dashboard.requests.BlockwiseConfigNode" title="cellmap_flow.dashboard.requests.BlockwiseConfigNode"><span class="pre">BlockwiseConfigNode</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">_required</span><span class="p"><span class="pre">(</span></span><span class="s"><span class="pre">'blockwise_config'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="n"><span class="pre">message</span></span><span class="o"><span class="pre">=</span></span><span class="s"><span class="pre">'No</span> <span class="pre">blockwise</span> <span class="pre">configuration</span> <span class="pre">defined'</span></span><span class="p"><span class="pre">)</span></span><span class="p"><span class="pre">]</span></span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.dashboard.requests.BlockwisePipeline.blockwise_config" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.requests.BlockwisePipeline.normalizers">
+<span class="sig-name descname"><span class="pre">normalizers</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#cellmap_flow.dashboard.requests.ChainNode" title="cellmap_flow.dashboard.requests.ChainNode"><span class="pre">ChainNode</span></a><span class="p"><span class="pre">]</span></span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">[]</span></span><a class="headerlink" href="#cellmap_flow.dashboard.requests.BlockwisePipeline.normalizers" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.requests.BlockwisePipeline.postprocessors">
+<span class="sig-name descname"><span class="pre">postprocessors</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="#cellmap_flow.dashboard.requests.ChainNode" title="cellmap_flow.dashboard.requests.ChainNode"><span class="pre">ChainNode</span></a><span class="p"><span class="pre">]</span></span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">[]</span></span><a class="headerlink" href="#cellmap_flow.dashboard.requests.BlockwisePipeline.postprocessors" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.requests.BlockwisePipeline.model_mode">
+<span class="sig-name descname"><span class="pre">model_mode</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Any</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">''</span></span><a class="headerlink" href="#cellmap_flow.dashboard.requests.BlockwisePipeline.model_mode" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.requests.BlockwiseValidate">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.requests.</span></span><span class="sig-name descname"><span class="pre">BlockwiseValidate</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">/</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">**data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.requests.BlockwiseValidate" title="Link to this definition"></a></dt>
+<dd><p>Whether <code class="docutils literal notranslate"><span class="pre">pipeline</span></code> is ready to run blockwise.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.requests.BlockwiseValidate.pipeline">
+<span class="sig-name descname"><span class="pre">pipeline</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="#cellmap_flow.dashboard.requests.BlockwisePipeline" title="cellmap_flow.dashboard.requests.BlockwisePipeline"><span class="pre">BlockwisePipeline</span></a></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.dashboard.requests.BlockwiseValidate.pipeline" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.requests.BlockwiseGenerate">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.requests.</span></span><span class="sig-name descname"><span class="pre">BlockwiseGenerate</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">/</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">**data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.requests.BlockwiseGenerate" title="Link to this definition"></a></dt>
+<dd><p>The task YAML(s) for <code class="docutils literal notranslate"><span class="pre">pipeline</span></code>; <code class="docutils literal notranslate"><span class="pre">job_name</span></code> names the task.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.requests.BlockwiseGenerate.job_name">
+<span class="sig-name descname"><span class="pre">job_name</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Any</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">''</span></span><a class="headerlink" href="#cellmap_flow.dashboard.requests.BlockwiseGenerate.job_name" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.requests.BlockwisePrecheck">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.requests.</span></span><span class="sig-name descname"><span class="pre">BlockwisePrecheck</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">/</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">**data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.requests.BlockwisePrecheck" title="Link to this definition"></a></dt>
+<dd><p>The task YAMLs generate wrote, to check.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.requests.BlockwisePrecheck.yaml_paths">
+<span class="sig-name descname"><span class="pre">yaml_paths</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Annotated</span><span class="p"><span class="pre">[</span></span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">_required</span><span class="p"><span class="pre">(</span></span><span class="s"><span class="pre">'yaml_paths'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="n"><span class="pre">message</span></span><span class="o"><span class="pre">=</span></span><span class="s"><span class="pre">'No</span> <span class="pre">YAML</span> <span class="pre">paths</span> <span class="pre">provided.</span> <span class="pre">Please</span> <span class="pre">generate</span> <span class="pre">task</span> <span class="pre">first.'</span></span><span class="p"><span class="pre">)</span></span><span class="p"><span class="pre">]</span></span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.dashboard.requests.BlockwisePrecheck.yaml_paths" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.requests.BlockwiseSubmit">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.requests.</span></span><span class="sig-name descname"><span class="pre">BlockwiseSubmit</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">/</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">**data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.requests.BlockwiseSubmit" title="Link to this definition"></a></dt>
+<dd><p>The task to submit: the YAMLs precheck passed and the name generate gave
+them, or else, when none are given or they are not all there,
+<code class="docutils literal notranslate"><span class="pre">pipeline</span></code>’s, generated anew. <code class="docutils literal notranslate"><span class="pre">yaml_paths</span></code> is a list of paths, as for
+precheck.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.requests.BlockwiseSubmit.yaml_paths">
+<span class="sig-name descname"><span class="pre">yaml_paths</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.dashboard.requests.BlockwiseSubmit.yaml_paths" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.requests.BlockwiseSubmit.task_name">
+<span class="sig-name descname"><span class="pre">task_name</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Any</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.dashboard.requests.BlockwiseSubmit.task_name" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../progress/index.html" class="btn btn-neutral float-left" title="cellmap_flow.dashboard.progress" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../routes/index.html" class="btn btn-neutral float-right" title="cellmap_flow.dashboard.routes" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, David Ackerman,  Marwan Zouinkhi, Jeff Rhoades, Larissa Heinrich, Aubrey Weigel.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

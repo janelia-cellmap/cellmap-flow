@@ -1,0 +1,125 @@
+cellmap_flow.finetune.job_manager.submit
+========================================
+
+.. py:module:: cellmap_flow.finetune.job_manager.submit
+
+.. autoapi-nested-parse::
+
+   What a submission runs, and where.
+
+   The manager's submit_finetuning_job validates a request and writes the
+   run's directory; this module answers the questions on the way:
+
+   - ``resolve_model_type``: the trainer's ``--model-type`` for a model
+     config, refusing one it cannot train; ``model_entry``: the model as the
+     trainer takes it with ``--model-entry``, for the types that go that way;
+   - ``find_checkpoint``, ``count_corrections``: the checkpoint to start from,
+     and whether the session has anything to train on;
+   - ``model_settings``: the channels and voxel sizes to train with;
+   - ``extract_data_path_from_corrections``: the raw data the job's server
+     serves;
+   - ``build_command``: the trainer's shell command line, which LSF runs on a
+     GPU node (``python -m cellmap_flow.finetune.finetune_cli``);
+   - ``launch``: that command on LSF, or here when there is no bsub.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.job_manager.submit.logger
+   cellmap_flow.finetune.job_manager.submit.TRAINABLE_MODEL_TYPES
+   cellmap_flow.finetune.job_manager.submit.MODEL_ENTRY_TYPES
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.job_manager.submit.resolve_model_type
+   cellmap_flow.finetune.job_manager.submit.model_entry
+   cellmap_flow.finetune.job_manager.submit.find_checkpoint
+   cellmap_flow.finetune.job_manager.submit.count_corrections
+   cellmap_flow.finetune.job_manager.submit.model_settings
+   cellmap_flow.finetune.job_manager.submit.extract_data_path_from_corrections
+   cellmap_flow.finetune.job_manager.submit.build_command
+   cellmap_flow.finetune.job_manager.submit.launch
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:data:: TRAINABLE_MODEL_TYPES
+
+.. py:data:: MODEL_ENTRY_TYPES
+
+.. py:function:: resolve_model_type(model_config) -> str
+
+   Infer the finetuning CLI model type from the model config.
+
+   Raises ValueError for a type the trainer cannot train, rather than
+   submitting a GPU job whose argparse exits with code 2.
+
+
+.. py:function:: model_entry(model_config, model_type: str, checkpoint_path: Optional[pathlib.Path]) -> Optional[dict]
+
+   The model as the trainer takes it with --model-entry, or None for a type
+   that goes by its own flags (MODEL_ENTRY_TYPES).
+
+   The entry is the model's to_dict(), so the trainer builds the model the
+   dashboard serves; ``checkpoint_path`` (find_checkpoint's) replaces the
+   entry's own checkpoint, which is how an override reaches a Fly model.
+
+
+.. py:function:: find_checkpoint(model_config, override=None) -> Optional[pathlib.Path]
+
+   The checkpoint to finetune from: ``override``, else the config's own.
+
+   None when there is neither: a script model passes its script instead.
+   Raises ValueError for a checkpoint that does not exist.
+
+
+.. py:function:: count_corrections(corrections_path: pathlib.Path) -> int
+
+   How many corrections the session holds.
+
+   Raises ValueError when there is nothing to train on.
+
+
+.. py:function:: model_settings(model_config, warned: set)
+
+   (channels, input voxel size, output voxel size) to train ``model_config`` with.
+
+   Each is the config's own, else its geometry's, else a guess: channels
+   ["mito"], 16 nm voxels. A guess is logged once per model; ``warned``
+   holds the names of the models already warned about.
+
+
+.. py:function:: extract_data_path_from_corrections(corrections_path: pathlib.Path) -> str
+
+   Extract dataset path from corrections metadata.
+
+   The manifest's raw_dataset_path first -- it is what the trainer reads
+   -- and only then the first correction zarr's attrs, which a crop zarr
+   may not have.
+
+
+.. py:function:: build_command(*, model_config, model_type: str, checkpoint_path: Optional[pathlib.Path], corrections_path: pathlib.Path, output_dir: pathlib.Path, log_file: pathlib.Path, channels: List[str], input_voxel_size: List[int], output_voxel_size: List[int], lora_r: int, num_epochs: int, batch_size: int, learning_rate: float, loss_type: str, label_smoothing: float, distillation_lambda: Optional[float], distillation_scope: str, margin: float, auto_serve: bool, serve_data_path: Optional[str], mask_unannotated: bool, balance_classes: bool, augment: bool, output_type: str, select_channel: Optional[int], offsets: Optional[str], models_dir: Optional[pathlib.Path] = None, queue: Optional[str] = None, charge_group: Optional[str] = None) -> str
+
+   Build the shell command used to launch finetuning, for ``bash -c``.
+
+
+.. py:function:: launch(job_name: str, command: str, queue: Optional[str], charge_group: Optional[str], walltime: Optional[str] = None)
+
+   Start ``command`` (build_command's) as the job ``job_name``.
+
+   On LSF with one GPU when bsub is available, for ``walltime`` ("HH:MM"
+   or minutes) or else the site's; otherwise as a process here.
+   Returns its LSFJob or LocalJob; raises RuntimeError if it did not start.
+
+

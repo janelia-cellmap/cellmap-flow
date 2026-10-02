@@ -1,0 +1,187 @@
+cellmap_flow.inference.runner
+=============================
+
+.. py:module:: cellmap_flow.inference.runner
+
+.. autoapi-nested-parse::
+
+   Running a model on a region: the device, the warmup and the forward.
+
+   ``ModelRunner`` puts a ModelConfig's model on the device, warms it up (the
+   same forward checks the declared shapes and probes the output's range), and
+   predicts an output region from an ImageDataInterface: the model's raw output,
+   ``(C, *spatial)``, with no postprocessing and no process-wide state.
+   ``cellmap_flow.inferencer.Inferencer`` adds the normalization and
+   postprocessing chain on top.
+
+   ``DeviceSlots`` is how many chunks may use the device at once, and in what
+   order; the inference server passes one, blockwise workers none.
+
+   Importing this module is cheap: torch is imported when it is first needed.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.inference.runner.logger
+   cellmap_flow.inference.runner.GPU_SLOTS_ENV
+   cellmap_flow.inference.runner.HALF_PRECISION_TOLERANCE
+
+
+Exceptions
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.inference.runner.ChunkCancelled
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.inference.runner.DeviceSlots
+   cellmap_flow.inference.runner.ModelRunner
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.inference.runner.predict
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:data:: GPU_SLOTS_ENV
+   :value: 'CELLMAP_FLOW_GPU_SLOTS'
+
+
+.. py:data:: HALF_PRECISION_TOLERANCE
+   :value: 0.01
+
+
+.. py:exception:: ChunkCancelled
+
+
+
+   The chunk was not computed: whoever asked for it stopped waiting.
+
+
+.. py:class:: DeviceSlots(n=1)
+
+   Lets at most ``n`` chunks use the device at once, in the order they asked.
+
+   The inference server answers every request on its own thread, and
+   neuroglancer asks for 6 chunks at once over HTTP/1.1, or dozens through an
+   HTTP/2 proxy. Unbounded, k concurrent forwards interleave on the GPU and
+   finish together, after about k forwards' time, so the first chunks of a
+   view all appeared at once, late. Each forward also holds its own
+   activations, and a dozen at once ran an 11 GB card out of memory. One
+   slot makes the GPU compute chunks one after another, the first one asked
+   for first, at the same total throughput: reading and normalizing the next
+   chunk, which stay outside the slot, overlap the current forward.
+
+   Strictly first come, first served: a thread that arrives while a slot is
+   free still waits behind anyone already waiting. A plain Semaphore lets
+   newcomers barge ahead.
+
+   The server takes ``n`` from ``CELLMAP_FLOW_GPU_SLOTS`` (default 1) when it
+   starts. More than one slot only helps a model too small to keep the
+   device busy on its own.
+
+   ``hold(cancelled)`` asks ``cancelled()`` while it waits, and once more just
+   before taking a slot, and raises ChunkCancelled instead of taking it once
+   that says yes. Neuroglancer drops the requests for chunks that have left
+   the view after a pan; without this, those still ran their forward ahead
+   of the new view's chunks. A chunk already on the device finishes.
+
+
+   .. py:attribute:: POLL_SECONDS
+      :value: 0.1
+
+
+
+   .. py:attribute:: n
+      :value: 1
+
+
+
+   .. py:method:: from_env()
+      :classmethod:
+
+
+
+   .. py:method:: hold(cancelled=None)
+
+
+.. py:function:: predict(read_roi, write_roi, config, **kwargs)
+
+   The default forward: read ``read_roi`` from ``kwargs["idi"]``, run
+   ``config.model`` on ``kwargs["device"]``, return ``(C, *spatial)``.
+
+   A script may define its own ``predict`` with this signature instead; it
+   is then given ``idi``, ``device`` and ``use_half_prediction``.
+
+
+.. py:class:: ModelRunner(model_config, use_half_prediction=False, device_slots=None, half_precision=False)
+
+   .. py:attribute:: device_slots
+      :value: None
+
+
+
+   .. py:attribute:: use_half_prediction
+      :value: False
+
+
+
+   .. py:attribute:: model_config
+
+
+   .. py:attribute:: output_range
+      :value: None
+
+
+
+   .. py:attribute:: output_class
+      :value: None
+
+
+
+   .. py:attribute:: half_precision
+
+
+   .. py:attribute:: autocast_dtype
+      :value: None
+
+
+
+   .. py:attribute:: context
+
+
+   .. py:method:: optimize_model()
+
+
+   .. py:method:: predict(idi, out_roi, cancelled=None)
+
+      The model's raw output for ``out_roi``: ``(C, *spatial)``, not postprocessed.
+
+      ``idi`` is read around ``out_roi`` with the model's context, normalized
+      however ``idi`` normalizes. ``cancelled``: asked while the chunk waits
+      for a device slot; raises ChunkCancelled, without computing it, once
+      that says yes.
+
+
+
+   .. py:method:: process_chunk_basic(idi, roi, cancelled=None)
+
+

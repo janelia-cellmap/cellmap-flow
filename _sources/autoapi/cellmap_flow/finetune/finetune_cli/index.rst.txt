@@ -13,6 +13,12 @@ cellmap_flow.finetune.finetune_cli
        # With custom settings
        python -m cellmap_flow.finetune.finetune_cli         --model-checkpoint /path/to/checkpoint         --corrections corrections.zarr         --output-dir output/fly_organelles_v1.1         --lora-r 8         --batch-size 8         --num-epochs 20         --learning-rate 2e-4
 
+   The job manager launches this module path, and a running job outlives a
+   dashboard upgrade, so the path, its flags and what it prints only change
+   compatibly. The flags are finetune.cli's, the job's loop is
+   finetune.session_loop.TrainingSession, what each iteration writes is
+   finetune.run_outputs', and its stdout markers are finetune.markers'.
+
 
 
 Attributes
@@ -23,20 +29,11 @@ Attributes
    cellmap_flow.finetune.finetune_cli.logger
 
 
-Classes
--------
-
-.. autoapisummary::
-
-   cellmap_flow.finetune.finetune_cli.RestartController
-
-
 Functions
 ---------
 
 .. autoapisummary::
 
-   cellmap_flow.finetune.finetune_cli.build_arg_parser
    cellmap_flow.finetune.finetune_cli.main
 
 
@@ -44,19 +41,6 @@ Module Contents
 ---------------
 
 .. py:data:: logger
-
-.. py:class:: RestartController
-
-   In-memory restart control shared between training loop and server endpoint.
-
-
-   .. py:method:: request_restart(payload: Optional[dict]) -> bool
-
-
-   .. py:method:: get_if_triggered() -> Optional[dict]
-
-
-.. py:function:: build_arg_parser()
 
 .. py:function:: main()
 

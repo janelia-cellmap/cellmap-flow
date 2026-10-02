@@ -1,0 +1,218 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Viewer layer API &mdash; CellMap Flow  documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="_static/graphviz.css?v=4ae1632d" />
+      <link rel="stylesheet" type="text/css" href="_static/css/custom.css" />
+
+  
+    <link rel="shortcut icon" href="_static/favicon.ico"/>
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Architecture" href="architecture.html" />
+    <link rel="prev" title="Reviewing instances" href="review.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            CellMap Flow
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">CellMap-Flow API:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="install.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="cli.html">Command line</a></li>
+<li class="toctree-l1"><a class="reference internal" href="scripts.html">Python Scripts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="yaml_config.html">YAML Configuration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="data_paths.html">Data paths</a></li>
+<li class="toctree-l1"><a class="reference internal" href="huggingface.html">HuggingFace Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="custom_script.html">Custom Model</a></li>
+<li class="toctree-l1"><a class="reference internal" href="post.html">PostProcessors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plugins.html">Plugins</a></li>
+<li class="toctree-l1"><a class="reference internal" href="review.html">Reviewing instances</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Viewer layer API</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#add-an-image-layer">Add an image layer</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#add-a-segmentation-layer">Add a segmentation layer</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#rename-a-layer">Rename a layer</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#remove-a-layer">Remove a layer</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#set-the-pipeline">Set the pipeline</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="architecture.html">Architecture</a></li>
+<li class="toctree-l1"><a class="reference internal" href="autoapi/index.html">API Reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">CellMap Flow</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Viewer layer API</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/viewer_api.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="viewer-layer-api">
+<h1>Viewer layer API<a class="headerlink" href="#viewer-layer-api" title="Link to this heading"></a></h1>
+<p>A running dashboard can add, rename and remove layers of its Neuroglancer
+viewer over HTTP, so a script or a shell can put a dataset next to the
+predictions without restarting anything. The dashboard’s own pages don’t use
+these routes. It can also <a class="reference internal" href="#set-the-pipeline">set the pipeline</a> the predictions are drawn
+through, as the pages do.</p>
+<p>Every layer route takes a JSON <code class="docutils literal notranslate"><span class="pre">POST</span></code> body and answers with <code class="docutils literal notranslate"><span class="pre">{&quot;success&quot;:</span> <span class="pre">true,</span>
+<span class="pre">...}</span></code>, or <code class="docutils literal notranslate"><span class="pre">{&quot;success&quot;:</span> <span class="pre">false,</span> <span class="pre">&quot;error&quot;:</span> <span class="pre">&quot;...&quot;}</span></code> and a 4xx or 5xx status.
+Open the dashboard’s Neuroglancer tab again (or reload it) to see a change
+when the answer says <code class="docutils literal notranslate"><span class="pre">&quot;reload_page&quot;:</span> <span class="pre">true</span></code>.</p>
+<p>In the examples, <code class="docutils literal notranslate"><span class="pre">DASHBOARD</span></code> is the address you open the dashboard at, the
+<code class="docutils literal notranslate"><span class="pre">Running</span> <span class="pre">on</span> <span class="pre">http://...</span></code> line it prints when it starts:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nv">DASHBOARD</span><span class="o">=</span>http://10.36.1.20:43219
+</pre></div>
+</div>
+<section id="add-an-image-layer">
+<h2>Add an image layer<a class="headerlink" href="#add-an-image-layer" title="Link to this heading"></a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">path</span></code> is a zarr or n5 array or multiscale group, or a <code class="docutils literal notranslate"><span class="pre">precomputed://</span></code>
+URL, opened the same way as the raw dataset (see <a class="reference internal" href="data_paths.html"><span class="doc">Data paths</span></a>). <code class="docutils literal notranslate"><span class="pre">shader</span></code> and <code class="docutils literal notranslate"><span class="pre">blend</span></code> are
+optional and passed to Neuroglancer as they are. A layer with the same name is
+replaced.</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>curl<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span><span class="s2">"</span><span class="nv">$DASHBOARD</span><span class="s2">/api/viewer/add-image-layer"</span><span class="w"> </span><span class="se">\</span>
+<span class="w">     </span>-H<span class="w"> </span><span class="s1">'Content-Type: application/json'</span><span class="w"> </span><span class="se">\</span>
+<span class="w">     </span>-d<span class="w"> </span><span class="s1">'{"path": "/path/to/dataset.zarr/em/fibsem-uint8",</span>
+<span class="s1">          "name": "em", "blend": "additive"}'</span>
+</pre></div>
+</div>
+</section>
+<section id="add-a-segmentation-layer">
+<h2>Add a segmentation layer<a class="headerlink" href="#add-a-segmentation-layer" title="Link to this heading"></a></h2>
+<p>The same, for label volumes. <code class="docutils literal notranslate"><span class="pre">disable_meshes</span></code> turns off Neuroglancer’s
+on-the-fly meshes, which can take a lot of the dashboard’s memory for a large
+label volume.</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>curl<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span><span class="s2">"</span><span class="nv">$DASHBOARD</span><span class="s2">/api/viewer/add-segmentation-layer"</span><span class="w"> </span><span class="se">\</span>
+<span class="w">     </span>-H<span class="w"> </span><span class="s1">'Content-Type: application/json'</span><span class="w"> </span><span class="se">\</span>
+<span class="w">     </span>-d<span class="w"> </span><span class="s1">'{"path": "/path/to/segmentation.zarr/mito",</span>
+<span class="s1">          "name": "mito", "disable_meshes": true}'</span>
+</pre></div>
+</div>
+</section>
+<section id="rename-a-layer">
+<h2>Rename a layer<a class="headerlink" href="#rename-a-layer" title="Link to this heading"></a></h2>
+<p>The layer keeps its place in the layer list. It answers 404 when
+<code class="docutils literal notranslate"><span class="pre">old_name</span></code> isn’t a layer and 409 when <code class="docutils literal notranslate"><span class="pre">new_name</span></code> already is one.</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>curl<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span><span class="s2">"</span><span class="nv">$DASHBOARD</span><span class="s2">/api/viewer/rename-layer"</span><span class="w"> </span><span class="se">\</span>
+<span class="w">     </span>-H<span class="w"> </span><span class="s1">'Content-Type: application/json'</span><span class="w"> </span><span class="se">\</span>
+<span class="w">     </span>-d<span class="w"> </span><span class="s1">'{"old_name": "mito", "new_name": "mito (v2)"}'</span>
+</pre></div>
+</div>
+</section>
+<section id="remove-a-layer">
+<h2>Remove a layer<a class="headerlink" href="#remove-a-layer" title="Link to this heading"></a></h2>
+<p>Removing a layer that isn’t there is not an error; the answer says
+<code class="docutils literal notranslate"><span class="pre">&quot;removed&quot;:</span> <span class="pre">false</span></code>.</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>curl<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span><span class="s2">"</span><span class="nv">$DASHBOARD</span><span class="s2">/api/viewer/remove-layer"</span><span class="w"> </span><span class="se">\</span>
+<span class="w">     </span>-H<span class="w"> </span><span class="s1">'Content-Type: application/json'</span><span class="w"> </span><span class="se">\</span>
+<span class="w">     </span>-d<span class="w"> </span><span class="s1">'{"name": "mito (v2)"}'</span>
+</pre></div>
+</div>
+<p>A layer’s shader settings go with it when it is renamed and are dropped when
+it is removed, so a new layer with the old name starts from the defaults.</p>
+<p>The routes open any path the dashboard’s user can read, as the dashboard’s
+“set data” does, and anyone who can reach the dashboard can call them.</p>
+</section>
+<section id="set-the-pipeline">
+<h2>Set the pipeline<a class="headerlink" href="#set-the-pipeline" title="Link to this heading"></a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">PUT</span> <span class="pre">/api/pipeline</span></code> sets the input normalization and postprocessing chains,
+and redraws the raw data and every prediction layer through them. It is what
+Submit on the dashboard page sends, and what the pipeline builder sends after
+each edit. Each chain is a list of steps in the order they run, each step an
+op’s class name and its parameters; send <code class="docutils literal notranslate"><span class="pre">[]</span></code> for none.</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>curl<span class="w"> </span>-X<span class="w"> </span>PUT<span class="w"> </span><span class="s2">"</span><span class="nv">$DASHBOARD</span><span class="s2">/api/pipeline"</span><span class="w"> </span><span class="se">\</span>
+<span class="w">     </span>-H<span class="w"> </span><span class="s1">'Content-Type: application/json'</span><span class="w"> </span><span class="se">\</span>
+<span class="w">     </span>-d<span class="w"> </span><span class="s1">'{"input_norm": [{"name": "MinMaxNormalizer", "min_value": 0, "max_value": 255},</span>
+<span class="s1">                         {"name": "LambdaNormalizer", "expression": "x*2-1"}],</span>
+<span class="s1">          "postprocess": [{"name": "ThresholdPostprocessor", "threshold": 0.5}]}'</span>
+</pre></div>
+</div>
+<p>The answer is <code class="docutils literal notranslate"><span class="pre">{&quot;success&quot;:</span> <span class="pre">true,</span> <span class="pre">&quot;pipeline&quot;:</span> <span class="pre">{...},</span> <span class="pre">&quot;digest&quot;:</span> <span class="pre">&quot;...&quot;,</span>
+<span class="pre">&quot;layers&quot;:</span> <span class="pre">[...]}</span></code>: the chains as set, the digest that names the layers’
+source, and the prediction layers redrawn. A model whose server has no address
+yet gets no layer. An op that isn’t registered, or a parameter its class
+refuses, is a 400 with <code class="docutils literal notranslate"><span class="pre">&quot;error&quot;</span></code>, and nothing changes.</p>
+<p><code class="docutils literal notranslate"><span class="pre">POST</span> <span class="pre">/api/process</span></code> (the same two chains) and <code class="docutils literal notranslate"><span class="pre">POST</span> <span class="pre">/api/pipeline/apply</span></code>
+(the pipeline builder’s nodes) did this before this release. They still
+answer as they did, with a <code class="docutils literal notranslate"><span class="pre">Deprecation</span></code> header, and are removed in the
+next release.</p>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="review.html" class="btn btn-neutral float-left" title="Reviewing instances" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="architecture.html" class="btn btn-neutral float-right" title="Architecture" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, David Ackerman,  Marwan Zouinkhi, Jeff Rhoades, Larissa Heinrich, Aubrey Weigel.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

@@ -1,0 +1,79 @@
+cellmap_flow.jobs.ready
+=======================
+
+.. py:module:: cellmap_flow.jobs.ready
+
+.. autoapi-nested-parse::
+
+   The file a server writes once it knows its own address.
+
+   A launcher learns where a server is from the ``CELLMAP_FLOW_SERVER_IP(...)``
+   marker the server prints. On LSF that means polling bpeek, and every bpeek
+   is a request to mbatchd for the job's whole output so far. A launcher that
+   sets ``READY_ENV`` in the job's environment is told instead: the server
+   writes ``{"url", "host", "pid", "job_id"}`` to that path as it prints the
+   marker, and the launcher reads the file before it asks LSF anything.
+
+   It is an environment variable, not a command-line flag, so that a server
+   from before this existed simply ignores it. The launcher then finds no file
+   and reads the marker through bpeek, as it always did.
+
+   The file says what the marker says: the server knows its URL. It is written
+   just before the server binds its port, not after, so it does not promise
+   that the first request will be answered.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.jobs.ready.logger
+   cellmap_flow.jobs.ready.READY_ENV
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.jobs.ready.ready_path
+   cellmap_flow.jobs.ready.write_ready_file
+   cellmap_flow.jobs.ready.read_ready_file
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:data:: READY_ENV
+   :value: 'CELLMAP_FLOW_READY_FILE'
+
+
+.. py:function:: ready_path(log_dir, job_name: str) -> pathlib.Path
+
+   A fresh path for one submission of ``job_name`` to write its address to.
+
+   Different on every call: a job resubmitted on another queue, or the same
+   model launched twice, must never read an earlier job's address.
+
+
+.. py:function:: write_ready_file(url: str) -> Optional[pathlib.Path]
+
+   Write ``url`` where the launcher asked, if it asked. Never raises.
+
+   Written to a temporary name and renamed into place, so a reader sees
+   either no file or a whole one. Returns the path written, or None when
+   ``READY_ENV`` is not set or the file could not be written; the printed
+   marker still says the same thing.
+
+
+.. py:function:: read_ready_file(path, job_id: Optional[str] = None) -> Optional[str]
+
+   The URL in a ready file, or None if there is no usable one yet.
+
+   With ``job_id``, a file written by a different LSF job is not usable.
+
+

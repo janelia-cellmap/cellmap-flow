@@ -1,0 +1,347 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>cellmap_flow.finetune.losses &mdash; CellMap Flow  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=4ae1632d" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css" />
+
+  
+    <link rel="shortcut icon" href="../../../../_static/favicon.ico"/>
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link rel="next" title="cellmap_flow.finetune.markers" href="../markers/index.html" />
+    <link rel="prev" title="cellmap_flow.finetune.lora_wrapper" href="../lora_wrapper/index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            CellMap Flow
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">CellMap-Flow API:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../../../../install.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../cli.html">Command line</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../scripts.html">Python Scripts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../yaml_config.html">YAML Configuration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../data_paths.html">Data paths</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../huggingface.html">HuggingFace Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../custom_script.html">Custom Model</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../post.html">PostProcessors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../plugins.html">Plugins</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../review.html">Reviewing instances</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../viewer_api.html">Viewer layer API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../architecture.html">Architecture</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../../../index.html">API Reference</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="../../index.html">cellmap_flow</a><ul class="current">
+<li class="toctree-l3 current"><a class="reference internal" href="../../index.html#submodules">Submodules</a><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="../../blockwise/index.html">cellmap_flow.blockwise</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../cli/index.html">cellmap_flow.cli</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../config/index.html">cellmap_flow.config</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../dashboard/index.html">cellmap_flow.dashboard</a></li>
+<li class="toctree-l4 current"><a class="reference internal" href="../index.html">cellmap_flow.finetune</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../globals/index.html">cellmap_flow.globals</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../image_data_interface/index.html">cellmap_flow.image_data_interface</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../inference/index.html">cellmap_flow.inference</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../inferencer/index.html">cellmap_flow.inferencer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../io/index.html">cellmap_flow.io</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../jobs/index.html">cellmap_flow.jobs</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../logging_setup/index.html">cellmap_flow.logging_setup</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../models/index.html">cellmap_flow.models</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../norm/index.html">cellmap_flow.norm</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../pipeline_spec/index.html">cellmap_flow.pipeline_spec</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../plugins/index.html">cellmap_flow.plugins</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../post/index.html">cellmap_flow.post</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../process_chain/index.html">cellmap_flow.process_chain</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../review/index.html">cellmap_flow.review</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../review_index/index.html">cellmap_flow.review_index</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../server/index.html">cellmap_flow.server</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../serving/index.html">cellmap_flow.serving</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../utils/index.html">cellmap_flow.utils</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../viewer/index.html">cellmap_flow.viewer</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">CellMap Flow</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">API Reference</a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">cellmap_flow</a></li>
+          <li class="breadcrumb-item"><a href="../index.html">cellmap_flow.finetune</a></li>
+      <li class="breadcrumb-item active">cellmap_flow.finetune.losses</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../../../../_sources/autoapi/cellmap_flow/finetune/losses/index.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-cellmap_flow.finetune.losses">
+<span id="cellmap-flow-finetune-losses"></span><h1>cellmap_flow.finetune.losses<a class="headerlink" href="#module-cellmap_flow.finetune.losses" title="Link to this heading"></a></h1>
+<p>The finetune losses, and the masked means they are all made of.</p>
+<p>Every loss here is averaged over the voxels a mask supervises, not over the
+patch: a correction labels a few voxels of it, and the rest must not count.
+<code class="docutils literal notranslate"><span class="pre">masked_mean</span></code> is that average, <code class="docutils literal notranslate"><span class="pre">balanced_mean</span></code> gives the foreground and
+the background half the weight each, and the losses and the distillation
+term below are built from the two.</p>
+<p>The float operations are kept in the order the trainer always used, so a
+run computes the same numbers bit for bit
+(tests/finetune/test_training_snapshot.py).</p>
+<section id="classes">
+<h2>Classes<a class="headerlink" href="#classes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.losses.DiceLoss" title="cellmap_flow.finetune.losses.DiceLoss"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DiceLoss</span></code></a></p></td>
+<td><p>Dice Loss for segmentation tasks.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.finetune.losses.CombinedLoss" title="cellmap_flow.finetune.losses.CombinedLoss"><code class="xref py py-obj docutils literal notranslate"><span class="pre">CombinedLoss</span></code></a></p></td>
+<td><p>Combined Dice + BCE loss for better convergence.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.losses.MarginLoss" title="cellmap_flow.finetune.losses.MarginLoss"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MarginLoss</span></code></a></p></td>
+<td><p>Margin-based loss for sparse/scribble annotations.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="functions">
+<h2>Functions<a class="headerlink" href="#functions" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.losses.masked_mean" title="cellmap_flow.finetune.losses.masked_mean"><code class="xref py py-obj docutils literal notranslate"><span class="pre">masked_mean</span></code></a>(x, weight)</p></td>
+<td><p>Mean of <code class="docutils literal notranslate"><span class="pre">x</span></code> weighted by <code class="docutils literal notranslate"><span class="pre">weight</span></code> (a 0/1 mask, usually); 0 when nothing is weighted.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.finetune.losses.balanced_mean" title="cellmap_flow.finetune.losses.balanced_mean"><code class="xref py py-obj docutils literal notranslate"><span class="pre">balanced_mean</span></code></a>(x, hard_target, mask)</p></td>
+<td><p>The foreground's and the background's masked means, averaged.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.losses.as_probabilities" title="cellmap_flow.finetune.losses.as_probabilities"><code class="xref py py-obj docutils literal notranslate"><span class="pre">as_probabilities</span></code></a>(pred, model_has_sigmoid)</p></td>
+<td><p>The model's output as probabilities.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.finetune.losses.soft_target_entropy" title="cellmap_flow.finetune.losses.soft_target_entropy"><code class="xref py py-obj docutils literal notranslate"><span class="pre">soft_target_entropy</span></code></a>(target[, eps])</p></td>
+<td><p>Per-voxel BCE that a perfectly calibrated prediction still pays.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.losses.distillation_loss" title="cellmap_flow.finetune.losses.distillation_loss"><code class="xref py py-obj docutils literal notranslate"><span class="pre">distillation_loss</span></code></a>(student, teacher, scope[, ...])</p></td>
+<td><p>Mean squared distance of the student's output from the teacher's, over <code class="docutils literal notranslate"><span class="pre">scope</span></code>.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="module-contents">
+<h2>Module Contents<a class="headerlink" href="#module-contents" title="Link to this heading"></a></h2>
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.losses.masked_mean">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.losses.</span></span><span class="sig-name descname"><span class="pre">masked_mean</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">weight</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.finetune.losses.masked_mean" title="Link to this definition"></a></dt>
+<dd><p>Mean of <code class="docutils literal notranslate"><span class="pre">x</span></code> weighted by <code class="docutils literal notranslate"><span class="pre">weight</span></code> (a 0/1 mask, usually); 0 when nothing is weighted.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.losses.balanced_mean">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.losses.</span></span><span class="sig-name descname"><span class="pre">balanced_mean</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">hard_target</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mask</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.finetune.losses.balanced_mean" title="Link to this definition"></a></dt>
+<dd><p>The foreground’s and the background’s masked means, averaged.</p>
+<p>Each class counts the same however many voxels it has. The split is by
+the target as annotated (0/1), before any label smoothing: split by the
+smoothed target, every background voxel carried s/2 of foreground weight.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.losses.as_probabilities">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.losses.</span></span><span class="sig-name descname"><span class="pre">as_probabilities</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">pred</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model_has_sigmoid</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.finetune.losses.as_probabilities" title="Link to this definition"></a></dt>
+<dd><p>The model’s output as probabilities.</p>
+<p>Left alone when the model already ends in a sigmoid (the cellmap
+<em>_distance_</em> UNets do); a second sigmoid would squash [0, 1] into
+[0.5, 0.73] and make a well-fitting prediction look like a constant.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.losses.soft_target_entropy">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.losses.</span></span><span class="sig-name descname"><span class="pre">soft_target_entropy</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">target</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">eps</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1e-07</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.finetune.losses.soft_target_entropy" title="Link to this definition"></a></dt>
+<dd><p>Per-voxel BCE that a perfectly calibrated prediction still pays.</p>
+<p>-(t log t + (1-t) log(1-t)): zero for hard 0/1 targets, log 2 at
+t = 0.5. On soft targets (distance, smoothed labels) this is the floor
+of the BCE curve, and it moves with the batch, so a “flat” BCE can be a
+model sitting on its floor. Report the loss minus this instead.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.losses.distillation_loss">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.losses.</span></span><span class="sig-name descname"><span class="pre">distillation_loss</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">student</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">teacher</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scope</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">anchor_mask</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">unlabeled_mask</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.finetune.losses.distillation_loss" title="Link to this definition"></a></dt>
+<dd><p>Mean squared distance of the student’s output from the teacher’s, over <code class="docutils literal notranslate"><span class="pre">scope</span></code>.</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;anchor&quot;</span></code>: the good regions the user vouched for, <code class="docutils literal notranslate"><span class="pre">anchor_mask</span></code>.
+It is about location, so one channel, broadcast over the output’s.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;unlabeled&quot;</span></code>: the voxels the supervised loss leaves out,
+<code class="docutils literal notranslate"><span class="pre">unlabeled_mask</span></code> (1 - the supervised mask).</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;all&quot;</span></code>: every voxel.</p></li>
+</ul>
+<p>The two are compared as the model emits them: logits, or probabilities
+for a model that ends in a sigmoid.</p>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.losses.DiceLoss">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.losses.</span></span><span class="sig-name descname"><span class="pre">DiceLoss</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">smooth</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1.0</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.finetune.losses.DiceLoss" title="Link to this definition"></a></dt>
+<dd><p>Dice Loss for segmentation tasks.</p>
+<p>Dice loss is effective for imbalanced datasets where the target class
+may be sparse (e.g., mitochondria in EM images).</p>
+<p>Formula: 1 - (2 * <a href="#id1"><span class="problematic" id="id2">|X ∩ Y|</span></a> + smooth) / (<a href="#id3"><span class="problematic" id="id4">|X|</span></a> + <a href="#id5"><span class="problematic" id="id6">|Y|</span></a> + smooth)</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.losses.DiceLoss.smooth">
+<span class="sig-name descname"><span class="pre">smooth</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">1.0</span></span><a class="headerlink" href="#cellmap_flow.finetune.losses.DiceLoss.smooth" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.losses.DiceLoss.apply_sigmoid">
+<span class="sig-name descname"><span class="pre">apply_sigmoid</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">True</span></span><a class="headerlink" href="#cellmap_flow.finetune.losses.DiceLoss.apply_sigmoid" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.losses.DiceLoss.forward">
+<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">pred</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">torch.Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">target</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">torch.Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mask</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">torch.Tensor</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">torch.Tensor</span></span></span><a class="headerlink" href="#cellmap_flow.finetune.losses.DiceLoss.forward" title="Link to this definition"></a></dt>
+<dd><p>Dice loss of (B, C, Z, Y, X) logits (or probabilities) against 0/1 targets, over <code class="docutils literal notranslate"><span class="pre">mask</span></code>.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.losses.CombinedLoss">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.losses.</span></span><span class="sig-name descname"><span class="pre">CombinedLoss</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dice_weight</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.5</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bce_weight</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.5</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.finetune.losses.CombinedLoss" title="Link to this definition"></a></dt>
+<dd><p>Combined Dice + BCE loss for better convergence.</p>
+<p>Uses both Dice loss (for overlap) and BCE loss (for pixel-wise accuracy).</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.losses.CombinedLoss.dice_loss">
+<span class="sig-name descname"><span class="pre">dice_loss</span></span><a class="headerlink" href="#cellmap_flow.finetune.losses.CombinedLoss.dice_loss" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.losses.CombinedLoss.bce_loss">
+<span class="sig-name descname"><span class="pre">bce_loss</span></span><a class="headerlink" href="#cellmap_flow.finetune.losses.CombinedLoss.bce_loss" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.losses.CombinedLoss.dice_weight">
+<span class="sig-name descname"><span class="pre">dice_weight</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0.5</span></span><a class="headerlink" href="#cellmap_flow.finetune.losses.CombinedLoss.dice_weight" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.losses.CombinedLoss.bce_weight">
+<span class="sig-name descname"><span class="pre">bce_weight</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0.5</span></span><a class="headerlink" href="#cellmap_flow.finetune.losses.CombinedLoss.bce_weight" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.losses.CombinedLoss.forward">
+<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">pred</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">torch.Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">target</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">torch.Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mask</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">torch.Tensor</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">torch.Tensor</span></span></span><a class="headerlink" href="#cellmap_flow.finetune.losses.CombinedLoss.forward" title="Link to this definition"></a></dt>
+<dd><p>Weighted Dice + BCE of (B, C, Z, Y, X) logits against 0/1 targets, over <code class="docutils literal notranslate"><span class="pre">mask</span></code>.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.losses.MarginLoss">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.losses.</span></span><span class="sig-name descname"><span class="pre">MarginLoss</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">margin</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.3</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">balance_classes</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.finetune.losses.MarginLoss" title="Link to this definition"></a></dt>
+<dd><p>Margin-based loss for sparse/scribble annotations.</p>
+<p>Only penalizes predictions on the wrong side of a margin threshold.
+For post-sigmoid outputs in [0, 1]:
+- Foreground (target=1): loss = relu(threshold - pred)^2, threshold = 1 - margin
+- Background (target=0): loss = relu(pred - margin)^2
+- No loss when prediction is already correct with sufficient confidence.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.losses.MarginLoss.margin">
+<span class="sig-name descname"><span class="pre">margin</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0.3</span></span><a class="headerlink" href="#cellmap_flow.finetune.losses.MarginLoss.margin" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.losses.MarginLoss.balance_classes">
+<span class="sig-name descname"><span class="pre">balance_classes</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">False</span></span><a class="headerlink" href="#cellmap_flow.finetune.losses.MarginLoss.balance_classes" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.losses.MarginLoss.apply_sigmoid">
+<span class="sig-name descname"><span class="pre">apply_sigmoid</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">True</span></span><a class="headerlink" href="#cellmap_flow.finetune.losses.MarginLoss.apply_sigmoid" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.losses.MarginLoss.forward">
+<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">pred</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">torch.Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">target</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">torch.Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mask</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">torch.Tensor</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">torch.Tensor</span></span></span><a class="headerlink" href="#cellmap_flow.finetune.losses.MarginLoss.forward" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../lora_wrapper/index.html" class="btn btn-neutral float-left" title="cellmap_flow.finetune.lora_wrapper" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../markers/index.html" class="btn btn-neutral float-right" title="cellmap_flow.finetune.markers" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, David Ackerman,  Marwan Zouinkhi, Jeff Rhoades, Larissa Heinrich, Aubrey Weigel.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

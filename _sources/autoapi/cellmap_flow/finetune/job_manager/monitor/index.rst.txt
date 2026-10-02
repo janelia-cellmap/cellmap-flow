@@ -1,0 +1,76 @@
+cellmap_flow.finetune.job_manager.monitor
+=========================================
+
+.. py:module:: cellmap_flow.finetune.job_manager.monitor
+
+.. autoapi-nested-parse::
+
+   Following a finetune job until it ends.
+
+   ``monitor_job`` runs on the job's own thread, which FinetuneJobManager
+   starts when it submits the job or finds it again. Every few seconds it asks
+   the scheduler about the job (state.on_scheduler_status) and reads what the
+   trainer has added to its log (tailer.LogTailer):
+   - the epoch and loss;
+   - the inference server's address, once it is up, which the listeners hear
+     as ``on_server_ready``;
+   - each finished iteration's model, their ``on_iteration_complete``;
+   - the status markers (state.on_status_marker).
+
+   It records each change of status in the run's metadata.json, and, when the
+   job ends, its final status, model and serving YAML, once it has read the
+   lines its last poll had not (``_read_last_lines``). A job the scheduler says
+   completed must have left its export (``complete_job``): it is COMPLETED only
+   once that is found, and FAILED if it is not.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.job_manager.monitor.logger
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.job_manager.monitor.monitor_job
+   cellmap_flow.finetune.job_manager.monitor.complete_job
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:function:: monitor_job(finetune_job: cellmap_flow.finetune.job_manager.state.FinetuneJob, listeners: cellmap_flow.finetune.job_manager.listener.Listeners)
+
+   Background thread for job monitoring.
+
+   Polls LSF status and tails log file to track training progress.
+   Triggers completion when job finishes.
+
+   :param finetune_job: The FinetuneJob to monitor
+   :param listeners: Whom to tell of its server and its iterations
+
+
+.. py:function:: complete_job(finetune_job: cellmap_flow.finetune.job_manager.state.FinetuneJob)
+
+   Post-training actions after job completes successfully.
+
+   1. Verify adapter files exist
+   2. Record the completion in metadata.json, with the model name and
+      serving YAML the trainer reported, which the monitor has read from
+      its log (_read_last_lines); the monitor makes the job COMPLETED once
+      this has returned
+
+   :param finetune_job: The completed job
+
+   :raises RuntimeError: If its export is missing (persistence.check_export);
+       nothing else here raises
+
+

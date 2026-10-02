@@ -18,6 +18,8 @@ Functions
 
 .. autoapisummary::
 
+   cellmap_flow.dashboard.routes.index_page.viewer_url_for
+   cellmap_flow.dashboard.routes.index_page.chain_items
    cellmap_flow.dashboard.routes.index_page.index
    cellmap_flow.dashboard.routes.index_page.set_data
 
@@ -28,6 +30,32 @@ Module Contents
 .. py:data:: logger
 
 .. py:data:: index_bp
+
+.. py:function:: viewer_url_for(viewer_url, headers, scheme)
+
+   The address the browser should load the neuroglancer viewer from.
+
+   Behind a reverse proxy (the request carries X-Forwarded-Host), the browser
+   can reach only the proxy, and an https page cannot embed the viewer's own
+   http://<node>:<port> address; so it asks for the viewer at the same path
+   on the proxy's host, which the proxy must route to the viewer. The scheme
+   is the proxy's X-Forwarded-Proto, else this request's own. Without the
+   header (direct access) the viewer's own address is returned unchanged.
+
+
+.. py:function:: chain_items(available, configured)
+
+   The rows of an Input/Postprocess list, in the order to render them.
+
+   The configured steps come first, in the order they run, each with its own
+   parameter values; a step configured twice is listed twice. Every other
+   available step follows, unticked, with its defaults. Submit All sends the
+   ticked rows in display order, so rendering the configured chain in
+   registry order instead would reorder it on the next submit.
+
+   ``available`` is get_input_normalizers() / get_postprocessors_list();
+   ``configured`` is the live chain (the session's input_norms / postprocess).
+
 
 .. py:function:: index()
 

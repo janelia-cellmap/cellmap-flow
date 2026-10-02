@@ -19,6 +19,14 @@ cellmap_flow.finetune.target_transforms
 
 
 
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.target_transforms.logger
+
+
 Classes
 -------
 
@@ -31,8 +39,27 @@ Classes
    cellmap_flow.finetune.target_transforms.DistanceTargetTransform
 
 
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.target_transforms.read_offsets_from_script
+
+
 Module Contents
 ---------------
+
+.. py:data:: logger
+
+.. py:function:: read_offsets_from_script(script_path) -> Optional[list]
+
+   The ``offsets`` a model script assigns, read by parsing it (not running it); None if none.
+
+   An affinity model's script names its neighbour offsets, which the
+   affinity target needs. The dashboard reads them too, to tell an affinity
+   model when a session is set up.
+
 
 .. py:class:: TargetTransform
 

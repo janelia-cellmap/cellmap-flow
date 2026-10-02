@@ -3,19 +3,35 @@ cellmap_flow.globals
 
 .. py:module:: cellmap_flow.globals
 
+.. autoapi-nested-parse::
+
+   Deprecated: ``g`` stands in for state that now lives with its owners.
+
+   ``cellmap_flow.globals.g`` used to hold everything a process shared. Each
+   part now has an owner, and ``g`` forwards every name it had to that owner,
+   warning with a DeprecationWarning that names the replacement:
+
+   - the launcher settings (``queue``, ``charge_group``, ``walltime``, ...,
+     ``save_server_config()``): ``cellmap_flow.jobs.settings.launcher_settings()``;
+   - the chain (``input_norms``, ``postprocess``, their ``*_config``,
+     ``pipeline_spec``, ``set_pipeline()``, ``get_output_dtype()``):
+     ``cellmap_flow.process_chain.process_chain()``;
+   - the servers this process started (``jobs``):
+     ``cellmap_flow.jobs.launch.started_jobs()``;
+   - the rest, the dashboard's state: ``cellmap_flow.dashboard.state.get_session()``.
+
+   ``g`` and ``Flow`` go in the release after 0.3.0. Until then importing this
+   module still configures logging, as it always has, so the scripts that
+   import it keep their log lines. The owners are imported only when a name is
+   used, so importing this module pulls in neither the dashboard nor jobs.
+
+
 
 Attributes
 ----------
 
 .. autoapisummary::
 
-   cellmap_flow.globals.logger
-   cellmap_flow.globals.SERVER_CONFIG_PATH
-   cellmap_flow.globals.SERVER_CONFIG_DEFAULTS
-   cellmap_flow.globals.SERVER_CONFIG_KEYS
-   cellmap_flow.globals.input_norms
-   cellmap_flow.globals.postprocess
-   cellmap_flow.globals.viewer
    cellmap_flow.globals.g
 
 
@@ -25,270 +41,29 @@ Classes
 .. autoapisummary::
 
    cellmap_flow.globals.Flow
-   cellmap_flow.globals.LogHandler
-
-
-Functions
----------
-
-.. autoapisummary::
-
-   cellmap_flow.globals.load_server_config_cache
-   cellmap_flow.globals.save_server_config_cache
-   cellmap_flow.globals.current_input_norm_config
-   cellmap_flow.globals.current_postprocess_config
-   cellmap_flow.globals.get_blockwise_tasks_dir
 
 
 Module Contents
 ---------------
 
-.. py:data:: logger
-
-.. py:data:: SERVER_CONFIG_PATH
-
-.. py:data:: SERVER_CONFIG_DEFAULTS
-
-.. py:data:: SERVER_CONFIG_KEYS
-   :value: ['queue', 'charge_group', 'walltime', 'cycle_gpu_queues', 'nb_cores_master', 'nb_cores_worker',...
-
-
-.. py:function:: load_server_config_cache() -> Optional[Dict[str, Any]]
-
-   Load server config from cache file. Returns None if not found.
-
-
-.. py:function:: save_server_config_cache(config: Dict[str, Any]) -> None
-
-   Save server config to cache file.
-
-
-.. py:data:: input_norms
-   :value: []
-
-
-.. py:data:: postprocess
-   :value: []
-
-
-.. py:data:: viewer
-   :value: None
-
-
 .. py:class:: Flow
 
-   .. py:attribute:: jobs
-      :type:  List[Any]
-
-
-   .. py:attribute:: models_config
-      :type:  List[Any]
-
-
-   .. py:attribute:: servers
-      :type:  List[Any]
-
-
-   .. py:attribute:: raw
-      :type:  Optional[Any]
-
-
-   .. py:attribute:: input_norms
-      :type:  List[Any]
-
-
-   .. py:attribute:: postprocess
-      :type:  List[Any]
-
-
-   .. py:attribute:: viewer
-      :type:  Optional[Any]
-
-
-   .. py:attribute:: dataset_path
-      :type:  Optional[str]
-
-
-   .. py:attribute:: model_catalog
-      :type:  dict
-
-
-   .. py:attribute:: queue
-      :type:  str
-
-
-   .. py:attribute:: charge_group
-      :type:  str
-
-
-   .. py:attribute:: nb_cores_master
-      :type:  int
-
-
-   .. py:attribute:: nb_cores_worker
-      :type:  int
-
-
-   .. py:attribute:: nb_workers
-      :type:  int
-
-
-   .. py:attribute:: tmp_dir
-      :type:  Optional[str]
-
-
-   .. py:attribute:: blockwise_tasks_dir
-      :type:  Optional[str]
-
-
-   .. py:attribute:: neuroglancer_thread
-      :type:  Optional[Any]
-
-
-   .. py:attribute:: pipeline_inputs
-      :type:  List[Any]
-
-
-   .. py:attribute:: pipeline_outputs
-      :type:  List[Any]
-
-
-   .. py:attribute:: pipeline_edges
-      :type:  List[Any]
-
-
-   .. py:attribute:: pipeline_normalizers
-      :type:  List[Any]
-
-
-   .. py:attribute:: pipeline_models
-      :type:  List[Any]
-
-
-   .. py:attribute:: pipeline_postprocessors
-      :type:  List[Any]
-
-
-   .. py:attribute:: shaders
-      :type:  dict
-
-
-   .. py:attribute:: shader_controls
-      :type:  dict
-
-
-   .. py:attribute:: log_buffer
-      :type:  collections.deque
-
-
-   .. py:attribute:: log_clients
-      :type:  list
-
-
-   .. py:attribute:: NEUROGLANCER_URL
-      :type:  Optional[str]
-
-
-   .. py:attribute:: INFERENCE_SERVER
-      :type:  Optional[Any]
-
-
-   .. py:attribute:: CUSTOM_CODE_FOLDER
-      :type:  str
-
-
-   .. py:attribute:: bbx_generator_state
-      :type:  dict
-
-
-   .. py:property:: finetune_job_manager
-
-
-   .. py:attribute:: minio_state
-      :type:  dict
-
-
-   .. py:attribute:: annotation_volumes
-      :type:  dict
-
-
-   .. py:attribute:: output_sessions
-      :type:  dict
-
-
-   .. py:method:: to_dict()
+   Deprecated: the type of ``g``; see the module docstring.
+
+   Every attribute is forwarded to its owner on each use, never copied, so
+   ``g`` and the owners cannot disagree. It stores nothing itself: a name g
+   never had raises, as a misspelt one does on the dashboard's Session,
+   rather than being kept where nothing reads it.
 
 
    .. py:method:: save_server_config()
 
-      Save current server config attributes to cache.
+
+   .. py:method:: set_pipeline(spec, built=None)
 
 
-
-   .. py:method:: get_output_dtype(model_output_dtype)
-
-
-   .. py:method:: run(zarr_path, model_configs, queue='gpu_h100', charge_group='cellmap', input_normalizers=None, post_processors=None)
-      :classmethod:
-
-
-
-   .. py:method:: stop()
-      :classmethod:
-
-
-
-   .. py:method:: delete()
-      :classmethod:
-
+   .. py:method:: get_output_dtype(model_output_dtype, postprocess=None)
 
 
 .. py:data:: g
-
-.. py:class:: LogHandler(level=NOTSET)
-
-
-
-   Handler instances dispatch logging events to specific destinations.
-
-   The base handler class. Acts as a placeholder which defines the Handler
-   interface. Handlers can optionally use Formatter instances to format
-   records as desired. By default, no formatter is specified; in this case,
-   the 'raw' message as determined by record.message is logged.
-
-
-   .. py:method:: emit(record)
-
-      Do whatever it takes to actually log the specified logging record.
-
-      This version is intended to be implemented by subclasses and so
-      raises a NotImplementedError.
-
-
-
-.. py:function:: current_input_norm_config() -> dict
-
-   Return the dashboard's current input_norm as a JSON-serializable dict.
-
-   Reads ``g.input_norm_config`` if populated; otherwise reconstructs the
-   dict from the live ``g.input_norms`` instances via their ``.to_dict()``.
-   The fallback matters because some startup paths (yaml_cli) populate
-   ``g.input_norms`` from the YAML at server boot but never touch
-   ``input_norm_config`` -- if the user submits training without first
-   hitting /api/run, the manifest would otherwise be written empty.
-
-
-.. py:function:: current_postprocess_config() -> dict
-
-   Return the dashboard's current postprocess chain as a JSON-serializable dict.
-
-   Mirrors ``current_input_norm_config()``: reads ``g.postprocess_config`` if
-   populated, otherwise reconstructs the dict from the live ``g.postprocess``
-   instances via their ``.to_dict()``. The fallback matters for the same
-   reason it does for input_norm -- e.g. a yaml booted with a
-   ``json_data.postprocess`` (like ``SigmoidPostprocessor``) populates
-   ``g.postprocess`` but never touches ``postprocess_config``.
-
-
-.. py:function:: get_blockwise_tasks_dir()
 

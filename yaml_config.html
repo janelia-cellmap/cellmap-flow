@@ -10,7 +10,6 @@
       <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="_static/graphviz.css?v=4ae1632d" />
-      <link rel="stylesheet" type="text/css" href="_static/mystnb.11b39860a7a0cbfd473a3ad8a317855267ff0bd372690045ca344a6b62be495e.css" />
       <link rel="stylesheet" type="text/css" href="_static/css/custom.css" />
 
   
@@ -20,11 +19,10 @@
       <script src="_static/documentation_options.js?v=5929fcd5"></script>
       <script src="_static/doctools.js?v=fd6eb6e6"></script>
       <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
-      <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
     <script src="_static/js/theme.js"></script>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
-    <link rel="next" title="HuggingFace Models" href="huggingface.html" />
+    <link rel="next" title="Data paths" href="data_paths.html" />
     <link rel="prev" title="Python Scripts" href="scripts.html" /> 
 </head>
 
@@ -50,16 +48,22 @@
               <p class="caption" role="heading"><span class="caption-text">CellMap-Flow API:</span></p>
 <ul class="current">
 <li class="toctree-l1"><a class="reference internal" href="install.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="cli.html">Command line</a></li>
 <li class="toctree-l1"><a class="reference internal" href="scripts.html">Python Scripts</a></li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">YAML Configuration</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="#usage">Usage</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#yaml-structure">YAML Structure</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#model-entries">Model Entries</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="#available-model-types">Available Model Types</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#channel-names">Channel Names</a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="#normalizers-and-postprocessors">Normalizers and Postprocessors</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#data-at-another-voxel-size">Data at Another Voxel Size</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#extra-layers">Extra Layers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#behind-a-reverse-proxy">Behind a Reverse Proxy</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#bounding-boxes">Bounding Boxes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#output-channels">Output Channels</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#examples">Examples</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="#minimal-configuration">Minimal configuration</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#full-configuration-with-normalizers">Full configuration with normalizers</a></li>
@@ -68,10 +72,14 @@
 </li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="data_paths.html">Data paths</a></li>
 <li class="toctree-l1"><a class="reference internal" href="huggingface.html">HuggingFace Models</a></li>
 <li class="toctree-l1"><a class="reference internal" href="custom_script.html">Custom Model</a></li>
 <li class="toctree-l1"><a class="reference internal" href="post.html">PostProcessors</a></li>
 <li class="toctree-l1"><a class="reference internal" href="plugins.html">Plugins</a></li>
+<li class="toctree-l1"><a class="reference internal" href="review.html">Reviewing instances</a></li>
+<li class="toctree-l1"><a class="reference internal" href="viewer_api.html">Viewer layer API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="architecture.html">Architecture</a></li>
 <li class="toctree-l1"><a class="reference internal" href="autoapi/index.html">API Reference</a></li>
 </ul>
 
@@ -101,21 +109,21 @@
              
   <section id="yaml-configuration">
 <h1>YAML Configuration<a class="headerlink" href="#yaml-configuration" title="Link to this heading"></a></h1>
-<p><code class="docutils literal notranslate"><span class="pre">cellmap_flow_yaml</span></code> lets you define and run multiple models from a single YAML file.
-It is the recommended way to launch inference jobs, and the same YAML format is used by the blockwise processor (<code class="docutils literal notranslate"><span class="pre">cellmap_flow_blockwise</span></code>).</p>
+<p><code class="docutils literal notranslate"><span class="pre">cellmap_flow</span> <span class="pre">yaml</span></code> lets you define and run multiple models from a single YAML file.
+It is the recommended way to launch inference jobs, and the same YAML format is used by the blockwise processor (<code class="docutils literal notranslate"><span class="pre">cellmap_flow</span> <span class="pre">blockwise</span></code>).</p>
 <section id="usage">
 <h2>Usage<a class="headerlink" href="#usage" title="Link to this heading"></a></h2>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Run inference</span>
-cellmap_flow_yaml<span class="w"> </span>config.yaml
+cellmap_flow<span class="w"> </span>yaml<span class="w"> </span>config.yaml
 
 <span class="c1"># Validate without running</span>
-cellmap_flow_yaml<span class="w"> </span>config.yaml<span class="w"> </span>--validate-only
+cellmap_flow<span class="w"> </span>yaml<span class="w"> </span>config.yaml<span class="w"> </span>--validate-only
 
 <span class="c1"># List available model types</span>
-cellmap_flow_yaml<span class="w"> </span>--list-types
+cellmap_flow<span class="w"> </span>yaml<span class="w"> </span>--list-types
 
 <span class="c1"># Set log level</span>
-cellmap_flow_yaml<span class="w"> </span>config.yaml<span class="w"> </span>--log-level<span class="w"> </span>DEBUG
+cellmap_flow<span class="w"> </span>yaml<span class="w"> </span>config.yaml<span class="w"> </span>--log-level<span class="w"> </span>DEBUG
 </pre></div>
 </div>
 </section>
@@ -137,7 +145,8 @@ cellmap_flow_yaml<span class="w"> </span>config.yaml<span class="w"> </span>--lo
 <tbody>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">data_path</span></code></p></td>
 <td><p>Yes</p></td>
-<td><p>Path to the input dataset (zarr/n5).</p></td>
+<td><p>Path to the input dataset: zarr, N5 or precomputed, on disk or at an
+<code class="docutils literal notranslate"><span class="pre">http(s)://</span></code>, <code class="docutils literal notranslate"><span class="pre">s3://</span></code> or <code class="docutils literal notranslate"><span class="pre">gs://</span></code> URL (see <a class="reference internal" href="data_paths.html"><span class="doc">Data paths</span></a>).</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">charge_group</span></code></p></td>
 <td><p>Yes</p></td>
@@ -158,6 +167,14 @@ cellmap_flow_yaml<span class="w"> </span>config.yaml<span class="w"> </span>--lo
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">wrap_raw</span></code></p></td>
 <td><p>No</p></td>
 <td><p>Wrap raw data in neuroglancer (default: <code class="docutils literal notranslate"><span class="pre">true</span></code>).</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">resample</span></code></p></td>
+<td><p>No</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">true</span></code> resamples the data to each model’s input voxel size when it has no level at that size (default: <code class="docutils literal notranslate"><span class="pre">false</span></code>; see <a class="reference internal" href="#resampling"><span class="std std-ref">Data at Another Voxel Size</span></a>).</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">extra_layers</span></code></p></td>
+<td><p>No</p></td>
+<td><p>More volumes to show in the viewer beside the raw data (see below).</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">output_path</span></code></p></td>
 <td><p>No</p></td>
@@ -187,13 +204,17 @@ cellmap_flow_yaml<span class="w"> </span>config.yaml<span class="w"> </span>--lo
 <td><p>No</p></td>
 <td><p>Write each bounding box to a separate zarr (blockwise).</p></td>
 </tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">output_channels</span></code></p></td>
+<td><p>No</p></td>
+<td><p>Which model channels blockwise writes, and to which outputs (see <a class="reference internal" href="#output-channels"><span class="std std-ref">Output Channels</span></a>).</p></td>
+</tr>
 </tbody>
 </table>
 </section>
 <section id="model-entries">
 <h2>Model Entries<a class="headerlink" href="#model-entries" title="Link to this heading"></a></h2>
 <p>Each model entry requires a <code class="docutils literal notranslate"><span class="pre">type</span></code> field and the parameters for that model type.
-Use <code class="docutils literal notranslate"><span class="pre">cellmap_flow_yaml</span> <span class="pre">--list-types</span></code> to see all available types and their required parameters.</p>
+Use <code class="docutils literal notranslate"><span class="pre">cellmap_flow</span> <span class="pre">yaml</span> <span class="pre">--list-types</span></code> to see all available types and their required parameters.</p>
 <p>Models can be specified as a <strong>dict</strong> (keys become model names) or a <strong>list</strong> (each entry must include a <code class="docutils literal notranslate"><span class="pre">name</span></code> field).</p>
 <p><strong>Dict format</strong> (recommended):</p>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">models</span><span class="p">:</span>
@@ -262,6 +283,18 @@ Use <code class="docutils literal notranslate"><span class="pre">cellmap_flow_ya
 </table>
 <p>Common optional parameters: <code class="docutils literal notranslate"><span class="pre">name</span></code>, <code class="docutils literal notranslate"><span class="pre">scale</span></code>.</p>
 </section>
+<section id="channel-names">
+<span id="id1"></span><h3>Channel Names<a class="headerlink" href="#channel-names" title="Link to this heading"></a></h3>
+<p>A model names its output channels, in order, with one of:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">channels</span></code>: a list in a model script, or a <code class="docutils literal notranslate"><span class="pre">fly</span></code> entry’s parameter. In a <code class="docutils literal notranslate"><span class="pre">fly</span></code> entry, <code class="docutils literal notranslate"><span class="pre">classes</span></code> is the same parameter under another name, so give one of them; a <code class="docutils literal notranslate"><span class="pre">fly</span></code> entry may also give its names as one comma-separated string, <code class="docutils literal notranslate"><span class="pre">classes:</span> <span class="pre">mito,er</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">channels_names</span></code>: read from the <code class="docutils literal notranslate"><span class="pre">metadata.json</span></code> of a <code class="docutils literal notranslate"><span class="pre">huggingface</span></code> or <code class="docutils literal notranslate"><span class="pre">cellmap</span></code> model.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">classes</span></code>: a list in a model script.</p></li>
+</ul>
+<p>A DaCapo model takes its names from its run’s task. A <code class="docutils literal notranslate"><span class="pre">bio</span></code> model names none.</p>
+<p>When a model gives more than one of these, the first that is not empty wins, in the order <code class="docutils literal notranslate"><span class="pre">channels</span></code>, <code class="docutils literal notranslate"><span class="pre">channels_names</span></code>, <code class="docutils literal notranslate"><span class="pre">classes</span></code>. In a model script a single string is one name: <code class="docutils literal notranslate"><span class="pre">channels</span> <span class="pre">=</span> <span class="pre">&quot;mito&quot;</span></code> is one channel called <code class="docutils literal notranslate"><span class="pre">mito</span></code>.</p>
+<p>The inference server reports the names with the model’s geometry, and blockwise names its outputs by them (see <a class="reference internal" href="#output-channels"><span class="std std-ref">Output Channels</span></a>). A model that names no channels still serves; blockwise then needs <code class="docutils literal notranslate"><span class="pre">output_channels</span></code> as a mapping of channel indices.</p>
+</section>
 </section>
 <section id="normalizers-and-postprocessors">
 <h2>Normalizers and Postprocessors<a class="headerlink" href="#normalizers-and-postprocessors" title="Link to this heading"></a></h2>
@@ -286,6 +319,53 @@ Use <code class="docutils literal notranslate"><span class="pre">cellmap_flow_ya
 </div>
 <p>Normalizers are applied in order before inference. Postprocessors are applied in order after inference.</p>
 </section>
+<section id="data-at-another-voxel-size">
+<span id="resampling"></span><h2>Data at Another Voxel Size<a class="headerlink" href="#data-at-another-voxel-size" title="Link to this heading"></a></h2>
+<p>A model reads the level of <code class="docutils literal notranslate"><span class="pre">data_path</span></code> at its input voxel size. When there is no such level, what happens depends on <code class="docutils literal notranslate"><span class="pre">resample</span></code>:</p>
+<ul class="simple">
+<li><p><strong>Left out, or</strong> <code class="docutils literal notranslate"><span class="pre">resample:</span> <span class="pre">false</span></code>: the level closest to the model’s voxel size that is not coarser on any axis (the finest level, when every one is) is read <em>as if</em> it were at the model’s voxel size, voxel for voxel, with a warning. The model then sees data at the wrong scale, and its predictions are drawn where that level really is, at a proportionally different voxel size.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">resample:</span> <span class="pre">true</span></code>: a level is resampled to the model’s voxel size, axis by axis, and the model sees the data at the size it was trained at. Its predictions are at its declared output voxel size.</p></li>
+</ul>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">data_path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/nrs/cellmap/data/my_dataset/my_dataset.zarr/recon-1/em/fibsem-uint8</span>
+<span class="nt">charge_group</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cellmap</span>
+<span class="nt">resample</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span><span class="w">   </span><span class="c1"># levels 8x8x40, 16x16x80 ... nm; the model wants 16x16x16</span>
+
+<span class="nt">models</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">my_model</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">dacapo</span>
+<span class="w">    </span><span class="nt">run_name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">my_run</span>
+<span class="w">    </span><span class="nt">iteration</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">50000</span>
+</pre></div>
+</div>
+<p>How the data is resampled:</p>
+<ul class="simple">
+<li><p><strong>Which level.</strong> The coarsest level that is no coarser than the model’s voxel size on any axis, so every axis is downsampled from as close as the pyramid allows; when every level is coarser on some axis, the finest level. A level at exactly the model’s voxel size is read as it is.</p></li>
+<li><p><strong>Each axis by its own factor.</strong> By a whole number of voxels (8 nm to 16 nm), each voxel is the mean of the voxels it covers. Otherwise (40 nm to 16 nm, or 12 nm to 16 nm), it is a linear interpolation between the two nearest voxels. Label data (bool, or integers of 32 bits or more) takes the nearest voxel instead, so no label is invented. Intensities stay in their dtype (uint8 stays uint8, rounded), and go through <code class="docutils literal notranslate"><span class="pre">json_data</span></code>’s normalizers after resampling, as a stored level would.</p></li>
+<li><p><strong>Where.</strong> The resampled grid starts at the level’s own corner, so the predictions lie over the data. Chunks are resampled on their own, and each gives exactly the voxels a read of the whole volume would.</p></li>
+</ul>
+<p><code class="docutils literal notranslate"><span class="pre">cellmap_flow</span> <span class="pre">yaml</span></code> starts each server with <code class="docutils literal notranslate"><span class="pre">--resample</span></code>, and <code class="docutils literal notranslate"><span class="pre">cellmap_flow</span> <span class="pre">blockwise</span></code> reads the data resampled the same way. <code class="docutils literal notranslate"><span class="pre">cellmap_flow</span> <span class="pre">infer</span> <span class="pre">&lt;type&gt;</span> <span class="pre">--resample</span></code> is the same for one model (<a class="reference internal" href="cli.html"><span class="doc">Command line</span></a>).</p>
+</section>
+<section id="extra-layers">
+<h2>Extra Layers<a class="headerlink" href="#extra-layers" title="Link to this heading"></a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">cellmap_flow</span> <span class="pre">yaml</span></code> can show more volumes in the viewer beside the raw data and the predictions, for instance an earlier prediction or an instance segmentation. Each is read as stored, without the input normalizers:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">extra_layers</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">base_mito</span>
+<span class="w">    </span><span class="nt">path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/nrs/cellmap/predictions/mito.zarr/mito</span>
+<span class="w">    </span><span class="nt">shader</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">|</span><span class="w">                      </span><span class="c1"># optional, image layers only</span>
+<span class="w">      </span><span class="no">void main() { emitRGB(vec3(0, toNormalized(getDataValue()), 0)); }</span>
+<span class="w">    </span><span class="nt">blend</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">additive</span><span class="w">                </span><span class="c1"># optional, image layers only</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">instances</span>
+<span class="w">    </span><span class="nt">path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/nrs/cellmap/predictions/instances.zarr/s0</span>
+<span class="w">    </span><span class="nt">layer_type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">segmentation</span><span class="w">       </span><span class="c1"># default: image</span>
+<span class="w">    </span><span class="nt">disable_meshes</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span><span class="w">           </span><span class="c1"># optional; no meshes computed when a segment is picked</span>
+</pre></div>
+</div>
+<p>A volume that cannot be opened is logged and left out. <code class="docutils literal notranslate"><span class="pre">--validate-only</span></code> checks that every entry has a unique <code class="docutils literal notranslate"><span class="pre">name</span></code> and a <code class="docutils literal notranslate"><span class="pre">path</span></code>, and a known <code class="docutils literal notranslate"><span class="pre">layer_type</span></code>.</p>
+</section>
+<section id="behind-a-reverse-proxy">
+<h2>Behind a Reverse Proxy<a class="headerlink" href="#behind-a-reverse-proxy" title="Link to this heading"></a></h2>
+<p>When the dashboard is reached through a reverse proxy that sets <code class="docutils literal notranslate"><span class="pre">X-Forwarded-Host</span></code>, the page loads the neuroglancer viewer from the same path on the proxy’s host, so the proxy must route <code class="docutils literal notranslate"><span class="pre">/v/</span></code> on to the viewer. Inference servers are addressed as they report themselves (<code class="docutils literal notranslate"><span class="pre">http://&lt;node&gt;:&lt;port&gt;</span></code>) unless <code class="docutils literal notranslate"><span class="pre">CELLMAP_FLOW_SERVER_URL_TEMPLATE</span></code> is set in the dashboard’s environment, for example to <code class="docutils literal notranslate"><span class="pre">https://proxy.example.org/inf-{port}</span></code>; <code class="docutils literal notranslate"><span class="pre">{url}</span></code>, <code class="docutils literal notranslate"><span class="pre">{host}</span></code> and <code class="docutils literal notranslate"><span class="pre">{port}</span></code> are the reported address and its parts.</p>
+</section>
 <section id="bounding-boxes">
 <h2>Bounding Boxes<a class="headerlink" href="#bounding-boxes" title="Link to this heading"></a></h2>
 <p>For blockwise processing, you can specify regions of interest:</p>
@@ -297,6 +377,27 @@ Use <code class="docutils literal notranslate"><span class="pre">cellmap_flow_ya
 </pre></div>
 </div>
 <p>Set <code class="docutils literal notranslate"><span class="pre">separate_bounding_boxes_zarrs:</span> <span class="pre">true</span></code> to write each bounding box to its own zarr subdirectory (<code class="docutils literal notranslate"><span class="pre">box_1</span></code>, <code class="docutils literal notranslate"><span class="pre">box_2</span></code>, etc).</p>
+</section>
+<section id="output-channels">
+<span id="id2"></span><h2>Output Channels<a class="headerlink" href="#output-channels" title="Link to this heading"></a></h2>
+<p>Blockwise writes each output to its own group, <code class="docutils literal notranslate"><span class="pre">&lt;output_path&gt;/&lt;output</span> <span class="pre">name&gt;/s0</span></code>. <code class="docutils literal notranslate"><span class="pre">output_channels</span></code> says which of the model’s channels go to which output:</p>
+<ul>
+<li><p><strong>Left out</strong>: one output per model channel, named by the model’s channel names (see <a class="reference internal" href="#channel-names"><span class="std std-ref">Channel Names</span></a>).</p></li>
+<li><p><strong>A list of channel names</strong> (or one name): one output for each, holding that model channel.</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">output_channels</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">mito</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">er</span><span class="p p-Indicator">]</span>
+</pre></div>
+</div>
+</li>
+<li><p><strong>A mapping of output names to channel indices</strong>, counted from 0. An index, or a list of one, gives an output holding that channel. A list of several gives one output with those channels stacked, in the list’s order, on a leading channel axis <code class="docutils literal notranslate"><span class="pre">c</span></code>: its axes are <code class="docutils literal notranslate"><span class="pre">c,</span> <span class="pre">z,</span> <span class="pre">y,</span> <span class="pre">x</span></code>.</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">output_channels</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">affinities</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">0</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">1</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">2</span><span class="p p-Indicator">]</span><span class="w">   </span><span class="c1"># c, z, y, x: channels 0, 1 and 2</span>
+<span class="w">  </span><span class="nt">mito</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">3</span><span class="w">                 </span><span class="c1"># z, y, x: channel 3</span>
+</pre></div>
+</div>
+<p>A mapping names the outputs itself and picks channels by index, so it also works for a model that names no channels.</p>
+</li>
+</ul>
+<p>Outputs are named uniquely: a list naming a channel twice is refused.</p>
 </section>
 <section id="examples">
 <h2>Examples<a class="headerlink" href="#examples" title="Link to this heading"></a></h2>
@@ -389,8 +490,8 @@ Use <code class="docutils literal notranslate"><span class="pre">cellmap_flow_ya
 </pre></div>
 </div>
 <p>Run blockwise processing with:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>cellmap_flow_blockwise<span class="w"> </span>config.yaml
-cellmap_flow_blockwise<span class="w"> </span>config.yaml<span class="w"> </span>--log-level<span class="w"> </span>DEBUG
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>cellmap_flow<span class="w"> </span>blockwise<span class="w"> </span>config.yaml
+cellmap_flow<span class="w"> </span>blockwise<span class="w"> </span>config.yaml<span class="w"> </span>--log-level<span class="w"> </span>DEBUG
 </pre></div>
 </div>
 </section>
@@ -402,7 +503,7 @@ cellmap_flow_blockwise<span class="w"> </span>config.yaml<span class="w"> </span
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
         <a href="scripts.html" class="btn btn-neutral float-left" title="Python Scripts" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
-        <a href="huggingface.html" class="btn btn-neutral float-right" title="HuggingFace Models" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="data_paths.html" class="btn btn-neutral float-right" title="Data paths" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>

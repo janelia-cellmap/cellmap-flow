@@ -1,0 +1,91 @@
+cellmap_flow.config.yaml
+========================
+
+.. py:module:: cellmap_flow.config.yaml
+
+.. autoapi-nested-parse::
+
+   Reading a ``cellmap_flow yaml`` or blockwise YAML file.
+
+   ``load_config`` reads and checks the file's top level, filling
+   ``charge_group`` and ``queue`` from the dashboard's saved settings (then the
+   site's default queue) when the file leaves them out; the model entries under
+   ``models`` are built by ``models.registry.build_models``. Every problem is a ``ConfigError``.
+   ``resolve_data_path`` is the one rule for a model's ``data_path`` and
+   ``scale``, used by every launcher. A top-level ``resample: true`` has every
+   model's input resampled to its voxel size when the data has no level at it
+   (``cellmap_flow yaml`` passes ``--resample`` to each server; blockwise reads
+   with ``on_voxel_size_mismatch="resample"``).
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.config.yaml.logger
+
+
+Exceptions
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.config.yaml.ConfigError
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.config.yaml.resolve_data_path
+   cellmap_flow.config.yaml.load_config
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:exception:: ConfigError
+
+
+
+   The YAML configuration is not usable; the message says why.
+
+   Raised rather than calling sys.exit: this code also runs inside the
+   dashboard (the blockwise precheck, a finetuned model's base config),
+   where SystemExit slips past ``except Exception`` and the request thread
+   dies without sending a response. The CLIs catch it and exit non-zero.
+
+
+.. py:function:: resolve_data_path(data_path: str, scale: Optional[str]) -> str
+
+   The dataset a model reads: ``data_path``, with ``scale`` applied.
+
+   The one rule every launcher uses (``cellmap_flow infer``, ``yaml`` and
+   ``blockwise``), so the same YAML reads the same data in each:
+
+   - ``data_path`` is an array: it is used as it is. A ``scale`` naming a
+     different level is ignored, with a warning.
+   - otherwise (a multiscale group, or a path that cannot be inspected
+     here, such as a URL): ``scale`` selects the level under it.
+
+
+.. py:function:: load_config(path: str) -> Dict[str, Any]
+
+   Load and validate the YAML configuration.
+
+   :param path: Path to YAML configuration file: a str, bytes or os.PathLike.
+                Anything else is refused, because open() takes an int as a file
+                descriptor: it would read through whatever the process has open
+                under that number, and then close it.
+
+   :returns: Validated configuration dictionary
+
+   :raises ConfigError: ``path`` is not a path, or a required field is missing
+       or malformed
+
+

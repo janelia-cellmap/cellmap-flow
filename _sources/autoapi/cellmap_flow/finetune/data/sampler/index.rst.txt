@@ -1,0 +1,180 @@
+cellmap_flow.finetune.data.sampler
+==================================
+
+.. py:module:: cellmap_flow.finetune.data.sampler
+
+.. autoapi-nested-parse::
+
+   Where a finetune patch is centred: the dense, sparse and rehearsal pools.
+
+   Two-pool stratified sampling. The annotated voxels of a session's volume are
+   split by its ``imported_crops`` boxes (recorded in the volume's attrs when
+   YAML crops are imported):
+
+   - **dense pool**: foreground voxels inside any imported crop (abundant
+     ground truth);
+   - **sparse pool**: annotated voxels outside every crop, background as well
+     as foreground (painted scribbles: by construction sparse and informative,
+     since the user paints where the base model failed).
+
+   A patch picks a pool by ``dense_to_sparse_ratio`` (0.5/0.5 when both pools
+   have voxels, the non-empty one when only one has), a random voxel of that
+   pool, and a jitter of the centre. Without the split, voxel-uniform sampling
+   buries the scribbles: a typical session has ~40M dense voxels against ~10K
+   painted, so 999 patches in 1000 would be dense and the corrections barely
+   move the gradient. The split gives them a set share of every epoch,
+   whatever the voxel counts.
+
+   A third pool, the good regions, is drawn from directly (see PatchSampler).
+
+   The index reads only **populated** chunks, the ``z.y.x`` files under
+   ``annotation/s0/``: an empty volume costs nothing, a painted region its
+   annotated voxels.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.data.sampler.logger
+   cellmap_flow.finetune.data.sampler.POOL_DTYPE
+   cellmap_flow.finetune.data.sampler.FOREGROUND_SHARE
+   cellmap_flow.finetune.data.sampler.ANCHOR_SHARE
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.data.sampler.PatchSampler
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:data:: POOL_DTYPE
+
+.. py:data:: FOREGROUND_SHARE
+   :value: 0.3333333333333333
+
+
+.. py:data:: ANCHOR_SHARE
+   :value: 0.25
+
+
+.. py:class:: PatchSampler(volume_zarr_path: str, output_voxel_size_nm, jitter_voxels, dense_to_sparse_ratio: Optional[float] = None, good_regions: Optional[list] = None, rehearsal_fraction: Optional[float] = None, anchor_fraction: Optional[float] = None)
+
+   The patch centres of one annotation volume, and the draw among them.
+
+   Rehearsal ("good") regions are boxes the user looked at and certified
+   the model already handles. The supervised loss only touches voxels that
+   were labelled, so nothing stops the adapter drifting everywhere else; a
+   rehearsal patch pins the student to the teacher inside a region the user
+   vouched for, chosen deliberately rather than "wherever happens to sit
+   next to a scribble", which is where the model is least likely to be
+   right. A good region carries no annotations, so neither of the other
+   pools, which index annotated voxels, can reach it: it is a pool of its
+   own, of box centres.
+
+   Built once, where the dataset is made; the pools travel to each loader
+   worker in the dataset's pickle.
+
+   .. attribute:: dense, sparse
+
+      (N, 3) annotation-voxel indices of the two pools
+      (POOL_DTYPE), in the order the chunk files are listed and
+      scanned. Either may be empty, never both.
+
+   .. attribute:: sparse_chunk_starts
+
+      where each chunk's voxels begin in ``sparse``,
+      plus its length at the end: chunk i holds rows
+      ``sparse_chunk_starts[i]:sparse_chunk_starts[i + 1]``.
+
+   .. attribute:: sparse_foreground_rows
+
+      the rows of ``sparse`` that are foreground;
+      the rest are painted background.
+
+   .. attribute:: effective_dense_ratio
+
+      the share of non-rehearsal patches taken from
+      ``dense``; ``dense_to_sparse_ratio`` as asked (None: auto),
+      clamped away from an empty pool.
+
+   .. attribute:: rehearsal_centres
+
+      (M, 3) good-region centres in annotation voxels,
+      or None when no region is usable.
+
+   .. attribute:: effective_rehearsal_fraction
+
+      the share of patches centred on one;
+      0 without a usable region.
+
+   .. attribute:: effective_anchor_fraction
+
+      the share of the other patches centred at a
+      random point of the volume, held to the teacher where unpainted;
+      ANCHOR_SHARE by default for a painted session, else 0.
+
+   .. attribute:: annotated_chunks
+
+      how many chunks hold a voxel of a pool, the
+      default epoch length.
+
+   .. attribute:: corner_nm, shape_voxels
+
+      where annotation voxel 0's lower corner is
+      (see volume_corner_nm), and the volume's shape in voxels.
+
+
+   .. py:attribute:: volume_zarr_path
+
+
+   .. py:attribute:: output_voxel_size
+
+
+   .. py:attribute:: jitter
+
+
+   .. py:attribute:: dense_to_sparse_ratio
+
+
+   .. py:attribute:: good_regions
+      :value: []
+
+
+
+   .. py:attribute:: rehearsal_fraction
+
+
+   .. py:method:: draw(rng: numpy.random.Generator) -> Tuple[numpy.ndarray, bool]
+
+      A patch centre in annotation voxels, and whether it is a rehearsal patch.
+
+      The centre is not whole voxels yet (see PatchReader.snap). What is
+      drawn from ``rng``, in order: rehearsal or not (only when there is a
+      usable good region); then which region, or else a random anchor or
+      not (only when anchors are on), and where; or else which pool (only when
+      both can be chosen); in the painted pool, whether to centre on
+      foreground (only when some is painted), then which chunk, or which
+      foreground voxel; which voxel, and the jitter.
+
+
+
+   .. py:method:: log_rehearsal_status() -> None
+
+      Say what is happening with the good regions, if there are any, and
+      with the random anchors.
+
+      Rehearsal switched off -- a deliberate choice -- and good regions that
+      all fell outside the volume are different states, and are told apart.
+
+
+

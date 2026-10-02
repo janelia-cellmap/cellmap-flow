@@ -1,0 +1,346 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>cellmap_flow.models.geometry &mdash; CellMap Flow  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=4ae1632d" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css" />
+
+  
+    <link rel="shortcut icon" href="../../../../_static/favicon.ico"/>
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link rel="next" title="cellmap_flow.models.geometry_cache" href="../geometry_cache/index.html" />
+    <link rel="prev" title="cellmap_flow.models.configs.script" href="../configs/script/index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            CellMap Flow
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">CellMap-Flow API:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../../../../install.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../cli.html">Command line</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../scripts.html">Python Scripts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../yaml_config.html">YAML Configuration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../data_paths.html">Data paths</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../huggingface.html">HuggingFace Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../custom_script.html">Custom Model</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../post.html">PostProcessors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../plugins.html">Plugins</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../review.html">Reviewing instances</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../viewer_api.html">Viewer layer API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../architecture.html">Architecture</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../../../index.html">API Reference</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="../../index.html">cellmap_flow</a><ul class="current">
+<li class="toctree-l3 current"><a class="reference internal" href="../../index.html#submodules">Submodules</a><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="../../blockwise/index.html">cellmap_flow.blockwise</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../cli/index.html">cellmap_flow.cli</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../config/index.html">cellmap_flow.config</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../dashboard/index.html">cellmap_flow.dashboard</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../finetune/index.html">cellmap_flow.finetune</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../globals/index.html">cellmap_flow.globals</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../image_data_interface/index.html">cellmap_flow.image_data_interface</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../inference/index.html">cellmap_flow.inference</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../inferencer/index.html">cellmap_flow.inferencer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../io/index.html">cellmap_flow.io</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../jobs/index.html">cellmap_flow.jobs</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../logging_setup/index.html">cellmap_flow.logging_setup</a></li>
+<li class="toctree-l4 current"><a class="reference internal" href="../index.html">cellmap_flow.models</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../norm/index.html">cellmap_flow.norm</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../pipeline_spec/index.html">cellmap_flow.pipeline_spec</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../plugins/index.html">cellmap_flow.plugins</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../post/index.html">cellmap_flow.post</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../process_chain/index.html">cellmap_flow.process_chain</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../review/index.html">cellmap_flow.review</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../review_index/index.html">cellmap_flow.review_index</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../server/index.html">cellmap_flow.server</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../serving/index.html">cellmap_flow.serving</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../utils/index.html">cellmap_flow.utils</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../viewer/index.html">cellmap_flow.viewer</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">CellMap Flow</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">API Reference</a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">cellmap_flow</a></li>
+          <li class="breadcrumb-item"><a href="../index.html">cellmap_flow.models</a></li>
+      <li class="breadcrumb-item active">cellmap_flow.models.geometry</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../../../../_sources/autoapi/cellmap_flow/models/geometry/index.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-cellmap_flow.models.geometry">
+<span id="cellmap-flow-models-geometry"></span><h1>cellmap_flow.models.geometry<a class="headerlink" href="#module-cellmap_flow.models.geometry" title="Link to this heading"></a></h1>
+<p>A model’s geometry: what it reads and writes, and at what voxel size.</p>
+<p>The inference server, blockwise, the server’s <code class="docutils literal notranslate"><span class="pre">model_info</span></code> and the
+dashboard’s geometry cache each read these numbers off <code class="docutils literal notranslate"><span class="pre">ModelConfig.config</span></code>
+one attribute at a time, with their own conversions. <code class="docutils literal notranslate"><span class="pre">ModelGeometry</span></code> is
+them, read once: sizes in nm as given (whole numbers as ints, so 5.24 nm
+stays 5.24), and the shapes in voxels, the context and the block shape
+derived from them.</p>
+<p><code class="docutils literal notranslate"><span class="pre">from_config</span></code> reads anything with the config attributes: a built config, or
+the stand-ins <code class="docutils literal notranslate"><span class="pre">serving.client</span></code> and <code class="docutils literal notranslate"><span class="pre">models.geometry_cache</span></code> build from a
+server’s <code class="docutils literal notranslate"><span class="pre">model_info</span></code> or the cache, which carry no block shape.</p>
+<p>Importing this module is cheap: numpy, funlib.geometry and io.ome only.</p>
+<section id="attributes">
+<h2>Attributes<a class="headerlink" href="#attributes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.models.geometry.DEFAULT_OUTPUT_AXES" title="cellmap_flow.models.geometry.DEFAULT_OUTPUT_AXES"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DEFAULT_OUTPUT_AXES</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="classes">
+<h2>Classes<a class="headerlink" href="#classes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.models.geometry.ModelGeometry" title="cellmap_flow.models.geometry.ModelGeometry"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ModelGeometry</span></code></a></p></td>
+<td><p>What a model reads and writes. Sizes are in nm unless named <code class="docutils literal notranslate"><span class="pre">*_shape</span></code> in voxels.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="functions">
+<h2>Functions<a class="headerlink" href="#functions" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.models.geometry.number" title="cellmap_flow.models.geometry.number"><code class="xref py py-obj docutils literal notranslate"><span class="pre">number</span></code></a>(value)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">value</span></code> as an int when it is whole, else as a float.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.models.geometry.channel_names_of" title="cellmap_flow.models.geometry.channel_names_of"><code class="xref py py-obj docutils literal notranslate"><span class="pre">channel_names_of</span></code></a>(config)</p></td>
+<td><p>The channel names a config gives, as a tuple, or None: the first</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="module-contents">
+<h2>Module Contents<a class="headerlink" href="#module-contents" title="Link to this heading"></a></h2>
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.models.geometry.DEFAULT_OUTPUT_AXES">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.geometry.</span></span><span class="sig-name descname"><span class="pre">DEFAULT_OUTPUT_AXES</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">('c',</span> <span class="pre">'z',</span> <span class="pre">'y',</span> <span class="pre">'x')</span></span><a class="headerlink" href="#cellmap_flow.models.geometry.DEFAULT_OUTPUT_AXES" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.models.geometry.number">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.geometry.</span></span><span class="sig-name descname"><span class="pre">number</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">value</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.models.geometry.number" title="Link to this definition"></a></dt>
+<dd><p><code class="docutils literal notranslate"><span class="pre">value</span></code> as an int when it is whole, else as a float.</p>
+<p><code class="docutils literal notranslate"><span class="pre">int()</span></code> truncated a 5.24 nm voxel size to 5, which put crops and
+layers on the wrong grid.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.models.geometry.channel_names_of">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.geometry.</span></span><span class="sig-name descname"><span class="pre">channel_names_of</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.models.geometry.channel_names_of" title="Link to this definition"></a></dt>
+<dd><p>The channel names a config gives, as a tuple, or None: the first
+non-empty one of channels, channels_names (Hugging Face), classes, or a
+ModelGeometry’s channel_names. A string is one name, so
+<code class="docutils literal notranslate"><span class="pre">channels</span> <span class="pre">=</span> <span class="pre">&quot;mito&quot;</span></code> is <code class="docutils literal notranslate"><span class="pre">(&quot;mito&quot;,)</span></code>.</p>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="cellmap_flow.models.geometry.ModelGeometry">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.geometry.</span></span><span class="sig-name descname"><span class="pre">ModelGeometry</span></span><a class="headerlink" href="#cellmap_flow.models.geometry.ModelGeometry" title="Link to this definition"></a></dt>
+<dd><p>What a model reads and writes. Sizes are in nm unless named <code class="docutils literal notranslate"><span class="pre">*_shape</span></code> in voxels.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.models.geometry.ModelGeometry.input_voxel_size">
+<span class="sig-name descname"><span class="pre">input_voxel_size</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span></span><a class="headerlink" href="#cellmap_flow.models.geometry.ModelGeometry.input_voxel_size" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.models.geometry.ModelGeometry.output_voxel_size">
+<span class="sig-name descname"><span class="pre">output_voxel_size</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span></span><a class="headerlink" href="#cellmap_flow.models.geometry.ModelGeometry.output_voxel_size" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.models.geometry.ModelGeometry.read_shape">
+<span class="sig-name descname"><span class="pre">read_shape</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span></span><a class="headerlink" href="#cellmap_flow.models.geometry.ModelGeometry.read_shape" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.models.geometry.ModelGeometry.write_shape">
+<span class="sig-name descname"><span class="pre">write_shape</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span></span><a class="headerlink" href="#cellmap_flow.models.geometry.ModelGeometry.write_shape" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.models.geometry.ModelGeometry.output_channels">
+<span class="sig-name descname"><span class="pre">output_channels</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></span><a class="headerlink" href="#cellmap_flow.models.geometry.ModelGeometry.output_channels" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.models.geometry.ModelGeometry.channel_names">
+<span class="sig-name descname"><span class="pre">channel_names</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.models.geometry.ModelGeometry.channel_names" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.models.geometry.ModelGeometry.chunk_output_axes">
+<span class="sig-name descname"><span class="pre">chunk_output_axes</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">('c',</span> <span class="pre">'z',</span> <span class="pre">'y',</span> <span class="pre">'x')</span></span><a class="headerlink" href="#cellmap_flow.models.geometry.ModelGeometry.chunk_output_axes" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.models.geometry.ModelGeometry.output_dtype">
+<span class="sig-name descname"><span class="pre">output_dtype</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">numpy.dtype</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.models.geometry.ModelGeometry.output_dtype" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.models.geometry.ModelGeometry.input_channels">
+<span class="sig-name descname"><span class="pre">input_channels</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">1</span></span><a class="headerlink" href="#cellmap_flow.models.geometry.ModelGeometry.input_channels" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.models.geometry.ModelGeometry.declared_block_shape">
+<span class="sig-name descname"><span class="pre">declared_block_shape</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.models.geometry.ModelGeometry.declared_block_shape" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cellmap_flow.models.geometry.ModelGeometry.ndim">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">ndim</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></span><a class="headerlink" href="#cellmap_flow.models.geometry.ModelGeometry.ndim" title="Link to this definition"></a></dt>
+<dd><p>Spatial dimensions.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cellmap_flow.models.geometry.ModelGeometry.input_shape">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">input_shape</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span></span><a class="headerlink" href="#cellmap_flow.models.geometry.ModelGeometry.input_shape" title="Link to this definition"></a></dt>
+<dd><p>Voxels the model reads.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cellmap_flow.models.geometry.ModelGeometry.output_shape">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">output_shape</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span></span><a class="headerlink" href="#cellmap_flow.models.geometry.ModelGeometry.output_shape" title="Link to this definition"></a></dt>
+<dd><p>Voxels the model writes.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cellmap_flow.models.geometry.ModelGeometry.context">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">context</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">funlib.geometry.Coordinate</span></span><a class="headerlink" href="#cellmap_flow.models.geometry.ModelGeometry.context" title="Link to this definition"></a></dt>
+<dd><p>nm read beyond the written region on each side.</p>
+<p>funlib arithmetic, as the Inferencer and blockwise always computed
+it: Coordinate truncates each size to an int, and <code class="docutils literal notranslate"><span class="pre">/</span></code> floors.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cellmap_flow.models.geometry.ModelGeometry.has_channel_axis">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">has_channel_axis</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></span><a class="headerlink" href="#cellmap_flow.models.geometry.ModelGeometry.has_channel_axis" title="Link to this definition"></a></dt>
+<dd><p>Whether a chunk the model outputs has a channel axis.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.models.geometry.ModelGeometry.block_shape">
+<span class="sig-name descname"><span class="pre">block_shape</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#cellmap_flow.models.geometry.ModelGeometry.block_shape" title="Link to this definition"></a></dt>
+<dd><p>(<a href="#id1"><span class="problematic" id="id2">*</span></a>spatial, channels) of one output block: the declared one, if any.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.models.geometry.ModelGeometry.from_config">
+<span class="property"><span class="k"><span class="pre">classmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">from_config</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">chunk_output_axes</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_dtype</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#cellmap_flow.models.geometry.ModelGeometry" title="cellmap_flow.models.geometry.ModelGeometry"><span class="pre">ModelGeometry</span></a></span></span><a class="headerlink" href="#cellmap_flow.models.geometry.ModelGeometry.from_config" title="Link to this definition"></a></dt>
+<dd><p>From <code class="docutils literal notranslate"><span class="pre">ModelConfig.config</span></code>, or anything with its geometry attributes.</p>
+<p><code class="docutils literal notranslate"><span class="pre">chunk_output_axes</span></code> and <code class="docutils literal notranslate"><span class="pre">output_dtype</span></code>, when given, win over the
+config’s own (<code class="docutils literal notranslate"><span class="pre">ModelConfig</span></code> passes its properties, with their
+defaults); otherwise the config’s are used, if it has them.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.models.geometry.ModelGeometry.to_model_info">
+<span class="sig-name descname"><span class="pre">to_model_info</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">spatial_axes</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">actual_input_voxel_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span></span></span><a class="headerlink" href="#cellmap_flow.models.geometry.ModelGeometry.to_model_info" title="Link to this definition"></a></dt>
+<dd><p>The geometry keys of the server’s <code class="docutils literal notranslate"><span class="pre">/__control__/model_info</span></code>.</p>
+<p><code class="docutils literal notranslate"><span class="pre">spatial_axes</span></code>: the served array’s, which are the raw data’s (the
+spatial axes of chunk_output_axes by default). <code class="docutils literal notranslate"><span class="pre">output_axes</span></code> is
+them in order, then “c” when the output has a channel axis.</p>
+<p><code class="docutils literal notranslate"><span class="pre">actual_input_voxel_size</span></code>: what the input really is. When it is
+not input_voxel_size, the data was read at another level as if it
+were at input_voxel_size, voxel for voxel, so an output voxel really
+is <code class="docutils literal notranslate"><span class="pre">actual_in</span> <span class="pre">*</span> <span class="pre">output_voxel_size</span> <span class="pre">/</span> <span class="pre">input_voxel_size</span></code>: that is
+<code class="docutils literal notranslate"><span class="pre">effective_output_voxel_size</span></code>, otherwise output_voxel_size. The
+served .zattrs still say output_voxel_size.</p>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../configs/script/index.html" class="btn btn-neutral float-left" title="cellmap_flow.models.configs.script" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../geometry_cache/index.html" class="btn btn-neutral float-right" title="cellmap_flow.models.geometry_cache" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, David Ackerman,  Marwan Zouinkhi, Jeff Rhoades, Larissa Heinrich, Aubrey Weigel.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

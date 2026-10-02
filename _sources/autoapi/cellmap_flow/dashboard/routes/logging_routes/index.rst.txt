@@ -13,6 +13,14 @@ Attributes
    cellmap_flow.dashboard.routes.logging_routes.logging_bp
 
 
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.routes.logging_routes.LogHandler
+
+
 Functions
 ---------
 
@@ -29,9 +37,30 @@ Module Contents
 
 .. py:data:: logging_bp
 
+.. py:class:: LogHandler(level=NOTSET)
+
+
+
+   Feeds the log panel: each record into the session's log_buffer, and
+   to every open stream's queue.
+
+   It runs on whichever thread logged, often one with no app context (a
+   launch, a job monitor), so it asks for the session at emit time.
+
+
+   .. py:method:: emit(record)
+
+      Do whatever it takes to actually log the specified logging record.
+
+      This version is intended to be implemented by subclasses and so
+      raises a NotImplementedError.
+
+
+
 .. py:function:: stream_logs()
 
-   Stream logs via Server-Sent Events (SSE)
+   The log panel's records as Server-Sent Events: the buffer's, then
+   each new one as it is logged, with a keepalive comment every 30 s.
 
 
 .. py:function:: get_bbox_json_template()

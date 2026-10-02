@@ -19,5 +19,6 @@ Submodules
    /autoapi/cellmap_flow/dashboard/routes/models/index
    /autoapi/cellmap_flow/dashboard/routes/pipeline/index
    /autoapi/cellmap_flow/dashboard/routes/pipeline_builder_page/index
+   /autoapi/cellmap_flow/dashboard/routes/review_routes/index
 
 

@@ -1,0 +1,132 @@
+cellmap_flow.io.resample
+========================
+
+.. py:module:: cellmap_flow.io.resample
+
+.. autoapi-nested-parse::
+
+   Reading an array resampled to another voxel size, axis by axis.
+
+   When a model asks for a voxel size that a dataset has no level at,
+   ``ImageDataInterface(..., on_voxel_size_mismatch="resample")`` reads the
+   level ``io.multiscale.select_level(..., mode="resample")`` picks and
+   resamples it here, so the model sees data at its own voxel size. The
+   default, "relabel", instead reads that level as if it were at the model's
+   voxel size, voxel for voxel.
+
+   **Geometry.** The resampled grid has voxels of the target size, and its
+   voxel 0 starts at the source's voxel 0's corner (the OME translation minus
+   half a source voxel; see ``io.geometry``), so both grids cover the data from
+   the same corner. On an axis with source voxels of ``s`` and target voxels of
+   ``t``, target voxel ``j`` is centred at ``corner + (j + 1/2)·t``, which is
+   the source index ``p = (j + 1/2)·t/s − 1/2`` (source voxel ``i`` is centred
+   at index ``i``). There are ``ceil(n·s/t)`` target voxels, so they cover all
+   ``n`` source voxels; the last may run past the data by less than a voxel.
+
+   **Values**, per axis, by the factor ``f = t/s``:
+
+   - ``f`` is 1: the source voxels as they are.
+   - ``f`` is a whole number of 2 or more: each target voxel is the mean of the
+     ``f`` source voxels it covers exactly (a block or area mean). The last
+     one, cut short by the end of the data, is the mean of those it has.
+   - otherwise (upsampling, or a factor that is not whole): linear
+     interpolation at ``p`` between the two source voxels around it. Past the
+     first or last voxel's centre, ``p`` is clamped to it, so the data's own
+     border voxel is repeated rather than blended with padding.
+   - label data, whatever ``f``: the source voxel the target voxel's centre is
+     in, so no label is invented by averaging two others. Data is taken as
+     labels by its dtype (``is_label_dtype``): bool, or integers of 32 bits or
+     more. EM intensities are uint8 or uint16, and segmentations uint32 or
+     uint64.
+
+   The axes are resampled one after another. Each step works along its own
+   axis only, so the order does not matter. Integer intensity data is rounded
+   back to its dtype, as a stored pyramid level is, so the input chain sees
+   the dtype it would see at a real level.
+
+   **Chunks.** A target voxel's value depends only on its index and on the
+   source array, never on where a read starts or ends. A read takes, from the
+   source, the voxels its target voxels need (the read's margin), clamped to
+   the array. So two reads that meet give, at their shared border, exactly the
+   voxels one read across both gives.
+
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.io.resample.Resampling
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.io.resample.is_label_dtype
+
+
+Module Contents
+---------------
+
+.. py:function:: is_label_dtype(dtype) -> bool
+
+   Whether data of ``dtype`` is resampled as labels (nearest voxel)
+   rather than as intensities (mean and linear): bool, or an integer type
+   of 32 bits or more.
+
+
+.. py:class:: Resampling
+
+   An array of ``source_shape`` voxels of ``source_voxel_size`` (nm,
+   spatial axes), seen at ``target_voxel_size`` from the same corner.
+
+
+   .. py:attribute:: source_voxel_size
+      :type:  Tuple[float, ...]
+
+
+   .. py:attribute:: target_voxel_size
+      :type:  Tuple[float, ...]
+
+
+   .. py:attribute:: source_shape
+      :type:  Tuple[int, ...]
+
+
+   .. py:method:: factor(axis) -> float
+
+      Source voxels per target voxel along ``axis``: above 1 is a downsampling.
+
+
+
+   .. py:property:: shape
+      :type: Tuple[int, ...]
+
+
+      enough to cover every source voxel.
+
+      :type: Target voxels per axis
+
+
+   .. py:method:: methods(labels=False) -> Tuple[str, ...]
+
+      How each axis is resampled: "same", "mean", "linear" or "nearest".
+
+
+
+   .. py:method:: read(store, box: cellmap_flow.io.geometry.Box, fill=0, transform=None) -> numpy.ndarray
+
+      The target voxels of ``box`` (``Box`` of target indices, one entry per
+      spatial axis), resampled from ``store`` (its spatial axes, voxel 0 at
+      index 0, as ``io.source`` opens arrays), as a numpy array.
+
+      Padding and ``transform`` work as in ``io.source.read_padded``: the
+      target voxels outside the resampled array are ``fill``, or with
+      "edge" its nearest voxel; ``transform`` (the input chain) is applied
+      to the resampled voxels before the padding is added.
+
+
+

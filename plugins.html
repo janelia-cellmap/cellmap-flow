@@ -10,7 +10,6 @@
       <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="_static/graphviz.css?v=4ae1632d" />
-      <link rel="stylesheet" type="text/css" href="_static/mystnb.11b39860a7a0cbfd473a3ad8a317855267ff0bd372690045ca344a6b62be495e.css" />
       <link rel="stylesheet" type="text/css" href="_static/css/custom.css" />
 
   
@@ -20,11 +19,10 @@
       <script src="_static/documentation_options.js?v=5929fcd5"></script>
       <script src="_static/doctools.js?v=fd6eb6e6"></script>
       <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
-      <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
     <script src="_static/js/theme.js"></script>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
-    <link rel="next" title="API Reference" href="autoapi/index.html" />
+    <link rel="next" title="Reviewing instances" href="review.html" />
     <link rel="prev" title="PostProcessors" href="post.html" /> 
 </head>
 
@@ -50,8 +48,10 @@
               <p class="caption" role="heading"><span class="caption-text">CellMap-Flow API:</span></p>
 <ul class="current">
 <li class="toctree-l1"><a class="reference internal" href="install.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="cli.html">Command line</a></li>
 <li class="toctree-l1"><a class="reference internal" href="scripts.html">Python Scripts</a></li>
 <li class="toctree-l1"><a class="reference internal" href="yaml_config.html">YAML Configuration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="data_paths.html">Data paths</a></li>
 <li class="toctree-l1"><a class="reference internal" href="huggingface.html">HuggingFace Models</a></li>
 <li class="toctree-l1"><a class="reference internal" href="custom_script.html">Custom Model</a></li>
 <li class="toctree-l1"><a class="reference internal" href="post.html">PostProcessors</a></li>
@@ -72,6 +72,9 @@
 <li class="toctree-l2"><a class="reference internal" href="#notes">Notes</a></li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="review.html">Reviewing instances</a></li>
+<li class="toctree-l1"><a class="reference internal" href="viewer_api.html">Viewer layer API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="architecture.html">Architecture</a></li>
 <li class="toctree-l1"><a class="reference internal" href="autoapi/index.html">API Reference</a></li>
 </ul>
 
@@ -102,23 +105,23 @@
   <section id="plugins">
 <h1>Plugins<a class="headerlink" href="#plugins" title="Link to this heading"></a></h1>
 <p>CellMap Flow supports user-defined <strong>plugins</strong> — custom normalizers, postprocessors, and model configurations that you can register once and use everywhere (CLI, dashboard, YAML pipelines).</p>
-<p>Plugins are Python files stored in <code class="docutils literal notranslate"><span class="pre">~/.cellmap_flow/plugins/</span></code> and loaded automatically every time CellMap Flow starts.</p>
+<p>Plugins are Python files stored in <code class="docutils literal notranslate"><span class="pre">~/.cellmap_flow/plugins/</span></code> and loaded every time a <code class="docutils literal notranslate"><span class="pre">cellmap_flow</span></code> command or the dashboard starts. Importing <code class="docutils literal notranslate"><span class="pre">cellmap_flow</span></code> does not load them: a Python script that uses a plugin’s classes calls <code class="docutils literal notranslate"><span class="pre">cellmap_flow.plugins.load_plugins()</span></code> first.</p>
 <section id="cli-commands">
 <h2>CLI Commands<a class="headerlink" href="#cli-commands" title="Link to this heading"></a></h2>
 <section id="register-a-plugin">
 <h3>Register a plugin<a class="headerlink" href="#register-a-plugin" title="Link to this heading"></a></h3>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>cellmap_flow<span class="w"> </span>register<span class="w"> </span>/path/to/my_plugin.py
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>cellmap_flow<span class="w"> </span>plugins<span class="w"> </span>register<span class="w"> </span>/path/to/my_plugin.py
 </pre></div>
 </div>
 <p>This copies the file to <code class="docutils literal notranslate"><span class="pre">~/.cellmap_flow/plugins/my_plugin.py</span></code>. A basic safety check is performed to reject scripts that import <code class="docutils literal notranslate"><span class="pre">os</span></code>, <code class="docutils literal notranslate"><span class="pre">subprocess</span></code>, <code class="docutils literal notranslate"><span class="pre">sys</span></code> or call <code class="docutils literal notranslate"><span class="pre">eval</span></code>/<code class="docutils literal notranslate"><span class="pre">exec</span></code>.</p>
 <p>To overwrite an existing plugin with the same filename:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>cellmap_flow<span class="w"> </span>register<span class="w"> </span>/path/to/my_plugin.py<span class="w"> </span>--force
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>cellmap_flow<span class="w"> </span>plugins<span class="w"> </span>register<span class="w"> </span>/path/to/my_plugin.py<span class="w"> </span>--force
 </pre></div>
 </div>
 </section>
 <section id="list-registered-plugins">
 <h3>List registered plugins<a class="headerlink" href="#list-registered-plugins" title="Link to this heading"></a></h3>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>cellmap_flow<span class="w"> </span>list-plugins
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>cellmap_flow<span class="w"> </span>plugins<span class="w"> </span>list
 </pre></div>
 </div>
 <p>Output:</p>
@@ -131,7 +134,7 @@
 </section>
 <section id="unregister-a-plugin">
 <h3>Unregister a plugin<a class="headerlink" href="#unregister-a-plugin" title="Link to this heading"></a></h3>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>cellmap_flow<span class="w"> </span>unregister<span class="w"> </span>my_normalizer
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>cellmap_flow<span class="w"> </span>plugins<span class="w"> </span>unregister<span class="w"> </span>my_normalizer
 </pre></div>
 </div>
 <p>The <code class="docutils literal notranslate"><span class="pre">.py</span></code> extension is optional. This deletes the file from the plugins directory.</p>
@@ -249,15 +252,15 @@
 </section>
 <section id="custom-modelconfig">
 <h3>Custom ModelConfig<a class="headerlink" href="#custom-modelconfig" title="Link to this heading"></a></h3>
-<p>Subclass <code class="docutils literal notranslate"><span class="pre">ModelConfig</span></code> and implement <code class="docutils literal notranslate"><span class="pre">_get_config</span></code>, <code class="docutils literal notranslate"><span class="pre">command</span></code>, and <code class="docutils literal notranslate"><span class="pre">to_dict</span></code>.</p>
+<p>Subclass <code class="docutils literal notranslate"><span class="pre">ModelConfig</span></code> and implement <code class="docutils literal notranslate"><span class="pre">_get_config</span></code>.</p>
+<p><code class="docutils literal notranslate"><span class="pre">command</span></code> (how a server is launched for this config) and <code class="docutils literal notranslate"><span class="pre">to_dict</span></code> (how it is exported to a YAML) have defaults, built from the constructor arguments the config was created with. Override them only if the config needs something else. The type is named by <code class="docutils literal notranslate"><span class="pre">cli_name</span></code> when the class sets one, otherwise by its class name without <code class="docutils literal notranslate"><span class="pre">ModelConfig</span></code>, lower-cased (<code class="docutils literal notranslate"><span class="pre">ONNXModelConfig</span></code> is <code class="docutils literal notranslate"><span class="pre">onnx</span></code>). That name is what <code class="docutils literal notranslate"><span class="pre">type:</span></code> in a YAML and the <code class="docutils literal notranslate"><span class="pre">cellmap_flow</span></code> subcommand use.</p>
 <p>The <code class="docutils literal notranslate"><span class="pre">_get_config</span></code> method must return a <code class="docutils literal notranslate"><span class="pre">Config</span></code> object with the following attributes:
 <code class="docutils literal notranslate"><span class="pre">model</span></code> (or <code class="docutils literal notranslate"><span class="pre">predict</span></code>), <code class="docutils literal notranslate"><span class="pre">read_shape</span></code>, <code class="docutils literal notranslate"><span class="pre">write_shape</span></code>, <code class="docutils literal notranslate"><span class="pre">input_voxel_size</span></code>,
 <code class="docutils literal notranslate"><span class="pre">output_voxel_size</span></code>, <code class="docutils literal notranslate"><span class="pre">output_channels</span></code>, and <code class="docutils literal notranslate"><span class="pre">block_shape</span></code>.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">funlib.geometry</span><span class="w"> </span><span class="kn">import</span> <span class="n">Coordinate</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">cellmap_flow.models.models_config</span><span class="w"> </span><span class="kn">import</span> <span class="n">ModelConfig</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">cellmap_flow.utils.serialize_config</span><span class="w"> </span><span class="kn">import</span> <span class="n">Config</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">cellmap_flow.models.models_config</span><span class="w"> </span><span class="kn">import</span> <span class="n">Config</span><span class="p">,</span> <span class="n">ModelConfig</span>
 
 
 <span class="k">class</span><span class="w"> </span><span class="nc">ONNXModelConfig</span><span class="p">(</span><span class="n">ModelConfig</span><span class="p">):</span>
@@ -284,10 +287,6 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">name</span> <span class="o">=</span> <span class="n">name</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">scale</span> <span class="o">=</span> <span class="n">scale</span>
 
-    <span class="nd">@property</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">command</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="k">return</span> <span class="sa">f</span><span class="s2">"onnx --onnx-path </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">onnx_path</span><span class="si">}</span><span class="s2">"</span>
-
     <span class="k">def</span><span class="w"> </span><span class="nf">_get_config</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="kn">import</span><span class="w"> </span><span class="nn">onnxruntime</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">ort</span>
 
@@ -302,19 +301,6 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">_output_shape</span> <span class="o">+</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_output_channels</span><span class="p">,)</span>
         <span class="p">)</span>
         <span class="k">return</span> <span class="n">config</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="nf">to_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="k">return</span> <span class="p">{</span>
-            <span class="s2">"type"</span><span class="p">:</span> <span class="s2">"onnx"</span><span class="p">,</span>
-            <span class="s2">"onnx_path"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">onnx_path</span><span class="p">,</span>
-            <span class="s2">"input_voxel_size"</span><span class="p">:</span> <span class="s2">","</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_input_voxel_size</span><span class="p">),</span>
-            <span class="s2">"output_voxel_size"</span><span class="p">:</span> <span class="s2">","</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_output_voxel_size</span><span class="p">),</span>
-            <span class="s2">"input_shape"</span><span class="p">:</span> <span class="s2">","</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_input_shape</span><span class="p">),</span>
-            <span class="s2">"output_shape"</span><span class="p">:</span> <span class="s2">","</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_output_shape</span><span class="p">),</span>
-            <span class="s2">"output_channels"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_output_channels</span><span class="p">,</span>
-            <span class="s2">"name"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
-            <span class="s2">"scale"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">scale</span><span class="p">,</span>
-        <span class="p">}</span>
 </pre></div>
 </div>
 </section>
@@ -324,12 +310,12 @@
 <ol class="arabic">
 <li><p>Write your plugin (e.g. <code class="docutils literal notranslate"><span class="pre">my_normalizer.py</span></code>)</p></li>
 <li><p>Register it:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>cellmap_flow<span class="w"> </span>register<span class="w"> </span>my_normalizer.py
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>cellmap_flow<span class="w"> </span>plugins<span class="w"> </span>register<span class="w"> </span>my_normalizer.py
 </pre></div>
 </div>
 </li>
 <li><p>Open the dashboard — your plugin appears in the normalizers/postprocessors/models list:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>cellmap_flow_app
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>cellmap_flow<span class="w"> </span>view<span class="w"> </span>-d<span class="w"> </span>/path/to/data.zarr
 </pre></div>
 </div>
 </li>
@@ -352,7 +338,7 @@
 <li><p>Plugin filenames must be unique. Use <code class="docutils literal notranslate"><span class="pre">--force</span></code> to overwrite.</p></li>
 <li><p>Plugins are checked for unsafe imports (<code class="docutils literal notranslate"><span class="pre">os</span></code>, <code class="docutils literal notranslate"><span class="pre">subprocess</span></code>, <code class="docutils literal notranslate"><span class="pre">sys</span></code>) and function calls (<code class="docutils literal notranslate"><span class="pre">eval</span></code>, <code class="docutils literal notranslate"><span class="pre">exec</span></code>) before registration.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">__init__</span></code> parameters should use simple types (<code class="docutils literal notranslate"><span class="pre">float</span></code>, <code class="docutils literal notranslate"><span class="pre">int</span></code>, <code class="docutils literal notranslate"><span class="pre">str</span></code>, <code class="docutils literal notranslate"><span class="pre">bool</span></code>) for dashboard and YAML compatibility.</p></li>
-<li><p>Registered <code class="docutils literal notranslate"><span class="pre">ModelConfig</span></code> subclasses automatically get their own CLI command under <code class="docutils literal notranslate"><span class="pre">cellmap_flow</span></code>.</p></li>
+<li><p>Registered <code class="docutils literal notranslate"><span class="pre">ModelConfig</span></code> subclasses automatically get their own CLI command, <code class="docutils literal notranslate"><span class="pre">cellmap_flow</span> <span class="pre">infer</span> <span class="pre">&lt;type&gt;</span></code>.</p></li>
 </ul>
 </section>
 </section>
@@ -362,7 +348,7 @@
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
         <a href="post.html" class="btn btn-neutral float-left" title="PostProcessors" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
-        <a href="autoapi/index.html" class="btn btn-neutral float-right" title="API Reference" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="review.html" class="btn btn-neutral float-right" title="Reviewing instances" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>

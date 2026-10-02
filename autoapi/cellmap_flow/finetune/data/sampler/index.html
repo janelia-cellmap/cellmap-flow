@@ -1,0 +1,370 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>cellmap_flow.finetune.data.sampler &mdash; CellMap Flow  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../../_static/graphviz.css?v=4ae1632d" />
+      <link rel="stylesheet" type="text/css" href="../../../../../_static/css/custom.css" />
+
+  
+    <link rel="shortcut icon" href="../../../../../_static/favicon.ico"/>
+      <script src="../../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../../../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../search.html" />
+    <link rel="next" title="cellmap_flow.finetune.export_merged" href="../../export_merged/index.html" />
+    <link rel="prev" title="cellmap_flow.finetune.data.reader" href="../reader/index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../../index.html" class="icon icon-home">
+            CellMap Flow
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">CellMap-Flow API:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../../../../../install.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../cli.html">Command line</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../scripts.html">Python Scripts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../yaml_config.html">YAML Configuration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../data_paths.html">Data paths</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../huggingface.html">HuggingFace Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../custom_script.html">Custom Model</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../post.html">PostProcessors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../plugins.html">Plugins</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../review.html">Reviewing instances</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../viewer_api.html">Viewer layer API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../architecture.html">Architecture</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../../../../index.html">API Reference</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="../../../index.html">cellmap_flow</a><ul class="current">
+<li class="toctree-l3 current"><a class="reference internal" href="../../../index.html#submodules">Submodules</a><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="../../../blockwise/index.html">cellmap_flow.blockwise</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../cli/index.html">cellmap_flow.cli</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../config/index.html">cellmap_flow.config</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../dashboard/index.html">cellmap_flow.dashboard</a></li>
+<li class="toctree-l4 current"><a class="reference internal" href="../../index.html">cellmap_flow.finetune</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../globals/index.html">cellmap_flow.globals</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../image_data_interface/index.html">cellmap_flow.image_data_interface</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../inference/index.html">cellmap_flow.inference</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../inferencer/index.html">cellmap_flow.inferencer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../io/index.html">cellmap_flow.io</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../jobs/index.html">cellmap_flow.jobs</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../logging_setup/index.html">cellmap_flow.logging_setup</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../models/index.html">cellmap_flow.models</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../norm/index.html">cellmap_flow.norm</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../pipeline_spec/index.html">cellmap_flow.pipeline_spec</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../plugins/index.html">cellmap_flow.plugins</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../post/index.html">cellmap_flow.post</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../process_chain/index.html">cellmap_flow.process_chain</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../review/index.html">cellmap_flow.review</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../review_index/index.html">cellmap_flow.review_index</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../server/index.html">cellmap_flow.server</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../serving/index.html">cellmap_flow.serving</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../utils/index.html">cellmap_flow.utils</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../viewer/index.html">cellmap_flow.viewer</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../../index.html">CellMap Flow</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../../index.html">API Reference</a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">cellmap_flow</a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">cellmap_flow.finetune</a></li>
+          <li class="breadcrumb-item"><a href="../index.html">cellmap_flow.finetune.data</a></li>
+      <li class="breadcrumb-item active">cellmap_flow.finetune.data.sampler</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../../../../../_sources/autoapi/cellmap_flow/finetune/data/sampler/index.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-cellmap_flow.finetune.data.sampler">
+<span id="cellmap-flow-finetune-data-sampler"></span><h1>cellmap_flow.finetune.data.sampler<a class="headerlink" href="#module-cellmap_flow.finetune.data.sampler" title="Link to this heading"></a></h1>
+<p>Where a finetune patch is centred: the dense, sparse and rehearsal pools.</p>
+<p>Two-pool stratified sampling. The annotated voxels of a session’s volume are
+split by its <code class="docutils literal notranslate"><span class="pre">imported_crops</span></code> boxes (recorded in the volume’s attrs when
+YAML crops are imported):</p>
+<ul class="simple">
+<li><p><strong>dense pool</strong>: foreground voxels inside any imported crop (abundant
+ground truth);</p></li>
+<li><p><strong>sparse pool</strong>: annotated voxels outside every crop, background as well
+as foreground (painted scribbles: by construction sparse and informative,
+since the user paints where the base model failed).</p></li>
+</ul>
+<p>A patch picks a pool by <code class="docutils literal notranslate"><span class="pre">dense_to_sparse_ratio</span></code> (0.5/0.5 when both pools
+have voxels, the non-empty one when only one has), a random voxel of that
+pool, and a jitter of the centre. Without the split, voxel-uniform sampling
+buries the scribbles: a typical session has ~40M dense voxels against ~10K
+painted, so 999 patches in 1000 would be dense and the corrections barely
+move the gradient. The split gives them a set share of every epoch,
+whatever the voxel counts.</p>
+<p>A third pool, the good regions, is drawn from directly (see PatchSampler).</p>
+<p>The index reads only <strong>populated</strong> chunks, the <code class="docutils literal notranslate"><span class="pre">z.y.x</span></code> files under
+<code class="docutils literal notranslate"><span class="pre">annotation/s0/</span></code>: an empty volume costs nothing, a painted region its
+annotated voxels.</p>
+<section id="attributes">
+<h2>Attributes<a class="headerlink" href="#attributes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.data.sampler.logger" title="cellmap_flow.finetune.data.sampler.logger"><code class="xref py py-obj docutils literal notranslate"><span class="pre">logger</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.finetune.data.sampler.POOL_DTYPE" title="cellmap_flow.finetune.data.sampler.POOL_DTYPE"><code class="xref py py-obj docutils literal notranslate"><span class="pre">POOL_DTYPE</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.data.sampler.FOREGROUND_SHARE" title="cellmap_flow.finetune.data.sampler.FOREGROUND_SHARE"><code class="xref py py-obj docutils literal notranslate"><span class="pre">FOREGROUND_SHARE</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.finetune.data.sampler.ANCHOR_SHARE" title="cellmap_flow.finetune.data.sampler.ANCHOR_SHARE"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ANCHOR_SHARE</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="classes">
+<h2>Classes<a class="headerlink" href="#classes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.data.sampler.PatchSampler" title="cellmap_flow.finetune.data.sampler.PatchSampler"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PatchSampler</span></code></a></p></td>
+<td><p>The patch centres of one annotation volume, and the draw among them.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="module-contents">
+<h2>Module Contents<a class="headerlink" href="#module-contents" title="Link to this heading"></a></h2>
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.data.sampler.logger">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.data.sampler.</span></span><span class="sig-name descname"><span class="pre">logger</span></span><a class="headerlink" href="#cellmap_flow.finetune.data.sampler.logger" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.data.sampler.POOL_DTYPE">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.data.sampler.</span></span><span class="sig-name descname"><span class="pre">POOL_DTYPE</span></span><a class="headerlink" href="#cellmap_flow.finetune.data.sampler.POOL_DTYPE" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.data.sampler.FOREGROUND_SHARE">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.data.sampler.</span></span><span class="sig-name descname"><span class="pre">FOREGROUND_SHARE</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0.3333333333333333</span></span><a class="headerlink" href="#cellmap_flow.finetune.data.sampler.FOREGROUND_SHARE" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.data.sampler.ANCHOR_SHARE">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.data.sampler.</span></span><span class="sig-name descname"><span class="pre">ANCHOR_SHARE</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0.25</span></span><a class="headerlink" href="#cellmap_flow.finetune.data.sampler.ANCHOR_SHARE" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.data.sampler.PatchSampler">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.data.sampler.</span></span><span class="sig-name descname"><span class="pre">PatchSampler</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">volume_zarr_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_voxel_size_nm</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">jitter_voxels</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dense_to_sparse_ratio</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">good_regions</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rehearsal_fraction</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">anchor_fraction</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.finetune.data.sampler.PatchSampler" title="Link to this definition"></a></dt>
+<dd><p>The patch centres of one annotation volume, and the draw among them.</p>
+<p>Rehearsal (“good”) regions are boxes the user looked at and certified
+the model already handles. The supervised loss only touches voxels that
+were labelled, so nothing stops the adapter drifting everywhere else; a
+rehearsal patch pins the student to the teacher inside a region the user
+vouched for, chosen deliberately rather than “wherever happens to sit
+next to a scribble”, which is where the model is least likely to be
+right. A good region carries no annotations, so neither of the other
+pools, which index annotated voxels, can reach it: it is a pool of its
+own, of box centres.</p>
+<p>Built once, where the dataset is made; the pools travel to each loader
+worker in the dataset’s pickle.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">dense,</span> <span class="pre">sparse</span></span></dt>
+<dd><p>(N, 3) annotation-voxel indices of the two pools
+(POOL_DTYPE), in the order the chunk files are listed and
+scanned. Either may be empty, never both.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.data.sampler.PatchSampler.sparse_chunk_starts">
+<span class="sig-name descname"><span class="pre">sparse_chunk_starts</span></span><a class="headerlink" href="#cellmap_flow.finetune.data.sampler.PatchSampler.sparse_chunk_starts" title="Link to this definition"></a></dt>
+<dd><p>where each chunk’s voxels begin in <code class="docutils literal notranslate"><span class="pre">sparse</span></code>,
+plus its length at the end: chunk i holds rows
+<code class="docutils literal notranslate"><span class="pre">sparse_chunk_starts[i]:sparse_chunk_starts[i</span> <span class="pre">+</span> <span class="pre">1]</span></code>.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.data.sampler.PatchSampler.sparse_foreground_rows">
+<span class="sig-name descname"><span class="pre">sparse_foreground_rows</span></span><a class="headerlink" href="#cellmap_flow.finetune.data.sampler.PatchSampler.sparse_foreground_rows" title="Link to this definition"></a></dt>
+<dd><p>the rows of <code class="docutils literal notranslate"><span class="pre">sparse</span></code> that are foreground;
+the rest are painted background.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.data.sampler.PatchSampler.effective_dense_ratio">
+<span class="sig-name descname"><span class="pre">effective_dense_ratio</span></span><a class="headerlink" href="#cellmap_flow.finetune.data.sampler.PatchSampler.effective_dense_ratio" title="Link to this definition"></a></dt>
+<dd><p>the share of non-rehearsal patches taken from
+<code class="docutils literal notranslate"><span class="pre">dense</span></code>; <code class="docutils literal notranslate"><span class="pre">dense_to_sparse_ratio</span></code> as asked (None: auto),
+clamped away from an empty pool.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.data.sampler.PatchSampler.rehearsal_centres">
+<span class="sig-name descname"><span class="pre">rehearsal_centres</span></span><a class="headerlink" href="#cellmap_flow.finetune.data.sampler.PatchSampler.rehearsal_centres" title="Link to this definition"></a></dt>
+<dd><p>(M, 3) good-region centres in annotation voxels,
+or None when no region is usable.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.data.sampler.PatchSampler.effective_rehearsal_fraction">
+<span class="sig-name descname"><span class="pre">effective_rehearsal_fraction</span></span><a class="headerlink" href="#cellmap_flow.finetune.data.sampler.PatchSampler.effective_rehearsal_fraction" title="Link to this definition"></a></dt>
+<dd><p>the share of patches centred on one;
+0 without a usable region.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.data.sampler.PatchSampler.effective_anchor_fraction">
+<span class="sig-name descname"><span class="pre">effective_anchor_fraction</span></span><a class="headerlink" href="#cellmap_flow.finetune.data.sampler.PatchSampler.effective_anchor_fraction" title="Link to this definition"></a></dt>
+<dd><p>the share of the other patches centred at a
+random point of the volume, held to the teacher where unpainted;
+ANCHOR_SHARE by default for a painted session, else 0.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.data.sampler.PatchSampler.annotated_chunks">
+<span class="sig-name descname"><span class="pre">annotated_chunks</span></span><a class="headerlink" href="#cellmap_flow.finetune.data.sampler.PatchSampler.annotated_chunks" title="Link to this definition"></a></dt>
+<dd><p>how many chunks hold a voxel of a pool, the
+default epoch length.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">corner_nm,</span> <span class="pre">shape_voxels</span></span></dt>
+<dd><p>where annotation voxel 0’s lower corner is
+(see volume_corner_nm), and the volume’s shape in voxels.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.data.sampler.PatchSampler.volume_zarr_path">
+<span class="sig-name descname"><span class="pre">volume_zarr_path</span></span><a class="headerlink" href="#cellmap_flow.finetune.data.sampler.PatchSampler.volume_zarr_path" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.data.sampler.PatchSampler.output_voxel_size">
+<span class="sig-name descname"><span class="pre">output_voxel_size</span></span><a class="headerlink" href="#cellmap_flow.finetune.data.sampler.PatchSampler.output_voxel_size" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.data.sampler.PatchSampler.jitter">
+<span class="sig-name descname"><span class="pre">jitter</span></span><a class="headerlink" href="#cellmap_flow.finetune.data.sampler.PatchSampler.jitter" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.data.sampler.PatchSampler.dense_to_sparse_ratio">
+<span class="sig-name descname"><span class="pre">dense_to_sparse_ratio</span></span><a class="headerlink" href="#cellmap_flow.finetune.data.sampler.PatchSampler.dense_to_sparse_ratio" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.data.sampler.PatchSampler.good_regions">
+<span class="sig-name descname"><span class="pre">good_regions</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">[]</span></span><a class="headerlink" href="#cellmap_flow.finetune.data.sampler.PatchSampler.good_regions" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.data.sampler.PatchSampler.rehearsal_fraction">
+<span class="sig-name descname"><span class="pre">rehearsal_fraction</span></span><a class="headerlink" href="#cellmap_flow.finetune.data.sampler.PatchSampler.rehearsal_fraction" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.data.sampler.PatchSampler.draw">
+<span class="sig-name descname"><span class="pre">draw</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">rng</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">numpy.random.Generator</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">numpy.ndarray</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">bool</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#cellmap_flow.finetune.data.sampler.PatchSampler.draw" title="Link to this definition"></a></dt>
+<dd><p>A patch centre in annotation voxels, and whether it is a rehearsal patch.</p>
+<p>The centre is not whole voxels yet (see PatchReader.snap). What is
+drawn from <code class="docutils literal notranslate"><span class="pre">rng</span></code>, in order: rehearsal or not (only when there is a
+usable good region); then which region, or else a random anchor or
+not (only when anchors are on), and where; or else which pool (only when
+both can be chosen); in the painted pool, whether to centre on
+foreground (only when some is painted), then which chunk, or which
+foreground voxel; which voxel, and the jitter.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.data.sampler.PatchSampler.log_rehearsal_status">
+<span class="sig-name descname"><span class="pre">log_rehearsal_status</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#cellmap_flow.finetune.data.sampler.PatchSampler.log_rehearsal_status" title="Link to this definition"></a></dt>
+<dd><p>Say what is happening with the good regions, if there are any, and
+with the random anchors.</p>
+<p>Rehearsal switched off – a deliberate choice – and good regions that
+all fell outside the volume are different states, and are told apart.</p>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../reader/index.html" class="btn btn-neutral float-left" title="cellmap_flow.finetune.data.reader" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../../export_merged/index.html" class="btn btn-neutral float-right" title="cellmap_flow.finetune.export_merged" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, David Ackerman,  Marwan Zouinkhi, Jeff Rhoades, Larissa Heinrich, Aubrey Weigel.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

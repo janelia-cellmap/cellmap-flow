@@ -1,0 +1,149 @@
+cellmap_flow.cli.main
+=====================
+
+.. py:module:: cellmap_flow.cli.main
+
+.. autoapi-nested-parse::
+
+   ``cellmap_flow``: the one command, with a subcommand for each job.
+
+   
+     infer <type>   start a model's inference server and open the viewer on it
+     yaml           the same for the models a YAML file lists
+     view           open a dataset in the viewer; pick models in the dashboard
+     dashboard      serve the dashboard alone, for a viewer already running
+     serve          serve one model's predictions (the launchers run this)
+     blockwise      run models over a whole volume, writing predictions to disk
+     finetune       the finetune tools: train, export-merged, build-corrections
+     models         list the model types and their arguments
+     plugins        register, unregister and list plugins
+     doctor         check the environment
+
+   Before 0.3.0 these were separate console scripts (``cellmap_flow_yaml`` and
+   the rest). Those names still work for one release: ``cli/aliases.py`` says
+   where each went and runs it. So do this command's own earlier subcommands,
+   hidden from ``--help``: ``cellmap_flow <type>``, ``run`` (cli/infer.py),
+   ``list-models``, ``register``, ``unregister`` and ``list-plugins``.
+
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.cli.main.CellMapFlowGroup
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.cli.main.cli
+   cellmap_flow.cli.main.dashboard
+   cellmap_flow.cli.main.models
+   cellmap_flow.cli.main.plugins_group
+   cellmap_flow.cli.main.register_cmd
+   cellmap_flow.cli.main.unregister_cmd
+   cellmap_flow.cli.main.list_plugins_cmd
+   cellmap_flow.cli.main.finetune
+   cellmap_flow.cli.main.main
+
+
+Module Contents
+---------------
+
+.. py:class:: CellMapFlowGroup(name: str | None = None, commands: collections.abc.MutableMapping[str, Command] | collections.abc.Sequence[Command] | None = None, invoke_without_command: bool = False, no_args_is_help: bool | None = None, subcommand_metavar: str | None = None, chain: bool = False, result_callback: Callable[..., Any] | None = None, **kwargs: Any)
+
+
+
+   The cellmap_flow group. ``cellmap_flow <type>``, its per-type commands
+   before 0.3.0, are built on request as deprecated aliases of ``infer``.
+
+
+   .. py:method:: get_command(ctx, name)
+
+      Given a context and a command name, this returns a :class:`Command`
+      object if it exists or returns ``None``.
+
+
+
+.. py:function:: cli()
+
+   CellMap Flow: real-time model inference on EM data, in Neuroglancer.
+
+   Each job is a subcommand; `cellmap_flow <command> --help` shows its
+   options.
+
+   
+     cellmap_flow view -d /path/to/data.zarr
+     cellmap_flow yaml config.yaml
+     cellmap_flow infer dacapo -r my_run -i 100 -d /path/to/data
+     cellmap_flow blockwise config.yaml
+
+
+.. py:function:: dashboard(neuroglancer_url)
+
+   Serve the dashboard alone, for a viewer already running.
+
+   `view`, `yaml` and `infer` start the dashboard with the viewer they
+   open; this is the dashboard on its own, as `cellmap_flow_app` served it
+   before 0.3.0. It prints its URL, and writes it to the file named by
+   SERVICE_URL_PATH when that is set. Ctrl+C stops it and kills the models
+   it launched.
+
+
+.. py:function:: models()
+
+   List the model types and the arguments each takes.
+
+
+.. py:function:: plugins_group()
+
+   Register, unregister and list plugins.
+
+   A plugin is a .py file defining subclasses of InputNormalizer,
+   PostProcessor or ModelConfig; registering copies it to
+   ~/.cellmap_flow/plugins/.
+
+
+.. py:function:: register_cmd(filepath, force)
+
+   Register a custom plugin (normalizer, postprocessor, or model config).
+
+   FILEPATH is the path to a .py file defining subclasses of
+   InputNormalizer, PostProcessor, or ModelConfig.
+
+   .. rubric:: Example
+
+   cellmap_flow plugins register my_normalizer.py
+
+
+.. py:function:: unregister_cmd(name)
+
+   Unregister a previously registered plugin by name.
+
+   NAME is the plugin filename (with or without .py extension).
+
+   .. rubric:: Example
+
+   cellmap_flow plugins unregister my_normalizer
+
+
+.. py:function:: list_plugins_cmd()
+
+   List all registered plugins.
+
+
+.. py:function:: finetune()
+
+   The finetune tools. The dashboard's finetune tab runs `train` for you.
+
+
+.. py:function:: main(args=None)
+
+   The ``cellmap_flow`` console script: load the plugins, then run the
+   command ``args`` (by default, the process's arguments) names.
+
+

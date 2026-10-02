@@ -19,7 +19,8 @@ cellmap_flow.finetune.crop_loader
        - The pydantic schema (:class:`CropEntry`, :class:`CropsConfig`).
        - The label remap function (:func:`remap_labels`).
        - Small zarr-attrs helpers used by the loader to derive a crop's voxel
-         size, offset, and the array sub-path inside an OME-NGFF group.
+         size, offset, and the array sub-path inside an OME-NGFF group (the
+         array itself is read with ``io.source.open_array``).
 
 
 
@@ -29,6 +30,16 @@ Attributes
 .. autoapisummary::
 
    cellmap_flow.finetune.crop_loader.logger
+   cellmap_flow.finetune.crop_loader.YAML_SUFFIXES
+   cellmap_flow.finetune.crop_loader.YAML_SIZE_LIMIT
+
+
+Exceptions
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.crop_loader.YamlFileRefused
 
 
 Classes
@@ -45,6 +56,7 @@ Functions
 
 .. autoapisummary::
 
+   cellmap_flow.finetune.crop_loader.read_yaml_file
    cellmap_flow.finetune.crop_loader.parse_crops_yaml
    cellmap_flow.finetune.crop_loader.remap_labels
 
@@ -120,15 +132,17 @@ Module Contents
    govern epoch length, patch-center jitter (in voxels), and the per-worker
    RNG base seed for reproducible patch sampling across runs.
 
-   ``patches_per_epoch=None`` (the default) means "cover every populated
-   chunk roughly once per epoch" — the dataset substitutes the total
-   populated-chunk count at index build time. Override with an explicit
-   int to cap the epoch length.
+   ``patches_per_epoch=None`` (the default) means "cover every annotated
+   chunk roughly once per epoch" — the dataset substitutes the number of
+   chunks holding a voxel of either pool at index build time. Override
+   with an explicit int to cap the epoch length.
 
    ``dense_to_sparse_ratio=None`` (the default) means "auto-balance":
-   50/50 split between dense imported crops and sparse painted scribbles
-   when both pools exist; degrades to 1.0 (all from the surviving pool)
-   when only one pool has FG voxels.
+   half the patches are centred in the dense pool (foreground inside the
+   imported crops) and half in the sparse one (every annotated voxel
+   outside them, background included: the painted scribbles) when both
+   have voxels, and all in the one that has when only one does (see
+   ``finetune.data.sampler``).
 
 
    .. py:attribute:: model_config
@@ -164,9 +178,44 @@ Module Contents
 
 
 
+.. py:data:: YAML_SUFFIXES
+   :value: ('.yaml', '.yml')
+
+
+.. py:data:: YAML_SIZE_LIMIT
+   :value: 1000000
+
+
+.. py:exception:: YamlFileRefused
+
+
+
+   A path :func:`read_yaml_file` will not read; the message says why.
+
+
+.. py:function:: read_yaml_file(path: str) -> str
+
+   Return the text of the YAML file at ``path``, or raise :class:`YamlFileRefused`.
+
+   The dashboard listens on every interface without authentication, and two
+   of its routes read a file the request names: read-yaml, for the editor,
+   and load-crops. Both used to read any file the dashboard's user could, so
+   this reads only a regular file that is YAML by name once symlinks are
+   resolved, and at most 1 MB of it.
+
+   A file that is missing, is not YAML, is not a regular file or cannot be
+   opened is refused with the same message, so the answer does not tell a
+   caller which paths exist either.
+
+
 .. py:function:: parse_crops_yaml(yaml_text_or_path: str) -> CropsConfig
 
-   Parse a YAML string OR the path to a YAML file into a validated config.
+   Parse YAML text, or the path to a YAML file, into a validated config.
+
+   A single line that ends in ``.yaml`` or ``.yml`` is a path, read through
+   :func:`read_yaml_file`; anything else is YAML text. Deciding by the name
+   rather than by whether the file exists is what keeps load-crops from
+   opening arbitrary files, or answering differently for one that exists.
 
 
 .. py:function:: remap_labels(source: numpy.ndarray, fg_ids: Optional[Iterable[int]], bg_ids: Iterable[int], mode: Literal['dense', 'sparse'], connected_components: bool) -> numpy.ndarray

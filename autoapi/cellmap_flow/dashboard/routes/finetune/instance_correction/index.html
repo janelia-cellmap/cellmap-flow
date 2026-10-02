@@ -1,0 +1,351 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../../../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>cellmap_flow.dashboard.routes.finetune.instance_correction &mdash; CellMap Flow  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../../../_static/graphviz.css?v=4ae1632d" />
+      <link rel="stylesheet" type="text/css" href="../../../../../../_static/css/custom.css" />
+
+  
+    <link rel="shortcut icon" href="../../../../../../_static/favicon.ico"/>
+      <script src="../../../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../../../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../../../../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../../search.html" />
+    <link rel="next" title="cellmap_flow.dashboard.routes.finetune.layers" href="../layers/index.html" />
+    <link rel="prev" title="cellmap_flow.dashboard.routes.finetune.good_regions" href="../good_regions/index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../../../index.html" class="icon icon-home">
+            CellMap Flow
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">CellMap-Flow API:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../../../../../../install.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../../cli.html">Command line</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../../scripts.html">Python Scripts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../../yaml_config.html">YAML Configuration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../../data_paths.html">Data paths</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../../huggingface.html">HuggingFace Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../../custom_script.html">Custom Model</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../../post.html">PostProcessors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../../plugins.html">Plugins</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../../review.html">Reviewing instances</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../../viewer_api.html">Viewer layer API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../../architecture.html">Architecture</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../../../../../index.html">API Reference</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="../../../../index.html">cellmap_flow</a><ul class="current">
+<li class="toctree-l3 current"><a class="reference internal" href="../../../../index.html#submodules">Submodules</a><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="../../../../blockwise/index.html">cellmap_flow.blockwise</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../cli/index.html">cellmap_flow.cli</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../config/index.html">cellmap_flow.config</a></li>
+<li class="toctree-l4 current"><a class="reference internal" href="../../../index.html">cellmap_flow.dashboard</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../finetune/index.html">cellmap_flow.finetune</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../globals/index.html">cellmap_flow.globals</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../image_data_interface/index.html">cellmap_flow.image_data_interface</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../inference/index.html">cellmap_flow.inference</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../inferencer/index.html">cellmap_flow.inferencer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../io/index.html">cellmap_flow.io</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../jobs/index.html">cellmap_flow.jobs</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../logging_setup/index.html">cellmap_flow.logging_setup</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../models/index.html">cellmap_flow.models</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../norm/index.html">cellmap_flow.norm</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../pipeline_spec/index.html">cellmap_flow.pipeline_spec</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../plugins/index.html">cellmap_flow.plugins</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../post/index.html">cellmap_flow.post</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../process_chain/index.html">cellmap_flow.process_chain</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../review/index.html">cellmap_flow.review</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../review_index/index.html">cellmap_flow.review_index</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../server/index.html">cellmap_flow.server</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../serving/index.html">cellmap_flow.serving</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../utils/index.html">cellmap_flow.utils</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../viewer/index.html">cellmap_flow.viewer</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../../../index.html">CellMap Flow</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../../../index.html">API Reference</a></li>
+          <li class="breadcrumb-item"><a href="../../../../index.html">cellmap_flow</a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">cellmap_flow.dashboard</a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">cellmap_flow.dashboard.routes</a></li>
+          <li class="breadcrumb-item"><a href="../index.html">cellmap_flow.dashboard.routes.finetune</a></li>
+      <li class="breadcrumb-item active">cellmap_flow.dashboard.routes.finetune.instance_correction</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../../../../../../_sources/autoapi/cellmap_flow/dashboard/routes/finetune/instance_correction/index.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-cellmap_flow.dashboard.routes.finetune.instance_correction">
+<span id="cellmap-flow-dashboard-routes-finetune-instance-correction"></span><h1>cellmap_flow.dashboard.routes.finetune.instance_correction<a class="headerlink" href="#module-cellmap_flow.dashboard.routes.finetune.instance_correction" title="Link to this heading"></a></h1>
+<p>HTTP handlers for instance-correction workflows.</p>
+<p>Three routes:</p>
+<ul class="simple">
+<li><p>POST <code class="docutils literal notranslate"><span class="pre">/api/viewer/create-instance-correction</span></code>: seed or reattach a
+paintable annotation layer for a ROI (fresh-seed or reuse-existing modes)</p></li>
+<li><p>POST <code class="docutils literal notranslate"><span class="pre">/api/viewer/sync-instance-correction</span></code>: snapshot the paintable zarr
+from MinIO to a local destination</p></li>
+<li><p>POST <code class="docutils literal notranslate"><span class="pre">/api/viewer/cc3d-relabel-annotation</span></code>: split a fused label via
+26-connectivity cc3d</p></li>
+</ul>
+<p>The volumes are ordinary annotation volumes (<code class="docutils literal notranslate"><span class="pre">type:</span> <span class="pre">annotation_volume</span></code>),
+registered under the id their MinIO bucket key names, so the periodic sync,
+the pull before every mirror, session listing and the overlay handle them
+like any other.</p>
+<section id="attributes">
+<h2>Attributes<a class="headerlink" href="#attributes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.instance_correction.logger" title="cellmap_flow.dashboard.routes.finetune.instance_correction.logger"><code class="xref py py-obj docutils literal notranslate"><span class="pre">logger</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="functions">
+<h2>Functions<a class="headerlink" href="#functions" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.instance_correction.create_instance_correction" title="cellmap_flow.dashboard.routes.finetune.instance_correction.create_instance_correction"><code class="xref py py-obj docutils literal notranslate"><span class="pre">create_instance_correction</span></code></a>()</p></td>
+<td><p>Create or reattach a paintable annotation layer for a ROI.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.instance_correction.sync_instance_correction" title="cellmap_flow.dashboard.routes.finetune.instance_correction.sync_instance_correction"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sync_instance_correction</span></code></a>()</p></td>
+<td><p>Snapshot a paintable instance-correction zarr from MinIO to a local</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.instance_correction.cc3d_relabel_annotation" title="cellmap_flow.dashboard.routes.finetune.instance_correction.cc3d_relabel_annotation"><code class="xref py py-obj docutils literal notranslate"><span class="pre">cc3d_relabel_annotation</span></code></a>()</p></td>
+<td><p>Split a single label in a paintable instance-correction zarr via</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="module-contents">
+<h2>Module Contents<a class="headerlink" href="#module-contents" title="Link to this heading"></a></h2>
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.instance_correction.logger">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.instance_correction.</span></span><span class="sig-name descname"><span class="pre">logger</span></span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.instance_correction.logger" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.instance_correction.create_instance_correction">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.instance_correction.</span></span><span class="sig-name descname"><span class="pre">create_instance_correction</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.instance_correction.create_instance_correction" title="Link to this definition"></a></dt>
+<dd><p>Create or reattach a paintable annotation layer for a ROI.</p>
+<p>Two modes:</p>
+<ul>
+<li><p><strong>Fresh seed (default, reuse_existing=False)</strong>: reads an instance
+zarr, computes a dilation shell around each instance as “confident
+background”, and writes a uint16 annotation zarr in cellmap-flow’s
+AffinityTargetTransform label scheme (0=unannotated, 1=background
+shell, 2+=instance IDs). Then serves via MinIO and wires a writable
+SegmentationLayer into the viewer.</p></li>
+<li><p><strong>Reuse existing (reuse_existing=True)</strong>: skips the seeding step
+entirely and reattaches to an already-annotation-formatted zarr.
+Used by the multi-ROI workflow to load any dated snapshot as the
+current paintable layer without redoing the dilation/labeling
+pass. Either:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>pass <cite>source_zarr_path</cite> to load from an explicit path (the
+preferred path for dated-snapshot workflows), or</p></li>
+<li><p>omit <cite>source_zarr_path</cite> and the route falls back to the
+conventional <cite>&lt;output_dir&gt;/&lt;roi_name&gt;_annotation.zarr</cite>
+location.</p></li>
+</ul>
+</div></blockquote>
+<p>The path must already exist and contain <cite>annotation/s0/</cite>;
+<cite>instance_zarr_path</cite> is ignored in this mode. Strokes MinIO already
+holds under the ROI’s bucket key are pulled into that zarr before it
+is mirrored, as for every annotation volume, so reattaching never
+drops unsaved edits; to start again from an older snapshot, give it
+a new roi_name.</p>
+</li>
+</ul>
+<p>The MinIO bucket object is always named <cite>&lt;roi_name&gt;_annotation.zarr</cite>
+regardless of the source path on disk. This keeps the bucket name
+stable across sessions so save / sync routes can always target the
+same bucket key without knowing which snapshot was loaded. The volume
+is registered as <cite>&lt;roi_name&gt;_annotation</cite>, the key without “.zarr”.</p>
+<dl>
+<dt>POST body:</dt><dd><p>roi_name:               str, required (short label, e.g. “roi3”)
+reuse_existing:         bool, default False
+instance_zarr_path:     str, required if reuse_existing=False
+source_zarr_path:       str, optional (reuse_existing=True only)</p>
+<blockquote>
+<div><p>explicit path to an existing annotation zarr</p>
+</div></blockquote>
+<p>dilation_radius_voxels: int, default 5 (fresh-seed mode only)
+model_name:             str, required if reuse_existing=False: the</p>
+<blockquote>
+<div><p>model whose geometry the volume records</p>
+</div></blockquote>
+<p>annotation_dtype:       “uint16” (default) or “uint32” (fresh-seed only)
+output_dir:             str, default = sibling/instance_corrections/</p>
+<blockquote>
+<div><p>(required if reuse_existing=True without
+source_zarr_path)</p>
+</div></blockquote>
+<p>layer_name:             NG layer name, default “{roi_name}_annotation”</p>
+</dd>
+</dl>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p><dl class="simple">
+<dt>{success, volume_id, zarr_path, minio_url, neuroglancer_url,</dt><dd><p>layer_name, reload_page, mode: “fresh_seed” or “reuse_existing”}</p>
+</dd>
+</dl>
+</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.instance_correction.sync_instance_correction">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.instance_correction.</span></span><span class="sig-name descname"><span class="pre">sync_instance_correction</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.instance_correction.sync_instance_correction" title="Link to this definition"></a></dt>
+<dd><p>Snapshot a paintable instance-correction zarr from MinIO to a local
+destination.</p>
+<p>Copies the MinIO object that brush edits land in, metadata and all, to
+a zarr on disk: a dated snapshot for rollback or audit, or a copy to
+train from. The served volume itself is kept current by the periodic
+sync, like any annotation volume. Uses s3fs, not <cite>mc</cite>.</p>
+<dl class="simple">
+<dt>POST body:</dt><dd><dl class="simple">
+<dt>zarr_path: str, required. The volume, e.g.</dt><dd><p><cite>/…/instance_corrections/roi3_annotation.zarr</cite>, or the
+<cite>zarr_path</cite> create answered: the MinIO bucket key is that of the
+volume registered for it, else its basename.</p>
+</dd>
+<dt>dst_path:  str, optional. Where to write the copy: a <cite>.zarr</cite> in the</dt><dd><p>same directory as <cite>zarr_path</cite>, new or an existing zarr. Defaults
+to <cite>zarr_path</cite>. Prefer a fresh dated path (e.g.
+<cite>…/roi3_annotation_&lt;ts&gt;.zarr</cite>), which leaves the volume as it
+was to roll back to.</p>
+</dd>
+</dl>
+</dd>
+</dl>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>{success, zarr_path, dst_path, keys_copied, keys_skipped, bytes_copied}</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.instance_correction.cc3d_relabel_annotation">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.instance_correction.</span></span><span class="sig-name descname"><span class="pre">cc3d_relabel_annotation</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.instance_correction.cc3d_relabel_annotation" title="Link to this definition"></a></dt>
+<dd><p>Split a single label in a paintable instance-correction zarr via
+26-connectivity cc3d.</p>
+<p>Typical workflow: the user has erased a thin bridge between two fused
+mitos in NG’s brush tool (still sharing <cite>target_label</cite>), then POSTs
+this route with that label. The server reads the MinIO-backed
+annotation/s0, snapshots it to a local DirectoryStore for rollback,
+runs cc3d on the target mask, keeps the largest component under
+<cite>target_label</cite>, and reassigns all smaller components to fresh unused
+instance IDs starting at <cite>max(existing) + 1</cite>. Then writes the full
+array back to MinIO. After the POST completes, the user must hard
+reload the NG tab to see the new split colors (NG does not auto-
+invalidate segmentation chunks on back-channel writes).</p>
+<dl>
+<dt>POST body:</dt><dd><dl class="simple">
+<dt>zarr_path:     str, required. Absolute path to the user-visible zarr,</dt><dd><p>as for sync-instance-correction.</p>
+</dd>
+</dl>
+<p>target_label:  int, required. The instance ID to split (must be &gt;= 2).
+snapshot_dir:  str, optional. Where to drop rollback snapshots: a</p>
+<blockquote>
+<div><p>directory beside <cite>zarr_path</cite>. Defaults to
+<cite>&lt;parent_of_zarr&gt;/snapshots/</cite>.</p>
+</div></blockquote>
+</dd>
+</dl>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p><dl class="simple">
+<dt>{success, zarr_path, target_label, n_components, kept_voxels,</dt><dd><p>splits: [{new_label, voxels}, …], snapshot_path,
+reload_hint: “hard reload NG tab to see split”}</p>
+</dd>
+</dl>
+</p>
+</dd>
+</dl>
+</dd></dl>
+
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../good_regions/index.html" class="btn btn-neutral float-left" title="cellmap_flow.dashboard.routes.finetune.good_regions" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../layers/index.html" class="btn btn-neutral float-right" title="cellmap_flow.dashboard.routes.finetune.layers" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, David Ackerman,  Marwan Zouinkhi, Jeff Rhoades, Larissa Heinrich, Aubrey Weigel.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

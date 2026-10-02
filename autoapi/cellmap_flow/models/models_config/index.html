@@ -10,7 +10,6 @@
       <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=4ae1632d" />
-      <link rel="stylesheet" type="text/css" href="../../../../_static/mystnb.11b39860a7a0cbfd473a3ad8a317855267ff0bd372690045ca344a6b62be495e.css" />
       <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css" />
 
   
@@ -20,11 +19,10 @@
       <script src="../../../../_static/documentation_options.js?v=5929fcd5"></script>
       <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
-      <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
     <script src="../../../../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../../../../genindex.html" />
     <link rel="search" title="Search" href="../../../../search.html" />
-    <link rel="next" title="cellmap_flow.models.run" href="../run/index.html" />
+    <link rel="next" title="cellmap_flow.models.registry" href="../registry/index.html" />
     <link rel="prev" title="cellmap_flow.models.model_registry" href="../model_registry/index.html" /> 
 </head>
 
@@ -50,27 +48,44 @@
               <p class="caption" role="heading"><span class="caption-text">CellMap-Flow API:</span></p>
 <ul class="current">
 <li class="toctree-l1"><a class="reference internal" href="../../../../install.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../cli.html">Command line</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../scripts.html">Python Scripts</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../yaml_config.html">YAML Configuration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../data_paths.html">Data paths</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../huggingface.html">HuggingFace Models</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../custom_script.html">Custom Model</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../post.html">PostProcessors</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../plugins.html">Plugins</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../review.html">Reviewing instances</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../viewer_api.html">Viewer layer API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../architecture.html">Architecture</a></li>
 <li class="toctree-l1 current"><a class="reference internal" href="../../../index.html">API Reference</a><ul class="current">
 <li class="toctree-l2 current"><a class="reference internal" href="../../index.html">cellmap_flow</a><ul class="current">
 <li class="toctree-l3 current"><a class="reference internal" href="../../index.html#submodules">Submodules</a><ul class="current">
 <li class="toctree-l4"><a class="reference internal" href="../../blockwise/index.html">cellmap_flow.blockwise</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../cli/index.html">cellmap_flow.cli</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../config/index.html">cellmap_flow.config</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../dashboard/index.html">cellmap_flow.dashboard</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../finetune/index.html">cellmap_flow.finetune</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../globals/index.html">cellmap_flow.globals</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../image_data_interface/index.html">cellmap_flow.image_data_interface</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../inference/index.html">cellmap_flow.inference</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../inferencer/index.html">cellmap_flow.inferencer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../io/index.html">cellmap_flow.io</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../jobs/index.html">cellmap_flow.jobs</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../logging_setup/index.html">cellmap_flow.logging_setup</a></li>
 <li class="toctree-l4 current"><a class="reference internal" href="../index.html">cellmap_flow.models</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../norm/index.html">cellmap_flow.norm</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../pipeline_spec/index.html">cellmap_flow.pipeline_spec</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../plugins/index.html">cellmap_flow.plugins</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../post/index.html">cellmap_flow.post</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../process_chain/index.html">cellmap_flow.process_chain</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../review/index.html">cellmap_flow.review</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../review_index/index.html">cellmap_flow.review_index</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../server/index.html">cellmap_flow.server</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../serving/index.html">cellmap_flow.serving</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../utils/index.html">cellmap_flow.utils</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../viewer/index.html">cellmap_flow.viewer</a></li>
 </ul>
 </li>
 </ul>
@@ -108,86 +123,120 @@
              
   <section id="module-cellmap_flow.models.models_config">
 <span id="cellmap-flow-models-models-config"></span><h1>cellmap_flow.models.models_config<a class="headerlink" href="#module-cellmap_flow.models.models_config" title="Link to this heading"></a></h1>
-<section id="attributes">
-<h2>Attributes<a class="headerlink" href="#attributes" title="Link to this heading"></a></h2>
-<table class="autosummary longtable docutils align-default">
-<tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.models.models_config.logger" title="cellmap_flow.models.models_config.logger"><code class="xref py py-obj docutils literal notranslate"><span class="pre">logger</span></code></a></p></td>
-<td><p></p></td>
-</tr>
-</tbody>
-</table>
-</section>
+<p>The model config classes: <code class="docutils literal notranslate"><span class="pre">ModelConfig</span></code> and the built-in model types.</p>
+<p>This is their public import path. The docs import them from here, and
+plugins subclass <code class="docutils literal notranslate"><span class="pre">ModelConfig</span></code>, <code class="docutils literal notranslate"><span class="pre">ScriptModelConfig</span></code> and the rest by
+it. The classes live in <code class="docutils literal notranslate"><span class="pre">cellmap_flow.models.configs</span></code>, one module per
+type. <code class="docutils literal notranslate"><span class="pre">Config</span></code>, what a type’s <code class="docutils literal notranslate"><span class="pre">_get_config</span></code> returns, is here too, for
+plugins that define a type.</p>
 <section id="classes">
 <h2>Classes<a class="headerlink" href="#classes" title="Link to this heading"></a></h2>
 <table class="autosummary longtable docutils align-default">
 <tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.models.models_config.ModelConfig" title="cellmap_flow.models.models_config.ModelConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ModelConfig</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.models.models_config.Config" title="cellmap_flow.models.models_config.Config"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Config</span></code></a></p></td>
+<td><p>What a model type's <code class="docutils literal notranslate"><span class="pre">_get_config</span></code> returns: the model, its geometry</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.models.models_config.ModelConfig" title="cellmap_flow.models.models_config.ModelConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ModelConfig</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.models.models_config.ScriptModelConfig" title="cellmap_flow.models.models_config.ScriptModelConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ScriptModelConfig</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.models.models_config.ScriptModelConfig" title="cellmap_flow.models.models_config.ScriptModelConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ScriptModelConfig</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.models.models_config.DaCapoModelConfig" title="cellmap_flow.models.models_config.DaCapoModelConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DaCapoModelConfig</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.models.models_config.DaCapoModelConfig" title="cellmap_flow.models.models_config.DaCapoModelConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DaCapoModelConfig</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.models.models_config.FlyModelConfig" title="cellmap_flow.models.models_config.FlyModelConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">FlyModelConfig</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.models.models_config.FlyModelConfig" title="cellmap_flow.models.models_config.FlyModelConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">FlyModelConfig</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.models.models_config.BioModelConfig" title="cellmap_flow.models.models_config.BioModelConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">BioModelConfig</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.models.models_config.BioModelConfig" title="cellmap_flow.models.models_config.BioModelConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">BioModelConfig</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.models.models_config.CellMapModelConfig" title="cellmap_flow.models.models_config.CellMapModelConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">CellMapModelConfig</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.models.models_config.CellMapModelConfig" title="cellmap_flow.models.models_config.CellMapModelConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">CellMapModelConfig</span></code></a></p></td>
 <td><p>Configuration class for a CellmapModel.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.models.models_config.FinetuneModelConfig" title="cellmap_flow.models.models_config.FinetuneModelConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">FinetuneModelConfig</span></code></a></p></td>
-<td><p>Configuration class for a LoRA-finetuned model.</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.models.models_config.FinetuneModelConfig" title="cellmap_flow.models.models_config.FinetuneModelConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">FinetuneModelConfig</span></code></a></p></td>
+<td><p>Configuration class for a finetuned model.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.models.models_config.HuggingFaceModelConfig" title="cellmap_flow.models.models_config.HuggingFaceModelConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">HuggingFaceModelConfig</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.models.models_config.HuggingFaceModelConfig" title="cellmap_flow.models.models_config.HuggingFaceModelConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">HuggingFaceModelConfig</span></code></a></p></td>
 <td><p>Configuration class for a Hugging Face model.</p></td>
-</tr>
-</tbody>
-</table>
-</section>
-<section id="functions">
-<h2>Functions<a class="headerlink" href="#functions" title="Link to this heading"></a></h2>
-<table class="autosummary longtable docutils align-default">
-<tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.models.models_config.concat_along_c" title="cellmap_flow.models.models_config.concat_along_c"><code class="xref py py-obj docutils literal notranslate"><span class="pre">concat_along_c</span></code></a>(arrs, axes_list[, channel_axis_name])</p></td>
-<td><p>Concatenate arrays along the channel axis, adding channel dim if missing.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.models.models_config.reorder_axes" title="cellmap_flow.models.models_config.reorder_axes"><code class="xref py py-obj docutils literal notranslate"><span class="pre">reorder_axes</span></code></a>(→ tuple[numpy.ndarray, list[str]])</p></td>
-<td><p>Reorder/remove axes to match desired_order, removing size-1 unwanted axes.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.models.models_config.process_chunk_bioimage" title="cellmap_flow.models.models_config.process_chunk_bioimage"><code class="xref py py-obj docutils literal notranslate"><span class="pre">process_chunk_bioimage</span></code></a>(self, idi, input_roi)</p></td>
-<td><p></p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.models.models_config.format_output_bioimage" title="cellmap_flow.models.models_config.format_output_bioimage"><code class="xref py py-obj docutils literal notranslate"><span class="pre">format_output_bioimage</span></code></a>(self, output_sample[, ...])</p></td>
-<td><p></p></td>
 </tr>
 </tbody>
 </table>
 </section>
 <section id="module-contents">
 <h2>Module Contents<a class="headerlink" href="#module-contents" title="Link to this heading"></a></h2>
-<dl class="py data">
-<dt class="sig sig-object py" id="cellmap_flow.models.models_config.logger">
-<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.models_config.</span></span><span class="sig-name descname"><span class="pre">logger</span></span><a class="headerlink" href="#cellmap_flow.models.models_config.logger" title="Link to this definition"></a></dt>
+<dl class="py class">
+<dt class="sig sig-object py" id="cellmap_flow.models.models_config.Config">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.models_config.</span></span><span class="sig-name descname"><span class="pre">Config</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.models.models_config.Config" title="Link to this definition"></a></dt>
+<dd><p>What a model type’s <code class="docutils literal notranslate"><span class="pre">_get_config</span></code> returns: the model, its geometry
+and anything else its script or checkpoint defines, as attributes.</p>
+<p>Built from keyword arguments (a script’s globals, for a script model),
+which <code class="docutils literal notranslate"><span class="pre">to_dict()</span></code> and <code class="docutils literal notranslate"><span class="pre">get()</span></code> read back. <code class="docutils literal notranslate"><span class="pre">axes_names</span></code> defaults to
+x, y, z.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.models.models_config.Config.axes_names">
+<span class="sig-name descname"><span class="pre">axes_names</span></span><a class="headerlink" href="#cellmap_flow.models.models_config.Config.axes_names" title="Link to this definition"></a></dt>
 <dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.models.models_config.Config.kwargs">
+<span class="sig-name descname"><span class="pre">kwargs</span></span><a class="headerlink" href="#cellmap_flow.models.models_config.Config.kwargs" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.models.models_config.Config.to_dict">
+<span class="sig-name descname"><span class="pre">to_dict</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.models.models_config.Config.to_dict" title="Link to this definition"></a></dt>
+<dd><p>Returns the configuration as a dictionary.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.models.models_config.Config.get">
+<span class="sig-name descname"><span class="pre">get</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">default</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Any</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Any</span></span></span><a class="headerlink" href="#cellmap_flow.models.models_config.Config.get" title="Link to this definition"></a></dt>
+<dd><p>Gets the value of a configuration key.</p>
+</dd></dl>
+
+</dd></dl>
 
 <dl class="py class">
 <dt class="sig sig-object py" id="cellmap_flow.models.models_config.ModelConfig">
 <span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.models_config.</span></span><span class="sig-name descname"><span class="pre">ModelConfig</span></span><a class="headerlink" href="#cellmap_flow.models.models_config.ModelConfig" title="Link to this definition"></a></dt>
-<dd><dl class="py property">
+<dd><dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.models.models_config.ModelConfig.validate_model_shapes">
+<span class="sig-name descname"><span class="pre">validate_model_shapes</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">True</span></span><a class="headerlink" href="#cellmap_flow.models.models_config.ModelConfig.validate_model_shapes" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.models.models_config.ModelConfig.check_shapes_on_warmup">
+<span class="sig-name descname"><span class="pre">check_shapes_on_warmup</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">False</span></span><a class="headerlink" href="#cellmap_flow.models.models_config.ModelConfig.check_shapes_on_warmup" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py property">
 <dt class="sig sig-object py" id="cellmap_flow.models.models_config.ModelConfig.config">
 <span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">config</span></span><a class="headerlink" href="#cellmap_flow.models.models_config.ModelConfig.config" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.models.models_config.ModelConfig.check_output_shape">
+<span class="sig-name descname"><span class="pre">check_output_shape</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">output_shape</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.models.models_config.ModelConfig.check_output_shape" title="Link to this definition"></a></dt>
+<dd><p>Raise ValueError if a forward’s <code class="docutils literal notranslate"><span class="pre">output_shape</span></code> (batch first)
+contradicts the declared write_shape, block_shape or output_channels.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cellmap_flow.models.models_config.ModelConfig.geometry">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">geometry</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="../geometry/index.html#cellmap_flow.models.geometry.ModelGeometry" title="cellmap_flow.models.geometry.ModelGeometry"><span class="pre">cellmap_flow.models.geometry.ModelGeometry</span></a></span><a class="headerlink" href="#cellmap_flow.models.models_config.ModelConfig.geometry" title="Link to this definition"></a></dt>
+<dd><p>The config’s geometry as one ModelGeometry, read once per built config.</p>
+</dd></dl>
+
 <dl class="py property">
 <dt class="sig sig-object py" id="cellmap_flow.models.models_config.ModelConfig.chunk_output_axes">
 <span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">chunk_output_axes</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span></span><a class="headerlink" href="#cellmap_flow.models.models_config.ModelConfig.chunk_output_axes" title="Link to this definition"></a></dt>
-<dd><p>Returns the axes order of processed chunk output. Defaults to (‘c’, ‘z’, ‘y’, ‘x’).</p>
-<p>Models can override by setting config.chunk_output_axes.
+<dd><p>The axes of a processed chunk; by default <code class="docutils literal notranslate"><span class="pre">geometry.DEFAULT_OUTPUT_AXES</span></code>,
+(“c”, “z”, “y”, “x”).</p>
+<p>Models can override by setting config.chunk_output_axes. The server
+and blockwise read it only for whether a chunk has a channel axis:
+one that has must have it first, and its spatial axes are the raw
+data’s, in the raw data’s order.
 Note: this is distinct from config.output_axes used by BioModelConfig
 for raw bioimageio model axes.</p>
 </dd></dl>
@@ -200,13 +249,36 @@ for raw bioimageio model axes.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="cellmap_flow.models.models_config.ModelConfig.to_dict">
-<span class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">to_dict</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.models.models_config.ModelConfig.to_dict" title="Link to this definition"></a></dt>
-<dd><p>Export model configuration as a dict that can be used with build_model_from_entry.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Returns<span class="colon">:</span></dt>
-<dd class="field-odd"><p>Dictionary containing model type and all init parameters.</p>
-</dd>
-</dl>
+<span class="sig-name descname"><span class="pre">to_dict</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.models.models_config.ModelConfig.to_dict" title="Link to this definition"></a></dt>
+<dd><p>This config as a model entry, which <code class="docutils literal notranslate"><span class="pre">registry.build_model</span></code> rebuilds.</p>
+<p><code class="docutils literal notranslate"><span class="pre">{&quot;type&quot;:</span> <span class="pre">&lt;registered</span> <span class="pre">name&gt;,</span> <span class="pre">**the</span> <span class="pre">constructor</span> <span class="pre">arguments</span> <span class="pre">given}</span></code>,
+leaving out None as the built-in types leave out an unset name or
+scale. The built-in types write their own; this one serves a plugin
+type that does not, so exporting its config and launching its server
+work without one.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cellmap_flow.models.models_config.ModelConfig.launch_entry">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">launch_entry</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">dict</span></span><a class="headerlink" href="#cellmap_flow.models.models_config.ModelConfig.launch_entry" title="Link to this definition"></a></dt>
+<dd><p>The model entry a launched server rebuilds this exact config from.</p>
+<p>to_dict(), less what only the pipeline builder shows (a Hugging Face
+repo’s downloaded metadata), under the name the registry has this
+class under (<code class="docutils literal notranslate"><span class="pre">registry.cli_name_of</span></code>), so that the server rebuilds
+this class and not a parent it inherited cli_name from.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cellmap_flow.models.models_config.ModelConfig.command">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">command</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></span><a class="headerlink" href="#cellmap_flow.models.models_config.ModelConfig.command" title="Link to this definition"></a></dt>
+<dd><p><code class="docutils literal notranslate"><span class="pre">cellmap_flow_server</span></code> arguments that rebuild this exact config.</p>
+<p>Generated from to_dict() so no constructor argument is left behind
+(hand-written commands dropped Fly’s input/output size, which then
+silently fell back to 178/56, and Bio’s required voxel size), with
+every token shell-quoted: bsub runs it through <code class="docutils literal notranslate"><span class="pre">bash</span> <span class="pre">-c</span></code> and local
+launches through <code class="docutils literal notranslate"><span class="pre">shlex.split</span></code>. The class is named as the server
+CLI registers it (<code class="docutils literal notranslate"><span class="pre">registry.cli_name_of</span></code>), so it rebuilds this
+class and not a parent it inherited cli_name from.</p>
 </dd></dl>
 
 </dd></dl>
@@ -234,15 +306,10 @@ for raw bioimageio model axes.</p>
 <span class="sig-name descname"><span class="pre">scale</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.models.models_config.ScriptModelConfig.scale" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
-<dl class="py property">
-<dt class="sig sig-object py" id="cellmap_flow.models.models_config.ScriptModelConfig.command">
-<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">command</span></span><a class="headerlink" href="#cellmap_flow.models.models_config.ScriptModelConfig.command" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
 <dl class="py method">
 <dt class="sig sig-object py" id="cellmap_flow.models.models_config.ScriptModelConfig.to_dict">
 <span class="sig-name descname"><span class="pre">to_dict</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.models.models_config.ScriptModelConfig.to_dict" title="Link to this definition"></a></dt>
-<dd><p>Export configuration for use with build_model_from_entry.</p>
+<dd><p>This config as a model entry, which <code class="docutils literal notranslate"><span class="pre">registry.build_model</span></code> rebuilds.</p>
 </dd></dl>
 
 </dd></dl>
@@ -275,15 +342,10 @@ for raw bioimageio model axes.</p>
 <span class="sig-name descname"><span class="pre">scale</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.models.models_config.DaCapoModelConfig.scale" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
-<dl class="py property">
-<dt class="sig sig-object py" id="cellmap_flow.models.models_config.DaCapoModelConfig.command">
-<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">command</span></span><a class="headerlink" href="#cellmap_flow.models.models_config.DaCapoModelConfig.command" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
 <dl class="py method">
 <dt class="sig sig-object py" id="cellmap_flow.models.models_config.DaCapoModelConfig.to_dict">
 <span class="sig-name descname"><span class="pre">to_dict</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.models.models_config.DaCapoModelConfig.to_dict" title="Link to this definition"></a></dt>
-<dd><p>Export configuration for use with build_model_from_entry.</p>
+<dd><p>This config as a model entry, which <code class="docutils literal notranslate"><span class="pre">registry.build_model</span></code> rebuilds.</p>
 </dd></dl>
 
 </dd></dl>
@@ -336,11 +398,6 @@ for raw bioimageio model axes.</p>
 <span class="sig-name descname"><span class="pre">output_size</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.models.models_config.FlyModelConfig.output_size" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
-<dl class="py property">
-<dt class="sig sig-object py" id="cellmap_flow.models.models_config.FlyModelConfig.command">
-<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">command</span></span><a class="headerlink" href="#cellmap_flow.models.models_config.FlyModelConfig.command" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
 <dl class="py method">
 <dt class="sig sig-object py" id="cellmap_flow.models.models_config.FlyModelConfig.load_eval_model">
 <span class="sig-name descname"><span class="pre">load_eval_model</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">num_channels</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">checkpoint_path</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.models.models_config.FlyModelConfig.load_eval_model" title="Link to this definition"></a></dt>
@@ -355,7 +412,7 @@ for raw bioimageio model axes.</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="cellmap_flow.models.models_config.FlyModelConfig.to_dict">
 <span class="sig-name descname"><span class="pre">to_dict</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.models.models_config.FlyModelConfig.to_dict" title="Link to this definition"></a></dt>
-<dd><p>Export configuration for use with build_model_from_entry.</p>
+<dd><p>This config as a model entry, which <code class="docutils literal notranslate"><span class="pre">registry.build_model</span></code> rebuilds.</p>
 </dd></dl>
 
 </dd></dl>
@@ -375,7 +432,7 @@ for raw bioimageio model axes.</p>
 
 <dl class="py attribute">
 <dt class="sig sig-object py" id="cellmap_flow.models.models_config.BioModelConfig.voxel_size">
-<span class="sig-name descname"><span class="pre">voxel_size</span></span><a class="headerlink" href="#cellmap_flow.models.models_config.BioModelConfig.voxel_size" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">voxel_size</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.models.models_config.BioModelConfig.voxel_size" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py attribute">
@@ -391,11 +448,6 @@ for raw bioimageio model axes.</p>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="cellmap_flow.models.models_config.BioModelConfig.voxels_to_process">
 <span class="sig-name descname"><span class="pre">voxels_to_process</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.models.models_config.BioModelConfig.voxels_to_process" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py property">
-<dt class="sig sig-object py" id="cellmap_flow.models.models_config.BioModelConfig.command">
-<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">command</span></span><a class="headerlink" href="#cellmap_flow.models.models_config.BioModelConfig.command" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
@@ -426,32 +478,10 @@ for raw bioimageio model axes.</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="cellmap_flow.models.models_config.BioModelConfig.to_dict">
 <span class="sig-name descname"><span class="pre">to_dict</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.models.models_config.BioModelConfig.to_dict" title="Link to this definition"></a></dt>
-<dd><p>Export configuration for use with build_model_from_entry.</p>
+<dd><p>This config as a model entry, which <code class="docutils literal notranslate"><span class="pre">registry.build_model</span></code> rebuilds.</p>
 </dd></dl>
 
 </dd></dl>
-
-<dl class="py function">
-<dt class="sig sig-object py" id="cellmap_flow.models.models_config.concat_along_c">
-<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.models_config.</span></span><span class="sig-name descname"><span class="pre">concat_along_c</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">arrs</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">axes_list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">channel_axis_name</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'c'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.models.models_config.concat_along_c" title="Link to this definition"></a></dt>
-<dd><p>Concatenate arrays along the channel axis, adding channel dim if missing.</p>
-</dd></dl>
-
-<dl class="py function">
-<dt class="sig sig-object py" id="cellmap_flow.models.models_config.reorder_axes">
-<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.models_config.</span></span><span class="sig-name descname"><span class="pre">reorder_axes</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">arr</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">numpy.ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">axes</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">desired_order</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">['z',</span> <span class="pre">'y',</span> <span class="pre">'x',</span> <span class="pre">'c']</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">numpy.ndarray</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#cellmap_flow.models.models_config.reorder_axes" title="Link to this definition"></a></dt>
-<dd><p>Reorder/remove axes to match desired_order, removing size-1 unwanted axes.</p>
-</dd></dl>
-
-<dl class="py function">
-<dt class="sig sig-object py" id="cellmap_flow.models.models_config.process_chunk_bioimage">
-<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.models_config.</span></span><span class="sig-name descname"><span class="pre">process_chunk_bioimage</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">self</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">idi</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../../image_data_interface/index.html#cellmap_flow.image_data_interface.ImageDataInterface" title="cellmap_flow.image_data_interface.ImageDataInterface"><span class="pre">cellmap_flow.image_data_interface.ImageDataInterface</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">input_roi</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">funlib.geometry.Roi</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.models.models_config.process_chunk_bioimage" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py function">
-<dt class="sig sig-object py" id="cellmap_flow.models.models_config.format_output_bioimage">
-<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.models_config.</span></span><span class="sig-name descname"><span class="pre">format_output_bioimage</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">self</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_sample</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_names</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_axes</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.models.models_config.format_output_bioimage" title="Link to this definition"></a></dt>
-<dd></dd></dl>
 
 <dl class="py class">
 <dt class="sig sig-object py" id="cellmap_flow.models.models_config.CellMapModelConfig">
@@ -477,15 +507,10 @@ for raw bioimageio model axes.</p>
 <span class="sig-name descname"><span class="pre">scale</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.models.models_config.CellMapModelConfig.scale" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
-<dl class="py property">
-<dt class="sig sig-object py" id="cellmap_flow.models.models_config.CellMapModelConfig.command">
-<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">command</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></span><a class="headerlink" href="#cellmap_flow.models.models_config.CellMapModelConfig.command" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
 <dl class="py method">
 <dt class="sig sig-object py" id="cellmap_flow.models.models_config.CellMapModelConfig.to_dict">
 <span class="sig-name descname"><span class="pre">to_dict</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.models.models_config.CellMapModelConfig.to_dict" title="Link to this definition"></a></dt>
-<dd><p>Export configuration for use with build_model_from_entry.</p>
+<dd><p>This config as a model entry, which <code class="docutils literal notranslate"><span class="pre">registry.build_model</span></code> rebuilds.</p>
 </dd></dl>
 
 </dd></dl>
@@ -493,10 +518,13 @@ for raw bioimageio model axes.</p>
 <dl class="py class">
 <dt class="sig sig-object py" id="cellmap_flow.models.models_config.FinetuneModelConfig">
 <span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.models_config.</span></span><span class="sig-name descname"><span class="pre">FinetuneModelConfig</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">lora_adapter_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">base_model</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scale</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">weights_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.models.models_config.FinetuneModelConfig" title="Link to this definition"></a></dt>
-<dd><p>Configuration class for a LoRA-finetuned model.</p>
-<p>Wraps any base ModelConfig with a LoRA adapter applied on top.
-The base model is loaded via its own ModelConfig, then the adapter
-is applied using PEFT.</p>
+<dd><p>Configuration class for a finetuned model.</p>
+<p>Wraps any base ModelConfig with the finetune’s weights, which are
+exactly one of: a LoRA adapter (<code class="docutils literal notranslate"><span class="pre">lora_adapter_path</span></code>), applied with
+PEFT, or a full finetune’s state dict (<code class="docutils literal notranslate"><span class="pre">weights_path</span></code>, from a run
+with <code class="docutils literal notranslate"><span class="pre">--lora-r</span> <span class="pre">0</span></code>), loaded strictly. The base model is built by its
+own ModelConfig, as the trainable module the trainer trained, and the
+weights go on top of it.</p>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="cellmap_flow.models.models_config.FinetuneModelConfig.cli_name">
 <span class="sig-name descname"><span class="pre">cli_name</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'finetune'</span></span><a class="headerlink" href="#cellmap_flow.models.models_config.FinetuneModelConfig.cli_name" title="Link to this definition"></a></dt>
@@ -533,15 +561,10 @@ is applied using PEFT.</p>
 <dd><p>Lazily build the base ModelConfig from the stored dict.</p>
 </dd></dl>
 
-<dl class="py property">
-<dt class="sig sig-object py" id="cellmap_flow.models.models_config.FinetuneModelConfig.command">
-<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">command</span></span><a class="headerlink" href="#cellmap_flow.models.models_config.FinetuneModelConfig.command" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
 <dl class="py method">
 <dt class="sig sig-object py" id="cellmap_flow.models.models_config.FinetuneModelConfig.to_dict">
 <span class="sig-name descname"><span class="pre">to_dict</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.models.models_config.FinetuneModelConfig.to_dict" title="Link to this definition"></a></dt>
-<dd><p>Export configuration for use with build_model_from_entry.</p>
+<dd><p>This config as a model entry, which <code class="docutils literal notranslate"><span class="pre">registry.build_model</span></code> rebuilds.</p>
 <p>Surfaces key base model fields at the top level so the pipeline
 builder UI can display them alongside the finetune-specific fields.</p>
 </dd></dl>
@@ -555,6 +578,11 @@ builder UI can display them alongside the finetune-specific fields.</p>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="cellmap_flow.models.models_config.HuggingFaceModelConfig.cli_name">
 <span class="sig-name descname"><span class="pre">cli_name</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'huggingface'</span></span><a class="headerlink" href="#cellmap_flow.models.models_config.HuggingFaceModelConfig.cli_name" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.models.models_config.HuggingFaceModelConfig.METADATA_RETRY_SECONDS">
+<span class="sig-name descname"><span class="pre">METADATA_RETRY_SECONDS</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">60</span></span><a class="headerlink" href="#cellmap_flow.models.models_config.HuggingFaceModelConfig.METADATA_RETRY_SECONDS" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py attribute">
@@ -577,15 +605,10 @@ builder UI can display them alongside the finetune-specific fields.</p>
 <span class="sig-name descname"><span class="pre">scale</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.models.models_config.HuggingFaceModelConfig.scale" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
-<dl class="py property">
-<dt class="sig sig-object py" id="cellmap_flow.models.models_config.HuggingFaceModelConfig.command">
-<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">command</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></span><a class="headerlink" href="#cellmap_flow.models.models_config.HuggingFaceModelConfig.command" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
 <dl class="py method">
 <dt class="sig sig-object py" id="cellmap_flow.models.models_config.HuggingFaceModelConfig.to_dict">
 <span class="sig-name descname"><span class="pre">to_dict</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.models.models_config.HuggingFaceModelConfig.to_dict" title="Link to this definition"></a></dt>
-<dd><p>Export configuration for use with build_model_from_entry.</p>
+<dd><p>This config as a model entry, which <code class="docutils literal notranslate"><span class="pre">registry.build_model</span></code> rebuilds.</p>
 </dd></dl>
 
 </dd></dl>
@@ -598,7 +621,7 @@ builder UI can display them alongside the finetune-specific fields.</p>
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
         <a href="../model_registry/index.html" class="btn btn-neutral float-left" title="cellmap_flow.models.model_registry" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
-        <a href="../run/index.html" class="btn btn-neutral float-right" title="cellmap_flow.models.run" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="../registry/index.html" class="btn btn-neutral float-right" title="cellmap_flow.models.registry" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>

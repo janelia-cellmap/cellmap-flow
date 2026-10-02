@@ -63,8 +63,6 @@ Functions
 .. autoapisummary::
 
    cellmap_flow.finetune.export_merged.valid_tile
-   cellmap_flow.finetune.export_merged.merge_lora_into_conv3d
-   cellmap_flow.finetune.export_merged.strip_lora_layers
    cellmap_flow.finetune.export_merged.load_eager_base
    cellmap_flow.finetune.export_merged.apply_finetune
    cellmap_flow.finetune.export_merged.check_equivalence
@@ -98,20 +96,6 @@ Module Contents
    True when ``tile`` keeps the pooling phase of the 178 training tile.
 
 
-.. py:function:: merge_lora_into_conv3d(peft_model)
-
-   Add each LoRA pair into its base Conv3d weight in place; return count.
-
-   PEFT's own ``merge_and_unload`` assumes 2-D conv kernels and fails on
-   Conv3d. For lora_A: Conv3d(Cin, r, k^3) and lora_B: Conv3d(r, Cout, 1^3),
-   delta[o, i, z, y, x] = scale * sum_r B[o, r] A[r, i, z, y, x].
-
-
-.. py:function:: strip_lora_layers(module)
-
-   Replace every LoraLayer under ``module`` by its (now merged) base layer.
-
-
 .. py:function:: load_eager_base(folder_path)
 
    The eager ``model.pt`` of a CellmapModel folder, eval mode, on CPU.
@@ -126,6 +110,10 @@ Module Contents
    dict keys carry a ``model.`` prefix. Wrapping the eager module the same
    way reproduces those names exactly (checked: 38/38 adapter tensors
    identical, 0.0 output difference at 178^3).
+
+   The adapter is folded in by ``LoraStrategy.merge``, the merge training
+   uses to continue from a finetuned model: every adapted layer, Conv3d,
+   Conv2d or Linear, to within float rounding of the adapter's output.
 
 
 .. py:function:: check_equivalence(module, reference, tile, seed=0)

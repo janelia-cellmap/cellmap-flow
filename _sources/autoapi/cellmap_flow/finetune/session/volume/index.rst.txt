@@ -1,0 +1,210 @@
+cellmap_flow.finetune.session.volume
+====================================
+
+.. py:module:: cellmap_flow.finetune.session.volume
+
+.. autoapi-nested-parse::
+
+   Annotation volumes: planning, creating, reading and writing crops into them.
+
+   An annotation volume is a zarr v2 group ``<id>.zarr`` whose
+   ``annotation/s0`` holds the labels: 0 unannotated, 1 background, 2 and up
+   foreground (instance ids, for instance corrections). It covers the whole raw
+   dataset on the grid predictions are made on, with one chunk per model output,
+   so each chunk is one training sample. Only painted or imported chunks exist
+   on disk. MinIO and neuroglancer write chunks straight into it, so its layout
+   -- uint8 unless the labels are instance ids, "." separated chunk keys, Blosc
+   zstd level 3 -- and its root attrs are a format.
+
+   The root attr ``dataset_offset_nm`` is voxel 0's *centre* and is also the
+   OME translation, since that is where Neuroglancer draws voxel 0 while it is
+   painted; ``volume_corner_nm`` gives the corner.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.session.volume.logger
+   cellmap_flow.finetune.session.volume.GEOMETRY_ATTRS
+
+
+Exceptions
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.session.volume.NotAnAnnotationVolume
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.session.volume.VolumeGeometry
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.session.volume.new_volume_id
+   cellmap_flow.finetune.session.volume.volume_corner_nm
+   cellmap_flow.finetune.session.volume.plan_volume
+   cellmap_flow.finetune.session.volume.create_volume_zarr
+   cellmap_flow.finetune.session.volume.read_volume
+   cellmap_flow.finetune.session.volume.build_manifest
+   cellmap_flow.finetune.session.volume.majority_vote_downsample
+   cellmap_flow.finetune.session.volume.write_crop_into_volume
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:data:: GEOMETRY_ATTRS
+
+.. py:exception:: NotAnAnnotationVolume
+
+
+
+   ``read_volume`` was given a zarr whose root ``type`` is not annotation_volume.
+
+
+.. py:class:: VolumeGeometry
+
+   Where a volume lies and what model it is for; see ``plan_volume``.
+
+   Sequences become tuples of the numbers given, ints kept ints, since the
+   root attrs are written from them as they are.
+
+
+   .. py:attribute:: output_voxel_size
+      :type:  tuple
+
+
+   .. py:attribute:: input_voxel_size
+      :type:  tuple
+
+
+   .. py:attribute:: claimed_output_voxel_size
+      :type:  Optional[tuple]
+
+
+   .. py:attribute:: claimed_input_voxel_size
+      :type:  Optional[tuple]
+
+
+   .. py:attribute:: chunk_size
+      :type:  tuple
+
+
+   .. py:attribute:: input_size
+      :type:  tuple
+
+
+   .. py:attribute:: dataset_offset_nm
+      :type:  tuple
+
+
+   .. py:attribute:: dataset_shape_voxels
+      :type:  tuple
+
+
+   .. py:method:: record(zarr_path, *, dataset_path, model_name, corrections_dir) -> dict
+
+      The registry record of a volume at ``zarr_path`` with this geometry.
+
+
+
+.. py:function:: new_volume_id() -> str
+
+   ``vol-<8 hex>-<YYYYmmdd-HHMMSS>``; the volume's zarr and bucket key are ``<id>.zarr``.
+
+
+.. py:function:: volume_corner_nm(dataset_offset_nm, output_voxel_size) -> numpy.ndarray
+
+   The world position of an annotation volume's voxel-0 lower corner, in nm.
+
+   ``dataset_offset_nm`` (a root attr of every volume) is also written as the
+   volume's OME-NGFF translation, and a translation is voxel 0's *centre*.
+   Neuroglancer drew the volume that way while it was painted, so that is
+   where the labels are: read as a corner, the value puts every label half
+   an annotation voxel away from where it was drawn.
+
+
+.. py:function:: plan_volume(raw_dataset_path: str, model_geometry) -> VolumeGeometry
+
+   Where a new volume over ``raw_dataset_path`` lies, for a model.
+
+   ``model_geometry`` has ``input_voxel_size`` and ``output_voxel_size``,
+   and either ``input_shape``/``output_shape`` in voxels or
+   ``read_shape``/``write_shape`` in nm, which is what a server reports.
+   Each voxel size is snapped to the raw level closest to it (the model's
+   own is kept as the claimed one); the volume lies on the output level's
+   grid from its corner, one chunk per model output, and covers the data
+   padded to whole chunks.
+
+
+.. py:function:: create_volume_zarr(zarr_path: str, geometry: VolumeGeometry, *, dataset_path: str, model_name: str, input_norm=None, postprocess=None, annotation_dtype='uint8', annotation_type='annotation_volume') -> str
+
+   Write an empty volume: its metadata only, no chunks. Returns ``zarr_path``.
+
+   ``input_norm`` and ``postprocess`` are the dashboard's chains when the
+   volume was made, as YAML-style lists: a resumed session inherits the
+   normalization, and a model finetuned on the volume is served with the
+   postprocessing. ``annotation_dtype`` is uint16 or uint32 when the labels
+   are instance ids.
+
+
+.. py:function:: read_volume(zarr_path: str, *, require_geometry: bool = True) -> dict
+
+   The registry record of the annotation volume at ``zarr_path``, from its attrs.
+
+   Nothing missing is guessed (it used to be 56^3 chunks, a 178^3 input and
+   16 nm voxels). Raises ValueError naming the geometry attrs the volume
+   lacks, unless ``require_geometry`` is False, when they are None in the
+   record: serving and syncing a volume need none of them. Raises
+   NotAnAnnotationVolume (a ValueError) if it is not an annotation volume
+   at all.
+
+
+.. py:function:: build_manifest(volume_meta: dict, *, input_norm, postprocess, overrides: Optional[dict] = None) -> dict
+
+   The ``_virtual_sources.json`` that trains on the volume a record describes.
+
+   ``input_norm`` and ``postprocess`` travel in it because the trainer runs
+   on LSF, where the dashboard's chains are not: without the normalization
+   it would feed the model raw uint8 while inference feeds it [-1, 1].
+   ``overrides`` replaces any key, e.g. a crops manifest's
+   patches_per_epoch. Raises ValueError naming what the record lacks
+   (the geometry read_volume reads, the zarr path, the raw dataset).
+
+
+.. py:function:: majority_vote_downsample(labels: numpy.ndarray, factors) -> numpy.ndarray
+
+   Downsample integer labels by whole per-axis factors: the majority vote of each block.
+
+   Nearest-neighbour sampling always picks one fixed corner of each block
+   (scipy.ndimage.zoom with grid_mode=True picks the block's *last* voxel on
+   every axis). Here each output voxel is the value most common across its
+   whole footprint: no systematic corner bias, and fewer boundary voxels
+   flipped by an unrepresentative single sample.
+
+
+.. py:function:: write_crop_into_volume(volume_meta: dict, entry, *, progress_callback=None) -> dict
+
+   Write a YAML crop's labels into the volume at the crop's physical place.
+
+   The labels are remapped to 1 background and 2+ foreground, resampled to
+   the volume's voxel size if it differs, and written into ``annotation/s0``
+   in parallel slabs; ``progress_callback(done, total)`` follows the slabs.
+   The import is appended to the volume's ``imported_crops`` attr (the
+   trainer's dense pool and the overlay's boxes), and returned.
+
+

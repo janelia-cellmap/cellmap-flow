@@ -10,7 +10,6 @@
       <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=4ae1632d" />
-      <link rel="stylesheet" type="text/css" href="../../../../_static/mystnb.11b39860a7a0cbfd473a3ad8a317855267ff0bd372690045ca344a6b62be495e.css" />
       <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css" />
 
   
@@ -20,12 +19,11 @@
       <script src="../../../../_static/documentation_options.js?v=5929fcd5"></script>
       <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
-      <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
     <script src="../../../../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../../../../genindex.html" />
     <link rel="search" title="Search" href="../../../../search.html" />
-    <link rel="next" title="cellmap_flow.cli.server_cli" href="../server_cli/index.html" />
-    <link rel="prev" title="cellmap_flow.cli" href="../index.html" /> 
+    <link rel="next" title="cellmap_flow.cli.common" href="../common/index.html" />
+    <link rel="prev" title="cellmap_flow.cli.aliases" href="../aliases/index.html" /> 
 </head>
 
 <body class="wy-body-for-nav"> 
@@ -50,27 +48,44 @@
               <p class="caption" role="heading"><span class="caption-text">CellMap-Flow API:</span></p>
 <ul class="current">
 <li class="toctree-l1"><a class="reference internal" href="../../../../install.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../cli.html">Command line</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../scripts.html">Python Scripts</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../yaml_config.html">YAML Configuration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../data_paths.html">Data paths</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../huggingface.html">HuggingFace Models</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../custom_script.html">Custom Model</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../post.html">PostProcessors</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../plugins.html">Plugins</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../review.html">Reviewing instances</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../viewer_api.html">Viewer layer API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../architecture.html">Architecture</a></li>
 <li class="toctree-l1 current"><a class="reference internal" href="../../../index.html">API Reference</a><ul class="current">
 <li class="toctree-l2 current"><a class="reference internal" href="../../index.html">cellmap_flow</a><ul class="current">
 <li class="toctree-l3 current"><a class="reference internal" href="../../index.html#submodules">Submodules</a><ul class="current">
 <li class="toctree-l4"><a class="reference internal" href="../../blockwise/index.html">cellmap_flow.blockwise</a></li>
 <li class="toctree-l4 current"><a class="reference internal" href="../index.html">cellmap_flow.cli</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../config/index.html">cellmap_flow.config</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../dashboard/index.html">cellmap_flow.dashboard</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../finetune/index.html">cellmap_flow.finetune</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../globals/index.html">cellmap_flow.globals</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../image_data_interface/index.html">cellmap_flow.image_data_interface</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../inference/index.html">cellmap_flow.inference</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../inferencer/index.html">cellmap_flow.inferencer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../io/index.html">cellmap_flow.io</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../jobs/index.html">cellmap_flow.jobs</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../logging_setup/index.html">cellmap_flow.logging_setup</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../models/index.html">cellmap_flow.models</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../norm/index.html">cellmap_flow.norm</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../pipeline_spec/index.html">cellmap_flow.pipeline_spec</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../plugins/index.html">cellmap_flow.plugins</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../post/index.html">cellmap_flow.post</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../process_chain/index.html">cellmap_flow.process_chain</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../review/index.html">cellmap_flow.review</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../review_index/index.html">cellmap_flow.review_index</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../server/index.html">cellmap_flow.server</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../serving/index.html">cellmap_flow.serving</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../utils/index.html">cellmap_flow.utils</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../viewer/index.html">cellmap_flow.viewer</a></li>
 </ul>
 </li>
 </ul>
@@ -108,149 +123,18 @@
              
   <section id="module-cellmap_flow.cli.cli">
 <span id="cellmap-flow-cli-cli"></span><h1>cellmap_flow.cli.cli<a class="headerlink" href="#module-cellmap_flow.cli.cli" title="Link to this heading"></a></h1>
-<p>Dynamic CLI generator that automatically detects ModelConfig subclasses
-and creates CLI commands based on their __init__ parameters.</p>
-<section id="attributes">
-<h2>Attributes<a class="headerlink" href="#attributes" title="Link to this heading"></a></h2>
-<table class="autosummary longtable docutils align-default">
-<tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.cli.cli.logger" title="cellmap_flow.cli.cli.logger"><code class="xref py py-obj docutils literal notranslate"><span class="pre">logger</span></code></a></p></td>
-<td><p></p></td>
-</tr>
-</tbody>
-</table>
-</section>
-<section id="functions">
-<h2>Functions<a class="headerlink" href="#functions" title="Link to this heading"></a></h2>
-<table class="autosummary longtable docutils align-default">
-<tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.cli.cli.cli" title="cellmap_flow.cli.cli.cli"><code class="xref py py-obj docutils literal notranslate"><span class="pre">cli</span></code></a>(log_level)</p></td>
-<td><p>CellMap Flow - Dynamic CLI for model inference.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.cli.cli.list_models" title="cellmap_flow.cli.cli.list_models"><code class="xref py py-obj docutils literal notranslate"><span class="pre">list_models</span></code></a>()</p></td>
-<td><p>List all available model configurations.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.cli.cli.register_cmd" title="cellmap_flow.cli.cli.register_cmd"><code class="xref py py-obj docutils literal notranslate"><span class="pre">register_cmd</span></code></a>(filepath, force)</p></td>
-<td><p>Register a custom plugin (normalizer, postprocessor, or model config).</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.cli.cli.unregister_cmd" title="cellmap_flow.cli.cli.unregister_cmd"><code class="xref py py-obj docutils literal notranslate"><span class="pre">unregister_cmd</span></code></a>(name)</p></td>
-<td><p>Unregister a previously registered plugin by name.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.cli.cli.list_plugins_cmd" title="cellmap_flow.cli.cli.list_plugins_cmd"><code class="xref py py-obj docutils literal notranslate"><span class="pre">list_plugins_cmd</span></code></a>()</p></td>
-<td><p>List all registered plugins.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.cli.cli.run_generic" title="cellmap_flow.cli.cli.run_generic"><code class="xref py py-obj docutils literal notranslate"><span class="pre">run_generic</span></code></a>(model_type, data_path, queue, project, ...)</p></td>
-<td><p>Generic run command that accepts any model type with dynamic configuration.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.cli.cli.create_dynamic_command" title="cellmap_flow.cli.cli.create_dynamic_command"><code class="xref py py-obj docutils literal notranslate"><span class="pre">create_dynamic_command</span></code></a>(cli_name, config_class)</p></td>
-<td><p>Dynamically create a Click command for a ModelConfig subclass.</p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.cli.cli.register_all_model_commands" title="cellmap_flow.cli.cli.register_all_model_commands"><code class="xref py py-obj docutils literal notranslate"><span class="pre">register_all_model_commands</span></code></a>()</p></td>
-<td><p>Discover and register all ModelConfig subclasses as CLI commands.</p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.cli.cli.main" title="cellmap_flow.cli.cli.main"><code class="xref py py-obj docutils literal notranslate"><span class="pre">main</span></code></a>()</p></td>
-<td><p>Entry point for the CLI.</p></td>
-</tr>
-</tbody>
-</table>
-</section>
-<section id="module-contents">
-<h2>Module Contents<a class="headerlink" href="#module-contents" title="Link to this heading"></a></h2>
-<dl class="py data">
-<dt class="sig sig-object py" id="cellmap_flow.cli.cli.logger">
-<span class="sig-prename descclassname"><span class="pre">cellmap_flow.cli.cli.</span></span><span class="sig-name descname"><span class="pre">logger</span></span><a class="headerlink" href="#cellmap_flow.cli.cli.logger" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py function">
-<dt class="sig sig-object py" id="cellmap_flow.cli.cli.cli">
-<span class="sig-prename descclassname"><span class="pre">cellmap_flow.cli.cli.</span></span><span class="sig-name descname"><span class="pre">cli</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">log_level</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.cli.cli.cli" title="Link to this definition"></a></dt>
-<dd><p>CellMap Flow - Dynamic CLI for model inference.</p>
-<p>Automatically generates commands for all available ModelConfig subclasses.</p>
-<p>Examples:</p>
-<dl class="simple">
-<dt></dt><dd><p>cellmap_flow dacapo -r my_run -i 100 -d /path/to/data
-cellmap_flow script -s /path/to/script.py -d /path/to/data
-cellmap_flow cellmap -f /path/to/model -n mymodel -d /path/to/data</p>
-</dd>
-</dl>
-<p>Related commands, each with its own –help:</p>
-<dl class="simple">
-<dt></dt><dd><p>cellmap_flow_yaml                run one or more models from a YAML config
-cellmap_flow_view                open the viewer, pick models in the UI
-cellmap_flow_blockwise           run a model over a whole volume to disk
-cellmap_flow_blockwise_multiple  the same for several models
-cellmap_flow_server              serve one model (usually launched for you)
-cellmap_flow_app                 serve the dashboard against a running server</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py function">
-<dt class="sig sig-object py" id="cellmap_flow.cli.cli.list_models">
-<span class="sig-prename descclassname"><span class="pre">cellmap_flow.cli.cli.</span></span><span class="sig-name descname"><span class="pre">list_models</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.cli.cli.list_models" title="Link to this definition"></a></dt>
-<dd><p>List all available model configurations.</p>
-</dd></dl>
-
-<dl class="py function">
-<dt class="sig sig-object py" id="cellmap_flow.cli.cli.register_cmd">
-<span class="sig-prename descclassname"><span class="pre">cellmap_flow.cli.cli.</span></span><span class="sig-name descname"><span class="pre">register_cmd</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">filepath</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">force</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.cli.cli.register_cmd" title="Link to this definition"></a></dt>
-<dd><p>Register a custom plugin (normalizer, postprocessor, or model config).</p>
-<p>FILEPATH is the path to a .py file defining subclasses of
-InputNormalizer, PostProcessor, or ModelConfig.</p>
-<p class="rubric">Example</p>
-<p>cellmap_flow register my_normalizer.py</p>
-</dd></dl>
-
-<dl class="py function">
-<dt class="sig sig-object py" id="cellmap_flow.cli.cli.unregister_cmd">
-<span class="sig-prename descclassname"><span class="pre">cellmap_flow.cli.cli.</span></span><span class="sig-name descname"><span class="pre">unregister_cmd</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.cli.cli.unregister_cmd" title="Link to this definition"></a></dt>
-<dd><p>Unregister a previously registered plugin by name.</p>
-<p>NAME is the plugin filename (with or without .py extension).</p>
-<p class="rubric">Example</p>
-<p>cellmap_flow unregister my_normalizer</p>
-</dd></dl>
-
-<dl class="py function">
-<dt class="sig sig-object py" id="cellmap_flow.cli.cli.list_plugins_cmd">
-<span class="sig-prename descclassname"><span class="pre">cellmap_flow.cli.cli.</span></span><span class="sig-name descname"><span class="pre">list_plugins_cmd</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.cli.cli.list_plugins_cmd" title="Link to this definition"></a></dt>
-<dd><p>List all registered plugins.</p>
-</dd></dl>
-
-<dl class="py function">
-<dt class="sig sig-object py" id="cellmap_flow.cli.cli.run_generic">
-<span class="sig-prename descclassname"><span class="pre">cellmap_flow.cli.cli.</span></span><span class="sig-name descname"><span class="pre">run_generic</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model_type</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">queue</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">project</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">config</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">server_check</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.cli.cli.run_generic" title="Link to this definition"></a></dt>
-<dd><p>Generic run command that accepts any model type with dynamic configuration.</p>
-<p class="rubric">Example</p>
-<p>cellmap_flow run -m dacapo -d /data/path -c run_name=myrun -c iteration=100</p>
-</dd></dl>
-
-<dl class="py function">
-<dt class="sig sig-object py" id="cellmap_flow.cli.cli.create_dynamic_command">
-<span class="sig-prename descclassname"><span class="pre">cellmap_flow.cli.cli.</span></span><span class="sig-name descname"><span class="pre">create_dynamic_command</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">cli_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">config_class</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Type</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="../../models/models_config/index.html#cellmap_flow.models.models_config.ModelConfig" title="cellmap_flow.models.models_config.ModelConfig"><span class="pre">cellmap_flow.models.models_config.ModelConfig</span></a><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.cli.cli.create_dynamic_command" title="Link to this definition"></a></dt>
-<dd><p>Dynamically create a Click command for a ModelConfig subclass.</p>
-</dd></dl>
-
-<dl class="py function">
-<dt class="sig sig-object py" id="cellmap_flow.cli.cli.register_all_model_commands">
-<span class="sig-prename descclassname"><span class="pre">cellmap_flow.cli.cli.</span></span><span class="sig-name descname"><span class="pre">register_all_model_commands</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.cli.cli.register_all_model_commands" title="Link to this definition"></a></dt>
-<dd><p>Discover and register all ModelConfig subclasses as CLI commands.</p>
-</dd></dl>
-
-<dl class="py function">
-<dt class="sig sig-object py" id="cellmap_flow.cli.cli.main">
-<span class="sig-prename descclassname"><span class="pre">cellmap_flow.cli.cli.</span></span><span class="sig-name descname"><span class="pre">main</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.cli.cli.main" title="Link to this definition"></a></dt>
-<dd><p>Entry point for the CLI.</p>
-</dd></dl>
-
-</section>
+<p>Where the <code class="docutils literal notranslate"><span class="pre">cellmap_flow</span></code> console script pointed before 0.3.0.</p>
+<p>An environment installed before then still runs <code class="docutils literal notranslate"><span class="pre">cellmap_flow</span></code> through
+this name until it is reinstalled; since 0.3.0 the command is
+<code class="docutils literal notranslate"><span class="pre">cli/main.py</span></code>. Delete in the release after 0.3.0.</p>
 </section>
 
 
            </div>
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
-        <a href="../index.html" class="btn btn-neutral float-left" title="cellmap_flow.cli" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
-        <a href="../server_cli/index.html" class="btn btn-neutral float-right" title="cellmap_flow.cli.server_cli" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="../aliases/index.html" class="btn btn-neutral float-left" title="cellmap_flow.cli.aliases" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../common/index.html" class="btn btn-neutral float-right" title="cellmap_flow.cli.common" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>

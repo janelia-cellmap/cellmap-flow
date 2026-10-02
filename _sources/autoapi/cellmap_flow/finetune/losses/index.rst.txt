@@ -1,0 +1,183 @@
+cellmap_flow.finetune.losses
+============================
+
+.. py:module:: cellmap_flow.finetune.losses
+
+.. autoapi-nested-parse::
+
+   The finetune losses, and the masked means they are all made of.
+
+   Every loss here is averaged over the voxels a mask supervises, not over the
+   patch: a correction labels a few voxels of it, and the rest must not count.
+   ``masked_mean`` is that average, ``balanced_mean`` gives the foreground and
+   the background half the weight each, and the losses and the distillation
+   term below are built from the two.
+
+   The float operations are kept in the order the trainer always used, so a
+   run computes the same numbers bit for bit
+   (tests/finetune/test_training_snapshot.py).
+
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.losses.DiceLoss
+   cellmap_flow.finetune.losses.CombinedLoss
+   cellmap_flow.finetune.losses.MarginLoss
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.losses.masked_mean
+   cellmap_flow.finetune.losses.balanced_mean
+   cellmap_flow.finetune.losses.as_probabilities
+   cellmap_flow.finetune.losses.soft_target_entropy
+   cellmap_flow.finetune.losses.distillation_loss
+
+
+Module Contents
+---------------
+
+.. py:function:: masked_mean(x, weight)
+
+   Mean of ``x`` weighted by ``weight`` (a 0/1 mask, usually); 0 when nothing is weighted.
+
+
+.. py:function:: balanced_mean(x, hard_target, mask)
+
+   The foreground's and the background's masked means, averaged.
+
+   Each class counts the same however many voxels it has. The split is by
+   the target as annotated (0/1), before any label smoothing: split by the
+   smoothed target, every background voxel carried s/2 of foreground weight.
+
+
+.. py:function:: as_probabilities(pred, model_has_sigmoid)
+
+   The model's output as probabilities.
+
+   Left alone when the model already ends in a sigmoid (the cellmap
+   *_distance_* UNets do); a second sigmoid would squash [0, 1] into
+   [0.5, 0.73] and make a well-fitting prediction look like a constant.
+
+
+.. py:function:: soft_target_entropy(target, eps=1e-07)
+
+   Per-voxel BCE that a perfectly calibrated prediction still pays.
+
+   -(t log t + (1-t) log(1-t)): zero for hard 0/1 targets, log 2 at
+   t = 0.5. On soft targets (distance, smoothed labels) this is the floor
+   of the BCE curve, and it moves with the batch, so a "flat" BCE can be a
+   model sitting on its floor. Report the loss minus this instead.
+
+
+.. py:function:: distillation_loss(student, teacher, scope, anchor_mask=None, unlabeled_mask=None)
+
+   Mean squared distance of the student's output from the teacher's, over ``scope``.
+
+   - ``"anchor"``: the good regions the user vouched for, ``anchor_mask``.
+     It is about location, so one channel, broadcast over the output's.
+   - ``"unlabeled"``: the voxels the supervised loss leaves out,
+     ``unlabeled_mask`` (1 - the supervised mask).
+   - ``"all"``: every voxel.
+
+   The two are compared as the model emits them: logits, or probabilities
+   for a model that ends in a sigmoid.
+
+
+.. py:class:: DiceLoss(smooth: float = 1.0)
+
+
+
+   Dice Loss for segmentation tasks.
+
+   Dice loss is effective for imbalanced datasets where the target class
+   may be sparse (e.g., mitochondria in EM images).
+
+   Formula: 1 - (2 * |X ∩ Y| + smooth) / (|X| + |Y| + smooth)
+
+
+   .. py:attribute:: smooth
+      :value: 1.0
+
+
+
+   .. py:attribute:: apply_sigmoid
+      :value: True
+
+
+
+   .. py:method:: forward(pred: torch.Tensor, target: torch.Tensor, mask: Optional[torch.Tensor] = None) -> torch.Tensor
+
+      Dice loss of (B, C, Z, Y, X) logits (or probabilities) against 0/1 targets, over ``mask``.
+
+
+
+.. py:class:: CombinedLoss(dice_weight: float = 0.5, bce_weight: float = 0.5)
+
+
+
+   Combined Dice + BCE loss for better convergence.
+
+   Uses both Dice loss (for overlap) and BCE loss (for pixel-wise accuracy).
+
+
+   .. py:attribute:: dice_loss
+
+
+   .. py:attribute:: bce_loss
+
+
+   .. py:attribute:: dice_weight
+      :value: 0.5
+
+
+
+   .. py:attribute:: bce_weight
+      :value: 0.5
+
+
+
+   .. py:method:: forward(pred: torch.Tensor, target: torch.Tensor, mask: Optional[torch.Tensor] = None) -> torch.Tensor
+
+      Weighted Dice + BCE of (B, C, Z, Y, X) logits against 0/1 targets, over ``mask``.
+
+
+
+.. py:class:: MarginLoss(margin: float = 0.3, balance_classes: bool = False)
+
+
+
+   Margin-based loss for sparse/scribble annotations.
+
+   Only penalizes predictions on the wrong side of a margin threshold.
+   For post-sigmoid outputs in [0, 1]:
+   - Foreground (target=1): loss = relu(threshold - pred)^2, threshold = 1 - margin
+   - Background (target=0): loss = relu(pred - margin)^2
+   - No loss when prediction is already correct with sufficient confidence.
+
+
+   .. py:attribute:: margin
+      :value: 0.3
+
+
+
+   .. py:attribute:: balance_classes
+      :value: False
+
+
+
+   .. py:attribute:: apply_sigmoid
+      :value: True
+
+
+
+   .. py:method:: forward(pred: torch.Tensor, target: torch.Tensor, mask: Optional[torch.Tensor] = None) -> torch.Tensor
+
+

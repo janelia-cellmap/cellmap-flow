@@ -10,7 +10,6 @@
       <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="_static/graphviz.css?v=4ae1632d" />
-      <link rel="stylesheet" type="text/css" href="_static/mystnb.11b39860a7a0cbfd473a3ad8a317855267ff0bd372690045ca344a6b62be495e.css" />
       <link rel="stylesheet" type="text/css" href="_static/css/custom.css" />
 
   
@@ -20,7 +19,6 @@
       <script src="_static/documentation_options.js?v=5929fcd5"></script>
       <script src="_static/doctools.js?v=fd6eb6e6"></script>
       <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
-      <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
     <script src="_static/js/theme.js"></script>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
@@ -49,12 +47,17 @@
               <p class="caption" role="heading"><span class="caption-text">CellMap-Flow API:</span></p>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="install.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="cli.html">Command line</a></li>
 <li class="toctree-l1"><a class="reference internal" href="scripts.html">Python Scripts</a></li>
 <li class="toctree-l1"><a class="reference internal" href="yaml_config.html">YAML Configuration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="data_paths.html">Data paths</a></li>
 <li class="toctree-l1"><a class="reference internal" href="huggingface.html">HuggingFace Models</a></li>
 <li class="toctree-l1"><a class="reference internal" href="custom_script.html">Custom Model</a></li>
 <li class="toctree-l1"><a class="reference internal" href="post.html">PostProcessors</a></li>
 <li class="toctree-l1"><a class="reference internal" href="plugins.html">Plugins</a></li>
+<li class="toctree-l1"><a class="reference internal" href="review.html">Reviewing instances</a></li>
+<li class="toctree-l1"><a class="reference internal" href="viewer_api.html">Viewer layer API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="architecture.html">Architecture</a></li>
 <li class="toctree-l1"><a class="reference internal" href="autoapi/index.html">API Reference</a></li>
 </ul>
 
@@ -148,39 +151,48 @@ See <a class="reference internal" href="#docs/finetuning.md"><span class="xref m
 </section>
 <section id="usage">
 <h1>Usage<a class="headerlink" href="#usage" title="Link to this heading"></a></h1>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>$<span class="w"> </span>cellmap_flow
-
-Usage:<span class="w"> </span>cellmap_flow<span class="w"> </span><span class="o">[</span>OPTIONS<span class="o">]</span><span class="w"> </span>COMMAND<span class="w"> </span><span class="o">[</span>ARGS<span class="o">]</span>...
-
-<span class="w">  </span>Examples:<span class="w">     </span>
-<span class="w">    </span>To<span class="w"> </span>use<span class="w"> </span>Dacapo<span class="w"> </span>run<span class="w"> </span>the<span class="w"> </span>following<span class="w"> </span>commands:<span class="w">  </span>
-<span class="w">    </span>cellmap_flow<span class="w"> </span>dacapo<span class="w"> </span>-r<span class="w"> </span>my_run<span class="w"> </span>-i<span class="w"> </span>iteration<span class="w"> </span>-d<span class="w"> </span>data_path
-
-<span class="w">    </span>To<span class="w"> </span>use<span class="w"> </span>custom<span class="w"> </span>script
-<span class="w">    </span>cellmap_flow<span class="w"> </span>script<span class="w"> </span>-s<span class="w"> </span>script_path<span class="w"> </span>-d<span class="w"> </span>data_path
-
-<span class="w">    </span>To<span class="w"> </span>use<span class="w"> </span>bioimage-io<span class="w"> </span>model<span class="w"> </span>
-<span class="w">    </span>cellmap_flow<span class="w"> </span>bioimage<span class="w"> </span>-m<span class="w"> </span>model_path<span class="w"> </span>-d<span class="w"> </span>data_path
-
+<p><code class="docutils literal notranslate"><span class="pre">cellmap_flow</span></code> has a subcommand for each job; <code class="docutils literal notranslate"><span class="pre">cellmap_flow</span> <span class="pre">&lt;command&gt;</span> <span class="pre">--help</span></code>
+shows its options, and the <a class="reference internal" href="#docs/source/cli.rst"><span class="xref myst">CLI page</span></a> lists them all,
+with the names they had before 0.3.0.</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>$<span class="w"> </span>cellmap_flow<span class="w"> </span>--help
 
 Commands:
-<span class="w">  </span>bioimage<span class="w">  </span>Run<span class="w"> </span>the<span class="w"> </span>CellMapFlow<span class="w"> </span>server<span class="w"> </span>with<span class="w"> </span>a<span class="w"> </span>bioimage-io<span class="w"> </span>model.
-<span class="w">  </span>dacapo<span class="w">    </span>Run<span class="w"> </span>the<span class="w"> </span>CellMapFlow<span class="w"> </span>server<span class="w"> </span>with<span class="w"> </span>a<span class="w"> </span>DaCapo<span class="w"> </span>model.
-<span class="w">  </span>script<span class="w">    </span>Run<span class="w"> </span>the<span class="w"> </span>CellMapFlow<span class="w"> </span>server<span class="w"> </span>with<span class="w"> </span>a<span class="w"> </span>custom<span class="w"> </span>script.
+<span class="w">  </span>blockwise<span class="w">  </span>Run<span class="w"> </span>the<span class="w"> </span>model<span class="w"> </span>a<span class="w"> </span>blockwise<span class="w"> </span>YAML<span class="w"> </span>describes<span class="w"> </span>over<span class="w"> </span>the<span class="w"> </span>whole...
+<span class="w">  </span>dashboard<span class="w">  </span>Serve<span class="w"> </span>the<span class="w"> </span>dashboard<span class="w"> </span>alone,<span class="w"> </span><span class="k">for</span><span class="w"> </span>a<span class="w"> </span>viewer<span class="w"> </span>already<span class="w"> </span>running.
+<span class="w">  </span>doctor<span class="w">     </span>Check<span class="w"> </span>the<span class="w"> </span>environment:<span class="w"> </span>what<span class="w"> </span>is<span class="w"> </span>installed,<span class="w"> </span>what<span class="w"> </span>is<span class="w"> </span>missing,...
+<span class="w">  </span>finetune<span class="w">   </span>The<span class="w"> </span>finetune<span class="w"> </span>tools.
+<span class="w">  </span>infer<span class="w">      </span>Start<span class="w"> </span>a<span class="w"> </span>model<span class="s1">'s inference server, then open the viewer on...</span>
+<span class="s1">  models     List the model types and the arguments each takes.</span>
+<span class="s1">  plugins    Register, unregister and list plugins.</span>
+<span class="s1">  serve      Serve one model'</span>s<span class="w"> </span>predictions,<span class="w"> </span>as<span class="w"> </span>an<span class="w"> </span>inference<span class="w"> </span>job<span class="w"> </span>does<span class="w"> </span>on...
+<span class="w">  </span>view<span class="w">       </span>Start<span class="w"> </span>CellMap<span class="w"> </span>Flow<span class="w"> </span>viewer<span class="w"> </span>with<span class="w"> </span>a<span class="w"> </span>dataset.
+<span class="w">  </span>yaml<span class="w">       </span>Run<span class="w"> </span>multiple<span class="w"> </span>model<span class="w"> </span>inference<span class="w"> </span><span class="nb">jobs</span><span class="w"> </span>from<span class="w"> </span>a<span class="w"> </span>YAML<span class="w"> </span>configuration...
+
+$<span class="w"> </span>cellmap_flow<span class="w"> </span>view<span class="w"> </span>-d<span class="w"> </span>data_path<span class="w">                       </span><span class="c1"># pick models in the dashboard</span>
+$<span class="w"> </span>cellmap_flow<span class="w"> </span>yaml<span class="w"> </span>config.yaml<span class="w">                        </span><span class="c1"># the models a YAML lists</span>
+$<span class="w"> </span>cellmap_flow<span class="w"> </span>infer<span class="w"> </span>dacapo<span class="w"> </span>-r<span class="w"> </span>my_run<span class="w"> </span>-i<span class="w"> </span>iteration<span class="w"> </span>-d<span class="w"> </span>data_path
+$<span class="w"> </span>cellmap_flow<span class="w"> </span>infer<span class="w"> </span>script<span class="w"> </span>-s<span class="w"> </span>script_path<span class="w"> </span>-d<span class="w"> </span>data_path
+$<span class="w"> </span>cellmap_flow<span class="w"> </span>infer<span class="w"> </span>bioimage<span class="w"> </span>-m<span class="w"> </span>model_path<span class="w"> </span>-v<span class="w"> </span><span class="m">8</span>,8,8<span class="w"> </span>-d<span class="w"> </span>data_path
 </pre></div>
 </div>
-<p>Currently available:</p>
+<p>A data path is a zarr (v2 or v3), N5 or Neuroglancer precomputed volume, on
+disk or at an <code class="docutils literal notranslate"><span class="pre">s3://</span></code>, <code class="docutils literal notranslate"><span class="pre">gs://</span></code> or <code class="docutils literal notranslate"><span class="pre">https://</span></code> URL; public buckets are read
+anonymously, private ones with your AWS or Google credentials. See
+<a class="reference internal" href="#docs/source/data_paths.rst"><span class="xref myst">data paths</span></a>.</p>
+<p>A model is fed the dataset’s level at its own voxel size. When the dataset has
+no such level, <code class="docutils literal notranslate"><span class="pre">--resample</span></code> (or <code class="docutils literal notranslate"><span class="pre">resample:</span> <span class="pre">true</span></code> in a YAML) resamples the
+nearest one to it; without it the nearest level is used as it is.</p>
 </section>
 <section id="using-custom-script">
 <h1>Using custom script:<a class="headerlink" href="#using-custom-script" title="Link to this heading"></a></h1>
 <p>This enables using any model by providing a script e.g. <a class="reference internal" href="#example/model_spec.py"><span class="xref myst">example/model_spec.py</span></a>
 e.g.</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>cellmap_flow<span class="w"> </span>script<span class="w"> </span>-s<span class="w"> </span>/groups/cellmap/cellmap/zouinkhim/cellmap-flow/example/model_spec.py<span class="w"> </span>-d<span class="w"> </span>/nrs/cellmap/data/jrc_mus-cerebellum-1/jrc_mus-cerebellum-1.zarr/recon-1/em/fibsem-uint8/s0<span class="w"> </span>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>cellmap_flow<span class="w"> </span>infer<span class="w"> </span>script<span class="w"> </span>-s<span class="w"> </span>/groups/cellmap/cellmap/zouinkhim/cellmap-flow/example/model_spec.py<span class="w"> </span>-d<span class="w"> </span>/nrs/cellmap/data/jrc_mus-cerebellum-1/jrc_mus-cerebellum-1.zarr/recon-1/em/fibsem-uint8/s0<span class="w"> </span>
 </pre></div>
 </div>
 <section id="script-keywords">
 <h2>Script keywords:<a class="headerlink" href="#script-keywords" title="Link to this heading"></a></h2>
-<p>Define these variables in your script (<code class="docutils literal notranslate"><span class="pre">cellmap_flow</span> <span class="pre">script</span> <span class="pre">-s</span> <span class="pre">path/to/your_script.py</span></code>):</p>
+<p>Define these variables in your script (<code class="docutils literal notranslate"><span class="pre">cellmap_flow</span> <span class="pre">infer</span> <span class="pre">script</span> <span class="pre">-s</span> <span class="pre">path/to/your_script.py</span></code>):</p>
 <ul class="simple">
 <li><p><strong>model</strong>:
 The PyTorch model to be used for inference.</p></li>
@@ -203,7 +215,7 @@ The number of channels in the output of the model.</p></li>
 <h1>Using Dacapo model:<a class="headerlink" href="#using-dacapo-model" title="Link to this heading"></a></h1>
 <p>which enable inference using a Dacapo model by providing the run name and iteration number
 e.g.</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>cellmap_flow<span class="w"> </span>dacapo<span class="w"> </span>-r<span class="w"> </span>20241204_finetune_mito_affs_task_datasplit_v3_u21_kidney_mito_default_cache_8_1<span class="w"> </span>-i<span class="w"> </span><span class="m">700000</span><span class="w"> </span>-d<span class="w"> </span>/nrs/cellmap/data/jrc_ut21-1413-003/jrc_ut21-1413-003.zarr/recon-1/em/fibsem-uint8/s0
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>cellmap_flow<span class="w"> </span>infer<span class="w"> </span>dacapo<span class="w"> </span>-r<span class="w"> </span>20241204_finetune_mito_affs_task_datasplit_v3_u21_kidney_mito_default_cache_8_1<span class="w"> </span>-i<span class="w"> </span><span class="m">700000</span><span class="w"> </span>-d<span class="w"> </span>/nrs/cellmap/data/jrc_ut21-1413-003/jrc_ut21-1413-003.zarr/recon-1/em/fibsem-uint8/s0
 </pre></div>
 </div>
 </section>
@@ -215,9 +227,10 @@ e.g.</p>
 <h1>Using TensorFlow model:<a class="headerlink" href="#using-tensorflow-model" title="Link to this heading"></a></h1>
 <p>To run TensorFlow models, we suggest installing TensorFlow via conda: <code class="docutils literal notranslate"><span class="pre">conda</span> <span class="pre">install</span> <span class="pre">tensorflow-gpu==2.16.1</span></code></p>
 </section>
-<section id="run-multiple-model-at-once">
-<h1>Run multiple model at once:<a class="headerlink" href="#run-multiple-model-at-once" title="Link to this heading"></a></h1>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>cellmap_flow_multiple<span class="w"> </span>--script<span class="w"> </span>-s<span class="w"> </span>/groups/cellmap/cellmap/zouinkhim/cellmap-flow/example/model_spec.py<span class="w"> </span>-n<span class="w"> </span>script_base<span class="w"> </span>--dacapo<span class="w"> </span>-r<span class="w"> </span>20241204_finetune_mito_affs_task_datasplit_v3_u21_kidney_mito_default_cache_8_1<span class="w"> </span>-i<span class="w"> </span><span class="m">700000</span><span class="w"> </span>-n<span class="w"> </span>using_dacapo<span class="w"> </span>-d<span class="w"> </span>/nrs/cellmap/data/jrc_ut21-1413-003/jrc_ut21-1413-003.zarr/recon-1/em/fibsem-uint8/s0
+<section id="run-multiple-models-at-once">
+<h1>Run multiple models at once:<a class="headerlink" href="#run-multiple-models-at-once" title="Link to this heading"></a></h1>
+<p>List them in a YAML file (<a class="reference internal" href="#docs/source/yaml_config.rst"><span class="xref myst">docs/source/yaml_config.rst</span></a>) and run</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>cellmap_flow<span class="w"> </span>yaml<span class="w"> </span>config.yaml
 </pre></div>
 </div>
 </section>

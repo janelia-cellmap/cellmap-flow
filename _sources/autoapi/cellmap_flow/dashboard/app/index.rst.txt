@@ -40,5 +40,15 @@ Module Contents
 
 .. py:data:: log_handler
 
-.. py:function:: create_and_run_app(neuroglancer_url=None, inference_servers=None)
+.. py:function:: create_and_run_app(neuroglancer_url=None)
+
+   Serve the dashboard on a free port, until the process is stopped.
+
+   It prints its URL, and writes it where SERVICE_URL_PATH says. Its
+   terminal lines (the URL, the models it launches) are INFO: a
+   cellmap_flow command has configured logging by now, and a script that
+   calls this without doing so gets the shared format at INFO. It loads
+   the plugins, whose normalizers, postprocessors and model types its
+   pages offer, if nothing has yet.
+
 

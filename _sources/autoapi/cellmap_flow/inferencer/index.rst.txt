@@ -3,6 +3,20 @@ cellmap_flow.inferencer
 
 .. py:module:: cellmap_flow.inferencer
 
+.. autoapi-nested-parse::
+
+   Predicting a chunk and postprocessing it: the Inferencer.
+
+   The model itself (the device, the warmup, the forward and the device
+   slots) is ``inference.runner.ModelRunner``; an Inferencer is a ModelRunner
+   that also applies a normalization and postprocessing chain, the layer's own
+   or the process's (``process_chain()``).
+
+   ``predict(read_roi, write_roi, config, **kwargs)`` and ``apply_postprocess``
+   are what model scripts are written against, so both stay importable from
+   here; ``predict`` itself is the runner's default forward.
+
+
 
 Attributes
 ----------
@@ -26,7 +40,6 @@ Functions
 .. autoapisummary::
 
    cellmap_flow.inferencer.apply_postprocess
-   cellmap_flow.inferencer.predict
 
 
 Module Contents
@@ -34,36 +47,38 @@ Module Contents
 
 .. py:data:: logger
 
-.. py:function:: apply_postprocess(data, **kwargs)
+.. py:function:: apply_postprocess(data, postprocess=None, **kwargs)
 
-.. py:function:: predict(read_roi, write_roi, config, **kwargs)
+   Run ``data`` through a postprocessing chain.
 
-.. py:class:: Inferencer(model_config: cellmap_flow.models.models_config.ModelConfig, use_half_prediction=False)
-
-   .. py:attribute:: use_half_prediction
-      :value: False
-
+   ``postprocess=None`` means the process's chain,
+   ``process_chain().postprocess``; the server passes the chain of the layer
+   being requested instead.
 
 
-   .. py:attribute:: model_config
-
-
-   .. py:attribute:: output_range
-      :value: None
+.. py:class:: Inferencer(model_config, use_half_prediction=False, device_slots=None, half_precision=False)
 
 
 
-   .. py:attribute:: output_class
-      :value: None
+   A ModelRunner that normalizes its input and postprocesses its output.
 
 
+   .. py:method:: process_chunk(idi, roi, input_norms=None, postprocess=None, cancelled=None, grid_origin=None)
 
-   .. py:method:: optimize_model()
+      Predict ``roi`` and postprocess it.
 
+      ``input_norms`` / ``postprocess``: the chain to use for this chunk.
+      ``None`` falls back to the process's chain (``process_chain()``), for
+      callers (scripts) that set the chain process-wide.
 
-   .. py:method:: process_chunk(idi, roi)
+      ``cancelled``: asked while the chunk waits for a device slot; raises
+      ChunkCancelled, without computing it, once that says yes.
 
+      ``grid_origin``: where (nm) the chunk grid ``roi`` lies on starts, so
+      the steps get ``roi``'s index on that grid as ``chunk_corner``; None
+      means a grid starting at 0. The server and blockwise both start
+      theirs at the raw data's corner (see ``_chunk_index``), so a region
+      gets the same unique label ids from either.
 
-   .. py:method:: process_chunk_basic(idi, roi)
 
 

@@ -1,0 +1,67 @@
+cellmap_flow.serving.restart_token
+==================================
+
+.. py:module:: cellmap_flow.serving.restart_token
+
+.. autoapi-nested-parse::
+
+   The shared secret that authorizes restarting a finetune job over HTTP.
+
+   A job's embedded inference server accepts POST /__control__/restart, and a
+   restart can change what the job trains on, so it must not be callable by
+   anyone who can reach the node. The job manager writes a random token into the
+   job's output directory before submitting it, readable only by the user; the
+   training process reads it from there and the dashboard sends it with every
+   restart. It never goes on the command line, where `bjobs -l` would show it to
+   other users of the cluster.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.serving.restart_token.TOKEN_FILE
+   cellmap_flow.serving.restart_token.TOKEN_HEADER
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.serving.restart_token.write_restart_token
+   cellmap_flow.serving.restart_token.read_restart_token
+   cellmap_flow.serving.restart_token.read_or_create_restart_token
+   cellmap_flow.serving.restart_token.tokens_match
+
+
+Module Contents
+---------------
+
+.. py:data:: TOKEN_FILE
+   :value: 'restart_token'
+
+
+.. py:data:: TOKEN_HEADER
+   :value: 'X-Restart-Token'
+
+
+.. py:function:: write_restart_token(output_dir) -> str
+
+   Create a new token in ``output_dir`` (mode 0600) and return it.
+
+
+.. py:function:: read_restart_token(output_dir) -> Optional[str]
+
+   The token in ``output_dir``, or None if there is none.
+
+
+.. py:function:: read_or_create_restart_token(output_dir) -> str
+
+   The job's token, creating one for runs the job manager did not launch.
+
+
+.. py:function:: tokens_match(expected: Optional[str], provided: Optional[str]) -> bool
+

@@ -1,0 +1,75 @@
+cellmap_flow.review_index
+=========================
+
+.. py:module:: cellmap_flow.review_index
+
+.. autoapi-nested-parse::
+
+   Build a review index, the SQLite file the dashboard's Review tab opens,
+   from an instance segmentation.
+
+       python -m cellmap_flow.review_index LABELS OUT.sqlite [--queue NAME ...]
+
+   LABELS is anything ImageDataInterface reads (zarr v2/v3, N5, precomputed;
+   a multiscale group is read at its finest level), with 0 as background. The
+   index has the schema cellmap_flow.review reads: one ``instances`` row per
+   label with its voxel count, bounding box (voxels, half-open) and centroid
+   (voxels, and in world nm), plus one ``rank_<queue>`` column per queue; one
+   empty ``ledger`` row per label; and ``meta``.
+
+   The volume is read in blocks of whole chunks and only per-label sums are
+   kept, so it need not fit in memory.
+
+   Queues are chosen with ``--queue`` from QUEUES. Other orderings are data:
+   any ``rank_<name>`` column added to ``instances`` later (say, from
+   per-instance intensity) shows up in the tab as a queue called ``<name>``.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.review_index.QUEUES
+   cellmap_flow.review_index.DEFAULT_QUEUES
+   cellmap_flow.review_index.MIN_BLOCK_EDGE
+   cellmap_flow.review_index.MAX_LABEL
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.review_index.build_index
+   cellmap_flow.review_index.main
+
+
+Module Contents
+---------------
+
+.. py:data:: QUEUES
+
+.. py:data:: DEFAULT_QUEUES
+   :value: ('smallest', 'random')
+
+
+.. py:data:: MIN_BLOCK_EDGE
+   :value: 128
+
+
+.. py:data:: MAX_LABEL
+   :value: 9223372036854775807
+
+
+.. py:function:: build_index(labels_path: str, db_path: str, queues: Sequence[str] = DEFAULT_QUEUES, seed: int = 0, block_shape: Optional[Sequence[int]] = None) -> Dict[str, object]
+
+   Write the review index for ``labels_path`` to ``db_path``.
+
+   Refuses to overwrite ``db_path``: its ledger holds the verdicts.
+   Returns ``{"n_instances", "voxel_size_nm", "offset_nm"}``.
+
+
+.. py:function:: main(argv=None)
+

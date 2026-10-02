@@ -9,7 +9,6 @@ Attributes
 
 .. autoapisummary::
 
-   cellmap_flow.dashboard.routes.bbx_generator.bbx_generator_state
    cellmap_flow.dashboard.routes.bbx_generator.logger
    cellmap_flow.dashboard.routes.bbx_generator.bbx_bp
    cellmap_flow.dashboard.routes.bbx_generator.BBOX_LAYER_NAME
@@ -28,8 +27,6 @@ Functions
 Module Contents
 ---------------
 
-.. py:data:: bbx_generator_state
-
 .. py:data:: logger
 
 .. py:data:: bbx_bp
@@ -40,7 +37,7 @@ Module Contents
 
 .. py:function:: start_bbx_generator()
 
-   Start the Neuroglancer viewer for creating bounding boxes
+   Start the box tool's Neuroglancer viewer (a BbxGenerator).
 
 
 .. py:function:: get_bbx_generator_status()

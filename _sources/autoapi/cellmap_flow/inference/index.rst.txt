@@ -1,0 +1,23 @@
+cellmap_flow.inference
+======================
+
+.. py:module:: cellmap_flow.inference
+
+.. autoapi-nested-parse::
+
+   Running a model: ``runner.ModelRunner`` and the device slots it shares.
+
+   This package imports nothing on its own; import ``cellmap_flow.inference.runner``.
+
+
+
+Submodules
+----------
+
+.. toctree::
+   :maxdepth: 1
+
+   /autoapi/cellmap_flow/inference/runner/index
+   /autoapi/cellmap_flow/inference/timing/index
+
+

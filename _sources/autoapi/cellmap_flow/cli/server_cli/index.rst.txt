@@ -5,8 +5,19 @@ cellmap_flow.cli.server_cli
 
 .. autoapi-nested-parse::
 
-   Dynamic server CLI generator that automatically detects ModelConfig subclasses
-   and creates server commands based on their __init__ parameters.
+   The inference server: serve one model's predictions, on the node an
+   inference job runs on.
+
+   - ``cellmap_flow serve --model <entry> -d <data path>`` (``serve``), what
+     the launchers run since 0.3.0 (``serving.launch``). The entry is
+     ``ModelConfig.launch_entry`` as JSON, rebuilt as a YAML's model entry is
+     (``registry.build_model``).
+   - ``cellmap_flow_server``, the server's program before 0.3.0, which goes in
+     the release after it. It takes ``--model`` too, for a deployment whose
+     CELLMAP_FLOW_SERVER_COMMAND still names it; and it keeps a command for
+     each model type, which a dashboard from before 0.3.0 launches: built
+     when click asks for it, with the type's constructor arguments as options
+     (``registry.click_options``, the ``ModelConfig.command`` form).
 
 
 
@@ -23,12 +34,12 @@ Functions
 
 .. autoapisummary::
 
+   cellmap_flow.cli.server_cli.run_server
+   cellmap_flow.cli.server_cli.serve_entry
+   cellmap_flow.cli.server_cli.serve
+   cellmap_flow.cli.server_cli.create_dynamic_server_command
    cellmap_flow.cli.server_cli.cli
    cellmap_flow.cli.server_cli.list_models
-   cellmap_flow.cli.server_cli.run_server
-   cellmap_flow.cli.server_cli.create_dynamic_server_command
-   cellmap_flow.cli.server_cli.register_all_server_commands
-   cellmap_flow.cli.server_cli.run_ui_server
    cellmap_flow.cli.server_cli.main
 
 
@@ -37,27 +48,32 @@ Module Contents
 
 .. py:data:: logger
 
-.. py:function:: cli(log_level)
+.. py:function:: run_server(model_config, data_path, debug=False, port=0, certfile=None, keyfile=None, resample=False)
 
-   CellMap Flow Server - Dynamic CLI for running inference servers.
-
-   Automatically generates server commands for all available ModelConfig subclasses.
-
-   .. rubric:: Examples
-
-   cellmap_flow_server dacapo -r my_run -i 100 -d /path/to/data
-   cellmap_flow_server script -s /path/to/script.py -d /path/to/data
-   cellmap_flow_server cellmap -f /path/to/model -n mymodel -d /path/to/data
+   Run the CellMapFlow server with the given configuration; ``resample``
+   as CellMapFlowServer takes it.
 
 
-.. py:function:: list_models()
+.. py:function:: serve_entry(model_json, data_path, debug=False, port=0, certfile=None, keyfile=None, resample=False)
 
-   List all available model configurations.
+   Build the model ``model_json`` describes, and serve it.
+
+   ``model_json`` is a model entry (``ModelConfig.launch_entry``) as JSON.
+   One that is not is a usage error; a model that cannot be built, or a
+   server that crashes, exits 1 with the traceback in the job's log.
 
 
-.. py:function:: run_server(model_config, data_path, debug=False, port=0, certfile=None, keyfile=None)
+.. py:function:: serve(model_json, data_path, port, debug, certfile, keyfile, resample)
 
-   Run the CellMapFlow server with the given configuration.
+   Serve one model's predictions, as an inference job does on its node.
+
+   The launchers (`infer`, `yaml`, the dashboard) run this for you, as
+   CELLMAP_FLOW_SERVER_COMMAND (by default `cellmap_flow serve`). The
+   model is a YAML model entry, as JSON:
+
+   
+     cellmap_flow serve -d /path/to/data.zarr/raw \
+       --model '{"type": "script", "script_path": "/path/to/model.py"}'
 
 
 .. py:function:: create_dynamic_server_command(cli_name: str, config_class: Type[cellmap_flow.models.models_config.ModelConfig])
@@ -65,18 +81,28 @@ Module Contents
    Dynamically create a Click command for a ModelConfig subclass server.
 
 
-.. py:function:: register_all_server_commands()
+.. py:function:: cli(ctx, model_json, data_path, port, debug, certfile, keyfile, resample)
 
-   Discover and register all ModelConfig subclasses as server CLI commands.
+   The inference server before 0.3.0: deprecated, and goes in the release
+   after it. Use `cellmap_flow serve`.
+
+   With --model and -d it is `cellmap_flow serve`. Each model type's
+   command is the form launchers used before 0.3.0:
+
+   
+       cellmap_flow_server dacapo -r my_run -i 100 -d /path/to/data
+       cellmap_flow_server script -s /path/to/script.py -d /path/to/data
+       cellmap_flow_server cellmap -f /path/to/model -n mymodel -d /path/to/data
 
 
-.. py:function:: run_ui_server(neuroglancer_url, inference_host)
+.. py:function:: list_models()
 
-   Run the dashboard UI server.
+   List all available model configurations.
 
 
 .. py:function:: main()
 
-   Entry point for the server CLI.
+   The ``cellmap_flow_server`` console script: load the plugins, whose
+   model types have commands too, then run the command.
 
 

@@ -1,0 +1,84 @@
+cellmap_flow.dashboard.routes.finetune.layers
+=============================================
+
+.. py:module:: cellmap_flow.dashboard.routes.finetune.layers
+
+.. autoapi-nested-parse::
+
+   Add, remove and rename layers of the running viewer over HTTP.
+
+   For scripts and the command line; the dashboard's own pages do not call
+   these. Each is a POST with a JSON body:
+
+   - ``/api/viewer/add-image-layer``
+   - ``/api/viewer/add-segmentation-layer``
+   - ``/api/viewer/remove-layer``
+   - ``/api/viewer/rename-layer``
+
+   Idempotency: add-* replaces a same-named layer; remove-layer is a no-op
+   when the name is absent; rename-layer answers 409 rather than overwrite
+   another layer.
+
+   The layer's per-name bookkeeping -- the session's ``shaders``,
+   ``shader_controls`` and ``extra_layers`` (dashboard.state) -- follows a
+   remove or a rename, so a later layer of the same name starts fresh.
+
+   ``path`` is opened as ``/api/set-data`` opens a dataset: any zarr, n5 or
+   precomputed store the dashboard's user can read.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.routes.finetune.layers.logger
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.routes.finetune.layers.add_segmentation_layer_to_viewer
+   cellmap_flow.dashboard.routes.finetune.layers.add_image_layer_to_viewer
+   cellmap_flow.dashboard.routes.finetune.layers.remove_layer_from_viewer
+   cellmap_flow.dashboard.routes.finetune.layers.rename_layer_in_viewer
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:function:: add_segmentation_layer_to_viewer()
+
+   Register a static segmentation zarr on the running NG viewer.
+
+   Required: path, name. Optional: blend, disable_meshes.
+
+
+.. py:function:: add_image_layer_to_viewer()
+
+   Register a static image zarr on the running NG viewer.
+
+   Required: path, name. Optional: shader, blend.
+
+
+.. py:function:: remove_layer_from_viewer()
+
+   Drop a layer from the running NG viewer state by name.
+
+   Idempotent: returns success with removed=false if the name is absent.
+
+
+.. py:function:: rename_layer_in_viewer()
+
+   Rename a layer in the running NG viewer state.
+
+   Required: old_name, new_name. 404s if old_name is absent; 409s if
+   new_name already exists (refuses to silently overwrite). The layer
+   keeps its place in the layer list and its visibility.
+
+

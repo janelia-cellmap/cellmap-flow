@@ -18,7 +18,6 @@ Attributes
 .. autoapisummary::
 
    cellmap_flow.models.model_merger.logger
-   cellmap_flow.models.model_merger.MERGE_MODE_MAP
 
 
 Classes
@@ -135,6 +134,4 @@ Module Contents
 
    :raises ValueError: If merger_name doesn't match any available merger class
 
-
-.. py:data:: MERGE_MODE_MAP
 

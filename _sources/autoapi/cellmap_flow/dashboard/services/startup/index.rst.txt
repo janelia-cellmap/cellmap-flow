@@ -1,0 +1,45 @@
+cellmap_flow.dashboard.services.startup
+=======================================
+
+.. py:module:: cellmap_flow.dashboard.services.startup
+
+.. autoapi-nested-parse::
+
+   The CLIs' last step: open the viewer on the dataset, then serve the dashboard.
+
+   ``generate_neuroglancer_url`` is what ``cellmap_flow <type>`` and
+   ``cellmap_flow yaml`` end with. The viewer and its layers are built by
+   ``cellmap_flow.viewer``; this module adds the session's models to it and
+   starts the dashboard, which is why it imports ``dashboard.app`` and
+   ``viewer`` does not. The routes never import it: ``dashboard.app`` imports
+   them.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.services.startup.logger
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.services.startup.generate_neuroglancer_url
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:function:: generate_neuroglancer_url(dataset_path, wrap_raw=True)
+
+   Open the viewer on ``dataset_path`` with a layer for each running model
+   and the YAML's extra layers, then serve the dashboard. Does not return.
+
+

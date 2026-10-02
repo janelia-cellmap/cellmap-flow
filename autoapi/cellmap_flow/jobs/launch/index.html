@@ -1,0 +1,351 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>cellmap_flow.jobs.launch &mdash; CellMap Flow  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=4ae1632d" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css" />
+
+  
+    <link rel="shortcut icon" href="../../../../_static/favicon.ico"/>
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link rel="next" title="cellmap_flow.jobs.local" href="../local/index.html" />
+    <link rel="prev" title="cellmap_flow.jobs" href="../index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            CellMap Flow
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">CellMap-Flow API:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../../../../install.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../cli.html">Command line</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../scripts.html">Python Scripts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../yaml_config.html">YAML Configuration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../data_paths.html">Data paths</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../huggingface.html">HuggingFace Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../custom_script.html">Custom Model</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../post.html">PostProcessors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../plugins.html">Plugins</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../review.html">Reviewing instances</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../viewer_api.html">Viewer layer API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../architecture.html">Architecture</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../../../index.html">API Reference</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="../../index.html">cellmap_flow</a><ul class="current">
+<li class="toctree-l3 current"><a class="reference internal" href="../../index.html#submodules">Submodules</a><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="../../blockwise/index.html">cellmap_flow.blockwise</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../cli/index.html">cellmap_flow.cli</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../config/index.html">cellmap_flow.config</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../dashboard/index.html">cellmap_flow.dashboard</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../finetune/index.html">cellmap_flow.finetune</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../globals/index.html">cellmap_flow.globals</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../image_data_interface/index.html">cellmap_flow.image_data_interface</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../inference/index.html">cellmap_flow.inference</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../inferencer/index.html">cellmap_flow.inferencer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../io/index.html">cellmap_flow.io</a></li>
+<li class="toctree-l4 current"><a class="reference internal" href="../index.html">cellmap_flow.jobs</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../logging_setup/index.html">cellmap_flow.logging_setup</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../models/index.html">cellmap_flow.models</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../norm/index.html">cellmap_flow.norm</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../pipeline_spec/index.html">cellmap_flow.pipeline_spec</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../plugins/index.html">cellmap_flow.plugins</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../post/index.html">cellmap_flow.post</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../process_chain/index.html">cellmap_flow.process_chain</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../review/index.html">cellmap_flow.review</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../review_index/index.html">cellmap_flow.review_index</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../server/index.html">cellmap_flow.server</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../serving/index.html">cellmap_flow.serving</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../utils/index.html">cellmap_flow.utils</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../viewer/index.html">cellmap_flow.viewer</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">CellMap Flow</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">API Reference</a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">cellmap_flow</a></li>
+          <li class="breadcrumb-item"><a href="../index.html">cellmap_flow.jobs</a></li>
+      <li class="breadcrumb-item active">cellmap_flow.jobs.launch</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../../../../_sources/autoapi/cellmap_flow/jobs/launch/index.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-cellmap_flow.jobs.launch">
+<span id="cellmap-flow-jobs-launch"></span><h1>cellmap_flow.jobs.launch<a class="headerlink" href="#module-cellmap_flow.jobs.launch" title="Link to this heading"></a></h1>
+<p>Starting the inference servers the CLIs and the dashboard ask for.</p>
+<p>The policy over <code class="docutils literal notranslate"><span class="pre">jobs.lsf</span></code> and <code class="docutils literal notranslate"><span class="pre">jobs.local</span></code>: <code class="docutils literal notranslate"><span class="pre">start_hosts</span></code> runs a
+server on LSF or on this machine, tries the other GPU queues when one does
+not start it, waits for its address and records the job in
+<code class="docutils literal notranslate"><span class="pre">started_jobs()</span></code>; <code class="docutils literal notranslate"><span class="pre">install_cleanup_handlers</span></code> kills the recorded jobs,
+and any still starting, on Ctrl+C, SIGTERM or SIGHUP.</p>
+<p>Two deployment settings are read here, once, at import:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">SERVER_COMMAND</span></code>, how a server is started on a compute node, from
+<code class="docutils literal notranslate"><span class="pre">CELLMAP_FLOW_SERVER_COMMAND</span></code>. Callers read it from this module when they
+build a command (serving.launch), never a copy of it.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">SERVER_LOG_DIR</span></code>, where job logs go; tests and deployments point it
+elsewhere, and <code class="docutils literal notranslate"><span class="pre">jobs.spec.default_log_dir</span></code> reads it at submit time.</p></li>
+</ul>
+<p>The job settings a start falls back on (the run limit, whether to try
+other queues) are <code class="docutils literal notranslate"><span class="pre">jobs.settings.launcher_settings()</span></code>, read when a job is
+started.</p>
+<section id="attributes">
+<h2>Attributes<a class="headerlink" href="#attributes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.jobs.launch.logger" title="cellmap_flow.jobs.launch.logger"><code class="xref py py-obj docutils literal notranslate"><span class="pre">logger</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.jobs.launch.SERVER_COMMAND" title="cellmap_flow.jobs.launch.SERVER_COMMAND"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SERVER_COMMAND</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.jobs.launch.SERVER_LOG_DIR" title="cellmap_flow.jobs.launch.SERVER_LOG_DIR"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SERVER_LOG_DIR</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.jobs.launch.PENDING_FALLBACK_SECONDS" title="cellmap_flow.jobs.launch.PENDING_FALLBACK_SECONDS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PENDING_FALLBACK_SECONDS</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.jobs.launch.STARTUP_TIMEOUT_SECONDS" title="cellmap_flow.jobs.launch.STARTUP_TIMEOUT_SECONDS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">STARTUP_TIMEOUT_SECONDS</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="functions">
+<h2>Functions<a class="headerlink" href="#functions" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.jobs.launch.started_jobs" title="cellmap_flow.jobs.launch.started_jobs"><code class="xref py py-obj docutils literal notranslate"><span class="pre">started_jobs</span></code></a>(→ list)</p></td>
+<td><p>The jobs this process started: the live list, which start_hosts</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.jobs.launch.cleanup_handler" title="cellmap_flow.jobs.launch.cleanup_handler"><code class="xref py py-obj docutils literal notranslate"><span class="pre">cleanup_handler</span></code></a>(→ None)</p></td>
+<td><p>Signal handler for graceful shutdown.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.jobs.launch.install_cleanup_handlers" title="cellmap_flow.jobs.launch.install_cleanup_handlers"><code class="xref py py-obj docutils literal notranslate"><span class="pre">install_cleanup_handlers</span></code></a>(→ bool)</p></td>
+<td><p>Kill the tracked jobs on Ctrl+C, SIGTERM or SIGHUP. Returns whether installed.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.jobs.launch.submit_bsub_job" title="cellmap_flow.jobs.launch.submit_bsub_job"><code class="xref py py-obj docutils literal notranslate"><span class="pre">submit_bsub_job</span></code></a>(→ cellmap_flow.jobs.lsf.LSFJob)</p></td>
+<td><p>Submit a shell command to LSF using bsub; see cellmap_flow.jobs.lsf.submit.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.jobs.launch.start_hosts" title="cellmap_flow.jobs.launch.start_hosts"><code class="xref py py-obj docutils literal notranslate"><span class="pre">start_hosts</span></code></a>(→ cellmap_flow.jobs.spec.Job)</p></td>
+<td><p>Start a server job either via bsub or locally.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="module-contents">
+<h2>Module Contents<a class="headerlink" href="#module-contents" title="Link to this heading"></a></h2>
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.jobs.launch.logger">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.jobs.launch.</span></span><span class="sig-name descname"><span class="pre">logger</span></span><a class="headerlink" href="#cellmap_flow.jobs.launch.logger" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.jobs.launch.SERVER_COMMAND">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.jobs.launch.</span></span><span class="sig-name descname"><span class="pre">SERVER_COMMAND</span></span><a class="headerlink" href="#cellmap_flow.jobs.launch.SERVER_COMMAND" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.jobs.launch.SERVER_LOG_DIR">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.jobs.launch.</span></span><span class="sig-name descname"><span class="pre">SERVER_LOG_DIR</span></span><a class="headerlink" href="#cellmap_flow.jobs.launch.SERVER_LOG_DIR" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.jobs.launch.PENDING_FALLBACK_SECONDS">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.jobs.launch.</span></span><span class="sig-name descname"><span class="pre">PENDING_FALLBACK_SECONDS</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">180</span></span><a class="headerlink" href="#cellmap_flow.jobs.launch.PENDING_FALLBACK_SECONDS" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.jobs.launch.STARTUP_TIMEOUT_SECONDS">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.jobs.launch.</span></span><span class="sig-name descname"><span class="pre">STARTUP_TIMEOUT_SECONDS</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">300</span></span><a class="headerlink" href="#cellmap_flow.jobs.launch.STARTUP_TIMEOUT_SECONDS" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.jobs.launch.started_jobs">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.jobs.launch.</span></span><span class="sig-name descname"><span class="pre">started_jobs</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">list</span></span></span><a class="headerlink" href="#cellmap_flow.jobs.launch.started_jobs" title="Link to this definition"></a></dt>
+<dd><p>The jobs this process started: the live list, which start_hosts
+appends to, cleanup_handler kills from, and the dashboard lists (its
+Session.jobs replaces the contents rather than the list).</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.jobs.launch.cleanup_handler">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.jobs.launch.</span></span><span class="sig-name descname"><span class="pre">cleanup_handler</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">signum</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">frame</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#cellmap_flow.jobs.launch.cleanup_handler" title="Link to this definition"></a></dt>
+<dd><p>Signal handler for graceful shutdown.
+Kills all tracked jobs, then exits with the conventional 128 + signal
+status, so a stopped run does not report success.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.jobs.launch.install_cleanup_handlers">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.jobs.launch.</span></span><span class="sig-name descname"><span class="pre">install_cleanup_handlers</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#cellmap_flow.jobs.launch.install_cleanup_handlers" title="Link to this definition"></a></dt>
+<dd><p>Kill the tracked jobs on Ctrl+C, SIGTERM or SIGHUP. Returns whether installed.</p>
+<p>SIGHUP is what a dashboard gets when its terminal goes: the window is
+closed, the connection to it drops, or the interactive LSF session it
+runs in ends. Unhandled, it ended the process and left every server it
+had started running.</p>
+<p>For entry points that launch jobs, called from their main thread. This
+used to happen when the module was imported, which set the handlers for
+every importer, and raised ValueError when the first import happened off
+the main thread (the lazy Session.finetune_job_manager, a dashboard request).</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.jobs.launch.submit_bsub_job">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.jobs.launch.</span></span><span class="sig-name descname"><span class="pre">submit_bsub_job</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">command</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">queue</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">_SITE.default_queue</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">charge_group</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">job_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'my_job'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_gpus</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_cpus</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">4</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">walltime</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">log_dir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">pathlib.Path</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bsub_timeout</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">lsf.BSUB_TIMEOUT_SECONDS</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">env</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="../lsf/index.html#cellmap_flow.jobs.lsf.LSFJob" title="cellmap_flow.jobs.lsf.LSFJob"><span class="pre">cellmap_flow.jobs.lsf.LSFJob</span></a></span></span><a class="headerlink" href="#cellmap_flow.jobs.launch.submit_bsub_job" title="Link to this definition"></a></dt>
+<dd><p>Submit a shell command to LSF using bsub; see cellmap_flow.jobs.lsf.submit.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>command</strong> – Shell command to execute (run with <code class="docutils literal notranslate"><span class="pre">bash</span> <span class="pre">-c</span></code>)</p></li>
+<li><p><strong>queue</strong> – LSF queue name</p></li>
+<li><p><strong>charge_group</strong> – Project/chargeback group for billing</p></li>
+<li><p><strong>job_name</strong> – Name for the job</p></li>
+<li><p><strong>num_gpus</strong> – Number of GPUs to request</p></li>
+<li><p><strong>num_cpus</strong> – Number of CPUs to request</p></li>
+<li><p><strong>walltime</strong> – LSF run limit (“HH:MM” or minutes); None leaves the
+queue default</p></li>
+<li><p><strong>log_dir</strong> – Directory for the job’s &lt;name&gt;_&lt;jobid&gt;.log (stdout and
+stderr); defaults to SERVER_LOG_DIR</p></li>
+<li><p><strong>bsub_timeout</strong> – Seconds to wait for bsub to answer, or None to wait as
+long as it takes (an over-ratio request is held for minutes
+before bsub returns)</p></li>
+<li><p><strong>env</strong> – Variables to set in the job’s environment, on top of this
+process’s (which LSF copies into the job anyway)</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>LSFJob object for the submitted job</p>
+</dd>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>subprocess.CalledProcessError</strong> – If job submission fails</p></li>
+<li><p><a class="reference internal" href="../lsf/index.html#cellmap_flow.jobs.lsf.BsubTimeoutError" title="cellmap_flow.jobs.lsf.BsubTimeoutError"><strong>BsubTimeoutError</strong></a> – bsub did not answer and no new job with this name
+can be found. The caller must not simply submit again.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.jobs.launch.start_hosts">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.jobs.launch.</span></span><span class="sig-name descname"><span class="pre">start_hosts</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">command</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">queue</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">_SITE.default_queue</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">charge_group</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">job_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'example_job'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_https</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">wait_for_host</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">walltime</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cycle_queues</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">local</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="../spec/index.html#cellmap_flow.jobs.spec.Job" title="cellmap_flow.jobs.spec.Job"><span class="pre">cellmap_flow.jobs.spec.Job</span></a></span></span><a class="headerlink" href="#cellmap_flow.jobs.launch.start_hosts" title="Link to this definition"></a></dt>
+<dd><p>Start a server job either via bsub or locally.</p>
+<p>It runs on this machine only when bsub is not installed, or when
+<code class="docutils literal notranslate"><span class="pre">local</span></code> asks for it. When bsub is there and every submission fails,
+this raises: the machine running the CLI or dashboard is often a login
+or submit node, which is no place for a GPU server.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>command</strong> – Command to execute</p></li>
+<li><p><strong>queue</strong> – LSF queue name (for bsub)</p></li>
+<li><p><strong>charge_group</strong> – Project for billing (for bsub)</p></li>
+<li><p><strong>job_name</strong> – Name for the job</p></li>
+<li><p><strong>use_https</strong> – Whether to use HTTPS (adds cert/key flags)</p></li>
+<li><p><strong>wait_for_host</strong> – Whether to wait for host information before returning</p></li>
+<li><p><strong>walltime</strong> – LSF run limit (“HH:MM” or minutes); defaults to the
+launcher settings’ walltime, then the site’s</p></li>
+<li><p><strong>cycle_queues</strong> – Try other GPU queues when the requested one is busy or
+closed. Defaults to the launcher settings’ cycle_gpu_queues,
+which defaults to True.</p></li>
+<li><p><strong>local</strong> – Run on this machine even if bsub is available.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Job object (LSFJob or LocalJob) with job information. <code class="docutils literal notranslate"><span class="pre">job.queue</span></code>
+is the queue it landed on. The settings are left alone: the queue
+the job fell back to is not what the next submission should ask for.</p>
+</dd>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference internal" href="../spec/index.html#cellmap_flow.jobs.spec.JobStartError" title="cellmap_flow.jobs.spec.JobStartError"><strong>JobStartError</strong></a> – bsub is available but no queue accepted the job.</p>
+</dd>
+</dl>
+</dd></dl>
+
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../index.html" class="btn btn-neutral float-left" title="cellmap_flow.jobs" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../local/index.html" class="btn btn-neutral float-right" title="cellmap_flow.jobs.local" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, David Ackerman,  Marwan Zouinkhi, Jeff Rhoades, Larissa Heinrich, Aubrey Weigel.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

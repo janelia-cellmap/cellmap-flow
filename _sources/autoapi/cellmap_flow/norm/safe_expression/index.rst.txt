@@ -1,0 +1,94 @@
+cellmap_flow.norm.safe_expression
+=================================
+
+.. py:module:: cellmap_flow.norm.safe_expression
+
+.. autoapi-nested-parse::
+
+   Evaluate the small array expressions behind LambdaNormalizer and LambdaPostprocessor.
+
+   These expressions arrive inside neuroglancer layer URLs and dashboard requests,
+   and inference servers listen on every interface, so evaluating them with a bare
+   eval() let anyone who could reach a server run code on it. An expression is now
+   parsed once and every node is checked against a whitelist before anything runs:
+
+   - the array ``x``, numbers, and numeric dtype names as strings (``x.astype("uint8")``);
+   - arithmetic, comparison and boolean operators, and ``a if cond else b``;
+   - indexing and slicing (``x[..., 0]``);
+   - ``np.<name>`` for the numpy functions, dtypes and constants listed below;
+   - a few array methods and attributes (``x.astype``, ``x.clip``, ``x.shape``, ...);
+   - ``abs``.
+
+   Anything else (other names, other attributes, dunders, lambdas, comprehensions,
+   ``**kwargs``) raises ValueError. So does what would let a short expression
+   allocate without bound: exponents must be literal numbers of modest size (no
+   ``x ** 10**10``), a list or tuple cannot be repeated (no ``[x] * 10**5``), keyword
+   arguments are only those in ``KEYWORDS`` (no ``shape=``), and the ``*_like``
+   functions take no positional shape either.
+
+   That bounds what a whitelisted call can be asked for, not what arithmetic can
+   produce: broadcasting arrays given new axes (``x[..., None] * x[None]``) still
+   multiplies a chunk's size, so the whitelist is not a memory limit.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.norm.safe_expression.NUMPY_FUNCTIONS
+   cellmap_flow.norm.safe_expression.NUMPY_DTYPES
+   cellmap_flow.norm.safe_expression.NUMPY_CONSTANTS
+   cellmap_flow.norm.safe_expression.ARRAY_METHODS
+   cellmap_flow.norm.safe_expression.ARRAY_ATTRIBUTES
+   cellmap_flow.norm.safe_expression.DTYPE_STRINGS
+   cellmap_flow.norm.safe_expression.KEYWORDS
+   cellmap_flow.norm.safe_expression.MAX_POSITIONAL
+   cellmap_flow.norm.safe_expression.MAX_LENGTH
+   cellmap_flow.norm.safe_expression.MAX_EXPONENT
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.norm.safe_expression.compile_expression
+
+
+Module Contents
+---------------
+
+.. py:data:: NUMPY_FUNCTIONS
+
+.. py:data:: NUMPY_DTYPES
+
+.. py:data:: NUMPY_CONSTANTS
+
+.. py:data:: ARRAY_METHODS
+
+.. py:data:: ARRAY_ATTRIBUTES
+
+.. py:data:: DTYPE_STRINGS
+
+.. py:data:: KEYWORDS
+
+.. py:data:: MAX_POSITIONAL
+
+.. py:data:: MAX_LENGTH
+   :value: 500
+
+
+.. py:data:: MAX_EXPONENT
+   :value: 64
+
+
+.. py:function:: compile_expression(expression: str) -> Callable[[numpy.ndarray], numpy.ndarray]
+
+   Check ``expression`` against the whitelist and return a function of ``x``.
+
+   Raises ValueError, naming the offending construct, if the expression is
+   not allowed.
+
+

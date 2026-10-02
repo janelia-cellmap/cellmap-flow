@@ -1,0 +1,85 @@
+cellmap_flow.models.configs.finetune
+====================================
+
+.. py:module:: cellmap_flow.models.configs.finetune
+
+.. autoapi-nested-parse::
+
+   ``FinetuneModelConfig``: a base model with a finetune's weights on top.
+
+   The weights are a LoRA adapter or, from a full finetune, a whole state
+   dict. Either is loaded onto the module the trainer trained
+   (``finetune.model_loading.load_trainable_model``), and the served model
+   keeps the base model's geometry.
+
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.models.configs.finetune.FinetuneModelConfig
+
+
+Module Contents
+---------------
+
+.. py:class:: FinetuneModelConfig(lora_adapter_path: str = None, base_model: dict = None, name: str = None, scale=None, weights_path: str = None)
+
+
+
+   Configuration class for a finetuned model.
+
+   Wraps any base ModelConfig with the finetune's weights, which are
+   exactly one of: a LoRA adapter (``lora_adapter_path``), applied with
+   PEFT, or a full finetune's state dict (``weights_path``, from a run
+   with ``--lora-r 0``), loaded strictly. The base model is built by its
+   own ModelConfig, as the trainable module the trainer trained, and the
+   weights go on top of it.
+
+
+   .. py:attribute:: cli_name
+      :value: 'finetune'
+
+
+
+   .. py:attribute:: lora_adapter_path
+      :value: None
+
+
+
+   .. py:attribute:: weights_path
+      :value: None
+
+
+
+   .. py:attribute:: base_model_dict
+      :value: None
+
+
+
+   .. py:attribute:: name
+      :value: None
+
+
+
+   .. py:attribute:: scale
+      :value: None
+
+
+
+   .. py:property:: base_model_config
+
+      Lazily build the base ModelConfig from the stored dict.
+
+
+   .. py:method:: to_dict()
+
+      This config as a model entry, which ``registry.build_model`` rebuilds.
+
+      Surfaces key base model fields at the top level so the pipeline
+      builder UI can display them alongside the finetune-specific fields.
+
+
+

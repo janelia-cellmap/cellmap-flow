@@ -19,6 +19,10 @@ cellmap_flow.dashboard.routes.finetune.good_regions
    these carry only a human's assertion that the model's own output is
    acceptable there. Both are evidence, but not the same kind.
 
+   Routes: GET ``/api/finetune/good-regions`` (the session's regions), POST
+   ``/api/finetune/good-regions/mark-view`` (a box where the viewer looks) and
+   POST ``/api/finetune/good-regions/delete`` (one region by ``id``, or all).
+
 
 
 Attributes
@@ -28,7 +32,6 @@ Attributes
 
    cellmap_flow.dashboard.routes.finetune.good_regions.logger
    cellmap_flow.dashboard.routes.finetune.good_regions.GOOD_REGIONS_LAYER
-   cellmap_flow.dashboard.routes.finetune.good_regions.GOOD_REGIONS_FILENAME
    cellmap_flow.dashboard.routes.finetune.good_regions.DEFAULT_REGION_SIZE_NM
 
 
@@ -39,9 +42,9 @@ Functions
 
    cellmap_flow.dashboard.routes.finetune.good_regions.load_good_regions
    cellmap_flow.dashboard.routes.finetune.good_regions.save_good_regions
-   cellmap_flow.dashboard.routes.finetune.good_regions.mark_current_view_response
-   cellmap_flow.dashboard.routes.finetune.good_regions.list_good_regions_response
-   cellmap_flow.dashboard.routes.finetune.good_regions.delete_good_region_response
+   cellmap_flow.dashboard.routes.finetune.good_regions.mark_current_view_good
+   cellmap_flow.dashboard.routes.finetune.good_regions.list_good_regions
+   cellmap_flow.dashboard.routes.finetune.good_regions.delete_good_region
    cellmap_flow.dashboard.routes.finetune.good_regions.refresh_good_regions_layer
 
 
@@ -54,10 +57,6 @@ Module Contents
    :value: 'good_regions'
 
 
-.. py:data:: GOOD_REGIONS_FILENAME
-   :value: 'good_regions.json'
-
-
 .. py:data:: DEFAULT_REGION_SIZE_NM
    :value: 896.0
 
@@ -66,14 +65,14 @@ Module Contents
 
 .. py:function:: save_good_regions(regions)
 
-.. py:function:: mark_current_view_response(data)
+.. py:function:: mark_current_view_good()
 
    Record a box centred on wherever the viewer is looking right now.
 
 
-.. py:function:: list_good_regions_response()
+.. py:function:: list_good_regions()
 
-.. py:function:: delete_good_region_response(data)
+.. py:function:: delete_good_region()
 
 .. py:function:: refresh_good_regions_layer(regions=None)
 

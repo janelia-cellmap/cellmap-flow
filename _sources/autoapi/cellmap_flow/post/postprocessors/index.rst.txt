@@ -9,9 +9,7 @@ Attributes
 
 .. autoapisummary::
 
-   cellmap_flow.post.postprocessors.postprocessing_lock
    cellmap_flow.post.postprocessors.logger
-   cellmap_flow.post.postprocessors.PostProcessorMethods
 
 
 Classes
@@ -23,6 +21,7 @@ Classes
    cellmap_flow.post.postprocessors.SigmoidPostprocessor
    cellmap_flow.post.postprocessors.DefaultPostprocessor
    cellmap_flow.post.postprocessors.ThresholdPostprocessor
+   cellmap_flow.post.postprocessors.FillHolesPostprocessor
    cellmap_flow.post.postprocessors.LabelPostprocessor
    cellmap_flow.post.postprocessors.MortonSegmentationRelabeling
    cellmap_flow.post.postprocessors.AffinityPostprocessor
@@ -42,8 +41,6 @@ Functions
 
 Module Contents
 ---------------
-
-.. py:data:: postprocessing_lock
 
 .. py:data:: logger
 
@@ -97,6 +94,27 @@ Module Contents
 
 
    Base class for post-processing methods.
+
+
+   .. py:attribute:: threshold
+
+
+   .. py:property:: dtype
+
+
+   .. py:property:: is_segmentation
+
+
+.. py:class:: FillHolesPostprocessor(threshold: float = 0.0)
+
+
+
+   Threshold, then fill the background holes each foreground blob encloses.
+
+   For compact single-instance organelles (a nucleus, say) that never have
+   interior gaps; not for structures with a real lumen. It runs per chunk
+   with no halo, so a hole that touches the chunk's boundary is not enclosed
+   within the chunk and stays unfilled.
 
 
    .. py:attribute:: threshold
@@ -220,6 +238,12 @@ Module Contents
    .. py:attribute:: keys_to_skip
 
 
+   .. py:method:: equivalences_json()
+
+      The equivalences so far, read while no other chunk is adding to them.
+
+
+
    .. py:method:: calculate_equivalences()
 
 
@@ -264,6 +288,4 @@ Module Contents
 
    Get postprocessors from either dict or list format.
 
-
-.. py:data:: PostProcessorMethods
 

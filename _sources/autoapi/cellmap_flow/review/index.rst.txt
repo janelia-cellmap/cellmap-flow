@@ -1,0 +1,164 @@
+cellmap_flow.review
+===================
+
+.. py:module:: cellmap_flow.review
+
+.. autoapi-nested-parse::
+
+   SQL helpers for the instance-review workflow (the dashboard's Review tab).
+
+   A review index is one SQLite file (``python -m cellmap_flow.review_index``
+   builds one) with three tables:
+
+     instances(id, vox, cz, cy, cx, cz_nm, cy_nm, cx_nm,
+               bz0, bz1, by0, by1, bx0, bx1, rank_<queue>, ...)
+     ledger(instance_id PK, review_state, reviewed_at, reviewer,
+            edit_details_json, entry_method)
+     meta(key, value)
+
+   ``cz..cx`` is the centroid in voxels, ``cz_nm..cx_nm`` the same point in
+   world nm, and ``bz0..bx1`` the half-open bounding box in voxels. Other
+   per-instance columns (sphericity, fm_score, em_mean, ...) are optional and
+   passed through.
+
+   Queues are data, not names known here: every ``rank_<name>`` column of
+   ``instances`` is a queue called ``<name>``, walked by ascending rank over
+   its non-NULL rows. ``meta.queue_labels``, a JSON object, can describe them
+   for the dashboard.
+
+   The ledger is pre-initialized with one row per instance and NULL fields;
+   a verdict is an UPDATE, and undo sets the row back to NULL.
+
+   Connections are read-only unless ``open_db(..., write=True)``, which the
+   verdict and undo paths use. Only a writable connection adds the
+   ``entry_method`` column to an index that predates it; a read-only one
+   reads it as NULL.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.review.DB_SUFFIXES
+   cellmap_flow.review.REQUIRED_TABLES
+   cellmap_flow.review.RANK_PREFIX
+   cellmap_flow.review.VALID_VERDICTS
+   cellmap_flow.review.VALID_ENTRY_METHODS
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.review.resolve_db_path
+   cellmap_flow.review.open_db
+   cellmap_flow.review.get_meta
+   cellmap_flow.review.count_instances
+   cellmap_flow.review.queues
+   cellmap_flow.review.get_next
+   cellmap_flow.review.get_instance
+   cellmap_flow.review.record_verdict
+   cellmap_flow.review.undo_verdict
+   cellmap_flow.review.get_progress
+
+
+Module Contents
+---------------
+
+.. py:data:: DB_SUFFIXES
+   :value: ('.sqlite', '.db')
+
+
+.. py:data:: REQUIRED_TABLES
+   :value: ('instances', 'ledger', 'meta')
+
+
+.. py:data:: RANK_PREFIX
+   :value: 'rank_'
+
+
+.. py:function:: resolve_db_path(path: str) -> str
+
+   The real path of a review index, or an error.
+
+   Only files named ``*.sqlite`` or ``*.db`` after resolving symlinks are
+   accepted, and the name is checked before existence, so the dashboard
+   route that takes this path cannot be used to probe for other files.
+
+   Raises ValueError for any other name, FileNotFoundError when the file
+   does not exist.
+
+
+.. py:function:: open_db(db_path: str, write: bool = False) -> sqlite3.Connection
+
+   Open a review index; read-only unless ``write``.
+
+   Raises ValueError when the file is not a review index (a SQLite
+   database with the instances, ledger and meta tables).
+
+
+.. py:function:: get_meta(conn: sqlite3.Connection) -> dict
+
+.. py:function:: count_instances(conn: sqlite3.Connection) -> int
+
+.. py:function:: queues(conn: sqlite3.Connection) -> Dict[str, str]
+
+   ``{queue name: rank column}``, in the order of the columns.
+
+
+.. py:function:: get_next(conn: sqlite3.Connection, order: str, min_vox: Optional[int] = None, skip_rank: Optional[int] = None) -> Optional[dict]
+
+   Return the next unreviewed instance in the chosen queue, or None.
+
+   skip_rank advances past a given rank value — needed so clicking Next
+   repeatedly without verdicting actually advances through the queue
+   (without it, the query returns the same "first unreviewed" row
+   every call, because nothing got marked reviewed).
+
+
+.. py:function:: get_instance(conn: sqlite3.Connection, instance_id: int) -> Optional[dict]
+
+   Full instance record (joined with ledger state), or None if not found.
+
+
+.. py:data:: VALID_VERDICTS
+   :value: ('blessed', 'edited', 'erased')
+
+
+.. py:data:: VALID_ENTRY_METHODS
+   :value: ('next', 'select_at', 'show', 'pick')
+
+
+.. py:function:: record_verdict(conn: sqlite3.Connection, instance_id: int, verdict: str, reviewer: str, edit_details: Optional[dict] = None, entry_method: Optional[str] = None) -> dict
+
+   Write a verdict to the ledger. Returns the updated row.
+
+   Valid verdicts:
+     - "blessed"  — correct detection, keep as-is.
+     - "edited"   — partially correct, edit_details describes the fix.
+     - "erased"   — false positive, wholesale paint with background
+                    (value 1 in the downstream correction zarr,
+                    indicating "not mito" for training).
+
+   entry_method records HOW the reviewer arrived at this instance:
+     'next' (queue advance), 'show' (Go to ID), 'pick' (the t key in
+     the viewer), or 'select_at' (a cursor lookup older indexes used).
+   NULL means unknown (legacy rows pre-dating this column).
+
+   Raises ValueError for unknown verdict, unknown entry_method, or
+   unknown instance_id.
+
+
+.. py:function:: undo_verdict(conn: sqlite3.Connection, instance_id: int) -> dict
+
+   Clear the ledger row for instance_id (NULL all verdict fields).
+
+
+.. py:function:: get_progress(conn: sqlite3.Connection) -> dict
+
+   Aggregate review progress: per-state counts + per-queue counts.
+
+

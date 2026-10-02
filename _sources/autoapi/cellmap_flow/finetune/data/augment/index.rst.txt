@@ -1,0 +1,95 @@
+cellmap_flow.finetune.data.augment
+==================================
+
+.. py:module:: cellmap_flow.finetune.data.augment
+
+.. autoapi-nested-parse::
+
+   Training-time augmentation of a patch pair: flips, XY rotations, brightness and noise.
+
+   Brightness and noise act on the raw before it is normalized, spatial
+   transforms on the pair after: see Augmentation.intensity and .spatial.
+   Targets (affinities, SKOOTS vectors) are derived from the annotation by the
+   trainer, after this, so they are computed from the transformed labels and
+   stay consistent. Move target computation into the dataset and that stops
+   being true: a flip would then need the affinity channels permuted and
+   negated.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.data.augment.logger
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.data.augment.Augmentation
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:class:: Augmentation(normalizers=())
+
+   Draws each patch's augmentation, applies it, and says what it applied.
+
+   ``intensity`` then ``spatial``, then ``report``, once per patch. Each
+   DataLoader worker is its own (spawned) process, so the tallies never
+   reach the parent: each worker reports its own, tagged, straight to the
+   training log. Without that, the only evidence augmentation ran would be
+   a flag echoed at startup.
+
+
+   .. py:attribute:: normalizers
+      :value: ()
+
+
+
+   .. py:method:: intensity(patch: numpy.ndarray, rng) -> numpy.ndarray
+
+      Random brightness scale (x0.8-x1.2) plus Gaussian noise (1% of range), as float32.
+
+      On the raw as stored, before normalization: the scale and noise are
+      in the raw dtype's own units (0-255 for uint8 EM), which is what they
+      physically describe; on the normalized [-1, 1] signal a
+      multiplicative factor would pull toward mid-grey instead of changing
+      brightness. The range is the data's own (see _intensity_range), and
+      the result is clipped to it; floats with no known range are not
+      clipped, and their noise is scaled by the patch's own magnitude.
+
+
+
+   .. py:method:: spatial(raw: numpy.ndarray, ann: numpy.ndarray, rng)
+
+      Random flips, and XY rotations when the YX plane is square, of both patches alike.
+
+      Raw and annotation are different sizes but share a centre, and for
+      even-sized patches reflection about index ``(n-1)/2`` lands on the
+      same physical plane for both -- so applying the identical transform
+      to each keeps them registered.
+
+      Rotation is skipped unless Y and X are equal in both patches, since
+      the model's input shape is fixed and a non-square rot90 would change
+      it. Z is never rotated into -- EM is routinely anisotropic there.
+
+
+
+   .. py:method:: report() -> None
+
+      Log what was applied: the first few patches in full, then rolling summaries.
+
+      Runs inside whichever DataLoader worker produced the patch, so the
+      line is tagged with the worker id -- several workers interleave in the
+      log and otherwise the counts look contradictory.
+
+
+

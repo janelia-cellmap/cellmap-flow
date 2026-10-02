@@ -1,0 +1,229 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Data paths &mdash; CellMap Flow  documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="_static/graphviz.css?v=4ae1632d" />
+      <link rel="stylesheet" type="text/css" href="_static/css/custom.css" />
+
+  
+    <link rel="shortcut icon" href="_static/favicon.ico"/>
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="HuggingFace Models" href="huggingface.html" />
+    <link rel="prev" title="YAML Configuration" href="yaml_config.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            CellMap Flow
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">CellMap-Flow API:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="install.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="cli.html">Command line</a></li>
+<li class="toctree-l1"><a class="reference internal" href="scripts.html">Python Scripts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="yaml_config.html">YAML Configuration</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Data paths</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#what-a-path-can-be">What a path can be</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#remote-data-and-credentials">Remote data and credentials</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#the-raw-layer-in-the-viewer">The raw layer in the viewer</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="huggingface.html">HuggingFace Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="custom_script.html">Custom Model</a></li>
+<li class="toctree-l1"><a class="reference internal" href="post.html">PostProcessors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plugins.html">Plugins</a></li>
+<li class="toctree-l1"><a class="reference internal" href="review.html">Reviewing instances</a></li>
+<li class="toctree-l1"><a class="reference internal" href="viewer_api.html">Viewer layer API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="architecture.html">Architecture</a></li>
+<li class="toctree-l1"><a class="reference internal" href="autoapi/index.html">API Reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">CellMap Flow</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Data paths</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/data_paths.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="data-paths">
+<h1>Data paths<a class="headerlink" href="#data-paths" title="Link to this heading"></a></h1>
+<p>Wherever cellmap-flow takes a dataset – <code class="docutils literal notranslate"><span class="pre">data_path</span></code> in a YAML file,
+<code class="docutils literal notranslate"><span class="pre">-d</span></code> on the command line, the dashboard, a viewer layer’s <code class="docutils literal notranslate"><span class="pre">path</span></code> – it
+takes the same kinds of path, and reads the same metadata and voxels from a
+URL as from the same files on disk.</p>
+<section id="what-a-path-can-be">
+<h2>What a path can be<a class="headerlink" href="#what-a-path-can-be" title="Link to this heading"></a></h2>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 22.0%" />
+<col style="width: 78.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Format</p></th>
+<th class="head"><p>Examples</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>zarr v2, OME-NGFF or funlib attributes</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">/nrs/cellmap/data/jrc_hela-2/jrc_hela-2.zarr/recon-1/em/fibsem-uint8</span></code></p>
+<p><code class="docutils literal notranslate"><span class="pre">s3://janelia-cosem-datasets/jrc_hela-2/jrc_hela-2.zarr/recon-1/em/fibsem-uint8/s1</span></code></p>
+<p><code class="docutils literal notranslate"><span class="pre">https://janelia-cosem-datasets.s3.amazonaws.com/jrc_hela-2/jrc_hela-2.zarr/recon-1/em/fibsem-uint8</span></code></p>
+<p><code class="docutils literal notranslate"><span class="pre">gs://bucket/data.zarr/raw</span></code></p>
+</td>
+</tr>
+<tr class="row-odd"><td><p>zarr v3 (OME-NGFF 0.5)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">/data/v3.zarr/em</span></code>, or the same at an <code class="docutils literal notranslate"><span class="pre">http(s)://</span></code>, <code class="docutils literal notranslate"><span class="pre">s3://</span></code> or <code class="docutils literal notranslate"><span class="pre">gs://</span></code> URL</p></td>
+</tr>
+<tr class="row-even"><td><p>N5</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">/data/x.n5/em/fibsem-uint16</span></code>, <code class="docutils literal notranslate"><span class="pre">s3://janelia-cosem-datasets/jrc_hela-2/jrc_hela-2.n5/em/fibsem-uint16/s0</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p>neuroglancer precomputed</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">precomputed:///data/volume</span></code>, <code class="docutils literal notranslate"><span class="pre">precomputed://gs://flyem-male-cns/em/em-clahe-jpeg</span></code>,
+<code class="docutils literal notranslate"><span class="pre">precomputed://https://storage.googleapis.com/flyem-male-cns/em/em-clahe-jpeg</span></code>,
+<code class="docutils literal notranslate"><span class="pre">precomputed://s3://bucket/volume</span></code>, and a bare <code class="docutils literal notranslate"><span class="pre">gs://flyem-male-cns/em/em-clahe-jpeg</span></code></p></td>
+</tr>
+</tbody>
+</table>
+<p>Paths run on past their container into the group or array inside it. The
+container ends at the last path component ending in <code class="docutils literal notranslate"><span class="pre">.zarr</span></code> or <code class="docutils literal notranslate"><span class="pre">.n5</span></code>;
+without one, it is the nearest directory up from the path with a <code class="docutils literal notranslate"><span class="pre">.zgroup</span></code>
+(on disk and at a URL alike), or the node’s own <code class="docutils literal notranslate"><span class="pre">zarr.json</span></code> for zarr v3.</p>
+<ul class="simple">
+<li><p>A <strong>multiscale group</strong> (OME-NGFF <code class="docutils literal notranslate"><span class="pre">multiscales</span></code>, or a precomputed volume’s
+scales) is read at the level for the voxel size asked for, or at its first
+level when none is. A path to one level (<code class="docutils literal notranslate"><span class="pre">…/s1</span></code>, a precomputed volume’s
+<code class="docutils literal notranslate"><span class="pre">…/s2</span></code>) is read at that level.</p></li>
+<li><p>A <strong>group without multiscales</strong> is read at its first array: the first
+subdirectory, sorted, that is one on disk; at a URL, which cannot be listed,
+its <code class="docutils literal notranslate"><span class="pre">s0</span></code>.</p></li>
+<li><p>A shell-escaped space (<code class="docutils literal notranslate"><span class="pre">my\</span> <span class="pre">data.zarr</span></code>) is unescaped in a local path, never
+in a URL.</p></li>
+</ul>
+<p><strong>A gs:// path is a precomputed volume unless it has a .zarr or .n5
+component.</strong> That is how cellmap-flow has always read <code class="docutils literal notranslate"><span class="pre">gs://</span></code> paths. A zarr
+whose names lack the suffix (such as CMIP6’s <code class="docutils literal notranslate"><span class="pre">gs://cmip6/CMIP6/…/tas</span></code>) is
+read through its public URL instead:
+<code class="docutils literal notranslate"><span class="pre">https://storage.googleapis.com/cmip6/CMIP6/…/tas</span></code>.</p>
+</section>
+<section id="remote-data-and-credentials">
+<h2>Remote data and credentials<a class="headerlink" href="#remote-data-and-credentials" title="Link to this heading"></a></h2>
+<p>Everything is read with tensorstore: no extra packages are needed for any
+scheme. Public data needs no credentials.</p>
+<dl>
+<dt><code class="docutils literal notranslate"><span class="pre">s3://</span></code></dt><dd><p>Read anonymously first, so a public bucket is read whatever AWS
+credentials are set up: S3 refuses even a public read signed with an
+expired or foreign key. When the bucket refuses an anonymous read,
+cellmap-flow tries again with the AWS default credentials: the
+<code class="docutils literal notranslate"><span class="pre">AWS_ACCESS_KEY_ID</span></code>/<code class="docutils literal notranslate"><span class="pre">AWS_SECRET_ACCESS_KEY</span></code> (and <code class="docutils literal notranslate"><span class="pre">AWS_SESSION_TOKEN</span></code>)
+environment variables, <code class="docutils literal notranslate"><span class="pre">~/.aws/credentials</span></code> and <code class="docutils literal notranslate"><span class="pre">~/.aws/config</span></code>
+(<code class="docutils literal notranslate"><span class="pre">AWS_PROFILE</span></code> picks the profile), then an EC2 instance’s role.</p>
+<p>An S3-compatible store (MinIO, Ceph, Wasabi) is named with
+<code class="docutils literal notranslate"><span class="pre">AWS_ENDPOINT_URL_S3</span></code> or <code class="docutils literal notranslate"><span class="pre">AWS_ENDPOINT_URL</span></code>, and its region with
+<code class="docutils literal notranslate"><span class="pre">AWS_REGION</span></code> or <code class="docutils literal notranslate"><span class="pre">AWS_DEFAULT_REGION</span></code>.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">gs://</span></code></dt><dd><p>Read with Google application-default credentials when there are any:
+<code class="docutils literal notranslate"><span class="pre">GOOGLE_APPLICATION_CREDENTIALS</span></code>, or the file
+<code class="docutils literal notranslate"><span class="pre">gcloud</span> <span class="pre">auth</span> <span class="pre">application-default</span> <span class="pre">login</span></code> writes. Without them the read is
+anonymous. When Google Cloud Storage refuses those credentials (an expired
+or revoked login refuses even public buckets), the bucket is read at its
+public URL, <code class="docutils literal notranslate"><span class="pre">https://storage.googleapis.com/&lt;bucket&gt;/&lt;path&gt;</span></code>.</p>
+</dd>
+<dt><code class="docutils literal notranslate"><span class="pre">http://</span></code> and <code class="docutils literal notranslate"><span class="pre">https://</span></code></dt><dd><p>Read as they are, with no credentials.</p>
+</dd>
+</dl>
+<p>The way in that worked is remembered for each bucket, so only the first read
+of a private bucket is refused. A failed metadata request is retried for
+about 5 seconds before the path is reported unreadable.</p>
+</section>
+<section id="the-raw-layer-in-the-viewer">
+<h2>The raw layer in the viewer<a class="headerlink" href="#the-raw-layer-in-the-viewer" title="Link to this heading"></a></h2>
+<p>By default (<code class="docutils literal notranslate"><span class="pre">wrap_raw:</span> <span class="pre">true</span></code>) the raw layer is served by cellmap-flow
+itself, through the same reader as inference, so it works for every path
+above and shows the data through the input normalizers.</p>
+<p>With <code class="docutils literal notranslate"><span class="pre">wrap_raw:</span> <span class="pre">false</span></code> neuroglancer reads the data in the browser, so the
+browser must be able to reach it. Its source is the dataset’s URL with the
+format in front: <code class="docutils literal notranslate"><span class="pre">zarr://s3://…</span></code>, <code class="docutils literal notranslate"><span class="pre">zarr://gs://…</span></code>, <code class="docutils literal notranslate"><span class="pre">zarr://https://…</span></code>,
+<code class="docutils literal notranslate"><span class="pre">n5://…</span></code>, or <code class="docutils literal notranslate"><span class="pre">precomputed://gs://…</span></code> (a precomputed volume, never one of
+its scales). The browser has none of the credentials above and cannot open
+local files, so a private bucket or a local path needs <code class="docutils literal notranslate"><span class="pre">wrap_raw:</span> <span class="pre">true</span></code>.</p>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="yaml_config.html" class="btn btn-neutral float-left" title="YAML Configuration" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="huggingface.html" class="btn btn-neutral float-right" title="HuggingFace Models" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, David Ackerman,  Marwan Zouinkhi, Jeff Rhoades, Larissa Heinrich, Aubrey Weigel.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

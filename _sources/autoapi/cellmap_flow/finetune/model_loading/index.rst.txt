@@ -1,0 +1,87 @@
+cellmap_flow.finetune.model_loading
+===================================
+
+.. py:module:: cellmap_flow.finetune.model_loading
+
+.. autoapi-nested-parse::
+
+   The trainable nn.Module behind a model config.
+
+   A served model is often not trainable as it stands: the cellmap and
+   Hugging Face models are TorchScript, which LoRA cannot wrap and autograd
+   cannot train. ``cellmap_model.train()`` rebuilds them as an unflattened
+   torch.export module, which is what the trainer needs. The adapter and
+   full-finetune exports are keyed by the names in that exact module tree
+   (``BatchLoopWrapper``'s ``model.`` prefix included), so training and
+   serving must build it the same way: both call ``load_trainable_model``
+   (serving through ``FinetuneModelConfig``).
+
+   The finetune CLI used to do this itself for fly/dacapo/huggingface/script
+   models only, so a ``type: cellmap`` model -- which is exactly what
+   export_merged produces -- or a finetuned model registered back into the
+   dashboard could not be finetuned at all.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.model_loading.logger
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.model_loading.decode_model_entry
+   cellmap_flow.finetune.model_loading.model_config_from_entry
+   cellmap_flow.finetune.model_loading.load_trainable_model
+   cellmap_flow.finetune.model_loading.root_base_model_dict
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:function:: decode_model_entry(text: str) -> dict
+
+   A model entry given on the command line: JSON, or encode_to_str() of it.
+
+
+.. py:function:: model_config_from_entry(entry: dict, name=None)
+
+   Build a ModelConfig from a model entry, as ``ModelConfig.to_dict()`` writes it.
+
+   Keys the class does not take are dropped first: ``to_dict()`` surfaces
+   some for display (FinetuneModelConfig copies its base model's channels
+   and voxel sizes up, say), and the constructor would reject them.
+
+
+.. py:function:: load_trainable_model(model_config) -> torch.nn.Module
+
+   The module to train for ``model_config``.
+
+   - TorchScript (cellmap, Hugging Face): the unflattened module from
+     ``cellmap_model.train()``, wrapped in BatchLoopWrapper when it is fixed
+     at batch 1.
+   - A finetuned model (``type: finetune``): the model it serves -- the base
+     tree with its LoRA adapter attached (a PeftModel), or with its full
+     finetuned weights loaded. Wrapping it in a new adapter folds the old
+     one in first (lora_wrapper._merge_existing_adapters), so training
+     continues from the finetuned model rather than from its base.
+   - Anything else: ``model_config.config.model`` as it is.
+
+
+.. py:function:: root_base_model_dict(model_config) -> dict
+
+   The innermost non-finetune model entry under ``model_config``.
+
+   A full finetune's weights replace every parameter, so what it needs from
+   its base is only the module tree -- and a finetune-of-a-finetune base
+   would hand the weights a PeftModel, whose names no longer match.
+
+

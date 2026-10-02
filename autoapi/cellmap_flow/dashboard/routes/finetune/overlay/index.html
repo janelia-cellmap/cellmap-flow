@@ -10,7 +10,6 @@
       <link rel="stylesheet" type="text/css" href="../../../../../../_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="../../../../../../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../../../../../../_static/graphviz.css?v=4ae1632d" />
-      <link rel="stylesheet" type="text/css" href="../../../../../../_static/mystnb.11b39860a7a0cbfd473a3ad8a317855267ff0bd372690045ca344a6b62be495e.css" />
       <link rel="stylesheet" type="text/css" href="../../../../../../_static/css/custom.css" />
 
   
@@ -20,12 +19,11 @@
       <script src="../../../../../../_static/documentation_options.js?v=5929fcd5"></script>
       <script src="../../../../../../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../../../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
-      <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
     <script src="../../../../../../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../../../../../../genindex.html" />
     <link rel="search" title="Search" href="../../../../../../search.html" />
-    <link rel="next" title="cellmap_flow.dashboard.routes.finetune.routes" href="../routes/index.html" />
-    <link rel="prev" title="cellmap_flow.dashboard.routes.finetune.good_regions" href="../good_regions/index.html" /> 
+    <link rel="next" title="cellmap_flow.dashboard.routes.finetune.training" href="../training/index.html" />
+    <link rel="prev" title="cellmap_flow.dashboard.routes.finetune.layers" href="../layers/index.html" /> 
 </head>
 
 <body class="wy-body-for-nav"> 
@@ -50,27 +48,44 @@
               <p class="caption" role="heading"><span class="caption-text">CellMap-Flow API:</span></p>
 <ul class="current">
 <li class="toctree-l1"><a class="reference internal" href="../../../../../../install.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../../cli.html">Command line</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../../../scripts.html">Python Scripts</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../../../yaml_config.html">YAML Configuration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../../data_paths.html">Data paths</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../../../huggingface.html">HuggingFace Models</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../../../custom_script.html">Custom Model</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../../../post.html">PostProcessors</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../../../plugins.html">Plugins</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../../review.html">Reviewing instances</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../../viewer_api.html">Viewer layer API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../../architecture.html">Architecture</a></li>
 <li class="toctree-l1 current"><a class="reference internal" href="../../../../../index.html">API Reference</a><ul class="current">
 <li class="toctree-l2 current"><a class="reference internal" href="../../../../index.html">cellmap_flow</a><ul class="current">
 <li class="toctree-l3 current"><a class="reference internal" href="../../../../index.html#submodules">Submodules</a><ul class="current">
 <li class="toctree-l4"><a class="reference internal" href="../../../../blockwise/index.html">cellmap_flow.blockwise</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../../../cli/index.html">cellmap_flow.cli</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../config/index.html">cellmap_flow.config</a></li>
 <li class="toctree-l4 current"><a class="reference internal" href="../../../index.html">cellmap_flow.dashboard</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../../../finetune/index.html">cellmap_flow.finetune</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../../../globals/index.html">cellmap_flow.globals</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../../../image_data_interface/index.html">cellmap_flow.image_data_interface</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../inference/index.html">cellmap_flow.inference</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../../../inferencer/index.html">cellmap_flow.inferencer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../io/index.html">cellmap_flow.io</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../jobs/index.html">cellmap_flow.jobs</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../logging_setup/index.html">cellmap_flow.logging_setup</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../../../models/index.html">cellmap_flow.models</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../../../norm/index.html">cellmap_flow.norm</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../pipeline_spec/index.html">cellmap_flow.pipeline_spec</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../plugins/index.html">cellmap_flow.plugins</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../../../post/index.html">cellmap_flow.post</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../process_chain/index.html">cellmap_flow.process_chain</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../review/index.html">cellmap_flow.review</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../review_index/index.html">cellmap_flow.review_index</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../../../server/index.html">cellmap_flow.server</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../serving/index.html">cellmap_flow.serving</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../../../utils/index.html">cellmap_flow.utils</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../viewer/index.html">cellmap_flow.viewer</a></li>
 </ul>
 </li>
 </ul>
@@ -110,6 +125,11 @@
              
   <section id="module-cellmap_flow.dashboard.routes.finetune.overlay">
 <span id="cellmap-flow-dashboard-routes-finetune-overlay"></span><h1>cellmap_flow.dashboard.routes.finetune.overlay<a class="headerlink" href="#module-cellmap_flow.dashboard.routes.finetune.overlay" title="Link to this heading"></a></h1>
+<p>What the viewer shows of the annotations: a volume’s editable layer, and
+boxes around the regions that have annotations in them.</p>
+<p>Routes: POST <code class="docutils literal notranslate"><span class="pre">/api/finetune/add-to-viewer</span></code> (a volume’s paintable layer),
+POST <code class="docutils literal notranslate"><span class="pre">/api/finetune/refresh-annotated-regions</span></code> (redraw the boxes) and POST
+<code class="docutils literal notranslate"><span class="pre">/api/finetune/sync-annotations</span></code> (pull the annotations from MinIO now).</p>
 <section id="attributes">
 <h2>Attributes<a class="headerlink" href="#attributes" title="Link to this heading"></a></h2>
 <table class="autosummary longtable docutils align-default">
@@ -127,16 +147,19 @@
 <h2>Functions<a class="headerlink" href="#functions" title="Link to this heading"></a></h2>
 <table class="autosummary longtable docutils align-default">
 <tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.overlay.refresh_annotated_regions_layer" title="cellmap_flow.dashboard.routes.finetune.overlay.refresh_annotated_regions_layer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">refresh_annotated_regions_layer</span></code></a>([corrections_path])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.overlay.add_annotation_layer" title="cellmap_flow.dashboard.routes.finetune.overlay.add_annotation_layer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">add_annotation_layer</span></code></a>(viewer, layer_name, annotation_url, *)</p></td>
+<td><p>Add the writable layer that paints into a volume, and select it.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.overlay.refresh_annotated_regions_layer" title="cellmap_flow.dashboard.routes.finetune.overlay.refresh_annotated_regions_layer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">refresh_annotated_regions_layer</span></code></a>([corrections_path])</p></td>
 <td><p>Draw a box around every region that has annotations in it.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.overlay.refresh_annotated_regions_response" title="cellmap_flow.dashboard.routes.finetune.overlay.refresh_annotated_regions_response"><code class="xref py py-obj docutils literal notranslate"><span class="pre">refresh_annotated_regions_response</span></code></a>(data)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.overlay.refresh_annotated_regions" title="cellmap_flow.dashboard.routes.finetune.overlay.refresh_annotated_regions"><code class="xref py py-obj docutils literal notranslate"><span class="pre">refresh_annotated_regions</span></code></a>()</p></td>
 <td><p>Redraw the annotated-regions boxes because the user asked for it.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.overlay.add_crop_to_viewer_response" title="cellmap_flow.dashboard.routes.finetune.overlay.add_crop_to_viewer_response"><code class="xref py py-obj docutils literal notranslate"><span class="pre">add_crop_to_viewer_response</span></code></a>(data)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.overlay.add_crop_to_viewer" title="cellmap_flow.dashboard.routes.finetune.overlay.add_crop_to_viewer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">add_crop_to_viewer</span></code></a>()</p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.overlay.sync_annotations_manually_response" title="cellmap_flow.dashboard.routes.finetune.overlay.sync_annotations_manually_response"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sync_annotations_manually_response</span></code></a>(data)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.overlay.sync_annotations_manually" title="cellmap_flow.dashboard.routes.finetune.overlay.sync_annotations_manually"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sync_annotations_manually</span></code></a>()</p></td>
 <td><p></p></td>
 </tr>
 </tbody>
@@ -155,18 +178,35 @@
 <dd></dd></dl>
 
 <dl class="py function">
-<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.overlay.refresh_annotated_regions_layer">
-<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.overlay.</span></span><span class="sig-name descname"><span class="pre">refresh_annotated_regions_layer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">corrections_path</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.overlay.refresh_annotated_regions_layer" title="Link to this definition"></a></dt>
-<dd><p>Draw a box around every region that has annotations in it.</p>
-<p>Only ever called for something the user just did – creating a volume,
-importing crops, or clicking “Show Annotated Regions”. Nothing calls this
-on a timer: see the note on _last_annotated_regions for why a push the
-user did not ask for is destructive.</p>
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.overlay.add_annotation_layer">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.overlay.</span></span><span class="sig-name descname"><span class="pre">add_annotation_layer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">viewer</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">layer_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">annotation_url</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">keep_existing</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.overlay.add_annotation_layer" title="Link to this definition"></a></dt>
+<dd><p>Add the writable layer that paints into a volume, and select it.</p>
+<p><code class="docutils literal notranslate"><span class="pre">annotation_url</span></code> is the volume’s <code class="docutils literal notranslate"><span class="pre">annotation</span></code> group as MinIO serves
+it. This is the one builder of that layer: add-to-viewer (after
+create-volume and resume), load-crops and instance corrections all add
+it here. So each gets the draw tools pre-bound (ANNOTATION_TOOL_BINDINGS)
+and is selected with its panel open, ready to paint without hunting for
+it in the layer list; load-crops and instance corrections used to build
+their own, with neither. The panel opens on its Draw tab, where the
+brush and flood fill are.</p>
+<p>A layer of that name is replaced, unless <code class="docutils literal notranslate"><span class="pre">keep_existing</span></code>: then it is
+left as it is, selection included, and False is returned.</p>
 </dd></dl>
 
 <dl class="py function">
-<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.overlay.refresh_annotated_regions_response">
-<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.overlay.</span></span><span class="sig-name descname"><span class="pre">refresh_annotated_regions_response</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.overlay.refresh_annotated_regions_response" title="Link to this definition"></a></dt>
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.overlay.refresh_annotated_regions_layer">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.overlay.</span></span><span class="sig-name descname"><span class="pre">refresh_annotated_regions_layer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">corrections_path</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.overlay.refresh_annotated_regions_layer" title="Link to this definition"></a></dt>
+<dd><p>Draw a box around every region that has annotations in it.</p>
+<p>Only ever called for something the user just did: creating a volume,
+importing crops, resuming a session, clicking “Save Annotations to
+Disk” or “Show Annotated Regions”. Nothing calls this on a timer: see
+the note on _last_annotated_regions for why a push the user did not ask
+for is destructive.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.overlay.refresh_annotated_regions">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.overlay.</span></span><span class="sig-name descname"><span class="pre">refresh_annotated_regions</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.overlay.refresh_annotated_regions" title="Link to this definition"></a></dt>
 <dd><p>Redraw the annotated-regions boxes because the user asked for it.</p>
 <p>This is the only way the boxes update during a session. It pushes viewer
 state, which rebuilds every layer browser-side, so it is deliberately a
@@ -175,13 +215,13 @@ while you are in the middle of painting.</p>
 </dd></dl>
 
 <dl class="py function">
-<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.overlay.add_crop_to_viewer_response">
-<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.overlay.</span></span><span class="sig-name descname"><span class="pre">add_crop_to_viewer_response</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.overlay.add_crop_to_viewer_response" title="Link to this definition"></a></dt>
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.overlay.add_crop_to_viewer">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.overlay.</span></span><span class="sig-name descname"><span class="pre">add_crop_to_viewer</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.overlay.add_crop_to_viewer" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py function">
-<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.overlay.sync_annotations_manually_response">
-<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.overlay.</span></span><span class="sig-name descname"><span class="pre">sync_annotations_manually_response</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.overlay.sync_annotations_manually_response" title="Link to this definition"></a></dt>
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.overlay.sync_annotations_manually">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.overlay.</span></span><span class="sig-name descname"><span class="pre">sync_annotations_manually</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.overlay.sync_annotations_manually" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 </section>
@@ -191,8 +231,8 @@ while you are in the middle of painting.</p>
            </div>
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
-        <a href="../good_regions/index.html" class="btn btn-neutral float-left" title="cellmap_flow.dashboard.routes.finetune.good_regions" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
-        <a href="../routes/index.html" class="btn btn-neutral float-right" title="cellmap_flow.dashboard.routes.finetune.routes" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="../layers/index.html" class="btn btn-neutral float-left" title="cellmap_flow.dashboard.routes.finetune.layers" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../training/index.html" class="btn btn-neutral float-right" title="cellmap_flow.dashboard.routes.finetune.training" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>

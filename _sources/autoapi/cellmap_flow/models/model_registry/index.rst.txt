@@ -5,111 +5,12 @@ cellmap_flow.models.model_registry
 
 .. autoapi-nested-parse::
 
-   Registry and introspection tools for ModelConfig subclasses.
+   Deprecated: the Hugging Face listing is ``cellmap_flow.models.hf_catalog``.
 
+   Kept only for ``list_huggingface_models`` and ``refresh_huggingface_models``,
+   which docs/source/huggingface.rst imported from here; they warn, and go in
+   the release after 0.3.0. The model form's helpers are
+   ``cellmap_flow.models.registry``'s.
 
-
-Attributes
-----------
-
-.. autoapisummary::
-
-   cellmap_flow.models.model_registry.MODEL_CONFIG_CLASSES
-   cellmap_flow.models.model_registry.HUGGING_FACE_ORGS_NAME
-   cellmap_flow.models.model_registry.HF_CACHE_DIR
-   cellmap_flow.models.model_registry.HF_CACHE_FILE
-
-
-Functions
----------
-
-.. autoapisummary::
-
-   cellmap_flow.models.model_registry.get_parameter_info
-   cellmap_flow.models.model_registry.get_all_model_configs
-   cellmap_flow.models.model_registry.instantiate_model_config
-   cellmap_flow.models.model_registry.list_huggingface_models
-   cellmap_flow.models.model_registry.refresh_huggingface_models
-
-
-Module Contents
----------------
-
-.. py:data:: MODEL_CONFIG_CLASSES
-
-.. py:data:: HUGGING_FACE_ORGS_NAME
-   :value: 'cellmap'
-
-
-.. py:data:: HF_CACHE_DIR
-
-.. py:data:: HF_CACHE_FILE
-
-.. py:function:: get_parameter_info(cls) -> Dict[str, Any]
-
-   Extract parameter information from a ModelConfig subclass __init__ method.
-
-   Returns a dict with parameter names as keys and info dicts with:
-   - 'type': the type hint (str, int, list, tuple, etc.)
-   - 'required': whether the parameter is required (no default value)
-   - 'default': the default value if provided
-   - 'description': parameter name for UI labels
-
-
-.. py:function:: get_all_model_configs() -> Dict[str, Dict[str, Any]]
-
-   Get metadata for all available ModelConfig subclasses.
-
-   Returns a dict like:
-   {
-       'ScriptModelConfig': {
-           'display_name': 'Script Model',
-           'description': 'Load model from Python script',
-           'parameters': {
-               'script_path': {
-                   'name': 'script_path',
-                   'type': 'string',
-                   'required': True,
-                   'description': 'Script Path',
-                   'input_type': 'file'
-               },
-               'name': {
-                   'name': 'name',
-                   'type': 'string',
-                   'required': False,
-                   'description': 'Name',
-                   'default': None
-               },
-               ...
-           }
-       },
-       ...
-   }
-
-
-.. py:function:: instantiate_model_config(class_name: str, params: Dict[str, Any]) -> Any
-
-   Instantiate a ModelConfig subclass with the provided parameters.
-
-   :param class_name: Name of the ModelConfig subclass (e.g., 'ScriptModelConfig')
-   :param params: Dictionary of parameters to pass to __init__
-
-   :returns: An instance of the ModelConfig subclass
-
-   :raises ValueError: If class_name is not recognized or params are invalid
-
-
-.. py:function:: list_huggingface_models(org_name: str = HUGGING_FACE_ORGS_NAME) -> Dict[str, Any]
-
-   List available Hugging Face models, using cache if available.
-
-   :param org_name: Hugging Face organization name to filter models (default: "cellmap")
-
-   :returns: A dict mapping model IDs to their metadata
-
-
-.. py:function:: refresh_huggingface_models(org_name: str = HUGGING_FACE_ORGS_NAME) -> Dict[str, Any]
-
-   Force refresh the Hugging Face models cache.
 
 

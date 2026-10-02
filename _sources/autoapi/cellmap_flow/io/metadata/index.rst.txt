@@ -1,0 +1,296 @@
+cellmap_flow.io.metadata
+========================
+
+.. py:module:: cellmap_flow.io.metadata
+
+.. autoapi-nested-parse::
+
+   Array metadata for every format cellmap-flow reads, as one ``ArrayMeta``.
+
+   ``read_array_meta(path)`` reads zarr v2 and v3, N5 and neuroglancer
+   precomputed, on disk or at an http(s), s3 or gs URL: every document is read
+   through ``io.store``, so a URL reads as the same files on disk do. Every axis is
+   kept, in the array's own (C) order; sizes and translations are nanometer
+   floats, and the translation is the lower corner of voxel 0 -- an OME
+   translation (voxel 0's centre) is converted exactly, with no rounding onto
+   the voxel grid. ``.spatial()`` drops the channel/time axes.
+
+   Four parsers produce it:
+
+   - ``_ome``: an OME-NGFF multiscales entry (v2 ``.zattrs`` and v3
+     ``zarr.json`` alike), matched on ``datasets[].path``.
+   - ``_n5``: the N5/funlib attribute search -- ``resolution``, ``scale``,
+     ``pixelResolution`` x ``downsamplingFactors``, ``transform``, ``offset``,
+     ``units`` -- on an array and its parent group, with the axis reversal N5
+     needs. zarr v2 arrays without OME metadata go through it too, and keep
+     its rounding of the offset onto the voxel grid (``regularize_offset``).
+   - ``legacy_attrs``: ``transform`` or ``resolution``/``offset`` on a v3
+     array itself (and on crops), taken as written.
+   - ``_precomputed``: the volume's ``info`` JSON, as tensorstore reads it.
+
+   ``list_levels(path)`` gives the levels of an OME multiscale group, or the
+   scales of a precomputed volume.
+
+   Each format's reader keeps the lookup order and fallbacks of the
+   per-format reader it replaced; tests/utils/test_io_metadata.py pins them.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.io.metadata.logger
+   cellmap_flow.io.metadata.NANOMETER
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.io.metadata.ArrayMeta
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.io.metadata.nm_per_unit
+   cellmap_flow.io.metadata.to_nm
+   cellmap_flow.io.metadata.spatial_axes
+   cellmap_flow.io.metadata.snap_integral
+   cellmap_flow.io.metadata.is_integral
+   cellmap_flow.io.metadata.regularize_offset
+   cellmap_flow.io.metadata.match_dataset
+   cellmap_flow.io.metadata.dataset_transforms
+   cellmap_flow.io.metadata.n5_voxel_size
+   cellmap_flow.io.metadata.n5_offset
+   cellmap_flow.io.metadata.n5_units
+   cellmap_flow.io.metadata.legacy_attrs
+   cellmap_flow.io.metadata.read_zarr_json
+   cellmap_flow.io.metadata.attrs_from_meta
+   cellmap_flow.io.metadata.multiscales_from_group
+   cellmap_flow.io.metadata.node_type
+   cellmap_flow.io.metadata.read_array_meta
+   cellmap_flow.io.metadata.list_levels
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:data:: NANOMETER
+   :value: 'nanometer'
+
+
+.. py:function:: nm_per_unit(unit) -> float
+
+   How many nanometers one ``unit`` is; 1 for a missing or unknown unit.
+
+
+.. py:function:: to_nm(values, units) -> Tuple[float, ...]
+
+   ``values`` (one per axis) in nanometers; ``units`` None means nm.
+
+
+.. py:function:: spatial_axes(axes)
+
+   Indices, names and units of the spatial axes of an OME ``axes`` list.
+
+   Returns ``(None, None, None)`` when there is no axes list. Axes typed
+   "space" are spatial; untyped ones are unless named like a channel or time
+   axis (OME 0.3 lists bare names).
+
+
+.. py:function:: snap_integral(values)
+
+   ``values`` as floats, with near-whole numbers made exactly whole.
+
+
+.. py:function:: is_integral(values) -> bool
+
+.. py:function:: regularize_offset(voxel_size_float, offset_float)
+
+       offset is not a multiple of voxel_size. This is often due to someone defining
+       offset to the point source of each array element i.e. the center of the rendered
+       voxel, vs the offset to the corner of the voxel.
+       apparently this can be a heated discussion. See here for arguments against
+       the convention we are using: http://alvyray.com/Memos/CG/Microsoft/6_pixel.pdf
+
+   Only the legacy (non-OME) attributes go through this; an OME translation
+   is converted to a corner exactly instead.
+
+   :param voxel_size_float: float voxel size list
+   :type voxel_size_float: [float]
+   :param offset_float: float offset list
+   :type offset_float: [float]
+
+   :returns: returned offset size that is multiple of voxel size.
+             For a non-integer voxel size, two tuples of floats instead (the same
+             rounding, without truncating the voxel size to an integer first).
+   :rtype: (Coordinate, Coordinate))
+
+
+.. py:class:: ArrayMeta
+
+   What one array is, independent of its format.
+
+   Every per-axis tuple has one entry per array dimension, in the array's
+   (C) order. ``units[i]`` is "nanometer" on a spatial axis -- its
+   ``voxel_size`` and ``translation`` have been converted to nm -- and None
+   on a channel or time axis, where ``voxel_size`` is 1.0 and
+   ``translation`` 0.0. ``translation`` is the lower corner of voxel 0.
+   An axis nobody named has the name "".
+
+   ``format`` is "zarr2", "zarr3", "n5" or "precomputed".
+
+
+   .. py:attribute:: path
+      :type:  str
+
+
+   .. py:attribute:: format
+      :type:  str
+
+
+   .. py:attribute:: shape
+      :type:  Tuple[int, ...]
+
+
+   .. py:attribute:: dtype
+      :type:  Optional[numpy.dtype]
+
+
+   .. py:attribute:: chunk_shape
+      :type:  Tuple[int, ...]
+
+
+   .. py:attribute:: axes
+      :type:  Tuple[str, ...]
+
+
+   .. py:attribute:: units
+      :type:  Tuple[Optional[str], ...]
+
+
+   .. py:attribute:: voxel_size
+      :type:  Tuple[float, ...]
+
+
+   .. py:attribute:: translation
+      :type:  Tuple[float, ...]
+
+
+   .. py:attribute:: fill_value
+      :type:  object
+      :value: None
+
+
+
+   .. py:property:: spatial_indices
+      :type: Tuple[int, ...]
+
+
+
+   .. py:property:: channel_axis
+      :type: Optional[int]
+
+
+      The first non-spatial axis that is not time, or None.
+
+
+   .. py:method:: spatial() -> ArrayMeta
+
+      This array's metadata with only its spatial axes.
+
+
+
+.. py:function:: match_dataset(multiscale: dict, dataset_path: str) -> Optional[dict]
+
+   The ``datasets`` entry of one multiscales item whose path is
+   ``dataset_path`` (leading and trailing "/" ignored), or None.
+
+
+.. py:function:: dataset_transforms(entry: dict)
+
+   ``(scale, translation)`` of an OME ``datasets`` entry as written, each
+   None when the entry has none.
+
+
+.. py:function:: n5_voxel_size(items: Sequence[dict], order: str)
+
+   The voxel size in the first of ``items`` (array attrs, then its
+   parent's) that has one: ``resolution``, ``scale``, ``pixelResolution``
+   times ``downsamplingFactors``, or ``transform.scale``.
+
+   ``order`` is the axis order the caller reads in ("C", or "F" for N5).
+   ``transform`` states its own ``ordering`` (C unless it says otherwise:
+   Davis writes C order whatever the store) and is reversed to ``order``.
+
+
+.. py:function:: n5_offset(items: Sequence[dict], order: str)
+
+   ``offset``, or ``transform.translate``, as ``n5_voxel_size`` finds it.
+
+
+.. py:function:: n5_units(items: Sequence[dict], order: str, ndim: int)
+
+   ``units``, ``pixelResolution.unit`` or ``transform.units``, one per
+   axis (see _per_axis); ``ndim`` "pixels" when there are none.
+
+
+.. py:function:: legacy_attrs(attrs: dict, ndim: int) -> Tuple[List[float], List[float]]
+
+   ``(voxel_size, offset)`` from an array's own ``transform`` or
+   ``resolution``/``offset`` attributes, as written; 1 and 0 without them.
+
+   For zarr v3 plain arrays and imported crops, which never went through
+   the N5 search: no parent lookup, no units, no rounding.
+
+
+.. py:function:: read_zarr_json(path: str) -> dict
+
+   The ``zarr.json`` of the v3 node at ``path``; FileNotFoundError when
+   there is none.
+
+
+.. py:function:: attrs_from_meta(meta: dict) -> dict
+
+   Merge OME-NGFF 0.5's nested ``attributes.ome`` with the top-level
+   ``attributes`` dict (some writers emit OME metadata unnested).
+
+
+.. py:function:: multiscales_from_group(group_path: str) -> Optional[dict]
+
+   The first multiscales item of a v3 group, or None (also for an array).
+
+
+.. py:function:: node_type(path: str) -> Tuple[str, str]
+
+   ``(node, "group" or "array")``: the zarr v2, v3 or N5 node that
+   answers for ``path`` and what it is. The node is ``path`` itself, except
+   on disk under a v3 node (``_v3_node``). FileNotFoundError when there is
+   none.
+
+
+.. py:function:: read_array_meta(path: str) -> ArrayMeta
+
+   Metadata of the array at ``path`` (see the module docstring). A path at
+   a group reads its first level: the first its multiscales list, else its
+   first array (``_child_names``).
+
+
+.. py:function:: list_levels(group_path: str) -> List[Tuple[str, ArrayMeta]]
+
+   ``[(dataset path, ArrayMeta)]`` for each level of the OME multiscale
+   group at ``group_path``, in the order its ``datasets`` list them, or of
+   the precomputed volume there (``_precomputed_levels``).
+
+   Raises when there is no such group (KeyError for a v2 group without
+   multiscales, ValueError for a v3 one).
+
+

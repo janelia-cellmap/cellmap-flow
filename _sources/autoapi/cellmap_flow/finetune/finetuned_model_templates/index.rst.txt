@@ -18,6 +18,8 @@ Attributes
 .. autoapisummary::
 
    cellmap_flow.finetune.finetuned_model_templates.logger
+   cellmap_flow.finetune.finetuned_model_templates.FINETUNED_MODEL_YAML_MARKER
+   cellmap_flow.finetune.finetuned_model_templates.PLACEHOLDER_DATA_PATHS
 
 
 Functions
@@ -34,7 +36,13 @@ Module Contents
 
 .. py:data:: logger
 
-.. py:function:: generate_finetuned_model_yaml(lora_adapter_path: str = None, base_model_dict: dict = None, model_name: str = None, output_path: pathlib.Path = None, data_path: str = None, queue: str = 'gpu_h100', charge_group: str = 'cellmap', json_data: dict = None, scale: str = 's0', weights_path: str = None) -> pathlib.Path
+.. py:data:: FINETUNED_MODEL_YAML_MARKER
+   :value: 'FINETUNED_MODEL_YAML:'
+
+
+.. py:data:: PLACEHOLDER_DATA_PATHS
+
+.. py:function:: generate_finetuned_model_yaml(lora_adapter_path: str = None, base_model_dict: dict = None, model_name: str = None, output_path: pathlib.Path = None, data_path: str = None, queue: str = None, charge_group: str = None, json_data: dict = None, scale: str = None, weights_path: str = None) -> pathlib.Path
 
    Generate .yaml configuration for serving a finetuned model.
 
@@ -49,19 +57,23 @@ Module Contents
    :param model_name: Name of the finetuned model
    :param output_path: Where to write the .yaml file
    :param data_path: Path to actual dataset (REQUIRED - no placeholders)
-   :param queue: LSF queue name
-   :param charge_group: LSF charge group
+   :param queue: LSF queue name; None is the site's default queue
+   :param charge_group: LSF charge group; None is the site's default one
    :param json_data: Optional dict with input_norm and postprocess from base model
-   :param scale: Scale level (e.g., "s0", "s1") from base model
+   :param scale: The level of a multiscale ``data_path`` to serve ("s1"), or
+                 None for none. With none, the server picks the level by the
+                 model's input voxel size, which is how the trainer read the same
+                 ``data_path``. This was always "s0", so a model trained on s1 of
+                 a multiscale group was served s0.
 
    :returns: Path to the generated YAML file
 
 
-.. py:function:: generate_current_config_yaml(models: list, data_path: str, queue: str = 'gpu_h100', charge_group: str = 'cellmap', walltime: str = None, json_data: dict = None) -> str
+.. py:function:: generate_current_config_yaml(models: list, data_path: str, queue: str = None, charge_group: str = None, walltime: str = None, json_data: dict = None) -> str
 
    Build YAML text snapshotting the dashboard's current live server config
    (whatever models/normalization/postprocessing/queue are active right
-   now), so it can be handed back to `cellmap_flow_yaml` later.
+   now), so it can be handed back to `cellmap_flow yaml` later.
 
    Unlike generate_finetuned_model_yaml (which describes one specific
    finetune job), this is a general "export what's currently running"
@@ -70,8 +82,8 @@ Module Contents
 
    :param models: list of model entry dicts (each from ModelConfig.to_dict())
    :param data_path: current dataset path
-   :param queue: LSF queue name
-   :param charge_group: LSF charge group
+   :param queue: LSF queue name; None is the site's default queue
+   :param charge_group: LSF charge group; None is the site's default one
    :param walltime: LSF run limit ("HH:MM" or minutes); omitted when unset, so
                     the reloaded config falls back to the built-in default
    :param json_data: dict with "input_norm"/"postprocess" keys reflecting the

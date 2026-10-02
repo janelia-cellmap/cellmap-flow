@@ -1,0 +1,128 @@
+cellmap_flow.finetune.session_loop
+==================================
+
+.. py:module:: cellmap_flow.finetune.session_loop
+
+.. autoapi-nested-parse::
+
+   The finetune job's loop: train, export, serve, wait for a restart, reset, again.
+
+   ``TrainingSession.run`` is the job. Each iteration builds its data, target
+   and trainer, trains, exports into its own iterations/NNN_<ts>/ (see
+   run_outputs), and announces the result on stdout (see markers). A served
+   job (--auto-serve) then starts, or keeps, its inference server, which shares
+   the model object, and waits for a restart: from the server's control
+   endpoint (RestartController) or a restart_signal.json in the output
+   directory. A restart may change training settings only (cli.RESTARTABLE_ARGS);
+   training then starts again from the model the job started from.
+
+   The job manager follows the job through those stdout lines, and a job
+   outlives a dashboard upgrade, so their text and order only change
+   compatibly.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.session_loop.logger
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.session_loop.RestartController
+   cellmap_flow.finetune.session_loop.TrainingSession
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:class:: RestartController
+
+   Hands a restart from the inference server's thread to the training loop.
+
+   The server's ``/__control__/restart`` endpoint, once it has checked the
+   job's token, calls ``request_restart`` with the request's body; the
+   loop's wait (_wait_for_restart_signal) polls ``get_if_triggered``. A
+   request that comes while the job is still training is kept until the
+   wait; a second one replaces the first.
+
+
+   .. py:method:: request_restart(payload: Optional[dict]) -> bool
+
+
+   .. py:method:: get_if_triggered() -> Optional[dict]
+
+
+.. py:class:: TrainingSession(args, model_config: cellmap_flow.models.models_config.ModelConfig, model, strategy)
+
+   One finetune job, iteration after iteration, until it ends.
+
+   ``model`` is the model to train, already prepared by ``strategy`` (the
+   request decides the strategy, once, in finetune_cli.main; from then on
+   the model does, through strategy_for). It is built once and reused
+   across restarts: the inference server shares the object, so a restart
+   retrains what is being served.
+
+
+   .. py:attribute:: args
+
+
+   .. py:attribute:: model_config
+
+
+   .. py:attribute:: model
+
+
+   .. py:attribute:: restart_controller
+
+
+   .. py:attribute:: server_started
+      :value: False
+
+
+
+   .. py:attribute:: iteration
+      :value: 0
+
+
+
+   .. py:attribute:: teacher_model
+      :value: None
+
+
+
+   .. py:attribute:: initial_state
+
+
+   .. py:attribute:: tb_position
+      :value: (0, 0)
+
+
+
+   .. py:attribute:: applied_restarts
+
+
+   .. py:attribute:: pending_reset
+      :value: False
+
+
+
+   .. py:attribute:: model_holds
+      :value: 'the starting weights'
+
+
+
+   .. py:method:: run() -> int
+
+      Train (and serve, and retrain on each restart) until the job ends; its exit code.
+
+
+

@@ -10,7 +10,6 @@
       <link rel="stylesheet" type="text/css" href="../../../../../_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="../../../../../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../../../../../_static/graphviz.css?v=4ae1632d" />
-      <link rel="stylesheet" type="text/css" href="../../../../../_static/mystnb.11b39860a7a0cbfd473a3ad8a317855267ff0bd372690045ca344a6b62be495e.css" />
       <link rel="stylesheet" type="text/css" href="../../../../../_static/css/custom.css" />
 
   
@@ -20,7 +19,6 @@
       <script src="../../../../../_static/documentation_options.js?v=5929fcd5"></script>
       <script src="../../../../../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
-      <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
     <script src="../../../../../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../../../../../genindex.html" />
     <link rel="search" title="Search" href="../../../../../search.html" />
@@ -50,27 +48,44 @@
               <p class="caption" role="heading"><span class="caption-text">CellMap-Flow API:</span></p>
 <ul class="current">
 <li class="toctree-l1"><a class="reference internal" href="../../../../../install.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../cli.html">Command line</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../../scripts.html">Python Scripts</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../../yaml_config.html">YAML Configuration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../data_paths.html">Data paths</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../../huggingface.html">HuggingFace Models</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../../custom_script.html">Custom Model</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../../post.html">PostProcessors</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../../plugins.html">Plugins</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../review.html">Reviewing instances</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../viewer_api.html">Viewer layer API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../architecture.html">Architecture</a></li>
 <li class="toctree-l1 current"><a class="reference internal" href="../../../../index.html">API Reference</a><ul class="current">
 <li class="toctree-l2 current"><a class="reference internal" href="../../../index.html">cellmap_flow</a><ul class="current">
 <li class="toctree-l3 current"><a class="reference internal" href="../../../index.html#submodules">Submodules</a><ul class="current">
 <li class="toctree-l4"><a class="reference internal" href="../../../blockwise/index.html">cellmap_flow.blockwise</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../../cli/index.html">cellmap_flow.cli</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../config/index.html">cellmap_flow.config</a></li>
 <li class="toctree-l4 current"><a class="reference internal" href="../../index.html">cellmap_flow.dashboard</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../../finetune/index.html">cellmap_flow.finetune</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../../globals/index.html">cellmap_flow.globals</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../../image_data_interface/index.html">cellmap_flow.image_data_interface</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../inference/index.html">cellmap_flow.inference</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../../inferencer/index.html">cellmap_flow.inferencer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../io/index.html">cellmap_flow.io</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../jobs/index.html">cellmap_flow.jobs</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../logging_setup/index.html">cellmap_flow.logging_setup</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../../models/index.html">cellmap_flow.models</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../../norm/index.html">cellmap_flow.norm</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../pipeline_spec/index.html">cellmap_flow.pipeline_spec</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../plugins/index.html">cellmap_flow.plugins</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../../post/index.html">cellmap_flow.post</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../process_chain/index.html">cellmap_flow.process_chain</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../review/index.html">cellmap_flow.review</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../review_index/index.html">cellmap_flow.review_index</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../../server/index.html">cellmap_flow.server</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../serving/index.html">cellmap_flow.serving</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../../../utils/index.html">cellmap_flow.utils</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../viewer/index.html">cellmap_flow.viewer</a></li>
 </ul>
 </li>
 </ul>
@@ -109,6 +124,13 @@
              
   <section id="module-cellmap_flow.dashboard.routes.blockwise">
 <span id="cellmap-flow-dashboard-routes-blockwise"></span><h1>cellmap_flow.dashboard.routes.blockwise<a class="headerlink" href="#module-cellmap_flow.dashboard.routes.blockwise" title="Link to this heading"></a></h1>
+<p>The pipeline builder’s blockwise steps: validate, generate (the task YAML
+the blockwise CLI runs), precheck, and submit (the task’s master, to LSF).</p>
+<p>Each answers 200 whatever happens, with “valid” (validate) or “success”
+false beside an “error” when it cannot go on: the builder reads that flag at
+each step and shows the error. A body a step cannot take is refused before
+anything is done (the requests.Blockwise* models); a failure after that,
+writing the YAML, a precheck or bsub, is answered the same way.</p>
 <section id="attributes">
 <h2>Attributes<a class="headerlink" href="#attributes" title="Link to this heading"></a></h2>
 <table class="autosummary longtable docutils align-default">
@@ -127,16 +149,16 @@
 <table class="autosummary longtable docutils align-default">
 <tbody>
 <tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.blockwise.validate_blockwise" title="cellmap_flow.dashboard.routes.blockwise.validate_blockwise"><code class="xref py py-obj docutils literal notranslate"><span class="pre">validate_blockwise</span></code></a>()</p></td>
-<td><p>Validate if pipeline is ready for blockwise processing</p></td>
+<td><p>Whether the builder's pipeline is ready for blockwise processing, as</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.blockwise.generate_blockwise_task" title="cellmap_flow.dashboard.routes.blockwise.generate_blockwise_task"><code class="xref py py-obj docutils literal notranslate"><span class="pre">generate_blockwise_task</span></code></a>()</p></td>
-<td><p>Generate blockwise task YAML files</p></td>
+<td><p>Write the task YAML the blockwise CLI runs, for the builder's pipeline;</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.blockwise.precheck_blockwise_task" title="cellmap_flow.dashboard.routes.blockwise.precheck_blockwise_task"><code class="xref py py-obj docutils literal notranslate"><span class="pre">precheck_blockwise_task</span></code></a>()</p></td>
-<td><p>Precheck blockwise task configuration using already-generated YAML</p></td>
+<td><p>Check the task YAMLs generate wrote, as blockwise_processor.precheck</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.blockwise.submit_blockwise_task" title="cellmap_flow.dashboard.routes.blockwise.submit_blockwise_task"><code class="xref py py-obj docutils literal notranslate"><span class="pre">submit_blockwise_task</span></code></a>()</p></td>
-<td><p>Submit blockwise task to LSF</p></td>
+<td><p>Submit the task's master to LSF, which runs the task's workers.</p></td>
 </tr>
 </tbody>
 </table>
@@ -156,25 +178,35 @@
 <dl class="py function">
 <dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.blockwise.validate_blockwise">
 <span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.blockwise.</span></span><span class="sig-name descname"><span class="pre">validate_blockwise</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.routes.blockwise.validate_blockwise" title="Link to this definition"></a></dt>
-<dd><p>Validate if pipeline is ready for blockwise processing</p>
+<dd><p>Whether the builder’s pipeline is ready for blockwise processing, as
+requests.BlockwisePipeline describes it: {“valid”: True, “message”}, or
+{“valid”: False, “error”}.</p>
 </dd></dl>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.blockwise.generate_blockwise_task">
 <span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.blockwise.</span></span><span class="sig-name descname"><span class="pre">generate_blockwise_task</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.routes.blockwise.generate_blockwise_task" title="Link to this definition"></a></dt>
-<dd><p>Generate blockwise task YAML files</p>
+<dd><p>Write the task YAML the blockwise CLI runs, for the builder’s pipeline;
+one per bounding box when each box gets its own zarr.</p>
+<p>{“success”: True, “task_paths”, “task_name”, “task_yaml”, “task_config”,
+“message”}, or {“success”: False, “error”}.</p>
 </dd></dl>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.blockwise.precheck_blockwise_task">
 <span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.blockwise.</span></span><span class="sig-name descname"><span class="pre">precheck_blockwise_task</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.routes.blockwise.precheck_blockwise_task" title="Link to this definition"></a></dt>
-<dd><p>Precheck blockwise task configuration using already-generated YAML</p>
+<dd><p>Check the task YAMLs generate wrote, as blockwise_processor.precheck
+does: {“success”: True, “message”: “success”}, or {“success”: False,
+“error”} with the first one’s problem.</p>
 </dd></dl>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.blockwise.submit_blockwise_task">
 <span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.blockwise.</span></span><span class="sig-name descname"><span class="pre">submit_blockwise_task</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.routes.blockwise.submit_blockwise_task" title="Link to this definition"></a></dt>
-<dd><p>Submit blockwise task to LSF</p>
+<dd><p>Submit the task’s master to LSF, which runs the task’s workers.</p>
+<p>{“success”: True, “job_id”, “task_name”, “task_paths”, “log_path”,
+“command”, “message”}, or {“success”: False, “error”}; “job_id” is
+“unknown” when bsub accepted the job without naming it.</p>
 </dd></dl>
 
 </section>

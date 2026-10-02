@@ -1,0 +1,56 @@
+cellmap_flow.models.configs.cellmap
+===================================
+
+.. py:module:: cellmap_flow.models.configs.cellmap
+
+.. autoapi-nested-parse::
+
+   ``CellMapModelConfig``: a model that cellmap_models exported, from its folder.
+
+   The folder's metadata gives the shapes, voxel sizes and channel names; the
+   model is its TorchScript export.
+
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.models.configs.cellmap.CellMapModelConfig
+
+
+Module Contents
+---------------
+
+.. py:class:: CellMapModelConfig(folder_path, name=None, scale=None)
+
+
+
+   Configuration class for a CellmapModel.
+
+
+   .. py:attribute:: cli_name
+      :value: 'cellmap'
+
+
+
+   .. py:attribute:: cellmap_model
+
+
+   .. py:attribute:: name
+      :value: None
+
+
+
+   .. py:attribute:: scale
+      :value: None
+
+
+
+   .. py:method:: to_dict()
+
+      This config as a model entry, which ``registry.build_model`` rebuilds.
+
+
+

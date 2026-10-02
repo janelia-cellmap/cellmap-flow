@@ -1,0 +1,87 @@
+cellmap_flow.finetune.cli
+=========================
+
+.. py:module:: cellmap_flow.finetune.cli
+
+.. autoapi-nested-parse::
+
+   The finetune training job's command line: its flags, and what they describe.
+
+   - ``build_arg_parser`` and ``parse_args``: every flag of
+     ``python -m cellmap_flow.finetune.finetune_cli``. The job manager builds
+     the command, and a running job outlives a dashboard upgrade, so flags only
+     ever change compatibly.
+   - ``model_config_from_args`` and ``build_target_transform``: the model and
+     the training target the flags describe.
+   - ``RESTARTABLE_ARGS`` and ``apply_restart_params``: which settings a
+     restart may change, and how a restart request changes them.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.cli.logger
+   cellmap_flow.finetune.cli.RESTARTABLE_ARGS
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.cli.build_arg_parser
+   cellmap_flow.finetune.cli.parse_args
+   cellmap_flow.finetune.cli.build_target_transform
+   cellmap_flow.finetune.cli.model_config_from_args
+   cellmap_flow.finetune.cli.apply_restart_params
+   cellmap_flow.finetune.cli.update_run_metadata
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:function:: build_arg_parser()
+
+.. py:function:: parse_args(argv=None) -> argparse.Namespace
+
+   The job's flags, with the defaults that depend on other flags filled in.
+
+
+.. py:function:: build_target_transform(args, model_config)
+
+   Build a TargetTransform based on CLI args.
+
+
+.. py:function:: model_config_from_args(args) -> cellmap_flow.models.models_config.ModelConfig
+
+   The ModelConfig the command line describes.
+
+
+.. py:data:: RESTARTABLE_ARGS
+
+.. py:function:: apply_restart_params(args, signal_data: dict)
+
+   Update args with parameters from restart signal and persist to metadata.json.
+
+   :param args: argparse Namespace to update
+   :param signal_data: Dict from restart signal file
+
+
+.. py:function:: update_run_metadata(output_dir, change) -> bool
+
+   Apply ``change(metadata)`` to the run's metadata.json; False if the run has none.
+
+   The dashboard's job monitor updates the same file from its own host,
+   within seconds of every restart. The file is read just before it is
+   replaced, and replaced whole (write_json_atomically), so neither side
+   can read the other's write half done, and the window in which both
+   update it at once, and one loses the other's change, is kept short.
+   A run that the job manager did not start has no metadata.json, and gets
+   none.
+
+

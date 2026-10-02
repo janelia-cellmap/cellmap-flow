@@ -1,0 +1,250 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>cellmap_flow.finetune.model_loading &mdash; CellMap Flow  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=4ae1632d" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css" />
+
+  
+    <link rel="shortcut icon" href="../../../../_static/favicon.ico"/>
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link rel="next" title="cellmap_flow.finetune.run_outputs" href="../run_outputs/index.html" />
+    <link rel="prev" title="cellmap_flow.finetune.markers" href="../markers/index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            CellMap Flow
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">CellMap-Flow API:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../../../../install.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../cli.html">Command line</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../scripts.html">Python Scripts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../yaml_config.html">YAML Configuration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../data_paths.html">Data paths</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../huggingface.html">HuggingFace Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../custom_script.html">Custom Model</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../post.html">PostProcessors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../plugins.html">Plugins</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../review.html">Reviewing instances</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../viewer_api.html">Viewer layer API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../architecture.html">Architecture</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../../../index.html">API Reference</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="../../index.html">cellmap_flow</a><ul class="current">
+<li class="toctree-l3 current"><a class="reference internal" href="../../index.html#submodules">Submodules</a><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="../../blockwise/index.html">cellmap_flow.blockwise</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../cli/index.html">cellmap_flow.cli</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../config/index.html">cellmap_flow.config</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../dashboard/index.html">cellmap_flow.dashboard</a></li>
+<li class="toctree-l4 current"><a class="reference internal" href="../index.html">cellmap_flow.finetune</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../globals/index.html">cellmap_flow.globals</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../image_data_interface/index.html">cellmap_flow.image_data_interface</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../inference/index.html">cellmap_flow.inference</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../inferencer/index.html">cellmap_flow.inferencer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../io/index.html">cellmap_flow.io</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../jobs/index.html">cellmap_flow.jobs</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../logging_setup/index.html">cellmap_flow.logging_setup</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../models/index.html">cellmap_flow.models</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../norm/index.html">cellmap_flow.norm</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../pipeline_spec/index.html">cellmap_flow.pipeline_spec</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../plugins/index.html">cellmap_flow.plugins</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../post/index.html">cellmap_flow.post</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../process_chain/index.html">cellmap_flow.process_chain</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../review/index.html">cellmap_flow.review</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../review_index/index.html">cellmap_flow.review_index</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../server/index.html">cellmap_flow.server</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../serving/index.html">cellmap_flow.serving</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../utils/index.html">cellmap_flow.utils</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../viewer/index.html">cellmap_flow.viewer</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">CellMap Flow</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">API Reference</a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">cellmap_flow</a></li>
+          <li class="breadcrumb-item"><a href="../index.html">cellmap_flow.finetune</a></li>
+      <li class="breadcrumb-item active">cellmap_flow.finetune.model_loading</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../../../../_sources/autoapi/cellmap_flow/finetune/model_loading/index.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-cellmap_flow.finetune.model_loading">
+<span id="cellmap-flow-finetune-model-loading"></span><h1>cellmap_flow.finetune.model_loading<a class="headerlink" href="#module-cellmap_flow.finetune.model_loading" title="Link to this heading"></a></h1>
+<p>The trainable nn.Module behind a model config.</p>
+<p>A served model is often not trainable as it stands: the cellmap and
+Hugging Face models are TorchScript, which LoRA cannot wrap and autograd
+cannot train. <code class="docutils literal notranslate"><span class="pre">cellmap_model.train()</span></code> rebuilds them as an unflattened
+torch.export module, which is what the trainer needs. The adapter and
+full-finetune exports are keyed by the names in that exact module tree
+(<code class="docutils literal notranslate"><span class="pre">BatchLoopWrapper</span></code>’s <code class="docutils literal notranslate"><span class="pre">model.</span></code> prefix included), so training and
+serving must build it the same way: both call <code class="docutils literal notranslate"><span class="pre">load_trainable_model</span></code>
+(serving through <code class="docutils literal notranslate"><span class="pre">FinetuneModelConfig</span></code>).</p>
+<p>The finetune CLI used to do this itself for fly/dacapo/huggingface/script
+models only, so a <code class="docutils literal notranslate"><span class="pre">type:</span> <span class="pre">cellmap</span></code> model – which is exactly what
+export_merged produces – or a finetuned model registered back into the
+dashboard could not be finetuned at all.</p>
+<section id="attributes">
+<h2>Attributes<a class="headerlink" href="#attributes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.model_loading.logger" title="cellmap_flow.finetune.model_loading.logger"><code class="xref py py-obj docutils literal notranslate"><span class="pre">logger</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="functions">
+<h2>Functions<a class="headerlink" href="#functions" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.model_loading.decode_model_entry" title="cellmap_flow.finetune.model_loading.decode_model_entry"><code class="xref py py-obj docutils literal notranslate"><span class="pre">decode_model_entry</span></code></a>(→ dict)</p></td>
+<td><p>A model entry given on the command line: JSON, or encode_to_str() of it.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.finetune.model_loading.model_config_from_entry" title="cellmap_flow.finetune.model_loading.model_config_from_entry"><code class="xref py py-obj docutils literal notranslate"><span class="pre">model_config_from_entry</span></code></a>(entry[, name])</p></td>
+<td><p>Build a ModelConfig from a model entry, as <code class="docutils literal notranslate"><span class="pre">ModelConfig.to_dict()</span></code> writes it.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.model_loading.load_trainable_model" title="cellmap_flow.finetune.model_loading.load_trainable_model"><code class="xref py py-obj docutils literal notranslate"><span class="pre">load_trainable_model</span></code></a>(→ torch.nn.Module)</p></td>
+<td><p>The module to train for <code class="docutils literal notranslate"><span class="pre">model_config</span></code>.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.finetune.model_loading.root_base_model_dict" title="cellmap_flow.finetune.model_loading.root_base_model_dict"><code class="xref py py-obj docutils literal notranslate"><span class="pre">root_base_model_dict</span></code></a>(→ dict)</p></td>
+<td><p>The innermost non-finetune model entry under <code class="docutils literal notranslate"><span class="pre">model_config</span></code>.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="module-contents">
+<h2>Module Contents<a class="headerlink" href="#module-contents" title="Link to this heading"></a></h2>
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.model_loading.logger">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.model_loading.</span></span><span class="sig-name descname"><span class="pre">logger</span></span><a class="headerlink" href="#cellmap_flow.finetune.model_loading.logger" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.model_loading.decode_model_entry">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.model_loading.</span></span><span class="sig-name descname"><span class="pre">decode_model_entry</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">text</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span></span></span><a class="headerlink" href="#cellmap_flow.finetune.model_loading.decode_model_entry" title="Link to this definition"></a></dt>
+<dd><p>A model entry given on the command line: JSON, or encode_to_str() of it.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.model_loading.model_config_from_entry">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.model_loading.</span></span><span class="sig-name descname"><span class="pre">model_config_from_entry</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">entry</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.finetune.model_loading.model_config_from_entry" title="Link to this definition"></a></dt>
+<dd><p>Build a ModelConfig from a model entry, as <code class="docutils literal notranslate"><span class="pre">ModelConfig.to_dict()</span></code> writes it.</p>
+<p>Keys the class does not take are dropped first: <code class="docutils literal notranslate"><span class="pre">to_dict()</span></code> surfaces
+some for display (FinetuneModelConfig copies its base model’s channels
+and voxel sizes up, say), and the constructor would reject them.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.model_loading.load_trainable_model">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.model_loading.</span></span><span class="sig-name descname"><span class="pre">load_trainable_model</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model_config</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">torch.nn.Module</span></span></span><a class="headerlink" href="#cellmap_flow.finetune.model_loading.load_trainable_model" title="Link to this definition"></a></dt>
+<dd><p>The module to train for <code class="docutils literal notranslate"><span class="pre">model_config</span></code>.</p>
+<ul class="simple">
+<li><p>TorchScript (cellmap, Hugging Face): the unflattened module from
+<code class="docutils literal notranslate"><span class="pre">cellmap_model.train()</span></code>, wrapped in BatchLoopWrapper when it is fixed
+at batch 1.</p></li>
+<li><p>A finetuned model (<code class="docutils literal notranslate"><span class="pre">type:</span> <span class="pre">finetune</span></code>): the model it serves – the base
+tree with its LoRA adapter attached (a PeftModel), or with its full
+finetuned weights loaded. Wrapping it in a new adapter folds the old
+one in first (lora_wrapper._merge_existing_adapters), so training
+continues from the finetuned model rather than from its base.</p></li>
+<li><p>Anything else: <code class="docutils literal notranslate"><span class="pre">model_config.config.model</span></code> as it is.</p></li>
+</ul>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.model_loading.root_base_model_dict">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.model_loading.</span></span><span class="sig-name descname"><span class="pre">root_base_model_dict</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model_config</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span></span></span><a class="headerlink" href="#cellmap_flow.finetune.model_loading.root_base_model_dict" title="Link to this definition"></a></dt>
+<dd><p>The innermost non-finetune model entry under <code class="docutils literal notranslate"><span class="pre">model_config</span></code>.</p>
+<p>A full finetune’s weights replace every parameter, so what it needs from
+its base is only the module tree – and a finetune-of-a-finetune base
+would hand the weights a PeftModel, whose names no longer match.</p>
+</dd></dl>
+
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../markers/index.html" class="btn btn-neutral float-left" title="cellmap_flow.finetune.markers" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../run_outputs/index.html" class="btn btn-neutral float-right" title="cellmap_flow.finetune.run_outputs" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, David Ackerman,  Marwan Zouinkhi, Jeff Rhoades, Larissa Heinrich, Aubrey Weigel.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

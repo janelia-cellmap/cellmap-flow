@@ -23,7 +23,20 @@ Functions
 Module Contents
 ---------------
 
-.. py:function:: cli(yaml_config, client, log_level)
-
 .. py:data:: logger
+
+.. py:function:: cli(yaml_configs, client)
+
+   Run the model a blockwise YAML describes over the whole volume, block
+   by block, writing its predictions to disk.
+
+   Several YAMLs run one after the other. One that leaves blocks
+   unprocessed does not stop the rest; the command fails at the end,
+   naming them. --client runs one of a run's workers (the run starts them
+   itself), so it takes one YAML.
+
+   
+     cellmap_flow blockwise config.yaml
+     cellmap_flow blockwise mito.yaml er.yaml
+
 

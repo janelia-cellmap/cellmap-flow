@@ -1,0 +1,53 @@
+cellmap_flow.finetune.job_manager.restart
+=========================================
+
+.. py:module:: cellmap_flow.finetune.job_manager.restart
+
+.. autoapi-nested-parse::
+
+   Asking a finetune job that waits for a restart to train again.
+
+   The trainer's inference server, in the same process as its training loop,
+   takes ``POST <server>/__control__/restart`` with the job's restart token
+   (written into the run's directory at submit; serving.restart_token) in the
+   ``X-Restart-Token`` header. The body is ``{"restart": true, "timestamp",
+   "params"}``, ``params`` being the settings to change. When the server cannot
+   be reached, or has no URL yet, the same body goes into the run's
+   ``restart_signal.json``, which the trainer also watches (finetune.session_loop).
+   It is written whole or not at all (``finetune.json_files.write_json_atomically``): the
+   trainer reads it as soon as it exists, and ends the job if it is not JSON.
+   Jobs outlive dashboard upgrades, so both ways are a protocol.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.job_manager.restart.logger
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.job_manager.restart.request_restart
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:function:: request_restart(job: cellmap_flow.finetune.job_manager.state.FinetuneJob, updated_params: Optional[Dict[str, Any]] = None) -> None
+
+   Ask ``job``'s trainer to train again, with ``updated_params`` changed.
+
+   The job is then RUNNING a new iteration from epoch 0, its server not
+   ready until the iteration completes, and ``job.params`` updated.
+   Raises ValueError, and sends nothing, unless the job can take a restart
+   (state.can_restart).
+
+

@@ -1,0 +1,185 @@
+cellmap_flow.finetune.data
+==========================
+
+.. py:module:: cellmap_flow.finetune.data
+
+.. autoapi-nested-parse::
+
+   What the finetune trainer trains on: random patch pairs read out of a
+   session's annotation volume, and the loaders that deliver them.
+
+   - ``dataset``: ``VirtualPatchDataset``, the patches. Each is a centre from
+     ``sampler`` (the dense, sparse and rehearsal pools), the annotation and raw
+     that ``reader`` reads around it, and ``augment``'s flips, rotations,
+     brightness and noise when asked for.
+   - ``loader``: ``dataset_from_manifest`` and ``create_dataloader`` (from a
+     session's manifest), ``make_training_loader`` and ``rebuild_loader``.
+
+
+
+Submodules
+----------
+
+.. toctree::
+   :maxdepth: 1
+
+   /autoapi/cellmap_flow/finetune/data/augment/index
+   /autoapi/cellmap_flow/finetune/data/dataset/index
+   /autoapi/cellmap_flow/finetune/data/loader/index
+   /autoapi/cellmap_flow/finetune/data/reader/index
+   /autoapi/cellmap_flow/finetune/data/sampler/index
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.data.VirtualPatchDataset
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.data.create_dataloader
+   cellmap_flow.finetune.data.dataset_from_manifest
+   cellmap_flow.finetune.data.make_training_loader
+   cellmap_flow.finetune.data.rebuild_loader
+
+
+Package Contents
+----------------
+
+.. py:class:: VirtualPatchDataset(volume_zarr_path: str, raw_dataset_path: str, input_size_voxels: Tuple[int, int, int], output_size_voxels: Tuple[int, int, int], input_voxel_size_nm: Tuple[float, float, float], output_voxel_size_nm: Tuple[float, float, float], patches_per_epoch: Optional[int] = None, jitter_voxels: Optional[Tuple[int, int, int]] = None, seed: int = 0, input_norm_config: Optional[dict] = None, dense_to_sparse_ratio: Optional[float] = None, good_regions: Optional[list] = None, rehearsal_fraction: Optional[float] = None, anchor_fraction: Optional[float] = None, augment: bool = False)
+
+
+
+   Yield random raw+annotation patches anchored on annotated voxels in a volume zarr.
+
+   :param volume_zarr_path: path to the session's ``annotation_volume.zarr``.
+   :param raw_dataset_path: path to the raw EM zarr the volume is aligned to.
+   :param input_size_voxels: shape (Z, Y, X) of the raw patch returned per
+                             sample, in voxels at ``input_voxel_size_nm``.
+   :param output_size_voxels: shape (Z, Y, X) of the annotation patch, in
+                              voxels at ``output_voxel_size_nm``.
+   :param input_voxel_size_nm: voxel size for raw patches (the dataset's
+                               closest scale to the model's claimed input voxel size).
+   :param output_voxel_size_nm: voxel size for annotation patches.
+   :param patches_per_epoch: ``len(self)``; controls how many random patches
+                             comprise one epoch. ``None`` (the default) means "auto:
+                             substitute the number of annotated chunks" -- every annotated
+                             chunk gets ~one patch per epoch on average.
+   :param jitter_voxels: half-range of the random offset applied to the patch
+                         center, in **annotation voxels**. Defaults to
+                         ``output_size_voxels // 4``.
+   :param seed: RNG seed; per-worker offset added so multi-worker dataloaders
+                sample distinct streams.
+   :param input_norm_config: the session's input normalization, applied to
+                             every raw patch (see reader.input_normalizers).
+   :param dense_to_sparse_ratio: fraction in [0, 1] of patches drawn from
+                                 the dense pool (FG voxels inside any imported_crops bbox).
+                                 ``None`` (default) means auto: 0.5 if both pools have voxels,
+                                 else 1.0 (use the non-empty pool exclusively).
+   :param good_regions: the session's good regions, ``{"offset_nm",
+                        "shape_nm"}`` boxes to hold the model to its teacher in.
+   :param rehearsal_fraction: the share of patches centred on a good region.
+                              ``None`` (default) means a quarter, when any region is usable.
+   :param anchor_fraction: the share of the other patches centred at a random
+                           point of the volume and held to the teacher there. ``None``
+                           (default) means a quarter for a painted session, none otherwise.
+   :param augment: flips, XY rotations, brightness and noise (augment.py).
+
+
+   .. py:attribute:: volume_zarr_path
+
+
+   .. py:attribute:: raw_dataset_path
+
+
+   .. py:attribute:: augment
+      :value: False
+
+
+
+   .. py:attribute:: seed
+      :value: 0
+
+
+
+   .. py:attribute:: sampler
+
+
+   .. py:attribute:: reader
+
+
+   .. py:attribute:: augmentation
+
+
+   .. py:attribute:: patches_per_epoch
+      :type:  int
+
+
+   .. py:property:: emits_anchor
+      :type: bool
+
+
+      Whether __getitem__ yields the 3-tuple (raw, annotation, anchor).
+
+      Only once there is something to anchor on: good regions, or random
+      anchors (a painted session's default). Otherwise the dataset keeps
+      its original 2-tuple contract.
+
+
+.. py:function:: create_dataloader(corrections_zarr_path: str, batch_size: int = 2, augment: bool = True, num_workers: int = 4) -> torch.utils.data.DataLoader
+
+   Build the training DataLoader for a corrections directory.
+
+   Requires a ``_virtual_sources.json`` manifest. Every path that creates a
+   session writes one (volume creation, YAML import, training submit) and
+   restarts backfill one, so a missing manifest means something upstream
+   failed -- which is worth an exception rather than training on anything
+   else. The patch geometry comes from the manifest, and the dataset
+   samples randomly, so there is no patch shape or shuffle to pass.
+
+   :param corrections_zarr_path: Session corrections directory.
+   :param batch_size: Clamped down to the dataset size when smaller.
+   :param augment: Flips, XY rotations, brightness and noise, on top of the
+                   patch-centre jitter that is always applied. It overrides the
+                   manifest's stored preference.
+   :param num_workers: DataLoader workers. Spawned, not forked -- tensorstore
+                       handles do not survive fork.
+
+
+.. py:function:: dataset_from_manifest(manifest: dict, corrections_dir: Optional[str] = None, augment: Optional[bool] = None) -> cellmap_flow.finetune.data.dataset.VirtualPatchDataset
+
+   Instantiate a :class:`VirtualPatchDataset` from a manifest dict.
+
+   Recognized manifest kinds:
+     - ``volume_zarr_v1`` (current): trainer reads the session's
+       annotation_volume.zarr directly. Field ``volume_zarr_path``.
+
+   ``corrections_dir`` is where the session's good regions are looked up;
+   omit it and the dataset simply trains without rehearsal anchors.
+
+
+.. py:function:: make_training_loader(dataset, batch_size: int, num_workers: int) -> torch.utils.data.DataLoader
+
+   The DataLoader the trainer reads patches through.
+
+   Persistent, spawned workers: each keeps its copy of the dataset, and so its
+   RNG, from one epoch to the next. Non-persistent workers are re-spawned
+   every epoch from a fresh pickle of the dataset -- RNG unset, same seed --
+   so every epoch would draw the identical patches and augmentations.
+
+
+.. py:function:: rebuild_loader(loader: torch.utils.data.DataLoader, batch_size: int) -> torch.utils.data.DataLoader
+
+   ``loader`` again with a different batch size and everything else kept.
+
+   The OOM fallback in the trainer used to rebuild its loader with only some
+   of the original arguments; losing persistent_workers made every epoch
+   after an OOM repeat the same patches (see make_training_loader).
+
+

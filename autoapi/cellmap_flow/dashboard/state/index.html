@@ -1,0 +1,413 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>cellmap_flow.dashboard.state &mdash; CellMap Flow  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=4ae1632d" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css" />
+
+  
+    <link rel="shortcut icon" href="../../../../_static/favicon.ico"/>
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link rel="next" title="cellmap_flow.finetune" href="../../finetune/index.html" />
+    <link rel="prev" title="cellmap_flow.dashboard.services.startup" href="../services/startup/index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            CellMap Flow
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">CellMap-Flow API:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../../../../install.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../cli.html">Command line</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../scripts.html">Python Scripts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../yaml_config.html">YAML Configuration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../data_paths.html">Data paths</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../huggingface.html">HuggingFace Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../custom_script.html">Custom Model</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../post.html">PostProcessors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../plugins.html">Plugins</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../review.html">Reviewing instances</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../viewer_api.html">Viewer layer API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../architecture.html">Architecture</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../../../index.html">API Reference</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="../../index.html">cellmap_flow</a><ul class="current">
+<li class="toctree-l3 current"><a class="reference internal" href="../../index.html#submodules">Submodules</a><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="../../blockwise/index.html">cellmap_flow.blockwise</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../cli/index.html">cellmap_flow.cli</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../config/index.html">cellmap_flow.config</a></li>
+<li class="toctree-l4 current"><a class="reference internal" href="../index.html">cellmap_flow.dashboard</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../finetune/index.html">cellmap_flow.finetune</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../globals/index.html">cellmap_flow.globals</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../image_data_interface/index.html">cellmap_flow.image_data_interface</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../inference/index.html">cellmap_flow.inference</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../inferencer/index.html">cellmap_flow.inferencer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../io/index.html">cellmap_flow.io</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../jobs/index.html">cellmap_flow.jobs</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../logging_setup/index.html">cellmap_flow.logging_setup</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../models/index.html">cellmap_flow.models</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../norm/index.html">cellmap_flow.norm</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../pipeline_spec/index.html">cellmap_flow.pipeline_spec</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../plugins/index.html">cellmap_flow.plugins</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../post/index.html">cellmap_flow.post</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../process_chain/index.html">cellmap_flow.process_chain</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../review/index.html">cellmap_flow.review</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../review_index/index.html">cellmap_flow.review_index</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../server/index.html">cellmap_flow.server</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../serving/index.html">cellmap_flow.serving</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../utils/index.html">cellmap_flow.utils</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../viewer/index.html">cellmap_flow.viewer</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">CellMap Flow</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">API Reference</a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">cellmap_flow</a></li>
+          <li class="breadcrumb-item"><a href="../index.html">cellmap_flow.dashboard</a></li>
+      <li class="breadcrumb-item active">cellmap_flow.dashboard.state</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../../../../_sources/autoapi/cellmap_flow/dashboard/state/index.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-cellmap_flow.dashboard.state">
+<span id="cellmap-flow-dashboard-state"></span><h1>cellmap_flow.dashboard.state<a class="headerlink" href="#module-cellmap_flow.dashboard.state" title="Link to this heading"></a></h1>
+<p>The dashboard’s state, read and written through one object: <code class="docutils literal notranslate"><span class="pre">get_session()</span></code>.</p>
+<p>One Session per process, made at import and filled by the CLIs,
+<code class="docutils literal notranslate"><span class="pre">services/startup</span></code> and <code class="docutils literal notranslate"><span class="pre">create_and_run_app</span></code>. It lives in this module
+rather than in Flask’s <code class="docutils literal notranslate"><span class="pre">app.extensions</span></code> because the CLIs fill it before
+<code class="docutils literal notranslate"><span class="pre">dashboard.app</span></code> is imported (they import it lazily so <code class="docutils literal notranslate"><span class="pre">--help</span></code> stays
+fast); because launch threads, job-monitor listeners, the MinIO sync thread
+and the log panel’s handler run with no app context; and so that this module
+imports without Flask.</p>
+<p>The Session forwards three parts to their owners, which also serve processes
+that have no dashboard:</p>
+<ul class="simple">
+<li><p>The launcher settings in ~/.cellmap_flow/server_config.yaml, one
+attribute per key of <code class="docutils literal notranslate"><span class="pre">jobs.settings.SERVER_CONFIG_DEFAULTS</span></code> (<code class="docutils literal notranslate"><span class="pre">queue</span></code>,
+<code class="docutils literal notranslate"><span class="pre">charge_group</span></code>, <code class="docutils literal notranslate"><span class="pre">walltime</span></code>, …), and <code class="docutils literal notranslate"><span class="pre">settings</span></code>, <code class="docutils literal notranslate"><span class="pre">server_config</span></code>,
+<code class="docutils literal notranslate"><span class="pre">server_config_cached</span></code> and <code class="docutils literal notranslate"><span class="pre">save_server_config()</span></code>:
+<code class="docutils literal notranslate"><span class="pre">jobs.settings.launcher_settings()</span></code>.</p></li>
+<li><p>The chain: <code class="docutils literal notranslate"><span class="pre">input_norms</span></code> and <code class="docutils literal notranslate"><span class="pre">postprocess</span></code> (the live steps, read-only),
+<code class="docutils literal notranslate"><span class="pre">pipeline_spec</span></code> (the same as data), and <code class="docutils literal notranslate"><span class="pre">set_pipeline()</span></code>, the one way
+to change them: <code class="docutils literal notranslate"><span class="pre">process_chain.process_chain()</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">jobs</span></code>, the running inference servers’ jobs: <code class="docutils literal notranslate"><span class="pre">jobs.launch.started_jobs()</span></code>.</p></li>
+</ul>
+<p>The rest it stores itself, in <code class="docutils literal notranslate"><span class="pre">__slots__</span></code>, so a misspelt attribute raises
+rather than being stored beside the real one:</p>
+<ul class="simple">
+<li><p>The data and the viewer: <code class="docutils literal notranslate"><span class="pre">dataset_path</span></code>, <code class="docutils literal notranslate"><span class="pre">viewer</span></code>, <code class="docutils literal notranslate"><span class="pre">raw</span></code>,
+<code class="docutils literal notranslate"><span class="pre">neuroglancer_url</span></code>, <code class="docutils literal notranslate"><span class="pre">shaders</span></code>, <code class="docutils literal notranslate"><span class="pre">shader_controls</span></code>, <code class="docutils literal notranslate"><span class="pre">extra_layers</span></code>.</p></li>
+<li><p>The models: <code class="docutils literal notranslate"><span class="pre">models_config</span></code>, <code class="docutils literal notranslate"><span class="pre">model_catalog</span></code>.</p></li>
+<li><p>The pipeline builder’s last apply: <code class="docutils literal notranslate"><span class="pre">builder_state</span></code>,
+<code class="docutils literal notranslate"><span class="pre">builder_model_configs</span></code>.</p></li>
+<li><p>Blockwise’s <code class="docutils literal notranslate"><span class="pre">tmp_dir</span></code> and <code class="docutils literal notranslate"><span class="pre">blockwise_tasks_dir</span></code>, and <code class="docutils literal notranslate"><span class="pre">tasks_dir()</span></code>.</p></li>
+<li><p>The finetune tab’s MinIO and volumes: <code class="docutils literal notranslate"><span class="pre">minio_state</span></code>,
+<code class="docutils literal notranslate"><span class="pre">annotation_volumes</span></code>, <code class="docutils literal notranslate"><span class="pre">output_sessions</span></code>; its training jobs’
+<code class="docutils literal notranslate"><span class="pre">finetune_job_manager</span></code>; the Review tab’s <code class="docutils literal notranslate"><span class="pre">review</span></code>.</p></li>
+<li><p>The log panel’s <code class="docutils literal notranslate"><span class="pre">log_buffer</span></code> and <code class="docutils literal notranslate"><span class="pre">log_clients</span></code>; the box tool’s
+<code class="docutils literal notranslate"><span class="pre">bbx_generator_state</span></code>.</p></li>
+</ul>
+<p>Read the session through <code class="docutils literal notranslate"><span class="pre">get_session()</span></code> when it is needed, never into a
+module global: tests/conftest.py installs a fresh Session for every test.</p>
+<section id="classes">
+<h2>Classes<a class="headerlink" href="#classes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.state.Session" title="cellmap_flow.dashboard.state.Session"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Session</span></code></a></p></td>
+<td><p>The dashboard's state; see the module docstring.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="functions">
+<h2>Functions<a class="headerlink" href="#functions" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.state.get_session" title="cellmap_flow.dashboard.state.get_session"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_session</span></code></a>(→ Session)</p></td>
+<td><p>The dashboard's session.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="module-contents">
+<h2>Module Contents<a class="headerlink" href="#module-contents" title="Link to this heading"></a></h2>
+<dl class="py class">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.state.Session">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.state.</span></span><span class="sig-name descname"><span class="pre">Session</span></span><a class="headerlink" href="#cellmap_flow.dashboard.state.Session" title="Link to this definition"></a></dt>
+<dd><p>The dashboard’s state; see the module docstring.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.state.Session.dataset_path">
+<span class="sig-name descname"><span class="pre">dataset_path</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.dashboard.state.Session.dataset_path" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.state.Session.viewer">
+<span class="sig-name descname"><span class="pre">viewer</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.dashboard.state.Session.viewer" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.state.Session.raw">
+<span class="sig-name descname"><span class="pre">raw</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.dashboard.state.Session.raw" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.state.Session.neuroglancer_url">
+<span class="sig-name descname"><span class="pre">neuroglancer_url</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.dashboard.state.Session.neuroglancer_url" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.state.Session.shaders">
+<span class="sig-name descname"><span class="pre">shaders</span></span><a class="headerlink" href="#cellmap_flow.dashboard.state.Session.shaders" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.state.Session.shader_controls">
+<span class="sig-name descname"><span class="pre">shader_controls</span></span><a class="headerlink" href="#cellmap_flow.dashboard.state.Session.shader_controls" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.state.Session.extra_layers">
+<span class="sig-name descname"><span class="pre">extra_layers</span></span><a class="headerlink" href="#cellmap_flow.dashboard.state.Session.extra_layers" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.state.Session.models_config">
+<span class="sig-name descname"><span class="pre">models_config</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">[]</span></span><a class="headerlink" href="#cellmap_flow.dashboard.state.Session.models_config" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.state.Session.model_catalog">
+<span class="sig-name descname"><span class="pre">model_catalog</span></span><a class="headerlink" href="#cellmap_flow.dashboard.state.Session.model_catalog" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.state.Session.builder_model_configs">
+<span class="sig-name descname"><span class="pre">builder_model_configs</span></span><a class="headerlink" href="#cellmap_flow.dashboard.state.Session.builder_model_configs" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.state.Session.tmp_dir">
+<span class="sig-name descname"><span class="pre">tmp_dir</span></span><a class="headerlink" href="#cellmap_flow.dashboard.state.Session.tmp_dir" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.state.Session.blockwise_tasks_dir">
+<span class="sig-name descname"><span class="pre">blockwise_tasks_dir</span></span><a class="headerlink" href="#cellmap_flow.dashboard.state.Session.blockwise_tasks_dir" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.state.Session.minio_state">
+<span class="sig-name descname"><span class="pre">minio_state</span></span><a class="headerlink" href="#cellmap_flow.dashboard.state.Session.minio_state" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.state.Session.annotation_volumes">
+<span class="sig-name descname"><span class="pre">annotation_volumes</span></span><a class="headerlink" href="#cellmap_flow.dashboard.state.Session.annotation_volumes" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.state.Session.output_sessions">
+<span class="sig-name descname"><span class="pre">output_sessions</span></span><a class="headerlink" href="#cellmap_flow.dashboard.state.Session.output_sessions" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.state.Session.review">
+<span class="sig-name descname"><span class="pre">review</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.dashboard.state.Session.review" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.state.Session.log_buffer">
+<span class="sig-name descname"><span class="pre">log_buffer</span></span><a class="headerlink" href="#cellmap_flow.dashboard.state.Session.log_buffer" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.state.Session.log_clients">
+<span class="sig-name descname"><span class="pre">log_clients</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">[]</span></span><a class="headerlink" href="#cellmap_flow.dashboard.state.Session.log_clients" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.state.Session.bbx_generator_state">
+<span class="sig-name descname"><span class="pre">bbx_generator_state</span></span><a class="headerlink" href="#cellmap_flow.dashboard.state.Session.bbx_generator_state" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.state.Session.jobs">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">jobs</span></span><a class="headerlink" href="#cellmap_flow.dashboard.state.Session.jobs" title="Link to this definition"></a></dt>
+<dd><p>The running inference servers’ jobs, each with its model_name and
+host: jobs.launch.started_jobs(). Assigning replaces the list’s
+contents, so start_hosts and cleanup_handler keep seeing it.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.state.Session.input_norms">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">input_norms</span></span><a class="headerlink" href="#cellmap_flow.dashboard.state.Session.input_norms" title="Link to this definition"></a></dt>
+<dd><p>The live input normalizers. Changed only by set_pipeline().</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.state.Session.postprocess">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">postprocess</span></span><a class="headerlink" href="#cellmap_flow.dashboard.state.Session.postprocess" title="Link to this definition"></a></dt>
+<dd><p>The live postprocessors. Changed only by set_pipeline().</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.state.Session.pipeline_spec">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">pipeline_spec</span></span><a class="headerlink" href="#cellmap_flow.dashboard.state.Session.pipeline_spec" title="Link to this definition"></a></dt>
+<dd><p>The chain as data (PipelineSpec), derived on every read.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.state.Session.set_pipeline">
+<span class="sig-name descname"><span class="pre">set_pipeline</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">spec</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">built</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.state.Session.set_pipeline" title="Link to this definition"></a></dt>
+<dd><p>Replace the chain; see ProcessChain.set.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.state.Session.builder_state">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">builder_state</span></span><a class="headerlink" href="#cellmap_flow.dashboard.state.Session.builder_state" title="Link to this definition"></a></dt>
+<dd><p><code class="docutils literal notranslate"><span class="pre">{inputs,</span> <span class="pre">outputs,</span>
+<span class="pre">edges,</span> <span class="pre">normalizers,</span> <span class="pre">models,</span> <span class="pre">postprocessors}</span></code>, each a list of its
+nodes, all empty until the first apply. A new dict on every read.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>What the builder last applied, as it sent it</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.state.Session.settings">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">settings</span></span><a class="headerlink" href="#cellmap_flow.dashboard.state.Session.settings" title="Link to this definition"></a></dt>
+<dd><p>The launcher settings themselves (jobs.settings.LauncherSettings).</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.state.Session.server_config">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">server_config</span></span><a class="headerlink" href="#cellmap_flow.dashboard.state.Session.server_config" title="Link to this definition"></a></dt>
+<dd><p>value} of the saved settings.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>{key</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.state.Session.server_config_cached">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">server_config_cached</span></span><a class="headerlink" href="#cellmap_flow.dashboard.state.Session.server_config_cached" title="Link to this definition"></a></dt>
+<dd><p>Whether the settings came from, or were saved to, the file.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.state.Session.save_server_config">
+<span class="sig-name descname"><span class="pre">save_server_config</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.state.Session.save_server_config" title="Link to this definition"></a></dt>
+<dd><p>Write the settings to ~/.cellmap_flow/server_config.yaml.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.state.Session.tasks_dir">
+<span class="sig-name descname"><span class="pre">tasks_dir</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#cellmap_flow.dashboard.state.Session.tasks_dir" title="Link to this definition"></a></dt>
+<dd><p><code class="docutils literal notranslate"><span class="pre">blockwise_tasks_dir</span></code>, made if it is missing.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.state.Session.finetune_job_manager">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">finetune_job_manager</span></span><a class="headerlink" href="#cellmap_flow.dashboard.state.Session.finetune_job_manager" title="Link to this definition"></a></dt>
+<dd><p>The training jobs’ FinetuneJobManager, made when first asked for.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.state.get_session">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.state.</span></span><span class="sig-name descname"><span class="pre">get_session</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#cellmap_flow.dashboard.state.Session" title="cellmap_flow.dashboard.state.Session"><span class="pre">Session</span></a></span></span><a class="headerlink" href="#cellmap_flow.dashboard.state.get_session" title="Link to this definition"></a></dt>
+<dd><p>The dashboard’s session.</p>
+</dd></dl>
+
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../services/startup/index.html" class="btn btn-neutral float-left" title="cellmap_flow.dashboard.services.startup" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../../finetune/index.html" class="btn btn-neutral float-right" title="cellmap_flow.finetune" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, David Ackerman,  Marwan Zouinkhi, Jeff Rhoades, Larissa Heinrich, Aubrey Weigel.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

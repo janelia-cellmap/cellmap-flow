@@ -1,0 +1,260 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>cellmap_flow.serving.virtual_zarr &mdash; CellMap Flow  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=4ae1632d" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css" />
+
+  
+    <link rel="shortcut icon" href="../../../../_static/favicon.ico"/>
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link rel="next" title="cellmap_flow.utils" href="../../utils/index.html" />
+    <link rel="prev" title="cellmap_flow.serving.restart_token" href="../restart_token/index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            CellMap Flow
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">CellMap-Flow API:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../../../../install.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../cli.html">Command line</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../scripts.html">Python Scripts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../yaml_config.html">YAML Configuration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../data_paths.html">Data paths</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../huggingface.html">HuggingFace Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../custom_script.html">Custom Model</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../post.html">PostProcessors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../plugins.html">Plugins</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../review.html">Reviewing instances</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../viewer_api.html">Viewer layer API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../architecture.html">Architecture</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../../../index.html">API Reference</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="../../index.html">cellmap_flow</a><ul class="current">
+<li class="toctree-l3 current"><a class="reference internal" href="../../index.html#submodules">Submodules</a><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="../../blockwise/index.html">cellmap_flow.blockwise</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../cli/index.html">cellmap_flow.cli</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../config/index.html">cellmap_flow.config</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../dashboard/index.html">cellmap_flow.dashboard</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../finetune/index.html">cellmap_flow.finetune</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../globals/index.html">cellmap_flow.globals</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../image_data_interface/index.html">cellmap_flow.image_data_interface</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../inference/index.html">cellmap_flow.inference</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../inferencer/index.html">cellmap_flow.inferencer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../io/index.html">cellmap_flow.io</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../jobs/index.html">cellmap_flow.jobs</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../logging_setup/index.html">cellmap_flow.logging_setup</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../models/index.html">cellmap_flow.models</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../norm/index.html">cellmap_flow.norm</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../pipeline_spec/index.html">cellmap_flow.pipeline_spec</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../plugins/index.html">cellmap_flow.plugins</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../post/index.html">cellmap_flow.post</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../process_chain/index.html">cellmap_flow.process_chain</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../review/index.html">cellmap_flow.review</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../review_index/index.html">cellmap_flow.review_index</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../server/index.html">cellmap_flow.server</a></li>
+<li class="toctree-l4 current"><a class="reference internal" href="../index.html">cellmap_flow.serving</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../utils/index.html">cellmap_flow.utils</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../viewer/index.html">cellmap_flow.viewer</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">CellMap Flow</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">API Reference</a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">cellmap_flow</a></li>
+          <li class="breadcrumb-item"><a href="../index.html">cellmap_flow.serving</a></li>
+      <li class="breadcrumb-item active">cellmap_flow.serving.virtual_zarr</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../../../../_sources/autoapi/cellmap_flow/serving/virtual_zarr/index.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-cellmap_flow.serving.virtual_zarr">
+<span id="cellmap-flow-serving-virtual-zarr"></span><h1>cellmap_flow.serving.virtual_zarr<a class="headerlink" href="#module-cellmap_flow.serving.virtual_zarr" title="Link to this heading"></a></h1>
+<p>The zarr v2 array an inference server makes up, as data.</p>
+<p>A server serves one model’s output as <code class="docutils literal notranslate"><span class="pre">&lt;dataset&gt;/.zattrs</span></code>,
+<code class="docutils literal notranslate"><span class="pre">&lt;dataset&gt;/s0/.zarray</span></code> and <code class="docutils literal notranslate"><span class="pre">&lt;dataset&gt;/s0/&lt;z&gt;.&lt;y&gt;.&lt;x&gt;[.&lt;c&gt;]</span></code> chunks, which
+neuroglancer reads as an OME-NGFF 0.4 group with one level. What those say,
+and which region each chunk key is, is plain arithmetic on the model’s
+geometry and the raw data’s; these functions are that arithmetic, with no
+Flask and no process-wide state, so the server’s routes only call them.</p>
+<p>Every client reads this format, including dashboards older than the server,
+so it changes only additively.</p>
+<section id="attributes">
+<h2>Attributes<a class="headerlink" href="#attributes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.serving.virtual_zarr.logger" title="cellmap_flow.serving.virtual_zarr.logger"><code class="xref py py-obj docutils literal notranslate"><span class="pre">logger</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.serving.virtual_zarr.BLOSC" title="cellmap_flow.serving.virtual_zarr.BLOSC"><code class="xref py py-obj docutils literal notranslate"><span class="pre">BLOSC</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="functions">
+<h2>Functions<a class="headerlink" href="#functions" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.serving.virtual_zarr.zattrs" title="cellmap_flow.serving.virtual_zarr.zattrs"><code class="xref py py-obj docutils literal notranslate"><span class="pre">zattrs</span></code></a>(→ dict)</p></td>
+<td><p>The group's OME-NGFF attributes: one level, s0, at the output voxel size.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.serving.virtual_zarr.zarray" title="cellmap_flow.serving.virtual_zarr.zarray"><code class="xref py py-obj docutils literal notranslate"><span class="pre">zarray</span></code></a>(→ dict)</p></td>
+<td><p>The array's zarr v2 metadata. <code class="docutils literal notranslate"><span class="pre">dtype</span></code> is anything np.dtype takes;</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.serving.virtual_zarr.served_spatial_shape" title="cellmap_flow.serving.virtual_zarr.served_spatial_shape"><code class="xref py py-obj docutils literal notranslate"><span class="pre">served_spatial_shape</span></code></a>(→ list)</p></td>
+<td><p>Output voxels from <code class="docutils literal notranslate"><span class="pre">origin</span></code> to the end of the raw data, rounded up.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.serving.virtual_zarr.chunk_roi" title="cellmap_flow.serving.virtual_zarr.chunk_roi"><code class="xref py py-obj docutils literal notranslate"><span class="pre">chunk_roi</span></code></a>(→ funlib.geometry.Roi)</p></td>
+<td><p>The region (nm) chunk <code class="docutils literal notranslate"><span class="pre">index</span></code> covers: <code class="docutils literal notranslate"><span class="pre">spatial_block</span></code> output voxels</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.serving.virtual_zarr.reorder_to_zarr_axes" title="cellmap_flow.serving.virtual_zarr.reorder_to_zarr_axes"><code class="xref py py-obj docutils literal notranslate"><span class="pre">reorder_to_zarr_axes</span></code></a>(→ numpy.ndarray)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">data</span></code>, laid out as <code class="docutils literal notranslate"><span class="pre">model_axes</span></code>, in zarr's order: the spatial axes, then &quot;c&quot;.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.serving.virtual_zarr.chunk_encoder" title="cellmap_flow.serving.virtual_zarr.chunk_encoder"><code class="xref py py-obj docutils literal notranslate"><span class="pre">chunk_encoder</span></code></a>(→ numcodecs.Blosc)</p></td>
+<td><p>The codec for the chunks, as <code class="docutils literal notranslate"><span class="pre">BLOSC</span></code> describes it.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="module-contents">
+<h2>Module Contents<a class="headerlink" href="#module-contents" title="Link to this heading"></a></h2>
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.serving.virtual_zarr.logger">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.serving.virtual_zarr.</span></span><span class="sig-name descname"><span class="pre">logger</span></span><a class="headerlink" href="#cellmap_flow.serving.virtual_zarr.logger" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.serving.virtual_zarr.BLOSC">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.serving.virtual_zarr.</span></span><span class="sig-name descname"><span class="pre">BLOSC</span></span><a class="headerlink" href="#cellmap_flow.serving.virtual_zarr.BLOSC" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.serving.virtual_zarr.zattrs">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.serving.virtual_zarr.</span></span><span class="sig-name descname"><span class="pre">zattrs</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">axes</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_voxel_size</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">origin</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">has_channel</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span></span></span><a class="headerlink" href="#cellmap_flow.serving.virtual_zarr.zattrs" title="Link to this definition"></a></dt>
+<dd><p>The group’s OME-NGFF attributes: one level, s0, at the output voxel size.</p>
+<p><code class="docutils literal notranslate"><span class="pre">axes</span></code> are the spatial axes, <code class="docutils literal notranslate"><span class="pre">origin</span></code> the lower corner of output
+voxel 0 in nm; OME writes voxel 0’s centre, so neuroglancer draws voxel 0
+at the origin. A channel axis comes last, with scale 1 and translation 0.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.serving.virtual_zarr.zarray">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.serving.virtual_zarr.</span></span><span class="sig-name descname"><span class="pre">zarray</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">shape</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">chunks</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dtype</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span></span></span><a class="headerlink" href="#cellmap_flow.serving.virtual_zarr.zarray" title="Link to this definition"></a></dt>
+<dd><p>The array’s zarr v2 metadata. <code class="docutils literal notranslate"><span class="pre">dtype</span></code> is anything np.dtype takes;
+its typestr is written (“&lt;f4”, “<a href="#id1"><span class="problematic" id="id2">|</span></a>u1”, …).</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.serving.virtual_zarr.served_spatial_shape">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.serving.virtual_zarr.</span></span><span class="sig-name descname"><span class="pre">served_spatial_shape</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">raw_offset</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">raw_shape</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">raw_voxel_size</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">origin</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_voxel_size</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">list</span></span></span><a class="headerlink" href="#cellmap_flow.serving.virtual_zarr.served_spatial_shape" title="Link to this definition"></a></dt>
+<dd><p>Output voxels from <code class="docutils literal notranslate"><span class="pre">origin</span></code> to the end of the raw data, rounded up.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.serving.virtual_zarr.chunk_roi">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.serving.virtual_zarr.</span></span><span class="sig-name descname"><span class="pre">chunk_roi</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">index</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">spatial_block</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_voxel_size</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">origin</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">funlib.geometry.Roi</span></span></span><a class="headerlink" href="#cellmap_flow.serving.virtual_zarr.chunk_roi" title="Link to this definition"></a></dt>
+<dd><p>The region (nm) chunk <code class="docutils literal notranslate"><span class="pre">index</span></code> covers: <code class="docutils literal notranslate"><span class="pre">spatial_block</span></code> output voxels
+per chunk, the grid starting at <code class="docutils literal notranslate"><span class="pre">origin</span></code>.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.serving.virtual_zarr.reorder_to_zarr_axes">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.serving.virtual_zarr.</span></span><span class="sig-name descname"><span class="pre">reorder_to_zarr_axes</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model_axes</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">spatial_axes</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">numpy.ndarray</span></span></span><a class="headerlink" href="#cellmap_flow.serving.virtual_zarr.reorder_to_zarr_axes" title="Link to this definition"></a></dt>
+<dd><p><code class="docutils literal notranslate"><span class="pre">data</span></code>, laid out as <code class="docutils literal notranslate"><span class="pre">model_axes</span></code>, in zarr’s order: the spatial axes, then “c”.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.serving.virtual_zarr.chunk_encoder">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.serving.virtual_zarr.</span></span><span class="sig-name descname"><span class="pre">chunk_encoder</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">numcodecs.Blosc</span></span></span><a class="headerlink" href="#cellmap_flow.serving.virtual_zarr.chunk_encoder" title="Link to this definition"></a></dt>
+<dd><p>The codec for the chunks, as <code class="docutils literal notranslate"><span class="pre">BLOSC</span></code> describes it.</p>
+</dd></dl>
+
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../restart_token/index.html" class="btn btn-neutral float-left" title="cellmap_flow.serving.restart_token" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../../utils/index.html" class="btn btn-neutral float-right" title="cellmap_flow.utils" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, David Ackerman,  Marwan Zouinkhi, Jeff Rhoades, Larissa Heinrich, Aubrey Weigel.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

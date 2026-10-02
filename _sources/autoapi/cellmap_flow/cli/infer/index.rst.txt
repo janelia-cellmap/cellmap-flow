@@ -1,0 +1,57 @@
+cellmap_flow.cli.infer
+======================
+
+.. py:module:: cellmap_flow.cli.infer
+
+.. autoapi-nested-parse::
+
+   ``cellmap_flow infer <type>``: start a model's inference server, then open
+   the viewer on its predictions and serve the dashboard.
+
+   There is a subcommand for each model type (``models.registry``), built when
+   click asks for it. It takes the type's constructor arguments as options
+   (``registry.click_options``), and the dataset (``-d``), queue (``-q``),
+   billing project (``-P``), ``--resample`` and ``--server-check`` as its own.
+
+   ``run``, the generic form before 0.3.0 (``cellmap_flow run -m TYPE -c
+   key=value``), is a deprecated alias: it says which ``infer`` command it
+   stands for, and runs it.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.cli.infer.logger
+   cellmap_flow.cli.infer.infer
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.cli.infer.run_generic
+   cellmap_flow.cli.infer.create_dynamic_command
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:function:: run_generic(ctx, model_type, data_path, queue, project, config, server_check)
+
+   ``cellmap_flow run -m TYPE -c key=value``, the form before 0.3.0:
+   ``cellmap_flow infer TYPE --key value``, which it prints and runs.
+
+
+.. py:function:: create_dynamic_command(cli_name: str, config_class: Type[cellmap_flow.models.models_config.ModelConfig])
+
+   Dynamically create a Click command for a ModelConfig subclass.
+
+
+.. py:data:: infer
+

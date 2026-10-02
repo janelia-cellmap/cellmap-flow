@@ -1,0 +1,155 @@
+cellmap_flow.finetune.data.reader
+=================================
+
+.. py:module:: cellmap_flow.finetune.data.reader
+
+.. autoapi-nested-parse::
+
+   Reading a finetune patch: the annotation, and the raw around the same place.
+
+   Annotation voxel v spans ``corner_nm + v * output_voxel_size`` (the corner
+   from session.volume.volume_corner_nm). A patch is whole annotation voxels,
+   ``[c - size/2, c + size/2)`` around its centre c, and the raw is read around
+   that same patch, so every label is paired with the raw it covers.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.data.reader.logger
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.data.reader.PatchReader
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.data.reader.input_normalizers
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:function:: input_normalizers(input_norm_config) -> list
+
+   The normalizer objects of an ``input_norm`` config; [] when it builds none.
+
+   The config arrives in either shape: the name-keyed dict a YAML gives
+   (e.g. {"MinMaxNormalizer": {...}, "LambdaNormalizer": {...}}), or the
+   list of {"name": ..., ...} dicts the dashboard POSTs -- a list on
+   purpose, because jsonify sorts dict keys and the order of these steps
+   changes what they compute.
+
+   Do not coerce it with dict(). Over a list whose entries have exactly two
+   keys it does not raise; it silently returns {"name": "expression"},
+   which builds no normalizers at all, and the trainer would then train on
+   raw uint8 while inference sees [-1, 1]. get_normalizations() understands
+   both shapes, so it gets the config untouched.
+
+
+.. py:class:: PatchReader(volume_zarr_path: str, raw_dataset_path: str, input_size_voxels, output_size_voxels, input_voxel_size_nm, output_voxel_size_nm, corner_nm: numpy.ndarray, shape_voxels: numpy.ndarray, input_norm_config=None)
+
+   Reads the annotation and raw patches of one volume, and normalizes the raw.
+
+   The raw is normalized here, with the session's own chain: the dashboard
+   normalizes raw through its ``process_chain()`` before inference, but the
+   trainer is a separate process whose chain is empty, so without this it
+   would train on raw uint8 while inference sees normalized [-1, 1].
+
+   The arrays are opened on first read. In training that is in a loader
+   worker, after the dataset was pickled to it: no open zarr or
+   tensorstore handle is ever pickled.
+
+
+   .. py:attribute:: volume_zarr_path
+
+
+   .. py:attribute:: raw_dataset_path
+
+
+   .. py:attribute:: input_size
+
+
+   .. py:attribute:: output_size
+
+
+   .. py:attribute:: input_voxel_size
+
+
+   .. py:attribute:: output_voxel_size
+
+
+   .. py:attribute:: corner_nm
+
+
+   .. py:attribute:: shape_voxels
+
+
+   .. py:attribute:: input_norm_config
+
+
+   .. py:attribute:: normalizers
+      :value: []
+
+
+
+   .. py:method:: snap(centre_voxels: numpy.ndarray) -> numpy.ndarray
+
+      The nearest centre whose patch, ``[c - size/2, c + size/2)``, is whole voxels.
+
+      Without it the annotation patch would be cut at int(c - size/2)
+      while the raw was read around c itself: half a voxel apart for an
+      odd output size, and for a good region, whose centre falls anywhere.
+
+
+
+   .. py:method:: annotation(centre_voxels: numpy.ndarray) -> numpy.ndarray
+
+      The annotation patch around a snapped centre, in the volume's own dtype.
+
+      Out-of-bounds voxels are 0, unannotated, which the trainer's loss
+      masks out when ``mask_unannotated`` is on.
+
+      The dtype is the volume's because an instance-correction volume is
+      uint16 or uint32 (instance id + 1): a uint8 patch wrapped its ids
+      modulo 256, so instance 255 became unannotated, 256 background, and
+      257 merged with instance 1. The dataset casts the patch to float32,
+      which holds every id below 2**24 exactly.
+
+
+
+   .. py:method:: raw(centre_voxels: numpy.ndarray) -> numpy.ndarray
+
+      The ``input_size`` raw patch centred on the annotation patch, as stored.
+
+      Read with ``normalize=False``, so no process-wide norms apply;
+      ``normalize`` applies the session's own afterwards.
+
+      The patch is a box of raw voxels: ``input_size`` of them, from the
+      one the patch's lower edge falls in (Grid.world_to_box's rule). It
+      used to go through a whole-nm Roi, whose Coordinate truncated the
+      edge and the shape, so at 5.24 nm or 10.48 nm the patch came out a
+      voxel short and started a voxel early. Where the edge is whole nm
+      on a whole-nm grid (the 8 and 16 nm levels) both give the same box.
+
+
+
+   .. py:method:: normalize(raw: numpy.ndarray) -> numpy.ndarray
+
+      ``raw`` through the session's normalizers, in order, as apply_norms() does for inference.
+
+
+

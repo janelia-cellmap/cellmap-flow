@@ -3,6 +3,14 @@ cellmap_flow.dashboard.routes.finetune.annotation_core
 
 .. py:module:: cellmap_flow.dashboard.routes.finetune.annotation_core
 
+.. autoapi-nested-parse::
+
+   The models to annotate for, a new annotation volume, and the user's settings.
+
+   Routes: GET ``/api/finetune/models``, POST ``/api/finetune/create-volume``,
+   and GET and POST ``/api/finetune/user-prefs``.
+
+
 
 Attributes
 ----------
@@ -17,12 +25,11 @@ Functions
 
 .. autoapisummary::
 
-   cellmap_flow.dashboard.routes.finetune.annotation_core.get_finetune_models_response
-   cellmap_flow.dashboard.routes.finetune.annotation_core.get_view_center_response
-   cellmap_flow.dashboard.routes.finetune.annotation_core.create_annotation_crop_response
-   cellmap_flow.dashboard.routes.finetune.annotation_core.create_annotation_volume_response
-   cellmap_flow.dashboard.routes.finetune.annotation_core.get_user_prefs_response
-   cellmap_flow.dashboard.routes.finetune.annotation_core.set_user_prefs_response
+   cellmap_flow.dashboard.routes.finetune.annotation_core.serve_new_volume
+   cellmap_flow.dashboard.routes.finetune.annotation_core.get_finetune_models
+   cellmap_flow.dashboard.routes.finetune.annotation_core.create_annotation_volume
+   cellmap_flow.dashboard.routes.finetune.annotation_core.get_user_prefs
+   cellmap_flow.dashboard.routes.finetune.annotation_core.set_user_prefs
 
 
 Module Contents
@@ -30,15 +37,22 @@ Module Contents
 
 .. py:data:: logger
 
-.. py:function:: get_finetune_models_response()
+.. py:function:: serve_new_volume(geometry, corrections_dir, dataset_path, model_name)
 
-.. py:function:: get_view_center_response()
+   Write a new volume with ``geometry`` into ``corrections_dir`` and serve it.
 
-.. py:function:: create_annotation_crop_response(data)
+   The volume records the dashboard's current normalization and
+   postprocessing chains, so the trainer can reproduce the inference-side
+   normalization and the finetuned model's YAML the postprocessing. Returns
+   ``(volume_id, zarr_path, url)``, the URL as the browser reaches MinIO.
+   Registering the volume is the caller's.
 
-.. py:function:: create_annotation_volume_response(data)
 
-.. py:function:: get_user_prefs_response()
+.. py:function:: get_finetune_models()
 
-.. py:function:: set_user_prefs_response(data)
+.. py:function:: create_annotation_volume()
+
+.. py:function:: get_user_prefs()
+
+.. py:function:: set_user_prefs()
 

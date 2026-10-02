@@ -1,0 +1,113 @@
+cellmap_flow.io.source
+======================
+
+.. py:module:: cellmap_flow.io.source
+
+.. autoapi-nested-parse::
+
+   Reading array data with tensorstore, whatever the format.
+
+   ``open_array(path)`` gives an ``ArraySource`` for zarr v2 and v3, N5 and
+   neuroglancer precomputed, on local disk or at an ``http(s)://``, ``s3://`` or
+   ``gs://`` URL (``io.store``). Every format is seen
+   the same way: C order, as the metadata in ``io.metadata`` describes it
+   (channels first, then z, y, x), with voxel 0 at index 0. ``read_padded``
+   reads a ``Box`` of voxels from it, or from any view of it, padding what
+   lies outside the array.
+
+   Where the voxels are in the world is ``io.geometry``'s business, and what
+   the input chain does to them is ``ImageDataInterface``'s.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.io.source.logger
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.io.source.ArraySource
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.io.source.open_array
+   cellmap_flow.io.source.read_padded
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:class:: ArraySource(path: str, concurrency_limit: Optional[int] = 1, cache_bytes: int = 0)
+
+   One array, read with tensorstore: every channel, not normalized.
+
+   Opened on first use and then kept, so everything sharing the source
+   (ImageDataInterface's ``with_input_norms`` views) shares one open store,
+   and its cache.
+
+
+   .. py:attribute:: path
+
+
+   .. py:attribute:: concurrency_limit
+      :value: 1
+
+
+
+   .. py:attribute:: cache_bytes
+      :value: 0
+
+
+
+   .. py:property:: ts
+
+      C order, voxel 0 at index 0.
+
+      :type: The tensorstore
+
+
+   .. py:method:: read(box: Optional[cellmap_flow.io.geometry.Box] = None, fill=0) -> numpy.ndarray
+
+      ``read_padded`` of this array: all of it when ``box`` is None.
+
+
+
+.. py:function:: open_array(path: str, concurrency_limit: Optional[int] = 1, cache_bytes: int = 0) -> ArraySource
+
+   The array at ``path``, to read with tensorstore; it is opened on the
+   first read (a missing or unreadable array raises then).
+
+   ``concurrency_limit``: how many files tensorstore reads and chunks it
+   decodes at once; ``None`` leaves its defaults (one decode per core).
+   ``cache_bytes``: how much decoded data it keeps for later reads of the
+   same chunks (0: none). Cached chunks are still checked against the file
+   on every read, so what is read never differs.
+
+
+.. py:function:: read_padded(store, box: Optional[cellmap_flow.io.geometry.Box] = None, fill=0, transform=None) -> numpy.ndarray
+
+   The voxels of ``box`` (one entry per dimension of ``store``; all of
+   it when None) as a numpy array, padded where the box runs past the
+   store's domain.
+
+   ``fill`` is the padding value, or "edge" to repeat the border voxels:
+   each voxel outside the array takes the value of the nearest one inside.
+   A box wholly outside the array is all padding. ``transform`` is applied
+   to what was read before the padding is added: ImageDataInterface runs
+   its input chain there, so padding is never normalized, and a box with
+   nothing to read still has the chain's dtype.
+
+

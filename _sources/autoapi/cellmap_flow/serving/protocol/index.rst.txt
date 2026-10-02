@@ -1,0 +1,81 @@
+cellmap_flow.serving.protocol
+=============================
+
+.. py:module:: cellmap_flow.serving.protocol
+
+.. autoapi-nested-parse::
+
+   What passes between the dashboard and an inference server, as text.
+
+   A prediction layer's source is ``zarr://<server>/<model><ARGS_KEY><blob><ARGS_KEY>``.
+   The blob is the layer's chain, ``{INPUT_NORM_KEY: [...], POSTPROCESS_KEY:
+   [...]}`` followed by extras such as ``dashboard_url`` and ``digest``, as
+   minified JSON in URL-safe base64 without padding (``encode_to_str``). Every
+   request the viewer makes carries it, and ``split_dataset_url`` finds it in
+   the dataset part of a request's path. ``pipeline_spec.PipelineSpec`` reads
+   and writes the chain; this module is only the codec, so a server and a
+   dashboard of different versions still understand each other.
+
+   The other way, a server announces its address by printing it between the
+   two ``IP_PATTERN`` markers (``CellMapFlowServer.run``). They are defined in
+   ``jobs.spec``, which finds them in a job's log.
+
+   The same codec carries a dict argument on a command line: a model entry
+   for the finetune CLI's ``--model-entry``, and a finetuned model's
+   ``base_model`` for ``cellmap_flow_server``.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.serving.protocol.ARGS_KEY
+   cellmap_flow.serving.protocol.INPUT_NORM_KEY
+   cellmap_flow.serving.protocol.POSTPROCESS_KEY
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.serving.protocol.encode_to_str
+   cellmap_flow.serving.protocol.decode_to_json
+   cellmap_flow.serving.protocol.split_dataset_url
+
+
+Module Contents
+---------------
+
+.. py:data:: ARGS_KEY
+   :value: '__CFLOW_ARGS__'
+
+
+.. py:data:: INPUT_NORM_KEY
+   :value: 'input_norm'
+
+
+.. py:data:: POSTPROCESS_KEY
+   :value: 'postprocess'
+
+
+.. py:function:: encode_to_str(data)
+
+   Encodes a JSON object into a URL-safe string without '/', '+', or '='.
+
+
+.. py:function:: decode_to_json(encoded_str)
+
+   Decodes a URL-safe string back into a JSON object.
+
+
+.. py:function:: split_dataset_url(dataset: str) -> Optional[str]
+
+   The args blob between a layer URL's two ``ARGS_KEY`` markers.
+
+   ``None`` when the URL carries no blob at all. Any other number of markers
+   than two is a malformed URL.
+
+

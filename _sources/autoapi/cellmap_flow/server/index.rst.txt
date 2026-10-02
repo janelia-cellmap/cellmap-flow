@@ -10,6 +10,12 @@ Attributes
 .. autoapisummary::
 
    cellmap_flow.server.logger
+   cellmap_flow.server.CHAIN_CACHE_SIZE
+   cellmap_flow.server.EQUIVALENCES_TIMEOUT_SECONDS
+   cellmap_flow.server.RAW_CACHE_BYTES_ENV
+   cellmap_flow.server.RAW_CACHE_BYTES_DEFAULT
+   cellmap_flow.server.RAW_READ_CONCURRENCY_ENV
+   cellmap_flow.server.HALF_PRECISION_ENV
 
 
 Classes
@@ -17,7 +23,17 @@ Classes
 
 .. autoapisummary::
 
+   cellmap_flow.server.ServedChain
    cellmap_flow.server.CellMapFlowServer
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.server.get_free_port
+   cellmap_flow.server.get_public_ip
 
 
 Module Contents
@@ -25,13 +41,75 @@ Module Contents
 
 .. py:data:: logger
 
-.. py:class:: CellMapFlowServer(dataset_name: str, model_config: cellmap_flow.models.models_config.ModelConfig, restart_callback=None)
+.. py:data:: CHAIN_CACHE_SIZE
+   :value: 32
+
+
+.. py:data:: EQUIVALENCES_TIMEOUT_SECONDS
+   :value: 10
+
+
+.. py:data:: RAW_CACHE_BYTES_ENV
+   :value: 'CELLMAP_FLOW_RAW_CACHE_BYTES'
+
+
+.. py:data:: RAW_CACHE_BYTES_DEFAULT
+   :value: 1073741824
+
+
+.. py:data:: RAW_READ_CONCURRENCY_ENV
+   :value: 'CELLMAP_FLOW_RAW_READ_CONCURRENCY'
+
+
+.. py:data:: HALF_PRECISION_ENV
+   :value: 'CELLMAP_FLOW_HALF_PRECISION'
+
+
+.. py:function:: get_free_port()
+
+   A TCP port free on this machine now, for a server to bind.
+
+
+.. py:function:: get_public_ip()
+
+   Return the local/private IP address in use on this machine
+   (e.g., 10.x.x.x or 192.168.x.x if behind NAT).
+   This *does not* return the real Internet-facing public IP
+   if you're behind NAT.
+
+
+.. py:class:: ServedChain
+
+
+
+   The normalization/postprocessing a layer URL asks for.
+
+
+   .. py:attribute:: dashboard_url
+      :type:  Optional[str]
+
+
+   .. py:attribute:: input_norms
+      :type:  Optional[list]
+
+
+   .. py:attribute:: postprocess
+      :type:  Optional[list]
+
+
+   .. py:method:: effective_postprocess()
+
+
+.. py:class:: CellMapFlowServer(dataset_name: str, model_config: cellmap_flow.models.models_config.ModelConfig, restart_callback=None, restart_token=None, resample=False)
 
    Flask application hosting a "virtual Zarr" for Neuroglancer.
    All routes are defined via Flask decorators for convenience.
 
 
-   .. py:attribute:: zarr_block_shape
+   .. py:attribute:: inferencer
+
+
+   .. py:attribute:: geometry
 
 
    .. py:attribute:: input_voxel_size
@@ -46,21 +124,20 @@ Module Contents
    .. py:attribute:: output_dtype
 
 
-   .. py:attribute:: model_output_axes
-
-
-   .. py:attribute:: model_config
-
-
-   .. py:attribute:: inferencer
-
-
    .. py:attribute:: restart_callback
       :value: None
 
 
 
+   .. py:attribute:: restart_token
+      :value: None
+
+
+
    .. py:attribute:: idi_raw
+
+
+   .. py:attribute:: origin
 
 
    .. py:attribute:: axes
@@ -79,16 +156,24 @@ Module Contents
 
 
 
-   .. py:attribute:: vol_shape
-
-
    .. py:attribute:: chunk_encoder
 
 
    .. py:attribute:: app
 
 
-   .. py:method:: refresh_dataset(dataset)
+   .. py:method:: chain_for(dataset) -> ServedChain
+
+      The chain the requested layer URL carries, built once per URL.
+
+      A URL without an args block gets the process's chain
+      (``process_chain()``, empty in a server started from the CLI).
+
+
+
+   .. py:attribute:: CHUNKS_TIMED_AT_INFO
+      :value: 20
+
 
 
    .. py:method:: run(debug=False, port=None, certfile=None, keyfile=None)

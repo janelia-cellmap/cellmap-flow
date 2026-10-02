@@ -3,6 +3,26 @@ cellmap_flow.dashboard.routes.finetune
 
 .. py:module:: cellmap_flow.dashboard.routes.finetune
 
+.. autoapi-nested-parse::
+
+   The finetune tab's routes, and the viewer-layer routes scripts use.
+
+   Importing the package puts every route on ``finetune_bp``, which
+   dashboard.app registers. Each module has its own:
+
+   - ``training``: submit, restart, the job list, a job's status and log (and
+     its live stream), cancel and stop-early;
+   - ``annotation_core``: the models to annotate for, a new annotation volume,
+     and the user's saved settings;
+   - ``annotation_sessions``: listing earlier sessions and resuming one;
+   - ``yaml_crops``: importing crops from a YAML, and reading a YAML file;
+   - ``overlay``: an annotation volume's layer, the annotated-regions boxes,
+     and syncing the annotations from MinIO;
+   - ``good_regions``: marking the current view as a region the model gets right;
+   - ``instance_correction``: instance-correction volumes;
+   - ``layers``: adding, removing and renaming viewer layers.
+
+
 
 Submodules
 ----------
@@ -10,16 +30,15 @@ Submodules
 .. toctree::
    :maxdepth: 1
 
-   /autoapi/cellmap_flow/dashboard/routes/finetune/annotation/index
    /autoapi/cellmap_flow/dashboard/routes/finetune/annotation_core/index
    /autoapi/cellmap_flow/dashboard/routes/finetune/annotation_sessions/index
+   /autoapi/cellmap_flow/dashboard/routes/finetune/blueprint/index
    /autoapi/cellmap_flow/dashboard/routes/finetune/common/index
    /autoapi/cellmap_flow/dashboard/routes/finetune/good_regions/index
+   /autoapi/cellmap_flow/dashboard/routes/finetune/instance_correction/index
+   /autoapi/cellmap_flow/dashboard/routes/finetune/layers/index
    /autoapi/cellmap_flow/dashboard/routes/finetune/overlay/index
-   /autoapi/cellmap_flow/dashboard/routes/finetune/routes/index
-   /autoapi/cellmap_flow/dashboard/routes/finetune/service/index
    /autoapi/cellmap_flow/dashboard/routes/finetune/training/index
-   /autoapi/cellmap_flow/dashboard/routes/finetune/viewer/index
    /autoapi/cellmap_flow/dashboard/routes/finetune/yaml_crops/index
 
 
@@ -31,26 +50,8 @@ Attributes
    cellmap_flow.dashboard.routes.finetune.finetune_bp
 
 
-Functions
----------
-
-.. autoapisummary::
-
-   cellmap_flow.dashboard.routes.finetune.refresh_annotated_regions_layer
-
-
 Package Contents
 ----------------
-
-.. py:function:: refresh_annotated_regions_layer(corrections_path=None)
-
-   Draw a box around every region that has annotations in it.
-
-   Only ever called for something the user just did -- creating a volume,
-   importing crops, or clicking "Show Annotated Regions". Nothing calls this
-   on a timer: see the note on _last_annotated_regions for why a push the
-   user did not ask for is destructive.
-
 
 .. py:data:: finetune_bp
 

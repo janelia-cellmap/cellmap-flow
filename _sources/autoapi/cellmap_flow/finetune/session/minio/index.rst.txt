@@ -1,0 +1,178 @@
+cellmap_flow.finetune.session.minio
+===================================
+
+.. py:module:: cellmap_flow.finetune.session.minio
+
+.. autoapi-nested-parse::
+
+   The dashboard's MinIO: the local S3 server annotation volumes are painted through.
+
+   Neuroglancer reads and writes a volume's chunks straight from MinIO; the
+   volume on disk is mirrored up when it is served and pulled back by
+   ``session.sync``. The server's state -- process, address, bucket, data
+   directory, sync thread -- lives in the dict a ``MinioServer`` is given (the
+   dashboard's ``minio_state``), never here, so any number of them over the
+   same dict agree.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.session.minio.logger
+   cellmap_flow.finetune.session.minio.MC_ALIAS
+   cellmap_flow.finetune.session.minio.MINIO_READY_TIMEOUT
+   cellmap_flow.finetune.session.minio.MINIO_PROXY_URL_ENV
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.session.minio.MinioServer
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.session.minio.get_local_ip
+   cellmap_flow.finetune.session.minio.find_available_port
+   cellmap_flow.finetune.session.minio.minio_root
+   cellmap_flow.finetune.session.minio.wait_for_ready
+   cellmap_flow.finetune.session.minio.make_s3_filesystem
+   cellmap_flow.finetune.session.minio.proxied_url
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:data:: MC_ALIAS
+   :value: 'myserver'
+
+
+.. py:data:: MINIO_READY_TIMEOUT
+   :value: 30.0
+
+
+.. py:data:: MINIO_PROXY_URL_ENV
+   :value: 'CELLMAP_FLOW_MINIO_PROXY_URL'
+
+
+.. py:function:: get_local_ip()
+
+   This machine's address on its outgoing interface, else 127.0.0.1.
+
+
+.. py:function:: find_available_port(start_port=9000)
+
+   A free port whose next one is free too: MinIO's API and console.
+
+
+.. py:function:: minio_root(output_base_dir) -> pathlib.Path
+
+   Where MinIO started for ``output_base_dir`` keeps its data.
+
+
+.. py:function:: wait_for_ready(ip, port, process, timeout=MINIO_READY_TIMEOUT) -> bool
+
+   Poll MinIO's readiness endpoint until it answers 200, the process exits, or time runs out.
+
+
+.. py:function:: make_s3_filesystem(state)
+
+   An s3fs filesystem pointed at the MinIO ``state`` describes.
+
+   Both cache opt-outs are load-bearing, not tuning knobs.
+
+   fsspec caches filesystem *instances* keyed on their constructor
+   arguments, so every call here would otherwise hand back the same object
+   -- and with it the same ``dircache``. s3fs fills ``dircache`` on ``ls()``
+   and never expires it by default. The periodic sync thread starts with
+   MinIO, when the first volume is served, so its first listing of
+   ``annotation/s0`` runs before the user has painted anything and would
+   cache a chunk-less listing. Every later sync would reuse that stale
+   listing, ``diff_and_sync_chunks`` would see no chunk keys, and painted
+   scribbles would never reach disk -- while ``sync_zarr_group_metadata``
+   would keep working, because ``cat()``/``exists()`` address objects
+   directly and bypass the cache. The symptom: every sync logs "no changes"
+   however much is painted, and training finds a volume with no populated
+   chunks.
+
+   Listings here are small and served by a local MinIO, so not caching them
+   costs nothing.
+
+
+.. py:function:: proxied_url(minio_url, request=None)
+
+   ``minio_url`` as a browser behind a reverse proxy can reach it.
+
+   A browser that loaded the dashboard over a proxy's HTTPS cannot fetch
+   ``http://<node>:<port>/...`` chunks from MinIO: the node may not be
+   reachable, and the page blocks the mixed content. When
+   CELLMAP_FLOW_MINIO_PROXY_URL is set and ``request`` (anything with
+   ``headers`` and ``scheme``) came through a proxy, the URL's path is put
+   under that URL instead.
+
+   Only a request carrying X-Forwarded-Host came through a proxy; the Host
+   header is there for every browser, including one that reaches the
+   dashboard directly. The scheme is X-Forwarded-Proto's, else the
+   request's own. Otherwise, and with no request, the URL is returned
+   unchanged.
+
+
+.. py:class:: MinioServer(state: dict, preflight=None, volumes: Optional[dict] = None)
+
+   Starts MinIO once, then serves annotation volumes through it.
+
+   ``state`` is the dashboard's ``minio_state`` dict (``process``, ``ip``,
+   ``port``, ``bucket``, ``output_base``, ``log_path``, ``sync_thread``):
+   it is read and written in place. ``volumes`` is the volume registry the
+   sync keeps its per-chunk state in. ``preflight``, if given, runs before
+   anything else, e.g. a check that the binaries are installed.
+
+
+   .. py:attribute:: state
+
+
+   .. py:attribute:: preflight
+      :value: None
+
+
+
+   .. py:attribute:: volumes
+
+
+   .. py:method:: running() -> bool
+
+
+   .. py:method:: mc_env() -> dict
+
+      The environment for an `mc` call that addresses this server as MC_ALIAS.
+
+
+
+   .. py:method:: url_for(zarr_name: str) -> str
+
+      The URL a browser reads ``<bucket>/<zarr_name>`` at, before any proxy.
+
+
+
+   .. py:method:: ensure_serving(zarr_path: str, volume_id: str, output_base_dir: Optional[str] = None, mc_target_name: Optional[str] = None) -> str
+
+      Start MinIO if needed, then upload the volume at ``zarr_path``; returns its MinIO URL.
+
+      ``volume_id`` is how the sync finds its chunks: the bucket key without
+      ".zarr". ``mc_target_name`` is that key when it is not
+      ``basename(zarr_path)``: instance corrections keep one key per ROI
+      whichever snapshot on disk is served. A MinIO that has to start keeps
+      its data in ``<output_base_dir>/.minio``; a running one keeps its own.
+
+
+

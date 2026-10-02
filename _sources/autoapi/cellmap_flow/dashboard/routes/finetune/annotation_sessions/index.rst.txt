@@ -3,6 +3,15 @@ cellmap_flow.dashboard.routes.finetune.annotation_sessions
 
 .. py:module:: cellmap_flow.dashboard.routes.finetune.annotation_sessions
 
+.. autoapi-nested-parse::
+
+   Earlier sessions: listing them, and resuming one's volume in a new session.
+
+   Routes: POST ``/api/finetune/list-existing-sessions``, POST
+   ``/api/finetune/load-existing-volume`` (the resume) and GET
+   ``/api/finetune/load-existing-volume-progress`` (how far a resume has got).
+
+
 
 Attributes
 ----------
@@ -17,9 +26,9 @@ Functions
 
 .. autoapisummary::
 
-   cellmap_flow.dashboard.routes.finetune.annotation_sessions.get_resume_progress_response
-   cellmap_flow.dashboard.routes.finetune.annotation_sessions.list_existing_sessions_response
-   cellmap_flow.dashboard.routes.finetune.annotation_sessions.load_existing_volume_response
+   cellmap_flow.dashboard.routes.finetune.annotation_sessions.load_existing_volume_progress
+   cellmap_flow.dashboard.routes.finetune.annotation_sessions.list_existing_sessions
+   cellmap_flow.dashboard.routes.finetune.annotation_sessions.load_existing_volume
 
 
 Module Contents
@@ -27,9 +36,12 @@ Module Contents
 
 .. py:data:: logger
 
-.. py:function:: get_resume_progress_response(load_id)
+.. py:function:: load_existing_volume_progress()
 
-.. py:function:: list_existing_sessions_response(data)
+   How far the resume with this load_id has got.
 
-.. py:function:: load_existing_volume_response(data)
+
+.. py:function:: list_existing_sessions()
+
+.. py:function:: load_existing_volume()
 

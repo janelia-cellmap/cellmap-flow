@@ -44,7 +44,6 @@ Functions
    cellmap_flow.finetune.lora_wrapper.print_lora_parameters
    cellmap_flow.finetune.lora_wrapper.load_lora_adapter
    cellmap_flow.finetune.lora_wrapper.save_lora_adapter
-   cellmap_flow.finetune.lora_wrapper.merge_lora_into_base
 
 
 Module Contents
@@ -219,25 +218,5 @@ Module Contents
    ...     lora_model,
    ...     "models/fly_organelles/v1.1.0/lora_adapter"
    ... )
-
-
-.. py:function:: merge_lora_into_base(model: torch.nn.Module) -> torch.nn.Module
-
-   Merge LoRA weights back into the base model.
-
-   This creates a standalone model with LoRA weights merged in,
-   removing the need for PEFT at inference time.
-
-   Warning: This increases model size back to the full model size.
-   Only use if you need a standalone model without PEFT dependency.
-
-   :param model: PEFT model with LoRA adapters
-
-   :returns: Base model with merged weights
-
-   .. rubric:: Examples
-
-   >>> merged_model = merge_lora_into_base(lora_model)
-   >>> torch.save(merged_model.state_dict(), "merged_model.pt")
 
 

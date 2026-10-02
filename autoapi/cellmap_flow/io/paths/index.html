@@ -1,0 +1,327 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>cellmap_flow.io.paths &mdash; CellMap Flow  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=4ae1632d" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css" />
+
+  
+    <link rel="shortcut icon" href="../../../../_static/favicon.ico"/>
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link rel="next" title="cellmap_flow.io.resample" href="../resample/index.html" />
+    <link rel="prev" title="cellmap_flow.io.ome" href="../ome/index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            CellMap Flow
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">CellMap-Flow API:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../../../../install.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../cli.html">Command line</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../scripts.html">Python Scripts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../yaml_config.html">YAML Configuration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../data_paths.html">Data paths</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../huggingface.html">HuggingFace Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../custom_script.html">Custom Model</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../post.html">PostProcessors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../plugins.html">Plugins</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../review.html">Reviewing instances</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../viewer_api.html">Viewer layer API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../architecture.html">Architecture</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../../../index.html">API Reference</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="../../index.html">cellmap_flow</a><ul class="current">
+<li class="toctree-l3 current"><a class="reference internal" href="../../index.html#submodules">Submodules</a><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="../../blockwise/index.html">cellmap_flow.blockwise</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../cli/index.html">cellmap_flow.cli</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../config/index.html">cellmap_flow.config</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../dashboard/index.html">cellmap_flow.dashboard</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../finetune/index.html">cellmap_flow.finetune</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../globals/index.html">cellmap_flow.globals</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../image_data_interface/index.html">cellmap_flow.image_data_interface</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../inference/index.html">cellmap_flow.inference</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../inferencer/index.html">cellmap_flow.inferencer</a></li>
+<li class="toctree-l4 current"><a class="reference internal" href="../index.html">cellmap_flow.io</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../jobs/index.html">cellmap_flow.jobs</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../logging_setup/index.html">cellmap_flow.logging_setup</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../models/index.html">cellmap_flow.models</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../norm/index.html">cellmap_flow.norm</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../pipeline_spec/index.html">cellmap_flow.pipeline_spec</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../plugins/index.html">cellmap_flow.plugins</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../post/index.html">cellmap_flow.post</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../process_chain/index.html">cellmap_flow.process_chain</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../review/index.html">cellmap_flow.review</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../review_index/index.html">cellmap_flow.review_index</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../server/index.html">cellmap_flow.server</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../serving/index.html">cellmap_flow.serving</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../utils/index.html">cellmap_flow.utils</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../viewer/index.html">cellmap_flow.viewer</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">CellMap Flow</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">API Reference</a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">cellmap_flow</a></li>
+          <li class="breadcrumb-item"><a href="../index.html">cellmap_flow.io</a></li>
+      <li class="breadcrumb-item active">cellmap_flow.io.paths</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../../../../_sources/autoapi/cellmap_flow/io/paths/index.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-cellmap_flow.io.paths">
+<span id="cellmap-flow-io-paths"></span><h1>cellmap_flow.io.paths<a class="headerlink" href="#module-cellmap_flow.io.paths" title="Link to this heading"></a></h1>
+<p>Dataset paths: where a container ends, how to join onto a path, what is there.</p>
+<p>A dataset path is a local directory or an http(s), s3 or gs URL, and may run
+on past its container into the group or array inside it
+(<code class="docutils literal notranslate"><span class="pre">/data/x.zarr/recon-1/em/s0</span></code>). A <code class="docutils literal notranslate"><span class="pre">precomputed://</span></code> path, and a <code class="docutils literal notranslate"><span class="pre">gs://</span></code>
+path with no <code class="docutils literal notranslate"><span class="pre">.zarr</span></code>/<code class="docutils literal notranslate"><span class="pre">.n5</span></code> in it, is a neuroglancer precomputed volume:
+<code class="docutils literal notranslate"><span class="pre">precomputed://</span></code> is followed by a local directory or, as neuroglancer
+writes it, a URL (<code class="docutils literal notranslate"><span class="pre">precomputed://gs://bucket/volume</span></code>).</p>
+<p>What is at a path is probed through <code class="docutils literal notranslate"><span class="pre">io.store</span></code> (for <code class="docutils literal notranslate"><span class="pre">.zgroup</span></code>,
+<code class="docutils literal notranslate"><span class="pre">.zarray</span></code>, <code class="docutils literal notranslate"><span class="pre">zarr.json</span></code>) only where a path has no <code class="docutils literal notranslate"><span class="pre">.zarr</span></code>/<code class="docutils literal notranslate"><span class="pre">.n5</span></code>
+suffix to split it at; the local v3 checks look at the filesystem.</p>
+<section id="attributes">
+<h2>Attributes<a class="headerlink" href="#attributes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.io.paths.ZARR_JSON" title="cellmap_flow.io.paths.ZARR_JSON"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ZARR_JSON</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="functions">
+<h2>Functions<a class="headerlink" href="#functions" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.io.paths.is_remote" title="cellmap_flow.io.paths.is_remote"><code class="xref py py-obj docutils literal notranslate"><span class="pre">is_remote</span></code></a>(→ bool)</p></td>
+<td><p>An http(s), s3 or gs URL.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.io.paths.is_precomputed" title="cellmap_flow.io.paths.is_precomputed"><code class="xref py py-obj docutils literal notranslate"><span class="pre">is_precomputed</span></code></a>(→ bool)</p></td>
+<td><p>A <code class="docutils literal notranslate"><span class="pre">precomputed://</span></code> path, or a <code class="docutils literal notranslate"><span class="pre">gs://</span></code> one that names no zarr or</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.io.paths.normalize_path" title="cellmap_flow.io.paths.normalize_path"><code class="xref py py-obj docutils literal notranslate"><span class="pre">normalize_path</span></code></a>(→ str)</p></td>
+<td><p>Remove shell-escape backslashes from a filesystem path.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.io.paths.join" title="cellmap_flow.io.paths.join"><code class="xref py py-obj docutils literal notranslate"><span class="pre">join</span></code></a>(→ str)</p></td>
+<td><p>Join path components; a URL is joined with &quot;/&quot; whatever the OS.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.io.paths.parent" title="cellmap_flow.io.paths.parent"><code class="xref py py-obj docutils literal notranslate"><span class="pre">parent</span></code></a>(→ str)</p></td>
+<td><p>The directory above <code class="docutils literal notranslate"><span class="pre">path</span></code>, a URL's as a local path's; a URL's root</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.io.paths.is_v3_container" title="cellmap_flow.io.paths.is_v3_container"><code class="xref py py-obj docutils literal notranslate"><span class="pre">is_v3_container</span></code></a>(→ bool)</p></td>
+<td><p>True if <code class="docutils literal notranslate"><span class="pre">path</span></code> is a directory with a <code class="docutils literal notranslate"><span class="pre">zarr.json</span></code> at its root.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.io.paths.find_v3_container" title="cellmap_flow.io.paths.find_v3_container"><code class="xref py py-obj docutils literal notranslate"><span class="pre">find_v3_container</span></code></a>(→ Optional[str])</p></td>
+<td><p>The nearest directory at or above <code class="docutils literal notranslate"><span class="pre">path</span></code> holding a <code class="docutils literal notranslate"><span class="pre">zarr.json</span></code>.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.io.paths.is_zarr_container" title="cellmap_flow.io.paths.is_zarr_container"><code class="xref py py-obj docutils literal notranslate"><span class="pre">is_zarr_container</span></code></a>(→ bool)</p></td>
+<td><p>A local zarr (v2 or v3) group or array, with or without a .zarr suffix.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.io.paths.suffix_format" title="cellmap_flow.io.paths.suffix_format"><code class="xref py py-obj docutils literal notranslate"><span class="pre">suffix_format</span></code></a>(→ Optional[str])</p></td>
+<td><p>&quot;zarr&quot; or &quot;n5&quot;: the suffix of the last component of <code class="docutils literal notranslate"><span class="pre">path</span></code> that ends</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.io.paths.split_container" title="cellmap_flow.io.paths.split_container"><code class="xref py py-obj docutils literal notranslate"><span class="pre">split_container</span></code></a>(→ Tuple[str, str])</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">(container,</span> <span class="pre">path</span> <span class="pre">inside</span> <span class="pre">it)</span></code>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.io.paths.precomputed_scale" title="cellmap_flow.io.paths.precomputed_scale"><code class="xref py py-obj docutils literal notranslate"><span class="pre">precomputed_scale</span></code></a>(→ Tuple[str, Optional[int]])</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">(volume,</span> <span class="pre">scale</span> <span class="pre">index)</span></code> for a precomputed path: a last component</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.io.paths.precomputed_volume" title="cellmap_flow.io.paths.precomputed_volume"><code class="xref py py-obj docutils literal notranslate"><span class="pre">precomputed_volume</span></code></a>(→ Tuple[str, int])</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">(volume</span> <span class="pre">location,</span> <span class="pre">scale</span> <span class="pre">index)</span></code> for a precomputed path: the volume's</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="module-contents">
+<h2>Module Contents<a class="headerlink" href="#module-contents" title="Link to this heading"></a></h2>
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.io.paths.ZARR_JSON">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.io.paths.</span></span><span class="sig-name descname"><span class="pre">ZARR_JSON</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'zarr.json'</span></span><a class="headerlink" href="#cellmap_flow.io.paths.ZARR_JSON" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.io.paths.is_remote">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.io.paths.</span></span><span class="sig-name descname"><span class="pre">is_remote</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#cellmap_flow.io.paths.is_remote" title="Link to this definition"></a></dt>
+<dd><p>An http(s), s3 or gs URL.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.io.paths.is_precomputed">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.io.paths.</span></span><span class="sig-name descname"><span class="pre">is_precomputed</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#cellmap_flow.io.paths.is_precomputed" title="Link to this definition"></a></dt>
+<dd><p>A <code class="docutils literal notranslate"><span class="pre">precomputed://</span></code> path, or a <code class="docutils literal notranslate"><span class="pre">gs://</span></code> one that names no zarr or
+N5 container (neuroglancer’s cloud volumes are precomputed).</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.io.paths.normalize_path">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.io.paths.</span></span><span class="sig-name descname"><span class="pre">normalize_path</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#cellmap_flow.io.paths.normalize_path" title="Link to this definition"></a></dt>
+<dd><p>Remove shell-escape backslashes from a filesystem path.</p>
+<p>Users often copy-paste paths from a terminal where spaces are escaped
+(e.g. <code class="docutils literal notranslate"><span class="pre">/path/to/file\</span> <span class="pre">name.zarr</span></code>).  YAML preserves the literal
+backslashes, but the filesystem expects plain spaces.</p>
+<p>A URL – http(s), s3, gs, or one after <code class="docutils literal notranslate"><span class="pre">precomputed://</span></code> – is returned
+as it is: it is not a filesystem path.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.io.paths.join">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.io.paths.</span></span><span class="sig-name descname"><span class="pre">join</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">base</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">parts</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#cellmap_flow.io.paths.join" title="Link to this definition"></a></dt>
+<dd><p>Join path components; a URL is joined with “/” whatever the OS.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.io.paths.parent">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.io.paths.</span></span><span class="sig-name descname"><span class="pre">parent</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#cellmap_flow.io.paths.parent" title="Link to this definition"></a></dt>
+<dd><p>The directory above <code class="docutils literal notranslate"><span class="pre">path</span></code>, a URL’s as a local path’s; a URL’s root
+(<code class="docutils literal notranslate"><span class="pre">s3://bucket</span></code>) is its own.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.io.paths.is_v3_container">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.io.paths.</span></span><span class="sig-name descname"><span class="pre">is_v3_container</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#cellmap_flow.io.paths.is_v3_container" title="Link to this definition"></a></dt>
+<dd><p>True if <code class="docutils literal notranslate"><span class="pre">path</span></code> is a directory with a <code class="docutils literal notranslate"><span class="pre">zarr.json</span></code> at its root.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.io.paths.find_v3_container">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.io.paths.</span></span><span class="sig-name descname"><span class="pre">find_v3_container</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#cellmap_flow.io.paths.find_v3_container" title="Link to this definition"></a></dt>
+<dd><p>The nearest directory at or above <code class="docutils literal notranslate"><span class="pre">path</span></code> holding a <code class="docutils literal notranslate"><span class="pre">zarr.json</span></code>.</p>
+<p>None if there is none (a v2 store), <code class="docutils literal notranslate"><span class="pre">path</span></code> is a URL (zarr v3 is read
+from the local filesystem only), or <code class="docutils literal notranslate"><span class="pre">path</span></code> does not exist: a missing
+level is not the group above it, whose zarr.json would otherwise answer
+for it.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.io.paths.is_zarr_container">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.io.paths.</span></span><span class="sig-name descname"><span class="pre">is_zarr_container</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#cellmap_flow.io.paths.is_zarr_container" title="Link to this definition"></a></dt>
+<dd><p>A local zarr (v2 or v3) group or array, with or without a .zarr suffix.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.io.paths.suffix_format">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.io.paths.</span></span><span class="sig-name descname"><span class="pre">suffix_format</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#cellmap_flow.io.paths.suffix_format" title="Link to this definition"></a></dt>
+<dd><p>“zarr” or “n5”: the suffix of the last component of <code class="docutils literal notranslate"><span class="pre">path</span></code> that ends
+in .zarr or .n5; else None.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.io.paths.split_container">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.io.paths.</span></span><span class="sig-name descname"><span class="pre">split_container</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#cellmap_flow.io.paths.split_container" title="Link to this definition"></a></dt>
+<dd><p><code class="docutils literal notranslate"><span class="pre">(container,</span> <span class="pre">path</span> <span class="pre">inside</span> <span class="pre">it)</span></code>.</p>
+<p>The container ends at the last component of <code class="docutils literal notranslate"><span class="pre">path</span></code> ending in
+<code class="docutils literal notranslate"><span class="pre">.zarr</span></code>/<code class="docutils literal notranslate"><span class="pre">.n5</span></code>; without one it is the nearest directory up from <code class="docutils literal notranslate"><span class="pre">path</span></code> with a
+<code class="docutils literal notranslate"><span class="pre">.zgroup</span></code> (or, failing that, the first with a <code class="docutils literal notranslate"><span class="pre">.zarray</span></code>), on disk or
+at a URL alike.
+<code class="docutils literal notranslate"><span class="pre">/data/x.zarr/em/s0</span></code> is <code class="docutils literal notranslate"><span class="pre">(&quot;/data/x.zarr&quot;,</span> <span class="pre">&quot;em/s0&quot;)</span></code>.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.io.paths.precomputed_scale">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.io.paths.</span></span><span class="sig-name descname"><span class="pre">precomputed_scale</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#cellmap_flow.io.paths.precomputed_scale" title="Link to this definition"></a></dt>
+<dd><p><code class="docutils literal notranslate"><span class="pre">(volume,</span> <span class="pre">scale</span> <span class="pre">index)</span></code> for a precomputed path: a last component
+<code class="docutils literal notranslate"><span class="pre">s&lt;N&gt;</span></code> names scale N of the volume above it; a path without one is
+the volume itself, with index None.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.io.paths.precomputed_volume">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.io.paths.</span></span><span class="sig-name descname"><span class="pre">precomputed_volume</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#cellmap_flow.io.paths.precomputed_volume" title="Link to this definition"></a></dt>
+<dd><p><code class="docutils literal notranslate"><span class="pre">(volume</span> <span class="pre">location,</span> <span class="pre">scale</span> <span class="pre">index)</span></code> for a precomputed path: the volume’s
+local directory or URL, which <code class="docutils literal notranslate"><span class="pre">io.store</span></code> reads, and the scale a trailing
+<code class="docutils literal notranslate"><span class="pre">/s&lt;N&gt;</span></code> names (<code class="docutils literal notranslate"><span class="pre">precomputed_scale</span></code>), else 0.</p>
+<p><code class="docutils literal notranslate"><span class="pre">precomputed://</span></code> followed by a URL – neuroglancer’s way of writing a
+cloud source, <code class="docutils literal notranslate"><span class="pre">precomputed://gs://bucket/volume</span></code> or
+<code class="docutils literal notranslate"><span class="pre">precomputed://https://host/volume</span></code> – is that URL, as is a bare
+<code class="docutils literal notranslate"><span class="pre">gs://</span></code> path. Any other <code class="docutils literal notranslate"><span class="pre">precomputed://</span></code> path is a local directory.</p>
+</dd></dl>
+
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../ome/index.html" class="btn btn-neutral float-left" title="cellmap_flow.io.ome" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../resample/index.html" class="btn btn-neutral float-right" title="cellmap_flow.io.resample" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, David Ackerman,  Marwan Zouinkhi, Jeff Rhoades, Larissa Heinrich, Aubrey Weigel.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

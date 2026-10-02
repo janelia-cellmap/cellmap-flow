@@ -1,0 +1,335 @@
+cellmap_flow.jobs.spec
+======================
+
+.. py:module:: cellmap_flow.jobs.spec
+
+.. autoapi-nested-parse::
+
+   What a job is, whichever backend runs it.
+
+   ``JobSpec`` says what to run and with what resources; a backend
+   (``jobs.lsf`` or ``jobs.local``) turns it into a running ``Job``. The rest
+   is shared by both: the statuses, the host marker a server prints, a log
+   file's tail, and a filesystem-safe stem for its name.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.jobs.spec.logger
+   cellmap_flow.jobs.spec.IP_PATTERN
+   cellmap_flow.jobs.spec.SERVER_URL_TEMPLATE_ENV
+
+
+Exceptions
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.jobs.spec.JobStartError
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.jobs.spec.JobSpec
+   cellmap_flow.jobs.spec.JobStatus
+   cellmap_flow.jobs.spec.Job
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.jobs.spec.shell_quote
+   cellmap_flow.jobs.spec.shell_join
+   cellmap_flow.jobs.spec.default_log_dir
+   cellmap_flow.jobs.spec.exists_now
+   cellmap_flow.jobs.spec.tail
+   cellmap_flow.jobs.spec.log_stem
+   cellmap_flow.jobs.spec.extract_host_from_output
+   cellmap_flow.jobs.spec.public_server_url
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:data:: IP_PATTERN
+   :value: ['CELLMAP_FLOW_SERVER_IP(', ')CELLMAP_FLOW_SERVER_IP']
+
+
+.. py:data:: SERVER_URL_TEMPLATE_ENV
+   :value: 'CELLMAP_FLOW_SERVER_URL_TEMPLATE'
+
+
+.. py:function:: shell_quote(part) -> str
+
+   ``part`` as one shell word, quoted without ever emitting a single quote.
+
+
+.. py:function:: shell_join(argv) -> str
+
+   ``argv`` as a shell line for a job's ``shell`` (``shell_quote``'s words).
+
+
+.. py:class:: JobSpec
+
+   One job to submit.
+
+   Exactly one of ``argv`` and ``shell`` is given. ``argv`` is run as it
+   stands. ``shell`` is a command line run by ``bash -c``, which is what
+   servers, finetune runs and blockwise workers have always been given; the
+   finetune command needs it, since it sets LD_LIBRARY_PATH and pipes
+   through tee.
+
+   ``queue`` None asks for none (``-q`` is left out, so LSF's default
+   queue), and ``gpus`` 0 asks for no GPU. ``walltime`` is LSF's
+   ``[hours:]minutes``; None leaves the queue's default. ``log_dir`` None is
+   ``jobs.launch.SERVER_LOG_DIR``, read when the job is submitted. ``env`` is
+   added to this process's environment, which the job inherits either way.
+
+
+   .. py:attribute:: name
+      :type:  str
+
+
+   .. py:attribute:: argv
+      :type:  Optional[Tuple[str, ...]]
+      :value: None
+
+
+
+   .. py:attribute:: shell
+      :type:  Optional[str]
+      :value: None
+
+
+
+   .. py:attribute:: queue
+      :type:  Optional[str]
+      :value: None
+
+
+
+   .. py:attribute:: charge_group
+      :type:  Optional[str]
+      :value: None
+
+
+
+   .. py:attribute:: gpus
+      :type:  int
+      :value: 1
+
+
+
+   .. py:attribute:: cpus
+      :type:  int
+      :value: 4
+
+
+
+   .. py:attribute:: walltime
+      :type:  Optional[str]
+      :value: None
+
+
+
+   .. py:attribute:: log_dir
+      :type:  Optional[pathlib.Path]
+      :value: None
+
+
+
+   .. py:attribute:: env
+      :type:  Optional[Mapping[str, str]]
+      :value: None
+
+
+
+.. py:function:: default_log_dir() -> pathlib.Path
+
+   Where job logs go unless the spec says otherwise.
+
+   ``jobs.launch.SERVER_LOG_DIR``, read at call time rather than copied: it
+   is the one setting of it (tests and deployments point it elsewhere).
+   Imported here because launch imports this module.
+
+
+.. py:class:: JobStatus(*args, **kwds)
+
+
+
+   Enumeration of possible job statuses.
+
+
+   .. py:attribute:: PENDING
+      :value: 'pending'
+
+
+
+   .. py:attribute:: RUNNING
+      :value: 'running'
+
+
+
+   .. py:attribute:: COMPLETED
+      :value: 'completed'
+
+
+
+   .. py:attribute:: FAILED
+      :value: 'failed'
+
+
+
+   .. py:attribute:: KILLED
+      :value: 'killed'
+
+
+
+.. py:exception:: JobStartError
+
+
+
+   A job was asked for and no usable one came of it.
+
+
+.. py:function:: exists_now(path) -> bool
+
+   Whether ``path`` exists, when another host may have just created it.
+
+   A job writes its log and ready file on the node it runs on, and the
+   launcher looks for them from another one. Over NFS that host caches "no
+   such file" for a name it looked up, until the directory's attributes
+   time out (acdirmax, 60 s by default; /groups and /nrs are mounted
+   without actimeo). So a log the trainer had been writing for a minute
+   still did not exist for the dashboard, which meanwhile showed bpeek's
+   delayed output. Reading the directory makes the client revalidate it,
+   which drops those cached misses; it is only done when the name is not
+   found, so a file already seen costs one stat.
+
+
+.. py:function:: tail(path: pathlib.Path, max_chars: int = 4000) -> Optional[str]
+
+   Read the tail of a log file, for surfacing crash output. Returns None if unreadable/empty.
+
+   Seeks to the end rather than reading the whole file. An inference server
+   log can run to hundreds of megabytes, and this is called from the polling
+   loop in ``wait_for_host`` while the caller is blocked.
+
+   Reads 4 bytes per requested character so a multi-byte sequence split at
+   the seek boundary still leaves at least ``max_chars`` intact; the leading
+   partial character decodes to a replacement char and is sliced off.
+
+
+.. py:function:: log_stem(job_name: str) -> str
+
+   A filesystem-safe stem for this job's log file.
+
+   ``job_name`` arrives from model names, YAML and HuggingFace repo ids, so
+   it can carry a path separator or ``..``. Interpolated straight into a
+   path, that writes the log outside the log directory -- or, more quietly,
+   makes the path we read back afterwards differ from the one we handed
+   bsub, so a crashed job looks like it produced no output at all.
+
+   Both the ``-o`` pattern and the path reconstructed after submission are
+   built from this one value, so they cannot drift apart.
+
+
+.. py:function:: extract_host_from_output(output: str) -> Optional[str]
+
+   Extract host/URL from command output using configured patterns.
+
+   :param output: String output to search
+
+   :returns: Host URL if found, None otherwise
+
+
+.. py:function:: public_server_url(url: Optional[str]) -> Optional[str]
+
+   The address to use for a server that reported ``url``: ``url`` itself,
+   or ``url`` put through $CELLMAP_FLOW_SERVER_URL_TEMPLATE when that is
+   set (see SERVER_URL_TEMPLATE_ENV). Read at call time.
+
+
+.. py:class:: Job(model_name: Optional[str] = None)
+
+
+
+   Abstract base class for jobs across different execution environments.
+
+   Subclasses should implement:
+   - kill(): Terminate the job
+   - get_status(): Get current job status
+   - wait_for_host(): Wait for and extract host information
+
+
+   .. py:attribute:: model_name
+      :value: None
+
+
+
+   .. py:attribute:: status
+
+
+   .. py:attribute:: host
+      :type:  Optional[str]
+      :value: None
+
+
+
+   .. py:attribute:: queue
+      :type:  Optional[str]
+      :value: None
+
+
+
+   .. py:method:: kill() -> None
+      :abstractmethod:
+
+
+      Terminate the job.
+
+
+
+   .. py:method:: get_status() -> JobStatus
+      :abstractmethod:
+
+
+      Get the current status of the job.
+
+
+
+   .. py:method:: wait_for_host(timeout: int = 300) -> Optional[str]
+      :abstractmethod:
+
+
+      Wait for the job to provide host information.
+
+      :param timeout: Maximum time to wait in seconds
+
+      :returns: Host URL if found, None otherwise
+
+
+
+   .. py:method:: peek(max_chars: int = 4000) -> Optional[str]
+
+      The tail of this job's own output, or None if it cannot be read.
+
+
+
+   .. py:method:: is_running() -> bool
+
+      Check if the job is currently running.
+
+
+

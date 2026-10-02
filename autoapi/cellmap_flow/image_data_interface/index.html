@@ -10,7 +10,6 @@
       <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../../../_static/graphviz.css?v=4ae1632d" />
-      <link rel="stylesheet" type="text/css" href="../../../_static/mystnb.11b39860a7a0cbfd473a3ad8a317855267ff0bd372690045ca344a6b62be495e.css" />
       <link rel="stylesheet" type="text/css" href="../../../_static/css/custom.css" />
 
   
@@ -20,11 +19,10 @@
       <script src="../../../_static/documentation_options.js?v=5929fcd5"></script>
       <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
       <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
-      <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
     <script src="../../../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../../../genindex.html" />
     <link rel="search" title="Search" href="../../../search.html" />
-    <link rel="next" title="cellmap_flow.inferencer" href="../inferencer/index.html" />
+    <link rel="next" title="cellmap_flow.inference" href="../inference/index.html" />
     <link rel="prev" title="cellmap_flow.globals" href="../globals/index.html" /> 
 </head>
 
@@ -50,27 +48,44 @@
               <p class="caption" role="heading"><span class="caption-text">CellMap-Flow API:</span></p>
 <ul class="current">
 <li class="toctree-l1"><a class="reference internal" href="../../../install.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../cli.html">Command line</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../scripts.html">Python Scripts</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../yaml_config.html">YAML Configuration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../data_paths.html">Data paths</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../huggingface.html">HuggingFace Models</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../custom_script.html">Custom Model</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../post.html">PostProcessors</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../plugins.html">Plugins</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../review.html">Reviewing instances</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../viewer_api.html">Viewer layer API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../architecture.html">Architecture</a></li>
 <li class="toctree-l1 current"><a class="reference internal" href="../../index.html">API Reference</a><ul class="current">
 <li class="toctree-l2 current"><a class="reference internal" href="../index.html">cellmap_flow</a><ul class="current">
 <li class="toctree-l3 current"><a class="reference internal" href="../index.html#submodules">Submodules</a><ul class="current">
 <li class="toctree-l4"><a class="reference internal" href="../blockwise/index.html">cellmap_flow.blockwise</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../cli/index.html">cellmap_flow.cli</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../config/index.html">cellmap_flow.config</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../dashboard/index.html">cellmap_flow.dashboard</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../finetune/index.html">cellmap_flow.finetune</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../globals/index.html">cellmap_flow.globals</a></li>
 <li class="toctree-l4 current"><a class="current reference internal" href="#">cellmap_flow.image_data_interface</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../inference/index.html">cellmap_flow.inference</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../inferencer/index.html">cellmap_flow.inferencer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../io/index.html">cellmap_flow.io</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../jobs/index.html">cellmap_flow.jobs</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../logging_setup/index.html">cellmap_flow.logging_setup</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../models/index.html">cellmap_flow.models</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../norm/index.html">cellmap_flow.norm</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../pipeline_spec/index.html">cellmap_flow.pipeline_spec</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../plugins/index.html">cellmap_flow.plugins</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../post/index.html">cellmap_flow.post</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../process_chain/index.html">cellmap_flow.process_chain</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../review/index.html">cellmap_flow.review</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../review_index/index.html">cellmap_flow.review_index</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../server/index.html">cellmap_flow.server</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../serving/index.html">cellmap_flow.serving</a></li>
 <li class="toctree-l4"><a class="reference internal" href="../utils/index.html">cellmap_flow.utils</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../viewer/index.html">cellmap_flow.viewer</a></li>
 </ul>
 </li>
 </ul>
@@ -107,11 +122,29 @@
              
   <section id="module-cellmap_flow.image_data_interface">
 <span id="cellmap-flow-image-data-interface"></span><h1>cellmap_flow.image_data_interface<a class="headerlink" href="#module-cellmap_flow.image_data_interface" title="Link to this heading"></a></h1>
+<p>A dataset to read in world coordinates, through the input chain.</p>
+<p><code class="docutils literal notranslate"><span class="pre">ImageDataInterface(path,</span> <span class="pre">voxel_size)</span></code> picks the level of a multiscale
+group or precomputed volume for <code class="docutils literal notranslate"><span class="pre">voxel_size</span></code> (<code class="docutils literal notranslate"><span class="pre">io.multiscale</span></code>), reads
+its metadata (<code class="docutils literal notranslate"><span class="pre">io.metadata</span></code>) and keeps its voxel grid (<code class="docutils literal notranslate"><span class="pre">io.geometry</span></code>)
+and the array (<code class="docutils literal notranslate"><span class="pre">io.source</span></code>). A read of a world ROI is the grid’s box of voxels, read
+with padding where it runs past the array. With
+<code class="docutils literal notranslate"><span class="pre">on_voxel_size_mismatch=&quot;resample&quot;</span></code>, a dataset with no level at
+<code class="docutils literal notranslate"><span class="pre">voxel_size</span></code> is resampled to it (<code class="docutils literal notranslate"><span class="pre">io.resample</span></code>); the deprecated
+<code class="docutils literal notranslate"><span class="pre">output_voxel_size</span></code> resamples what is read, crudely. What is read goes through the input
+chain on the way: the normalizers and ChannelSelector given as
+<code class="docutils literal notranslate"><span class="pre">input_norms</span></code>, else the process’s chain (<code class="docutils literal notranslate"><span class="pre">process_chain().input_norms</span></code>)
+as it is at read time, which user <code class="docutils literal notranslate"><span class="pre">process_chunk</span></code> scripts rely on.</p>
 <section id="attributes">
 <h2>Attributes<a class="headerlink" href="#attributes" title="Link to this heading"></a></h2>
 <table class="autosummary longtable docutils align-default">
 <tbody>
 <tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.image_data_interface.logger" title="cellmap_flow.image_data_interface.logger"><code class="xref py py-obj docutils literal notranslate"><span class="pre">logger</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.image_data_interface.ON_VOXEL_SIZE_MISMATCH" title="cellmap_flow.image_data_interface.ON_VOXEL_SIZE_MISMATCH"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ON_VOXEL_SIZE_MISMATCH</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.image_data_interface.RESAMPLE_HINT" title="cellmap_flow.image_data_interface.RESAMPLE_HINT"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RESAMPLE_HINT</span></code></a></p></td>
 <td><p></p></td>
 </tr>
 </tbody>
@@ -124,6 +157,28 @@
 <tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.image_data_interface.ImageDataInterface" title="cellmap_flow.image_data_interface.ImageDataInterface"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ImageDataInterface</span></code></a></p></td>
 <td><p></p></td>
 </tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.image_data_interface.LazyNormalization" title="cellmap_flow.image_data_interface.LazyNormalization"><code class="xref py py-obj docutils literal notranslate"><span class="pre">LazyNormalization</span></code></a></p></td>
+<td><p>A tensorstore seen through the input chain, for neuroglancer to index.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="functions">
+<h2>Functions<a class="headerlink" href="#functions" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.image_data_interface.legacy_meta" title="cellmap_flow.image_data_interface.legacy_meta"><code class="xref py py-obj docutils literal notranslate"><span class="pre">legacy_meta</span></code></a>(meta)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">(voxel_size,</span> <span class="pre">offset,</span> <span class="pre">chunk_shape,</span> <span class="pre">shape,</span> <span class="pre">axes_names,</span> <span class="pre">filetype)</span></code>, the</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.image_data_interface.apply_norms" title="cellmap_flow.image_data_interface.apply_norms"><code class="xref py py-obj docutils literal notranslate"><span class="pre">apply_norms</span></code></a>(data[, input_norms])</p></td>
+<td><p>Read <code class="docutils literal notranslate"><span class="pre">data</span></code> if it is a tensorstore view and run it through the chain.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.image_data_interface.selected_channel" title="cellmap_flow.image_data_interface.selected_channel"><code class="xref py py-obj docutils literal notranslate"><span class="pre">selected_channel</span></code></a>(→ int)</p></td>
+<td><p>The input channel a chain asks for: its first ChannelSelector, else 0.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.image_data_interface.select_channel" title="cellmap_flow.image_data_interface.select_channel"><code class="xref py py-obj docutils literal notranslate"><span class="pre">select_channel</span></code></a>(ts_dataset[, channel, spatial_ndim])</p></td>
+<td><p>Index one channel out of a multichannel tensorstore.</p></td>
+</tr>
 </tbody>
 </table>
 </section>
@@ -134,17 +189,68 @@
 <span class="sig-prename descclassname"><span class="pre">cellmap_flow.image_data_interface.</span></span><span class="sig-name descname"><span class="pre">logger</span></span><a class="headerlink" href="#cellmap_flow.image_data_interface.logger" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.image_data_interface.ON_VOXEL_SIZE_MISMATCH">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.image_data_interface.</span></span><span class="sig-name descname"><span class="pre">ON_VOXEL_SIZE_MISMATCH</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">('relabel',</span> <span class="pre">'resample',</span> <span class="pre">'error')</span></span><a class="headerlink" href="#cellmap_flow.image_data_interface.ON_VOXEL_SIZE_MISMATCH" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.image_data_interface.RESAMPLE_HINT">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.image_data_interface.</span></span><span class="sig-name descname"><span class="pre">RESAMPLE_HINT</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'on_voxel_size_mismatch=&quot;resample&quot;</span> <span class="pre">(`resample:</span> <span class="pre">true`</span> <span class="pre">in</span> <span class="pre">a</span> <span class="pre">YAML,</span> <span class="pre">`--resample`</span> <span class="pre">on</span> <span class="pre">the</span> <span class="pre">command...</span></span><a class="headerlink" href="#cellmap_flow.image_data_interface.RESAMPLE_HINT" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.image_data_interface.legacy_meta">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.image_data_interface.</span></span><span class="sig-name descname"><span class="pre">legacy_meta</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">meta</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../io/metadata/index.html#cellmap_flow.io.metadata.ArrayMeta" title="cellmap_flow.io.metadata.ArrayMeta"><span class="pre">cellmap_flow.io.metadata.ArrayMeta</span></a></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.image_data_interface.legacy_meta" title="Link to this definition"></a></dt>
+<dd><p><code class="docutils literal notranslate"><span class="pre">(voxel_size,</span> <span class="pre">offset,</span> <span class="pre">chunk_shape,</span> <span class="pre">shape,</span> <span class="pre">axes_names,</span> <span class="pre">filetype)</span></code>, the
+tuple the old readers returned, from an ArrayMeta: spatial axes only,
+voxel size and offset as lists of nanometer floats.</p>
+<p>The zarr v2/N5 reader always took the <em>last</em> n axes (n spatial ones)
+and called them z, y, x, whatever the metadata said, on disk; a URL now
+reads the same. The others take the spatial axes by name. Both are kept.</p>
+</dd></dl>
+
 <dl class="py class">
 <dt class="sig sig-object py" id="cellmap_flow.image_data_interface.ImageDataInterface">
-<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.image_data_interface.</span></span><span class="sig-name descname"><span class="pre">ImageDataInterface</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dataset_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">voxel_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mode</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'r'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_voxel_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">custom_fill_value</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">concurrency_limit</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">normalize</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.image_data_interface.ImageDataInterface" title="Link to this definition"></a></dt>
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.image_data_interface.</span></span><span class="sig-name descname"><span class="pre">ImageDataInterface</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dataset_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">voxel_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mode</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'r'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_voxel_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">custom_fill_value</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">concurrency_limit</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">normalize</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">input_norms</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">on_voxel_size_mismatch</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'relabel'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cache_bytes</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.image_data_interface.ImageDataInterface" title="Link to this definition"></a></dt>
 <dd><dl class="py attribute">
 <dt class="sig sig-object py" id="cellmap_flow.image_data_interface.ImageDataInterface.path">
 <span class="sig-name descname"><span class="pre">path</span></span><a class="headerlink" href="#cellmap_flow.image_data_interface.ImageDataInterface.path" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.image_data_interface.ImageDataInterface.input_norms">
+<span class="sig-name descname"><span class="pre">input_norms</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.image_data_interface.ImageDataInterface.input_norms" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.image_data_interface.ImageDataInterface.actual_voxel_size">
+<span class="sig-name descname"><span class="pre">actual_voxel_size</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.image_data_interface.ImageDataInterface.actual_voxel_size" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.image_data_interface.ImageDataInterface.requested_voxel_size">
+<span class="sig-name descname"><span class="pre">requested_voxel_size</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.image_data_interface.ImageDataInterface.requested_voxel_size" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.image_data_interface.ImageDataInterface.shape">
+<span class="sig-name descname"><span class="pre">shape</span></span><a class="headerlink" href="#cellmap_flow.image_data_interface.ImageDataInterface.shape" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.image_data_interface.ImageDataInterface.voxel_size">
+<span class="sig-name descname"><span class="pre">voxel_size</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.image_data_interface.ImageDataInterface.voxel_size" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
 <dt class="sig sig-object py" id="cellmap_flow.image_data_interface.ImageDataInterface.offset">
-<span class="sig-name descname"><span class="pre">offset</span></span><a class="headerlink" href="#cellmap_flow.image_data_interface.ImageDataInterface.offset" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">offset</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.image_data_interface.ImageDataInterface.offset" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.image_data_interface.ImageDataInterface.roi">
+<span class="sig-name descname"><span class="pre">roi</span></span><a class="headerlink" href="#cellmap_flow.image_data_interface.ImageDataInterface.roi" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py attribute">
@@ -158,14 +264,45 @@
 <dd></dd></dl>
 
 <dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.image_data_interface.ImageDataInterface.cache_bytes">
+<span class="sig-name descname"><span class="pre">cache_bytes</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0</span></span><a class="headerlink" href="#cellmap_flow.image_data_interface.ImageDataInterface.cache_bytes" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.image_data_interface.ImageDataInterface.source">
+<span class="sig-name descname"><span class="pre">source</span></span><a class="headerlink" href="#cellmap_flow.image_data_interface.ImageDataInterface.source" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
 <dt class="sig sig-object py" id="cellmap_flow.image_data_interface.ImageDataInterface.normalize">
 <span class="sig-name descname"><span class="pre">normalize</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">True</span></span><a class="headerlink" href="#cellmap_flow.image_data_interface.ImageDataInterface.normalize" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py property">
+<dt class="sig sig-object py" id="cellmap_flow.image_data_interface.ImageDataInterface.resampled">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">resampled</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></span><a class="headerlink" href="#cellmap_flow.image_data_interface.ImageDataInterface.resampled" title="Link to this definition"></a></dt>
+<dd><p>Whether reads are resampled from <code class="docutils literal notranslate"><span class="pre">actual_voxel_size</span></code> to
+<code class="docutils literal notranslate"><span class="pre">voxel_size</span></code>: the data then really is at <code class="docutils literal notranslate"><span class="pre">voxel_size</span></code>. When the
+two differ and this is False, the level was relabelled, and the data
+really lies at <code class="docutils literal notranslate"><span class="pre">actual_voxel_size</span></code>.</p>
+</dd></dl>
+
+<dl class="py property">
 <dt class="sig sig-object py" id="cellmap_flow.image_data_interface.ImageDataInterface.ts">
 <span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">ts</span></span><a class="headerlink" href="#cellmap_flow.image_data_interface.ImageDataInterface.ts" title="Link to this definition"></a></dt>
-<dd></dd></dl>
+<dd><p>The dataset seen through the input chain (one channel, normalized).</p>
+<p>With <code class="docutils literal notranslate"><span class="pre">normalize=False</span></code> this is the plain tensorstore of the selected
+channel, as it always was.</p>
+<p>A resampled dataset has none: its voxels exist only as
+<code class="docutils literal notranslate"><span class="pre">to_ndarray_ts</span></code> computes them. <code class="docutils literal notranslate"><span class="pre">source.ts</span></code> is the level as stored.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.image_data_interface.ImageDataInterface.with_input_norms">
+<span class="sig-name descname"><span class="pre">with_input_norms</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input_norms</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.image_data_interface.ImageDataInterface.with_input_norms" title="Link to this definition"></a></dt>
+<dd><p>This dataset, read through <code class="docutils literal notranslate"><span class="pre">input_norms</span></code> instead of the process’s chain.</p>
+<p>Shares the opened tensorstore, so it is cheap to make one per request.</p>
+</dd></dl>
 
 <dl class="py property">
 <dt class="sig sig-object py" id="cellmap_flow.image_data_interface.ImageDataInterface.info">
@@ -175,7 +312,88 @@
 <dl class="py method">
 <dt class="sig sig-object py" id="cellmap_flow.image_data_interface.ImageDataInterface.to_ndarray_ts">
 <span class="sig-name descname"><span class="pre">to_ndarray_ts</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">roi</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.image_data_interface.ImageDataInterface.to_ndarray_ts" title="Link to this definition"></a></dt>
+<dd><p><code class="docutils literal notranslate"><span class="pre">roi</span></code> (world nm; all of the array when None) read through the
+input chain, as a numpy array.</p>
+<p>Where the ROI runs past the array it is padded with
+<code class="docutils literal notranslate"><span class="pre">custom_fill_value</span></code> (0 when unset; “edge” repeats the border
+voxels), after the chain: padding is never normalized.</p>
+<p>A resampled dataset (<code class="docutils literal notranslate"><span class="pre">resampled</span></code>) is read at <code class="docutils literal notranslate"><span class="pre">voxel_size</span></code> by
+<code class="docutils literal notranslate"><span class="pre">io.resample</span></code>: the stored voxels are resampled, then go through the
+chain, as a stored level at <code class="docutils literal notranslate"><span class="pre">voxel_size</span></code> would. A ROI is read at
+the deprecated <code class="docutils literal notranslate"><span class="pre">output_voxel_size</span></code> when that differs from the voxel
+size (see <code class="docutils literal notranslate"><span class="pre">_read_resampled</span></code>); the whole array never is.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.image_data_interface.apply_norms">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.image_data_interface.</span></span><span class="sig-name descname"><span class="pre">apply_norms</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">input_norms</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.image_data_interface.apply_norms" title="Link to this definition"></a></dt>
+<dd><p>Read <code class="docutils literal notranslate"><span class="pre">data</span></code> if it is a tensorstore view and run it through the chain.</p>
+<p><code class="docutils literal notranslate"><span class="pre">input_norms=None</span></code> means the process’s chain, <code class="docutils literal notranslate"><span class="pre">process_chain().input_norms</span></code>.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.image_data_interface.selected_channel">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.image_data_interface.</span></span><span class="sig-name descname"><span class="pre">selected_channel</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input_norms</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">int</span></span></span><a class="headerlink" href="#cellmap_flow.image_data_interface.selected_channel" title="Link to this definition"></a></dt>
+<dd><p>The input channel a chain asks for: its first ChannelSelector, else 0.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.image_data_interface.select_channel">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.image_data_interface.</span></span><span class="sig-name descname"><span class="pre">select_channel</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ts_dataset</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">channel</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">spatial_ndim</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">3</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.image_data_interface.select_channel" title="Link to this definition"></a></dt>
+<dd><p>Index one channel out of a multichannel tensorstore.</p>
+<p>The channel axis is the one labelled c/c^/channel when the store labels its
+dimensions, and otherwise the first one (the OME-Zarr convention).
+Arrays with no more than <code class="docutils literal notranslate"><span class="pre">spatial_ndim</span></code> dimensions are returned as is.</p>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="cellmap_flow.image_data_interface.LazyNormalization">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.image_data_interface.</span></span><span class="sig-name descname"><span class="pre">LazyNormalization</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ts_dataset</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">input_norms</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">normalize</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">spatial_ndim</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">3</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.image_data_interface.LazyNormalization" title="Link to this definition"></a></dt>
+<dd><p>A tensorstore seen through the input chain, for neuroglancer to index.</p>
+<p>The channel and the normalizers are looked up on every access rather than
+fixed when the store was opened: a server that has already read one chunk
+must still follow a ChannelSelector that changes afterwards.</p>
+<p><code class="docutils literal notranslate"><span class="pre">input_norms=None</span></code> follows the process’s chain,
+<code class="docutils literal notranslate"><span class="pre">process_chain().input_norms</span></code>, as it is at each access: a worker that
+unpickles one reads its own chain, not the sender’s.
+<code class="docutils literal notranslate"><span class="pre">normalize=False</span></code> selects the channel but applies no normalizers.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.image_data_interface.LazyNormalization.ts_dataset">
+<span class="sig-name descname"><span class="pre">ts_dataset</span></span><a class="headerlink" href="#cellmap_flow.image_data_interface.LazyNormalization.ts_dataset" title="Link to this definition"></a></dt>
 <dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.image_data_interface.LazyNormalization.input_norms">
+<span class="sig-name descname"><span class="pre">input_norms</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.image_data_interface.LazyNormalization.input_norms" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.image_data_interface.LazyNormalization.normalize">
+<span class="sig-name descname"><span class="pre">normalize</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">True</span></span><a class="headerlink" href="#cellmap_flow.image_data_interface.LazyNormalization.normalize" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.image_data_interface.LazyNormalization.spatial_ndim">
+<span class="sig-name descname"><span class="pre">spatial_ndim</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">3</span></span><a class="headerlink" href="#cellmap_flow.image_data_interface.LazyNormalization.spatial_ndim" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.image_data_interface.LazyNormalization.chain">
+<span class="sig-name descname"><span class="pre">chain</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.image_data_interface.LazyNormalization.chain" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.image_data_interface.LazyNormalization.norms_to_apply">
+<span class="sig-name descname"><span class="pre">norms_to_apply</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.image_data_interface.LazyNormalization.norms_to_apply" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.image_data_interface.LazyNormalization.selected">
+<span class="sig-name descname"><span class="pre">selected</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.image_data_interface.LazyNormalization.selected" title="Link to this definition"></a></dt>
+<dd><p>The raw (unnormalized) tensorstore for the channel the chain selects.</p>
+</dd></dl>
 
 </dd></dl>
 
@@ -187,7 +405,7 @@
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
         <a href="../globals/index.html" class="btn btn-neutral float-left" title="cellmap_flow.globals" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
-        <a href="../inferencer/index.html" class="btn btn-neutral float-right" title="cellmap_flow.inferencer" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="../inference/index.html" class="btn btn-neutral float-right" title="cellmap_flow.inference" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>
