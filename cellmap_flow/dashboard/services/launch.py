@@ -5,7 +5,8 @@
   server is the Finetune tab's to stop, never this one's.
 - ``run_model()`` / ``run_hf_model()``: start one catalog or Hugging Face
   model's inference server (``start_hosts``, which records the job) and add
-  its layer, the one Submit would give it.
+  its layer, the one Submit would give it. Each is served from its type's
+  ``default_env``, when the type sets one (``serving.launch.server_argv_for``).
 """
 
 from cellmap_flow.dashboard.state import get_session

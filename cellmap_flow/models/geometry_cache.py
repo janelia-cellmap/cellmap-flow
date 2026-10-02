@@ -161,16 +161,19 @@ def store_geometry(model_config, config):
 def build_here(model_config):
     """``model_config.config``, built in this process.
 
-    Refused for a model with an ``env``: this process lacks its packages,
-    or has other versions of them (the default environment's cellpose 3
-    for a Cellpose-SAM model), so building it here fails or, worse,
-    half-works. Its geometry comes from its running server.
+    Refused for a model that runs in another environment (its ``env``, or
+    its type's ``default_env``): this process lacks its packages, or has
+    other versions of them (the default environment's cellpose 3 for a
+    Cellpose-SAM model), so building it here fails or, worse, half-works.
+    Its geometry comes from its running server.
 
     Raises:
         ModelEnvError: the model runs in its own environment.
     """
-    env = getattr(model_config, "env", None)
-    if env:
+    from cellmap_flow.models import envs
+
+    env = envs.model_env(model_config)
+    if env and not envs.is_running_in(env):
         from cellmap_flow.models.configs.base import ModelEnvError
 
         label = getattr(model_config, "name", None) or type(model_config).__name__

@@ -10,6 +10,7 @@
   finetune       the finetune tools: train, export-merged, build-corrections
   models         list the model types and their arguments
   plugins        register, unregister and list plugins
+  envs           the environments models run in: list, install, check
   doctor         check the environment
 
 Before 0.3.0 these were separate console scripts (``cellmap_flow_yaml`` and
@@ -24,7 +25,7 @@ import sys
 import click
 
 from cellmap_flow.blockwise.cli import cli as blockwise
-from cellmap_flow.cli import doctor, server_cli, viewer_cli, yaml_cli
+from cellmap_flow.cli import doctor, envs_cli, server_cli, viewer_cli, yaml_cli
 from cellmap_flow.cli.common import deprecated, log_level_option
 from cellmap_flow.cli.infer import infer, run_generic
 from cellmap_flow.models import registry
@@ -199,6 +200,7 @@ cli.add_command(blockwise)
 cli.add_command(finetune)
 cli.add_command(models)
 cli.add_command(plugins_group)
+cli.add_command(envs_cli.envs_group)
 cli.add_command(doctor.main)
 
 # The subcommands before 0.3.0, hidden, until the release after it.
