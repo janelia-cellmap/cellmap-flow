@@ -273,6 +273,11 @@ def extract_data_path_from_corrections(corrections_path: Path) -> str:
 
 
 _TRAINER_MODULE = "cellmap_flow.finetune.finetune_cli"
+# The tee the trainer's output goes through (see build_command), and the
+# interpreter it runs with: this process's, as it starts, since the tee needs
+# only the standard library, whichever environment the trainer runs in.
+SYNCED_TEE = str(Path(__file__).resolve().parents[2] / "jobs" / "synced_tee.py")
+TEE_PYTHON = sys.executable
 
 
 def _model_env(model_config):
@@ -444,18 +449,18 @@ def build_command(
         f"LD_LIBRARY_PATH={shell_quote(env_lib)}"
         '${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH} '
     )
-    # stdbuf on *both* sides. The trainer already flushes every line it
-    # prints, but tee writes to the log file through stdio, which is
-    # block-buffered when the destination is not a terminal -- so roughly
-    # 8KB of output, five to ten epochs' worth, landed in the file at
-    # once and the dashboard showed nothing in between.
+    # stdbuf on the trainer: it flushes every line it prints. The log is
+    # written by jobs/synced_tee.py, not tee: tee's lines sat in the job
+    # node's NFS page cache for about 30 s before the dashboard's node could
+    # read them, so its log and loss plot got ten epochs at once. Run as a
+    # script with this interpreter: it needs only the standard library.
     #
     # pipefail, so that the job's exit status is the trainer's. A pipeline's
     # is otherwise its last command's, tee's: a trainer that failed ended
     # its job DONE to LSF, and the monitor made it COMPLETED.
     return (
         f"set -o pipefail; {loader_path}stdbuf -oL {command} 2>&1 "
-        f"| stdbuf -oL tee {shell_quote(log_file)}"
+        f"| {shell_join([TEE_PYTHON, '-P', SYNCED_TEE, str(log_file)])}"
     )
 
 

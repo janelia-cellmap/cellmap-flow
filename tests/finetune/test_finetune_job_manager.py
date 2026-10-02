@@ -83,12 +83,16 @@ def submit(local_jobs, session, monkeypatch):
 
 
 def test_a_job_runs_this_interpreters_trainer_and_logs_as_it_goes(submit):
-    """tee writes through stdio, which block-buffers a file: the log, and the
-    dashboard, got 5-10 epochs at once. And the command tees its own log, so a
-    local run keeps no second copy."""
+    """tee's lines sat in the job node's NFS page cache for ~30 s, so the
+    dashboard got ten epochs at once: the log goes through synced_tee, which
+    syncs it. And the command writes its own log, so a local run keeps no
+    second copy."""
+    from cellmap_flow.finetune.job_manager.submit import SYNCED_TEE
+
     job = submit(_Script())
     assert f"{sys.executable} -P -m cellmap_flow.finetune.finetune_cli" in job.command
-    assert f"| stdbuf -oL tee {job.job.log_file}" in job.command and "stdbuf -oL python -m" not in job.command
+    assert f"| {sys.executable} -P {SYNCED_TEE} {job.job.log_file}" in job.command
+    assert os.path.isfile(SYNCED_TEE)
     assert job.runs[0]["log_file"] == os.devnull
 
 

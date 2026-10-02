@@ -133,6 +133,7 @@ export function initGoodRegions({ log }) {
   // default (the volume model's latest finetune, else that model) marked.
   // Refreshed every few seconds and before the picker opens, since models
   // and finetunes come and go; the choice is kept while it is still running.
+  const undoViewLabelsBtn = document.getElementById("undoViewLabelsBtn");
   const seedModel = document.getElementById("seedModel");
   function showOnly(text) {
     seedModel.replaceChildren(new Option(text, ""));
@@ -141,6 +142,7 @@ export function initGoodRegions({ log }) {
   function refreshSeedSources() {
     return getAnswer("/api/finetune/view-labels/sources")
       .then((d) => {
+        if (d && d.can_undo !== undefined) undoViewLabelsBtn.disabled = !d.can_undo;
         const names = (d && d.models) || [];
         if (!names.length) return showOnly("no model running");
         const chosen = seedModel.value;
@@ -165,6 +167,7 @@ export function initGoodRegions({ log }) {
         if (d.needs_confirmation && !confirmed) {
           return confirm(d.error) ? labelView(button, url, what, describe, true, body) : undefined;
         }
+        if (d.can_undo !== undefined) undoViewLabelsBtn.disabled = !d.can_undo;
         if (!d.success) {
           log.add(`Could not ${what}: ${d.error}`);
           alert(`Could not ${what}:\n\n${d.error}`);
@@ -202,6 +205,10 @@ export function initGoodRegions({ log }) {
   const backgroundViewBtn = document.getElementById("backgroundViewBtn");
   backgroundViewBtn.addEventListener("click", () =>
     labelView(backgroundViewBtn, "/api/finetune/view-labels/background", "label the view background", describeFill));
+  undoViewLabelsBtn.addEventListener("click", () =>
+    labelView(undoViewLabelsBtn, "/api/finetune/view-labels/undo", "undo", (d) =>
+      d.reload_viewer ? `Undid the last label action: ${d.restored} voxels restored`
+                      : "Undid the last label action: every voxel it changed has been painted since"));
   const splitObjectsBtn = document.getElementById("splitObjectsBtn");
   splitObjectsBtn.addEventListener("click", () =>
     labelView(splitObjectsBtn, "/api/finetune/view-labels/split", "split the view's objects", describeSplit));
