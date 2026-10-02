@@ -67,7 +67,8 @@ def run_model(model_path, name, st_data):
     if model_path is None or model_path == "":
         logger.error(f"Model path is empty for {name}")
         return
-    command = server_command_for("cellmap", {"folder_path": model_path, "name": name}, get_session().dataset_path)
+    session = get_session()
+    command = server_command_for("cellmap", {"folder_path": model_path, "name": name}, session.dataset_path, session.resample)
     logger.info(f"To be submitted command : {command}")
     job = _start(command, name)
     if job is not None:
@@ -77,7 +78,8 @@ def run_model(model_path, name, st_data):
 def run_hf_model(repo, name, st_data):
     """Run a Hugging Face model by repo ID."""
     name = _sanitize_job_name(name)
-    command = server_command_for("huggingface", {"repo": repo, "name": name}, get_session().dataset_path)
+    session = get_session()
+    command = server_command_for("huggingface", {"repo": repo, "name": name}, session.dataset_path, session.resample)
     logger.info(f"To be submitted HF command : {command}")
     job = _start(command, name)
     if job is not None:

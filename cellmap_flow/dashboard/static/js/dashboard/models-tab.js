@@ -13,6 +13,9 @@ export function initModelsTab({ onModelsSubmitted } = {}) {
   const logArea = document.getElementById("modelSubmissionLogModels");
   // The repos of the Hugging Face models already running, ticked on load.
   const defaultHfRepos = pageData().default_hf_repos || [];
+  // The session's Resample setting (a YAML's resample, view --resample).
+  const resampleCheckbox = document.getElementById("resampleCheckbox");
+  resampleCheckbox.checked = !!pageData().resample;
   let hfModelsLoaded = false;
 
   function renderHfModels(data) {
@@ -331,7 +334,11 @@ export function initModelsTab({ onModelsSubmitted } = {}) {
     });
 
     console.log("Selected models:", selected, "HF models:", selectedHf);
-    postJSON("/api/models", { selected_models: selected, selected_hf_models: selectedHf })
+    postJSON("/api/models", {
+      selected_models: selected,
+      selected_hf_models: selectedHf,
+      resample: resampleCheckbox.checked,
+    })
       .then((data) => {
         console.log("Server response:", data);
         logArea.value += "Server response:\n" + JSON.stringify(data, null, 2) + "\n";

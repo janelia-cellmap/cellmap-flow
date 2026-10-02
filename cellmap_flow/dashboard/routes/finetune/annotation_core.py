@@ -203,7 +203,7 @@ def create_annotation_volume():
         if not dataset_path:
             return jsonify({"success": False, "error": "No dataset path configured"}), 400
 
-        geometry = plan_volume(dataset_path, config)
+        geometry = plan_volume(dataset_path, config, resample=session.resample)
         _, corrections_dir = ensure_corrections_storage(output_path)
         volume_id, zarr_path, minio_url = serve_new_volume(
             geometry, corrections_dir, dataset_path, model_name

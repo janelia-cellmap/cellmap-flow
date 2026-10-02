@@ -42,7 +42,7 @@ def server_argv(model_config, data_path: str, resample: bool = False) -> list:
     return _serve_argv(model_config.launch_entry, data_path, resample)
 
 
-def server_argv_for(model_type: str, params: dict, data_path: str) -> list:
+def server_argv_for(model_type: str, params: dict, data_path: str, resample: bool = False) -> list:
     """The server's argv for a model given as its type and constructor arguments.
 
     For launchers that have no model config to hand and should not build
@@ -52,7 +52,7 @@ def server_argv_for(model_type: str, params: dict, data_path: str) -> list:
     from cellmap_flow.models.configs.base import model_entry
     from cellmap_flow.models.registry import model_type as lookup
 
-    return _serve_argv(model_entry(lookup(model_type), params), data_path)
+    return _serve_argv(model_entry(lookup(model_type), params), data_path, resample)
 
 
 def server_command(model_config, data_path: str, resample: bool = False) -> str:
@@ -60,6 +60,6 @@ def server_command(model_config, data_path: str, resample: bool = False) -> str:
     return shell_join(server_argv(model_config, data_path, resample))
 
 
-def server_command_for(model_type: str, params: dict, data_path: str) -> str:
+def server_command_for(model_type: str, params: dict, data_path: str, resample: bool = False) -> str:
     """``server_argv_for`` as the shell line start_hosts takes."""
-    return shell_join(server_argv_for(model_type, params, data_path))
+    return shell_join(server_argv_for(model_type, params, data_path, resample))

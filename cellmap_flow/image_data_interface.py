@@ -294,6 +294,19 @@ class ImageDataInterface:
         view = self._view()
         return view if self.normalize else view.selected()
 
+    def read_box(self, box: Box, fill=0) -> np.ndarray:
+        """The voxels of ``box`` (a ``Box`` of voxel indices at ``voxel_size``)
+        through the input chain, as a numpy array padded with ``fill`` where
+        it runs past the array: ``to_ndarray_ts`` by voxels instead of nm.
+        Unlike ``ts``, works on a resampled dataset too.
+        """
+        view = self._view()
+        store = view.selected()
+        through_chain = functools.partial(apply_norms, input_norms=view.norms_to_apply())
+        if self.resampled:
+            return self._resampling.read(store, box, fill, through_chain)
+        return read_padded(store, box, fill, through_chain)
+
     def with_input_norms(self, input_norms):
         """This dataset, read through ``input_norms`` instead of the process's chain.
 

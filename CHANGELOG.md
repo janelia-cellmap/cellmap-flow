@@ -2,7 +2,16 @@
 
 All notable changes to cellmap-flow. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow `cellmap_flow.__version__`.
 
-## Unreleased (the cleanup, PR #103)
+## Unreleased
+
+### Added
+- **Resampling from the dashboard.** The Models tab has a *Resample to each model's voxel size* box: the servers it submits are started with `--resample`.
+  - `cellmap_flow yaml` with `resample: true` and the new `cellmap_flow view --resample` start the box ticked, so models added later in the dashboard resample too; before, only the YAML's own models did.
+  - Blockwise runs and Export Config carry the setting.
+  - An annotation volume made while it is on is at the model's own voxel sizes and remembers it (`resample` in its attrs and manifest): the finetune trains on the raw resampled, serves the result with `--resample`, and writes `resample: true` into its serving YAML.
+- **A wrong-scale warning.** When a model's server reads a level at another voxel size as if it were at the model's, which is the default without resampling, the banner above the tabs says so and how to fix it. `model_info` reports `input_relabelled_from` beside `input_resampled_from`.
+
+## The cleanup, PR #103 (merged 2026-10-01)
 
 One pull request carries the whole cleanup: bug fixes in place, dead-code removal, consolidation into `io/`, `jobs/`, `pipeline_spec`, `models/registry`, `inference/`, `serving/`, `finetune/session/` and `viewer/`, the PR #102 features, and the first-chunk latency work. Every behaviour change is its own commit whose subject starts with "Behaviour change:"; they are listed at the end of this entry.
 

@@ -155,11 +155,16 @@ def _start_inference_server_background(
     restart_token = (
         read_or_create_restart_token(args.output_dir) if restart_callback is not None else None
     )
+    # Served the way it was trained: resampled when the volume is.
+    from cellmap_flow.finetune.session.manifest import read_manifest
+
+    resample = bool((read_manifest(args.corrections) or {}).get("resample", False))
     server = CellMapFlowServer(
         args.serve_data_path,
         model_config,
         restart_callback=restart_callback,
         restart_token=restart_token,
+        resample=resample,
     )
 
     # Get port

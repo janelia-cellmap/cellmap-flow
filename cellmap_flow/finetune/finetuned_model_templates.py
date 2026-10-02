@@ -35,6 +35,7 @@ def generate_finetuned_model_yaml(
     json_data: dict = None,
     scale: str = None,
     weights_path: str = None,
+    resample: bool = False,
 ) -> Path:
     """
     Generate .yaml configuration for serving a finetuned model.
@@ -59,6 +60,8 @@ def generate_finetuned_model_yaml(
             model's input voxel size, which is how the trainer read the same
             ``data_path``. This was always "s0", so a model trained on s1 of
             a multiscale group was served s0.
+        resample: the model was trained on the raw resampled to its voxel
+            size (its volume's ``resample``), so serve it that way too
 
     Returns:
         Path to the generated YAML file
@@ -97,6 +100,8 @@ def generate_finetuned_model_yaml(
         "queue": queue,
         "models": [model_entry],
     }
+    if resample:
+        yaml_dict["resample"] = True
 
     # Add json_data (normalization/postprocessing)
     if json_data:
@@ -137,6 +142,7 @@ def generate_current_config_yaml(
     charge_group: str = None,
     walltime: str = None,
     json_data: dict = None,
+    resample: bool = False,
 ) -> str:
     """
     Build YAML text snapshotting the dashboard's current live server config
@@ -157,6 +163,7 @@ def generate_current_config_yaml(
             the reloaded config falls back to the built-in default
         json_data: dict with "input_norm"/"postprocess" keys reflecting the
             currently active normalization/postprocessing, if any
+        resample: the dashboard's Resample setting; written only when on
 
     Returns:
         YAML text (str) ready to write to a file.
@@ -174,6 +181,8 @@ def generate_current_config_yaml(
     }
     if walltime:
         yaml_dict["walltime"] = walltime
+    if resample:
+        yaml_dict["resample"] = True
 
     has_json_data = json_data and (
         json_data.get("input_norm") or json_data.get("postprocess")

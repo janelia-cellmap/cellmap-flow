@@ -6,7 +6,7 @@ import os
 
 import click
 import logging
-from cellmap_flow.cli.common import log_level_option
+from cellmap_flow.cli.common import log_level_option, resample_option
 
 logger = logging.getLogger(__name__)
 
@@ -25,14 +25,18 @@ logger = logging.getLogger(__name__)
     default=None,
     help="Charge group (LSF project) billed for the models launched from the dashboard",
 )
+@resample_option()
 @log_level_option()
-def main(dataset, project):
+def main(dataset, project, resample):
     """
     Start CellMap Flow viewer with a dataset.
 
     Opens neuroglancer on the raw data and starts the dashboard, where models
     can be picked and submitted interactively. Use `cellmap_flow yaml` instead
     to launch models from a config file.
+
+    ``--resample`` starts the dashboard's Resample box ticked, so the models
+    launched from it read the data resampled to their voxel size.
 
     Example:
 
@@ -72,6 +76,7 @@ def main(dataset, project):
 
     session = get_session()
     session.dataset_path = dataset
+    session.resample = resample
     session.viewer = viewer
 
     # Add dataset layer to viewer

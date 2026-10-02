@@ -24,8 +24,9 @@ that have no dashboard:
 The rest it stores itself, in ``__slots__``, so a misspelt attribute raises
 rather than being stored beside the real one:
 
-- The data and the viewer: ``dataset_path``, ``viewer``, ``raw``,
-  ``neuroglancer_url``, ``shaders``, ``shader_controls``, ``extra_layers``.
+- The data and the viewer: ``dataset_path``, ``resample``, ``viewer``,
+  ``raw``, ``neuroglancer_url``, ``shaders``, ``shader_controls``,
+  ``extra_layers``.
 - The models: ``models_config``, ``model_catalog``.
 - The pipeline builder's last apply: ``builder_state``,
   ``builder_model_configs``.
@@ -60,7 +61,7 @@ class Session:
     # _builder_state and _finetune_job_manager hold what the builder_state
     # and finetune_job_manager properties serve: a slot and a property of one
     # name cannot coexist.
-    __slots__ = ("dataset_path", "viewer", "raw", "neuroglancer_url", "shaders", "shader_controls", "extra_layers",
+    __slots__ = ("dataset_path", "resample", "viewer", "raw", "neuroglancer_url", "shaders", "shader_controls", "extra_layers",
                  "models_config", "model_catalog", "_builder_state", "builder_model_configs", "tmp_dir",
                  "blockwise_tasks_dir", "minio_state", "annotation_volumes", "output_sessions", "review",
                  "_finetune_job_manager", "log_buffer", "log_clients", "bbx_generator_state")
@@ -69,6 +70,13 @@ class Session:
         # The data and the viewer
         # The raw data as the user gave it: a multiscale group or one level of it.
         self.dataset_path = None
+        # Whether models launched from here, their finetunes and blockwise
+        # runs read the data resampled to each model's input voxel size when
+        # it has no level at that size (``--resample``), rather than reading
+        # the nearest level as if it were at that size. Set by
+        # ``cellmap_flow yaml`` (the YAML's ``resample``), ``view --resample``
+        # and the Models tab's checkbox; servers already running keep theirs.
+        self.resample = False
         # The neuroglancer viewer; None until a dataset is opened.
         self.viewer = None
         # The raw data's layer, as last built.

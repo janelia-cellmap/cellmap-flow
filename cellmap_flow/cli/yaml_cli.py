@@ -334,13 +334,16 @@ def main(ctx, config_path: str, list_types: bool, validate_only: bool):
 
     settings.save()
     session.extra_layers = build_extra_layers(extra_layers)
+    # Also for the models launched later from the dashboard, its finetunes
+    # and its blockwise runs, not only for the YAML's own models.
+    session.resample = config.get("resample", False)
 
     # Run the models; Ctrl+C or SIGTERM from here on kills what was started.
     install_cleanup_handlers()
     try:
         run_multiple(
             session.models_config, data_path, charge_group, queue, wrap_raw=wrap_raw,
-            resample=config.get("resample", False),
+            resample=session.resample,
         )
     except JobStartError as e:
         raise click.ClickException(str(e))

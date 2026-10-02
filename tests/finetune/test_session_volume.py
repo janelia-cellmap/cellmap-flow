@@ -13,6 +13,7 @@ from cellmap_flow.finetune.crop_loader import CropEntry
 from cellmap_flow.finetune.session import sync
 from cellmap_flow.finetune.session.volume import (
     VolumeGeometry,
+    build_manifest,
     create_volume_zarr,
     plan_volume,
     read_volume,
@@ -129,3 +130,40 @@ def test_a_volume_without_its_geometry_is_not_given_one(tmp_path):
     # Serving and syncing need no geometry: the record says what is missing.
     record = read_volume(path, require_geometry=False)
     assert record["output_size"] is None and record["input_size"] == [4, 4, 4]
+
+
+@pytest.mark.parametrize("resample, voxel_size, shape", [
+    # Snapped to the raw level, which the trainer then reads as it is stored.
+    pytest.param(False, [16, 4, 4], [16, 16, 16], id="snapped-to-the-level"),
+    # At the model's own 8 nm, over the data's whole extent, and read resampled.
+    pytest.param(True, [8, 8, 8], [32, 8, 8], id="resampled"),
+])
+def test_a_volume_made_to_resample_is_trained_on_the_raw_resampled(tmp_path, ome_pyramid, resample, voxel_size,
+                                                                   shape):
+    """The Resample setting travels with the volume (its attrs, then the
+    manifest), so the trainer reads the raw at the model's voxel size as a
+    --resample server does, whatever the dashboard is set to later."""
+    from cellmap_flow.finetune.data.reader import PatchReader
+    from cellmap_flow.image_data_interface import ImageDataInterface
+    from funlib.geometry import Roi
+
+    raw = ome_pyramid((((16, 4, 4), 0),))  # 16^3 voxels from (-8, -2, -2) nm; no 8 nm level
+    model = SimpleNamespace(input_voxel_size=(8, 8, 8), output_voxel_size=(8, 8, 8),
+                            input_shape=(4, 4, 4), output_shape=(4, 4, 4))
+    geometry = plan_volume(raw, model, resample=resample)
+    assert (list(geometry.output_voxel_size), list(geometry.dataset_shape_voxels)) == (voxel_size, shape)
+
+    path = create_volume_zarr(str(tmp_path / "volume.zarr"), geometry, dataset_path=raw, model_name="m")
+    record = {**read_volume(path), "zarr_path": path}
+    manifest = build_manifest(record, input_norm=None, postprocess=None)
+    assert (record["resample"], manifest["resample"]) == (resample, resample)
+    if not resample:
+        return
+
+    corner = np.array([-8.0, -2.0, -2.0])
+    reader = PatchReader(path, raw, (4, 4, 4), (4, 4, 4), (8, 8, 8), (8, 8, 8),
+                         corner_nm=corner, shape_voxels=np.array(shape), resample=manifest["resample"])
+    # Centred 6, 2, 2 output voxels in: the input box starts 32, 0, 0 nm from the corner.
+    expected = ImageDataInterface(raw, voxel_size=(8, 8, 8), on_voxel_size_mismatch="resample",
+                                  normalize=False).to_ndarray_ts(Roi((24, -2, -2), (32, 32, 32)))
+    assert np.array_equal(reader.raw(np.array([6, 2, 2])), expected)

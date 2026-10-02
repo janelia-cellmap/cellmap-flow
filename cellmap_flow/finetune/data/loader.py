@@ -58,6 +58,7 @@ def dataset_from_manifest(
         good_regions=load_good_regions_for(corrections_dir),
         rehearsal_fraction=manifest.get("rehearsal_fraction"),
         anchor_fraction=manifest.get("anchor_fraction"),
+        resample=bool(manifest.get("resample", False)),
         # Explicit argument wins: at training time the CLI flag is the
         # authority. The manifest value is the session's stored preference.
         augment=(

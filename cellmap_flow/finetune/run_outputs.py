@@ -199,6 +199,7 @@ def write_serving_yaml(args, model_config, timestamp, *, is_lora: bool, export_d
         output_path=yaml_dir / f"{name}.yaml",
         data_path=data_path,
         json_data=json_data,
+        resample=bool(manifest.get("resample", False)),
     )
     logger.info(f"Generated YAML: {yaml_path}")
 

@@ -138,6 +138,11 @@ def model_advice():
             "output_max": probe.get("output_max"),
             "configured_postprocess": configured_post,
             "configured_input_norm": configured_norm,
+            # How the server reads the data (model_info): one of the last two
+            # is a list when the data has no level at input_voxel_size.
+            "input_voxel_size": probe.get("input_voxel_size"),
+            "input_resampled_from": probe.get("input_resampled_from"),
+            "input_relabelled_from": probe.get("input_relabelled_from"),
         }
         if not probe.get("available"):
             entry["postprocess_review"] = {
