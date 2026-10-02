@@ -142,7 +142,7 @@ def test_a_run_leaves_the_chain_the_models_and_the_settings_for_the_dashboard(tm
         tmp_path,
         models={"m": {"type": "script", "script_path": SCRIPT}},
         extra_layers=[{"name": "pred", "path": _array(tmp_path / "pred.zarr" / "mito")}],
-        queue="gpu_h200", walltime="36:00", cycle_gpu_queues=False,
+        queue="gpu_h200", walltime="36:00", cycle_gpu_queues=False, resample=True,
         json_data={"input_norm": {"MinMaxNormalizer": {"min_value": 0, "max_value": 255}},
                    "postprocess": {"ThresholdPostprocessor": {"threshold": 0.5}}},
     )
@@ -153,6 +153,8 @@ def test_a_run_leaves_the_chain_the_models_and_the_settings_for_the_dashboard(tm
     assert [(type(m).__name__, m.name) for m in session.models_config] == [("ScriptModelConfig", "m")]
     assert ran == [(session.models_config, yaml.safe_load(open(config))["data_path"], "grp", "gpu_h200")]
     assert list(session.extra_layers) == ["pred"]
+    # For the models the dashboard launches later, not only the YAML's.
+    assert session.resample is True
     assert ([type(s).__name__ for s in chain.input_norms], [type(s).__name__ for s in chain.postprocess]) == (
         ["MinMaxNormalizer"], ["ThresholdPostprocessor"])
     # The steps as the YAML gives them, as a chain submitted in the

@@ -256,6 +256,7 @@ CELLMAP_FLOW = {
         ('dataset', ('-d', '--dataset'), (), 'text', True, None, False, 'Path to the dataset (zarr or n5)'),
         ('project', ('-P', '--project'), (), 'text', False, None, False,
          'Charge group (LSF project) billed for the models launched from the dashboard'),
+        RESAMPLE,
         *LOG_LEVEL_OF_GROUP,
     ],
     'yaml': [

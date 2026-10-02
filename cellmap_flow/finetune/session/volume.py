@@ -54,7 +54,8 @@ class VolumeGeometry:
     """Where a volume lies and what model it is for; see ``plan_volume``.
 
     Sequences become tuples of the numbers given, ints kept ints, since the
-    root attrs are written from them as they are.
+    root attrs are written from them as they are. ``resample``: the raw is
+    read resampled to the model's voxel sizes (see ``plan_volume``).
     """
 
     output_voxel_size: tuple
@@ -65,11 +66,12 @@ class VolumeGeometry:
     input_size: tuple
     dataset_offset_nm: tuple  # voxel 0's centre == the OME translation
     dataset_shape_voxels: tuple
+    resample: bool = False
 
     def __post_init__(self):
         for field in fields(self):
             value = getattr(self, field.name)
-            if value is not None:
+            if value is not None and not isinstance(value, bool):
                 object.__setattr__(self, field.name, _values(value))
 
     def record(self, zarr_path, *, dataset_path, model_name, corrections_dir) -> dict:
@@ -89,6 +91,7 @@ class VolumeGeometry:
             "dataset_path": dataset_path,
             "dataset_offset_nm": list(self.dataset_offset_nm),
             "corrections_dir": corrections_dir,
+            "resample": self.resample,
         }
 
 
@@ -110,13 +113,17 @@ def volume_corner_nm(dataset_offset_nm, output_voxel_size) -> np.ndarray:
     return np.asarray(ome_corner(offset, output_voxel_size), dtype=float)
 
 
-def _grid(raw_dataset_path, output_voxel_size, chunk_size):
+def _grid(raw_dataset_path, output_voxel_size, chunk_size, resample=False):
     """``(offset_nm, shape_voxels)`` of a volume over the data, padded to whole chunks."""
     from cellmap_flow.image_data_interface import ImageDataInterface
 
     output_voxel_size = np.asarray(output_voxel_size, dtype=float)
     chunk_size = np.asarray(chunk_size, dtype=int)
-    idi = ImageDataInterface(raw_dataset_path, voxel_size=output_voxel_size)
+    idi = ImageDataInterface(
+        raw_dataset_path,
+        voxel_size=output_voxel_size,
+        on_voxel_size_mismatch="resample" if resample else "relabel",
+    )
     offset = np.asarray(ome_translation(np.asarray(idi.offset, dtype=float), output_voxel_size))
     # The data's own extent in output voxels, rounded up so a partial voxel
     # at the far end is covered. Not idi.roi's: that is the whole-nm box
@@ -129,7 +136,7 @@ def _grid(raw_dataset_path, output_voxel_size, chunk_size):
     return offset, np.ceil(shape / chunk_size).astype(int) * chunk_size
 
 
-def plan_volume(raw_dataset_path: str, model_geometry) -> VolumeGeometry:
+def plan_volume(raw_dataset_path: str, model_geometry, resample: bool = False) -> VolumeGeometry:
     """Where a new volume over ``raw_dataset_path`` lies, for a model.
 
     ``model_geometry`` has ``input_voxel_size`` and ``output_voxel_size``,
@@ -139,6 +146,10 @@ def plan_volume(raw_dataset_path: str, model_geometry) -> VolumeGeometry:
     own is kept as the claimed one); the volume lies on the output level's
     grid from its corner, one chunk per model output, and covers the data
     padded to whole chunks.
+
+    With ``resample`` (the dashboard's Resample setting) nothing is snapped:
+    the volume is at the model's own voxel sizes, and the trainer reads the
+    raw resampled to them, as a server started with --resample serves it.
     """
     claimed_in = np.array(model_geometry.input_voxel_size)
     claimed_out = np.array(model_geometry.output_voxel_size)
@@ -148,9 +159,12 @@ def plan_volume(raw_dataset_path: str, model_geometry) -> VolumeGeometry:
     else:
         input_size = (np.array(model_geometry.read_shape) / claimed_in).astype(int)
         output_size = (np.array(model_geometry.write_shape) / claimed_out).astype(int)
-    output_voxel_size = np.array(closest_raw_scale(raw_dataset_path, tuple(claimed_out)) or claimed_out)
-    input_voxel_size = np.array(closest_raw_scale(raw_dataset_path, tuple(claimed_in)) or claimed_in)
-    offset, shape = _grid(raw_dataset_path, output_voxel_size, output_size)
+    if resample:
+        output_voxel_size, input_voxel_size = claimed_out, claimed_in
+    else:
+        output_voxel_size = np.array(closest_raw_scale(raw_dataset_path, tuple(claimed_out)) or claimed_out)
+        input_voxel_size = np.array(closest_raw_scale(raw_dataset_path, tuple(claimed_in)) or claimed_in)
+    offset, shape = _grid(raw_dataset_path, output_voxel_size, output_size, resample)
     return VolumeGeometry(
         output_voxel_size=output_voxel_size,
         input_voxel_size=input_voxel_size,
@@ -160,6 +174,7 @@ def plan_volume(raw_dataset_path: str, model_geometry) -> VolumeGeometry:
         input_size=input_size,
         dataset_offset_nm=offset,
         dataset_shape_voxels=shape,
+        resample=bool(resample),
     )
 
 
@@ -223,6 +238,9 @@ def create_volume_zarr(
         "dataset_shape_voxels": list(geometry.dataset_shape_voxels),
         "created_at": datetime.now().isoformat(),
     }
+    # Only when on, so volumes made before it existed read the same.
+    if geometry.resample:
+        attrs["resample"] = True
     # The model's own voxel sizes, for provenance: the ones above are the raw
     # levels closest to them.
     for key in ("claimed_output_voxel_size", "claimed_input_voxel_size"):
@@ -267,6 +285,7 @@ def read_volume(zarr_path: str, *, require_geometry: bool = True) -> dict:
         "dataset_path": attrs.get("dataset_path"),
         "dataset_offset_nm": attrs.get("dataset_offset_nm"),
         "corrections_dir": str(Path(zarr_path).parent),
+        "resample": bool(attrs.get("resample", False)),
         "chunk_sync_state": {},
     }
 
@@ -307,6 +326,9 @@ def build_manifest(volume_meta: dict, *, input_norm, postprocess, overrides: Opt
         "postprocess": postprocess,
         # None: auto-balance the dense and sparse pools.
         "dense_to_sparse_ratio": None,
+        # Read the raw resampled to the volume's voxel sizes, and serve the
+        # finetuned model that way (plan_volume's resample).
+        "resample": bool(volume_meta.get("resample", False)),
         **overrides,
     }
 

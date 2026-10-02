@@ -90,6 +90,8 @@ def submit_models():
     if error:
         return error
     selected_models, selected_hf_models = body.selected_models, body.selected_hf_models
+    if body.resample is not None:
+        get_session().resample = body.resample
     update_run_models(selected_models, selected_hf_models)
     logger.info(f"Selected models: {selected_models}, HF models: {selected_hf_models}")
     return jsonify(
@@ -170,6 +172,7 @@ def export_config():
             charge_group=session.charge_group,
             walltime=session.walltime,
             json_data=session.pipeline_spec.to_json_data(),
+            resample=session.resample,
         )
     except Exception as e:
         logger.error(f"Error exporting config: {str(e)}")

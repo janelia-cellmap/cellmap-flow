@@ -141,10 +141,13 @@ class SetData(BaseModel):
 
 class SubmitModels(BaseModel):
     """The Models tab's Submit: the catalog models and Hugging Face repos to
-    run. Every other running model is stopped (services.launch)."""
+    run. Every other running model is stopped (services.launch).
+    ``resample``, when given, becomes the session's (``Session.resample``)
+    before the models are started."""
 
     selected_models: list[str] = []
     selected_hf_models: list[str] = []
+    resample: Optional[bool] = None
 
 
 class Equivalences(BaseModel):

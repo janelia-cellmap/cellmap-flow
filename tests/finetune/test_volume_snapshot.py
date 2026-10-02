@@ -223,8 +223,8 @@ def _manifest(volume):
         "dense_to_sparse_ratio": None, "input_norm": NORM, "input_size_voxels": [12, 12, 12],
         "input_voxel_size_nm": [8.0, 8.0, 8.0], "jitter_voxels": None, "kind": "volume_zarr_v1",
         "output_size_voxels": [4, 4, 4], "output_voxel_size_nm": [16.0, 16.0, 16.0],
-        "patches_per_epoch": None, "postprocess": POST, "raw_dataset_path": RAW, "seed": 0,
-        "volume_zarr_path": volume,
+        "patches_per_epoch": None, "postprocess": POST, "raw_dataset_path": RAW, "resample": False,
+        "seed": 0, "volume_zarr_path": volume,
     }
 
 

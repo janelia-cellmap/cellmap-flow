@@ -119,8 +119,9 @@ anonymously, private ones with your AWS or Google credentials. See
 [data paths](docs/source/data_paths.rst).
 
 A model is fed the dataset's level at its own voxel size. When the dataset has
-no such level, `--resample` (or `resample: true` in a YAML) resamples the
-nearest one to it; without it the nearest level is used as it is.
+no such level, `--resample` (or `resample: true` in a YAML, or the dashboard's
+*Resample if no scale matches the model* box) resamples the nearest one to it; without it the nearest level
+is used as it is, and the dashboard warns that the model sees the wrong scale.
 
 ## Using custom script:
 This enables using any model by providing a script e.g. [example/model_spec.py](example/model_spec.py)

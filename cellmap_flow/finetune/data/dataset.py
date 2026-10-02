@@ -73,6 +73,8 @@ class VirtualPatchDataset(Dataset):
             point of the volume and held to the teacher there. ``None``
             (default) means a quarter for a painted session, none otherwise.
         augment: flips, XY rotations, brightness and noise (augment.py).
+        resample: read the raw resampled to ``input_voxel_size_nm`` when it
+            has no level at it (the volume's ``resample``).
     """
 
     def __init__(
@@ -92,6 +94,7 @@ class VirtualPatchDataset(Dataset):
         rehearsal_fraction: Optional[float] = None,
         anchor_fraction: Optional[float] = None,
         augment: bool = False,
+        resample: bool = False,
     ):
         self.volume_zarr_path = volume_zarr_path
         self.raw_dataset_path = raw_dataset_path
@@ -119,6 +122,7 @@ class VirtualPatchDataset(Dataset):
             corner_nm=self.sampler.corner_nm,
             shape_voxels=self.sampler.shape_voxels,
             input_norm_config=input_norm_config,
+            resample=resample,
         )
         self.augmentation = Augmentation(self.reader.normalizers)
 

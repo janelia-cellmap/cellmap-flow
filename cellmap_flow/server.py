@@ -391,6 +391,14 @@ class CellMapFlowServer:
                 self.axes, idi.voxel_size if idi.resampled else idi.actual_voxel_size
             )
             info["input_resampled_from"] = list(idi.actual_voxel_size) if idi.resampled else None
+            # The other way round: a level at another voxel size read as if
+            # it were at input_voxel_size, so the model sees the wrong scale
+            # (the dashboard warns; --resample is the fix).
+            relabelled = not idi.resampled and not np.allclose(
+                np.asarray(idi.actual_voxel_size, dtype=float),
+                np.asarray(self.geometry.input_voxel_size, dtype=float),
+            )
+            info["input_relabelled_from"] = list(idi.actual_voxel_size) if relabelled else None
 
             output_class = getattr(inferencer, "output_class", None)
             if output_class is None:

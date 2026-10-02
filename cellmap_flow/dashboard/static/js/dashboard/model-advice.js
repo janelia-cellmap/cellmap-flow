@@ -175,11 +175,46 @@ function renderPostprocessAdvice(m, box, wanted) {
   });
 }
 
+function nm(voxelSize) {
+  return (voxelSize || []).join("×") + " nm";
+}
+
+// How the model's server reads the data, when the data has no level at the
+// model's input voxel size. Read as if it were (the default), the model sees
+// the wrong scale and nothing else shows it, so that is a warning; resampled,
+// a confirmation that goes away.
+function renderVoxelSizeAdvice(m, box, wanted) {
+  const relabelled = m.input_relabelled_from;
+  const resampled = m.input_resampled_from;
+  if (!relabelled && !resampled) return;
+  const key = adviceKey("voxel", m, [relabelled, resampled, m.input_voxel_size]);
+  showAdvice(box, wanted, key, function () {
+    const div = document.createElement("div");
+    const model = "<code>" + esc(m.model || "model") + "</code>";
+    if (relabelled) {
+      div.className = "alert alert-warning";
+      div.innerHTML = "<strong>Wrong scale</strong>: " + model + " expects "
+                    + esc(nm(m.input_voxel_size)) + " data, but the dataset has no such level, so it reads "
+                    + esc(nm(relabelled)) + " data as if it were " + esc(nm(m.input_voxel_size))
+                    + ". Tick <em>Resample if no scale matches the model</em> in the Models tab and submit it again.";
+      div.appendChild(adviceButton("btn btn-sm btn-link", "Dismiss",
+        function () { hideAdvice(key); }));
+    } else {
+      div.className = "alert alert-secondary py-1 px-2";
+      div.innerHTML = "<small>" + model + " reads the data resampled from "
+                    + esc(nm(resampled)) + " to " + esc(nm(m.input_voxel_size)) + ".</small>";
+      setTimeout(function () { hideAdvice(key); }, CONFIRM_BANNER_MS);
+    }
+    return div;
+  });
+}
+
 function renderModelAdvice(models) {
   const box = document.getElementById("modelAdviceBanner");
   if (!box) return;
   const wanted = new Set();
   (models || []).forEach(function (m) {
+    renderVoxelSizeAdvice(m, box, wanted);
     renderInputNormAdvice(m, box, wanted);
     renderPostprocessAdvice(m, box, wanted);
   });

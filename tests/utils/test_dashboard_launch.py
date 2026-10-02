@@ -7,6 +7,7 @@ from types import SimpleNamespace
 
 import neuroglancer
 import pytest
+import yaml
 
 from cellmap_flow.dashboard.services import launch
 from cellmap_flow.dashboard.state import get_session
@@ -89,3 +90,22 @@ def test_submit_on_the_models_tab_leaves_a_finetune_jobs_server_running(viewer, 
     launch.update_run_models(["nuc"])
     assert killed == [] and [j.model_name for j in get_session().jobs] == ["mito_finetuned_1"]
     assert "mito_finetuned_1" in viewer.state.layers
+
+
+@pytest.mark.parametrize("resample", [True, False])
+def test_the_resample_box_reaches_the_servers_and_the_exported_config(viewer, dashboard, monkeypatch, resample):
+    """The Models tab's box is the session's setting: the servers it submits
+    get --resample, and Export Config keeps it for `cellmap_flow yaml`."""
+    commands = []
+    monkeypatch.setattr(launch, "start_hosts", lambda command, *args, **kwargs: commands.append(command))
+    monkeypatch.setattr(launch.threading, "Thread", _InlineThread)
+    process_chain().input_norms, process_chain().postprocess = [], []
+    session = get_session()
+    session.jobs, session.dataset_path = [], "/data/raw.zarr"
+    session.model_catalog = {"catalog": {"mito": "/models/mito"}}
+
+    response = dashboard.post("/api/models", json={"selected_models": ["mito"], "resample": resample})
+    assert response.status_code == 200 and session.resample is resample
+    assert len(commands) == 1 and ("--resample" in commands[0].split()) is resample
+    exported = yaml.safe_load(dashboard.get("/api/export-config").data)
+    assert exported.get("resample", False) is resample

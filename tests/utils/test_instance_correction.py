@@ -149,7 +149,7 @@ def test_a_fresh_seed_asks_the_server_for_geometry(client, monkeypatch, tmp_path
         "zarr_path": path, "model_name": "model", "output_size": [4, 4, 4], "input_size": [12, 12, 12],
         "input_voxel_size": [16.0] * 3, "output_voxel_size": [16.0] * 3, "dataset_path": "/raw.zarr",
         "dataset_offset_nm": [8.0] * 3, "corrections_dir": str(tmp_path / "instance_corrections"),
-        "minio_url": "http://m:9000/annotations/roi_annotation.zarr", "chunk_sync_state": {},
+        "minio_url": "http://m:9000/annotations/roi_annotation.zarr", "chunk_sync_state": {}, "resample": False,
     }
     assert zarr.open_group(path, mode="r").attrs["chunk_size"] == [4, 4, 4]
 

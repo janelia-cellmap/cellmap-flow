@@ -70,6 +70,7 @@ class PatchReader:
         corner_nm: np.ndarray,
         shape_voxels: np.ndarray,
         input_norm_config=None,
+        resample: bool = False,
     ):
         self.volume_zarr_path = volume_zarr_path
         self.raw_dataset_path = raw_dataset_path
@@ -83,6 +84,9 @@ class PatchReader:
         self.normalizers = input_normalizers(self.input_norm_config)
         self._volume_arr = None
         self._raw_idi = None
+        # Read the raw resampled to input_voxel_size when it has no level at
+        # it (the volume's resample, see session.volume.plan_volume).
+        self.resample = bool(resample)
 
         if not self.normalizers and self.input_norm_config:
             logger.warning(
@@ -163,13 +167,13 @@ class PatchReader:
         from cellmap_flow.image_data_interface import ImageDataInterface
         from cellmap_flow.io.geometry import Box
         from cellmap_flow.io.metadata import snap_integral
-        from cellmap_flow.io.source import read_padded
 
         if self._raw_idi is None:
             self._raw_idi = ImageDataInterface(
                 self.raw_dataset_path,
                 voxel_size=self.input_voxel_size,
                 normalize=False,
+                on_voxel_size_mismatch="resample" if self.resample else "relabel",
             )
         raw_voxel_size = np.asarray(self._raw_idi.voxel_size, dtype=float)
         raw_corner_nm = np.asarray(self._raw_idi.offset, dtype=float)
@@ -179,9 +183,9 @@ class PatchReader:
         # number it is.
         begin = np.floor(snap_integral((lower_edge_nm - raw_corner_nm) / raw_voxel_size))
         box = Box(tuple(int(b) for b in begin), tuple(int(s) for s in self.input_size))
-        # .ts is the selected channel, unnormalized (normalize=False); out of
-        # the array is padded with 0, as to_ndarray_ts pads.
-        return read_padded(self._raw_idi.ts, box)
+        # The selected channel, unnormalized (normalize=False), resampled when
+        # the volume is; out of the array is padded with 0, as to_ndarray_ts pads.
+        return self._raw_idi.read_box(box)
 
     def normalize(self, raw: np.ndarray) -> np.ndarray:
         """``raw`` through the session's normalizers, in order, as apply_norms() does for inference."""

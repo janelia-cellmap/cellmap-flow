@@ -2,7 +2,19 @@
 
 All notable changes to cellmap-flow. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow `cellmap_flow.__version__`.
 
-## Unreleased (the cleanup, PR #103)
+## Unreleased
+
+### Added
+- **Resampling from the dashboard.** The Models tab has a *Resample if no scale matches the model* box: the servers it submits are started with `--resample`. The matching scale is still picked automatically when there is one; the box decides what happens when there is none.
+  - `cellmap_flow yaml` with `resample: true` and the new `cellmap_flow view --resample` start the box ticked, so models added later in the dashboard resample too; before, only the YAML's own models did.
+  - Blockwise runs and Export Config carry the setting.
+  - An annotation volume made while it is on is at the model's own voxel sizes and remembers it (`resample` in its attrs and manifest): the finetune trains on the raw resampled, serves the result with `--resample`, and writes `resample: true` into its serving YAML.
+- **A wrong-scale warning.** When a model's server reads a level at another voxel size as if it were at the model's, which is the default without resampling, the banner above the tabs says so and how to fix it. `model_info` reports `input_relabelled_from` beside `input_resampled_from`.
+
+### Fixed
+- **The raw layer's fallback contrast follows the input normalizers.** When the data cannot be sampled for a range (jrc_fly-larva-1 never downsamples z, so even its coarsest level is too big to read), a multiscale raw layer was shown at [0, 255] whatever the normalizers did, one flat colour over [-1, 1] data. The fallback is now the stored dtype's range put through them: [0, 1] after a MinMaxNormalizer, [-1, 1] with `x*2-1`. A single array got [-1, 1] for any float chain, which was wrong for one ending in [0, 1].
+
+## The cleanup, PR #103 (merged 2026-10-01)
 
 One pull request carries the whole cleanup: bug fixes in place, dead-code removal, consolidation into `io/`, `jobs/`, `pipeline_spec`, `models/registry`, `inference/`, `serving/`, `finetune/session/` and `viewer/`, the PR #102 features, and the first-chunk latency work. Every behaviour change is its own commit whose subject starts with "Behaviour change:"; they are listed at the end of this entry.
 

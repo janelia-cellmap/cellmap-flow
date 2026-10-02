@@ -118,6 +118,7 @@ def index():
         model_catalog=model_catalog,
         default_models=[j.model_name for j in session.jobs],
         default_hf_repos=default_hf_repos,
+        resample=session.resample,
         server_config_cached=session.server_config_cached,
     )
 
