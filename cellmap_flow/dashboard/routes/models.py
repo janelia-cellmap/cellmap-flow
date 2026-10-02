@@ -82,23 +82,61 @@ def refresh_huggingface_models_route():
         return jsonify({'error': str(e)}), 500
 
 
+def _bioimage_answer(read):
+    """``read()``'s zoo list as JSON, or its failure as {"error": ...}: a 502
+    when the zoo's index could not be fetched, which the tab shows."""
+    from cellmap_flow.models.bioimage_catalog import ZooIndexError
+
+    try:
+        return jsonify(read())
+    except ZooIndexError as e:
+        logger.error(str(e))
+        return jsonify({"error": str(e)}), 502
+    except Exception as e:
+        logger.error(f"Error listing BioImage Model Zoo models: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@models_bp.route("/api/bioimage-models")
+def get_bioimage_models():
+    """The BioImage Model Zoo's models (cached): bioimage_catalog.list_bioimage_models."""
+    from cellmap_flow.models.bioimage_catalog import list_bioimage_models
+
+    return _bioimage_answer(list_bioimage_models)
+
+
+@models_bp.route("/api/bioimage-models/refresh", methods=["POST"])
+def refresh_bioimage_models_route():
+    """Fetch the zoo's index again."""
+    from cellmap_flow.models.bioimage_catalog import refresh_bioimage_models
+
+    return _bioimage_answer(refresh_bioimage_models)
+
+
 @models_bp.route("/api/models", methods=["POST"])
 def submit_models():
     """Run the models the Models tab has ticked (a SubmitModels), and stop
-    the others: services.launch.update_run_models."""
+    the others: services.launch.update_run_models. A zoo model that needs a
+    voxel size and was given none is a 400, and nothing changes."""
     body, error = parse(SubmitModels, request.get_json(silent=True))
     if error:
         return error
     selected_models, selected_hf_models = body.selected_models, body.selected_hf_models
+    selected_bioimage = [s.model_dump() for s in body.selected_bioimage_models]
     if body.resample is not None:
         get_session().resample = body.resample
-    update_run_models(selected_models, selected_hf_models)
-    logger.info(f"Selected models: {selected_models}, HF models: {selected_hf_models}")
+    try:
+        update_run_models(selected_models, selected_hf_models, selected_bioimage)
+    except ValueError as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+    logger.info(f"Selected models: {selected_models}, HF models: {selected_hf_models}, "
+                f"bioimage models: {selected_bioimage}")
     return jsonify(
         {
             "message": "Data received successfully",
             "models": selected_models,
             "hf_models": selected_hf_models,
+            "bioimage_models": selected_bioimage,
         }
     )
 

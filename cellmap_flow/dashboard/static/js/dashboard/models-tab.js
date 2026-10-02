@@ -1,6 +1,6 @@
-// The Models tab (templates/_models_tab.html): the local catalog and
-// Hugging Face models to serve, the LSF server config, the GPU queue picker,
-// and the inference jobs' own output.
+// The Models tab (templates/_models_tab.html): the local catalog, Hugging
+// Face and BioImage Model Zoo models to serve, the LSF server config, the GPU
+// queue picker, and the inference jobs' own output.
 import { ApiError, getJSON, postJSON } from "../lib/api.js";
 import { pageData } from "../lib/page-data.js";
 import { poll } from "../lib/poll.js";
@@ -122,6 +122,172 @@ export function initModelsTab({ onModelsSubmitted } = {}) {
       const searchData = item.getAttribute("data-search");
       item.style.display = searchData.includes(query) ? "" : "none";
     });
+  });
+
+  // The BioImage Model Zoo: listed like the Hugging Face models, from the
+  // zoo's index (models/bioimage_catalog.py), and filtered to EM by default.
+  // The zoo models already running are ticked on load, with the voxel size
+  // each was given.
+  const zooRunning = new Map((pageData().default_bioimage_models || []).map((m) => [m.id, m.voxel_size]));
+  let zooModelsLoaded = false;
+  const ZOO_VOXEL_TITLE =
+    "Voxel size in nm: z,y,x or one number. Blank: the model's own, when its description declares one.";
+
+  function zooTag(text, title) {
+    const tag = document.createElement("span");
+    tag.className = "zoo-tag";
+    tag.textContent = text;
+    if (title) tag.title = title;
+    return tag;
+  }
+
+  // One row, built from nodes rather than an HTML string: every text in it
+  // comes from the zoo's uploaders. voxelSize is the value to start with
+  // (an array, a string or undefined); a row starts ticked when it is given.
+  function zooRow(model, voxelSize) {
+    const div = document.createElement("div");
+    div.className = "form-check zoo-model-item";
+    div.dataset.search = [model.name, model.key, model.id, model.description, ...model.tags].join(" ").toLowerCase();
+    div.dataset.em = model.em ? "1" : "";
+    div.dataset.dims = model.dims || "";
+
+    const input = document.createElement("input");
+    input.className = "form-check-input zoo-model-checkbox";
+    input.type = "checkbox";
+    input.id = "chk_zoo_" + model.key.replace(/\W+/g, "_");
+    input.value = model.key;
+    input.checked = voxelSize !== undefined;
+    const label = document.createElement("label");
+    label.className = "form-check-label";
+    label.htmlFor = input.id;
+    label.textContent = model.name;
+    label.title = [model.description, model.key, model.license].filter(Boolean).join("\n");
+    div.append(input, label);
+
+    if (model.dims) div.append(zooTag(model.dims.toUpperCase()));
+    model.weight_formats.forEach((format) => div.append(zooTag(format, "Weight format")));
+    if (/^https?:\/\//.test(model.url || "")) {
+      const link = document.createElement("a");
+      link.className = "zoo-link";
+      link.href = model.url;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      link.title = "Open on bioimage.io";
+      link.textContent = "\u2197";
+      div.append(link);
+    }
+    if (model.description) {
+      const desc = document.createElement("div");
+      desc.className = "zoo-desc";
+      desc.textContent = model.description;
+      desc.title = model.description;
+      div.append(desc);
+    }
+
+    // Shown only while the row is ticked.
+    const voxelRow = document.createElement("div");
+    voxelRow.className = "zoo-voxel-row d-flex align-items-center gap-2 mt-1";
+    const voxelLabel = document.createElement("label");
+    voxelLabel.textContent = "Voxel (nm)";
+    voxelLabel.htmlFor = input.id + "_voxel";
+    const voxel = document.createElement("input");
+    voxel.type = "text";
+    voxel.className = "form-control form-control-sm zoo-voxel";
+    voxel.id = input.id + "_voxel";
+    voxel.placeholder = "from model";
+    voxel.title = ZOO_VOXEL_TITLE;
+    voxel.value = Array.isArray(voxelSize) ? voxelSize.join(",") : (voxelSize || "");
+    voxelRow.append(voxelLabel, voxel);
+    voxelRow.style.display = input.checked ? "" : "none";
+    input.addEventListener("change", () => {
+      voxelRow.style.display = input.checked ? "" : "none";
+    });
+    div.append(voxelRow);
+    return div;
+  }
+
+  // Search words (all must match), EM only, and 2D/3D (neither ticked: any).
+  // A ticked row stays in view, so nothing is submitted unseen.
+  function filterZooModels() {
+    const words = document.getElementById("zooSearchBar").value.toLowerCase().split(/\s+/).filter(Boolean);
+    const emOnly = document.getElementById("zooEmOnly").checked;
+    const dims = [["zoo2d", "2d"], ["zoo3d", "3d"]]
+      .filter(([id]) => document.getElementById(id).checked)
+      .map(([, d]) => d);
+    const rows = document.querySelectorAll("#zooModelList .zoo-model-item");
+    let shown = 0;
+    rows.forEach((row) => {
+      const matches = words.every((w) => row.dataset.search.includes(w))
+        && (!emOnly || row.dataset.em)
+        && (!dims.length || dims.includes(row.dataset.dims));
+      const show = matches || row.querySelector(".zoo-model-checkbox").checked;
+      row.style.display = show ? "" : "none";
+      if (show) shown += 1;
+    });
+    document.getElementById("zooCount").textContent = rows.length ? shown + " / " + rows.length : "";
+  }
+
+  function renderZooModels(data) {
+    const list = document.getElementById("zooModelList");
+    // A refresh keeps what is ticked, and the voxel sizes typed.
+    const ticked = new Map(zooRunning);
+    list.querySelectorAll(".zoo-model-item").forEach((row) => {
+      const box = row.querySelector(".zoo-model-checkbox");
+      if (box.checked) ticked.set(box.value, row.querySelector(".zoo-voxel").value);
+      else ticked.delete(box.value);
+    });
+    list.replaceChildren();
+    const placeholder = document.getElementById("zooPlaceholder");
+    if (placeholder) placeholder.remove();
+
+    if (data.error) {
+      const p = document.createElement("p");
+      p.className = "text-danger";
+      p.textContent = "Error: " + data.error;
+      list.appendChild(p);
+      return;
+    }
+    const models = data.models || [];
+    if (!models.length) {
+      const p = document.createElement("p");
+      p.className = "text-muted";
+      p.textContent = "No models found.";
+      list.appendChild(p);
+      return;
+    }
+    document.getElementById("zooControls").style.display = "";
+    document.getElementById("zooRefreshBtn").title =
+      "Refresh from bioimage.io" + (data.fetched ? " (listed " + data.fetched + ")" : "");
+    models.forEach((model) => {
+      list.appendChild(zooRow(model, ticked.has(model.key) ? ticked.get(model.key) : undefined));
+    });
+    filterZooModels();
+  }
+
+  function loadZooModels(refresh) {
+    const spinner = document.getElementById("zooLoadingSpinner");
+    spinner.classList.remove("d-none");
+    (refresh ? postJSON("/api/bioimage-models/refresh") : getJSON("/api/bioimage-models"))
+      .then((data) => {
+        renderZooModels(data);
+        zooModelsLoaded = true;
+      })
+      .catch((err) => {
+        // The routes answer a failed fetch of the zoo's index with
+        // {"error": ...}; anything else never reached them.
+        renderZooModels({ error: err instanceof ApiError ? err.message : "Error loading models: " + err });
+        zooModelsLoaded = err instanceof ApiError;
+      })
+      .finally(() => spinner.classList.add("d-none"));
+  }
+
+  document.getElementById("collapse_zoo").addEventListener("show.bs.collapse", function () {
+    if (!zooModelsLoaded) loadZooModels(false);
+  });
+  document.getElementById("zooRefreshBtn").addEventListener("click", () => loadZooModels(true));
+  document.getElementById("zooSearchBar").addEventListener("input", filterZooModels);
+  ["zooEmOnly", "zoo2d", "zoo3d"].forEach((id) => {
+    document.getElementById(id).addEventListener("change", filterZooModels);
   });
 
   // Inference job output.
@@ -333,10 +499,20 @@ export function initModelsTab({ onModelsSubmitted } = {}) {
       selectedHf.push(checkbox.value);
     });
 
-    console.log("Selected models:", selected, "HF models:", selectedHf);
+    // Ticked zoo models, with the voxel size typed (blank: the model's own).
+    const selectedZoo = [];
+    document.querySelectorAll("#zooModelList .zoo-model-item").forEach((row) => {
+      const box = row.querySelector(".zoo-model-checkbox");
+      if (!box.checked) return;
+      const voxel = row.querySelector(".zoo-voxel").value.trim();
+      selectedZoo.push({ id: box.value, voxel_size: voxel || null });
+    });
+
+    console.log("Selected models:", selected, "HF models:", selectedHf, "zoo models:", selectedZoo);
     postJSON("/api/models", {
       selected_models: selected,
       selected_hf_models: selectedHf,
+      selected_bioimage_models: selectedZoo,
       resample: resampleCheckbox.checked,
     })
       .then((data) => {
