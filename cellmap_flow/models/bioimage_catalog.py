@@ -14,6 +14,11 @@ the index's models in its order, each as ``normalise`` gives it. A failed
 fetch raises ``ZooIndexError``, whose message says why, and leaves the
 cache as it was.
 
+None of the zoo's models declares the voxel size it was trained at, so the
+EM ones' were looked up by hand, in ``bioimage_voxel_sizes.yaml`` beside
+this module: ``trained_at`` reads it, and each listed model carries its
+row as ``trained`` (None for a model not in it).
+
 ``bioimage_entry`` turns a ticked model into ``BioModelConfig``'s
 constructor arguments: the one place that knows their names.
 """
@@ -42,6 +47,10 @@ BIOIMAGE_CACHE_FILE = os.path.join(BIOIMAGE_CACHE_DIR, "models_cache.json")
 # description links left Submit unable to tell whether a model declares a
 # voxel size.
 CACHE_FORMAT = 2
+# A cached list older than this is marked "stale" when read: the Models tab
+# then fetches it again in the background, so a model added to the zoo, or
+# a description changed, shows without anyone clicking Refresh.
+STALE_AFTER_S = 3600
 ZOO_PAGE_URL = "https://bioimage.io/#/artifacts/{}"
 
 # Tags (lower case) that mark an electron microscopy model. The zoo has no
@@ -254,26 +263,62 @@ def _read_cache() -> Optional[dict]:
         return None
 
 
+def _age_s(document: dict) -> float:
+    """Seconds since ``document`` was fetched; infinite when it does not say."""
+    try:
+        fetched = datetime.fromisoformat(document["fetched"])
+    except (KeyError, TypeError, ValueError):
+        return float("inf")
+    return (datetime.now(timezone.utc) - fetched).total_seconds()
+
+
+TRAINED_VOXEL_SIZES_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "bioimage_voxel_sizes.yaml")
+_trained = {}
+
+
+def trained_at(model) -> Optional[dict]:
+    """What ``bioimage_voxel_sizes.yaml`` says the model (an entry, or its
+    nickname) was trained at: {"voxel_size" (absent when trained across
+    resolutions), "trained_on", "confidence", "source", "note"?}, or None."""
+    if not _trained:
+        import yaml
+
+        with open(TRAINED_VOXEL_SIZES_FILE) as f:
+            _trained.update(yaml.safe_load(f) or {})
+    keys = [model] if isinstance(model, str) else [model.get("nickname"), model.get("key")]
+    for key in keys:
+        if key in _trained:
+            return dict(_trained[key])
+    return None
+
+
+def _annotated(document: dict) -> dict:
+    """``document`` with each model's ``trained`` row: read at each call, not
+    cached, so a corrected table needs no refetch."""
+    return {**document, "models": [{**m, "trained": trained_at(m)} for m in document.get("models", [])]}
+
+
 def list_bioimage_models() -> dict:
-    """The zoo's models, from the cache when there is a current one.
+    """The zoo's models, from the cache when there is a current one, with
+    ``stale`` saying whether it is older than STALE_AFTER_S.
 
     A cache in an older format is fetched again; when that fails it is
     still read, as a list that is older is better than none.
     """
     cached = _read_cache()
     if cached and cached.get("format") == CACHE_FORMAT:
-        return cached
+        return _annotated({**cached, "stale": _age_s(cached) > STALE_AFTER_S})
     try:
-        return _fetch_models()
+        return _annotated(_fetch_models())
     except ZooIndexError:
         if cached:
-            return cached
+            return _annotated(cached)
         raise
 
 
 def refresh_bioimage_models() -> dict:
     """Fetch the zoo's index again, and cache it."""
-    return _fetch_models()
+    return _annotated(_fetch_models())
 
 
 def find_bioimage_model(key: str) -> Optional[dict]:

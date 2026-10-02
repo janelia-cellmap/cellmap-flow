@@ -307,6 +307,15 @@ def test_offline_only_a_zoo_shaped_name_is_taken_on_trust(online):
     assert online.asked == []
 
 
+def test_a_zoo_model_gets_the_voxel_size_it_was_trained_at_and_says_where_from(online):
+    resolved = resolve("organized-badger", online=False)
+    assert resolved.entry()["voxel_size"] == [100, 80, 80] and resolved.needs == []
+    assert any("Platynereis" in note and "zenodo" in note for note in resolved.notes)
+    assert any("downsampled" in note for note in resolved.notes)
+    # One given wins.
+    assert resolve("organized-badger", voxel_size=8, online=False).entry()["voxel_size"] == [8, 8, 8]
+
+
 # --- what is given -----------------------------------------------------------------------------
 
 def test_a_name_and_voxel_size_are_given_as_asked(tmp_path):

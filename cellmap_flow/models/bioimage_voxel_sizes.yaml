@@ -1,0 +1,144 @@
+# The voxel size (nm, z y x) each BioImage Model Zoo EM model was trained at,
+# by nickname. No zoo model says it in a machine-readable way (October 2026:
+# none of the 523 space axes in the zoo carries a unit, and the dataset
+# artifacts record no resolution), so it was looked up by hand: in the
+# model's documentation, the dataset it names, and that dataset's paper or
+# challenge page, checking whether the data was downsampled for training.
+#
+# voxel_size: what to run it at; for a 2D model, the z of the data it was
+#   trained on. Absent when it was trained across several resolutions.
+# trained_on: the training data.
+# confidence: high (the model's docs or its dataset's bioimage.io page say
+#   it), medium (the dataset's paper or challenge page; which dataset is
+#   certain), low (inferred).
+# source: where the number comes from.
+# note: what else to know before running it.
+
+# BiaPy, 2D mitochondria on Lucchi++ (EPFL hippocampus FIB-SEM)
+poisonous-spider: &lucchi
+  voxel_size: [5, 5, 5]
+  trained_on: Lucchi++ (EPFL CA1 hippocampus FIB-SEM)
+  confidence: high
+  source: "https://bioimage.io/#/artifacts/sublime-pizza: \"Each voxel has an approximate resolution of 5x5x5nm.\""
+  note: Trained with zoom augmentation of 0.8-1.2, so about 20% off in scale is tolerated.
+jolly-duck: *lucchi
+demanding-dromedary: *lucchi
+gleeful-skunk: *lucchi
+rebellious-mouse: *lucchi
+zealous-spider: *lucchi
+sensible-cat: *lucchi
+fearless-deer: *lucchi
+good-microbe: *lucchi
+territorial-cricket: *lucchi
+
+# BiaPy, 3D
+good-butterfly: &biapy_mitoem
+  voxel_size: [30, 8, 8]
+  trained_on: MitoEM (human and rat cortex, multi-beam SEM)
+  confidence: medium
+  source: "https://mitoem.grand-challenge.org: \"1000x4096x4096 in voxels at 30x8x8 nm resolution\""
+  note: Never pools in z; give it anisotropic data like it was trained on.
+conscientious-dromedary: *biapy_mitoem
+zealous-snail: &biapy_cremi
+  voxel_size: [40, 4, 4]
+  trained_on: CREMI (adult Drosophila brain ssTEM)
+  confidence: medium
+  source: "https://cremi.org: (5 um)^3 volumes of 1250 x 1250 x 125 px"
+  note: Never pools in z; give it anisotropic data like it was trained on.
+exuberant-parrot: *biapy_cremi
+willing-whale: *biapy_cremi
+loving-monkey:
+  voxel_size: [30, 6, 6]
+  trained_on: SNEMI3D (mouse cortex ATUM-SEM)
+  confidence: medium
+  source: "SNEMI3D is 6x6x30 nm (secondary sources; the challenge page says only that z is anisotropic)"
+  note: Never pools in z; give it anisotropic data like it was trained on.
+
+# ilastik / torch-em
+impartial-shrimp:
+  voxel_size: [40, 4, 4]
+  trained_on: CREMI (adult Drosophila brain ssTEM)
+  confidence: medium
+  source: "https://cremi.org/data: the volumes' resolution attribute, 40,4,4 (z,y,x nm); torch-em loads them unresampled"
+kind-seashell:
+  voxel_size: [30, 8, 8]
+  trained_on: MitoEM (human and rat cortex, multi-beam SEM)
+  confidence: medium
+  source: "https://mitoem.grand-challenge.org: \"1000x4096x4096 in voxels at 30x8x8 nm resolution\"; torch-em loads it unresampled"
+organized-badger:
+  voxel_size: [100, 80, 80]
+  trained_on: Platynereis SBEM, nuclei blocks (Vergara et al. 2021)
+  confidence: high
+  source: "https://zenodo.org/records/3675220: \"nuclei: 12 training blocks @ resolution 80x80x100 nm\""
+  note: Trained on data downsampled from the raw 10x10x25 nm volume; run it at 80x80x100 nm, not the full resolution.
+willing-hedgehog:
+  voxel_size: [25, 20, 20]
+  trained_on: Platynereis SBEM, cell membrane blocks (Vergara et al. 2021)
+  confidence: high
+  source: "https://zenodo.org/records/3675220: \"cell membranes: 9 training blocks @ resolution 20x20x25 nm\""
+  note: Trained on data downsampled 2x in xy from the raw 10x10x25 nm volume.
+shivering-raccoon:
+  voxel_size: [50, 4.6, 4.6]
+  trained_on: Drosophila larval VNC ssTEM (Gerhard et al. 2013)
+  confidence: medium
+  source: "https://github.com/unidesigner/groundtruth-drosophila-vnc: \"resolution of 4.6 x 4.6 nm/pixel and section thickness of 45-50 nm\""
+
+# ilastik Shallow2Deep enhancers: their input is a pixel classifier's
+# probabilities, not raw EM.
+hiding-blowfish: &enhancer_mitoem
+  voxel_size: [30, 8, 8]
+  trained_on: MitoEM (human and rat cortex), through a random forest's predictions
+  confidence: medium
+  source: "https://mitoem.grand-challenge.org: \"at 30x8x8 nm resolution\""
+  note: Expects an ilastik pixel classifier's probability map as input, not raw EM; on raw EM its output means little.
+dazzling-crab: *enhancer_mitoem
+independent-shrimp: *enhancer_mitoem
+determined-chipmunk:
+  trained_on: "Several EM boundary datasets, not listed (its docs say \"Source: TODO\")"
+  confidence: low
+  source: "https://bioimage.io/#/artifacts/determined-chipmunk: \"trained on several EM datasets for boundary prediction\""
+  note: Trained across resolutions, probably about 4-20 nm in xy. Expects an ilastik pixel classifier's probability map as input, not raw EM.
+amiable-crocodile:
+  trained_on: Platynereis EM, mmwc, mmwc downsampled 2.7x, CREMI and CREMI downsampled 3.7x
+  confidence: high
+  source: "https://bioimage.io/#/artifacts/amiable-crocodile (doc.md) lists the datasets"
+  note: Trained across resolutions, about 4-20 nm in xy. Expects an ilastik pixel classifier's probability map as input, not raw EM.
+
+# Others
+creative-panda:
+  voxel_size: [50, 4, 4]
+  trained_on: ISBI 2012 challenge (Drosophila larval VNC ssTEM)
+  confidence: medium
+  source: "https://imagej.net/events/isbi-2012-segmentation-challenge: \"a resolution of 4x4x50 nm/pixel\""
+  note: Its description's test pixel size (0.0004, no unit) is wrong; the ISBI data is 4 nm.
+naked-microbe:
+  voxel_size: [1.56, 1.56, 1.56]
+  trained_on: FRU-Net small extracellular vesicle TEM (Gomez-de-Mariscal et al. 2019)
+  confidence: high
+  source: "https://bioimage.io/#/artifacts/naked-microbe (preprocessing.txt): \"required pixel size 1.566 nm\"; the paper: \"Every input image is rescaled to a pixel size of 1.56 nm\""
+  note: Negative-stain TEM of vesicles, every training image rescaled to 1.56 nm.
+joyful-deer:
+  voxel_size: [5, 5, 5]
+  trained_on: FIB-SEM of a HeLa cell (CebraEM's Hela-1), made isotropic
+  confidence: low
+  source: "https://bioimage.io/#/artifacts/joyful-deer (CebraNET_README.md): \"Use isotropic data! ... 10 nm is well suited for larger organelles such as mitochondria. A resolution of 5 nm usually yields high level of detail to reconstruct the ER\""
+  note: Wants isotropic data; 5 nm for ER and fine membranes, 10 nm for mitochondria.
+stupendous-sheep:
+  voxel_size: [15, 15, 15]
+  trained_on: CEM-MitoLab (about 22,000 2D EM images from many labs)
+  confidence: medium
+  source: "https://pmc.ncbi.nlm.nih.gov/articles/PMC9883049: \"resampled the other volumes to have 10-25 nm resolutions ... in line with the most common resolutions in the training dataset\""
+  note: A generalist trained on about 6-25 nm pixels; 15 nm is the middle of that range, not one training size. Downsample finer data.
+wild-rhino: &sem_n2v
+  trained_on: SEM crops from Buchholz et al. 2020 (no pixel size published)
+  confidence: low
+  source: "https://bioimage.io/#/artifacts/wild-rhino: \"Cropped images from a SEM dataset from T.-O. Buchholz et al\""
+  note: A denoiser, so the scale matters much less than for segmentation; run it at the data's own full resolution.
+humorous-fox: *sem_n2v
+greedy-whale: &microsam
+  trained_on: micro-SAM EM Organelles v2 (MitoEM 30x8x8 nm, CEM-MitoLab about 5-25 nm, Platynereis nuclei 100x80x80 nm)
+  confidence: medium
+  source: "https://github.com/computational-cell-analytics/micro-sam/blob/master/doc/datasets/em_organelles_v2.md"
+  note: A Segment Anything model that needs prompts, which cellmap-flow cannot give, so it is refused when started.
+noisy-ox: *microsam
+humorous-crab: *microsam

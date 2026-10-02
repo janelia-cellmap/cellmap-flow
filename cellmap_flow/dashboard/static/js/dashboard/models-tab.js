@@ -131,7 +131,8 @@ export function initModelsTab({ onModelsSubmitted } = {}) {
   const zooRunning = new Map((pageData().default_bioimage_models || []).map((m) => [m.id, m.voxel_size]));
   let zooModelsLoaded = false;
   const ZOO_VOXEL_TITLE =
-    "Voxel size in nm: z,y,x or one number. Blank: the model's own, when its description declares one.";
+    "Voxel size in nm, z,y,x or one number: the scale the model reads the data at. Filled in with what it "
+    + "was trained at when cellmap-flow knows it; blank, the model's own if its description declares one.";
 
   function zooTag(text, title) {
     const tag = document.createElement("span");
@@ -165,6 +166,11 @@ export function initModelsTab({ onModelsSubmitted } = {}) {
     div.append(input, label);
 
     if (model.dims) div.append(zooTag(model.dims.toUpperCase()));
+    // What it was trained at, from cellmap-flow's own table: no zoo model
+    // says it in its description.
+    const trained = model.trained || null;
+    const trainedNm = trained && trained.voxel_size ? trained.voxel_size.join("\u00d7") + " nm" : "";
+    if (trainedNm) div.append(zooTag(trainedNm, "Trained at (z\u00d7y\u00d7x) on " + trained.trained_on));
     model.weight_formats.forEach((format) => div.append(zooTag(format, "Weight format")));
     if (/^https?:\/\//.test(model.url || "")) {
       const link = document.createElement("a");
@@ -196,13 +202,23 @@ export function initModelsTab({ onModelsSubmitted } = {}) {
     voxel.id = input.id + "_voxel";
     voxel.placeholder = "from model";
     voxel.title = ZOO_VOXEL_TITLE;
+    if (voxelSize === undefined && trained && trained.voxel_size) voxelSize = trained.voxel_size;
     voxel.value = Array.isArray(voxelSize) ? voxelSize.join(",") : (voxelSize || "");
     voxelRow.append(voxelLabel, voxel);
-    voxelRow.style.display = input.checked ? "" : "none";
-    input.addEventListener("change", () => {
-      voxelRow.style.display = input.checked ? "" : "none";
-    });
-    div.append(voxelRow);
+    const shown = [voxelRow];
+    if (trained) {
+      const hint = document.createElement("div");
+      hint.className = "zoo-trained";
+      hint.textContent = (trainedNm ? "Trained at " + trainedNm + " (z,y,x) on " : "Trained on ")
+        + trained.trained_on + "." + (trained.note ? " " + trained.note : "")
+        + (trainedNm ? "" : " Enter the voxel size of the data to run it on.");
+      hint.title = trained.confidence + " confidence: " + trained.source;
+      shown.push(hint);
+    }
+    const showTicked = () => shown.forEach((el) => { el.style.display = input.checked ? "" : "none"; });
+    showTicked();
+    input.addEventListener("change", showTicked);
+    div.append(...shown);
     return div;
   }
 
@@ -264,6 +280,18 @@ export function initModelsTab({ onModelsSubmitted } = {}) {
     filterZooModels();
   }
 
+  // The zoo changes under the page: a list cached over an hour ago comes
+  // back "stale" and is fetched again behind it, and an open page fetches it
+  // again every hour. Quietly: a failure leaves the list shown as it was.
+  const ZOO_REFRESH_MS = 60 * 60 * 1000;
+  let zooRefreshTimer = null;
+
+  function refreshZooQuietly() {
+    postJSON("/api/bioimage-models/refresh")
+      .then((data) => { if (!data.error) renderZooModels(data); })
+      .catch(() => {});
+  }
+
   function loadZooModels(refresh) {
     const spinner = document.getElementById("zooLoadingSpinner");
     spinner.classList.remove("d-none");
@@ -271,6 +299,8 @@ export function initModelsTab({ onModelsSubmitted } = {}) {
       .then((data) => {
         renderZooModels(data);
         zooModelsLoaded = true;
+        if (data.stale) refreshZooQuietly();
+        if (!zooRefreshTimer) zooRefreshTimer = setInterval(refreshZooQuietly, ZOO_REFRESH_MS);
       })
       .catch((err) => {
         // The routes answer a failed fetch of the zoo's index with

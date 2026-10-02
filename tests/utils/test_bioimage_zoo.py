@@ -113,6 +113,18 @@ def test_the_list_is_cached_until_refreshed_and_a_failed_fetch_keeps_it(zoo):
     assert len(catalog.list_bioimage_models()["models"]) == 1
 
 
+def test_a_list_cached_over_an_hour_ago_says_it_is_stale_so_the_page_fetches_it_again(zoo):
+    catalog.list_bioimage_models()
+    assert catalog.list_bioimage_models()["stale"] is False
+    with open(catalog.BIOIMAGE_CACHE_FILE) as f:
+        document = json.load(f)
+    document["fetched"] = "2026-01-01T00:00:00+00:00"
+    with open(catalog.BIOIMAGE_CACHE_FILE, "w") as f:
+        json.dump(document, f)
+    assert catalog.list_bioimage_models()["stale"] is True and zoo.fetches == 1
+    assert "stale" not in catalog.refresh_bioimage_models() and catalog.list_bioimage_models()["stale"] is False
+
+
 def test_a_download_that_fails_says_where_from(zoo, monkeypatch):
     def unreachable(request, timeout):
         assert timeout == catalog.FETCH_TIMEOUT_S
@@ -218,6 +230,7 @@ def test_submit_serves_a_ticked_zoo_model_from_the_bioimageio_environment(submit
 
 def test_a_zoo_model_without_a_voxel_size_its_class_needs_refuses_the_submit(submit, monkeypatch):
     monkeypatch.setattr(catalog, "bioimage_entry", functools.partial(catalog.bioimage_entry, cls=_Before))
+    monkeypatch.setattr(catalog, "trained_at", lambda model: None)
     monkeypatch.setattr(catalog, "declared_voxel_size", lambda entry: [8.0, 8.0, 8.0])
     running = _Job("mito")
     get_session().jobs = [running]
@@ -267,6 +280,7 @@ def test_the_declared_voxel_size_is_read_from_the_models_description(monkeypatch
 def test_a_blank_voxel_size_for_a_model_that_declares_none_refuses_the_submit(submit, monkeypatch):
     """Its server would refuse it after its job started, where the page showed
     nothing: Submit says so instead."""
+    monkeypatch.setattr(catalog, "trained_at", lambda model: None)
     monkeypatch.setattr(catalog, "declared_voxel_size", lambda entry: None)
     answer = submit({"id": "kind-seashell"})
     assert answer.status_code == 400 and "enter one (nm) in its row" in answer.get_json()["error"]
@@ -278,6 +292,7 @@ def test_a_blank_voxel_size_for_a_model_that_declares_none_refuses_the_submit(su
 def test_a_blank_voxel_size_refuses_the_submit_when_the_description_cannot_be_read(submit, monkeypatch):
     """Its server could not read it either. This let impartial-shrimp through
     from a cache written before entries carried their description's link."""
+    monkeypatch.setattr(catalog, "trained_at", lambda model: None)
     def unreadable(entry):
         raise catalog.ZooIndexError("offline")
 
@@ -285,6 +300,35 @@ def test_a_blank_voxel_size_refuses_the_submit_when_the_description_cannot_be_re
     answer = submit({"id": "kind-seashell"})
     assert answer.status_code == 400 and "offline" in answer.get_json()["error"] and submit.commands == []
     assert submit({"id": "kind-seashell", "voxel_size": "8"}).status_code == 200 and len(submit.commands) == 1
+
+
+def test_a_blank_voxel_size_is_the_one_the_model_was_trained_at_when_cellmap_flow_knows_it(submit):
+    assert submit({"id": "kind-seashell"}).status_code == 200
+    (command,) = submit.commands
+    assert _served_entry(command)[1]["voxel_size"] == [30, 8, 8]
+
+
+def test_the_listed_models_say_what_they_were_trained_at(zoo):
+    models = {m["key"]: m for m in catalog.list_bioimage_models()["models"]}
+    assert models["kind-seashell"]["trained"]["voxel_size"] == [30, 8, 8]
+    assert "MitoEM" in models["kind-seashell"]["trained"]["trained_on"]
+    assert models["philosophical-panda"]["trained"] is None
+
+
+def test_every_row_of_the_trained_at_table_says_where_its_number_comes_from():
+    import yaml
+
+    with open(catalog.TRAINED_VOXEL_SIZES_FILE) as f:
+        table = yaml.safe_load(f)
+    assert len(table) >= 26
+    for nickname, row in table.items():
+        assert re.fullmatch(r"[a-z]+-[a-z]+", nickname), nickname
+        assert row["trained_on"] and row["source"] and row["confidence"] in ("high", "medium", "low"), nickname
+        assert set(row) <= {"voxel_size", "trained_on", "confidence", "source", "note"}, nickname
+        if "voxel_size" in row:
+            assert len(row["voxel_size"]) == 3 and all(v > 0 for v in row["voxel_size"]), nickname
+        else:
+            assert row.get("note"), f"{nickname}: no voxel size, so its note must say why"
 
 
 def test_a_cache_in_an_older_format_is_fetched_again_and_still_read_when_that_fails(zoo):

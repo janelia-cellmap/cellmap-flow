@@ -47,7 +47,7 @@ stat, a file name, a regex, or (only when ``online``) one request.
 
 6. A BioImage Model Zoo id or nickname (``affable-shark``,
    ``10.5281/zenodo.5764892``): ``bioimage``. Online, it is looked up in
-   the zoo's index; offline, a nickname- or DOI-shaped one is taken to be
+   the zoo's model list; offline, a nickname- or DOI-shaped one is taken to be
    one, with a note.
 
 Anything else is a ValueError that says what was tried.
@@ -59,25 +59,17 @@ and ``Resolved.entry()`` is a plain dict.
 """
 
 import inspect
-import json
 import os
 import re
-import time
 import zipfile
 from dataclasses import asdict, dataclass, field
 from types import SimpleNamespace
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import parse_qs, urlparse
 
-# The zoo's index of every published resource; its models are matched by
-# id, nickname and concept DOI.
-ZOO_INDEX_URL = "https://uk1s3.embassy.ebi.ac.uk/public-datasets/bioimage.io/collection.json"
-# Seconds to wait for the zoo's index or the Hub before treating them as
+# Seconds to wait for the Hub before treating them as
 # unreachable: a dashboard request waits this long at most.
 ONLINE_TIMEOUT = 20
-# How long the zoo's index is kept: models are added to the zoo while a
-# dashboard runs for days, and the index is 300 kB.
-ZOO_INDEX_MAX_AGE = 3600
 
 # What a cellmap-models export holds; the cellmap and huggingface types serve
 # the TorchScript.
@@ -403,8 +395,18 @@ def bioimage_params(model: str, voxel_size=None, cls=None) -> Tuple[Dict[str, An
 
 
 def _bioimage(model: str, name: str, how: str, request: _Request, notes=()) -> Resolved:
-    params, needs = bioimage_params(model, request.voxel_size)
+    from cellmap_flow.models.bioimage_catalog import trained_at
+
     notes = list(notes)
+    voxel_size = request.voxel_size
+    trained = trained_at(model) or trained_at(name) or {}
+    if voxel_size is None and trained.get("voxel_size"):
+        voxel_size = trained["voxel_size"]
+        notes.append(f"voxel_size {voxel_size} is what it was trained at, on {trained['trained_on']} "
+                     f"({trained['confidence']} confidence; {trained['source']})")
+    if trained.get("note"):
+        notes.append(trained["note"])
+    params, needs = bioimage_params(model, voxel_size)
     if request.voxel_size is not None and "voxel_size" not in params:
         notes.append("voxel_size is not used: this bioimage model type does not take one")
     return _resolved("bioimage", params, name, how, request, needs=needs, notes=notes, takes_voxel_size=True)
@@ -710,23 +712,23 @@ def _huggingface(repo, revision, how, request, notes=()) -> Resolved:
 
 # --- 6. a zoo id or nickname -------------------------------------------------------------------
 
-_zoo_index = {"entries": None, "read_at": 0.0}
-
 
 def _zoo_entries() -> List[dict]:
-    """The zoo's models, from its index; kept for ZOO_INDEX_MAX_AGE seconds.
+    """The zoo's models, as the Models tab lists them (bioimage.io's server,
+    else the legacy index; cached), fetched again when that list is stale.
 
     Raises:
-        Exception: the index cannot be read.
+        Exception: the list cannot be read.
     """
-    if _zoo_index["entries"] is None or time.monotonic() - _zoo_index["read_at"] > ZOO_INDEX_MAX_AGE:
-        import urllib.request
+    from cellmap_flow.models import bioimage_catalog
 
-        with urllib.request.urlopen(ZOO_INDEX_URL, timeout=ONLINE_TIMEOUT) as response:
-            index = json.load(response)
-        _zoo_index["entries"] = [e for e in index.get("collection", []) if e.get("type") == "model"]
-        _zoo_index["read_at"] = time.monotonic()
-    return _zoo_index["entries"]
+    document = bioimage_catalog.list_bioimage_models()
+    if document.get("stale"):
+        try:
+            document = bioimage_catalog.refresh_bioimage_models()
+        except bioimage_catalog.ZooIndexError:
+            pass  # the stale list it is
+    return document["models"]
 
 
 def _zoo_id(ref: str, request: _Request) -> Optional[Resolved]:
@@ -746,10 +748,10 @@ def _zoo_id(ref: str, request: _Request) -> Optional[Resolved]:
         if not shaped:
             return None
         return _bioimage(ref, _bioimage_name(ref), how, request,
-                         notes=[f"could not read the zoo's index to check it ({e}): taken to be a zoo model"])
+                         notes=[f"could not read the zoo's model list to check it ({e}): taken to be a zoo model"])
     wanted = ref.lower()
     for entry in entries:
-        if wanted in (str(entry.get(k, "")).lower() for k in ("id", "nickname", "concept_doi")):
+        if wanted in (str(entry.get(k) or "").lower() for k in ("id", "nickname", "key", "concept_doi")):
             name = entry.get("nickname") or _bioimage_name(str(entry.get("id") or ref))
             return _bioimage(ref, name, how, request)
     if shaped:

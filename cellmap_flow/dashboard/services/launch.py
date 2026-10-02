@@ -149,6 +149,10 @@ def _bioimage_params(selections):
         found = bioimage_catalog.find_bioimage_model(selection["id"])
         key = found["key"] if found else selection["id"]
         voxel_size = selection.get("voxel_size")
+        trained = bioimage_catalog.trained_at(found or key) or {}
+        if voxel_size is None and trained.get("voxel_size"):
+            voxel_size = trained["voxel_size"]
+            logger.info(f"{key}: at {voxel_size} nm, the voxel size it was trained at ({trained['trained_on']})")
         if voxel_size is None and found is not None and bioimage_job_name(key) not in _running_names():
             # Its server would refuse a model with no voxel size after its job
             # started, where nothing on the page shows it: refuse here.

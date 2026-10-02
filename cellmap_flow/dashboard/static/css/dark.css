@@ -581,6 +581,13 @@ textarea.form-control[readonly] {
   color: var(--text-secondary);
 }
 
+/* Where the filled-in voxel size comes from; its source is the tooltip. */
+.zoo-trained {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
 .zoo-voxel {
   width: 9rem;
 }
