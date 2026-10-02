@@ -290,14 +290,21 @@ def test_a_label_change_re_reads_only_the_paint_layer_under_a_new_url(dashboard,
     served()
     with viewer.txn() as s:
         s.layers["other"] = neuroglancer.ImageLayer(source="zarr://http://x/raw")
-        s.layers["annotation_vol-1"] = neuroglancer.SegmentationLayer(
-            source={"url": "s3+http://m:9000/annotations/vol-1.zarr/annotation"})
+        # What the user set in the Draw tab, as the browser syncs it back.
+        s.layers["annotation_vol-1"] = neuroglancer.viewer_state.make_layer({
+            "type": "segmentation", "tab": "Draw", "paintValue": "7", "brushSize": 12,
+            "source": {"url": "s3+http://m:9000/annotations/vol-1.zarr/annotation",
+                       "subsources": {"default": {"writingEnabled": True}}}})
 
     first = dashboard.post(BACKGROUND, json={}).get_json()
     assert first["reload_viewer"] and first["layer_refreshed"]
     layers = viewer.state.layers
-    assert layers["annotation_vol-1"].layer.source[0].url == "s3+http://m:09000/annotations/vol-1.zarr/annotation"
-    assert layers["annotation_vol-1"].layer.tab == "Draw" and layers["other"].layer.source[0].url == "zarr://http://x/raw"
+    state = layers["annotation_vol-1"].layer.to_json()
+    assert state["source"]["url"] == "s3+http://m:09000/annotations/vol-1.zarr/annotation"
+    # Only the URL changed: rebuilding the layer reset the paint value and brush size.
+    assert (state["paintValue"], state["brushSize"], state["tab"]) == ("7", 12, "Draw")
+    assert state["source"]["subsources"] == {"default": {"writingEnabled": True}}
+    assert [layer.name for layer in layers] == ["other", "annotation_vol-1"]
 
     dashboard.post(SPLIT, json={})  # nothing to relabel: the URL stays
-    assert layers["annotation_vol-1"].layer.source[0].url.endswith(":09000/annotations/vol-1.zarr/annotation")
+    assert viewer.state.layers["annotation_vol-1"].layer.to_json()["source"]["url"].endswith(":09000/annotations/vol-1.zarr/annotation")
