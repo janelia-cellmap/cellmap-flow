@@ -56,7 +56,8 @@ Explanation
 -----------
 
 - **configure_logging()**: the timestamped INFO lines. The ``cellmap_flow`` commands set up logging themselves; a script that skips this prints only warnings and errors.
-- **FlyModelConfig**: the model, its checkpoint, and its input and output voxel sizes.
+- **FlyModelConfig**: a fly_organelles checkpoint; its channels, voxel sizes and tile are read from the
+  checkpoint's folder when not given (see :ref:`fly`).
 - **process_chain().set(PipelineSpec(...))**: the input normalization (``input_norm``) and postprocessing (``postprocess``) chains. Each step is ``{"name": <class name>, **its arguments}``, as in a YAML's ``json_data``; ``set()`` builds them, skipping a name it does not know with a warning. Left unset, the model sees the raw values.
 - **queue**: the LSF queue the inference servers are submitted to.
 - **charge_group**: the accounting group the GPU time is billed to.

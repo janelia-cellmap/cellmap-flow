@@ -137,7 +137,9 @@ Available Model Types
      - ``run_name`` (required), ``iteration`` (required)
    * - ``fly``
      - FlyModelConfig
-     - ``checkpoint`` (required), ``classes`` (required), ``resolution`` (required)
+     - ``checkpoint`` (required); ``classes``, ``resolution``, ``input_size`` and
+       ``output_size`` when the run's folder does not say them; ``sigmoid``.
+       See :ref:`fly`.
    * - ``bioimage``
      - BioModelConfig
      - ``model_name`` or ``model_path`` (required), ``voxel_size`` (required)
@@ -231,6 +233,102 @@ does not install it is refused when the job is submitted.
 ``cellmap_flow infer <type> --env <env>`` and the dashboard's model form take
 it too. The ``cellpose`` type runs in ``cellpose4`` without one (see
 :ref:`cellpose`).
+
+.. _fly:
+
+fly_organelles checkpoints
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+``type: fly`` serves a network fly_organelles trained, from one checkpoint
+file:
+
+- a training checkpoint (``model_checkpoint_<iteration>``), loaded into
+  fly_organelles' ``StandardUnet``; its feature maps, levels and kernel sizes
+  are read from the weights;
+- a TorchScript file (``.ts``);
+- a whole pickled model (``model.pt``), unpickled only when
+  ``CELLMAP_FLOW_ALLOW_PICKLE=1`` is set.
+
+A training checkpoint or a ``model.pt`` runs in the ``fly`` pixi environment
+unless the entry gives an ``env``; a ``.ts`` runs in any. A folder that
+cellmap_models exported (``metadata.json`` and ``model.ts``) is served as
+exported by ``type: cellmap``, ``folder_path: <the folder>``, and refused here.
+The ``model.pt`` in such a folder can be served here, at a larger
+``input_size`` than the one it was exported at.
+
+What the entry does not give is read from the checkpoint's folder. A
+fly_organelles training run is enough as it is:
+
+.. code-block:: yaml
+
+    models:
+      mito_distance_16:
+        type: fly
+        checkpoint: /groups/cellmap/cellmap/zouinkhim/salevary/train/v2/distance/mito_16_all/model_checkpoint_20000
+
+reads the channel names from the run's ``train.py`` and the voxel sizes and
+tile from its training snapshots. Each value comes from the first of these
+files that has it; a key the entry gives always wins:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 22 78
+
+   * - File
+     - What is read
+   * - ``metadata.json``
+     - A cellmap_models export's: ``channels_names``, the voxel sizes,
+       ``input_shape`` and ``output_shape``.
+   * - ``config.yaml``
+     - fly_organelles' run configuration: ``run.labels``, ``run.voxel_size``,
+       ``checkpoint.input_shape`` and ``output_shape``.
+   * - ``snapshots/``
+     - The newest training snapshot's ``raw`` and ``output`` arrays: input and
+       output size, their voxel sizes, and how many channels the network
+       outputs.
+   * - ``train.py``
+     - Its top-level ``labels = [...]`` and ``voxel_size = ...``, when they are
+       written out as literals. The script is parsed, never run.
+
+Labels are taken as channel names only when the snapshots show one channel
+per label; an affinity or LSD run's network outputs several per label, and
+its entry has to name them. The voxel sizes are read only when the entry
+gives neither, and the input and output size only when it gives neither: an
+output size belongs to the input size it came with.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 25 20 55
+
+   * - Parameter
+     - Default
+     - Meaning
+   * - ``checkpoint`` (``checkpoint_path``)
+     - (required)
+     - The checkpoint file.
+   * - ``classes`` (``channels``)
+     - read from the folder
+     - The name of each output channel, one per channel. An error when
+       neither the entry nor the folder gives them.
+   * - ``resolution`` (``input_voxel_size``), ``output_resolution``
+       (``output_voxel_size``)
+     - read from the folder
+     - nm per voxel, one number or one per axis; fractions are kept. One
+       stands for the other, as fly_organelles trains at one voxel size. An
+       error when neither the entry nor the folder gives one.
+   * - ``input_size``, ``output_size``
+     - read from the folder, else 178 and computed
+     - Voxels a side of a tile in and out. Without either, 178 goes in
+       (fly_organelles' training tile) and what comes out is computed from the
+       network. ``input_size`` alone is enough; ``output_size`` alone is an
+       error. Larger tiles waste less context: a StandardUnet takes
+       178 + 16k (194, 338, ...).
+   * - ``sigmoid``
+     - ``true``
+     - Pass the output through a sigmoid, which is added unless the network
+       ends in one already (a cellmap_models export does). fly_organelles
+       trains on logits, so a training checkpoint gets one. ``false`` serves
+       the network's output as it is.
 
 .. _cellpose:
 
