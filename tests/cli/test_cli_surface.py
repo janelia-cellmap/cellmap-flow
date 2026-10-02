@@ -181,14 +181,17 @@ MODEL_OPTIONS = {
     ],
     'fly': [
         ('checkpoint_path', ('-c', '--checkpoint-path'), (), 'text', True, None, False, 'Parameter: checkpoint_path'),
-        ('channels', ('--channels',), (), 'text', True, None, False, 'Parameter: channels [comma-separated values]'),
-        ('input_voxel_size', ('-i', '--input-voxel-size'), (), 'text', True, None, False, 'Parameter: input_voxel_size'),
-        ('output_voxel_size', ('-o', '--output-voxel-size'), (), 'text', True, None, False,
-         'Parameter: output_voxel_size'),
+        ('channels', ('--channels',), (), 'text', False, None, False,
+         'Parameter: channels (optional) [comma-separated values]'),
+        ('input_voxel_size', ('-i', '--input-voxel-size'), (), 'text', False, None, False,
+         'Parameter: input_voxel_size (optional)'),
+        ('output_voxel_size', ('-o', '--output-voxel-size'), (), 'text', False, None, False,
+         'Parameter: output_voxel_size (optional)'),
         NAME,
         ('input_size', ('--input-size',), (), 'text', False, None, False, 'Parameter: input_size (optional)'),
         ('output_size', ('--output-size',), (), 'text', False, None, False, 'Parameter: output_size (optional)'),
         SCALE,
+        ('sigmoid', ('--sigmoid',), (), 'boolean', False, True, False, 'Parameter: sigmoid (default: True)'),
     ],
     'bioimage': [
         ('model_name', ('-m', '--model-name'), (), 'text', True, None, False, 'Parameter: model_name'),
@@ -385,8 +388,8 @@ _LISTED = [
     ("finetune", "FinetuneModelConfig",
      "lora_adapter_path, base_model, name, scale, weights_path, input_voxel_size, output_voxel_size", ""),
     ("fly", "FlyModelConfig",
-     "checkpoint_path, channels, input_voxel_size, output_voxel_size, name, input_size, output_size, scale",
-     "checkpoint_path, channels, input_voxel_size, output_voxel_size"),
+     "checkpoint_path, channels, input_voxel_size, output_voxel_size, name, input_size, output_size, scale, sigmoid",
+     "checkpoint_path"),
     ("huggingface", "HuggingFaceModelConfig", "repo, revision, name, scale", "repo"),
     ("script", "ScriptModelConfig", "script_path, name, scale", "script_path"),
 ]
@@ -494,15 +497,15 @@ CONFIGS = {
         "fly --checkpoint-path /ckpt/model_checkpoint_1000 --channels mito,er --input-voxel-size 16,16,16"
         " --output-voxel-size 8,8,8 --name fly --input-size 100,100,100 --output-size 20,20,20 --scale s1",
     ),
-    # As the server CLI passes them: strings, and no sizes.
+    # As the server CLI passes them: strings, and no sizes, which are the
+    # training tile's and computed from the network when it is built.
     "fly_from_cli": (
         lambda: FlyModelConfig(checkpoint_path="/c.ts", channels="mito, er",
-                               input_voxel_size="8,8,8", output_voxel_size="8,8,8"),
+                               input_voxel_size="8,8,8", output_voxel_size="8,8,8", sigmoid="false"),
         {'type': 'fly', 'checkpoint_path': '/c.ts', 'channels': ['mito', 'er'],
-         'input_voxel_size': [8, 8, 8], 'output_voxel_size': [8, 8, 8],
-         'input_size': [178, 178, 178], 'output_size': [56, 56, 56]},
+         'input_voxel_size': [8, 8, 8], 'output_voxel_size': [8, 8, 8], 'sigmoid': False},
         "fly --checkpoint-path /c.ts --channels mito,er --input-voxel-size 8,8,8 --output-voxel-size 8,8,8"
-        " --input-size 178,178,178 --output-size 56,56,56",
+        " --sigmoid False",
     ),
     "bio": (
         lambda: BioModelConfig(model_name="affable-shark", voxel_size=(8, 8, 8),
@@ -650,13 +653,14 @@ MODEL_CONFIG_TYPES = {
     "FlyModelConfig": _type_info(
         "FlyModelConfig", "Fly Model",
         _param_info("checkpoint_path", "str", True, "file"),
-        _param_info("channels", "list", True, "textarea"),
-        _param_info("input_voxel_size", "tuple", True, "textarea"),
-        _param_info("output_voxel_size", "tuple", True, "textarea"),
+        _param_info("channels", "list", False, "textarea", None),
+        _param_info("input_voxel_size", "tuple", False, "textarea", None),
+        _param_info("output_voxel_size", "tuple", False, "textarea", None),
         _STR_NAME,
         _param_info("input_size", "string", False, "number", None),
         _param_info("output_size", "string", False, "number", None),
         _SCALE,
+        _param_info("sigmoid", "bool", False, "text", True),
     ),
     "HuggingFaceModelConfig": _type_info(
         "HuggingFaceModelConfig", "Hugging Face Model",
@@ -688,15 +692,14 @@ def test_the_model_form_is_offered_the_same_types(dashboard):
 @pytest.mark.parametrize(
     "class_name, params, status, expected",
     [
-        # Form tuples become floats (the CLI's become ints), and a list of
-        # strings is split on commas when it is not JSON.
+        # Form tuples become floats, a whole voxel size an int again, and a
+        # list of strings is split on commas when it is not JSON.
         ("FlyModelConfig",
          {"checkpoint_path": "/c.ts", "channels": "mito, er", "input_voxel_size": "16,16,16",
           "output_voxel_size": "[8, 8, 8]", "input_size": "", "name": "fly"},
          200,
          {"type": "fly", "checkpoint_path": "/c.ts", "channels": ["mito", "er"],
-          "input_voxel_size": [16.0, 16.0, 16.0], "output_voxel_size": [8, 8, 8], "name": "fly",
-          "input_size": [178, 178, 178], "output_size": [56, 56, 56]}),
+          "input_voxel_size": [16, 16, 16], "output_voxel_size": [8, 8, 8], "name": "fly"}),
         ("NoSuchModelConfig", {}, 400, "Unknown model config class: NoSuchModelConfig"),
         ("DaCapoModelConfig", {"run_name": "r", "iteration": ""}, 400, "Required parameter 'iteration' is missing"),
         ("DaCapoModelConfig", {"run_name": "r"}, 400, "Failed to instantiate DaCapoModelConfig: "),

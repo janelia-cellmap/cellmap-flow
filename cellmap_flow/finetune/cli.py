@@ -547,9 +547,10 @@ def model_config_from_args(args) -> ModelConfig:
             raise ValueError(
                 "For fly models, either --model-checkpoint or --model-script must be provided"
             )
-        # No flag gives its input and output sizes, so this is
-        # fly_organelles' StandardUnet (178 in, 56 out). The job manager
-        # sends a Fly model as --model-entry instead, sizes and all.
+        # No flag gives its input and output sizes, so they are what the
+        # checkpoint's folder says, else 178 in and what the network makes
+        # of it. The job manager sends a Fly model as --model-entry instead,
+        # sizes and all.
         return FlyModelConfig(
             checkpoint_path=args.model_checkpoint,
             channels=args.channels,

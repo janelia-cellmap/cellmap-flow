@@ -137,15 +137,12 @@ def test_a_shape_mismatch_names_the_models_type():
         _fly_whose_model_outputs(10, name="mito").config
 
 
-@pytest.mark.parametrize("given, missing", [
-    pytest.param({"input_size": (100, 100, 100)}, "output_size", id="input-size-only"),
-    pytest.param({"output_size": (20, 20, 20)}, "input_size", id="output-size-only"),
-])
-def test_a_fly_model_given_one_size_asks_for_the_other(given, missing):
-    """Both used to be replaced by the 178/56 default."""
-    with pytest.raises(ValueError, match=f"no {missing}"):
+def test_a_fly_model_given_an_output_size_asks_for_its_input_size():
+    """Both used to be replaced by the 178/56 default. An input size alone
+    is enough: its output size is computed (tests/utils/test_fly_model.py)."""
+    with pytest.raises(ValueError, match="no input_size"):
         FlyModelConfig(checkpoint_path="unused", channels=["mito"], input_voxel_size=(8, 8, 8),
-                       output_voxel_size=(8, 8, 8), **given)
+                       output_voxel_size=(8, 8, 8), output_size=(20, 20, 20))
 
 
 @pytest.mark.parametrize("out_channels, channels", [

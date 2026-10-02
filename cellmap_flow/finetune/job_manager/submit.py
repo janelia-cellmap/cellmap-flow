@@ -38,8 +38,8 @@ logger = logging.getLogger(__name__)
 # The --model-type values finetune_cli accepts, and the ones among them that
 # it takes as --model-entry (the model's to_dict()): cellmap and finetune
 # have no dedicated flags, and fly's flags (its checkpoint and voxel sizes)
-# leave out its input and output sizes, which the trainer then took to be
-# 178 and 56 whatever the model's were.
+# leave out its input and output sizes and its sigmoid, which the trainer
+# then took to be 178 and 56 whatever the model's were.
 TRAINABLE_MODEL_TYPES = frozenset({"fly", "dacapo", "huggingface", "script", "cellmap", "finetune"})
 MODEL_ENTRY_TYPES = frozenset({"cellmap", "finetune", "fly"})
 
