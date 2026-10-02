@@ -7,7 +7,9 @@ import json
 import shlex
 import sys
 import time
+import tomllib
 import types
+from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
@@ -165,6 +167,49 @@ def test_a_bioimage_model_declares_its_uint8_output(fake_frameworks, monkeypatch
     monkeypatch.setattr(bio, "load_input_information", lambda model: ("in", axes, [16] * 3, (slice(None),) * 5, False))
     monkeypatch.setattr(bio, "load_output_information", lambda model: (["out"], [axes], [16, 16, 16, 1], [16] * 3, 1))
     assert np.dtype(bio.output_dtype) == np.uint8 and tuple(bio.config.input_voxel_size) == (8, 8, 8)
+
+
+def test_a_3d_bioimage_models_shapes_come_from_its_test_tensors(fake_frameworks, monkeypatch):
+    """Like the zoo's 3D EM U-Nets (batch, channel, z, y, x). Reading the
+    input called a get_and_dims that did not exist, so no bioimage model built."""
+    def sample(member, channels):
+        sizes = {"batch": 1, "channel": channels, "z": 4, "y": 8, "x": 8}
+        data = SimpleNamespace(to_numpy=lambda: np.zeros(tuple(sizes.values()), np.float32))
+        return SimpleNamespace(shape={member: sizes}, members={member: SimpleNamespace(data=data)})
+
+    digest_spec = types.ModuleType("bioimageio.core.digest_spec")
+    digest_spec.get_test_input_sample = lambda model: sample("input0", 1)
+    digest_spec.get_test_output_sample = lambda model: sample("output0", 2)
+    monkeypatch.setitem(sys.modules, "bioimageio.core.digest_spec", digest_spec)
+    bio = BioModelConfig(model_name="conscientious-dromedary", voxel_size=(8, 8, 8))
+
+    assert bio.load_input_information(None) == (
+        "input0", ["b", "c", "z", "y", "x"], [4, 8, 8], (np.newaxis, np.newaxis, slice(None), slice(None), slice(None)),
+        False)
+    names, _, block_shape, spatial, channels = bio.load_output_information(None)
+    assert (names, block_shape, spatial, channels) == ("output0", [4, 8, 8, 2], [4, 8, 8], 2)
+
+
+@pytest.mark.parametrize("config, env", [
+    pytest.param(lambda: FlyModelConfig(checkpoint_path="/ckpt/model_checkpoint_1000", channels=["mito"],
+                                        input_voxel_size=(8, 8, 8), output_voxel_size=(8, 8, 8)),
+                 "fly", id="fly-raw-checkpoint"),
+    pytest.param(lambda: FlyModelConfig(checkpoint_path="/ckpt/model.pt", channels=["mito"],
+                                        input_voxel_size=(8, 8, 8), output_voxel_size=(8, 8, 8)),
+                 "fly", id="fly-eager-model-pt"),
+    pytest.param(lambda: FlyModelConfig(checkpoint_path="/ckpt/model.ts", channels=["mito"],
+                                        input_voxel_size=(8, 8, 8), output_voxel_size=(8, 8, 8)),
+                 None, id="fly-torchscript"),
+    pytest.param(lambda: BioModelConfig(model_name="affable-shark", voxel_size=(8, 8, 8)), "bioimageio", id="bio"),
+    # pixi.toml's dacapo environment does not import DaCapo yet.
+    pytest.param(lambda: DaCapoModelConfig(run_name="r", iteration=0), None, id="dacapo"),
+])
+def test_a_model_types_default_environment(config, env):
+    """The pixi environment a type's server runs in when its entry names none."""
+    assert getattr(config(), "default_env", None) == env
+    if env is not None:
+        pixi = tomllib.loads((Path(__file__).resolve().parents[2] / "pixi.toml").read_text())
+        assert env in pixi["environments"]
 
 
 @pytest.mark.parametrize("seconds_later, model_type, downloads", [

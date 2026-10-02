@@ -138,9 +138,9 @@ Available Model Types
    * - ``fly``
      - FlyModelConfig
      - ``checkpoint`` (required), ``classes`` (required), ``resolution`` (required)
-   * - ``bio``
+   * - ``bioimage``
      - BioModelConfig
-     - ``model_path`` (required)
+     - ``model_name`` or ``model_path`` (required), ``voxel_size`` (required)
    * - ``cellmap``
      - CellMapModelConfig
      - ``config_folder`` (required)
@@ -176,14 +176,50 @@ transformer models) can run in an environment of its own. Give its entry an
   as ``pixi run --frozen --manifest-path <pixi.toml> -e cellpose4 cellmap_flow serve ...``,
   and pixi installs the environment from the lockfile the first time. The
   manifest is the one in the checkout cellmap-flow is installed from; set
-  ``CELLMAP_FLOW_PIXI_MANIFEST`` to use another. cellmap-flow's ``pixi.toml``
-  has ``cellpose4`` (Cellpose 4, for Cellpose-SAM), ``dacapo`` and
-  ``bioimageio``; or
+  ``CELLMAP_FLOW_PIXI_MANIFEST`` to use another. The environments of
+  cellmap-flow's ``pixi.toml`` are listed below; or
 - the absolute path of a conda environment or virtualenv with cellmap-flow
   installed. The server runs as ``<path>/bin/python -P -m cellmap_flow.cli.main serve ...``.
 
 A value with a ``/`` in it, or starting with ``~``, is a path. An unknown name,
 or a path without ``bin/python``, is an error when the YAML is read.
+
+The environments of cellmap-flow's ``pixi.toml``. A model type with a default
+runs there when its entry gives no ``env``; an explicit ``env`` wins, and
+``env: current`` keeps it in the environment cellmap-flow runs in.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 15 55 30
+
+   * - Environment
+     - What it is for
+     - Default for
+   * - ``default``
+     - The dashboard, the catalog, Cellpose 3 and finetuning; what Fileglancer
+       deploys. ``test`` and ``dev`` add pytest and the linters to it.
+     - types without a default of their own, which run where cellmap-flow runs
+   * - ``fly``
+     - fly_organelles (``mzouink/fly-organelles`` at ``ab89c10``), whose
+       ``StandardUnet`` loads a raw training checkpoint and whose classes an
+       eager ``model.pt`` unpickles. Solved on its own.
+     - ``fly``, unless the checkpoint is TorchScript (``.ts``)
+   * - ``bioimageio``
+     - ``bioimageio.core`` 0.11 with its ONNX and PyTorch backends, for BioImage
+       Model Zoo models. ``example/bioimage_em.yaml`` runs one.
+     - ``bioimage``
+   * - ``cellpose4``
+     - Cellpose 4 (Cellpose-SAM), which needs a newer torch and numpy than
+       Cellpose 3. Solved on its own.
+     - none: give ``env: cellpose4``
+   * - ``dacapo``
+     - ``dacapo-ml``. Its lock does not import DaCapo yet (``dacapo-ml`` 0.3.0
+       with fibsem-tools 7, which dropped ``fibsem_tools.metadata``), so a
+       DaCapo model is served from a conda environment that has it.
+     - none
+   * - ``docs``
+     - Building these docs.
+     - none
 
 Only the model's inference server and its finetuning job run there. The
 dashboard reads the model's geometry from its running server rather than
