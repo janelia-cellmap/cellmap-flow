@@ -123,6 +123,9 @@ def normalise(raw: dict) -> dict:
         "weight_formats": _weight_formats(raw, tags),
         "license": raw.get("license"),
         "cover": covers[0] if covers and isinstance(covers[0], str) else None,
+        # The model's description, read for its declared voxel size
+        # (declared_voxel_size) without bioimageio.core.
+        "rdf_source": raw.get("rdf_source") if isinstance(raw.get("rdf_source"), str) else None,
         # A DOI-only entry has no page of its own on bioimage.io; its DOI
         # resolves to the Zenodo record.
         "url": f"https://doi.org/{key}" if _is_doi(key) else ZOO_PAGE_URL.format(key),
@@ -186,6 +189,45 @@ def find_bioimage_model(key: str) -> Optional[dict]:
         if key in (model["id"], model["nickname"], model["key"]):
             return model
     return None
+
+
+# nm per unit of the RDF's space axes (bioimage.io spec 0.5).
+_NM_PER_UNIT = {"angstrom": 0.1, "nanometer": 1.0, "micrometer": 1e3, "millimeter": 1e6}
+_declared = {}
+
+
+def declared_voxel_size(entry: dict) -> Optional[list]:
+    """The voxel size (nm, z y x) the model's description declares, None when it declares none.
+
+    Read from its RDF (``rdf_source``) with a plain fetch, so the dashboard,
+    which has no bioimageio.core, can refuse a blank voxel size at Submit:
+    the server would otherwise refuse it after its job started, out of
+    sight. Remembered per model. Raises ZooIndexError when the description
+    cannot be read, which the caller treats as "don't know".
+    """
+    source = entry.get("rdf_source")
+    if not source:
+        raise ZooIndexError(f"{entry.get('key')} names no description to read")
+    if source not in _declared:
+        import yaml
+
+        request = urllib.request.Request(source, headers={"User-Agent": "cellmap-flow"})
+        try:
+            with urllib.request.urlopen(request, timeout=FETCH_TIMEOUT_S) as response:
+                rdf = yaml.safe_load(response.read())
+        except (urllib.error.URLError, OSError, ValueError, yaml.YAMLError) as e:
+            raise ZooIndexError(f"Could not read {source}: {e}") from e
+        sizes = {}
+        inputs = (rdf or {}).get("inputs") or []
+        for axis in (inputs[0].get("axes") if inputs and isinstance(inputs[0].get("axes"), list) else []):
+            if isinstance(axis, dict) and axis.get("type") == "space" and axis.get("unit") in _NM_PER_UNIT:
+                sizes[axis.get("id")] = float(axis.get("scale", 1.0)) * _NM_PER_UNIT[axis["unit"]]
+        if "y" in sizes and "x" in sizes:
+            # A 2D model's z is its slices' spacing, which BioModelConfig takes as its y.
+            _declared[source] = [sizes.get("z", sizes["y"]), sizes["y"], sizes["x"]]
+        else:
+            _declared[source] = None
+    return _declared[source]
 
 
 def _model_parameter(cls) -> str:

@@ -94,6 +94,13 @@ def _while_starting(job):
             _starting.discard(job)
 
 
+def starting_jobs() -> list:
+    """The jobs submitted but not yet serving (waiting in their queue, or for
+    their server to come up), for the dashboard to show as starting."""
+    with _starting_lock:
+        return [job for job in _starting if job not in _started]
+
+
 def started_jobs() -> list:
     """The jobs this process started: the live list, which start_hosts
     appends to, cleanup_handler kills from, and the dashboard lists (its

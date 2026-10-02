@@ -23,6 +23,7 @@ from cellmap_flow.viewer.layers import prediction_layer
 import threading
 from typing import List
 import re
+import functools
 import logging
 
 logger = logging.getLogger(__name__)
@@ -67,6 +68,20 @@ def _show(job, st_data):
         s.layers[job.model_name] = layer
 
 
+def _reported(launch):
+    """Log what a launch thread raises: it runs on its own thread, whose
+    exceptions only reach the terminal, so a model that failed before its
+    job was submitted looked, on the page, like one that was never started."""
+    @functools.wraps(launch)
+    def run(*args, **kwargs):
+        try:
+            return launch(*args, **kwargs)
+        except Exception as e:
+            logger.error(f"Could not start a model ({launch.__name__}): {e}", exc_info=True)
+    return run
+
+
+@_reported
 def run_model(model_path, name, st_data):
     if model_path is None or model_path == "":
         logger.error(f"Model path is empty for {name}")
@@ -79,6 +94,7 @@ def run_model(model_path, name, st_data):
         _show(job, st_data)
 
 
+@_reported
 def run_hf_model(repo, name, st_data):
     """Run a Hugging Face model by repo ID."""
     name = _sanitize_job_name(name)
@@ -90,6 +106,7 @@ def run_hf_model(repo, name, st_data):
         _show(job, st_data)
 
 
+@_reported
 def run_model_config(model_config, st_data):
     """Run a model given as its config (an entry the Models tab's Add built),
     in its environment, as Submit runs the catalog's."""
@@ -107,6 +124,7 @@ def bioimage_job_name(key: str) -> str:
     return re.sub(r"\W+", "_", key).strip("_")
 
 
+@_reported
 def run_bioimage_model(params, st_data):
     """Run a BioImage Model Zoo model: ``params`` are its BioModelConfig
     arguments, name included (``bioimage_catalog.bioimage_entry``)."""
@@ -130,8 +148,26 @@ def _bioimage_params(selections):
     for selection in selections:
         found = bioimage_catalog.find_bioimage_model(selection["id"])
         key = found["key"] if found else selection["id"]
-        params.append(bioimage_catalog.bioimage_entry(key, selection.get("voxel_size"), bioimage_job_name(key)))
+        voxel_size = selection.get("voxel_size")
+        if voxel_size is None and found is not None and bioimage_job_name(key) not in _running_names():
+            # Its server would refuse a model with no voxel size after its job
+            # started, where nothing on the page shows it: refuse here.
+            try:
+                declared = bioimage_catalog.declared_voxel_size(found)
+            except bioimage_catalog.ZooIndexError as e:
+                logger.warning(f"Could not tell whether {key} declares a voxel size: {e}")
+            else:
+                if declared is None:
+                    raise ValueError(
+                        f"{found['name']} ({key}) does not say what voxel size it was trained at: "
+                        "enter one (nm) in its row"
+                    )
+        params.append(bioimage_catalog.bioimage_entry(key, voxel_size, bioimage_job_name(key)))
     return params
+
+
+def _running_names():
+    return {job.model_name for job in get_session().jobs}
 
 
 def kill_n_remove_from_neuroglancer(jobs, s):

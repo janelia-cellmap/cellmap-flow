@@ -4,6 +4,7 @@ Submit launching what is ticked as a ``bioimage`` model. The index is
 faked: no test touches the network."""
 
 import functools
+import io
 import json
 import re
 import shlex
@@ -232,3 +233,43 @@ def test_the_page_ticks_the_running_zoo_models_with_their_voxel_size(submit, das
     html = dashboard.get("/").get_data(as_text=True)
     page = json.loads(re.search(r'<script type="application/json" id="page-data">(.*?)</script>', html, re.S).group(1))
     assert page["default_bioimage_models"] == [{"id": "kind-seashell", "voxel_size": [4, 4, 8]}]
+
+
+def _rdf(axes):
+    return ("inputs:\n  - id: raw\n    axes:\n" + "".join(
+        f"      - {{id: {a}, type: {kind}" + (f", scale: {scale}, unit: {unit}" if unit else "") + "}\n"
+        for a, kind, scale, unit in axes))
+
+
+@pytest.mark.parametrize("axes, declared", [
+    pytest.param([("batch", "batch", 1, None), ("z", "space", 1, None), ("y", "space", 1, None),
+                  ("x", "space", 1, None)], None, id="no-units-like-the-zoo-EM-models"),
+    pytest.param([("z", "space", 0.04, "micrometer"), ("y", "space", 8, "nanometer"), ("x", "space", 8, "nanometer")],
+                 [40.0, 8.0, 8.0], id="3d-in-mixed-units"),
+    pytest.param([("y", "space", 0.5, "micrometer"), ("x", "space", 0.5, "micrometer")],
+                 [500.0, 500.0, 500.0], id="2d-z-is-its-y"),
+])
+def test_the_declared_voxel_size_is_read_from_the_models_description(monkeypatch, axes, declared):
+    monkeypatch.setattr(catalog, "_declared", {})
+    monkeypatch.setattr(catalog.urllib.request, "urlopen",
+                        lambda request, timeout: io.BytesIO(_rdf(axes).encode()))
+    assert catalog.declared_voxel_size({"key": "m", "rdf_source": "https://zoo/m/rdf.yaml"}) == declared
+
+
+def test_a_blank_voxel_size_for_a_model_that_declares_none_refuses_the_submit(submit, monkeypatch):
+    """Its server would refuse it after its job started, where the page showed
+    nothing: Submit says so instead."""
+    monkeypatch.setattr(catalog, "declared_voxel_size", lambda entry: None)
+    answer = submit({"id": "kind-seashell"})
+    assert answer.status_code == 400 and "enter one (nm) in its row" in answer.get_json()["error"]
+    assert submit.commands == []
+    # Given one, it starts; and an unreadable description does not block it.
+    assert submit({"id": "kind-seashell", "voxel_size": "8"}).status_code == 200 and len(submit.commands) == 1
+
+
+def test_an_unreadable_description_leaves_the_voxel_size_to_the_server(submit, monkeypatch):
+    def unreadable(entry):
+        raise catalog.ZooIndexError("offline")
+
+    monkeypatch.setattr(catalog, "declared_voxel_size", unreadable)
+    assert submit({"id": "kind-seashell"}).status_code == 200 and len(submit.commands) == 1

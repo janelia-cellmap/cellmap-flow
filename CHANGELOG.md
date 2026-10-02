@@ -64,6 +64,8 @@ All notable changes to cellmap-flow. The format follows [Keep a Changelog](https
   - Voxel sizes are no longer truncated to whole nm, the model declares float32 output, and the unused `axes_names = ["x", "y", "z", "c^"]` is gone.
 
 ### Fixed
+- **Submit shows what it started.** Job Logs lists jobs while they start (in a queue, or installing their environment) with the status `starting`, and after a Submit it refreshes itself until none is, Follow or not; the log area says what was submitted instead of the raw answer. An error a launch thread raises is logged in the dashboard, not only the terminal.
+- **A zoo model that declares no voxel size is refused at Submit** when its voxel size is left blank: the dashboard reads the model's description (its `rdf_source`) for declared units. Its server used to refuse it after the job started, with nothing on the page.
 - **BioImage Model Zoo models build again.** Reading a model's input called `get_and_dims`, which does not exist, so every `bioimage` model failed with an AttributeError (see the rewrite above).
 - The install docs named the extra `bioimage`; it is `bioimageio`.
 - **Finetuning at another voxel size.** A finetune trained on the raw level nearest the model's voxel size, read as it is (the Resample box off), is a model at that level's size, and its serving YAML now says so (`input_voxel_size`/`output_voxel_size` on the `finetune` entry): the server reads that level exactly instead of relabelling the nearest with a wrong-scale warning. The crop import and `cellmap_flow finetune build-corrections --resample` follow the Resample box, which only creating a volume did.

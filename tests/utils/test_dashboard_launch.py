@@ -143,3 +143,34 @@ def test_add_builds_a_pasted_models_entry_and_runs_it_in_its_environment(viewer,
                                                              "name": "mine"}}).status_code == 409
     bad = dashboard.post("/api/models/add", json={"entry": {"type": "nope", "name": "x"}})
     assert bad.status_code == 400 and "nope" in bad.get_json()["error"]
+
+
+def test_job_logs_list_a_job_that_is_still_starting(dashboard, monkeypatch):
+    """From Submit until a server answers the page said no job had been submitted."""
+    from cellmap_flow.jobs import launch as jobs_launch
+
+    class Starting:
+        model_name, job_id, host = "impartial_shrimp", "77", None
+
+        def get_status(self):
+            return None
+
+        def peek(self):
+            return "Installing environment..."
+
+    monkeypatch.setattr(jobs_launch, "_starting", {Starting()})
+    get_session().jobs = []
+    (job,) = dashboard.get("/api/job-logs").get_json()["jobs"]
+    assert (job["model_name"], job["status"], job["log"]) == ("impartial_shrimp", "starting", "Installing environment...")
+
+
+def test_a_launch_that_raises_is_reported_in_the_log(viewer, monkeypatch, caplog):
+    """Launch threads' exceptions reached only the terminal."""
+    def broken(*args, **kwargs):
+        raise RuntimeError("no such environment")
+
+    monkeypatch.setattr(launch, "server_command_for", broken)
+    get_session().dataset_path = "/data/raw.zarr"
+    with caplog.at_level(logging.ERROR, logger="cellmap_flow.dashboard.services.launch"):
+        launch.run_hf_model("cellmap/mito", "mito", "blob")
+    assert any("no such environment" in r.getMessage() for r in caplog.records)

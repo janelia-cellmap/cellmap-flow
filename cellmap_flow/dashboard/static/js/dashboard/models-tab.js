@@ -365,6 +365,31 @@ export function initModelsTab({ onModelsSubmitted } = {}) {
     }
   });
 
+  // After a Submit, show Job Logs and keep it current until no job is still
+  // starting (waiting in a queue, or installing its environment), even with
+  // Follow off: until then the page showed nothing of what Submit started.
+  // A tick resolving false stops the poll.
+  let startingWatcher = null;
+
+  function watchStartingJobs() {
+    const area = document.getElementById("jobLogsArea");
+    if (area.style.display === "none") document.getElementById("jobLogsBtn").click();
+    if (startingWatcher) startingWatcher.stop();
+    // The first ticks can come before a job is handed to LSF at all, which
+    // lists nothing: only a list with no starting job in it ends the watch.
+    let ticks = 0;
+    startingWatcher = poll(function () {
+      if (jobLogsFollower) return Promise.resolve(false);  // Follow keeps it current
+      ticks += 1;
+      return getJSON("/api/job-logs").then(function (data) {
+        renderJobLogs(data);
+        const jobs = (data && data.jobs) || [];
+        const starting = jobs.some(function (j) { return j.status === "starting"; });
+        return starting || (jobs.length === 0 && ticks < 6) ? undefined : false;
+      }).catch(function () { return false; });
+    }, { intervalMs: JOB_LOGS_POLL_MS, maxTicks: 60 });
+  }
+
   // GPU queue picker: the one next to Submit and the Server Config one show
   // the same configured queue.
   let gpuQueueCurrent = "";
@@ -620,12 +645,20 @@ export function initModelsTab({ onModelsSubmitted } = {}) {
     })
       .then((data) => {
         console.log("Server response:", data);
-        logArea.value += "Server response:\n" + JSON.stringify(data, null, 2) + "\n";
+        const started = [...(data.models || []), ...(data.hf_models || []),
+                         ...(data.bioimage_models || []).map((m) => m.id)];
+        logArea.value += started.length
+          ? `Submitted ${started.join(", ")}: starting (see Job Logs)\n`
+          : "Submitted: no model selected; any running ones are stopped\n";
+        logArea.scrollTop = logArea.scrollHeight;
+        if (started.length) watchStartingJobs();
         if (onModelsSubmitted) onModelsSubmitted();
       })
       .catch((err) => {
         console.error("Error:", err);
-        alert("Error submitting model selection" + err);
+        const message = err instanceof ApiError ? err.message : String(err);
+        logArea.value += `Not submitted: ${message}\n`;
+        alert("Could not submit: " + message);
       });
   });
 }
