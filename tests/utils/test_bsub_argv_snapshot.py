@@ -12,15 +12,20 @@ import os
 import re
 import subprocess
 import sys
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
+import cellmap_flow
 from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.jobs import launch
 from cellmap_flow.jobs.settings import launcher_settings
 
 BSUB_ANSWER = "Job <4242> is submitted to queue <gpu_a100>.\n"
+
+# The checkout cellmap_flow is imported from, for paths into it.
+REPO = str(Path(cellmap_flow.__file__).resolve().parents[1])
 
 
 class Recorder:
@@ -43,6 +48,7 @@ class Recorder:
             return value
         # Longest first: the interpreter lives under the prefix.
         value = value.replace(sys.executable, "<python>").replace(sys.prefix, "<prefix>")
+        value = value.replace(REPO, "<repo>")
         value = value.replace(self.tmp, "<tmp>")
         value = re.sub(r"\d{8}_\d{6}", "<ts>", value)
         # The random part of a ready file's name (jobs.ready.ready_path).
@@ -182,7 +188,7 @@ FINETUNE_COMMAND = (
     "--num-epochs 10 --batch-size 8 --learning-rate 0.0001 --loss-type combined "
     "--auto-serve --serve-data-path /data/raw.zarr --no-augment "
     "--models-dir <tmp>/session/models --queue gpu_a100 --charge-group my_lab "
-    "2>&1 | stdbuf -oL tee <tmp>/session/runs/mito_<ts>/training_log.txt"
+    "2>&1 | <python> -P <repo>/cellmap_flow/jobs/synced_tee.py <tmp>/session/runs/mito_<ts>/training_log.txt"
 )
 
 

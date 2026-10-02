@@ -31,7 +31,7 @@ rather than being stored beside the real one:
 - The pipeline builder's last apply: ``builder_state``,
   ``builder_model_configs``.
 - Blockwise's ``tmp_dir`` and ``blockwise_tasks_dir``, and ``tasks_dir()``.
-- The finetune tab's MinIO and volumes: ``minio_state``,
+- The finetune tab's MinIO and volumes: ``minio_state``, ``label_undo``,
   ``annotation_volumes``, ``output_sessions``; its training jobs'
   ``finetune_job_manager``; the Review tab's ``review``.
 - The log panel's ``log_buffer`` and ``log_clients``; the box tool's
@@ -64,7 +64,7 @@ class Session:
     __slots__ = ("dataset_path", "resample", "viewer", "raw", "neuroglancer_url", "shaders", "shader_controls", "extra_layers",
                  "models_config", "model_catalog", "_builder_state", "builder_model_configs", "tmp_dir",
                  "blockwise_tasks_dir", "minio_state", "annotation_volumes", "output_sessions", "review",
-                 "_finetune_job_manager", "log_buffer", "log_clients", "bbx_generator_state")
+                 "_finetune_job_manager", "label_undo", "log_buffer", "log_clients", "bbx_generator_state")
 
     def __init__(self):
         # The data and the viewer
@@ -128,6 +128,10 @@ class Session:
         # The Review tab's open index (review_routes.ReviewSession), or None
         # until /api/review/open.
         self.review = None
+        # {volume id: deque of (lo, hi, before, after)}: what each one-click
+        # label action (seed, background, split) replaced, newest last, for
+        # the Finetune tab's Undo (routes/finetune/view_labels.py).
+        self.label_undo = {}
         self._finetune_job_manager = None
 
         # The log panel and the box tool

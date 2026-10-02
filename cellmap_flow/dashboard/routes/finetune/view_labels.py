@@ -23,6 +23,7 @@ A box over LARGE_BOX_VOXELS voxels is only labelled when the request says
 """
 
 import json
+from collections import deque
 import logging
 from concurrent.futures import ThreadPoolExecutor
 
@@ -103,21 +104,35 @@ def _confirmation_needed(data, lo, hi):
     )
 
 
+# How many one-click label actions per volume Undo can take back.
+UNDO_DEPTH = 10
+
+
+def _undo_stack(volume_id):
+    return get_session().label_undo.setdefault(volume_id, deque(maxlen=UNDO_DEPTH))
+
+
+def _after_write(volume_id, what):
+    """Pull the written box to disk and re-read the paint layer; whether the layer was refreshed."""
+    # Now rather than at the next periodic sync, so training submitted
+    # straight after sees the box. A failure is only late: the periodic
+    # sync pulls the same chunks.
+    try:
+        sync_annotation_volume_from_minio(volume_id)
+    except Exception as e:
+        logger.warning(f"Could not pull the {what} box of {volume_id} to disk yet: {e}")
+    return _refresh_layer(volume_id)
+
+
 def _fill(volume_id, volume, lo, hi, labels_for):
     """Fill the box in MinIO and pull it to disk; returns the answer's counts."""
     n_foreground, n_background = fill.fill_unpainted(
-        get_session().minio_state, volume_id, lo, hi, labels_for, volume.get("zarr_path")
+        get_session().minio_state, volume_id, lo, hi, labels_for, volume.get("zarr_path"),
+        undo=_undo_stack(volume_id),
     )
     layer_refreshed = False
     if n_foreground or n_background:
-        # Now rather than at the next periodic sync, so training submitted
-        # straight after sees the box. A failure is only late: the periodic
-        # sync pulls the same chunks.
-        try:
-            sync_annotation_volume_from_minio(volume_id)
-        except Exception as e:
-            logger.warning(f"Could not pull the labelled box of {volume_id} to disk yet: {e}")
-        layer_refreshed = _refresh_layer(volume_id)
+        layer_refreshed = _after_write(volume_id, "labelled")
     logger.info(
         f"Labelled box {lo.tolist()}..{hi.tolist()} of {volume_id}: "
         f"{n_foreground} foreground and {n_background} background voxels filled"
@@ -133,6 +148,7 @@ def _fill(volume_id, volume, lo, hi, labels_for):
         # else the page reloads the viewer.
         "reload_viewer": bool(n_foreground or n_background),
         "layer_refreshed": layer_refreshed,
+        "can_undo": bool(_undo_stack(volume_id)),
     }
 
 
@@ -191,10 +207,12 @@ def seed_sources():
     """The models a seed can read, for the page's picker: ``models`` (every
     running server, oldest first) and ``default``, the one a seed reads when
     none is chosen (None when that is a choice for the user)."""
-    _, volume = session_store().session_volume()
+    volume_id, volume = session_store().session_volume()
     names = [name for name, _ in _prediction_sources()]
     default = _prediction_server((volume or {}).get("model_name"))[0]
-    return jsonify({"success": True, "models": names, "default": default})
+    # The page polls this, so it also says whether Undo has anything to take back.
+    can_undo = bool(volume_id and get_session().label_undo.get(volume_id))
+    return jsonify({"success": True, "models": names, "default": default, "can_undo": can_undo})
 
 
 def _get(url):
@@ -410,15 +428,12 @@ def split_view_objects():
         if refused:
             return refused
         n_changed, counts = fill.rewrite_foreground(
-            get_session().minio_state, volume_id, lo, hi, fill.relabel_objects, volume.get("zarr_path")
+            get_session().minio_state, volume_id, lo, hi, fill.relabel_objects, volume.get("zarr_path"),
+            undo=_undo_stack(volume_id),
         )
         layer_refreshed = False
         if n_changed:
-            try:
-                sync_annotation_volume_from_minio(volume_id)
-            except Exception as e:
-                logger.warning(f"Could not pull the relabelled box of {volume_id} to disk yet: {e}")
-            layer_refreshed = _refresh_layer(volume_id)
+            layer_refreshed = _after_write(volume_id, "relabelled")
         logger.info(
             f"Relabelled box {lo.tolist()}..{hi.tolist()} of {volume_id}: {counts['objects']} objects, "
             f"{counts['split']} split off, {counts['merged']} merged, {n_changed} voxels changed"
@@ -430,6 +445,7 @@ def split_view_objects():
             "changed": n_changed,
             "reload_viewer": bool(n_changed),
             "layer_refreshed": layer_refreshed,
+            "can_undo": bool(_undo_stack(volume_id)),
             **counts,
         })
     except _Refused as e:
@@ -440,4 +456,40 @@ def split_view_objects():
         return _error(str(e), 400)
     except Exception as e:
         logger.error(f"Error splitting the view's objects: {e}", exc_info=True)
+        return _error(str(e), 500)
+
+
+@finetune_bp.route("/api/finetune/view-labels/undo", methods=["POST"])
+def undo_view_labels():
+    """Take back the last Seed, All Background or Split of the session's volume.
+
+    The box goes back to what it held before, on the voxels still as that
+    action left them: a stroke painted there since is kept. 409 when there
+    is nothing to undo.
+    """
+    try:
+        volume_id, volume = session_store().session_volume()
+        if volume is None:
+            raise _Refused("No annotation volume to undo in.")
+        stack = _undo_stack(volume_id)
+        if not stack:
+            raise _Refused("Nothing to undo.")
+        lo, hi, before, after = stack.pop()
+        restored = fill.restore_box(get_session().minio_state, volume_id, lo, hi, before, after)
+        layer_refreshed = _after_write(volume_id, "restored") if restored else False
+        logger.info(f"Undid the label action on box {lo.tolist()}..{hi.tolist()} of {volume_id}: "
+                    f"{restored} voxels restored")
+        return jsonify({
+            "success": True,
+            "restored": restored,
+            "reload_viewer": bool(restored),
+            "layer_refreshed": layer_refreshed,
+            "can_undo": bool(stack),
+        })
+    except _Refused as e:
+        return _error(str(e), e.status)
+    except FileNotFoundError as e:
+        return _error(str(e), 409)
+    except Exception as e:
+        logger.error(f"Error undoing the label action: {e}", exc_info=True)
         return _error(str(e), 500)
