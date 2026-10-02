@@ -54,6 +54,7 @@ URLS = {
     "/api/model-config-types": "GET",
     "/api/model_advice": "GET",
     "/api/models": "POST",
+    "/api/models/resolve": "POST",
     "/api/pipeline": "PUT",
     "/api/pipeline/apply": "POST",
     "/api/process": "POST",

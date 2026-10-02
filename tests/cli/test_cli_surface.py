@@ -261,6 +261,21 @@ SERVE = [('model_json', ('--model',), (), 'text', True, None, False, MODEL_JSON_
 # --log-level (yaml, view, blockwise) defaults to the group's.
 CELLMAP_FLOW = {
     '': LOG_LEVEL,
+    'add': [
+        ('ref', ('ref',), (), 'text', True, None, False, None),
+        ('name', ('-n', '--name'), (), 'text', False, None, False, "The model's name (default: one made from REF)."),
+        ('voxel_size', ('-v', '--voxel-size'), (), 'text', False, None, False,
+         "nm per voxel, '8' or '16,8,8', for a model that does not say its own (Cellpose, bioimage.io)."),
+        ('offline', ('--offline',), (), 'boolean', False, False, True,
+         'Do not look REF up on Hugging Face or in the BioImage Model Zoo.'),
+        ('run_now', ('--run',), (), 'boolean', False, False, True,
+         'Serve the model on --data-path right away and open the viewer, as `cellmap_flow yaml` does.'),
+        ('data_path', ('-d', '--data-path'), (), 'text', False, None, False, 'The dataset --run serves it on.'),
+        ('queue', ('-q', '--queue'), (), 'text', False, None, False, "Queue for --run's job (default: the saved queue)"),
+        ('project', ('-P', '--project'), (), 'text', False, None, False,
+         "Project/chargeback group for --run's job (default: the saved one)"),
+        RESAMPLE,
+    ],
     'blockwise': [
         ('yaml_configs', ('yaml_configs',), (), 'path', True, None, False, None, 'nargs=-1'),
         ('client', ('-c', '--client'), (), 'boolean', False, False, True, 'Run as client if this flag is set.'),

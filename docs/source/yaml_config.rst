@@ -155,6 +155,61 @@ Available Model Types
 
 Common optional parameters: ``name``, ``scale``, ``env`` (see :ref:`model-env`).
 
+.. _resolving-models:
+
+An entry from what you have
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+``cellmap_flow add REF`` writes the entry for you. ``REF`` is whatever you
+have in hand, and the entry is printed as YAML to paste under ``models:``,
+with comments saying what ``REF`` was taken to be, where it runs, and what
+it still needs:
+
+.. code-block:: console
+
+    $ cellmap_flow add cpsam
+    # cellpose: a Cellpose 4 pretrained model
+    # runs in the cellpose4 environment (its type's default)
+    # still needs: voxel_size (add to the entry)
+    models:
+      cpsam:
+        type: cellpose
+        pretrained_model: cpsam
+
+``-n`` names the model and ``-v 16,8,8`` gives the voxel size of a model
+that does not say its own (Cellpose, bioimage.io). ``--run -d DATA`` (with
+``-q``, ``-P`` and ``--resample`` as ``infer`` takes them) serves the model
+right away, as ``cellmap_flow yaml`` would. The dashboard does the same for
+a reference pasted into it (``POST /api/models/resolve``).
+
+``REF`` is checked against these in order, and the first that matches wins:
+
+1. A local file or folder: a ``.py`` is a ``script``; a folder with
+   ``metadata.json`` (and ``model.ts``) a ``cellmap`` export; a folder with
+   ``rdf.yaml`` or ``bioimageio.yaml``, such a file, or a ``.zip`` with one
+   inside a ``bioimage`` model; ``model_checkpoint_<n>``, a ``.ts`` or a
+   ``model.pt`` a ``fly`` model (its channels and voxel sizes read from its
+   run's folder, see :ref:`fly`); a folder with ``adapter_config.json`` (a
+   LoRA adapter) or a full finetune's ``model_state_dict.pt`` a
+   ``finetune``, which still needs its ``base_model``; Cellpose-SAM weights a
+   ``cellpose`` model.
+2. A prefix that says outright what it is: ``hf:org/repo[@revision]``,
+   ``bioimageio:<id, nickname, URL or path>``, ``cellpose:<name or path>``,
+   ``fly:<path>``, ``dacapo:<run>@<iteration>``, ``script:<path>``.
+3. A Cellpose model name: ``cpsam_v2``, ``cpsam``, ``cpdino``, ``cpdino-vitb``.
+4. A URL: a bioimage.io model page, a Zenodo record, a DOI link or the URL of
+   an ``rdf.yaml`` or zip is a ``bioimage`` model; ``huggingface.co/org/repo``
+   is as 5.
+5. ``org/repo``: a Hugging Face repo, which must be a cellmap-models export
+   (``metadata.json`` and ``model.ts``). Any other model on the Hub is
+   refused: wrap it in a script (:doc:`custom_script`).
+6. A BioImage Model Zoo nickname or id (``affable-shark``,
+   ``10.5281/zenodo.5764892``), looked up in the zoo's index.
+
+5 and 6 are checked online; with ``--offline`` (or when the Hub or zoo
+cannot be reached) a repo or zoo-shaped name is taken on trust, with a note.
+Anything else is an error saying what was tried; a prefix settles it.
+
 .. _model-env:
 
 Running a model in its own environment
