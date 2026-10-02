@@ -33,9 +33,9 @@ import math
 import os
 
 import numpy as np
-from funlib.geometry import Coordinate
 
-from cellmap_flow.models.configs.base import Config, ModelConfig, _as_int_tuple
+from cellmap_flow.models.configs.base import Config, ModelConfig
+from cellmap_flow.models.geometry import _numbers
 
 logger = logging.getLogger(__name__)
 
@@ -106,6 +106,17 @@ def _check_cellpose_4():
         )
 
 
+def _voxel_size(value):
+    """A voxel size given as one number, "5.24,4,4" or one per axis: three numbers, ints kept ints."""
+    if isinstance(value, str):
+        value = [float(v) for v in value.replace("(", "").replace(")", "").split(",") if v.strip()]
+    if np.ndim(value) == 0:
+        value = [value] * 3
+    elif len(value) == 1:
+        value = list(value) * 3
+    return _numbers(float(v) for v in value)
+
+
 class CellposeModelConfig(ModelConfig):
     """Cellpose 4 run on each z slice of a chunk.
 
@@ -154,7 +165,8 @@ class CellposeModelConfig(ModelConfig):
             raise ValueError(f"output must be one of {', '.join(OUTPUTS)}, not {output!r}")
         # The server CLI and the model form pass the voxel size as a string
         # ("64" or "16,8,8"); a YAML gives a number or a list.
-        self.voxel_size = _as_int_tuple(voxel_size)
+        # Not _as_int_tuple: that truncated a 5.24 nm voxel to 5.
+        self.voxel_size = _voxel_size(voxel_size)
         self.pretrained_model = str(pretrained_model)
         self.output = output
         self.slices_per_chunk = int(slices_per_chunk)
@@ -210,17 +222,19 @@ class CellposeModelConfig(ModelConfig):
 
     def _get_config(self):
         model = self._load_model()
-        voxel_size = Coordinate(self.voxel_size)
+        voxel_size = np.asarray(self.voxel_size, dtype=float)
         slices, size, read = self.slices_per_chunk, self.slice_size, self.read_size
 
         config = Config()
         config.model = model
-        config.input_voxel_size = voxel_size
-        config.output_voxel_size = voxel_size
+        # Plain numbers rather than Coordinates, which are integers: a
+        # 5.24 nm z would be 5, and every chunk placed on the wrong grid.
+        config.input_voxel_size = self.voxel_size
+        config.output_voxel_size = self.voxel_size
         # No context in z: each slice is segmented on its own.
-        config.read_shape = Coordinate((slices, read, read)) * voxel_size
-        config.write_shape = Coordinate((slices, size, size)) * voxel_size
-        config.context = (config.read_shape - config.write_shape) / 2
+        config.read_shape = _numbers(np.array((slices, read, read)) * voxel_size)
+        config.write_shape = _numbers(np.array((slices, size, size)) * voxel_size)
+        config.context = _numbers((np.asarray(config.read_shape) - np.asarray(config.write_shape)) / 2)
         config.output_channels = 1
         config.channels = ["cell"]
         config.block_shape = np.array((slices, size, size, config.output_channels))

@@ -74,7 +74,9 @@ def test_list_says_where_each_is_and_which_types_default_to_it(setup):
     rows = {line.split()[0]: line.split() for line in result.output.splitlines()[4:] if line.strip()}
     root = setup.root
     assert rows["NAME"] == ["NAME", "KIND", "INSTALLED", "FINETUNE", "DEFAULT", "FOR", "WHERE"]
-    assert rows["cellpose4"] == ["cellpose4", "pixi", "no", "no", "cellpose-test", f"{root}/.pixi/envs/cellpose4"]
+    # The real cellpose type defaults to cellpose4 too.
+    assert rows["cellpose4"] == ["cellpose4", "pixi", "no", "no", "cellpose,", "cellpose-test",
+                                 f"{root}/.pixi/envs/cellpose4"]
     assert rows["dacapo"] == ["dacapo", "pixi", "yes", "yes", "-", f"{root}/.pixi/envs/dacapo"]
     assert rows["mine"] == ["mine", "alias", "yes", "unchecked", "-", f"{root}/conda"]
     assert rows["nowhere"] == ["nowhere", "missing", "-", "-", "nowhere-test", "-"]

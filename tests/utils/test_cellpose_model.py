@@ -169,7 +169,10 @@ def test_nothing_but_building_the_model_imports_cellpose(monkeypatch):
     assert "CellposeModelConfig" in registry.describe_types()
     result = CliRunner().invoke(main.cli, ["infer", "cellpose", "--help"])
     assert result.exit_code == 0 and "--pretrained-model" in result.output
-    with pytest.raises(ImportError):
+    # It runs in cellpose4: a process without cellpose refuses to build it, naming the env.
+    from cellmap_flow.models.configs.base import ModelEnvError
+
+    with pytest.raises(ModelEnvError, match="cellpose4"):
         model.config
 
 
@@ -223,3 +226,12 @@ def test_the_example_yaml_is_a_cellpose_model():
         (model,) = registry.build_models(yaml.safe_load(f)["models"])
     assert isinstance(model, CellposeModelConfig)
     assert (model.pretrained_model, model.output, model.voxel_size) == ("cpsam", "probability", (64, 64, 64))
+
+
+def test_a_non_integer_voxel_size_is_kept(fake_cellpose):
+    """_as_int_tuple truncated 5.24 nm to 5, putting every chunk on the wrong grid."""
+    from cellmap_flow.models.configs.cellpose import CellposeModelConfig
+
+    config = CellposeModelConfig(voxel_size="5.24,4,4", slices_per_chunk=2, slice_size=64, context=8).config
+    assert (config.input_voxel_size, config.write_shape, config.read_shape) == (
+        (5.24, 4, 4), (10.48, 256, 256), (10.48, 320, 320))
