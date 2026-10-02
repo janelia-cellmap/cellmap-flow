@@ -87,9 +87,12 @@ lsd-lite = { git = "https://github.com/neptunes5thmoon/lsd-lite.git", rev = "055
 [feature.dacapo.pypi-dependencies]
 dacapo-ml = "*"
 
-# For the `bioimage` model type, which defaults to this environment.
+# For the `bioimage` model type, which defaults to this environment. timm is
+# what the zoo's BiaPy transformers ("good-microbe", a 2D UNETR) build their
+# blocks from; their weights need it to load.
 [feature.bioimageio.pypi-dependencies]
 bioimageio-core = { version = "==0.11.0", extras = ["onnx", "pytorch"] }
+timm = ">=1.0"
 
 [feature.test.dependencies]
 pytest = "*"
