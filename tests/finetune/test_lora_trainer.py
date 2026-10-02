@@ -14,7 +14,7 @@ import torch
 import torch.nn as nn
 
 from cellmap_flow.finetune.adaptation import LoraStrategy, cpu_state_copy, frozen_teacher_copy
-from cellmap_flow.finetune.target_transforms import BinaryTargetTransform
+from cellmap_flow.finetune.target_transforms import BinaryTargetTransform, IntervalTargetTransform
 
 
 def _net():
@@ -102,6 +102,24 @@ def test_a_target_of_one_class_is_called_out(make_trainer, caplog, ann, warns):
     _train_at_rate_0(make_trainer, _constant(2.0), ann)
     warnings = [r for r in caplog.records if r.levelno >= logging.WARNING and r.name.endswith("lora_trainer")]
     assert len(warnings) == (1 if warns else 0)
+
+
+# Background painted over a whole 4^3 patch, at a constant logit of 3: the
+# wrong side. Its upper bound is -2L/6, L being 1 voxel to the patch's edge
+# for the 56 voxels on its surface and 2 for the 8 inside, less a third
+# for the slack; the wrong side costs 5 x (3 - the slack) on top.
+WRONG_SIDE = (56 * 3.0 + 8 * (3.0 + 1 / 3)) / 64 + 5 * (3.0 - 1 / 3)
+
+
+@pytest.mark.parametrize("model, expected", [
+    pytest.param(_constant(-3.0), 0.0, id="within the bounds"),
+    pytest.param(_constant(3.0), WRONG_SIDE, id="on the wrong side"),
+    pytest.param(_constant(3.0, sigmoid=True), WRONG_SIDE, id="a model ending in a sigmoid, in logits"),
+])
+def test_a_distance_model_on_scribbles_trains_on_bounds(make_trainer, model, expected):
+    trainer = _train_at_rate_0(make_trainer, model, BACKGROUND, loss_type="interval",
+                               target_transform=IntervalTargetTransform(6.0))
+    assert trainer.last_supervised_loss == pytest.approx(expected, abs=1e-4)
 
 
 def test_the_best_epoch_is_the_best_supervised_one(make_trainer):

@@ -438,7 +438,11 @@ class TrainingSession:
         self._record_input_norm()
 
         # Re-built each iteration, to pick up restart params.
-        target_transform = build_target_transform(args, self.model_config)
+        # Measured at the annotation's voxel size, which the reader knows.
+        reader = getattr(dataloader.dataset, "reader", None)
+        target_transform = build_target_transform(
+            args, self.model_config, output_voxel_size_nm=getattr(reader, "output_voxel_size", None)
+        )
         logger.info(f"output_type={args.output_type}, select_channel={args.select_channel}")
 
         # Only now that its data and target are built: put the model back
@@ -469,6 +473,7 @@ class TrainingSession:
             distillation_all_voxels=args.distillation_all_voxels,
             margin=args.margin,
             balance_classes=args.balance_classes,
+            slope_weight=args.slope_weight,
             target_transform=target_transform,
             tensorboard=not args.no_tensorboard,
             teacher_model=self.teacher_model,
