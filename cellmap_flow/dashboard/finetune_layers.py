@@ -156,7 +156,8 @@ def register_finetuned_model(job, model_name):
 
     if base_model_dict is None:
         # Last, rebuilt from the job's params as a Fly model. Its sizes are
-        # not among them, so it is 178/56, which is what a Fly run's trainer
+        # not among them, so they are what the checkpoint's folder says, else
+        # 178 in and what the network makes of it: what a Fly run's trainer
         # built before its entry was recorded.
         base_model_dict = {"type": "fly"}
         if params.get("model_checkpoint"):
