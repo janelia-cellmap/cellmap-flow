@@ -7,13 +7,16 @@ json_data: {"input_norm": {"MinMaxNormalizer": {"min_value": 0.0, "max_value": 2
 models:
   # A training checkpoint is loaded into fly_organelles' StandardUnet, so this
   # server runs in pixi.toml's `fly` environment without an `env:` here (a .ts
-  # checkpoint would run in the default one). The rest is read from the run's
-  # folder: the channels ("mito") from its train.py, the 16 nm voxels and the
-  # 178 -> 56 tile from its training snapshots. Give `classes`, `resolution`,
-  # `input_size` / `output_size` to override them.
+  # checkpoint would run in the default one). What the entry leaves out is read
+  # from the run's folder: here the 178 -> 56 tile from its training snapshots.
+  # `classes` and `resolution` would be read too (from its train.py and
+  # snapshots); they are written out so the example also validates where that
+  # folder cannot be read.
   - type: "fly"
     scale: "s1"
     checkpoint: "/groups/cellmap/cellmap/zouinkhim/salevary/train/v2/distance/mito_16_all/model_checkpoint_20000"
+    classes: ["mito"]
+    resolution: 16
     name: "mito_distance_16"
 
 
