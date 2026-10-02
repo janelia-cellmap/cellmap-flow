@@ -32,6 +32,11 @@ cellmap_flow.models.registry
 
    A bad YAML entry or type name is a ``config.yaml.ConfigError``.
 
+   A model entry's ``env`` (the environment its server runs in, see
+   ``models.envs``) is not a constructor argument: ``build_model`` and
+   ``instantiate_model_config`` check it and set it on the built config, and
+   the dashboard's form offers it beside each type's arguments.
+
    Importing this module imports neither torch, flask, huggingface_hub nor
    ``cellmap_flow.globals``. The model config classes, which bring numpy and
    funlib (most of a second), are imported only when a function needs them.
@@ -47,6 +52,7 @@ Attributes
 
    cellmap_flow.models.registry.logger
    cellmap_flow.models.registry.YAML_ALIASES
+   cellmap_flow.models.registry.ENV_KEY
 
 
 Functions
@@ -76,6 +82,10 @@ Module Contents
 .. py:data:: logger
 
 .. py:data:: YAML_ALIASES
+
+.. py:data:: ENV_KEY
+   :value: 'env'
+
 
 .. py:function:: cli_name_of(cls: type) -> str
 

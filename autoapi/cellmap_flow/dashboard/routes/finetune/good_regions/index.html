@@ -165,16 +165,19 @@ POST <code class="docutils literal notranslate"><span class="pre">/api/finetune/
 <tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.good_regions.save_good_regions" title="cellmap_flow.dashboard.routes.finetune.good_regions.save_good_regions"><code class="xref py py-obj docutils literal notranslate"><span class="pre">save_good_regions</span></code></a>(regions)</p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.good_regions.mark_current_view_good" title="cellmap_flow.dashboard.routes.finetune.good_regions.mark_current_view_good"><code class="xref py py-obj docutils literal notranslate"><span class="pre">mark_current_view_good</span></code></a>()</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.good_regions.view_box_nm" title="cellmap_flow.dashboard.routes.finetune.good_regions.view_box_nm"><code class="xref py py-obj docutils literal notranslate"><span class="pre">view_box_nm</span></code></a>([size_nm])</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">(centre_nm,</span> <span class="pre">size_nm)</span></code> of the box centred where the viewer looks.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.good_regions.mark_current_view_good" title="cellmap_flow.dashboard.routes.finetune.good_regions.mark_current_view_good"><code class="xref py py-obj docutils literal notranslate"><span class="pre">mark_current_view_good</span></code></a>()</p></td>
 <td><p>Record a box centred on wherever the viewer is looking right now.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.good_regions.list_good_regions" title="cellmap_flow.dashboard.routes.finetune.good_regions.list_good_regions"><code class="xref py py-obj docutils literal notranslate"><span class="pre">list_good_regions</span></code></a>()</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.good_regions.list_good_regions" title="cellmap_flow.dashboard.routes.finetune.good_regions.list_good_regions"><code class="xref py py-obj docutils literal notranslate"><span class="pre">list_good_regions</span></code></a>()</p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.good_regions.delete_good_region" title="cellmap_flow.dashboard.routes.finetune.good_regions.delete_good_region"><code class="xref py py-obj docutils literal notranslate"><span class="pre">delete_good_region</span></code></a>()</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.good_regions.delete_good_region" title="cellmap_flow.dashboard.routes.finetune.good_regions.delete_good_region"><code class="xref py py-obj docutils literal notranslate"><span class="pre">delete_good_region</span></code></a>()</p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.good_regions.refresh_good_regions_layer" title="cellmap_flow.dashboard.routes.finetune.good_regions.refresh_good_regions_layer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">refresh_good_regions_layer</span></code></a>([regions])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.good_regions.refresh_good_regions_layer" title="cellmap_flow.dashboard.routes.finetune.good_regions.refresh_good_regions_layer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">refresh_good_regions_layer</span></code></a>([regions])</p></td>
 <td><p>Draw the good regions in the viewer so you can see what you marked.</p></td>
 </tr>
 </tbody>
@@ -206,6 +209,17 @@ POST <code class="docutils literal notranslate"><span class="pre">/api/finetune/
 <dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.good_regions.save_good_regions">
 <span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.good_regions.</span></span><span class="sig-name descname"><span class="pre">save_good_regions</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">regions</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.good_regions.save_good_regions" title="Link to this definition"></a></dt>
 <dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.good_regions.view_box_nm">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.good_regions.</span></span><span class="sig-name descname"><span class="pre">view_box_nm</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">size_nm</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.good_regions.view_box_nm" title="Link to this definition"></a></dt>
+<dd><p><code class="docutils literal notranslate"><span class="pre">(centre_nm,</span> <span class="pre">size_nm)</span></code> of the box centred where the viewer looks.</p>
+<p><code class="docutils literal notranslate"><span class="pre">size_nm</span></code> defaults to one model output patch (see
+DEFAULT_REGION_SIZE_NM); one number is the same along every axis.
+The labelling buttons beside “Mark This View as Good” use the same box,
+so what they label is what a mark would cover. ValueError when there
+is no viewer position or the size is not positive.</p>
+</dd></dl>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.good_regions.mark_current_view_good">

@@ -19,7 +19,9 @@ cellmap_flow.models.geometry_cache
 
    1. a running inference server, which already holds the model;
    2. this cache, keyed so that it invalidates itself when the model changes;
-   3. building the model, which then populates the cache.
+   3. building the model, which then populates the cache. Not for a model
+      that runs in its own environment (``models.envs``): its packages are
+      there, not here (``build_here``).
 
    Reading the declarations statically is deliberately *not* among them. The
    script contract allows geometry to depend on the model -- a DaCapo script
@@ -47,6 +49,7 @@ Functions
    cellmap_flow.models.geometry_cache.cache_key
    cellmap_flow.models.geometry_cache.load_cached_geometry
    cellmap_flow.models.geometry_cache.store_geometry
+   cellmap_flow.models.geometry_cache.build_here
    cellmap_flow.models.geometry_cache.resolve_model_geometry
 
 
@@ -85,6 +88,18 @@ Module Contents
    geometry attributes, a ModelGeometry included.
 
 
+.. py:function:: build_here(model_config)
+
+   ``model_config.config``, built in this process.
+
+   Refused for a model with an ``env``: this process lacks its packages,
+   or has other versions of them (the default environment's cellpose 3
+   for a Cellpose-SAM model), so building it here fails or, worse,
+   half-works. Its geometry comes from its running server.
+
+   :raises ModelEnvError: the model runs in its own environment.
+
+
 .. py:function:: resolve_model_geometry(model_name, model_config)
 
    The five geometry fields, by the cheapest route that can supply them.
@@ -92,5 +107,7 @@ Module Contents
    Returns an object exposing ``read_shape``, ``write_shape``,
    ``input_voxel_size``, ``output_voxel_size`` and ``output_channels`` --
    either a stand-in or, on the build path, the real ``ModelConfig.config``.
+   Raises ModelEnvError for a model that runs in its own environment when
+   neither its server nor the cache knows its geometry.
 
 

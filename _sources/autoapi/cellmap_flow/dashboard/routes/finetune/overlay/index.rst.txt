@@ -29,6 +29,7 @@ Functions
 .. autoapisummary::
 
    cellmap_flow.dashboard.routes.finetune.overlay.add_annotation_layer
+   cellmap_flow.dashboard.routes.finetune.overlay.refresh_annotation_layer
    cellmap_flow.dashboard.routes.finetune.overlay.refresh_annotated_regions_layer
    cellmap_flow.dashboard.routes.finetune.overlay.refresh_annotated_regions
    cellmap_flow.dashboard.routes.finetune.overlay.add_crop_to_viewer
@@ -57,6 +58,20 @@ Module Contents
 
    A layer of that name is replaced, unless ``keep_existing``: then it is
    left as it is, selection included, and False is returned.
+
+
+.. py:function:: refresh_annotation_layer(viewer, volume_id) -> bool
+
+   Make neuroglancer re-read the paint layer of ``volume_id``'s volume, and only it.
+
+   Labels written behind its back (a seed, a relabel) show only once the
+   layer's chunks are read again. The layer keeps everything the browser
+   set on it (its paint value, brush size, tool, colours) and only its
+   source moves to a new spelling of the same URL (``_respelled_port``);
+   rebuilding it with add_annotation_layer reset those. The view, the other
+   layers and their servers are left alone; reloading the viewer re-read
+   every layer and had every server recompute the view. Returns whether a
+   layer was found and refreshed.
 
 
 .. py:function:: refresh_annotated_regions_layer(corrections_path=None)

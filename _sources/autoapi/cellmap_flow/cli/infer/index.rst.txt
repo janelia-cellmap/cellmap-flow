@@ -11,7 +11,8 @@ cellmap_flow.cli.infer
    There is a subcommand for each model type (``models.registry``), built when
    click asks for it. It takes the type's constructor arguments as options
    (``registry.click_options``), and the dataset (``-d``), queue (``-q``),
-   billing project (``-P``), ``--resample`` and ``--server-check`` as its own.
+   billing project (``-P``), ``--resample``, ``--server-check`` and ``--env``
+   (the environment the server runs in, ``models.envs``) as its own.
 
    ``run``, the generic form before 0.3.0 (``cellmap_flow run -m TYPE -c
    key=value``), is a deprecated alias: it says which ``infer`` command it

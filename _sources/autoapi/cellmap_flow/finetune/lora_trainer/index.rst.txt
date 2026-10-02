@@ -33,7 +33,7 @@ Module Contents
 
 .. py:data:: logger
 
-.. py:class:: LoRAFinetuner(model: torch.nn.Module, dataloader: torch.utils.data.DataLoader, output_dir: str, learning_rate: float = 0.0001, num_epochs: int = 10, gradient_accumulation_steps: int = 1, use_mixed_precision: bool = True, loss_type: str = 'combined', device: Optional[str] = None, select_channel: Optional[int] = None, mask_unannotated: bool = True, label_smoothing: float = 0.0, distillation_lambda: Optional[float] = None, distillation_all_voxels: bool = False, margin: float = 0.3, balance_classes: bool = False, target_transform=None, tensorboard: bool = True, teacher_model: Optional[torch.nn.Module] = None, initial_state: Optional[Dict[str, torch.Tensor]] = None, tb_start_step: int = 0, tb_start_epoch: int = 0)
+.. py:class:: LoRAFinetuner(model: torch.nn.Module, dataloader: torch.utils.data.DataLoader, output_dir: str, learning_rate: float = 0.0001, num_epochs: int = 10, gradient_accumulation_steps: int = 1, use_mixed_precision: bool = True, loss_type: str = 'combined', device: Optional[str] = None, select_channel: Optional[int] = None, mask_unannotated: bool = True, label_smoothing: float = 0.0, distillation_lambda: Optional[float] = None, distillation_all_voxels: bool = False, margin: float = 0.3, balance_classes: bool = False, slope_weight: float = 1.0, target_transform=None, tensorboard: bool = True, teacher_model: Optional[torch.nn.Module] = None, initial_state: Optional[Dict[str, torch.Tensor]] = None, tb_start_step: int = 0, tb_start_epoch: int = 0)
 
    Trainer for finetuning a model on user corrections: a LoRA adapter, or
    every weight (a full finetune).
@@ -61,7 +61,8 @@ Module Contents
    :param num_epochs: Number of training epochs (default: 10)
    :param gradient_accumulation_steps: Steps to accumulate gradients (default: 1)
    :param use_mixed_precision: Enable mixed precision on CUDA (default: True; off on the CPU)
-   :param loss_type: Loss function: "dice", "bce", "combined" (Dice + BCE), "mse" or "margin"
+   :param loss_type: Loss function: "dice", "bce", "combined" (Dice + BCE), "mse", "margin"
+                     or "interval" (a distance model on scribbles; needs an IntervalTargetTransform)
    :param device: Training device ("cuda" or "cpu", auto-detected if None)
    :param select_channel: Optional channel index to select from multi-channel output (default: None)
    :param mask_unannotated: If True (default), only compute loss on annotated regions (target > 0).
@@ -75,6 +76,7 @@ Module Contents
                                    (no effect when the dataset has good regions: they decide where)
    :param margin: The margin of the "margin" loss (default: 0.3)
    :param balance_classes: Weight foreground and background voxels equally
+   :param slope_weight: The weight of the interval loss's slope limit (default: 1)
    :param target_transform: Optional TargetTransform instance that converts raw annotations
                             to (target, mask) pairs. Overrides mask_unannotated when provided.
                             See cellmap_flow.finetune.target_transforms.

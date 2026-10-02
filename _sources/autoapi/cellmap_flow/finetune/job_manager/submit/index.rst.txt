@@ -74,6 +74,9 @@ Module Contents
    The entry is the model's to_dict(), so the trainer builds the model the
    dashboard serves; ``checkpoint_path`` (find_checkpoint's) replaces the
    entry's own checkpoint, which is how an override reaches a Fly model.
+   A model with an ``env`` always goes as an entry: no other flag carries
+   the env, and without it the serving YAMLs the trainer writes would run
+   the finetuned model in the default environment.
 
 
 .. py:function:: find_checkpoint(model_config, override=None) -> Optional[pathlib.Path]

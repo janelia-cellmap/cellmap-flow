@@ -11,7 +11,8 @@ cellmap_flow.finetune.losses
    patch: a correction labels a few voxels of it, and the rest must not count.
    ``masked_mean`` is that average, ``balanced_mean`` gives the foreground and
    the background half the weight each, and the losses and the distillation
-   term below are built from the two.
+   term below are built from the two. ``IntervalLoss``, a distance model's loss
+   on scribbles, works in logits instead of probabilities (``as_logits``).
 
    The float operations are kept in the order the trainer always used, so a
    run computes the same numbers bit for bit
@@ -27,6 +28,7 @@ Classes
    cellmap_flow.finetune.losses.DiceLoss
    cellmap_flow.finetune.losses.CombinedLoss
    cellmap_flow.finetune.losses.MarginLoss
+   cellmap_flow.finetune.losses.IntervalLoss
 
 
 Functions
@@ -37,6 +39,7 @@ Functions
    cellmap_flow.finetune.losses.masked_mean
    cellmap_flow.finetune.losses.balanced_mean
    cellmap_flow.finetune.losses.as_probabilities
+   cellmap_flow.finetune.losses.as_logits
    cellmap_flow.finetune.losses.soft_target_entropy
    cellmap_flow.finetune.losses.distillation_loss
 
@@ -65,6 +68,15 @@ Module Contents
    Left alone when the model already ends in a sigmoid (the cellmap
    *_distance_* UNets do); a second sigmoid would squash [0, 1] into
    [0.5, 0.73] and make a well-fitting prediction look like a constant.
+
+
+.. py:function:: as_logits(pred, model_has_sigmoid)
+
+   The model's output as logits: ``as_probabilities``' inverse.
+
+   A model ending in a sigmoid is taken back through it. The clamp keeps
+   log(0) out; it costs no gradient short of |logit| ~16, far past where any
+   distance bound sits (SATURATION_SIGMAS is a logit of 6).
 
 
 .. py:function:: soft_target_entropy(target, eps=1e-07)
@@ -179,5 +191,91 @@ Module Contents
 
 
    .. py:method:: forward(pred: torch.Tensor, target: torch.Tensor, mask: Optional[torch.Tensor] = None) -> torch.Tensor
+
+
+.. py:class:: IntervalLoss(sigma_nm, voxel_size_nm, slope_weight=1.0, balance_classes=False, slack_voxels=1.0, sign_weight=5.0)
+
+
+
+   A distance model's loss on scribbles: stay within the bounds the paint implies.
+
+   After iSDF (Ortiz et al., RSS 2022). IntervalTargetTransform gives each
+   painted voxel a lower and an upper bound on its logit z (the distance
+   target is z = 2d/sigma). Per painted voxel the loss is
+
+       relu(lower - slack - z) + relu(z - upper - slack)
+           + sign_weight * relu(-s * z - slack)
+
+   with s the painted side (+1 foreground, -1 background): zero inside the
+   bounds, linear outside them, and much steeper on the wrong side of the
+   boundary. The slack, a voxel of distance by default, forgives a stroke
+   that strays a voxel over an edge. Unpainted voxels get none of it:
+   distillation and the anchor patches hold them.
+
+   Bounds alone let the field collapse: a step at the boundary meets every
+   lower bound and most upper ones, and is what margin loss made of a
+   distance model. So a second term limits the slope, everywhere in the
+   patch: the mean of relu(|grad z| / max_slope - 1), from central
+   differences scaled by the voxel size in nm, with max_slope =
+   SLOPE_TOLERANCE * 2/sigma per nm, the steepest a distance field gets in
+   logits. One-sided: the field may be flatter. z is clamped to the
+   saturation (SATURATION_SIGMAS) first, so a model confident far from any
+   boundary is not asked to bring its far field in.
+
+   :param sigma_nm: from the IntervalTargetTransform that made
+                    the bounds.
+   :param voxel_size_nm: from the IntervalTargetTransform that made
+                         the bounds.
+   :param slope_weight: the slope term's weight against the bounds' (default 1).
+   :param balance_classes: average foreground and background voxels separately.
+   :param slack_voxels: the slack, in voxels of the finest axis (default 1).
+   :param sign_weight: the extra slope of the wrong-side penalty (default 5).
+
+
+   .. py:attribute:: voxel_size_nm
+
+
+   .. py:attribute:: slack
+
+
+   .. py:attribute:: max_slope
+
+
+   .. py:attribute:: saturation
+      :value: 6.0
+
+
+
+   .. py:attribute:: slope_weight
+      :value: 1.0
+
+
+
+   .. py:attribute:: balance_classes
+      :value: False
+
+
+
+   .. py:attribute:: sign_weight
+      :value: 5.0
+
+
+
+   .. py:method:: bounds_term(z, bounds, mask)
+
+      The mean penalty for leaving the bounds, over the painted voxels.
+
+
+
+   .. py:method:: slope_term(z)
+
+      The mean excess of |grad z| over max_slope, as a fraction of it, over the patch's interior.
+
+
+
+   .. py:method:: forward(z: torch.Tensor, bounds: torch.Tensor, mask: torch.Tensor) -> torch.Tensor
+
+      The loss of (B, C, Z, Y, X) logits ``z`` against IntervalTargetTransform's bounds and mask.
+
 
 

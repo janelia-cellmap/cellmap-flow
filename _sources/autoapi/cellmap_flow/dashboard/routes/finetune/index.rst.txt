@@ -19,6 +19,8 @@ cellmap_flow.dashboard.routes.finetune
    - ``overlay``: an annotation volume's layer, the annotated-regions boxes,
      and syncing the annotations from MinIO;
    - ``good_regions``: marking the current view as a region the model gets right;
+   - ``view_labels``: labelling the view from the model's prediction, or all
+     background;
    - ``instance_correction``: instance-correction volumes;
    - ``layers``: adding, removing and renaming viewer layers.
 
@@ -39,6 +41,7 @@ Submodules
    /autoapi/cellmap_flow/dashboard/routes/finetune/layers/index
    /autoapi/cellmap_flow/dashboard/routes/finetune/overlay/index
    /autoapi/cellmap_flow/dashboard/routes/finetune/training/index
+   /autoapi/cellmap_flow/dashboard/routes/finetune/view_labels/index
    /autoapi/cellmap_flow/dashboard/routes/finetune/yaml_crops/index
 
 

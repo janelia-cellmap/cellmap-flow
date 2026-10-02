@@ -23,6 +23,12 @@ cellmap_flow.serving.launch
    the program before 0.3.0, takes ``--model`` too, so a deployment that
    still sets that works.
 
+   A model with an ``env`` (``models.envs``) is served from that environment
+   instead: the entry's ``env`` is taken off, and the program is that
+   environment's (``pixi run --frozen --manifest-path <pixi.toml> -e <env>
+   cellmap_flow serve``, or ``<env>/bin/python -P -m cellmap_flow.cli.main
+   serve``) in place of SERVER_COMMAND, which names this deployment's own.
+
    The launchers submit it as a shell line, which ``jobs.spec.shell_join``
    quotes: the entry's JSON is full of double quotes and braces, and
    ``shlex.join`` would single-quote it, which LSF's own quoting splits apart
@@ -56,7 +62,8 @@ Module Contents
 
    For launchers that have no model config to hand and should not build
    one (a Hugging Face config fetches its repo's metadata); None arguments
-   are left out, as in ``ModelConfig.launch_entry``.
+   are left out, as in ``ModelConfig.launch_entry``. An ``env`` among
+   ``params`` serves the model from that environment.
 
 
 .. py:function:: server_command(model_config, data_path: str, resample: bool = False) -> str

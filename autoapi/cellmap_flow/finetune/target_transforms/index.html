@@ -134,11 +134,16 @@
 mask: (B, C, Z, Y, X) or (B, 1, Z, Y, X) — valid loss mask</p>
 </dd>
 </dl>
+<p>except IntervalTargetTransform, whose “target” is a lower and an upper bound
+on a distance model’s output, for losses.IntervalLoss.</p>
 <section id="attributes">
 <h2>Attributes<a class="headerlink" href="#attributes" title="Link to this heading"></a></h2>
 <table class="autosummary longtable docutils align-default">
 <tbody>
 <tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.target_transforms.logger" title="cellmap_flow.finetune.target_transforms.logger"><code class="xref py py-obj docutils literal notranslate"><span class="pre">logger</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.finetune.target_transforms.SATURATION_SIGMAS" title="cellmap_flow.finetune.target_transforms.SATURATION_SIGMAS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SATURATION_SIGMAS</span></code></a></p></td>
 <td><p></p></td>
 </tr>
 </tbody>
@@ -162,6 +167,9 @@ mask: (B, C, Z, Y, X) or (B, 1, Z, Y, X) — valid loss mask</p>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.target_transforms.DistanceTargetTransform" title="cellmap_flow.finetune.target_transforms.DistanceTargetTransform"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DistanceTargetTransform</span></code></a></p></td>
 <td><p>Soft signed-distance target for models trained the fly_organelles way.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.finetune.target_transforms.IntervalTargetTransform" title="cellmap_flow.finetune.target_transforms.IntervalTargetTransform"><code class="xref py py-obj docutils literal notranslate"><span class="pre">IntervalTargetTransform</span></code></a></p></td>
+<td><p>Bounds on a distance model's output at each painted voxel, for scribbles.</p></td>
 </tr>
 </tbody>
 </table>
@@ -292,6 +300,64 @@ of them, as BroadcastBinaryTargetTransform does.</p></li>
 <dt class="sig sig-object py" id="cellmap_flow.finetune.target_transforms.DistanceTargetTransform.num_channels">
 <span class="sig-name descname"><span class="pre">num_channels</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">1</span></span><a class="headerlink" href="#cellmap_flow.finetune.target_transforms.DistanceTargetTransform.num_channels" title="Link to this definition"></a></dt>
 <dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.target_transforms.SATURATION_SIGMAS">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.target_transforms.</span></span><span class="sig-name descname"><span class="pre">SATURATION_SIGMAS</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">3.0</span></span><a class="headerlink" href="#cellmap_flow.finetune.target_transforms.SATURATION_SIGMAS" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.target_transforms.IntervalTargetTransform">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.target_transforms.</span></span><span class="sig-name descname"><span class="pre">IntervalTargetTransform</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">sigma_voxels</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">6.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">voxel_size_nm</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.finetune.target_transforms.IntervalTargetTransform" title="Link to this definition"></a></dt>
+<dd><p>Bounds on a distance model’s output at each painted voxel, for scribbles.</p>
+<p>A distance target needs every voxel’s distance to the object boundary,
+and a stroke does not say where the boundary is. It does bound it:</p>
+<ul class="simple">
+<li><p>upper, U: the nearest voxel painted as the other class. The boundary
+lies between the two, so <a href="#id5"><span class="problematic" id="id6">|d|</span></a> &lt;= U.</p></li>
+<li><p>lower, L: the nearest voxel not painted as the voxel’s own class –
+the other class, unpainted (it may be either), or past the patch edge.
+Every voxel closer is known to be its own class, so <a href="#id7"><span class="problematic" id="id8">|d|</span></a> &gt;= L.</p></li>
+</ul>
+<p>Where the paint is dense, the nearest voxel not of its own class is of
+the other, and L == U: the exact distance DistanceTargetTransform would
+give, with the same convention (edt to the nearest voxel of the other
+class, so 1 voxel on either side of a boundary). On a stroke the two
+bracket the truth. Both are computed in the patch the trainer gets, which
+keeps them valid: a closer other-class voxel outside the patch would only
+lower the true <a href="#id9"><span class="problematic" id="id10">|d|</span></a>, which U already exceeds or meets, and the patch edge
+counts as “not its own class”, which can only lower L. Reading context
+around the patch would tighten bounds near its edges, but the dataset
+hands the trainer the patch alone (augmented with it), so they are left
+as loose as the patch makes them.</p>
+<p>Distances are Euclidean in nm (<code class="docutils literal notranslate"><span class="pre">voxel_size_nm</span></code>, so an anisotropic
+grid is measured as it is), and sigma, which is in output voxels as for
+the distance target, is taken in the finest axis’s voxels. The bounds
+are returned in the model’s logit space, where the distance target
+(tanh(d/sigma) + 1)/2 = sigmoid(2d/sigma) is the line z = 2d/sigma, with
+the sign of the painted class. Past SATURATION_SIGMAS a lower bound is
+capped there and an upper bound dropped (+-inf).</p>
+<p>Returns <code class="docutils literal notranslate"><span class="pre">(bounds,</span> <span class="pre">mask)</span></code>: bounds (B, 2, Z, Y, X), the lower and upper
+bound on the logit (0 off the paint), and mask (B, 1, Z, Y, X), the
+painted voxels. Both have one channel per bound whatever the model’s
+channels: losses.IntervalLoss broadcasts them over its output.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.target_transforms.IntervalTargetTransform.voxel_size_nm">
+<span class="sig-name descname"><span class="pre">voxel_size_nm</span></span><a class="headerlink" href="#cellmap_flow.finetune.target_transforms.IntervalTargetTransform.voxel_size_nm" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.target_transforms.IntervalTargetTransform.sigma_nm">
+<span class="sig-name descname"><span class="pre">sigma_nm</span></span><a class="headerlink" href="#cellmap_flow.finetune.target_transforms.IntervalTargetTransform.sigma_nm" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.target_transforms.IntervalTargetTransform.distance_bounds">
+<span class="sig-name descname"><span class="pre">distance_bounds</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ann</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.finetune.target_transforms.IntervalTargetTransform.distance_bounds" title="Link to this definition"></a></dt>
+<dd><p>(L, U) in nm for each voxel of a (Z, Y, X) annotation; 0 off the paint, U inf with no other class.</p>
+</dd></dl>
 
 </dd></dl>
 

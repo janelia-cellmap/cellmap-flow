@@ -135,7 +135,9 @@ inference server already had.</p>
 <ol class="arabic simple">
 <li><p>a running inference server, which already holds the model;</p></li>
 <li><p>this cache, keyed so that it invalidates itself when the model changes;</p></li>
-<li><p>building the model, which then populates the cache.</p></li>
+<li><p>building the model, which then populates the cache. Not for a model
+that runs in its own environment (<code class="docutils literal notranslate"><span class="pre">models.envs</span></code>): its packages are
+there, not here (<code class="docutils literal notranslate"><span class="pre">build_here</span></code>).</p></li>
 </ol>
 <p>Reading the declarations statically is deliberately <em>not</em> among them. The
 script contract allows geometry to depend on the model – a DaCapo script
@@ -171,7 +173,10 @@ rather than failing.</p>
 <tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.models.geometry_cache.store_geometry" title="cellmap_flow.models.geometry_cache.store_geometry"><code class="xref py py-obj docutils literal notranslate"><span class="pre">store_geometry</span></code></a>(model_config, config)</p></td>
 <td><p>Remember the geometry of a model we just paid to build.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.models.geometry_cache.resolve_model_geometry" title="cellmap_flow.models.geometry_cache.resolve_model_geometry"><code class="xref py py-obj docutils literal notranslate"><span class="pre">resolve_model_geometry</span></code></a>(model_name, model_config)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.models.geometry_cache.build_here" title="cellmap_flow.models.geometry_cache.build_here"><code class="xref py py-obj docutils literal notranslate"><span class="pre">build_here</span></code></a>(model_config)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">model_config.config</span></code>, built in this process.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.models.geometry_cache.resolve_model_geometry" title="cellmap_flow.models.geometry_cache.resolve_model_geometry"><code class="xref py py-obj docutils literal notranslate"><span class="pre">resolve_model_geometry</span></code></a>(model_name, model_config)</p></td>
 <td><p>The five geometry fields, by the cheapest route that can supply them.</p></td>
 </tr>
 </tbody>
@@ -220,12 +225,29 @@ geometry attributes, a ModelGeometry included.</p>
 </dd></dl>
 
 <dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.models.geometry_cache.build_here">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.geometry_cache.</span></span><span class="sig-name descname"><span class="pre">build_here</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model_config</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.models.geometry_cache.build_here" title="Link to this definition"></a></dt>
+<dd><p><code class="docutils literal notranslate"><span class="pre">model_config.config</span></code>, built in this process.</p>
+<p>Refused for a model with an <code class="docutils literal notranslate"><span class="pre">env</span></code>: this process lacks its packages,
+or has other versions of them (the default environment’s cellpose 3
+for a Cellpose-SAM model), so building it here fails or, worse,
+half-works. Its geometry comes from its running server.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference internal" href="../configs/base/index.html#cellmap_flow.models.configs.base.ModelEnvError" title="cellmap_flow.models.configs.base.ModelEnvError"><strong>ModelEnvError</strong></a> – the model runs in its own environment.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
 <dt class="sig sig-object py" id="cellmap_flow.models.geometry_cache.resolve_model_geometry">
 <span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.geometry_cache.</span></span><span class="sig-name descname"><span class="pre">resolve_model_geometry</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model_config</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.models.geometry_cache.resolve_model_geometry" title="Link to this definition"></a></dt>
 <dd><p>The five geometry fields, by the cheapest route that can supply them.</p>
 <p>Returns an object exposing <code class="docutils literal notranslate"><span class="pre">read_shape</span></code>, <code class="docutils literal notranslate"><span class="pre">write_shape</span></code>,
 <code class="docutils literal notranslate"><span class="pre">input_voxel_size</span></code>, <code class="docutils literal notranslate"><span class="pre">output_voxel_size</span></code> and <code class="docutils literal notranslate"><span class="pre">output_channels</span></code> –
-either a stand-in or, on the build path, the real <code class="docutils literal notranslate"><span class="pre">ModelConfig.config</span></code>.</p>
+either a stand-in or, on the build path, the real <code class="docutils literal notranslate"><span class="pre">ModelConfig.config</span></code>.
+Raises ModelEnvError for a model that runs in its own environment when
+neither its server nor the cache knows its geometry.</p>
 </dd></dl>
 
 </section>

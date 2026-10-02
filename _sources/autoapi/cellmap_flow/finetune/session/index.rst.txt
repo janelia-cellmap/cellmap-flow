@@ -17,6 +17,7 @@ cellmap_flow.finetune.session
    - ``minio``: starting MinIO and serving volumes through it.
    - ``sync``: pulling painted chunks back from MinIO, and the periodic sync.
    - ``instance``: instance corrections, seeded from a segmentation.
+   - ``fill``: labelling a whole box of a volume at once, unpainted voxels only.
 
    The submodules import neither flask, neuroglancer, torch nor
    ``cellmap_flow.globals``, so the CLI, the trainer and scripts can use them
@@ -32,6 +33,7 @@ Submodules
 .. toctree::
    :maxdepth: 1
 
+   /autoapi/cellmap_flow/finetune/session/fill/index
    /autoapi/cellmap_flow/finetune/session/instance/index
    /autoapi/cellmap_flow/finetune/session/manifest/index
    /autoapi/cellmap_flow/finetune/session/minio/index

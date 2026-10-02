@@ -141,10 +141,7 @@
 <tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.common.RESTART_PASSTHROUGH_KEYS" title="cellmap_flow.dashboard.routes.finetune.common.RESTART_PASSTHROUGH_KEYS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RESTART_PASSTHROUGH_KEYS</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.common.SIGN_ONLY_MARGIN" title="cellmap_flow.dashboard.routes.finetune.common.SIGN_ONLY_MARGIN"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SIGN_ONLY_MARGIN</span></code></a></p></td>
-<td><p></p></td>
-</tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.common.SPARSE_MSE_NOTE" title="cellmap_flow.dashboard.routes.finetune.common.SPARSE_MSE_NOTE"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SPARSE_MSE_NOTE</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.common.SPARSE_MSE_NOTE" title="cellmap_flow.dashboard.routes.finetune.common.SPARSE_MSE_NOTE"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SPARSE_MSE_NOTE</span></code></a></p></td>
 <td><p></p></td>
 </tr>
 </tbody>
@@ -327,21 +324,11 @@ without a manifest cannot be trained, so it is not sparse either.</p>
 <dd></dd></dl>
 
 <dl class="py attribute">
-<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.common.TrainingSettings.margin">
-<span class="sig-name descname"><span class="pre">margin</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">float</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.common.TrainingSettings.margin" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
 <dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.common.TrainingSettings.note">
 <span class="sig-name descname"><span class="pre">note</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.common.TrainingSettings.note" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 </dd></dl>
-
-<dl class="py data">
-<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.common.SIGN_ONLY_MARGIN">
-<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.common.</span></span><span class="sig-name descname"><span class="pre">SIGN_ONLY_MARGIN</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0.5</span></span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.common.SIGN_ONLY_MARGIN" title="Link to this definition"></a></dt>
-<dd></dd></dl>
 
 <dl class="py data">
 <dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.common.SPARSE_MSE_NOTE">
@@ -361,9 +348,9 @@ failing on the cluster:
 distance case below);</p>
 </div></blockquote>
 <ul class="simple">
-<li><p>a distance target with sparse annotations: a binary target with margin
-loss instead, at margin 0.5 and distillation of at least 0.5 (see
-below);</p></li>
+<li><p>a distance target with sparse annotations: the interval loss, on the
+bounds the paint sets on each voxel’s distance, with distillation of
+at least 0.5 (see below);</p></li>
 <li><p>a distance target otherwise: bce, without label smoothing.</p></li>
 </ul>
 <p>A sparse session also masks its unannotated voxels out of the loss.</p>

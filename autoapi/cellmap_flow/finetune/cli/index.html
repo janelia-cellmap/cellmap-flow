@@ -157,7 +157,7 @@ restart may change, and how a restart request changes them.</p></li>
 <tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.finetune.cli.parse_args" title="cellmap_flow.finetune.cli.parse_args"><code class="xref py py-obj docutils literal notranslate"><span class="pre">parse_args</span></code></a>(→ argparse.Namespace)</p></td>
 <td><p>The job's flags, with the defaults that depend on other flags filled in.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.cli.build_target_transform" title="cellmap_flow.finetune.cli.build_target_transform"><code class="xref py py-obj docutils literal notranslate"><span class="pre">build_target_transform</span></code></a>(args, model_config)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.cli.build_target_transform" title="cellmap_flow.finetune.cli.build_target_transform"><code class="xref py py-obj docutils literal notranslate"><span class="pre">build_target_transform</span></code></a>(args, model_config[, ...])</p></td>
 <td><p>Build a TargetTransform based on CLI args.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.finetune.cli.model_config_from_args" title="cellmap_flow.finetune.cli.model_config_from_args"><code class="xref py py-obj docutils literal notranslate"><span class="pre">model_config_from_args</span></code></a>(...)</p></td>
@@ -192,8 +192,11 @@ restart may change, and how a restart request changes them.</p></li>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="cellmap_flow.finetune.cli.build_target_transform">
-<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.cli.</span></span><span class="sig-name descname"><span class="pre">build_target_transform</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model_config</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.finetune.cli.build_target_transform" title="Link to this definition"></a></dt>
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.cli.</span></span><span class="sig-name descname"><span class="pre">build_target_transform</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model_config</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_voxel_size_nm</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.finetune.cli.build_target_transform" title="Link to this definition"></a></dt>
 <dd><p>Build a TargetTransform based on CLI args.</p>
+<p><code class="docutils literal notranslate"><span class="pre">output_voxel_size_nm</span></code> is the annotation patches’ voxel size, which
+the distance bounds of <code class="docutils literal notranslate"><span class="pre">--loss-type</span> <span class="pre">interval</span></code> are measured in; the
+model’s output voxel size when not given.</p>
 </dd></dl>
 
 <dl class="py function">

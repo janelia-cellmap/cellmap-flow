@@ -42,7 +42,7 @@ Module Contents
 
 .. py:data:: PLACEHOLDER_DATA_PATHS
 
-.. py:function:: generate_finetuned_model_yaml(lora_adapter_path: str = None, base_model_dict: dict = None, model_name: str = None, output_path: pathlib.Path = None, data_path: str = None, queue: str = None, charge_group: str = None, json_data: dict = None, scale: str = None, weights_path: str = None, resample: bool = False) -> pathlib.Path
+.. py:function:: generate_finetuned_model_yaml(lora_adapter_path: str = None, base_model_dict: dict = None, model_name: str = None, output_path: pathlib.Path = None, data_path: str = None, queue: str = None, charge_group: str = None, json_data: dict = None, scale: str = None, weights_path: str = None, resample: bool = False, input_voxel_size=None, output_voxel_size=None) -> pathlib.Path
 
    Generate .yaml configuration for serving a finetuned model.
 
@@ -67,6 +67,12 @@ Module Contents
                  a multiscale group was served s0.
    :param resample: the model was trained on the raw resampled to its voxel
                     size (its volume's ``resample``), so serve it that way too
+   :param input_voxel_size: the voxel sizes the finetune was
+                            trained at, when not the base model's (run_outputs); the served
+                            model declares them
+   :param output_voxel_size: the voxel sizes the finetune was
+                             trained at, when not the base model's (run_outputs); the served
+                             model declares them
 
    :returns: Path to the generated YAML file
 

@@ -41,6 +41,7 @@ Functions
    cellmap_flow.finetune.run_outputs.models_dir
    cellmap_flow.finetune.run_outputs.point_latest_export
    cellmap_flow.finetune.run_outputs.write_serving_yaml
+   cellmap_flow.finetune.run_outputs.trained_voxel_sizes
 
 
 Module Contents
@@ -95,5 +96,17 @@ Module Contents
                    restart without changing the model.
    :param export_dir: the directory this iteration exported into
                       (iteration_dir); the YAML points there.
+
+
+.. py:function:: trained_voxel_sizes(manifest: dict, model_config) -> dict
+
+   The ``input_voxel_size``/``output_voxel_size`` the serving YAML declares:
+   the manifest's, for each that is not the model's own.
+
+   A volume made without resampling is at the raw level nearest the model's
+   voxel size, and the trainer read that level as it is, so the finetuned
+   model is a model at that level's size (FinetuneModelConfig's
+   ``trained_at_geometry``). A volume made resampling is at the model's own
+   sizes, and nothing is declared.
 
 

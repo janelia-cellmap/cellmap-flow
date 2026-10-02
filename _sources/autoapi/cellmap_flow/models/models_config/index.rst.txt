@@ -64,6 +64,11 @@ Module Contents
 
 .. py:class:: ModelConfig
 
+   .. py:attribute:: env
+      :value: None
+
+
+
    .. py:attribute:: validate_model_shapes
       :value: True
 
@@ -132,7 +137,9 @@ Module Contents
       to_dict(), less what only the pipeline builder shows (a Hugging Face
       repo's downloaded metadata), under the name the registry has this
       class under (``registry.cli_name_of``), so that the server rebuilds
-      this class and not a parent it inherited cli_name from.
+      this class and not a parent it inherited cli_name from. With an
+      ``env``, which ``serving.launch`` takes off again to start the server
+      in that environment.
 
 
    .. py:property:: command
@@ -349,7 +356,7 @@ Module Contents
 
 
 
-.. py:class:: FinetuneModelConfig(lora_adapter_path: str = None, base_model: dict = None, name: str = None, scale=None, weights_path: str = None)
+.. py:class:: FinetuneModelConfig(lora_adapter_path: str = None, base_model: dict = None, name: str = None, scale=None, weights_path: str = None, input_voxel_size: tuple = None, output_voxel_size: tuple = None)
 
 
 
@@ -391,6 +398,24 @@ Module Contents
    .. py:attribute:: scale
       :value: None
 
+
+
+   .. py:attribute:: input_voxel_size
+      :value: None
+
+
+
+   .. py:attribute:: output_voxel_size
+      :value: None
+
+
+
+   .. py:property:: env
+
+      the
+      weights go on the base model, so they need the base's packages.
+
+      :type: Its own ``env`` if it was given one, else its base model's
 
 
    .. py:property:: base_model_config

@@ -138,6 +138,11 @@ the override), and split into words (quoted as one token, the shell looks
 for a program called “pixi run cellmap_flow serve”). <code class="docutils literal notranslate"><span class="pre">cellmap_flow_server</span></code>,
 the program before 0.3.0, takes <code class="docutils literal notranslate"><span class="pre">--model</span></code> too, so a deployment that
 still sets that works.</p>
+<p>A model with an <code class="docutils literal notranslate"><span class="pre">env</span></code> (<code class="docutils literal notranslate"><span class="pre">models.envs</span></code>) is served from that environment
+instead: the entry’s <code class="docutils literal notranslate"><span class="pre">env</span></code> is taken off, and the program is that
+environment’s (<code class="docutils literal notranslate"><span class="pre">pixi</span> <span class="pre">run</span> <span class="pre">--frozen</span> <span class="pre">--manifest-path</span> <span class="pre">&lt;pixi.toml&gt;</span> <span class="pre">-e</span> <span class="pre">&lt;env&gt;</span>
+<span class="pre">cellmap_flow</span> <span class="pre">serve</span></code>, or <code class="docutils literal notranslate"><span class="pre">&lt;env&gt;/bin/python</span> <span class="pre">-P</span> <span class="pre">-m</span> <span class="pre">cellmap_flow.cli.main</span>
+<span class="pre">serve</span></code>) in place of SERVER_COMMAND, which names this deployment’s own.</p>
 <p>The launchers submit it as a shell line, which <code class="docutils literal notranslate"><span class="pre">jobs.spec.shell_join</span></code>
 quotes: the entry’s JSON is full of double quotes and braces, and
 <code class="docutils literal notranslate"><span class="pre">shlex.join</span></code> would single-quote it, which LSF’s own quoting splits apart
@@ -176,7 +181,8 @@ it to the model’s input voxel size when <code class="docutils literal notransl
 <dd><p>The server’s argv for a model given as its type and constructor arguments.</p>
 <p>For launchers that have no model config to hand and should not build
 one (a Hugging Face config fetches its repo’s metadata); None arguments
-are left out, as in <code class="docutils literal notranslate"><span class="pre">ModelConfig.launch_entry</span></code>.</p>
+are left out, as in <code class="docutils literal notranslate"><span class="pre">ModelConfig.launch_entry</span></code>. An <code class="docutils literal notranslate"><span class="pre">env</span></code> among
+<code class="docutils literal notranslate"><span class="pre">params</span></code> serves the model from that environment.</p>
 </dd></dl>
 
 <dl class="py function">

@@ -128,7 +128,8 @@
 patch: a correction labels a few voxels of it, and the rest must not count.
 <code class="docutils literal notranslate"><span class="pre">masked_mean</span></code> is that average, <code class="docutils literal notranslate"><span class="pre">balanced_mean</span></code> gives the foreground and
 the background half the weight each, and the losses and the distillation
-term below are built from the two.</p>
+term below are built from the two. <code class="docutils literal notranslate"><span class="pre">IntervalLoss</span></code>, a distance model’s loss
+on scribbles, works in logits instead of probabilities (<code class="docutils literal notranslate"><span class="pre">as_logits</span></code>).</p>
 <p>The float operations are kept in the order the trainer always used, so a
 run computes the same numbers bit for bit
 (tests/finetune/test_training_snapshot.py).</p>
@@ -144,6 +145,9 @@ run computes the same numbers bit for bit
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.losses.MarginLoss" title="cellmap_flow.finetune.losses.MarginLoss"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MarginLoss</span></code></a></p></td>
 <td><p>Margin-based loss for sparse/scribble annotations.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.finetune.losses.IntervalLoss" title="cellmap_flow.finetune.losses.IntervalLoss"><code class="xref py py-obj docutils literal notranslate"><span class="pre">IntervalLoss</span></code></a></p></td>
+<td><p>A distance model's loss on scribbles: stay within the bounds the paint implies.</p></td>
 </tr>
 </tbody>
 </table>
@@ -161,10 +165,13 @@ run computes the same numbers bit for bit
 <tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.losses.as_probabilities" title="cellmap_flow.finetune.losses.as_probabilities"><code class="xref py py-obj docutils literal notranslate"><span class="pre">as_probabilities</span></code></a>(pred, model_has_sigmoid)</p></td>
 <td><p>The model's output as probabilities.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.finetune.losses.soft_target_entropy" title="cellmap_flow.finetune.losses.soft_target_entropy"><code class="xref py py-obj docutils literal notranslate"><span class="pre">soft_target_entropy</span></code></a>(target[, eps])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.finetune.losses.as_logits" title="cellmap_flow.finetune.losses.as_logits"><code class="xref py py-obj docutils literal notranslate"><span class="pre">as_logits</span></code></a>(pred, model_has_sigmoid)</p></td>
+<td><p>The model's output as logits: <code class="docutils literal notranslate"><span class="pre">as_probabilities</span></code>' inverse.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.losses.soft_target_entropy" title="cellmap_flow.finetune.losses.soft_target_entropy"><code class="xref py py-obj docutils literal notranslate"><span class="pre">soft_target_entropy</span></code></a>(target[, eps])</p></td>
 <td><p>Per-voxel BCE that a perfectly calibrated prediction still pays.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.losses.distillation_loss" title="cellmap_flow.finetune.losses.distillation_loss"><code class="xref py py-obj docutils literal notranslate"><span class="pre">distillation_loss</span></code></a>(student, teacher, scope[, ...])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.finetune.losses.distillation_loss" title="cellmap_flow.finetune.losses.distillation_loss"><code class="xref py py-obj docutils literal notranslate"><span class="pre">distillation_loss</span></code></a>(student, teacher, scope[, ...])</p></td>
 <td><p>Mean squared distance of the student's output from the teacher's, over <code class="docutils literal notranslate"><span class="pre">scope</span></code>.</p></td>
 </tr>
 </tbody>
@@ -194,6 +201,15 @@ smoothed target, every background voxel carried s/2 of foreground weight.</p>
 <p>Left alone when the model already ends in a sigmoid (the cellmap
 <em>_distance_</em> UNets do); a second sigmoid would squash [0, 1] into
 [0.5, 0.73] and make a well-fitting prediction look like a constant.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.losses.as_logits">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.losses.</span></span><span class="sig-name descname"><span class="pre">as_logits</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">pred</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model_has_sigmoid</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.finetune.losses.as_logits" title="Link to this definition"></a></dt>
+<dd><p>The model’s output as logits: <code class="docutils literal notranslate"><span class="pre">as_probabilities</span></code>’ inverse.</p>
+<p>A model ending in a sigmoid is taken back through it. The clamp keeps
+log(0) out; it costs no gradient short of <a href="#id1"><span class="problematic" id="id2">|logit|</span></a> ~16, far past where any
+distance bound sits (SATURATION_SIGMAS is a logit of 6).</p>
 </dd></dl>
 
 <dl class="py function">
@@ -227,7 +243,7 @@ for a model that ends in a sigmoid.</p>
 <dd><p>Dice Loss for segmentation tasks.</p>
 <p>Dice loss is effective for imbalanced datasets where the target class
 may be sparse (e.g., mitochondria in EM images).</p>
-<p>Formula: 1 - (2 * <a href="#id1"><span class="problematic" id="id2">|X ∩ Y|</span></a> + smooth) / (<a href="#id3"><span class="problematic" id="id4">|X|</span></a> + <a href="#id5"><span class="problematic" id="id6">|Y|</span></a> + smooth)</p>
+<p>Formula: 1 - (2 * <a href="#id3"><span class="problematic" id="id4">|X ∩ Y|</span></a> + smooth) / (<a href="#id5"><span class="problematic" id="id6">|X|</span></a> + <a href="#id7"><span class="problematic" id="id8">|Y|</span></a> + smooth)</p>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="cellmap_flow.finetune.losses.DiceLoss.smooth">
 <span class="sig-name descname"><span class="pre">smooth</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">1.0</span></span><a class="headerlink" href="#cellmap_flow.finetune.losses.DiceLoss.smooth" title="Link to this definition"></a></dt>
@@ -307,6 +323,104 @@ For post-sigmoid outputs in [0, 1]:
 <dt class="sig sig-object py" id="cellmap_flow.finetune.losses.MarginLoss.forward">
 <span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">pred</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">torch.Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">target</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">torch.Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mask</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">torch.Tensor</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">torch.Tensor</span></span></span><a class="headerlink" href="#cellmap_flow.finetune.losses.MarginLoss.forward" title="Link to this definition"></a></dt>
 <dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.losses.IntervalLoss">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.losses.</span></span><span class="sig-name descname"><span class="pre">IntervalLoss</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">sigma_nm</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">voxel_size_nm</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">slope_weight</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">balance_classes</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">slack_voxels</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sign_weight</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">5.0</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.finetune.losses.IntervalLoss" title="Link to this definition"></a></dt>
+<dd><p>A distance model’s loss on scribbles: stay within the bounds the paint implies.</p>
+<p>After iSDF (Ortiz et al., RSS 2022). IntervalTargetTransform gives each
+painted voxel a lower and an upper bound on its logit z (the distance
+target is z = 2d/sigma). Per painted voxel the loss is</p>
+<blockquote>
+<div><dl class="simple">
+<dt>relu(lower - slack - z) + relu(z - upper - slack)</dt><dd><ul class="simple">
+<li><p>sign_weight * relu(-s * z - slack)</p></li>
+</ul>
+</dd>
+</dl>
+</div></blockquote>
+<p>with s the painted side (+1 foreground, -1 background): zero inside the
+bounds, linear outside them, and much steeper on the wrong side of the
+boundary. The slack, a voxel of distance by default, forgives a stroke
+that strays a voxel over an edge. Unpainted voxels get none of it:
+distillation and the anchor patches hold them.</p>
+<p>Bounds alone let the field collapse: a step at the boundary meets every
+lower bound and most upper ones, and is what margin loss made of a
+distance model. So a second term limits the slope, everywhere in the
+patch: the mean of relu(<a href="#id9"><span class="problematic" id="id10">|grad z|</span></a> / max_slope - 1), from central
+differences scaled by the voxel size in nm, with max_slope =
+SLOPE_TOLERANCE * 2/sigma per nm, the steepest a distance field gets in
+logits. One-sided: the field may be flatter. z is clamped to the
+saturation (SATURATION_SIGMAS) first, so a model confident far from any
+boundary is not asked to bring its far field in.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>sigma_nm</strong> – from the IntervalTargetTransform that made
+the bounds.</p></li>
+<li><p><strong>voxel_size_nm</strong> – from the IntervalTargetTransform that made
+the bounds.</p></li>
+<li><p><strong>slope_weight</strong> – the slope term’s weight against the bounds’ (default 1).</p></li>
+<li><p><strong>balance_classes</strong> – average foreground and background voxels separately.</p></li>
+<li><p><strong>slack_voxels</strong> – the slack, in voxels of the finest axis (default 1).</p></li>
+<li><p><strong>sign_weight</strong> – the extra slope of the wrong-side penalty (default 5).</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.losses.IntervalLoss.voxel_size_nm">
+<span class="sig-name descname"><span class="pre">voxel_size_nm</span></span><a class="headerlink" href="#cellmap_flow.finetune.losses.IntervalLoss.voxel_size_nm" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.losses.IntervalLoss.slack">
+<span class="sig-name descname"><span class="pre">slack</span></span><a class="headerlink" href="#cellmap_flow.finetune.losses.IntervalLoss.slack" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.losses.IntervalLoss.max_slope">
+<span class="sig-name descname"><span class="pre">max_slope</span></span><a class="headerlink" href="#cellmap_flow.finetune.losses.IntervalLoss.max_slope" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.losses.IntervalLoss.saturation">
+<span class="sig-name descname"><span class="pre">saturation</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">6.0</span></span><a class="headerlink" href="#cellmap_flow.finetune.losses.IntervalLoss.saturation" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.losses.IntervalLoss.slope_weight">
+<span class="sig-name descname"><span class="pre">slope_weight</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">1.0</span></span><a class="headerlink" href="#cellmap_flow.finetune.losses.IntervalLoss.slope_weight" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.losses.IntervalLoss.balance_classes">
+<span class="sig-name descname"><span class="pre">balance_classes</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">False</span></span><a class="headerlink" href="#cellmap_flow.finetune.losses.IntervalLoss.balance_classes" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.losses.IntervalLoss.sign_weight">
+<span class="sig-name descname"><span class="pre">sign_weight</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">5.0</span></span><a class="headerlink" href="#cellmap_flow.finetune.losses.IntervalLoss.sign_weight" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.losses.IntervalLoss.bounds_term">
+<span class="sig-name descname"><span class="pre">bounds_term</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">z</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bounds</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mask</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.finetune.losses.IntervalLoss.bounds_term" title="Link to this definition"></a></dt>
+<dd><p>The mean penalty for leaving the bounds, over the painted voxels.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.losses.IntervalLoss.slope_term">
+<span class="sig-name descname"><span class="pre">slope_term</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">z</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.finetune.losses.IntervalLoss.slope_term" title="Link to this definition"></a></dt>
+<dd><p>The mean excess of <a href="#id11"><span class="problematic" id="id12">|grad z|</span></a> over max_slope, as a fraction of it, over the patch’s interior.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.losses.IntervalLoss.forward">
+<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">z</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">torch.Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bounds</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">torch.Tensor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mask</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">torch.Tensor</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">torch.Tensor</span></span></span><a class="headerlink" href="#cellmap_flow.finetune.losses.IntervalLoss.forward" title="Link to this definition"></a></dt>
+<dd><p>The loss of (B, C, Z, Y, X) logits <code class="docutils literal notranslate"><span class="pre">z</span></code> against IntervalTargetTransform’s bounds and mask.</p>
+</dd></dl>
 
 </dd></dl>
 

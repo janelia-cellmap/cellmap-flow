@@ -146,6 +146,10 @@ shorthands, then <code class="docutils literal notranslate"><span class="pre">co
 <code class="docutils literal notranslate"><span class="pre">models</span></code>.</p></li>
 </ul>
 <p>A bad YAML entry or type name is a <code class="docutils literal notranslate"><span class="pre">config.yaml.ConfigError</span></code>.</p>
+<p>A model entry’s <code class="docutils literal notranslate"><span class="pre">env</span></code> (the environment its server runs in, see
+<code class="docutils literal notranslate"><span class="pre">models.envs</span></code>) is not a constructor argument: <code class="docutils literal notranslate"><span class="pre">build_model</span></code> and
+<code class="docutils literal notranslate"><span class="pre">instantiate_model_config</span></code> check it and set it on the built config, and
+the dashboard’s form offers it beside each type’s arguments.</p>
 <p>Importing this module imports neither torch, flask, huggingface_hub nor
 <code class="docutils literal notranslate"><span class="pre">cellmap_flow.globals</span></code>. The model config classes, which bring numpy and
 funlib (most of a second), are imported only when a function needs them.
@@ -159,6 +163,9 @@ bioimageio, dacapo or cellmap_models either.</p>
 <td><p></p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.models.registry.YAML_ALIASES" title="cellmap_flow.models.registry.YAML_ALIASES"><code class="xref py py-obj docutils literal notranslate"><span class="pre">YAML_ALIASES</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.models.registry.ENV_KEY" title="cellmap_flow.models.registry.ENV_KEY"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ENV_KEY</span></code></a></p></td>
 <td><p></p></td>
 </tr>
 </tbody>
@@ -223,6 +230,11 @@ bioimageio, dacapo or cellmap_models either.</p>
 <dl class="py data">
 <dt class="sig sig-object py" id="cellmap_flow.models.registry.YAML_ALIASES">
 <span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.registry.</span></span><span class="sig-name descname"><span class="pre">YAML_ALIASES</span></span><a class="headerlink" href="#cellmap_flow.models.registry.YAML_ALIASES" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.models.registry.ENV_KEY">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.registry.</span></span><span class="sig-name descname"><span class="pre">ENV_KEY</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'env'</span></span><a class="headerlink" href="#cellmap_flow.models.registry.ENV_KEY" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py function">

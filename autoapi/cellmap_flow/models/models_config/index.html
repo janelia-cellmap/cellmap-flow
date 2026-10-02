@@ -201,6 +201,11 @@ x, y, z.</p>
 <dt class="sig sig-object py" id="cellmap_flow.models.models_config.ModelConfig">
 <span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.models_config.</span></span><span class="sig-name descname"><span class="pre">ModelConfig</span></span><a class="headerlink" href="#cellmap_flow.models.models_config.ModelConfig" title="Link to this definition"></a></dt>
 <dd><dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.models.models_config.ModelConfig.env">
+<span class="sig-name descname"><span class="pre">env</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.models.models_config.ModelConfig.env" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
 <dt class="sig sig-object py" id="cellmap_flow.models.models_config.ModelConfig.validate_model_shapes">
 <span class="sig-name descname"><span class="pre">validate_model_shapes</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">True</span></span><a class="headerlink" href="#cellmap_flow.models.models_config.ModelConfig.validate_model_shapes" title="Link to this definition"></a></dt>
 <dd></dd></dl>
@@ -265,7 +270,9 @@ work without one.</p>
 <p>to_dict(), less what only the pipeline builder shows (a Hugging Face
 repo’s downloaded metadata), under the name the registry has this
 class under (<code class="docutils literal notranslate"><span class="pre">registry.cli_name_of</span></code>), so that the server rebuilds
-this class and not a parent it inherited cli_name from.</p>
+this class and not a parent it inherited cli_name from. With an
+<code class="docutils literal notranslate"><span class="pre">env</span></code>, which <code class="docutils literal notranslate"><span class="pre">serving.launch</span></code> takes off again to start the server
+in that environment.</p>
 </dd></dl>
 
 <dl class="py property">
@@ -517,7 +524,7 @@ class and not a parent it inherited cli_name from.</p>
 
 <dl class="py class">
 <dt class="sig sig-object py" id="cellmap_flow.models.models_config.FinetuneModelConfig">
-<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.models_config.</span></span><span class="sig-name descname"><span class="pre">FinetuneModelConfig</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">lora_adapter_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">base_model</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scale</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">weights_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.models.models_config.FinetuneModelConfig" title="Link to this definition"></a></dt>
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.models_config.</span></span><span class="sig-name descname"><span class="pre">FinetuneModelConfig</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">lora_adapter_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">base_model</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scale</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">weights_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">input_voxel_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">tuple</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_voxel_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">tuple</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.models.models_config.FinetuneModelConfig" title="Link to this definition"></a></dt>
 <dd><p>Configuration class for a finetuned model.</p>
 <p>Wraps any base ModelConfig with the finetune’s weights, which are
 exactly one of: a LoRA adapter (<code class="docutils literal notranslate"><span class="pre">lora_adapter_path</span></code>), applied with
@@ -554,6 +561,28 @@ weights go on top of it.</p>
 <dt class="sig sig-object py" id="cellmap_flow.models.models_config.FinetuneModelConfig.scale">
 <span class="sig-name descname"><span class="pre">scale</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.models.models_config.FinetuneModelConfig.scale" title="Link to this definition"></a></dt>
 <dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.models.models_config.FinetuneModelConfig.input_voxel_size">
+<span class="sig-name descname"><span class="pre">input_voxel_size</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.models.models_config.FinetuneModelConfig.input_voxel_size" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.models.models_config.FinetuneModelConfig.output_voxel_size">
+<span class="sig-name descname"><span class="pre">output_voxel_size</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.models.models_config.FinetuneModelConfig.output_voxel_size" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cellmap_flow.models.models_config.FinetuneModelConfig.env">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">env</span></span><a class="headerlink" href="#cellmap_flow.models.models_config.FinetuneModelConfig.env" title="Link to this definition"></a></dt>
+<dd><p>the
+weights go on the base model, so they need the base’s packages.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Its own <code class="docutils literal notranslate"><span class="pre">env</span></code> if it was given one, else its base model’s</p>
+</dd>
+</dl>
+</dd></dl>
 
 <dl class="py property">
 <dt class="sig sig-object py" id="cellmap_flow.models.models_config.FinetuneModelConfig.base_model_config">

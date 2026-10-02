@@ -166,6 +166,9 @@ dashboard upgrade, so the layout only ever changes compatibly.</p>
 <tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.run_outputs.write_serving_yaml" title="cellmap_flow.finetune.run_outputs.write_serving_yaml"><code class="xref py py-obj docutils literal notranslate"><span class="pre">write_serving_yaml</span></code></a>(args, model_config, timestamp, *, ...)</p></td>
 <td><p>Write the YAML that serves this iteration's export; its (model name, path).</p></td>
 </tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.finetune.run_outputs.trained_voxel_sizes" title="cellmap_flow.finetune.run_outputs.trained_voxel_sizes"><code class="xref py py-obj docutils literal notranslate"><span class="pre">trained_voxel_sizes</span></code></a>(→ dict)</p></td>
+<td><p>The <code class="docutils literal notranslate"><span class="pre">input_voxel_size</span></code>/<code class="docutils literal notranslate"><span class="pre">output_voxel_size</span></code> the serving YAML declares:</p></td>
+</tr>
 </tbody>
 </table>
 </section>
@@ -230,6 +233,18 @@ restart without changing the model.</p></li>
 </ul>
 </dd>
 </dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.run_outputs.trained_voxel_sizes">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.run_outputs.</span></span><span class="sig-name descname"><span class="pre">trained_voxel_sizes</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">manifest</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model_config</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span></span></span><a class="headerlink" href="#cellmap_flow.finetune.run_outputs.trained_voxel_sizes" title="Link to this definition"></a></dt>
+<dd><p>The <code class="docutils literal notranslate"><span class="pre">input_voxel_size</span></code>/<code class="docutils literal notranslate"><span class="pre">output_voxel_size</span></code> the serving YAML declares:
+the manifest’s, for each that is not the model’s own.</p>
+<p>A volume made without resampling is at the raw level nearest the model’s
+voxel size, and the trainer read that level as it is, so the finetuned
+model is a model at that level’s size (FinetuneModelConfig’s
+<code class="docutils literal notranslate"><span class="pre">trained_at_geometry</span></code>). A volume made resampling is at the model’s own
+sizes, and nothing is declared.</p>
 </dd></dl>
 
 </section>

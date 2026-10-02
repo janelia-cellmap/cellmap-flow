@@ -11,6 +11,7 @@ Submodules
    :maxdepth: 1
 
    /autoapi/cellmap_flow/models/configs/index
+   /autoapi/cellmap_flow/models/envs/index
    /autoapi/cellmap_flow/models/geometry/index
    /autoapi/cellmap_flow/models/geometry_cache/index
    /autoapi/cellmap_flow/models/hf_catalog/index

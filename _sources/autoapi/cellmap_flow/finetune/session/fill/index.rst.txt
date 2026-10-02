@@ -1,0 +1,123 @@
+cellmap_flow.finetune.session.fill
+==================================
+
+.. py:module:: cellmap_flow.finetune.session.fill
+
+.. autoapi-nested-parse::
+
+   Labelling a whole box of an annotation volume at once.
+
+   The Finetune tab's "Seed" and "All background" buttons label the box on
+   screen in one click: from the model's own prediction, for the user to clean
+   up with the brush, or all background (1), for a region of false positives.
+   Either way only unannotated voxels (0) are filled. A stroke the user painted
+   is a decision about that voxel; a seed is a guess. "Split objects" relabels
+   the box's foreground by connected component (``relabel_objects``), so a
+   background wall painted through a merged object gives it two ids again.
+
+   Objects are 6-connected (face neighbours, scipy's default): a one-voxel wall
+   the brush paints cuts an object under it, where under 26-connectivity the
+   voxels across a diagonal wall would still touch.
+
+   The write goes to MinIO, as cc3d_relabel's does, not to the volume on disk:
+   MinIO holds strokes the periodic sync has not pulled yet, which is what "only
+   fill 0s" must see, and it is what neuroglancer reads. The caller then pulls
+   the changed chunks to disk with ``sync.sync_volume``, so disk and MinIO agree
+   and the periodic sync has nothing to revert.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.session.fill.logger
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.session.fill.box_voxels
+   cellmap_flow.finetune.session.fill.seed_labels
+   cellmap_flow.finetune.session.fill.relabel_objects
+   cellmap_flow.finetune.session.fill.open_served_labels
+   cellmap_flow.finetune.session.fill.fill_unpainted
+   cellmap_flow.finetune.session.fill.rewrite_foreground
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:function:: box_voxels(volume, offset_nm, shape_nm, volume_shape)
+
+   ``(lo, hi)``: the annotation voxels whose centres lie in a box, clipped to the volume.
+
+   ``offset_nm`` and ``shape_nm`` are the box's lower corner and size in
+   world nm, as a good region records them; ``volume`` is the volume's
+   record, for its grid. None when no voxel of the volume is in the box.
+
+
+.. py:function:: seed_labels(foreground, existing, count_up=False, min_size=0)
+
+   Labels for a box from a foreground mask: an id per object inside, 1 outside.
+
+   ``existing`` is what the box holds now. Each connected component of
+   ``foreground`` gets an id of its own (``_fresh_ids``; ``count_up`` for
+   an affinity target), so neighbouring objects are told apart, and a
+   merge the model made shows as one colour to split; but a component the
+   user has already painted part of takes the id painted there most, or
+   the unpainted rest of an object would be taught as a different object
+   from its painted part. A binary or distance target reads every id as
+   foreground, so the ids cost it nothing. Components of fewer than
+   ``min_size`` voxels are background: specks the threshold let through.
+
+
+.. py:function:: relabel_objects(existing, count_up=False)
+
+   The box's foreground (labels 2 and up) relabelled by connected component.
+
+   Each component takes the id most of its voxels hold, so a stroke that
+   joins two objects merges them into the id of the bigger. An id left on
+   several components, an object a background wall cut in two, stays on the
+   largest and the others get fresh ids (``_fresh_ids``). Background (1)
+   and unpainted (0) voxels are left alone. Returns ``(labels, counts)``:
+   ``counts`` has ``objects``, ``split`` (components given a fresh id) and
+   ``merged`` (components that held more than one id).
+
+   A cut has to go through every slice the object spans: the brush paints
+   one slice, and an object cut in one slice is still one object above and
+   below it. ``split`` is 0 then, which the page says.
+
+
+.. py:function:: open_served_labels(state, volume_id)
+
+   The volume's ``annotation/s0`` as MinIO serves it, open for writing.
+
+   The bucket key is ``<volume_id>.zarr``, as for the sync.
+
+
+.. py:function:: fill_unpainted(state, volume_id, lo, hi, labels_for, local_zarr_path=None)
+
+   Write ``labels_for(existing)`` into the box ``[lo, hi)`` where the volume holds 0.
+
+   ``labels_for`` gets the box as MinIO holds it and returns labels of the
+   same shape (0 for "leave as it is"). Returns ``(n_foreground,
+   n_background)``: how many voxels were filled with each. Nothing is
+   written when nothing would change.
+
+
+.. py:function:: rewrite_foreground(state, volume_id, lo, hi, relabel, local_zarr_path=None)
+
+   Write ``relabel(existing)``'s labels over the box's foreground voxels.
+
+   ``relabel`` gets the box as MinIO holds it and returns ``(labels,
+   counts)`` (``relabel_objects``); only foreground voxels (2 and up) whose
+   label changed are written, so a stroke painted meanwhile elsewhere in
+   the box is kept. Returns ``(n_changed, counts)``.
+
+

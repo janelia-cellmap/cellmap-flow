@@ -52,9 +52,13 @@ Module Contents
    The job's flags, with the defaults that depend on other flags filled in.
 
 
-.. py:function:: build_target_transform(args, model_config)
+.. py:function:: build_target_transform(args, model_config, output_voxel_size_nm=None)
 
    Build a TargetTransform based on CLI args.
+
+   ``output_voxel_size_nm`` is the annotation patches' voxel size, which
+   the distance bounds of ``--loss-type interval`` are measured in; the
+   model's output voxel size when not given.
 
 
 .. py:function:: model_config_from_args(args) -> cellmap_flow.models.models_config.ModelConfig

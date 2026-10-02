@@ -13,7 +13,6 @@ Attributes
    cellmap_flow.dashboard.routes.finetune.common.USER_PREFS_FILE
    cellmap_flow.dashboard.routes.finetune.common.LOG_FILTER_PATTERNS
    cellmap_flow.dashboard.routes.finetune.common.RESTART_PASSTHROUGH_KEYS
-   cellmap_flow.dashboard.routes.finetune.common.SIGN_ONLY_MARGIN
    cellmap_flow.dashboard.routes.finetune.common.SPARSE_MSE_NOTE
 
 
@@ -130,20 +129,10 @@ Module Contents
       :type:  bool
 
 
-   .. py:attribute:: margin
-      :type:  float
-      :value: None
-
-
-
    .. py:attribute:: note
       :type:  str
       :value: None
 
-
-
-.. py:data:: SIGN_ONLY_MARGIN
-   :value: 0.5
 
 
 .. py:data:: SPARSE_MSE_NOTE
@@ -160,9 +149,9 @@ Module Contents
    - sparse annotations with mse: margin loss, with distillation to the
      base model at 0.5, which is how sparse annotations train (see the
      distance case below);
-   - a distance target with sparse annotations: a binary target with margin
-     loss instead, at margin 0.5 and distillation of at least 0.5 (see
-     below);
+   - a distance target with sparse annotations: the interval loss, on the
+     bounds the paint sets on each voxel's distance, with distillation of
+     at least 0.5 (see below);
    - a distance target otherwise: bce, without label smoothing.
    A sparse session also masks its unannotated voxels out of the loss.
 

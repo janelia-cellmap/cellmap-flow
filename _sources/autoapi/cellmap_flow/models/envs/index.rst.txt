@@ -1,0 +1,146 @@
+cellmap_flow.models.envs
+========================
+
+.. py:module:: cellmap_flow.models.envs
+
+.. autoapi-nested-parse::
+
+   Running a model in an environment of its own.
+
+   Some models need packages that cannot share cellmap-flow's environment:
+   Cellpose 4 (Cellpose-SAM) wants a newer torch and numpy than the default
+   environment's cellpose 3 allows, and transformer models pin their own
+   stacks. A model entry's ``env`` says where such a model's inference server,
+   and its finetuning job, run instead::
+
+       models:
+         cpsam:
+           type: script
+           script_path: example/cellpose_sam_model.py
+           env: cellpose4
+
+   ``env`` is one of:
+
+   - the name of an environment in cellmap-flow's ``pixi.toml``. The program
+     runs as ``pixi run --frozen --manifest-path <pixi.toml> -e <name> ...``,
+     which installs the environment from the lockfile on first use. The
+     manifest is the one in the checkout cellmap-flow is installed from, or
+     ``CELLMAP_FLOW_PIXI_MANIFEST``; pixi is ``PIXI_EXE`` (which ``pixi run``
+     sets), else the ``pixi`` on PATH.
+   - an absolute path to a conda environment or virtualenv that has
+     cellmap-flow installed. The program runs as ``<path>/bin/python -P -m
+     <module>``.
+
+   A value with a ``/`` in it, or starting with ``~``, is a path; anything
+   else is a pixi environment's name.
+
+   ``env`` is not a constructor argument of any model type, so it is not on
+   the model's own form or command line: ``registry.build_model`` takes it
+   off the entry and sets ``ModelConfig.env``, ``to_dict()`` and
+   ``launch_entry`` write it back, and ``serving.launch`` takes it off again
+   to put the server in the environment, so the server never sees it.
+
+   Only the server and the trainer move. Everything else (the dashboard,
+   blockwise, ``infer --server-check``) runs the model, when it runs it at
+   all, in the process's own environment.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.models.envs.PIXI_MANIFEST_ENV
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.models.envs.is_path
+   cellmap_flow.models.envs.pixi_manifest
+   cellmap_flow.models.envs.pixi_environments
+   cellmap_flow.models.envs.validate
+   cellmap_flow.models.envs.server_argv
+   cellmap_flow.models.envs.python_argv
+   cellmap_flow.models.envs.lib_dir
+   cellmap_flow.models.envs.finetune_problem
+
+
+Module Contents
+---------------
+
+.. py:data:: PIXI_MANIFEST_ENV
+   :value: 'CELLMAP_FLOW_PIXI_MANIFEST'
+
+
+.. py:function:: is_path(env: str) -> bool
+
+   Whether ``env`` names a directory rather than a pixi environment.
+
+
+.. py:function:: pixi_manifest() -> pathlib.Path
+
+   The pixi.toml whose environments ``env`` names.
+
+   ``CELLMAP_FLOW_PIXI_MANIFEST``, else the one at the root of the checkout
+   this package is installed from (pixi installs it editable from there).
+
+
+.. py:function:: pixi_environments(manifest: pathlib.Path) -> Dict[str, dict]
+
+   Each environment ``manifest`` declares, as a table with ``features``.
+
+   ``default`` is always there, as pixi has it even when it is not
+   declared. The list form (``name = ["feature", ...]``) becomes
+   ``{"features": [...]}``.
+
+
+.. py:function:: validate(env, model_name: str = 'model') -> str
+
+   ``env`` checked, with a path's ``~`` expanded; what the model keeps.
+
+   :raises ConfigError: ``env`` is not a string, a path is relative or has no
+       ``bin/python``, or no pixi.toml declares an environment by that
+       name.
+
+
+.. py:function:: server_argv(env: str) -> List[str]
+
+   The program that serves a model in ``env``, before its ``--model`` and ``-d``.
+
+   In a pixi environment that is the environment's ``cellmap_flow serve``,
+   as the deployment's own CELLMAP_FLOW_SERVER_COMMAND is. A directory need
+   not be on PATH, so there it is its python running the CLI; -P keeps the
+   job's working directory off sys.path, so a job started inside another
+   checkout does not run that checkout's cellmap_flow.
+
+
+.. py:function:: python_argv(env: str, module: str) -> List[str]
+
+   ``python -P -m <module>`` in ``env``.
+
+
+.. py:function:: lib_dir(env: str) -> str
+
+   The lib directory of ``env``, for LD_LIBRARY_PATH.
+
+   For a pixi environment that is where pixi installs it by default,
+   ``.pixi/envs/<name>`` beside the manifest; a pixi configured with
+   detached environments puts it elsewhere, and the job then loads
+   libraries as ``pixi run`` alone would.
+
+
+.. py:function:: finetune_problem(env: str) -> Optional[str]
+
+   Why the trainer cannot run in ``env``, or None when it can (as far as
+   can be told cheaply).
+
+   A pixi environment is checked against the manifest: one of its features,
+   the default feature included unless it sets ``no-default-feature``, must
+   install peft. A directory is not checked; a trainer that cannot import
+   there fails in its job's log.
+
+

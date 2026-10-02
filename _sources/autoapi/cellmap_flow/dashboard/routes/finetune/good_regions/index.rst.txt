@@ -42,6 +42,7 @@ Functions
 
    cellmap_flow.dashboard.routes.finetune.good_regions.load_good_regions
    cellmap_flow.dashboard.routes.finetune.good_regions.save_good_regions
+   cellmap_flow.dashboard.routes.finetune.good_regions.view_box_nm
    cellmap_flow.dashboard.routes.finetune.good_regions.mark_current_view_good
    cellmap_flow.dashboard.routes.finetune.good_regions.list_good_regions
    cellmap_flow.dashboard.routes.finetune.good_regions.delete_good_region
@@ -64,6 +65,17 @@ Module Contents
 .. py:function:: load_good_regions()
 
 .. py:function:: save_good_regions(regions)
+
+.. py:function:: view_box_nm(size_nm=None)
+
+   ``(centre_nm, size_nm)`` of the box centred where the viewer looks.
+
+   ``size_nm`` defaults to one model output patch (see
+   DEFAULT_REGION_SIZE_NM); one number is the same along every axis.
+   The labelling buttons beside "Mark This View as Good" use the same box,
+   so what they label is what a mark would cover. ValueError when there
+   is no viewer position or the size is not positive.
+
 
 .. py:function:: mark_current_view_good()
 

@@ -128,7 +128,8 @@ the viewer on its predictions and serve the dashboard.</p>
 <p>There is a subcommand for each model type (<code class="docutils literal notranslate"><span class="pre">models.registry</span></code>), built when
 click asks for it. It takes the type’s constructor arguments as options
 (<code class="docutils literal notranslate"><span class="pre">registry.click_options</span></code>), and the dataset (<code class="docutils literal notranslate"><span class="pre">-d</span></code>), queue (<code class="docutils literal notranslate"><span class="pre">-q</span></code>),
-billing project (<code class="docutils literal notranslate"><span class="pre">-P</span></code>), <code class="docutils literal notranslate"><span class="pre">--resample</span></code> and <code class="docutils literal notranslate"><span class="pre">--server-check</span></code> as its own.</p>
+billing project (<code class="docutils literal notranslate"><span class="pre">-P</span></code>), <code class="docutils literal notranslate"><span class="pre">--resample</span></code>, <code class="docutils literal notranslate"><span class="pre">--server-check</span></code> and <code class="docutils literal notranslate"><span class="pre">--env</span></code>
+(the environment the server runs in, <code class="docutils literal notranslate"><span class="pre">models.envs</span></code>) as its own.</p>
 <p><code class="docutils literal notranslate"><span class="pre">run</span></code>, the generic form before 0.3.0 (<code class="docutils literal notranslate"><span class="pre">cellmap_flow</span> <span class="pre">run</span> <span class="pre">-m</span> <span class="pre">TYPE</span> <span class="pre">-c</span>
 <span class="pre">key=value</span></code>), is a deprecated alias: it says which <code class="docutils literal notranslate"><span class="pre">infer</span></code> command it
 stands for, and runs it.</p>

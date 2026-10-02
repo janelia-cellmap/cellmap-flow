@@ -142,6 +142,9 @@ to a ModelRunner’s warmup forward, which calls <code class="docutils literal n
 <li><p><code class="docutils literal notranslate"><span class="pre">command</span></code>: the <code class="docutils literal notranslate"><span class="pre">cellmap_flow_server</span> <span class="pre">&lt;type&gt;</span></code> arguments that rebuild
 it, which launchers passed before 0.3.0; that form of the server goes in
 the release after it.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">env</span></code>: the environment its server runs in, when not this one
+(<code class="docutils literal notranslate"><span class="pre">models.envs</span></code>). Set after construction, never a constructor argument;
+to_dict() and launch_entry carry it.</p></li>
 </ul>
 <section id="attributes">
 <h2>Attributes<a class="headerlink" href="#attributes" title="Link to this heading"></a></h2>
@@ -152,6 +155,16 @@ the release after it.</p></li>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.models.configs.base.DEFAULT_AXES_NAMES" title="cellmap_flow.models.configs.base.DEFAULT_AXES_NAMES"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DEFAULT_AXES_NAMES</span></code></a></p></td>
 <td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="exceptions">
+<h2>Exceptions<a class="headerlink" href="#exceptions" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.models.configs.base.ModelEnvError" title="cellmap_flow.models.configs.base.ModelEnvError"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ModelEnvError</span></code></a></p></td>
+<td><p>A model that runs in its own environment was built in another, which</p></td>
 </tr>
 </tbody>
 </table>
@@ -208,6 +221,13 @@ for each constructor argument in signature order, leaving out None.
 Each value is written the way the server CLI parses it back.</p>
 </dd></dl>
 
+<dl class="py exception">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.base.ModelEnvError">
+<span class="property"><span class="k"><span class="pre">exception</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.configs.base.</span></span><span class="sig-name descname"><span class="pre">ModelEnvError</span></span><a class="headerlink" href="#cellmap_flow.models.configs.base.ModelEnvError" title="Link to this definition"></a></dt>
+<dd><p>A model that runs in its own environment was built in another, which
+lacks its packages (<code class="docutils literal notranslate"><span class="pre">ModelConfig.config</span></code>).</p>
+</dd></dl>
+
 <dl class="py data">
 <dt class="sig sig-object py" id="cellmap_flow.models.configs.base.DEFAULT_AXES_NAMES">
 <span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.configs.base.</span></span><span class="sig-name descname"><span class="pre">DEFAULT_AXES_NAMES</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">['x',</span> <span class="pre">'y',</span> <span class="pre">'z']</span></span><a class="headerlink" href="#cellmap_flow.models.configs.base.DEFAULT_AXES_NAMES" title="Link to this definition"></a></dt>
@@ -249,6 +269,11 @@ x, y, z.</p>
 <dt class="sig sig-object py" id="cellmap_flow.models.configs.base.ModelConfig">
 <span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.configs.base.</span></span><span class="sig-name descname"><span class="pre">ModelConfig</span></span><a class="headerlink" href="#cellmap_flow.models.configs.base.ModelConfig" title="Link to this definition"></a></dt>
 <dd><dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.base.ModelConfig.env">
+<span class="sig-name descname"><span class="pre">env</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.models.configs.base.ModelConfig.env" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
 <dt class="sig sig-object py" id="cellmap_flow.models.configs.base.ModelConfig.validate_model_shapes">
 <span class="sig-name descname"><span class="pre">validate_model_shapes</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">True</span></span><a class="headerlink" href="#cellmap_flow.models.configs.base.ModelConfig.validate_model_shapes" title="Link to this definition"></a></dt>
 <dd></dd></dl>
@@ -313,7 +338,9 @@ work without one.</p>
 <p>to_dict(), less what only the pipeline builder shows (a Hugging Face
 repo’s downloaded metadata), under the name the registry has this
 class under (<code class="docutils literal notranslate"><span class="pre">registry.cli_name_of</span></code>), so that the server rebuilds
-this class and not a parent it inherited cli_name from.</p>
+this class and not a parent it inherited cli_name from. With an
+<code class="docutils literal notranslate"><span class="pre">env</span></code>, which <code class="docutils literal notranslate"><span class="pre">serving.launch</span></code> takes off again to start the server
+in that environment.</p>
 </dd></dl>
 
 <dl class="py property">

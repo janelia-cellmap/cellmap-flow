@@ -17,6 +17,9 @@ cellmap_flow.finetune.target_transforms
      target: (B, C, Z, Y, X) — training target matching model output channels
      mask: (B, C, Z, Y, X) or (B, 1, Z, Y, X) — valid loss mask
 
+   except IntervalTargetTransform, whose "target" is a lower and an upper bound
+   on a distance model's output, for losses.IntervalLoss.
+
 
 
 Attributes
@@ -25,6 +28,7 @@ Attributes
 .. autoapisummary::
 
    cellmap_flow.finetune.target_transforms.logger
+   cellmap_flow.finetune.target_transforms.SATURATION_SIGMAS
 
 
 Classes
@@ -37,6 +41,7 @@ Classes
    cellmap_flow.finetune.target_transforms.BroadcastBinaryTargetTransform
    cellmap_flow.finetune.target_transforms.AffinityTargetTransform
    cellmap_flow.finetune.target_transforms.DistanceTargetTransform
+   cellmap_flow.finetune.target_transforms.IntervalTargetTransform
 
 
 Functions
@@ -150,6 +155,63 @@ Module Contents
 
    .. py:attribute:: num_channels
       :value: 1
+
+
+
+.. py:data:: SATURATION_SIGMAS
+   :value: 3.0
+
+
+.. py:class:: IntervalTargetTransform(sigma_voxels: float = 6.0, voxel_size_nm=None)
+
+
+
+   Bounds on a distance model's output at each painted voxel, for scribbles.
+
+   A distance target needs every voxel's distance to the object boundary,
+   and a stroke does not say where the boundary is. It does bound it:
+
+   - upper, U: the nearest voxel painted as the other class. The boundary
+     lies between the two, so |d| <= U.
+   - lower, L: the nearest voxel not painted as the voxel's own class --
+     the other class, unpainted (it may be either), or past the patch edge.
+     Every voxel closer is known to be its own class, so |d| >= L.
+
+   Where the paint is dense, the nearest voxel not of its own class is of
+   the other, and L == U: the exact distance DistanceTargetTransform would
+   give, with the same convention (edt to the nearest voxel of the other
+   class, so 1 voxel on either side of a boundary). On a stroke the two
+   bracket the truth. Both are computed in the patch the trainer gets, which
+   keeps them valid: a closer other-class voxel outside the patch would only
+   lower the true |d|, which U already exceeds or meets, and the patch edge
+   counts as "not its own class", which can only lower L. Reading context
+   around the patch would tighten bounds near its edges, but the dataset
+   hands the trainer the patch alone (augmented with it), so they are left
+   as loose as the patch makes them.
+
+   Distances are Euclidean in nm (``voxel_size_nm``, so an anisotropic
+   grid is measured as it is), and sigma, which is in output voxels as for
+   the distance target, is taken in the finest axis's voxels. The bounds
+   are returned in the model's logit space, where the distance target
+   (tanh(d/sigma) + 1)/2 = sigmoid(2d/sigma) is the line z = 2d/sigma, with
+   the sign of the painted class. Past SATURATION_SIGMAS a lower bound is
+   capped there and an upper bound dropped (+-inf).
+
+   Returns ``(bounds, mask)``: bounds (B, 2, Z, Y, X), the lower and upper
+   bound on the logit (0 off the paint), and mask (B, 1, Z, Y, X), the
+   painted voxels. Both have one channel per bound whatever the model's
+   channels: losses.IntervalLoss broadcasts them over its output.
+
+
+   .. py:attribute:: voxel_size_nm
+
+
+   .. py:attribute:: sigma_nm
+
+
+   .. py:method:: distance_bounds(ann)
+
+      (L, U) in nm for each voxel of a (Z, Y, X) annotation; 0 off the paint, U inf with no other class.
 
 
 

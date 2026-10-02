@@ -55,6 +55,7 @@
 <li class="toctree-l2"><a class="reference internal" href="#yaml-structure">YAML Structure</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#model-entries">Model Entries</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="#available-model-types">Available Model Types</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#running-a-model-in-its-own-environment">Running a model in its own environment</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#channel-names">Channel Names</a></li>
 </ul>
 </li>
@@ -281,7 +282,42 @@ Use <code class="docutils literal notranslate"><span class="pre">cellmap_flow</s
 </tr>
 </tbody>
 </table>
-<p>Common optional parameters: <code class="docutils literal notranslate"><span class="pre">name</span></code>, <code class="docutils literal notranslate"><span class="pre">scale</span></code>.</p>
+<p>Common optional parameters: <code class="docutils literal notranslate"><span class="pre">name</span></code>, <code class="docutils literal notranslate"><span class="pre">scale</span></code>, <code class="docutils literal notranslate"><span class="pre">env</span></code> (see <a class="reference internal" href="#model-env"><span class="std std-ref">Running a model in its own environment</span></a>).</p>
+</section>
+<section id="running-a-model-in-its-own-environment">
+<span id="model-env"></span><h3>Running a model in its own environment<a class="headerlink" href="#running-a-model-in-its-own-environment" title="Link to this heading"></a></h3>
+<p>A model whose packages conflict with cellmap-flow’s environment (Cellpose 4,
+transformer models) can run in an environment of its own. Give its entry an
+<code class="docutils literal notranslate"><span class="pre">env</span></code>:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">models</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">cellpose_sam</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">script</span>
+<span class="w">    </span><span class="nt">script_path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">example/cellpose_sam_model.py</span>
+<span class="w">    </span><span class="nt">env</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cellpose4</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">env</span></code> is either</p>
+<ul class="simple">
+<li><p>the name of an environment in cellmap-flow’s <code class="docutils literal notranslate"><span class="pre">pixi.toml</span></code>. The server runs
+as <code class="docutils literal notranslate"><span class="pre">pixi</span> <span class="pre">run</span> <span class="pre">--frozen</span> <span class="pre">--manifest-path</span> <span class="pre">&lt;pixi.toml&gt;</span> <span class="pre">-e</span> <span class="pre">cellpose4</span> <span class="pre">cellmap_flow</span> <span class="pre">serve</span> <span class="pre">...</span></code>,
+and pixi installs the environment from the lockfile the first time. The
+manifest is the one in the checkout cellmap-flow is installed from; set
+<code class="docutils literal notranslate"><span class="pre">CELLMAP_FLOW_PIXI_MANIFEST</span></code> to use another. cellmap-flow’s <code class="docutils literal notranslate"><span class="pre">pixi.toml</span></code>
+has <code class="docutils literal notranslate"><span class="pre">cellpose4</span></code> (Cellpose 4, for Cellpose-SAM), <code class="docutils literal notranslate"><span class="pre">dacapo</span></code> and
+<code class="docutils literal notranslate"><span class="pre">bioimageio</span></code>; or</p></li>
+<li><p>the absolute path of a conda environment or virtualenv with cellmap-flow
+installed. The server runs as <code class="docutils literal notranslate"><span class="pre">&lt;path&gt;/bin/python</span> <span class="pre">-P</span> <span class="pre">-m</span> <span class="pre">cellmap_flow.cli.main</span> <span class="pre">serve</span> <span class="pre">...</span></code>.</p></li>
+</ul>
+<p>A value with a <code class="docutils literal notranslate"><span class="pre">/</span></code> in it, or starting with <code class="docutils literal notranslate"><span class="pre">~</span></code>, is a path. An unknown name,
+or a path without <code class="docutils literal notranslate"><span class="pre">bin/python</span></code>, is an error when the YAML is read.</p>
+<p>Only the model’s inference server and its finetuning job run there. The
+dashboard reads the model’s geometry from its running server rather than
+building the model itself; blockwise runs models in its own process, so run
+<code class="docutils literal notranslate"><span class="pre">pixi</span> <span class="pre">run</span> <span class="pre">-e</span> <span class="pre">cellpose4</span> <span class="pre">cellmap_flow</span> <span class="pre">blockwise</span> <span class="pre">...</span></code> for such a model. A
+finetuning job needs <code class="docutils literal notranslate"><span class="pre">peft</span></code> in the environment: a pixi environment that
+does not install it is refused when the job is submitted.</p>
+<p><code class="docutils literal notranslate"><span class="pre">cellmap_flow</span> <span class="pre">infer</span> <span class="pre">&lt;type&gt;</span> <span class="pre">--env</span> <span class="pre">&lt;env&gt;</span></code> and the dashboard’s model form take
+it too. <code class="docutils literal notranslate"><span class="pre">example/cellpose_sam.yaml</span></code> runs Cellpose-SAM this way.</p>
 </section>
 <section id="channel-names">
 <span id="id1"></span><h3>Channel Names<a class="headerlink" href="#channel-names" title="Link to this heading"></a></h3>

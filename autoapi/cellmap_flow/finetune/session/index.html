@@ -22,7 +22,7 @@
     <script src="../../../../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../../../../genindex.html" />
     <link rel="search" title="Search" href="../../../../search.html" />
-    <link rel="next" title="cellmap_flow.finetune.session.instance" href="instance/index.html" />
+    <link rel="next" title="cellmap_flow.finetune.session.fill" href="fill/index.html" />
     <link rel="prev" title="cellmap_flow.finetune.run_outputs" href="../run_outputs/index.html" /> 
 </head>
 
@@ -134,6 +134,7 @@ reads; <code class="docutils literal notranslate"><span class="pre">good_regions
 <li><p><code class="docutils literal notranslate"><span class="pre">minio</span></code>: starting MinIO and serving volumes through it.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">sync</span></code>: pulling painted chunks back from MinIO, and the periodic sync.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">instance</span></code>: instance corrections, seeded from a segmentation.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">fill</span></code>: labelling a whole box of a volume at once, unpainted voxels only.</p></li>
 </ul>
 <p>The submodules import neither flask, neuroglancer, torch nor
 <code class="docutils literal notranslate"><span class="pre">cellmap_flow.globals</span></code>, so the CLI, the trainer and scripts can use them
@@ -144,6 +145,7 @@ none of them itself.</p>
 <h2>Submodules<a class="headerlink" href="#submodules" title="Link to this heading"></a></h2>
 <div class="toctree-wrapper compound">
 <ul>
+<li class="toctree-l1"><a class="reference internal" href="fill/index.html">cellmap_flow.finetune.session.fill</a></li>
 <li class="toctree-l1"><a class="reference internal" href="instance/index.html">cellmap_flow.finetune.session.instance</a></li>
 <li class="toctree-l1"><a class="reference internal" href="manifest/index.html">cellmap_flow.finetune.session.manifest</a></li>
 <li class="toctree-l1"><a class="reference internal" href="minio/index.html">cellmap_flow.finetune.session.minio</a></li>
@@ -160,7 +162,7 @@ none of them itself.</p>
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
         <a href="../run_outputs/index.html" class="btn btn-neutral float-left" title="cellmap_flow.finetune.run_outputs" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
-        <a href="instance/index.html" class="btn btn-neutral float-right" title="cellmap_flow.finetune.session.instance" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="fill/index.html" class="btn btn-neutral float-right" title="cellmap_flow.finetune.session.fill" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>

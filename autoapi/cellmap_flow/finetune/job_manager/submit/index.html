@@ -219,7 +219,10 @@ submitting a GPU job whose argparse exits with code 2.</p>
 that goes by its own flags (MODEL_ENTRY_TYPES).</p>
 <p>The entry is the model’s to_dict(), so the trainer builds the model the
 dashboard serves; <code class="docutils literal notranslate"><span class="pre">checkpoint_path</span></code> (find_checkpoint’s) replaces the
-entry’s own checkpoint, which is how an override reaches a Fly model.</p>
+entry’s own checkpoint, which is how an override reaches a Fly model.
+A model with an <code class="docutils literal notranslate"><span class="pre">env</span></code> always goes as an entry: no other flag carries
+the env, and without it the serving YAMLs the trainer writes would run
+the finetuned model in the default environment.</p>
 </dd></dl>
 
 <dl class="py function">

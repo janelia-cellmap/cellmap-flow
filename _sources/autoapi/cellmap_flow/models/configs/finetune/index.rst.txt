@@ -10,7 +10,8 @@ cellmap_flow.models.configs.finetune
    The weights are a LoRA adapter or, from a full finetune, a whole state
    dict. Either is loaded onto the module the trainer trained
    (``finetune.model_loading.load_trainable_model``), and the served model
-   keeps the base model's geometry.
+   keeps the base model's geometry, at the voxel sizes the finetune was
+   trained at when those differ (``trained_at_geometry``).
 
 
 
@@ -22,10 +23,34 @@ Classes
    cellmap_flow.models.configs.finetune.FinetuneModelConfig
 
 
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.models.configs.finetune.trained_at_geometry
+
+
 Module Contents
 ---------------
 
-.. py:class:: FinetuneModelConfig(lora_adapter_path: str = None, base_model: dict = None, name: str = None, scale=None, weights_path: str = None)
+.. py:function:: trained_at_geometry(base_cfg, input_voxel_size=None, output_voxel_size=None) -> dict
+
+   The base model's geometry at the voxel sizes a finetune was trained at.
+
+   A volume made without resampling lies on the raw level nearest the
+   model's voxel size, and the trainer read that level as it is: the model
+   learnt that scale, so the finetuned model really is a model at the
+   level's voxel size (16 nm data read as 8 nm by an 8 nm model gives a 16
+   nm model). Declaring it, the served model reads that level exactly,
+   instead of the nearest one relabelled with a warning. The shapes in nm
+   scale with the voxel size; the voxel counts are the base's.
+
+   Returns ``input_voxel_size``, ``output_voxel_size``, ``read_shape`` and
+   ``write_shape``; each size None keeps the base's.
+
+
+.. py:class:: FinetuneModelConfig(lora_adapter_path: str = None, base_model: dict = None, name: str = None, scale=None, weights_path: str = None, input_voxel_size: tuple = None, output_voxel_size: tuple = None)
 
 
 
@@ -67,6 +92,24 @@ Module Contents
    .. py:attribute:: scale
       :value: None
 
+
+
+   .. py:attribute:: input_voxel_size
+      :value: None
+
+
+
+   .. py:attribute:: output_voxel_size
+      :value: None
+
+
+
+   .. py:property:: env
+
+      the
+      weights go on the base model, so they need the base's packages.
+
+      :type: Its own ``env`` if it was given one, else its base model's
 
 
    .. py:property:: base_model_config

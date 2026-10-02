@@ -150,16 +150,19 @@ POST <code class="docutils literal notranslate"><span class="pre">/api/finetune/
 <tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.overlay.add_annotation_layer" title="cellmap_flow.dashboard.routes.finetune.overlay.add_annotation_layer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">add_annotation_layer</span></code></a>(viewer, layer_name, annotation_url, *)</p></td>
 <td><p>Add the writable layer that paints into a volume, and select it.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.overlay.refresh_annotated_regions_layer" title="cellmap_flow.dashboard.routes.finetune.overlay.refresh_annotated_regions_layer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">refresh_annotated_regions_layer</span></code></a>([corrections_path])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.overlay.refresh_annotation_layer" title="cellmap_flow.dashboard.routes.finetune.overlay.refresh_annotation_layer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">refresh_annotation_layer</span></code></a>(→ bool)</p></td>
+<td><p>Make neuroglancer re-read the paint layer of <code class="docutils literal notranslate"><span class="pre">volume_id</span></code>'s volume, and only it.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.overlay.refresh_annotated_regions_layer" title="cellmap_flow.dashboard.routes.finetune.overlay.refresh_annotated_regions_layer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">refresh_annotated_regions_layer</span></code></a>([corrections_path])</p></td>
 <td><p>Draw a box around every region that has annotations in it.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.overlay.refresh_annotated_regions" title="cellmap_flow.dashboard.routes.finetune.overlay.refresh_annotated_regions"><code class="xref py py-obj docutils literal notranslate"><span class="pre">refresh_annotated_regions</span></code></a>()</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.overlay.refresh_annotated_regions" title="cellmap_flow.dashboard.routes.finetune.overlay.refresh_annotated_regions"><code class="xref py py-obj docutils literal notranslate"><span class="pre">refresh_annotated_regions</span></code></a>()</p></td>
 <td><p>Redraw the annotated-regions boxes because the user asked for it.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.overlay.add_crop_to_viewer" title="cellmap_flow.dashboard.routes.finetune.overlay.add_crop_to_viewer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">add_crop_to_viewer</span></code></a>()</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.overlay.add_crop_to_viewer" title="cellmap_flow.dashboard.routes.finetune.overlay.add_crop_to_viewer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">add_crop_to_viewer</span></code></a>()</p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.overlay.sync_annotations_manually" title="cellmap_flow.dashboard.routes.finetune.overlay.sync_annotations_manually"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sync_annotations_manually</span></code></a>()</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.overlay.sync_annotations_manually" title="cellmap_flow.dashboard.routes.finetune.overlay.sync_annotations_manually"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sync_annotations_manually</span></code></a>()</p></td>
 <td><p></p></td>
 </tr>
 </tbody>
@@ -191,6 +194,20 @@ their own, with neither. The panel opens on its Draw tab, where the
 brush and flood fill are.</p>
 <p>A layer of that name is replaced, unless <code class="docutils literal notranslate"><span class="pre">keep_existing</span></code>: then it is
 left as it is, selection included, and False is returned.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.overlay.refresh_annotation_layer">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.overlay.</span></span><span class="sig-name descname"><span class="pre">refresh_annotation_layer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">viewer</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">volume_id</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.overlay.refresh_annotation_layer" title="Link to this definition"></a></dt>
+<dd><p>Make neuroglancer re-read the paint layer of <code class="docutils literal notranslate"><span class="pre">volume_id</span></code>’s volume, and only it.</p>
+<p>Labels written behind its back (a seed, a relabel) show only once the
+layer’s chunks are read again. The layer keeps everything the browser
+set on it (its paint value, brush size, tool, colours) and only its
+source moves to a new spelling of the same URL (<code class="docutils literal notranslate"><span class="pre">_respelled_port</span></code>);
+rebuilding it with add_annotation_layer reset those. The view, the other
+layers and their servers are left alone; reloading the viewer re-read
+every layer and had every server recompute the view. Returns whether a
+layer was found and refreshed.</p>
 </dd></dl>
 
 <dl class="py function">

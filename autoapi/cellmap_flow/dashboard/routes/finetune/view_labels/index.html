@@ -1,0 +1,305 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../../../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>cellmap_flow.dashboard.routes.finetune.view_labels &mdash; CellMap Flow  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../../../_static/graphviz.css?v=4ae1632d" />
+      <link rel="stylesheet" type="text/css" href="../../../../../../_static/css/custom.css" />
+
+  
+    <link rel="shortcut icon" href="../../../../../../_static/favicon.ico"/>
+      <script src="../../../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../../../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../../../../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../../search.html" />
+    <link rel="next" title="cellmap_flow.dashboard.routes.finetune.yaml_crops" href="../yaml_crops/index.html" />
+    <link rel="prev" title="cellmap_flow.dashboard.routes.finetune.training" href="../training/index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../../../index.html" class="icon icon-home">
+            CellMap Flow
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">CellMap-Flow API:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../../../../../../install.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../../cli.html">Command line</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../../scripts.html">Python Scripts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../../yaml_config.html">YAML Configuration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../../data_paths.html">Data paths</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../../huggingface.html">HuggingFace Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../../custom_script.html">Custom Model</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../../post.html">PostProcessors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../../plugins.html">Plugins</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../../review.html">Reviewing instances</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../../viewer_api.html">Viewer layer API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../../architecture.html">Architecture</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../../../../../index.html">API Reference</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="../../../../index.html">cellmap_flow</a><ul class="current">
+<li class="toctree-l3 current"><a class="reference internal" href="../../../../index.html#submodules">Submodules</a><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="../../../../blockwise/index.html">cellmap_flow.blockwise</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../cli/index.html">cellmap_flow.cli</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../config/index.html">cellmap_flow.config</a></li>
+<li class="toctree-l4 current"><a class="reference internal" href="../../../index.html">cellmap_flow.dashboard</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../finetune/index.html">cellmap_flow.finetune</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../globals/index.html">cellmap_flow.globals</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../image_data_interface/index.html">cellmap_flow.image_data_interface</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../inference/index.html">cellmap_flow.inference</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../inferencer/index.html">cellmap_flow.inferencer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../io/index.html">cellmap_flow.io</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../jobs/index.html">cellmap_flow.jobs</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../logging_setup/index.html">cellmap_flow.logging_setup</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../models/index.html">cellmap_flow.models</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../norm/index.html">cellmap_flow.norm</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../pipeline_spec/index.html">cellmap_flow.pipeline_spec</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../plugins/index.html">cellmap_flow.plugins</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../post/index.html">cellmap_flow.post</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../process_chain/index.html">cellmap_flow.process_chain</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../review/index.html">cellmap_flow.review</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../review_index/index.html">cellmap_flow.review_index</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../server/index.html">cellmap_flow.server</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../serving/index.html">cellmap_flow.serving</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../utils/index.html">cellmap_flow.utils</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../viewer/index.html">cellmap_flow.viewer</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../../../index.html">CellMap Flow</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../../../index.html">API Reference</a></li>
+          <li class="breadcrumb-item"><a href="../../../../index.html">cellmap_flow</a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">cellmap_flow.dashboard</a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">cellmap_flow.dashboard.routes</a></li>
+          <li class="breadcrumb-item"><a href="../index.html">cellmap_flow.dashboard.routes.finetune</a></li>
+      <li class="breadcrumb-item active">cellmap_flow.dashboard.routes.finetune.view_labels</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../../../../../../_sources/autoapi/cellmap_flow/dashboard/routes/finetune/view_labels/index.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-cellmap_flow.dashboard.routes.finetune.view_labels">
+<span id="cellmap-flow-dashboard-routes-finetune-view-labels"></span><h1>cellmap_flow.dashboard.routes.finetune.view_labels<a class="headerlink" href="#module-cellmap_flow.dashboard.routes.finetune.view_labels" title="Link to this heading"></a></h1>
+<p>Labelling the box on screen in one click: from the model’s prediction, or all background.</p>
+<p>Two buttons beside “Mark This View as Good”, over the same box (one model
+output patch centred where the viewer looks, <code class="docutils literal notranslate"><span class="pre">good_regions.view_box_nm</span></code>):</p>
+<ul class="simple">
+<li><p>POST <code class="docutils literal notranslate"><span class="pre">/api/finetune/view-labels/seed</span></code>: the model’s prediction there,
+thresholded at its decision boundary, written as foreground 2 (an id per
+object, 2 and up, for an affinity model on an instance volume) and
+background 1. The user then cleans it up with the brush; it is far
+quicker than painting a whole object from nothing.</p></li>
+<li><p>POST <code class="docutils literal notranslate"><span class="pre">/api/finetune/view-labels/background</span></code>: every unannotated voxel 1,
+for a region the model fills with false positives.</p></li>
+</ul>
+<p>Both fill only unannotated voxels (<code class="docutils literal notranslate"><span class="pre">session.fill</span></code>): a voxel the user
+painted is a decision, a seed is a guess. The write goes to MinIO, which
+neuroglancer reads, and the changed chunks are pulled to disk at once.
+Neuroglancer keeps the chunks it has already read, so the page reloads the
+viewer afterwards to show the new labels.</p>
+<p>A box over LARGE_BOX_VOXELS voxels is only labelled when the request says
+<code class="docutils literal notranslate"><span class="pre">confirm:</span> <span class="pre">true</span></code>; without it the answer is a 409 with
+<code class="docutils literal notranslate"><span class="pre">needs_confirmation</span></code>, for the page to ask first.</p>
+<section id="attributes">
+<h2>Attributes<a class="headerlink" href="#attributes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.view_labels.logger" title="cellmap_flow.dashboard.routes.finetune.view_labels.logger"><code class="xref py py-obj docutils literal notranslate"><span class="pre">logger</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.view_labels.LARGE_BOX_VOXELS" title="cellmap_flow.dashboard.routes.finetune.view_labels.LARGE_BOX_VOXELS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">LARGE_BOX_VOXELS</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.view_labels.PREDICTION_TIMEOUT_SECONDS" title="cellmap_flow.dashboard.routes.finetune.view_labels.PREDICTION_TIMEOUT_SECONDS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PREDICTION_TIMEOUT_SECONDS</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="functions">
+<h2>Functions<a class="headerlink" href="#functions" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.view_labels.seed_sources" title="cellmap_flow.dashboard.routes.finetune.view_labels.seed_sources"><code class="xref py py-obj docutils literal notranslate"><span class="pre">seed_sources</span></code></a>()</p></td>
+<td><p>The models a seed can read, for the page's picker: <code class="docutils literal notranslate"><span class="pre">models</span></code> (every</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.view_labels.read_prediction" title="cellmap_flow.dashboard.routes.finetune.view_labels.read_prediction"><code class="xref py py-obj docutils literal notranslate"><span class="pre">read_prediction</span></code></a>(host, model_name, volume, lo, hi, info)</p></td>
+<td><p>The model's raw output over annotation voxels <code class="docutils literal notranslate"><span class="pre">[lo,</span> <span class="pre">hi)</span></code>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.view_labels.foreground_mask" title="cellmap_flow.dashboard.routes.finetune.view_labels.foreground_mask"><code class="xref py py-obj docutils literal notranslate"><span class="pre">foreground_mask</span></code></a>(prediction[, output_class, channels, ...])</p></td>
+<td><p>Where the model says foreground: its probability over <code class="docutils literal notranslate"><span class="pre">threshold</span></code>.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.view_labels.seed_view_from_prediction" title="cellmap_flow.dashboard.routes.finetune.view_labels.seed_view_from_prediction"><code class="xref py py-obj docutils literal notranslate"><span class="pre">seed_view_from_prediction</span></code></a>()</p></td>
+<td><p>Fill the unannotated voxels of the box on screen from the model's prediction.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.view_labels.label_view_background" title="cellmap_flow.dashboard.routes.finetune.view_labels.label_view_background"><code class="xref py py-obj docutils literal notranslate"><span class="pre">label_view_background</span></code></a>()</p></td>
+<td><p>Label every unannotated voxel of the box on screen background (1).</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.view_labels.split_view_objects" title="cellmap_flow.dashboard.routes.finetune.view_labels.split_view_objects"><code class="xref py py-obj docutils literal notranslate"><span class="pre">split_view_objects</span></code></a>()</p></td>
+<td><p>Relabel the box on screen's foreground by connected component.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="module-contents">
+<h2>Module Contents<a class="headerlink" href="#module-contents" title="Link to this heading"></a></h2>
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.view_labels.logger">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.view_labels.</span></span><span class="sig-name descname"><span class="pre">logger</span></span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.view_labels.logger" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.view_labels.LARGE_BOX_VOXELS">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.view_labels.</span></span><span class="sig-name descname"><span class="pre">LARGE_BOX_VOXELS</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">2097152</span></span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.view_labels.LARGE_BOX_VOXELS" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.view_labels.PREDICTION_TIMEOUT_SECONDS">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.view_labels.</span></span><span class="sig-name descname"><span class="pre">PREDICTION_TIMEOUT_SECONDS</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">120</span></span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.view_labels.PREDICTION_TIMEOUT_SECONDS" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.view_labels.seed_sources">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.view_labels.</span></span><span class="sig-name descname"><span class="pre">seed_sources</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.view_labels.seed_sources" title="Link to this definition"></a></dt>
+<dd><p>The models a seed can read, for the page’s picker: <code class="docutils literal notranslate"><span class="pre">models</span></code> (every
+running server, oldest first) and <code class="docutils literal notranslate"><span class="pre">default</span></code>, the one a seed reads when
+none is chosen (None when that is a choice for the user).</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.view_labels.read_prediction">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.view_labels.</span></span><span class="sig-name descname"><span class="pre">read_prediction</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">host</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">volume</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lo</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">hi</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">info</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.view_labels.read_prediction" title="Link to this definition"></a></dt>
+<dd><p>The model’s raw output over annotation voxels <code class="docutils literal notranslate"><span class="pre">[lo,</span> <span class="pre">hi)</span></code>.</p>
+<p>Read from its server as a layer is, with the dashboard’s input
+normalization and no postprocessing: the trainer’s target is set on the
+raw output, and that is where its decision boundary is. Each annotation
+voxel takes the served voxel its centre lies in, placed where
+neuroglancer draws the layer (<code class="docutils literal notranslate"><span class="pre">prediction_voxel_override</span></code>), so the
+seed lies under the prediction the user sees.</p>
+<p>Returns <code class="docutils literal notranslate"><span class="pre">(prediction,</span> <span class="pre">lo,</span> <span class="pre">hi)</span></code>: a (channels, z, y, x) float32 array,
+and the box, shrunk to what the server covers.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.view_labels.foreground_mask">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.view_labels.</span></span><span class="sig-name descname"><span class="pre">foreground_mask</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">prediction</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_class</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">channels</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">threshold</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.5</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.view_labels.foreground_mask" title="Link to this definition"></a></dt>
+<dd><p>Where the model says foreground: its probability over <code class="docutils literal notranslate"><span class="pre">threshold</span></code>.</p>
+<p>The decision boundary depends on the output’s activation: 0.5 on [0, 1]
+output (a sigmoid already applied; the cellmap distance models end in
+one, and 0.5 is their object boundary), 0 on tanh’s [-1, 1], and 0 on
+unbounded output, logits or a signed distance alike. Each is turned into
+a probability first, so <code class="docutils literal notranslate"><span class="pre">channels</span></code> – the affinity channels, say –
+can be averaged. <code class="docutils literal notranslate"><span class="pre">output_class</span></code> is the server’s (serving.probe), or
+read off the values when it has none. <code class="docutils literal notranslate"><span class="pre">threshold</span></code> is in probability
+whatever the activation: 0.5 is the model’s own boundary.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.view_labels.seed_view_from_prediction">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.view_labels.</span></span><span class="sig-name descname"><span class="pre">seed_view_from_prediction</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.view_labels.seed_view_from_prediction" title="Link to this definition"></a></dt>
+<dd><p>Fill the unannotated voxels of the box on screen from the model’s prediction.</p>
+<p>JSON body, all optional: <code class="docutils literal notranslate"><span class="pre">size_nm</span></code> (as for mark-view), <code class="docutils literal notranslate"><span class="pre">confirm</span></code>
+(label a large box), <code class="docutils literal notranslate"><span class="pre">select_channel</span></code> (the channel the session
+trains, when it trains one), <code class="docutils literal notranslate"><span class="pre">model</span></code> (a name from <code class="docutils literal notranslate"><span class="pre">seed_sources</span></code>;
+the latest finetune, else the base, when absent), <code class="docutils literal notranslate"><span class="pre">threshold</span></code> (probability, 0 to 1; the
+model’s own boundary, 0.5, when absent) and <code class="docutils literal notranslate"><span class="pre">min_size</span></code> (objects of
+fewer voxels are background).</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.view_labels.label_view_background">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.view_labels.</span></span><span class="sig-name descname"><span class="pre">label_view_background</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.view_labels.label_view_background" title="Link to this definition"></a></dt>
+<dd><p>Label every unannotated voxel of the box on screen background (1).</p>
+<p>JSON body, all optional: <code class="docutils literal notranslate"><span class="pre">size_nm</span></code> and <code class="docutils literal notranslate"><span class="pre">confirm</span></code>, as for seed.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.view_labels.split_view_objects">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.view_labels.</span></span><span class="sig-name descname"><span class="pre">split_view_objects</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.view_labels.split_view_objects" title="Link to this definition"></a></dt>
+<dd><p>Relabel the box on screen’s foreground by connected component.</p>
+<p>For a merge the model made: paint a background wall through the object,
+in every slice it spans, and click; the two sides get ids of their own
+(<code class="docutils literal notranslate"><span class="pre">fill.relabel_objects</span></code>). A stroke joining two objects merges them.
+JSON body, all optional: <code class="docutils literal notranslate"><span class="pre">size_nm</span></code> and <code class="docutils literal notranslate"><span class="pre">confirm</span></code>, as for seed.</p>
+</dd></dl>
+
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../training/index.html" class="btn btn-neutral float-left" title="cellmap_flow.dashboard.routes.finetune.training" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../yaml_crops/index.html" class="btn btn-neutral float-right" title="cellmap_flow.dashboard.routes.finetune.yaml_crops" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, David Ackerman,  Marwan Zouinkhi, Jeff Rhoades, Larissa Heinrich, Aubrey Weigel.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

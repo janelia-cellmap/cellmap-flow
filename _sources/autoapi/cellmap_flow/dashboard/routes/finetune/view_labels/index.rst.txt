@@ -1,0 +1,133 @@
+cellmap_flow.dashboard.routes.finetune.view_labels
+==================================================
+
+.. py:module:: cellmap_flow.dashboard.routes.finetune.view_labels
+
+.. autoapi-nested-parse::
+
+   Labelling the box on screen in one click: from the model's prediction, or all background.
+
+   Two buttons beside "Mark This View as Good", over the same box (one model
+   output patch centred where the viewer looks, ``good_regions.view_box_nm``):
+
+   - POST ``/api/finetune/view-labels/seed``: the model's prediction there,
+     thresholded at its decision boundary, written as foreground 2 (an id per
+     object, 2 and up, for an affinity model on an instance volume) and
+     background 1. The user then cleans it up with the brush; it is far
+     quicker than painting a whole object from nothing.
+   - POST ``/api/finetune/view-labels/background``: every unannotated voxel 1,
+     for a region the model fills with false positives.
+
+   Both fill only unannotated voxels (``session.fill``): a voxel the user
+   painted is a decision, a seed is a guess. The write goes to MinIO, which
+   neuroglancer reads, and the changed chunks are pulled to disk at once.
+   Neuroglancer keeps the chunks it has already read, so the page reloads the
+   viewer afterwards to show the new labels.
+
+   A box over LARGE_BOX_VOXELS voxels is only labelled when the request says
+   ``confirm: true``; without it the answer is a 409 with
+   ``needs_confirmation``, for the page to ask first.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.routes.finetune.view_labels.logger
+   cellmap_flow.dashboard.routes.finetune.view_labels.LARGE_BOX_VOXELS
+   cellmap_flow.dashboard.routes.finetune.view_labels.PREDICTION_TIMEOUT_SECONDS
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.routes.finetune.view_labels.seed_sources
+   cellmap_flow.dashboard.routes.finetune.view_labels.read_prediction
+   cellmap_flow.dashboard.routes.finetune.view_labels.foreground_mask
+   cellmap_flow.dashboard.routes.finetune.view_labels.seed_view_from_prediction
+   cellmap_flow.dashboard.routes.finetune.view_labels.label_view_background
+   cellmap_flow.dashboard.routes.finetune.view_labels.split_view_objects
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:data:: LARGE_BOX_VOXELS
+   :value: 2097152
+
+
+.. py:data:: PREDICTION_TIMEOUT_SECONDS
+   :value: 120
+
+
+.. py:function:: seed_sources()
+
+   The models a seed can read, for the page's picker: ``models`` (every
+   running server, oldest first) and ``default``, the one a seed reads when
+   none is chosen (None when that is a choice for the user).
+
+
+.. py:function:: read_prediction(host, model_name, volume, lo, hi, info)
+
+   The model's raw output over annotation voxels ``[lo, hi)``.
+
+   Read from its server as a layer is, with the dashboard's input
+   normalization and no postprocessing: the trainer's target is set on the
+   raw output, and that is where its decision boundary is. Each annotation
+   voxel takes the served voxel its centre lies in, placed where
+   neuroglancer draws the layer (``prediction_voxel_override``), so the
+   seed lies under the prediction the user sees.
+
+   Returns ``(prediction, lo, hi)``: a (channels, z, y, x) float32 array,
+   and the box, shrunk to what the server covers.
+
+
+.. py:function:: foreground_mask(prediction, output_class=None, channels=None, threshold=0.5)
+
+   Where the model says foreground: its probability over ``threshold``.
+
+   The decision boundary depends on the output's activation: 0.5 on [0, 1]
+   output (a sigmoid already applied; the cellmap distance models end in
+   one, and 0.5 is their object boundary), 0 on tanh's [-1, 1], and 0 on
+   unbounded output, logits or a signed distance alike. Each is turned into
+   a probability first, so ``channels`` -- the affinity channels, say --
+   can be averaged. ``output_class`` is the server's (serving.probe), or
+   read off the values when it has none. ``threshold`` is in probability
+   whatever the activation: 0.5 is the model's own boundary.
+
+
+.. py:function:: seed_view_from_prediction()
+
+   Fill the unannotated voxels of the box on screen from the model's prediction.
+
+   JSON body, all optional: ``size_nm`` (as for mark-view), ``confirm``
+   (label a large box), ``select_channel`` (the channel the session
+   trains, when it trains one), ``model`` (a name from ``seed_sources``;
+   the latest finetune, else the base, when absent), ``threshold`` (probability, 0 to 1; the
+   model's own boundary, 0.5, when absent) and ``min_size`` (objects of
+   fewer voxels are background).
+
+
+.. py:function:: label_view_background()
+
+   Label every unannotated voxel of the box on screen background (1).
+
+   JSON body, all optional: ``size_nm`` and ``confirm``, as for seed.
+
+
+.. py:function:: split_view_objects()
+
+   Relabel the box on screen's foreground by connected component.
+
+   For a merge the model made: paint a background wall through the object,
+   in every slice it spans, and click; the two sides get ids of their own
+   (``fill.relabel_objects``). A stroke joining two objects merges them.
+   JSON body, all optional: ``size_nm`` and ``confirm``, as for seed.
+
+

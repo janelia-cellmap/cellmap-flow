@@ -1,0 +1,286 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>cellmap_flow.finetune.session.fill &mdash; CellMap Flow  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../../_static/graphviz.css?v=4ae1632d" />
+      <link rel="stylesheet" type="text/css" href="../../../../../_static/css/custom.css" />
+
+  
+    <link rel="shortcut icon" href="../../../../../_static/favicon.ico"/>
+      <script src="../../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../../../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../search.html" />
+    <link rel="next" title="cellmap_flow.finetune.session.instance" href="../instance/index.html" />
+    <link rel="prev" title="cellmap_flow.finetune.session" href="../index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../../index.html" class="icon icon-home">
+            CellMap Flow
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">CellMap-Flow API:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../../../../../install.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../cli.html">Command line</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../scripts.html">Python Scripts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../yaml_config.html">YAML Configuration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../data_paths.html">Data paths</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../huggingface.html">HuggingFace Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../custom_script.html">Custom Model</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../post.html">PostProcessors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../plugins.html">Plugins</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../review.html">Reviewing instances</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../viewer_api.html">Viewer layer API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../architecture.html">Architecture</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../../../../index.html">API Reference</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="../../../index.html">cellmap_flow</a><ul class="current">
+<li class="toctree-l3 current"><a class="reference internal" href="../../../index.html#submodules">Submodules</a><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="../../../blockwise/index.html">cellmap_flow.blockwise</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../cli/index.html">cellmap_flow.cli</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../config/index.html">cellmap_flow.config</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../dashboard/index.html">cellmap_flow.dashboard</a></li>
+<li class="toctree-l4 current"><a class="reference internal" href="../../index.html">cellmap_flow.finetune</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../globals/index.html">cellmap_flow.globals</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../image_data_interface/index.html">cellmap_flow.image_data_interface</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../inference/index.html">cellmap_flow.inference</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../inferencer/index.html">cellmap_flow.inferencer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../io/index.html">cellmap_flow.io</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../jobs/index.html">cellmap_flow.jobs</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../logging_setup/index.html">cellmap_flow.logging_setup</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../models/index.html">cellmap_flow.models</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../norm/index.html">cellmap_flow.norm</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../pipeline_spec/index.html">cellmap_flow.pipeline_spec</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../plugins/index.html">cellmap_flow.plugins</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../post/index.html">cellmap_flow.post</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../process_chain/index.html">cellmap_flow.process_chain</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../review/index.html">cellmap_flow.review</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../review_index/index.html">cellmap_flow.review_index</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../server/index.html">cellmap_flow.server</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../serving/index.html">cellmap_flow.serving</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../utils/index.html">cellmap_flow.utils</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../viewer/index.html">cellmap_flow.viewer</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../../index.html">CellMap Flow</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../../index.html">API Reference</a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">cellmap_flow</a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">cellmap_flow.finetune</a></li>
+          <li class="breadcrumb-item"><a href="../index.html">cellmap_flow.finetune.session</a></li>
+      <li class="breadcrumb-item active">cellmap_flow.finetune.session.fill</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../../../../../_sources/autoapi/cellmap_flow/finetune/session/fill/index.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-cellmap_flow.finetune.session.fill">
+<span id="cellmap-flow-finetune-session-fill"></span><h1>cellmap_flow.finetune.session.fill<a class="headerlink" href="#module-cellmap_flow.finetune.session.fill" title="Link to this heading"></a></h1>
+<p>Labelling a whole box of an annotation volume at once.</p>
+<p>The Finetune tab’s “Seed” and “All background” buttons label the box on
+screen in one click: from the model’s own prediction, for the user to clean
+up with the brush, or all background (1), for a region of false positives.
+Either way only unannotated voxels (0) are filled. A stroke the user painted
+is a decision about that voxel; a seed is a guess. “Split objects” relabels
+the box’s foreground by connected component (<code class="docutils literal notranslate"><span class="pre">relabel_objects</span></code>), so a
+background wall painted through a merged object gives it two ids again.</p>
+<p>Objects are 6-connected (face neighbours, scipy’s default): a one-voxel wall
+the brush paints cuts an object under it, where under 26-connectivity the
+voxels across a diagonal wall would still touch.</p>
+<p>The write goes to MinIO, as cc3d_relabel’s does, not to the volume on disk:
+MinIO holds strokes the periodic sync has not pulled yet, which is what “only
+fill 0s” must see, and it is what neuroglancer reads. The caller then pulls
+the changed chunks to disk with <code class="docutils literal notranslate"><span class="pre">sync.sync_volume</span></code>, so disk and MinIO agree
+and the periodic sync has nothing to revert.</p>
+<section id="attributes">
+<h2>Attributes<a class="headerlink" href="#attributes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.session.fill.logger" title="cellmap_flow.finetune.session.fill.logger"><code class="xref py py-obj docutils literal notranslate"><span class="pre">logger</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="functions">
+<h2>Functions<a class="headerlink" href="#functions" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.session.fill.box_voxels" title="cellmap_flow.finetune.session.fill.box_voxels"><code class="xref py py-obj docutils literal notranslate"><span class="pre">box_voxels</span></code></a>(volume, offset_nm, shape_nm, volume_shape)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">(lo,</span> <span class="pre">hi)</span></code>: the annotation voxels whose centres lie in a box, clipped to the volume.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.finetune.session.fill.seed_labels" title="cellmap_flow.finetune.session.fill.seed_labels"><code class="xref py py-obj docutils literal notranslate"><span class="pre">seed_labels</span></code></a>(foreground, existing[, count_up, min_size])</p></td>
+<td><p>Labels for a box from a foreground mask: an id per object inside, 1 outside.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.session.fill.relabel_objects" title="cellmap_flow.finetune.session.fill.relabel_objects"><code class="xref py py-obj docutils literal notranslate"><span class="pre">relabel_objects</span></code></a>(existing[, count_up])</p></td>
+<td><p>The box's foreground (labels 2 and up) relabelled by connected component.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.finetune.session.fill.open_served_labels" title="cellmap_flow.finetune.session.fill.open_served_labels"><code class="xref py py-obj docutils literal notranslate"><span class="pre">open_served_labels</span></code></a>(state, volume_id)</p></td>
+<td><p>The volume's <code class="docutils literal notranslate"><span class="pre">annotation/s0</span></code> as MinIO serves it, open for writing.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.session.fill.fill_unpainted" title="cellmap_flow.finetune.session.fill.fill_unpainted"><code class="xref py py-obj docutils literal notranslate"><span class="pre">fill_unpainted</span></code></a>(state, volume_id, lo, hi, labels_for[, ...])</p></td>
+<td><p>Write <code class="docutils literal notranslate"><span class="pre">labels_for(existing)</span></code> into the box <code class="docutils literal notranslate"><span class="pre">[lo,</span> <span class="pre">hi)</span></code> where the volume holds 0.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.finetune.session.fill.rewrite_foreground" title="cellmap_flow.finetune.session.fill.rewrite_foreground"><code class="xref py py-obj docutils literal notranslate"><span class="pre">rewrite_foreground</span></code></a>(state, volume_id, lo, hi, relabel)</p></td>
+<td><p>Write <code class="docutils literal notranslate"><span class="pre">relabel(existing)</span></code>'s labels over the box's foreground voxels.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="module-contents">
+<h2>Module Contents<a class="headerlink" href="#module-contents" title="Link to this heading"></a></h2>
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.session.fill.logger">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.session.fill.</span></span><span class="sig-name descname"><span class="pre">logger</span></span><a class="headerlink" href="#cellmap_flow.finetune.session.fill.logger" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.session.fill.box_voxels">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.session.fill.</span></span><span class="sig-name descname"><span class="pre">box_voxels</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">volume</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">offset_nm</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">shape_nm</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">volume_shape</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.finetune.session.fill.box_voxels" title="Link to this definition"></a></dt>
+<dd><p><code class="docutils literal notranslate"><span class="pre">(lo,</span> <span class="pre">hi)</span></code>: the annotation voxels whose centres lie in a box, clipped to the volume.</p>
+<p><code class="docutils literal notranslate"><span class="pre">offset_nm</span></code> and <code class="docutils literal notranslate"><span class="pre">shape_nm</span></code> are the box’s lower corner and size in
+world nm, as a good region records them; <code class="docutils literal notranslate"><span class="pre">volume</span></code> is the volume’s
+record, for its grid. None when no voxel of the volume is in the box.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.session.fill.seed_labels">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.session.fill.</span></span><span class="sig-name descname"><span class="pre">seed_labels</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">foreground</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">existing</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">count_up</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">min_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.finetune.session.fill.seed_labels" title="Link to this definition"></a></dt>
+<dd><p>Labels for a box from a foreground mask: an id per object inside, 1 outside.</p>
+<p><code class="docutils literal notranslate"><span class="pre">existing</span></code> is what the box holds now. Each connected component of
+<code class="docutils literal notranslate"><span class="pre">foreground</span></code> gets an id of its own (<code class="docutils literal notranslate"><span class="pre">_fresh_ids</span></code>; <code class="docutils literal notranslate"><span class="pre">count_up</span></code> for
+an affinity target), so neighbouring objects are told apart, and a
+merge the model made shows as one colour to split; but a component the
+user has already painted part of takes the id painted there most, or
+the unpainted rest of an object would be taught as a different object
+from its painted part. A binary or distance target reads every id as
+foreground, so the ids cost it nothing. Components of fewer than
+<code class="docutils literal notranslate"><span class="pre">min_size</span></code> voxels are background: specks the threshold let through.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.session.fill.relabel_objects">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.session.fill.</span></span><span class="sig-name descname"><span class="pre">relabel_objects</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">existing</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">count_up</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.finetune.session.fill.relabel_objects" title="Link to this definition"></a></dt>
+<dd><p>The box’s foreground (labels 2 and up) relabelled by connected component.</p>
+<p>Each component takes the id most of its voxels hold, so a stroke that
+joins two objects merges them into the id of the bigger. An id left on
+several components, an object a background wall cut in two, stays on the
+largest and the others get fresh ids (<code class="docutils literal notranslate"><span class="pre">_fresh_ids</span></code>). Background (1)
+and unpainted (0) voxels are left alone. Returns <code class="docutils literal notranslate"><span class="pre">(labels,</span> <span class="pre">counts)</span></code>:
+<code class="docutils literal notranslate"><span class="pre">counts</span></code> has <code class="docutils literal notranslate"><span class="pre">objects</span></code>, <code class="docutils literal notranslate"><span class="pre">split</span></code> (components given a fresh id) and
+<code class="docutils literal notranslate"><span class="pre">merged</span></code> (components that held more than one id).</p>
+<p>A cut has to go through every slice the object spans: the brush paints
+one slice, and an object cut in one slice is still one object above and
+below it. <code class="docutils literal notranslate"><span class="pre">split</span></code> is 0 then, which the page says.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.session.fill.open_served_labels">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.session.fill.</span></span><span class="sig-name descname"><span class="pre">open_served_labels</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">state</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">volume_id</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.finetune.session.fill.open_served_labels" title="Link to this definition"></a></dt>
+<dd><p>The volume’s <code class="docutils literal notranslate"><span class="pre">annotation/s0</span></code> as MinIO serves it, open for writing.</p>
+<p>The bucket key is <code class="docutils literal notranslate"><span class="pre">&lt;volume_id&gt;.zarr</span></code>, as for the sync.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.session.fill.fill_unpainted">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.session.fill.</span></span><span class="sig-name descname"><span class="pre">fill_unpainted</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">state</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">volume_id</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lo</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">hi</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">labels_for</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">local_zarr_path</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.finetune.session.fill.fill_unpainted" title="Link to this definition"></a></dt>
+<dd><p>Write <code class="docutils literal notranslate"><span class="pre">labels_for(existing)</span></code> into the box <code class="docutils literal notranslate"><span class="pre">[lo,</span> <span class="pre">hi)</span></code> where the volume holds 0.</p>
+<p><code class="docutils literal notranslate"><span class="pre">labels_for</span></code> gets the box as MinIO holds it and returns labels of the
+same shape (0 for “leave as it is”). Returns <code class="docutils literal notranslate"><span class="pre">(n_foreground,</span>
+<span class="pre">n_background)</span></code>: how many voxels were filled with each. Nothing is
+written when nothing would change.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.session.fill.rewrite_foreground">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.session.fill.</span></span><span class="sig-name descname"><span class="pre">rewrite_foreground</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">state</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">volume_id</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lo</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">hi</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">relabel</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">local_zarr_path</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.finetune.session.fill.rewrite_foreground" title="Link to this definition"></a></dt>
+<dd><p>Write <code class="docutils literal notranslate"><span class="pre">relabel(existing)</span></code>’s labels over the box’s foreground voxels.</p>
+<p><code class="docutils literal notranslate"><span class="pre">relabel</span></code> gets the box as MinIO holds it and returns <code class="docutils literal notranslate"><span class="pre">(labels,</span>
+<span class="pre">counts)</span></code> (<code class="docutils literal notranslate"><span class="pre">relabel_objects</span></code>); only foreground voxels (2 and up) whose
+label changed are written, so a stroke painted meanwhile elsewhere in
+the box is kept. Returns <code class="docutils literal notranslate"><span class="pre">(n_changed,</span> <span class="pre">counts)</span></code>.</p>
+</dd></dl>
+
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../index.html" class="btn btn-neutral float-left" title="cellmap_flow.finetune.session" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../instance/index.html" class="btn btn-neutral float-right" title="cellmap_flow.finetune.session.instance" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, David Ackerman,  Marwan Zouinkhi, Jeff Rhoades, Larissa Heinrich, Aubrey Weigel.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
