@@ -53,6 +53,13 @@ numpy = "<2.1"
 [feature.cellpose.pypi-dependencies]
 cellpose = "==3.1.1.1"
 
+# Cellpose 4 (Cellpose-SAM) wants a newer torch and numpy than the default
+# environment's cellpose 3 pins allow, so it lives in an environment of its
+# own, solved separately. A model runs in it with `env: cellpose4` in its
+# YAML entry (docs: "Running a model in its own environment").
+[feature.cellpose4.pypi-dependencies]
+cellpose = ">=4"
+
 [feature.dacapo.pypi-dependencies]
 dacapo-ml = "*"
 
@@ -88,3 +95,6 @@ dev = { features = ["finetune", "cellpose", "test", "dev"], solve-group = "defau
 docs = { features = ["docs"] }
 dacapo = { features = ["finetune", "dacapo"] }
 bioimageio = { features = ["finetune", "bioimageio"] }
+# For models that set `env: cellpose4`; its own solve group, so cellpose 4
+# can have the torch and numpy it needs without moving the default env's.
+cellpose4 = { features = ["cellpose4"], solve-group = "cellpose4" }

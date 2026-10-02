@@ -119,6 +119,9 @@ def test_a_served_run_that_cannot_serve_fails(run_cli, tmp_path, options, marker
     pytest.param(["--output-type", "binary", "--loss-type", "dice"], True, id="binary with dice: broadcast"),
     # --select-channel slices the prediction to one channel; these targets had every channel.
     pytest.param(["--output-type", "distance", "--select-channel", "1"], True, id="distance, one channel"),
+    pytest.param(["--output-type", "distance", "--loss-type", "interval"], True, id="distance bounds"),
+    pytest.param(["--output-type", "binary_broadcast", "--loss-type", "interval"], False,
+                 id="bounds without a distance target: refused"),
     pytest.param(["--output-type", "binary_broadcast", "--select-channel", "0"], True,
                  id="broadcast binary, one channel"),
     pytest.param(["--select-channel", "3"], False, id="a channel the model does not have: refused"),
@@ -391,3 +394,18 @@ def test_the_cli_takes_every_model_type_the_job_manager_submits():
     for model_type in TRAINABLE_MODEL_TYPES:
         args = ["--corrections", "/c", "--output-dir", "/o", "--model-type", model_type]
         assert build_arg_parser().parse_args(args).model_type == model_type
+
+
+def test_the_serving_yaml_declares_the_voxel_size_the_finetune_was_trained_at():
+    """A volume made without resampling is at the raw level nearest the model's
+    voxel size, and the trainer read it as it is: the finetuned model is a
+    model at that size. Only a size that differs from the model's is written."""
+    from types import SimpleNamespace
+
+    from cellmap_flow.finetune.run_outputs import trained_voxel_sizes
+
+    model = SimpleNamespace(config=SimpleNamespace(input_voxel_size=(8, 8, 8), output_voxel_size=(8, 8, 8)))
+    relabelled = {"input_voxel_size_nm": [10.48, 8.0, 8.0], "output_voxel_size_nm": [8.0, 8.0, 8.0]}
+    assert trained_voxel_sizes(relabelled, model) == {"input_voxel_size": [10.48, 8.0, 8.0]}
+    assert trained_voxel_sizes({"input_voxel_size_nm": [8, 8, 8], "output_voxel_size_nm": [8, 8, 8]}, model) == {}
+    assert trained_voxel_sizes({}, model) == {}

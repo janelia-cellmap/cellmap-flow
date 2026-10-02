@@ -100,26 +100,39 @@ def _default_size_nm():
     return [DEFAULT_REGION_SIZE_NM] * 3
 
 
+def view_box_nm(size_nm=None):
+    """``(centre_nm, size_nm)`` of the box centred where the viewer looks.
+
+    ``size_nm`` defaults to one model output patch (see
+    DEFAULT_REGION_SIZE_NM); one number is the same along every axis.
+    The labelling buttons beside "Mark This View as Good" use the same box,
+    so what they label is what a mark would cover. ValueError when there
+    is no viewer position or the size is not positive.
+    """
+    position, scales_nm = viewer_position_and_scales()
+    if position is None:
+        raise ValueError("Viewer has no position")
+
+    # viewer_position_and_scales returns the position in viewer voxels and
+    # the scale of each axis in nm, so the product is absolute nm.
+    centre_nm = np.array(position, dtype=float)
+    if scales_nm:
+        centre_nm = centre_nm * np.array(scales_nm, dtype=float)
+
+    size_nm = np.array(size_nm or _default_size_nm(), dtype=float)
+    if size_nm.size == 1:
+        size_nm = np.repeat(size_nm, 3)
+    if np.any(size_nm <= 0):
+        raise ValueError("size_nm must be positive")
+    return centre_nm, size_nm
+
+
 @finetune_bp.route("/api/finetune/good-regions/mark-view", methods=["POST"])
 def mark_current_view_good():
     """Record a box centred on wherever the viewer is looking right now."""
     data = request.get_json(silent=True) or {}
     try:
-        position, scales_nm = viewer_position_and_scales()
-        if position is None:
-            return jsonify({"success": False, "error": "Viewer has no position"}), 400
-
-        # viewer_position_and_scales returns the position in viewer voxels and
-        # the scale of each axis in nm, so the product is absolute nm.
-        centre_nm = np.array(position, dtype=float)
-        if scales_nm:
-            centre_nm = centre_nm * np.array(scales_nm, dtype=float)
-
-        size_nm = np.array(data.get("size_nm") or _default_size_nm(), dtype=float)
-        if size_nm.size == 1:
-            size_nm = np.repeat(size_nm, 3)
-        if np.any(size_nm <= 0):
-            return jsonify({"success": False, "error": "size_nm must be positive"}), 400
+        centre_nm, size_nm = view_box_nm(data.get("size_nm"))
 
         regions = load_good_regions()
         region = {

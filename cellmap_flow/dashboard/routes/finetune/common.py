@@ -288,15 +288,10 @@ class TrainingSettings(NamedTuple):
     label_smoothing: float
     distillation_lambda: float
     mask_unannotated: bool
-    # The margin loss's margin when it must not be the form's, else None.
-    margin: float = None
     # The sentence submit's answer carries when the loss was switched for
     # sparse annotations, else None.
     note: str = None
 
-
-# The margin at which margin loss only asks for the right side of 0.5.
-SIGN_ONLY_MARGIN = 0.5
 
 SPARSE_MSE_NOTE = "Auto-switched to margin loss + distillation (lambda=0.5) for sparse annotations"
 
@@ -310,14 +305,13 @@ def training_settings(*, output_type, loss_type, label_smoothing, distillation_l
     - sparse annotations with mse: margin loss, with distillation to the
       base model at 0.5, which is how sparse annotations train (see the
       distance case below);
-    - a distance target with sparse annotations: a binary target with margin
-      loss instead, at margin 0.5 and distillation of at least 0.5 (see
-      below);
+    - a distance target with sparse annotations: the interval loss, on the
+      bounds the paint sets on each voxel's distance, with distillation of
+      at least 0.5 (see below);
     - a distance target otherwise: bce, without label smoothing.
     A sparse session also masks its unannotated voxels out of the loss.
     """
     note = None
-    margin = None  # the form's
     if sparse and loss_type == "mse":
         loss_type = "margin"
         distillation_lambda = 0.5
@@ -325,32 +319,29 @@ def training_settings(*, output_type, loss_type, label_smoothing, distillation_l
         logger.info(SPARSE_MSE_NOTE)
 
     if output_type == "distance" and sparse:
-        # A distance target needs the 3D object boundary. Scribbles are
-        # strokes with unannotated voxels all around them, so the safe
-        # radius of every painted voxel is ~1 and next to nothing would be
-        # supervised. Fall back to what sparse annotations already use:
-        # a per-voxel binary target with margin loss and distillation to
-        # the base model elsewhere.
+        # A distance target needs the 3D object boundary, and scribbles are
+        # strokes with unannotated voxels all around them: the exact target
+        # would supervise next to nothing. They do bound each painted
+        # voxel's distance, between the nearest voxel not painted as its own
+        # class and the nearest painted as the other, and the interval loss
+        # asks only for that (target_transforms.IntervalTargetTransform,
+        # losses.IntervalLoss). Where the paint is dense the two meet and
+        # the distance is exact.
         #
-        # At margin 0.5, so that only the side of 0.5 is enforced and the
-        # model's gradual field survives. The form's 0.3 pushed every
-        # painted voxel to 0.7 or 0.3, which on a distance model (sigma 6)
-        # is 2.5 voxels from the boundary: edges near strokes turned into
-        # steps. And distillation of at least 0.5: the form's default, 0.01,
-        # was passed through as "set", so almost nothing held the rest.
+        # It replaced a binary target with margin loss at margin 0.5, which
+        # kept only the sign: no distance at all was learnt from the paint.
+        #
+        # Distillation of at least 0.5 holds the unpainted voxels, which get
+        # no bounds: the form's default, 0.01, held almost nothing.
         logger.info(
-            "output_type=distance with sparse annotations: using binary "
-            "target + margin loss instead (a distance transform needs dense 3D labels)"
+            "output_type=distance with sparse annotations: using the interval loss "
+            "on the distance bounds the paint sets"
         )
-        output_type = "binary"
-        loss_type = "margin"
-        margin = SIGN_ONLY_MARGIN
+        loss_type = "interval"
+        label_smoothing = 0.0
         distillation_lambda = max(distillation_lambda or 0.0, 0.5)
         # The form still shows what was entered, so say what was used.
-        note = (
-            "Distance model on scribbles: trained as a binary target with margin loss at "
-            f"margin {margin} and distillation {distillation_lambda:g}, in place of the form's"
-        )
+        note = f"Distance model on scribbles: trained on distance bounds, distillation {distillation_lambda:g}."
     elif output_type == "distance":
         # The soft distance target is only defined against BCE-with-logits;
         # margin/dice assume hard labels and smoothing would blur a target
@@ -369,7 +360,6 @@ def training_settings(*, output_type, loss_type, label_smoothing, distillation_l
         label_smoothing=label_smoothing,
         distillation_lambda=distillation_lambda,
         mask_unannotated=bool(sparse),
-        margin=margin,
         note=note,
     )
 

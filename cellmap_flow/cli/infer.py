@@ -4,7 +4,8 @@ the viewer on its predictions and serve the dashboard.
 There is a subcommand for each model type (``models.registry``), built when
 click asks for it. It takes the type's constructor arguments as options
 (``registry.click_options``), and the dataset (``-d``), queue (``-q``),
-billing project (``-P``), ``--resample`` and ``--server-check`` as its own.
+billing project (``-P``), ``--resample``, ``--server-check`` and ``--env``
+(the environment the server runs in, ``models.envs``) as its own.
 
 ``run``, the generic form before 0.3.0 (``cellmap_flow run -m TYPE -c
 key=value``), is a deprecated alias: it says which ``infer`` command it
@@ -93,6 +94,7 @@ def create_dynamic_command(cli_name: str, config_class: Type[ModelConfig]):
         project = kwargs.pop("project", None)
         server_check = kwargs.pop("server_check", False)
         resample = kwargs.pop("resample", False)
+        env = kwargs.pop("env", None)
 
         # Fall back to the saved settings if not provided
         settings = launcher_settings()
@@ -116,6 +118,14 @@ def create_dynamic_command(cli_name: str, config_class: Type[ModelConfig]):
             logger.error(f"Error creating {config_class.__name__}: {e}")
             logger.error(f"Provided arguments: {processed_kwargs}")
             sys.exit(1)
+        if env:
+            from cellmap_flow.config.yaml import ConfigError
+            from cellmap_flow.models import envs
+
+            try:
+                model_config.env = envs.validate(env, getattr(model_config, "name", None) or cli_name)
+            except ConfigError as e:
+                raise click.BadParameter(str(e), param_hint="'--env'")
 
         # The scale selects a level of a multiscale data_path; see resolve_data_path.
         final_data_path = resolve_data_path(
@@ -185,6 +195,15 @@ def create_dynamic_command(cli_name: str, config_class: Type[ModelConfig]):
     )(command_func)
 
     command_func = resample_option()(command_func)
+
+    command_func = click.option(
+        "--env",
+        default=None,
+        type=str,
+        help="Run the server in this environment: a pixi environment of "
+        "cellmap-flow's pixi.toml, or the absolute path of one with "
+        "cellmap-flow installed (default: this one)",
+    )(command_func)
 
     # Add model-specific options based on constructor parameters; -d, -q
     # and -P are the command's own.

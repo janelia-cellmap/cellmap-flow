@@ -182,6 +182,10 @@ MODEL_OPTIONS = {
         ('base_model', ('-b', '--base-model'), (), 'text', False, None, False, 'Parameter: base_model (optional)'),
         NAME, SCALE,
         ('weights_path', ('-w', '--weights-path'), (), 'text', False, None, False, 'Parameter: weights_path (optional)'),
+        ('input_voxel_size', ('-i', '--input-voxel-size'), (), 'text', False, None, False,
+         'Parameter: input_voxel_size (optional)'),
+        ('output_voxel_size', ('-o', '--output-voxel-size'), (), 'text', False, None, False,
+         'Parameter: output_voxel_size (optional)'),
     ],
     'huggingface': [
         ('repo', ('-r', '--repo'), (), 'text', True, None, False, 'Parameter: repo'),
@@ -207,7 +211,10 @@ PLUGIN_NAME = [('name', ('name',), (), 'text', True, None, False, None)]
 RESAMPLE = ('resample', ('--resample',), (), 'boolean', False, False, True,
             "When the dataset has no level at the model's input voxel size, resample a level to it, "
             "axis by axis, instead of reading the level as if it were at that size.")
-INFER = {t: [*options, RESAMPLE, SERVER_CHECK, PROJECT, QUEUE, DATA_PATH] for t, options in MODEL_OPTIONS.items()}
+ENV = ('env', ('--env',), (), 'text', False, None, False,
+       "Run the server in this environment: a pixi environment of cellmap-flow's pixi.toml, "
+       "or the absolute path of one with cellmap-flow installed (default: this one)")
+INFER = {t: [*options, ENV, RESAMPLE, SERVER_CHECK, PROJECT, QUEUE, DATA_PATH] for t, options in MODEL_OPTIONS.items()}
 # The server's own options: `serve` requires the model and data, and
 # cellmap_flow_server takes them instead of a type's command.
 MODEL_JSON_HELP = 'The model: its launch entry (ModelConfig.launch_entry), as JSON.'
@@ -339,7 +346,8 @@ _LISTED = [
     ("bioimage", "BioModelConfig", "model_name, voxel_size, edge_length_to_process, name, scale", "model_name, voxel_size"),
     ("cellmap", "CellMapModelConfig", "folder_path, name, scale", "folder_path"),
     ("dacapo", "DaCapoModelConfig", "run_name, iteration, name, scale", "run_name, iteration"),
-    ("finetune", "FinetuneModelConfig", "lora_adapter_path, base_model, name, scale, weights_path", ""),
+    ("finetune", "FinetuneModelConfig",
+     "lora_adapter_path, base_model, name, scale, weights_path, input_voxel_size, output_voxel_size", ""),
     ("fly", "FlyModelConfig",
      "checkpoint_path, channels, input_voxel_size, output_voxel_size, name, input_size, output_size, scale",
      "checkpoint_path, channels, input_voxel_size, output_voxel_size"),
@@ -494,8 +502,7 @@ CONFIGS = {
                                     name="ft", scale="s1"),
         {'type': 'finetune', 'lora_adapter_path': '/runs/my run/lora_adapter', 'weights_path': None,
          'base_model': FLY_ENTRY, 'name': 'ft', 'scale': 's1', 'channels': ['mito', 'er'],
-         'checkpoint_path': '/ckpt/fly run/model.ts', 'input_voxel_size': [16, 16, 16],
-         'output_voxel_size': [8, 8, 8], 'input_size': [100, 100, 100], 'output_size': [20, 20, 20],
+         'checkpoint_path': '/ckpt/fly run/model.ts', 'input_size': [100, 100, 100], 'output_size': [20, 20, 20],
          'base_type': 'fly'},
         "finetune --lora-adapter-path '/runs/my run/lora_adapter' --base-model"
         " eyJ0eXBlIjoiZmx5IiwiY2hlY2twb2ludF9wYXRoIjoiL2NrcHQvZmx5IHJ1bi9tb2RlbC50cyIsImNoYW5uZWxzIjpbIm1pdG8iLCJlciJdLCJpbnB1dF92b3hlbF9zaXplIjpbMTYsMTYsMTZdLCJvdXRwdXRfdm94ZWxfc2l6ZSI6WzgsOCw4XSwiaW5wdXRfc2l6ZSI6WzEwMCwxMDAsMTAwXSwib3V0cHV0X3NpemUiOlsyMCwyMCwyMF0sIm5hbWUiOiJmbHkgYmFzZSJ9"
@@ -537,12 +544,17 @@ def _param_info(name, type_, required, input_type, default=...):
     return info
 
 
+# Every type's form also offers env, which no constructor takes (models.envs).
+_ENV = {"name": "env", "required": False, "type": "str", "input_type": "text",
+        "description": "Environment (pixi env name or absolute path; blank: this one)"}
+
+
 def _type_info(class_name, display_name, *params):
     return {
         "display_name": display_name,
         "description": f"Create a {display_name} model configuration",
         "class_name": class_name,
-        "parameters": {p["name"]: p for p in params},
+        "parameters": {p["name"]: p for p in (*params, _ENV)},
     }
 
 
@@ -572,6 +584,8 @@ MODEL_CONFIG_TYPES = {
         _param_info("base_model", "dict", False, "textarea", None),
         _STR_NAME, _SCALE,
         _param_info("weights_path", "str", False, "file", None),
+        _param_info("input_voxel_size", "tuple", False, "textarea", None),
+        _param_info("output_voxel_size", "tuple", False, "textarea", None),
     ),
     "FlyModelConfig": _type_info(
         "FlyModelConfig", "Fly Model",

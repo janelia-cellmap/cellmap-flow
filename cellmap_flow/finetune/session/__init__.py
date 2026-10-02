@@ -10,6 +10,7 @@ reads; ``good_regions.json`` sits beside ``corrections/``.
 - ``minio``: starting MinIO and serving volumes through it.
 - ``sync``: pulling painted chunks back from MinIO, and the periodic sync.
 - ``instance``: instance corrections, seeded from a segmentation.
+- ``fill``: labelling a whole box of a volume at once, unpainted voxels only.
 
 The submodules import neither flask, neuroglancer, torch nor
 ``cellmap_flow.globals``, so the CLI, the trainer and scripts can use them

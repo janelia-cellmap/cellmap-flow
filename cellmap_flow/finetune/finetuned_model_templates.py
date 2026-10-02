@@ -36,6 +36,8 @@ def generate_finetuned_model_yaml(
     scale: str = None,
     weights_path: str = None,
     resample: bool = False,
+    input_voxel_size=None,
+    output_voxel_size=None,
 ) -> Path:
     """
     Generate .yaml configuration for serving a finetuned model.
@@ -62,6 +64,9 @@ def generate_finetuned_model_yaml(
             a multiscale group was served s0.
         resample: the model was trained on the raw resampled to its voxel
             size (its volume's ``resample``), so serve it that way too
+        input_voxel_size, output_voxel_size: the voxel sizes the finetune was
+            trained at, when not the base model's (run_outputs); the served
+            model declares them
 
     Returns:
         Path to the generated YAML file
@@ -88,6 +93,10 @@ def generate_finetuned_model_yaml(
     }
     if scale:
         model_entry["scale"] = scale
+    if input_voxel_size is not None:
+        model_entry["input_voxel_size"] = list(input_voxel_size)
+    if output_voxel_size is not None:
+        model_entry["output_voxel_size"] = list(output_voxel_size)
     if weights_path:
         model_entry["weights_path"] = weights_path
     else:

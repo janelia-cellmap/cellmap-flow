@@ -32,7 +32,11 @@ dependencies = [
     "funlib.persistence==0.6.1",
     "daisy",
     "cellmap-models",
-    "huggingface_hub",
+    # Below 2: tokenizers requires it, and with hub 2 allowed the resolver
+    # kept hub 2 and fell back to transformers 4.12 (which bounds neither),
+    # whose tokenizers 0.10 has no wheels and does not build: the finetune
+    # extra (peft -> transformers) could not be installed.
+    "huggingface_hub<2",
     # Imported directly but previously only arriving transitively.
     "requests",
     "scipy",

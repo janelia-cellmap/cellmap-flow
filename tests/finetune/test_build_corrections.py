@@ -11,10 +11,10 @@ import zarr
 from cellmap_flow.finetune.build_corrections import DEFAULT_INPUT_NORM, build_corrections
 
 
-def _build(tmp_path, ome_zarr, settings="", fg_ids="[50]", **flags):
+def _build(tmp_path, ome_zarr, settings="", fg_ids="[50]", voxel_size=16, **flags):
     """build_corrections of one 8^3 crop, foreground id 50 in a background
-    shell, over a 64^3 raw at 8 nm with s1 at 16 nm, for a toy 16 nm model.
-    ``settings``: more top-level lines for the crops YAML."""
+    shell, over a 64^3 raw at 8 nm with s1 at 16 nm, for a toy 16 nm model
+    (``voxel_size``). ``settings``: more top-level lines for the crops YAML."""
     raw = ome_zarr(tmp_path / "raw.zarr", ("s0", np.zeros((64,) * 3, np.uint8), 8.0, 0.0),
                    ("s1", np.zeros((32,) * 3, np.uint8), 16.0, 0.0))
     labels = np.zeros((8, 8, 8), np.uint8)
@@ -25,8 +25,8 @@ def _build(tmp_path, ome_zarr, settings="", fg_ids="[50]", **flags):
     out = tmp_path / "corrections"
     record = build_corrections(
         raw_dataset_path=raw, crops_yaml=str(tmp_path / "crops.yaml"), output_dir=str(out),
-        input_shape=(16, 16, 16), output_shape=(8, 8, 8), input_voxel_size=(16, 16, 16),
-        output_voxel_size=(16, 16, 16), model_name="toy", **flags,
+        input_shape=(16, 16, 16), output_shape=(8, 8, 8), input_voxel_size=(voxel_size,) * 3,
+        output_voxel_size=(voxel_size,) * 3, model_name="toy", **flags,
     )
     return raw, out, record, json.loads((out / "_virtual_sources.json").read_text())
 
@@ -45,6 +45,17 @@ def test_a_build_writes_the_crop_at_its_place_and_records_where_it_came_from(tmp
     assert record["total_fg_voxels"] == record["crops"][0]["n_fg_voxels"] == 4 ** 3
     assert (record["dataset"], record["class"]) == ("toy_ds", "mito_group") and "fg_ids: [50]" in record["crops_yaml"]
     assert json.loads((out / "build_record.json").read_text())["geometry"]["effective_output_voxel_size_nm"] == [16.0] * 3
+
+
+@pytest.mark.parametrize("resample, voxel_size", [
+    pytest.param(False, [8.0] * 3, id="the nearest level, as the dashboard snaps"),
+    pytest.param(True, [12.0] * 3, id="--resample: the model's own voxel size"),
+])
+def test_a_build_follows_the_resample_flag(tmp_path, ome_zarr, resample, voxel_size):
+    """A 12 nm model over 8 and 16 nm levels: without --resample the volume is
+    at the 8 nm level's size (the import ignored the dashboard's box)."""
+    _, _, _, manifest = _build(tmp_path, ome_zarr, voxel_size=12, resample=resample)
+    assert (manifest["output_voxel_size_nm"], manifest["resample"]) == (voxel_size, resample)
 
 
 def test_a_background_only_crop_builds_and_trains(tmp_path, ome_zarr):

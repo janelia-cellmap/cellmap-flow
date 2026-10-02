@@ -17,8 +17,12 @@ describes it. What the rest of cellmap-flow reads:
 - ``command``: the ``cellmap_flow_server <type>`` arguments that rebuild
   it, which launchers passed before 0.3.0; that form of the server goes in
   the release after it.
+- ``env``: the environment its server runs in, when not this one
+  (``models.envs``). Set after construction, never a constructor argument;
+  to_dict() and launch_entry carry it.
 """
 
+import functools
 import inspect
 import logging
 import shlex
@@ -27,7 +31,7 @@ from typing import Any
 
 import numpy as np
 
-from cellmap_flow.models.geometry import DEFAULT_OUTPUT_AXES, ModelGeometry
+from cellmap_flow.models.geometry import DEFAULT_OUTPUT_AXES, ModelGeometry, _voxels
 
 logger = logging.getLogger(__name__)
 
@@ -143,6 +147,26 @@ def command_argv(cls, params: dict) -> list:
     return argv
 
 
+class ModelEnvError(RuntimeError):
+    """A model that runs in its own environment was built in another, which
+    lacks its packages (``ModelConfig.config``)."""
+
+
+def _missing_module(error: BaseException):
+    """The ImportError behind ``error``, as text, or None.
+
+    A script model's error is load_safe_config's RuntimeError, raised from
+    the script's own, so the causes are followed.
+    """
+    seen = set()
+    while error is not None and id(error) not in seen:
+        if isinstance(error, ImportError):
+            return str(error)
+        seen.add(id(error))
+        error = error.__cause__ or error.__context__
+    return None
+
+
 DEFAULT_AXES_NAMES = ["x", "y", "z"]
 
 
@@ -194,7 +218,38 @@ class Config:
         return self.kwargs.get(key, default)
 
 
+def _with_env(to_dict):
+    """``to_dict`` with the config's ``env`` added to the entry it returns."""
+
+    @functools.wraps(to_dict)
+    def to_dict_with_env(self):
+        result = to_dict(self)
+        if getattr(self, "env", None) and isinstance(result, dict):
+            result["env"] = self.env
+        return result
+
+    to_dict_with_env._adds_env = True
+    return to_dict_with_env
+
+
 class ModelConfig:
+    # The environment this model's server and finetuning job run in, when it
+    # is not cellmap-flow's own: a pixi environment's name or a directory
+    # (models.envs). registry.build_model sets it from a model entry's
+    # `env`; it is not a constructor argument, because the server rebuilds
+    # the model from the same entry and must not get it back.
+    env = None
+
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        # No type's to_dict() knows env, which is not among the arguments it
+        # writes, so add it to each type's own, plugins' included: an
+        # exported YAML, a finetuned model's base_model and the trainer's
+        # model entry then keep the environment.
+        own = cls.__dict__.get("to_dict")
+        if own is not None and not getattr(own, "_adds_env", False):
+            cls.to_dict = _with_env(own)
+
     def __new__(cls, *args, **kwargs):
         # Remember the constructor arguments, for the default to_dict().
         # Recorded here rather than by wrapping each subclass's __init__,
@@ -235,7 +290,21 @@ class ModelConfig:
     @property
     def config(self):
         if self._config is None:
-            self._config = self._get_config()
+            try:
+                self._config = self._get_config()
+            except Exception as e:
+                missing = _missing_module(e)
+                if self.env and missing:
+                    # The model's packages are in its own environment, not in
+                    # this process's; say so rather than show a bare
+                    # ImportError from deep inside its script.
+                    label = getattr(self, "name", None) or type(self).__name__
+                    raise ModelEnvError(
+                        f"Model {label} runs in its own environment ({self.env}), and this "
+                        f"process cannot build it: {missing}. Read what you need from its "
+                        "running server instead."
+                    ) from e
+                raise
             self._validate_config()
         return self._config
 
@@ -285,7 +354,8 @@ class ModelConfig:
             # TensorFlow/ONNX/cellpose scripts set model to None or a non-torch
             # object and run through process_chunk; there is nothing to forward.
             return
-        input_size = np.array(config.read_shape) // np.array(config.input_voxel_size)
+        # Not //: 1865.44 / 10.48 is a hair under 178 in floats.
+        input_size = _voxels(config.read_shape, config.input_voxel_size)
 
         try:
             first_param = next(model.parameters(), None)
@@ -309,10 +379,8 @@ class ModelConfig:
         contradicts the declared write_shape, block_shape or output_channels.
         """
         config = self._config
-        input_size = np.array(config.read_shape) // np.array(config.input_voxel_size)
-        declared_output_size = np.array(config.write_shape) // np.array(
-            config.output_voxel_size
-        )
+        input_size = np.array(_voxels(config.read_shape, config.input_voxel_size))
+        declared_output_size = np.array(_voxels(config.write_shape, config.output_voxel_size))
         declared_block_spatial = np.array(config.block_shape)[:3]
         actual_output = np.array(tuple(output_shape)[1:])  # drop batch dim
         # Determine actual spatial shape (skip channel dim if present)
@@ -432,6 +500,8 @@ class ModelConfig:
 
         result = {"type": cli_name_of(type(self))}
         result.update({k: _plain(v) for k, v in params.items() if v is not None})
+        if self.env:
+            result["env"] = self.env
         return result
 
     def _with_name_scale(self, result: dict) -> dict:
@@ -453,9 +523,14 @@ class ModelConfig:
         to_dict(), less what only the pipeline builder shows (a Hugging Face
         repo's downloaded metadata), under the name the registry has this
         class under (``registry.cli_name_of``), so that the server rebuilds
-        this class and not a parent it inherited cli_name from.
+        this class and not a parent it inherited cli_name from. With an
+        ``env``, which ``serving.launch`` takes off again to start the server
+        in that environment.
         """
-        return model_entry(type(self), self._launch_params())
+        entry = model_entry(type(self), self._launch_params())
+        if self.env:
+            entry["env"] = self.env
+        return entry
 
     @property
     def command(self) -> str:

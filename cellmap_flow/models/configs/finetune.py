@@ -3,10 +3,51 @@
 The weights are a LoRA adapter or, from a full finetune, a whole state
 dict. Either is loaded onto the module the trainer trained
 (``finetune.model_loading.load_trainable_model``), and the served model
-keeps the base model's geometry.
+keeps the base model's geometry, at the voxel sizes the finetune was
+trained at when those differ (``trained_at_geometry``).
 """
 
+import numpy as np
+
 from cellmap_flow.models.configs.base import Config, ModelConfig
+from cellmap_flow.models.geometry import _numbers, _voxels
+
+
+def _voxel_sizes(value):
+    """A voxel size given as a sequence or as the CLI's "10.48,8,8"; None stays None."""
+    if value is None:
+        return None
+    if isinstance(value, str):
+        value = value.split(",")
+    return _numbers(float(v) for v in value)
+
+
+def trained_at_geometry(base_cfg, input_voxel_size=None, output_voxel_size=None) -> dict:
+    """The base model's geometry at the voxel sizes a finetune was trained at.
+
+    A volume made without resampling lies on the raw level nearest the
+    model's voxel size, and the trainer read that level as it is: the model
+    learnt that scale, so the finetuned model really is a model at the
+    level's voxel size (16 nm data read as 8 nm by an 8 nm model gives a 16
+    nm model). Declaring it, the served model reads that level exactly,
+    instead of the nearest one relabelled with a warning. The shapes in nm
+    scale with the voxel size; the voxel counts are the base's.
+
+    Returns ``input_voxel_size``, ``output_voxel_size``, ``read_shape`` and
+    ``write_shape``; each size None keeps the base's.
+    """
+    geometry = {}
+    for which, trained in (("input", input_voxel_size), ("output", output_voxel_size)):
+        shape_key = "read_shape" if which == "input" else "write_shape"
+        base_size = getattr(base_cfg, f"{which}_voxel_size")
+        base_shape = getattr(base_cfg, shape_key)
+        if trained is None:
+            geometry[f"{which}_voxel_size"], geometry[shape_key] = base_size, base_shape
+            continue
+        voxels = np.asarray(_voxels(base_shape, base_size), dtype=float)
+        geometry[f"{which}_voxel_size"] = _numbers(trained)
+        geometry[shape_key] = _numbers(voxels * np.asarray(trained, dtype=float))
+    return geometry
 
 
 class FinetuneModelConfig(ModelConfig):
@@ -29,6 +70,8 @@ class FinetuneModelConfig(ModelConfig):
         name: str = None,
         scale=None,
         weights_path: str = None,
+        input_voxel_size: tuple = None,
+        output_voxel_size: tuple = None,
     ):
         """
         Args:
@@ -47,6 +90,10 @@ class FinetuneModelConfig(ModelConfig):
                 constructor decodes it back on the receiving end.
             name: Display name for this model.
             scale: Optional scale override.
+            input_voxel_size, output_voxel_size: the voxel sizes the finetune
+                was trained at, when not the base model's (see
+                ``trained_at_geometry``); the trainer writes them into the
+                serving YAML. A sequence, or "10.48,8,8" from the CLI.
         """
         super().__init__()
         self.lora_adapter_path = lora_adapter_path
@@ -67,7 +114,23 @@ class FinetuneModelConfig(ModelConfig):
         self.base_model_dict = base_model
         self.name = name
         self.scale = scale
+        self.input_voxel_size = _voxel_sizes(input_voxel_size)
+        self.output_voxel_size = _voxel_sizes(output_voxel_size)
         self._base_model_config = None
+
+    @property
+    def env(self):
+        """Its own ``env`` if it was given one, else its base model's: the
+        weights go on the base model, so they need the base's packages."""
+        own = self.__dict__.get("_env")
+        if own:
+            return own
+        base = self.base_model_dict
+        return base.get("env") if isinstance(base, dict) else None
+
+    @env.setter
+    def env(self, value):
+        self._env = value
 
     @property
     def base_model_config(self):
@@ -121,13 +184,12 @@ class FinetuneModelConfig(ModelConfig):
         model.to(device)
         model.eval()
 
-        # Replace the model in the config, keep everything else
+        # Replace the model in the config, keep everything else: the base's
+        # geometry, at the voxel sizes the finetune was trained at.
         config = Config()
         config.model = model
-        config.input_voxel_size = base_cfg.input_voxel_size
-        config.output_voxel_size = base_cfg.output_voxel_size
-        config.read_shape = base_cfg.read_shape
-        config.write_shape = base_cfg.write_shape
+        for key, value in trained_at_geometry(base_cfg, self.input_voxel_size, self.output_voxel_size).items():
+            setattr(config, key, value)
         config.output_channels = base_cfg.output_channels
         config.block_shape = base_cfg.block_shape
 
@@ -150,14 +212,18 @@ class FinetuneModelConfig(ModelConfig):
             "weights_path": self.weights_path,
             "base_model": self.base_model_dict,
         })
+        # Its own voxel sizes, before the base's are surfaced below.
+        for key in ("input_voxel_size", "output_voxel_size"):
+            if getattr(self, key) is not None:
+                result[key] = list(getattr(self, key))
 
-        # Surface base model fields for UI display
+        # Surface base model fields for UI display. Not its voxel sizes: those
+        # keys are this config's own, the sizes the finetune was trained at,
+        # and the base's would be read back as them.
         base = self.base_model_dict
         for key in (
             "channels",
             "checkpoint_path",
-            "input_voxel_size",
-            "output_voxel_size",
             "input_size",
             "output_size",
         ):

@@ -23,13 +23,16 @@ from cellmap_flow.finetune.adaptation import strategy_for
 from cellmap_flow.finetune.losses import (
     CombinedLoss,
     DiceLoss,
+    IntervalLoss,
     MarginLoss,
+    as_logits,
     as_probabilities,
     balanced_mean,
     distillation_loss,
     masked_mean,
     soft_target_entropy,
 )
+from cellmap_flow.finetune.target_transforms import IntervalTargetTransform
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +66,8 @@ class LoRAFinetuner:
         num_epochs: Number of training epochs (default: 10)
         gradient_accumulation_steps: Steps to accumulate gradients (default: 1)
         use_mixed_precision: Enable mixed precision on CUDA (default: True; off on the CPU)
-        loss_type: Loss function: "dice", "bce", "combined" (Dice + BCE), "mse" or "margin"
+        loss_type: Loss function: "dice", "bce", "combined" (Dice + BCE), "mse", "margin"
+                   or "interval" (a distance model on scribbles; needs an IntervalTargetTransform)
         device: Training device ("cuda" or "cpu", auto-detected if None)
         select_channel: Optional channel index to select from multi-channel output (default: None)
         mask_unannotated: If True (default), only compute loss on annotated regions (target > 0).
@@ -77,6 +81,7 @@ class LoRAFinetuner:
                          (no effect when the dataset has good regions: they decide where)
         margin: The margin of the "margin" loss (default: 0.3)
         balance_classes: Weight foreground and background voxels equally
+        slope_weight: The weight of the interval loss's slope limit (default: 1)
         target_transform: Optional TargetTransform instance that converts raw annotations
                          to (target, mask) pairs. Overrides mask_unannotated when provided.
                          See cellmap_flow.finetune.target_transforms.
@@ -115,6 +120,7 @@ class LoRAFinetuner:
         distillation_all_voxels: bool = False,
         margin: float = 0.3,
         balance_classes: bool = False,
+        slope_weight: float = 1.0,
         target_transform=None,
         tensorboard: bool = True,
         teacher_model: Optional[nn.Module] = None,
@@ -189,6 +195,8 @@ class LoRAFinetuner:
         # Loss function
         self._use_bce = False
         self._use_mse = False
+        self._use_interval = False
+        self._step_interval_terms = None  # (bounds, slope) terms of the last step
         self._model_has_sigmoid = False   # set by _apply_probability_output_mode
         self._step_bce_metrics = None     # (entropy floor, mean |p - t|) of the last step
         self._epoch_bce_floor_sum = 0.0
@@ -207,12 +215,21 @@ class LoRAFinetuner:
             self._use_mse = True
         elif loss_type == "margin":
             self.criterion = MarginLoss(margin=margin, balance_classes=balance_classes)
+        elif loss_type == "interval":
+            # The bounds are in the transform's geometry, so the loss takes it from there.
+            if not isinstance(target_transform, IntervalTargetTransform):
+                raise ValueError("loss_type 'interval' needs an IntervalTargetTransform's bounds")
+            self.criterion = IntervalLoss(
+                target_transform.sigma_nm, target_transform.voxel_size_nm,
+                slope_weight=slope_weight, balance_classes=balance_classes,
+            )
+            self._use_interval = True
         else:
             raise ValueError(f"Unknown loss_type: {loss_type}")
 
-        # Label smoothing is redundant with margin loss
-        if loss_type == "margin" and self.label_smoothing > 0:
-            logger.warning("Label smoothing is redundant with margin loss, setting to 0")
+        # Label smoothing is redundant with margin loss, and means nothing to bounds
+        if loss_type in ("margin", "interval") and self.label_smoothing > 0:
+            logger.warning(f"Label smoothing is redundant with {loss_type} loss, setting to 0")
             self.label_smoothing = 0.0
 
         if self.balance_classes:
@@ -1073,6 +1090,12 @@ class LoRAFinetuner:
             mask = None
             if self.target_transform is not None:
                 target, mask = self.target_transform(target)
+                if self._use_interval:
+                    # The loss takes the bounds; the painted class stands in
+                    # as the target for the class check, the class balance
+                    # and the TensorBoard image.
+                    bounds = target
+                    target = (bounds[:, :1] > 0).float()
             elif self.mask_unannotated:
                 # Legacy behavior: binary single-channel
                 mask = (target > 0).float()  # (B, C, Z, Y, X)
@@ -1132,7 +1155,14 @@ class LoRAFinetuner:
                 # logits, training them toward 0 and 1 -- which the served
                 # sigmoid turns into 0.5 and 0.73, wrecking any threshold.
                 loss_pred = as_probabilities(pred, self._model_has_sigmoid) if self._use_mse else pred
-                if (self._use_bce or self._use_mse) and mask is not None:
+                if self._use_interval:
+                    # Bounds on the logit, which is where a distance field is a line.
+                    logits = as_logits(pred, self._model_has_sigmoid)
+                    bounds_term = self.criterion.bounds_term(logits, bounds, mask)
+                    slope_term = self.criterion.slope_term(logits)
+                    supervised_loss = bounds_term + self.criterion.slope_weight * slope_term
+                    self._step_interval_terms = (bounds_term.item(), slope_term.item())
+                elif (self._use_bce or self._use_mse) and mask is not None:
                     # For per-element losses (BCE, MSE), manually apply mask
                     per_element_loss = self.criterion(loss_pred, target)
 
@@ -1252,6 +1282,9 @@ class LoRAFinetuner:
                         self.tb.add_scalar("train/bce_floor", floor, self._tb_step)
                         self.tb.add_scalar("train/supervised_above_floor", supervised_loss.item() - floor, self._tb_step)
                         self.tb.add_scalar("train/mean_abs_error", mae, self._tb_step)
+                    if self._step_interval_terms is not None:
+                        self.tb.add_scalar("train/interval_bounds", self._step_interval_terms[0], self._tb_step)
+                        self.tb.add_scalar("train/interval_slope", self._step_interval_terms[1], self._tb_step)
                     if self.distillation_lambda > 0:
                         self.tb.add_scalar("train/distillation", distill_loss.item(), self._tb_step)
                     self.tb.add_scalar("train/lr", self.optimizer.param_groups[0]["lr"], self._tb_step)

@@ -231,8 +231,11 @@ def build_arg_parser():
         "--loss-type",
         type=str,
         default="combined",
-        choices=["dice", "bce", "combined", "mse", "margin"],
-        help="Loss function (default: combined)"
+        choices=["dice", "bce", "combined", "mse", "margin", "interval"],
+        help="Loss function (default: combined). 'interval' is for a distance model "
+             "(--output-type distance) on scribbles: each painted voxel is held between "
+             "the bounds the paint implies on its distance to the boundary, exact where "
+             "the paint is dense, and the field's slope is limited (--slope-weight)."
     )
     parser.add_argument(
         "--label-smoothing",
@@ -266,6 +269,14 @@ def build_arg_parser():
         action="store_true",
         help="Balance fg/bg loss contribution so each class is weighted equally, "
              "regardless of scribble voxel counts. Helps prevent foreground overprediction. (default: off)"
+    )
+    parser.add_argument(
+        "--slope-weight",
+        type=float,
+        default=1.0,
+        help="Weight of --loss-type interval's slope limit, which keeps the predicted "
+             "field from getting steeper than a distance field. Without it the bounds "
+             "alone let the field collapse into a step. (default: 1.0)"
     )
     parser.add_argument(
         "--no-mixed-precision",
@@ -328,7 +339,8 @@ def build_arg_parser():
              "'binary_broadcast': broadcast binary target to all output channels. "
              "'affinities': compute affinity targets from instance labels (requires offsets). "
              "'distance': soft signed-distance target (tanh(d/sigma)+1)/2 for models trained "
-             "the fly_organelles way, e.g. the cellmap *_distance_* repos; requires --loss-type bce. "
+             "the fly_organelles way, e.g. the cellmap *_distance_* repos; requires --loss-type "
+             "bce, or interval for scribbles. "
              "(default: binary)"
     )
     parser.add_argument(
@@ -371,17 +383,29 @@ def parse_args(argv=None) -> argparse.Namespace:
     return args
 
 
-def build_target_transform(args, model_config):
-    """Build a TargetTransform based on CLI args."""
+def build_target_transform(args, model_config, output_voxel_size_nm=None):
+    """Build a TargetTransform based on CLI args.
+
+    ``output_voxel_size_nm`` is the annotation patches' voxel size, which
+    the distance bounds of ``--loss-type interval`` are measured in; the
+    model's output voxel size when not given.
+    """
     from cellmap_flow.finetune.target_transforms import (
         BinaryTargetTransform,
         BroadcastBinaryTargetTransform,
         AffinityTargetTransform,
         DistanceTargetTransform,
+        IntervalTargetTransform,
     )
 
     output_type = args.output_type
     num_channels = model_config.config.output_channels
+
+    if getattr(args, "loss_type", None) == "interval" and output_type != "distance":
+        raise ValueError(
+            "--loss-type interval bounds a distance model's output; it needs "
+            "--output-type distance."
+        )
 
     # --select-channel slices the prediction to one channel, so the target
     # must have one too. Distance and binary_broadcast built theirs with every
@@ -432,9 +456,11 @@ def build_target_transform(args, model_config):
         if args.offsets:
             offsets = json.loads(args.offsets)
 
-        # Try reading from model script
-        if offsets is None and args.model_script:
-            offsets = read_offsets_from_script(args.model_script)
+        # Try reading from model script (a model with an env comes as
+        # --model-entry, its script path in the config)
+        script = args.model_script or getattr(model_config, "script_path", None)
+        if offsets is None and script:
+            offsets = read_offsets_from_script(script)
 
         if offsets is None:
             raise ValueError(
@@ -458,12 +484,21 @@ def build_target_transform(args, model_config):
         logger.info(f"Using affinity target transform with {len(offsets)} offsets: {offsets}")
         return AffinityTargetTransform(offsets, num_channels=num_channels)
 
+    elif output_type == "distance" and args.loss_type == "interval":
+        if output_voxel_size_nm is None:
+            output_voxel_size_nm = getattr(model_config.config, "output_voxel_size", None)
+        logger.info(
+            f"Using distance bounds from the paint (sigma={args.distance_sigma} voxels, "
+            f"voxel size {output_voxel_size_nm} nm, slope weight {args.slope_weight})"
+        )
+        return IntervalTargetTransform(args.distance_sigma, voxel_size_nm=output_voxel_size_nm)
+
     elif output_type == "distance":
         if args.loss_type != "bce":
             raise ValueError(
                 "--output-type distance produces soft targets in [0, 1]; only "
-                "--loss-type bce (BCE with logits) is supported for them. Margin and "
-                "dice assume hard labels."
+                "--loss-type bce (BCE with logits) is supported for them, or "
+                "interval for scribbles. Margin and dice assume hard labels."
             )
         if args.label_smoothing > 0:
             logger.warning(
@@ -477,7 +512,7 @@ def build_target_transform(args, model_config):
                 "annotations): a distance transform needs dense 3D labels, and "
                 "voxels next to unannotated ones are left out of the loss, so "
                 "very little of a scribble session will be supervised. Use "
-                "--output-type binary --loss-type margin for scribbles."
+                "--loss-type interval for scribbles."
             )
         logger.info(
             f"Using distance target transform (sigma={args.distance_sigma} voxels, "
@@ -641,7 +676,7 @@ _RESTART_ARG_CONVERTERS = {
     "num_epochs": ("num_epochs", _at_least(1)),
     "batch_size": ("batch_size", _at_least(1)),
     "learning_rate": ("learning_rate", _positive),
-    "loss_type": ("loss_type", _one_of("dice", "bce", "combined", "mse", "margin")),
+    "loss_type": ("loss_type", _one_of("dice", "bce", "combined", "mse", "margin", "interval")),
     "label_smoothing": ("label_smoothing", float),
     "distillation_lambda": ("distillation_lambda", float),
     "distillation_all_voxels": ("distillation_all_voxels", _as_bool),

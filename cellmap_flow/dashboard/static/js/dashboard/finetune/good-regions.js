@@ -1,6 +1,9 @@
 // Good regions: views the user marks as ones the model already gets right.
 // Training rehearses them (holds the model to what it predicts there), and
-// the rehearsal setting's hint says how much that will weigh.
+// the rehearsal setting's hint says how much that will weigh. Beside them,
+// three buttons act on the same patch at once (routes/finetune/view_labels.py):
+// label it from the model's prediction or all background, or relabel its
+// objects by connected component.
 import { setBusy } from "../../lib/dom.js";
 import { getAnswer, postAnswer } from "./requests.js";
 
@@ -80,6 +83,128 @@ export function initGoodRegions({ log }) {
       })
       .catch(() => {});
   });
+
+  // Neuroglancer keeps the chunks it has read. The server re-reads the paint
+  // layer alone (answer's layer_refreshed); only when it could not does the
+  // whole viewer reload, getting its state back from the dashboard. Absent
+  // when no viewer is connected.
+  function reloadViewer() {
+    const frame = document.querySelector("#my_iframe");
+    if (frame) frame.src = frame.src;
+  }
+
+  // what: "seed the view", say, for the log; describe(d): the log line for an
+  // answer that changed labels. A box too large to label without asking is
+  // answered needs_confirmation, and sent again confirmed; the button stays
+  // busy until that answer too.
+  // The seed settings (threshold, smallest object), kept in this browser,
+  // and shown when one is set so a seed never silently uses an old one.
+  const seedSettings = document.getElementById("seedSettings");
+  const seedThreshold = document.getElementById("seedThreshold");
+  const seedMinSize = document.getElementById("seedMinSize");
+  const SETTINGS_KEY = "cellmap_flow.seed_settings";
+  try {
+    const saved = JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}");
+    if (saved.threshold !== undefined && saved.threshold !== "") seedThreshold.value = saved.threshold;
+    if (saved.min_size !== undefined) seedMinSize.value = saved.min_size;
+  } catch (e) { /* no storage: defaults */ }
+  function seedBody() {
+    const body = {};
+    if (seedThreshold.value !== "") body.threshold = Number(seedThreshold.value);
+    if (Number(seedMinSize.value) > 0) body.min_size = Number(seedMinSize.value);
+    return body;
+  }
+  function seedRequest() {
+    const body = seedBody();
+    if (seedModel.value) body.model = seedModel.value;
+    return body;
+  }
+  function rememberSeedSettings() {
+    try {
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify({ threshold: seedThreshold.value, min_size: seedMinSize.value }));
+    } catch (e) { /* no storage */ }
+  }
+  seedThreshold.addEventListener("change", rememberSeedSettings);
+  seedMinSize.addEventListener("change", rememberSeedSettings);
+  // Open whenever a setting is set, so a seed never silently uses an old one.
+  seedSettings.open = Object.keys(seedBody()).length > 0;
+
+  // The models a seed can read: every running server, newest first, the
+  // default (the volume model's latest finetune, else that model) marked.
+  // Refreshed every few seconds and before the picker opens, since models
+  // and finetunes come and go; the choice is kept while it is still running.
+  const seedModel = document.getElementById("seedModel");
+  function showOnly(text) {
+    seedModel.replaceChildren(new Option(text, ""));
+    seedModel.disabled = true;
+  }
+  function refreshSeedSources() {
+    return getAnswer("/api/finetune/view-labels/sources")
+      .then((d) => {
+        const names = (d && d.models) || [];
+        if (!names.length) return showOnly("no model running");
+        const chosen = seedModel.value;
+        const options = names.slice().reverse().map((name) =>
+          new Option(name === d.default ? `${name} (default)` : name, name));
+        // Rebuilt only when the list changed, so an open picker is not reset under the cursor.
+        const now = Array.from(seedModel.options).map((o) => `${o.value}|${o.text}`).join(",");
+        if (now !== options.map((o) => `${o.value}|${o.text}`).join(",")) seedModel.replaceChildren(...options);
+        seedModel.disabled = false;
+        seedModel.value = names.includes(chosen) ? chosen : (d.default || names[names.length - 1]);
+      })
+      .catch(() => showOnly("could not list models"));
+  }
+  seedModel.addEventListener("mousedown", refreshSeedSources);
+  refreshSeedSources();
+  setInterval(refreshSeedSources, 5000);
+
+  function labelView(button, url, what, describe, confirmed, body = {}) {
+    setBusy(button, true);
+    return postAnswer(url, confirmed ? { ...body, confirm: true } : body)
+      .then((d) => {
+        if (d.needs_confirmation && !confirmed) {
+          return confirm(d.error) ? labelView(button, url, what, describe, true, body) : undefined;
+        }
+        if (!d.success) {
+          log.add(`Could not ${what}: ${d.error}`);
+          alert(`Could not ${what}:\n\n${d.error}`);
+        } else if (d.reload_viewer) {
+          log.add(describe(d) + (d.layer_refreshed ? "" : "; reloading the viewer"));
+          if (!d.layer_refreshed) reloadViewer();
+        } else {
+          log.add(describe(d));
+        }
+        log.showEnd();
+      })
+      .catch((e) => log.add(`Could not ${what}: ${e}`))
+      .finally(() => setBusy(button, false));
+  }
+
+  function describeFill(d) {
+    if (!d.reload_viewer) return "Nothing to label: every voxel of the view is labelled already.";
+    const from = d.model ? ` from ${d.model}` : "";
+    const how = d.threshold !== undefined && d.threshold !== null ? ` at threshold ${d.threshold}` : "";
+    return `Labelled the view${from}${how}: ${d.filled_foreground} foreground and ${d.filled_background} background voxels`;
+  }
+
+  function describeSplit(d) {
+    const objects = `${d.objects} object${d.objects === 1 ? "" : "s"}`;
+    if (!d.reload_viewer) {
+      return `Nothing to relabel: ${objects}, each already one id. A cut has to go through ` +
+             "every slice the object spans: paint the wall in the slices above and below too.";
+    }
+    return `Relabelled the view: ${objects}, ${d.split} split off, ${d.merged} merged`;
+  }
+
+  const seedViewBtn = document.getElementById("seedViewBtn");
+  seedViewBtn.addEventListener("click", () =>
+    labelView(seedViewBtn, "/api/finetune/view-labels/seed", "seed the view", describeFill, false, seedRequest()));
+  const backgroundViewBtn = document.getElementById("backgroundViewBtn");
+  backgroundViewBtn.addEventListener("click", () =>
+    labelView(backgroundViewBtn, "/api/finetune/view-labels/background", "label the view background", describeFill));
+  const splitObjectsBtn = document.getElementById("splitObjectsBtn");
+  splitObjectsBtn.addEventListener("click", () =>
+    labelView(splitObjectsBtn, "/api/finetune/view-labels/split", "split the view's objects", describeSplit));
 
   rehearsalFraction.addEventListener("change", updateRehearsalHint);
 

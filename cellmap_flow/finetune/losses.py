@@ -4,7 +4,8 @@ Every loss here is averaged over the voxels a mask supervises, not over the
 patch: a correction labels a few voxels of it, and the rest must not count.
 ``masked_mean`` is that average, ``balanced_mean`` gives the foreground and
 the background half the weight each, and the losses and the distillation
-term below are built from the two.
+term below are built from the two. ``IntervalLoss``, a distance model's loss
+on scribbles, works in logits instead of probabilities (``as_logits``).
 
 The float operations are kept in the order the trainer always used, so a
 run computes the same numbers bit for bit
@@ -16,15 +17,19 @@ from typing import Optional
 import torch
 import torch.nn as nn
 
+from cellmap_flow.finetune.target_transforms import SATURATION_SIGMAS
+
 __all__ = [
     "masked_mean",
     "balanced_mean",
     "as_probabilities",
+    "as_logits",
     "soft_target_entropy",
     "distillation_loss",
     "DiceLoss",
     "CombinedLoss",
     "MarginLoss",
+    "IntervalLoss",
 ]
 
 
@@ -53,6 +58,16 @@ def as_probabilities(pred, model_has_sigmoid):
     [0.5, 0.73] and make a well-fitting prediction look like a constant.
     """
     return pred if model_has_sigmoid else torch.sigmoid(pred)
+
+
+def as_logits(pred, model_has_sigmoid):
+    """The model's output as logits: ``as_probabilities``' inverse.
+
+    A model ending in a sigmoid is taken back through it. The clamp keeps
+    log(0) out; it costs no gradient short of |logit| ~16, far past where any
+    distance bound sits (SATURATION_SIGMAS is a logit of 6).
+    """
+    return torch.logit(pred, eps=1e-7) if model_has_sigmoid else pred
 
 
 def soft_target_entropy(target, eps=1e-7):
@@ -201,3 +216,100 @@ class MarginLoss(nn.Module):
         if mask is not None:
             return masked_mean(loss, mask)
         return loss.mean()
+
+
+# How much steeper than a distance field the predicted field may get before
+# IntervalLoss's slope term objects. A true distance field changes by one
+# voxel per voxel, but the targets the distance models learnt (edt to the
+# nearest voxel of the other class) step from -1 to +1 voxel across a
+# boundary: a central difference of 1.5 across a flat one, and up to ~2
+# across an oblique one, which pays a little. Held to 1, every boundary the
+# model draws would be penalized; a collapse into a step is far steeper
+# than either.
+SLOPE_TOLERANCE = 1.5
+
+
+class IntervalLoss(nn.Module):
+    """A distance model's loss on scribbles: stay within the bounds the paint implies.
+
+    After iSDF (Ortiz et al., RSS 2022). IntervalTargetTransform gives each
+    painted voxel a lower and an upper bound on its logit z (the distance
+    target is z = 2d/sigma). Per painted voxel the loss is
+
+        relu(lower - slack - z) + relu(z - upper - slack)
+            + sign_weight * relu(-s * z - slack)
+
+    with s the painted side (+1 foreground, -1 background): zero inside the
+    bounds, linear outside them, and much steeper on the wrong side of the
+    boundary. The slack, a voxel of distance by default, forgives a stroke
+    that strays a voxel over an edge. Unpainted voxels get none of it:
+    distillation and the anchor patches hold them.
+
+    Bounds alone let the field collapse: a step at the boundary meets every
+    lower bound and most upper ones, and is what margin loss made of a
+    distance model. So a second term limits the slope, everywhere in the
+    patch: the mean of relu(|grad z| / max_slope - 1), from central
+    differences scaled by the voxel size in nm, with max_slope =
+    SLOPE_TOLERANCE * 2/sigma per nm, the steepest a distance field gets in
+    logits. One-sided: the field may be flatter. z is clamped to the
+    saturation (SATURATION_SIGMAS) first, so a model confident far from any
+    boundary is not asked to bring its far field in.
+
+    Args:
+        sigma_nm, voxel_size_nm: from the IntervalTargetTransform that made
+            the bounds.
+        slope_weight: the slope term's weight against the bounds' (default 1).
+        balance_classes: average foreground and background voxels separately.
+        slack_voxels: the slack, in voxels of the finest axis (default 1).
+        sign_weight: the extra slope of the wrong-side penalty (default 5).
+    """
+
+    def __init__(self, sigma_nm, voxel_size_nm, slope_weight=1.0, balance_classes=False,
+                 slack_voxels=1.0, sign_weight=5.0):
+        super().__init__()
+        logit_per_nm = 2.0 / sigma_nm
+        self.voxel_size_nm = tuple(float(v) for v in voxel_size_nm)
+        self.slack = logit_per_nm * slack_voxels * min(self.voxel_size_nm)
+        self.max_slope = SLOPE_TOLERANCE * logit_per_nm
+        self.saturation = 2.0 * SATURATION_SIGMAS
+        self.slope_weight = slope_weight
+        self.balance_classes = balance_classes
+        self.sign_weight = sign_weight
+
+    def bounds_term(self, z, bounds, mask):
+        """The mean penalty for leaving the bounds, over the painted voxels."""
+        lower, upper = bounds[:, :1], bounds[:, 1:2]
+        # Foreground bounds are positive, background's negative (0 off the paint, masked out).
+        side = torch.where(lower > 0, 1.0, -1.0)
+        per_voxel = (
+            torch.relu(lower - self.slack - z)
+            + torch.relu(z - upper - self.slack)
+            + self.sign_weight * torch.relu(-side * z - self.slack)
+        )
+        weight = mask.expand_as(per_voxel)
+        if self.balance_classes:
+            return balanced_mean(per_voxel, (side > 0).float().expand_as(per_voxel), weight)
+        return masked_mean(per_voxel, weight)
+
+    def slope_term(self, z):
+        """The mean excess of |grad z| over max_slope, as a fraction of it, over the patch's interior."""
+        z = z.clamp(-self.saturation, self.saturation)
+        spatial = range(z.dim() - 3, z.dim())
+        axes = [(a, h) for a, h in zip(spatial, self.voxel_size_nm) if z.shape[a] >= 3]
+        if not axes:
+            return z.new_zeros(())
+        interior = [slice(None)] * z.dim()
+        for a, _ in axes:
+            interior[a] = slice(1, -1)
+        squared = 0.0
+        for a, h in axes:
+            ahead, behind = list(interior), list(interior)
+            ahead[a], behind[a] = slice(2, None), slice(None, -2)
+            squared = squared + ((z[tuple(ahead)] - z[tuple(behind)]) / (2.0 * h)) ** 2
+        # The epsilon keeps sqrt's derivative finite on a flat field.
+        slope = torch.sqrt(squared + 1e-12)
+        return torch.relu(slope / self.max_slope - 1.0).mean()
+
+    def forward(self, z: torch.Tensor, bounds: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
+        """The loss of (B, C, Z, Y, X) logits ``z`` against IntervalTargetTransform's bounds and mask."""
+        return self.bounds_term(z, bounds, mask) + self.slope_weight * self.slope_term(z)

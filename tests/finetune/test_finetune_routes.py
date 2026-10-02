@@ -114,15 +114,14 @@ def submit(client, trainable_session, monkeypatch):
 
 @pytest.mark.parametrize("volume, request_data, sent", [
     pytest.param(CROPPED, {}, dict(mask_unannotated=False, loss_type="mse"), id="imported crops are dense"),
-    # A distance target needs 3D boundaries, which scribbles do not have. Only
-    # the side of 0.5 is asked for: the form's margin 0.3 pushed painted voxels
-    # to 0.7, 2.5 voxels inside a distance model's boundary, and its
-    # distillation of 0.01 held nothing else in place.
+    # A distance target needs 3D boundaries, which scribbles do not have; they
+    # bound the distance instead. The form's distillation of 0.01 held nothing
+    # else in place.
     pytest.param(PAINTED, {"output_type": "distance", "loss_type": "margin", "margin": 0.3, "distillation_lambda": 0.01},
-                 dict(mask_unannotated=True, loss_type="margin", output_type="binary", margin=0.5,
+                 dict(mask_unannotated=True, loss_type="interval", output_type="distance", label_smoothing=0.0,
                       distillation_lambda=0.5), id="a painted session"),
     pytest.param(PAINTED, {"output_type": "distance", "loss_type": "margin", "distillation_lambda": 10},
-                 dict(margin=0.5, distillation_lambda=10), id="a painted session asking for more distillation"),
+                 dict(loss_type="interval", distillation_lambda=10), id="a painted session asking for more distillation"),
     pytest.param(STROKE_BESIDE, {}, dict(mask_unannotated=True, loss_type="margin", distillation_lambda=0.5),
                  id="a stroke beside the crops"),
     # The CLI takes a distance target only with bce, and a soft target is not smoothed.
@@ -138,10 +137,10 @@ def test_submit_trains_scribbles_as_scribbles(submit, volume, request_data, sent
     assert {key: job.sent[key] for key in sent} == sent
 
 
-def test_submit_says_when_a_distance_model_is_trained_as_binary(submit):
-    """The form keeps showing margin 0.3 and distillation 0.01, so the answer says what was used."""
+def test_submit_says_when_a_distance_model_is_trained_on_bounds(submit):
+    """The form keeps showing margin loss and distillation 0.01, so the answer says what was used."""
     job = submit(PAINTED, output_type="distance", loss_type="margin", margin=0.3, distillation_lambda=0.01)
-    assert "margin 0.5 and distillation 0.5" in job.body["note"]
+    assert "distance bounds, distillation 0.5" in job.body["note"]
 
 
 def test_submit_reads_the_strokes_still_in_minio(submit):
@@ -375,7 +374,7 @@ FORM = {"lora_r": 8, "num_epochs": 10, "batch_size": 2, "learning_rate": 1e-4, "
                  id="mse on scribbles"),
     # Strokes painted since submit, over a distance model's imported crops.
     pytest.param({"output_type": "distance"}, STROKE_BESIDE, FORM,
-                 dict(output_type="binary", loss_type="margin", distillation_lambda=0.5, margin=0.5,
+                 dict(output_type="distance", loss_type="interval", distillation_lambda=0.5,
                       mask_unannotated=True),
                  id="a distance model whose session has become sparse"),
 ])
@@ -788,3 +787,21 @@ def test_a_long_request_reports_its_progress_as_it_goes(routes, start, body, pro
     assert status == 200 and answer["success"]
     assert {k: answer["progress"][k] for k in ("phase", "done")} == {"phase": phase, "done": False}
     assert {"created_at", "updated_at"} <= set(answer["progress"])
+
+
+@pytest.mark.parametrize("resample", [True, False])
+def test_a_crop_import_follows_the_resample_box(monkeypatch, resample):
+    """The box was wired into creating a volume, not into importing crops,
+    which always snapped to the nearest raw level."""
+    from cellmap_flow.dashboard.routes.finetune import yaml_crops
+
+    planned = []
+    geometry = SimpleNamespace(record=lambda *a, **k: {})
+    monkeypatch.setattr(yaml_crops, "plan_volume", lambda path, config, **kw: planned.append(kw) or geometry)
+    monkeypatch.setattr(yaml_crops, "serve_new_volume", lambda *a: ("vol-1", "/v.zarr", "http://m/v"))
+    monkeypatch.setattr(yaml_crops, "session_store",
+                        lambda: SimpleNamespace(register_volume=lambda volume_id, **record: record))
+    get_session().resample = resample
+    yaml_crops._create_session_annotation_volume(
+        raw_dataset_path="/raw.zarr", corrections_dir="/c", model_name="m", config=None)
+    assert planned == [{"resample": resample}]

@@ -101,6 +101,7 @@ def build_corrections(
     dense_to_sparse_ratio=None,
     input_norm=None,
     postprocess=None,
+    resample=False,
     extra_record=None,
 ):
     """Create ``output_dir`` with the annotation volume, imported crops and
@@ -112,6 +113,8 @@ def build_corrections(
     ``patches_per_epoch``, ``jitter_voxels``, ``seed`` and
     ``dense_to_sparse_ratio`` are the CLI's flags: each one given (not None)
     wins over the crops YAML's own setting, which applies otherwise.
+    ``resample`` is the dashboard's Resample box: the volume at the model's
+    own voxel sizes, read resampled, instead of at the nearest raw level.
     """
     from cellmap_flow.finetune.crop_loader import parse_crops_yaml
     from cellmap_flow.finetune.session.manifest import write_manifest
@@ -144,7 +147,8 @@ def build_corrections(
     model_name = model_name or geom.get("model_name") or "model"
 
     # Same resolution snapping the dashboard does: a model that says 16 nm
-    # runs on whichever raw pyramid level is closest to 16 nm.
+    # runs on whichever raw pyramid level is closest to 16 nm, unless the
+    # raw is resampled to it.
     geometry = plan_volume(
         raw_dataset_path,
         SimpleNamespace(
@@ -153,6 +157,7 @@ def build_corrections(
             input_voxel_size=np.array(geom["input_voxel_size"], dtype=float),
             output_voxel_size=np.array(geom["output_voxel_size"], dtype=float),
         ),
+        resample=resample,
     )
 
     os.makedirs(output_dir, exist_ok=True)
@@ -176,6 +181,7 @@ def build_corrections(
         "input_voxel_size": list(geometry.input_voxel_size),
         "output_voxel_size": list(geometry.output_voxel_size),
         "dataset_offset_nm": list(geometry.dataset_offset_nm),
+        "resample": geometry.resample,
     }
     cfg = parse_crops_yaml(crops_yaml)
     if not cfg.crops:
@@ -276,6 +282,9 @@ def main(argv=None):
     p.add_argument("--dense-to-sparse-ratio", type=float)
     p.add_argument("--input-norm", help="JSON input_norm block (default: MinMax 0-255 then x*2-1)")
     p.add_argument("--postprocess", help="JSON postprocess block recorded for the served yaml")
+    p.add_argument("--resample", action="store_true",
+                   help="resample the raw to the model's voxel sizes when it has no level at them "
+                        "(the dashboard's Resample box); default: the nearest level, read as it is")
     p.add_argument("--record", action="append", default=[],
                    help="extra key=value pairs for build_record.json (e.g. dataset=jrc_x class=mito_group)")
     p.add_argument("-v", "--verbose", action="store_true")
@@ -296,6 +305,7 @@ def main(argv=None):
         seed=args.seed, dense_to_sparse_ratio=args.dense_to_sparse_ratio,
         input_norm=json.loads(args.input_norm) if args.input_norm else None,
         postprocess=json.loads(args.postprocess) if args.postprocess else None,
+        resample=args.resample,
         extra_record=extra or None,
     )
     print(json.dumps({k: record[k] for k in ("manifest_path", "volume_zarr_path", "total_fg_voxels")}, indent=2))

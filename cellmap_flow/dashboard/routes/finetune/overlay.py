@@ -126,6 +126,59 @@ def add_annotation_layer(viewer, layer_name, annotation_url, *, keep_existing=Fa
     return True
 
 
+def _respelled_port(url):
+    """``url`` with one more leading zero on its port: the same server, a new URL.
+
+    Neuroglancer keeps a data source, and the chunks it read, per URL: a
+    layer taken out and added back with the same URL re-read nothing. Its
+    S3 reader takes the host text as written, so ``host:09000`` is a source
+    it has never seen; the browser parses that port as 9000, so the
+    requests go where they always did. None when the URL names no port.
+    """
+    scheme, sep, rest = url.partition("://")
+    host, slash, path = rest.partition("/")
+    name, colon, port = host.rpartition(":")
+    if not sep or not colon or not port.isdigit():
+        return None
+    return f"{scheme}://{name}:0{port}{slash}{path}"
+
+
+def refresh_annotation_layer(viewer, volume_id) -> bool:
+    """Make neuroglancer re-read the paint layer of ``volume_id``'s volume, and only it.
+
+    Labels written behind its back (a seed, a relabel) show only once the
+    layer's chunks are read again. The layer keeps everything the browser
+    set on it (its paint value, brush size, tool, colours) and only its
+    source moves to a new spelling of the same URL (``_respelled_port``);
+    rebuilding it with add_annotation_layer reset those. The view, the other
+    layers and their servers are left alone; reloading the viewer re-read
+    every layer and had every server recompute the view. Returns whether a
+    layer was found and refreshed.
+    """
+    if viewer is None:
+        return False
+    marker = f"/{volume_id}.zarr/annotation"
+    refreshed = False
+    with viewer.txn() as s:
+        for managed in list(s.layers):
+            state = managed.layer.to_json()
+            sources = state.get("source")
+            listed = sources if isinstance(sources, list) else [sources]
+            for i, source in enumerate(listed):
+                url = source.get("url") if isinstance(source, dict) else source
+                if not isinstance(url, str) or marker not in url:
+                    continue
+                respelled = _respelled_port(url)
+                if respelled is None:
+                    continue
+                listed[i] = {**source, "url": respelled} if isinstance(source, dict) else respelled
+                state["source"] = listed if isinstance(sources, list) else listed[0]
+                s.layers[managed.name] = neuroglancer.viewer_state.make_layer(state)
+                refreshed = True
+                break
+    return refreshed
+
+
 def _chunk_outside_all_bboxes(
     chunk_lo_voxels: np.ndarray,
     chunk_hi_voxels: np.ndarray,
