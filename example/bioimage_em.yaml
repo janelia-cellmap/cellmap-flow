@@ -1,7 +1,8 @@
 # A BioImage Model Zoo model on jrc_mus-salivary-1: "conscientious-dromedary",
 # a 3D residual U-Net for mitochondria in EM (two channels: foreground and
-# boundaries). bioimageio.core downloads it from the zoo on first use and
-# runs its own preprocessing, so the uint8 EM goes in as it is.
+# boundaries, after its own sigmoid). bioimageio.core downloads it from the
+# zoo on first use and runs its own preprocessing, so the uint8 EM goes in as
+# it is.
 #   cellmap_flow yaml example/bioimage_em.yaml
 # Its server runs in pixi.toml's `bioimageio` environment, the bioimage type's
 # default; no `env:` is needed.
@@ -14,9 +15,14 @@ queue: "gpu_h100"
 models:
   mito_bioimageio:
     type: "bioimage"
-    # A zoo id (nickname), or the URL or path of a model's rdf.yaml or zip.
-    model_name: "conscientious-dromedary"
-    # A model description has no physical voxel size: this is the level read
-    # (s0, 8 nm), and the model sees 20 x 256 x 256 voxels of it per chunk.
-    voxel_size: [8, 8, 8]
-    scale: "s0"
+    # A zoo id (nickname), a DOI or URL, or the path of a model's rdf.yaml
+    # or .zip.
+    model: "conscientious-dromedary"
+    # Its description gives no physical voxel size: this is the level read
+    # (s1, 16 nm). It fixes its tile at 20 x 256 x 256 voxels.
+    voxel_size: 16
+    # Its description gives no halo either: cut 16 voxels off each side of
+    # the tile's output in y and x, so chunks meet where it saw both sides
+    # (without, 16% of the voxels along a seam were 0.1 or more off what the
+    # model gives them mid-tile; with, 0.8%). Its z is 20 voxels, fixed.
+    context: [0, 16, 16]

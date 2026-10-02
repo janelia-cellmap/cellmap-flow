@@ -48,7 +48,8 @@ SERVE_FORMS = {
         lambda: FlyModelConfig(checkpoint_path="/ckpt/model_checkpoint_1000", channels=["mito", "er"],
                                input_voxel_size=(16, 16, 16), output_voxel_size=(16, 16, 16), name="fly",
                                input_size=(100, 100, 100), output_size=(20, 20, 20)),
-        lambda: BioModelConfig(model_name="affable-shark", voxel_size=(8, 8, 8), edge_length_to_process=64, name="bio"),
+        lambda: BioModelConfig(model="affable-shark", voxel_size=(8, 8, 8), input_size=(20, 256, 256), context=8,
+                               slices_per_chunk=4, weight_format="onnx", name="bio"),
         lambda: FinetuneModelConfig(lora_adapter_path="/runs/my run/lora_adapter",
                                     base_model={"type": "script", "script_path": "/a b/c.py"}, name="ft",
                                     input_voxel_size=(10.48, 8, 8), output_voxel_size=(10.48, 8, 8)),
@@ -83,15 +84,13 @@ def test_the_server_rebuilds_the_same_config(config, form, monkeypatch):
 
 @pytest.fixture
 def fake_frameworks(monkeypatch):
-    """Just enough of dacapo and bioimageio to import them."""
-    for name in ("dacapo", "dacapo.experiments", "dacapo.store", "dacapo.store.create_store", "bioimageio"):
+    """Just enough of dacapo to import it. (The bioimage type's stand-in
+    bioimageio is in test_bio_model.py.)"""
+    for name in ("dacapo", "dacapo.experiments", "dacapo.store", "dacapo.store.create_store"):
         monkeypatch.setitem(sys.modules, name, types.ModuleType(name))
     sys.modules["dacapo.experiments"].Run = object
     store = sys.modules["dacapo.store.create_store"]
     store.create_config_store = store.create_weights_store = lambda: None
-    core = types.ModuleType("bioimageio.core")
-    core.load_description = lambda name: object()
-    monkeypatch.setitem(sys.modules, "bioimageio.core", core)
 
 
 def _dacapo_run(out_channels):
@@ -161,35 +160,6 @@ def test_a_dacapo_models_geometry_and_channels_follow_the_model(fake_frameworks,
     assert (config.channels[3] if out_channels == 9 else config.channels) == channels
 
 
-def test_a_bioimage_model_declares_its_uint8_output(fake_frameworks, monkeypatch):
-    bio = BioModelConfig(model_name="m", voxel_size="8,8,8")
-    axes = ["b", "c", "z", "y", "x"]
-    monkeypatch.setattr(bio, "load_input_information", lambda model: ("in", axes, [16] * 3, (slice(None),) * 5, False))
-    monkeypatch.setattr(bio, "load_output_information", lambda model: (["out"], [axes], [16, 16, 16, 1], [16] * 3, 1))
-    assert np.dtype(bio.output_dtype) == np.uint8 and tuple(bio.config.input_voxel_size) == (8, 8, 8)
-
-
-def test_a_3d_bioimage_models_shapes_come_from_its_test_tensors(fake_frameworks, monkeypatch):
-    """Like the zoo's 3D EM U-Nets (batch, channel, z, y, x). Reading the
-    input called a get_and_dims that did not exist, so no bioimage model built."""
-    def sample(member, channels):
-        sizes = {"batch": 1, "channel": channels, "z": 4, "y": 8, "x": 8}
-        data = SimpleNamespace(to_numpy=lambda: np.zeros(tuple(sizes.values()), np.float32))
-        return SimpleNamespace(shape={member: sizes}, members={member: SimpleNamespace(data=data)})
-
-    digest_spec = types.ModuleType("bioimageio.core.digest_spec")
-    digest_spec.get_test_input_sample = lambda model: sample("input0", 1)
-    digest_spec.get_test_output_sample = lambda model: sample("output0", 2)
-    monkeypatch.setitem(sys.modules, "bioimageio.core.digest_spec", digest_spec)
-    bio = BioModelConfig(model_name="conscientious-dromedary", voxel_size=(8, 8, 8))
-
-    assert bio.load_input_information(None) == (
-        "input0", ["b", "c", "z", "y", "x"], [4, 8, 8], (np.newaxis, np.newaxis, slice(None), slice(None), slice(None)),
-        False)
-    names, _, block_shape, spatial, channels = bio.load_output_information(None)
-    assert (names, block_shape, spatial, channels) == ("output0", [4, 8, 8, 2], [4, 8, 8], 2)
-
-
 @pytest.mark.parametrize("config, env", [
     pytest.param(lambda: FlyModelConfig(checkpoint_path="/ckpt/model_checkpoint_1000", channels=["mito"],
                                         input_voxel_size=(8, 8, 8), output_voxel_size=(8, 8, 8)),
@@ -200,7 +170,7 @@ def test_a_3d_bioimage_models_shapes_come_from_its_test_tensors(fake_frameworks,
     pytest.param(lambda: FlyModelConfig(checkpoint_path="/ckpt/model.ts", channels=["mito"],
                                         input_voxel_size=(8, 8, 8), output_voxel_size=(8, 8, 8)),
                  None, id="fly-torchscript"),
-    pytest.param(lambda: BioModelConfig(model_name="affable-shark", voxel_size=(8, 8, 8)), "bioimageio", id="bio"),
+    pytest.param(lambda: BioModelConfig(model="affable-shark", voxel_size=(8, 8, 8)), "bioimageio", id="bio"),
     # pixi.toml's dacapo environment does not import DaCapo yet.
     pytest.param(lambda: DaCapoModelConfig(run_name="r", iteration=0), None, id="dacapo"),
 ])

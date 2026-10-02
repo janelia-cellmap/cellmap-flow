@@ -1,26 +1,253 @@
-"""``BioModelConfig``: a bioimage.io model, run through ``bioimageio.core``.
+"""``BioModelConfig``: a BioImage Model Zoo model, run through ``bioimageio.core``.
 
-The shapes come from the model's test input and output. A 2-D model's
-batch axis stands in for z. Chunks go through ``process_chunk_bioimage``,
-bound onto the built Config, whose output ``format_output_bioimage``
-puts channels first and scales to uint8. Its server runs in pixi.toml's
+``model`` is any source ``bioimageio.core`` loads: a zoo id or nickname
+("conscientious-dromedary"), a DOI or URL, or the path of a model's
+``rdf.yaml`` (``bioimageio.yaml``) or packaged ``.zip``. Its description (the
+RDF, read as format 0.5; a 0.4 one is converted) gives the rest:
+
+- What a chunk is. A 3D model (space axes z, y, x) is given one tile a
+  chunk. A 2D model (y, x) is given ``slices_per_chunk`` z slices a chunk, each
+  segmented on its own: in one call when its batch axis takes any size, a
+  call a slice when the RDF fixes the batch at 1 or has no batch axis.
+- The tile's size. An axis of fixed size keeps it; a parameterized one
+  (``min + n * step``) gets the smallest size it takes of at least
+  ``input_size``: 256 a side for a 2D model and 128 for a 3D one by default.
+- The context: the halo of the model's output, cut off on each side so that
+  chunks meet where the model saw both sides of the seam. ``context`` sets
+  it; the zoo's EM U-Nets give none.
+- The voxel size: the input's space axes' ``scale`` and ``unit``, in nm,
+  unless ``voxel_size`` is given. The zoo's EM models give no unit, so they
+  need ``voxel_size``: the level the model should read.
+- The output: every output tensor's channels, one tensor after another, as
+  the model's own postprocessing leaves them (a sigmoid, if it has one;
+  nothing clipped or rescaled), served as float32 unless the RDF says the
+  output is integers (labels), which keep an integer type.
+- The weights: whichever ``bioimageio.core`` prefers of those the model has,
+  or ``weight_format``.
+
+The model's preprocessing (normalization) and postprocessing run in
+``bioimageio.core``'s prediction pipeline, which is built with the config,
+once, and reused for every chunk.
+
+What it cannot run: a model with more than one required input, an input with
+more than one channel (RGB), or an output that is not a map over the input's
+space, such as micro-SAM's, whose masks have an object axis of data-dependent
+size and need prompts.
+
+``bioimageio`` is imported only when the model is built: the CLIs and the
+dashboard's model form import every type. The server runs in pixi.toml's
 ``bioimageio`` environment unless the entry names another ``env``.
 """
 
-import copy
-import warnings
+import logging
+import math
 from typing import TYPE_CHECKING
 
 import numpy as np
-from funlib.geometry import Coordinate, Roi
 
-from cellmap_flow.models.configs.base import Config, ModelConfig, _as_int_tuple
+from cellmap_flow.models.configs.base import Config, ModelConfig, _voxel_size
+from cellmap_flow.models.geometry import _numbers
 
 if TYPE_CHECKING:
     from cellmap_flow.image_data_interface import ImageDataInterface
 
+logger = logging.getLogger(__name__)
+
+# What bioimageio.core runs (bioimageio.core.common.SupportedWeightsFormat).
+WEIGHT_FORMATS = (
+    "pytorch_state_dict",
+    "torchscript",
+    "onnx",
+    "tensorflow_saved_model_bundle",
+    "keras_hdf5",
+    "keras_v3",
+)
+# The tile edge, in voxels, asked of a parameterized axis when no
+# input_size is given: a 2D model's tile is one slice, so it can be larger.
+DEFAULT_INPUT_SIZE = {2: 256, 3: 128}
+DEFAULT_SLICES_PER_CHUNK = 8
+# nm per unit, for the space units of the 0.5 spec that a voxel is measured
+# in; any other (a foot, a parsec) is taken for no unit at all.
+NM_PER_UNIT = {
+    "picometer": 1e-3,
+    "angstrom": 0.1,
+    "nanometer": 1.0,
+    "micrometer": 1e3,
+    "millimeter": 1e6,
+    "centimeter": 1e7,
+    "meter": 1e9,
+}
+
+
+def _sizes(value):
+    """None, or ``value`` (one number, "20,256,256" or a list) as a tuple of ints."""
+    if value is None:
+        return None
+    if isinstance(value, str):
+        value = [v for v in value.replace("(", "").replace(")", "").split(",") if v.strip()]
+    if np.ndim(value) == 0:
+        value = [value]
+    sizes = tuple(int(float(v)) for v in value)
+    if any(s < 0 for s in sizes):
+        raise ValueError(f"sizes must not be negative, got {list(sizes)}")
+    return sizes
+
+
+def _per_axis(sizes, n: int, what: str) -> tuple:
+    """``sizes`` for each of ``n`` axes: one number is every axis's."""
+    if len(sizes) == 1:
+        return tuple(sizes) * n
+    if len(sizes) != n:
+        raise ValueError(f"{what} needs one number or {n} (one per space axis of the model), got {list(sizes)}")
+    return tuple(sizes)
+
+
+def _as_given(sizes):
+    """``sizes`` as a model entry writes them: one number as itself, more as a list."""
+    return sizes[0] if len(sizes) == 1 else list(sizes)
+
+
+def _space_axes(axes) -> list:
+    """The space axes of ``axes``, as z, y, x: by id when they are called so, else in the RDF's order."""
+    space = [a for a in axes if a.type == "space"]
+    ids = [str(a.id) for a in space]
+    named = [i for i in ("z", "y", "x") if i in ids]
+    if len(named) == len(ids):
+        return [space[ids.index(i)] for i in named]
+    return space
+
+
+def _check_axes(tensor, what: str):
+    """Raise for a tensor axis that is no axis of an image: time, index."""
+    other = [f"{a.id} ({a.type})" for a in tensor.axes if a.type not in ("batch", "channel", "space")]
+    if other:
+        raise ValueError(
+            f"The model's {what} {tensor.id} has axes cellmap-flow cannot map onto an image: {', '.join(other)}"
+        )
+
+
+def _channel_axis(tensor):
+    return next((a for a in tensor.axes if a.type == "channel"), None)
+
+
+def _input_shape(tensor, space, wanted) -> tuple:
+    """The size of each of ``space`` (the input's space axes) for a tile of about ``wanted``."""
+    sizes = {}
+    for axis, want in zip(space, wanted):
+        size = axis.size
+        if isinstance(size, int):
+            if want != size:
+                logger.info(f"Input axis {axis.id} has a fixed size of {size}; using it, not {want}")
+            sizes[str(axis.id)] = size
+        elif hasattr(size, "step"):  # ParameterizedSize: min + n * step, for any n
+            n = max(0, math.ceil((want - size.min) / size.step))
+            sizes[str(axis.id)] = size.min + n * size.step
+    by_id = {str(a.id): a for a in space}
+    for axis in space:
+        size = axis.size
+        if str(axis.id) in sizes:
+            continue
+        if hasattr(size, "axis_id") and str(size.tensor_id) == str(tensor.id) and str(size.axis_id) in sizes:
+            # SizeReference to another of its space axes (y as large as x),
+            # as bioimageio.spec's SizeReference.get_size computes it.
+            ref = by_id[str(size.axis_id)]
+            sizes[str(axis.id)] = int(sizes[str(ref.id)] * ref.scale / axis.scale + size.offset)
+        else:
+            raise ValueError(f"Input axis {axis.id} has a size cellmap-flow cannot choose: {size}")
+    return tuple(sizes[str(a.id)] for a in space)
+
+
+def _output_size(axis, input_axes, tile, input_id) -> int:
+    """An output space axis's size, before any of it is cut off, for a tile of the input of ``tile``.
+
+    ``input_axes`` and ``tile`` map the input's space axes' ids to the axes
+    and to their sizes.
+    """
+    size = axis.size
+    if isinstance(size, int):
+        return size
+    if hasattr(size, "axis_id") and str(size.tensor_id) == input_id and str(size.axis_id) in tile:
+        # SizeReference: as bioimageio.spec's SizeReference.get_size computes it.
+        ref = input_axes[str(size.axis_id)]
+        return int(tile[str(ref.id)] * ref.scale / axis.scale + size.offset)
+    raise ValueError(f"Output axis {axis.id} has a size cellmap-flow cannot tell from the input's: {size}")
+
+
+def _data_types(tensor) -> list:
+    """The dtypes a tensor's description gives: one, or one per channel."""
+    data = tensor.data if isinstance(tensor.data, (list, tuple)) else [tensor.data]
+    return [np.dtype(str(d.type)) for d in data]
+
+
+def served_dtype(outputs) -> np.dtype:
+    """What chunks of ``outputs`` (output tensor descriptions) are served as.
+
+    float32 unless every output is declared as integers: the model's own
+    postprocessing (a sigmoid, labels from a watershed) has run by then, so
+    the RDF's dtype is what the values are. bool is served as uint8 and
+    int64 as uint64, which neuroglancer shows; integer outputs are ids or
+    classes, which are not negative.
+    """
+    types = [t for tensor in outputs for t in _data_types(tensor)]
+    if not types or any(t.kind not in "biu" for t in types):
+        return np.dtype(np.float32)
+    dtype = np.result_type(*types)
+    if dtype.kind == "b":
+        return np.dtype(np.uint8)
+    if dtype == np.int64:
+        return np.dtype(np.uint64)
+    # uint64 with a signed type has no common integer type.
+    return dtype if dtype.kind in "iu" else np.dtype(np.float32)
+
+
+def _arrange(array, dims, order):
+    """``array``, whose axes are ``dims``, with its axes in ``order``.
+
+    An axis of ``order`` that ``dims`` lacks is added with size 1; one of
+    ``dims`` that ``order`` lacks must be of size 1, and is dropped.
+    """
+    dims = [str(d) for d in dims]
+    order = [str(d) for d in order]
+    for i in reversed(range(len(dims))):
+        if dims[i] not in order:
+            if array.shape[i] != 1:
+                raise ValueError(f"Cannot drop axis {dims[i]} of size {array.shape[i]}")
+            array = array.squeeze(i)
+            del dims[i]
+    for axis in order:
+        if axis not in dims:
+            array = array[..., np.newaxis]
+            dims.append(axis)
+    return array.transpose([dims.index(a) for a in order])
+
 
 class BioModelConfig(ModelConfig):
+    """A BioImage Model Zoo model, run through bioimageio.core.
+
+    Args:
+        model: a zoo id or nickname ("conscientious-dromedary"), a DOI or
+            URL, or the path of a model's rdf.yaml (bioimageio.yaml) or
+            packaged .zip.
+        voxel_size: nm per input voxel (one number, or z, y, x): the level
+            the model reads. By default the RDF's, from its input's space
+            axes' scale and unit; a model whose RDF gives no unit (the zoo's
+            EM models) needs it. A 2D model's z is the spacing of its slices,
+            its y by default.
+        input_size: voxels a side of the tile the model is given, one number
+            or one per space axis of the model (z, y, x; y, x for a 2D
+            model). An axis the RDF fixes keeps its size; a parameterized
+            one gets the smallest size it takes of at least this. By default
+            256 for a 2D model and 128 for a 3D one.
+        context: voxels cut off each side of the model's output (one number,
+            or one per space axis of the model), so chunks meet where the
+            model saw both sides of the seam; the input is read that much
+            larger. By default the RDF's halo, 0 where it gives none.
+        slices_per_chunk: z slices in a chunk of a 2D model; 8 by default. A
+            3D model ignores it.
+        weight_format: the weights to run ("torchscript",
+            "pytorch_state_dict", "onnx", ...); by default bioimageio.core's
+            pick of those the model has.
+    """
 
     cli_name = "bioimage"
     # bioimageio.core and its backends are not in cellmap-flow's own
@@ -29,253 +256,258 @@ class BioModelConfig(ModelConfig):
 
     def __init__(
         self,
-        model_name: str,
-        voxel_size,
-        edge_length_to_process=None,
+        model: str,
+        voxel_size=None,
+        input_size=None,
+        context=None,
+        slices_per_chunk: int = None,
+        weight_format: str = None,
         name=None,
         scale=None,
     ):
         super().__init__()
-        self.model_name = model_name
-        # The server CLI passes both of these as strings ("8,8,8", "64").
-        self.voxel_size = (
-            _as_int_tuple(voxel_size) if isinstance(voxel_size, str) else voxel_size
-        )
+        self.model = str(model)
+        # The server CLI and the model form pass sizes as strings ("8,8,8",
+        # "256"); a YAML gives a number or a list. The voxel size is not
+        # _as_int_tuple's, which truncates a 5.24 nm voxel to 5.
+        self.voxel_size = None if voxel_size is None else _voxel_size(voxel_size)
+        self.input_size = _sizes(input_size)
+        self.context = _sizes(context)
+        self.slices_per_chunk = None if slices_per_chunk is None else int(slices_per_chunk)
+        if self.slices_per_chunk is not None and self.slices_per_chunk < 1:
+            raise ValueError(f"slices_per_chunk must be at least 1, got {self.slices_per_chunk}")
+        if weight_format is not None and weight_format not in WEIGHT_FORMATS:
+            raise ValueError(f"weight_format must be one of {', '.join(WEIGHT_FORMATS)}, not {weight_format!r}")
+        self.weight_format = weight_format
         self.name = name
         self.scale = scale
-        self.voxels_to_process = None
-        if edge_length_to_process:
-            self.voxels_to_process = int(edge_length_to_process) ** 3
 
     def _get_config(self):
-        from bioimageio.core import load_description
-        from types import MethodType
+        from bioimageio.core import create_prediction_pipeline, load_model_description
 
+        # Without the description's IO checks, which download and hash every
+        # file it names (covers, documentation, test tensors: 14 s of 15 for
+        # "conscientious-dromedary") and refuse a model whose test tensor's
+        # dtype is not the one described ("stupendous-sheep": int16 for
+        # uint16). Those are bioimageio's test of a model, not what running
+        # it needs; the weights are still checked against their sha256 when
+        # the pipeline downloads them.
+        description = load_model_description(self.model, format_version="latest", perform_io_checks=False)
         config = Config()
-        config.model = load_description(self.model_name)
-
-        (
-            config.input_name,
-            config.input_axes,
-            config.input_spatial_dims,
-            config.input_slicer,
-            is_2d_with_batch,
-        ) = self.load_input_information(config.model)
-
-        (
-            config.output_names,
-            config.output_axes,
-            config.block_shape,
-            config.output_spatial_dims,
-            config.output_channels,
-        ) = self.load_output_information(config.model)
-
-        if self.voxels_to_process:
-            if not is_2d_with_batch:
-                warnings.warn("edge_length_to_process is only supported for 2D models")
-            else:
-                batch_size = max(
-                    1, self.voxels_to_process // np.prod(config.input_spatial_dims)
-                )
-                config.input_spatial_dims[config.input_axes.index("z")] = batch_size
-                config.output_spatial_dims[0] = batch_size
-                config.block_shape[0] = batch_size
-
-        config.input_voxel_size = Coordinate(self.voxel_size)
-        config.output_voxel_size = Coordinate(self.voxel_size)
-        config.read_shape = (
-            Coordinate(config.input_spatial_dims) * config.input_voxel_size
+        self._describe(config, description)
+        # Built here, once: it loads the weights onto the device, which
+        # bioimageio.core.predict() did again for every chunk. Its adapter
+        # hands each call a model of its own from a queue, so chunks served
+        # at once (more than one GPU slot) do not share one.
+        config.model = create_prediction_pipeline(description, weights_format=self.weight_format)
+        config.process_chunk = self.process_chunk
+        logger.info(
+            f"{self.model}: {config.ndim}D, tiles of {list(config.tile_shape)} voxels, "
+            f"{config.block_shape[:-1].tolist()} written a chunk, as {np.dtype(config.output_dtype)}"
         )
-        config.write_shape = (
-            Coordinate(config.output_spatial_dims) * config.output_voxel_size
-        )
-        config.context = (config.read_shape - config.write_shape) / 2
-        # format_output_bioimage clips to [0, 1] and scales to uint8; saying so
-        # stops the server advertising (and casting to) float32.
-        config.output_dtype = np.uint8
-        config.process_chunk = MethodType(process_chunk_bioimage, config)
-        config.format_output_bioimage = MethodType(format_output_bioimage, config)
         return config
 
-    def load_input_information(self, model):
-        from bioimageio.core.digest_spec import get_test_input_sample
+    def _describe(self, config, description):
+        """Set ``config``'s geometry, and what process_chunk needs, from the model's description."""
+        inputs = [t for t in description.inputs if not getattr(t, "optional", False)]
+        if len(inputs) != 1:
+            raise ValueError(f"{self.model} needs {len(inputs)} inputs ({', '.join(str(t.id) for t in inputs)}); "
+                             "cellmap-flow gives a model one image")
+        tensor = inputs[0]
+        _check_axes(tensor, "input")
+        channel = _channel_axis(tensor)
+        if channel is not None and len(channel.channel_names) != 1:
+            raise ValueError(f"{self.model} takes {len(channel.channel_names)} input channels "
+                             f"({', '.join(channel.channel_names)}); cellmap-flow gives it one")
+        space = _space_axes(tensor.axes)
+        ndim = len(space)
+        if ndim not in (2, 3):
+            raise ValueError(f"{self.model}'s input has {ndim} space axes; cellmap-flow runs 2D and 3D models")
+        batch = next((a for a in tensor.axes if a.type == "batch"), None)
 
-        input_sample = get_test_input_sample(model)
-        if len(input_sample.members) > 1:
-            raise ValueError("Only one input tensor is supported")
+        tile = _input_shape(tensor, space, _per_axis(self.input_size or (DEFAULT_INPUT_SIZE[ndim],), ndim,
+                                                     "input_size"))
+        crop = self._crop(description, space)
+        out_shape, ratio, channels, channel_axes = self._outputs(description, tensor, space, tile, crop)
 
-        input_name, input_axes, input_dims, is_2d_with_batch = self.get_axes_and_dims(
-            input_sample
-        )
-        input_spatial_dims = self.get_spatial_dims(input_axes, input_dims)
-        input_slicer = self.get_input_slicer(input_axes)
-        return (
-            input_name,
-            input_axes,
-            input_spatial_dims,
-            input_slicer,
-            is_2d_with_batch,
-        )
-
-    def load_output_information(self, model):
-        from bioimageio.core.digest_spec import get_test_output_sample
-
-        output_sample = get_test_output_sample(model)
-        output_names, output_axes, _, _ = self.get_axes_and_dims(output_sample)
-        finalized_output, finalized_output_axes = format_output_bioimage(
-            None, output_sample, output_names, copy.deepcopy(output_axes)
-        )
-
-        output_dims = finalized_output.shape
-        output_spatial_dims = [
-            output_dims[finalized_output_axes.index(a)] for a in ["z", "y", "x"]
-        ]
-        output_channels = output_dims[finalized_output_axes.index("c")]
-        block_shape = [
-            output_dims[finalized_output_axes.index(a)] for a in ["z", "y", "x", "c"]
-        ]
-        return (
-            output_names,
-            output_axes,
-            block_shape,
-            output_spatial_dims,
-            output_channels,
-        )
-
-    def get_axes_and_dims(self, sample):
-        sample_names = list(sample.shape.keys())
-        sample_axis_to_dims_dicts = list(sample.shape.values())
-        sample_axes = []
-        sample_dims = []
-        is_2d_with_batch = False
-
-        for sample_axis_to_dim_dict in sample_axis_to_dims_dicts:
-            current_sample_axes = sample_axis_to_dim_dict.keys()
-            if (
-                "b" in current_sample_axes or "batch" in current_sample_axes
-            ) and "z" not in current_sample_axes:
-                is_2d_with_batch = True
-
-            # Use 'z' instead of 'b' if z is not present (for 2D models)
-            sample_axes.append(
-                [
-                    "z" if (a[0] == "b" and "z" not in current_sample_axes) else a[0]
-                    for a in current_sample_axes
-                ]
+        in_voxel = np.asarray(self._input_voxel_size(space), dtype=float)
+        if ndim == 2:
+            # Each slice is segmented on its own: no context in z, and a z
+            # voxel out is a z voxel in.
+            slices = self.slices_per_chunk or DEFAULT_SLICES_PER_CHUNK
+            read, write, ratio = (slices, *tile), (slices, *out_shape), (1.0, *ratio)
+        else:
+            read, write = tile, out_shape
+        out_voxel = in_voxel * np.asarray(ratio, dtype=float)
+        read_shape = np.asarray(read) * in_voxel
+        write_shape = np.asarray(write) * out_voxel
+        context = (read_shape - write_shape) / 2
+        in_voxels = context / in_voxel
+        if (context < 0).any() or not np.allclose(in_voxels, np.rint(in_voxels)):
+            # The chunk is read around the written region on the input's
+            # grid; half a voxel off, every output would be shifted.
+            raise ValueError(
+                f"{self.model}'s output ({list(write)} voxels of {list(_numbers(out_voxel))} nm) is not centred "
+                f"on whole voxels of its input ({list(read)} of {list(_numbers(in_voxel))} nm); give an "
+                "input_size or context that makes the difference even"
             )
-            sample_dims.append(list(sample_axis_to_dim_dict.values()))
 
-        if len(sample_names) == 1:
-            return sample_names[0], sample_axes[0], sample_dims[0], is_2d_with_batch
-        return sample_names, sample_axes, sample_dims, is_2d_with_batch
+        # Plain numbers rather than Coordinates, which are integers: a
+        # 5.24 nm voxel would be 5, and every chunk placed on the wrong grid.
+        config.input_voxel_size = _numbers(in_voxel)
+        config.output_voxel_size = _numbers(out_voxel)
+        config.read_shape = _numbers(read_shape)
+        config.write_shape = _numbers(write_shape)
+        config.context = _numbers(context)
+        config.output_channels = len(channels)
+        config.channels = channels
+        config.block_shape = np.array((*write, len(channels)))
+        config.output_dtype = served_dtype(description.outputs)
 
-    def get_spatial_dims(self, axes, dims):
-        return [d for a, d in zip(axes, dims) if a in ["x", "y", "z"]]
+        config.ndim = ndim
+        config.tile_shape = tile
+        config.input_id = str(tensor.id)
+        config.input_axes = [str(a.id) for a in tensor.axes]
+        config.input_dtype = _data_types(tensor)[0]
+        config.space_axes = [str(a.id) for a in space]
+        # A 2D model's slices go in as one batch when its batch axis takes
+        # any size. The zoo's EM models fix it at 1, or have none, and are
+        # given one slice a call.
+        config.batch_axis = str(batch.id) if ndim == 2 and batch is not None and batch.size is None else None
+        config.output_channel_axes = channel_axes
+        config.crop = crop
 
-    def get_input_slicer(self, input_axes):
-        return tuple(
-            (
-                np.newaxis
-                if a.startswith("c") or (a == "b" and "z" in input_axes)
-                else slice(None)
+    def _outputs(self, description, tensor, space, tile, crop):
+        """(size once cropped, output over input voxel size, channel names, channel axes), from the outputs.
+
+        The sizes and ratios are per space axis; the channel axes are each
+        output's, by its id (None for an output without one). Every output is
+        served, its channels after the one before's, so they must all be the
+        same size at the same scale.
+        """
+        input_axes = {str(a.id): a for a in space}
+        tile = dict(zip(input_axes, tile))
+        geometry, channels, channel_axes = None, [], {}
+        for out in description.outputs:
+            _check_axes(out, "output")
+            out_space = {str(a.id): a for a in out.axes if a.type == "space"}
+            if set(out_space) != set(input_axes):
+                raise ValueError(f"{self.model}'s output {out.id} has space axes {sorted(out_space)}, "
+                                 f"its input {sorted(input_axes)}")
+            sizes, ratio = [], []
+            for axis, cut in zip(space, crop[str(out.id)]):
+                out_axis = out_space[str(axis.id)]
+                sizes.append(_output_size(out_axis, input_axes, tile, str(tensor.id)) - 2 * cut)
+                ratio.append(out_axis.scale / axis.scale)
+            if min(sizes) < 1:
+                raise ValueError(f"{self.model}'s output {out.id} is {sizes} voxels once its context is cut off; "
+                                 "give a larger input_size or a smaller context")
+            if geometry is not None and geometry != (sizes, ratio):
+                raise ValueError(f"{self.model}'s outputs differ in size or scale; cellmap-flow serves them as "
+                                 "the channels of one array")
+            geometry = (sizes, ratio)
+            channel = _channel_axis(out)
+            if channel is None:
+                names = [str(out.id)]
+            elif len(description.outputs) > 1:
+                names = [f"{out.id}_{n}" for n in channel.channel_names]
+            else:
+                names = list(channel.channel_names)
+            channels += names
+            channel_axes[str(out.id)] = None if channel is None else str(channel.id)
+        return tuple(geometry[0]), tuple(geometry[1]), channels, channel_axes
+
+    def _crop(self, description, space) -> dict:
+        """Voxels cut off each side of each output, by its id, per space axis: context, else its halo."""
+        if self.context is not None:
+            context = _per_axis(self.context, len(space), "context")
+            return {str(out.id): context for out in description.outputs}
+        crop = {}
+        for out in description.outputs:
+            halo = {str(a.id): getattr(a, "halo", None) or 0 for a in out.axes if a.type == "space"}
+            crop[str(out.id)] = tuple(halo.get(str(a.id), 0) for a in space)
+        return crop
+
+    def _input_voxel_size(self, space) -> tuple:
+        """nm per input voxel, z, y, x: voxel_size, else the RDF's space axes' scale and unit."""
+        if self.voxel_size is not None:
+            return self.voxel_size
+        nm = []
+        for axis in space:
+            per_unit = NM_PER_UNIT.get(axis.unit) if axis.unit else None
+            if per_unit is None:
+                raise ValueError(
+                    f"{self.model}'s description gives its input no physical voxel size (axis {axis.id} "
+                    f"has unit {axis.unit!r}); give voxel_size, the nm per voxel of the level it should read"
+                )
+            # 0.008 micrometer is 8.000000000000002 nm in floats.
+            nm.append(round(axis.scale * per_unit, 6))
+        if len(nm) == 2:
+            nm = [nm[0], *nm]  # a 2D model's slices: as far apart as its y voxels
+        return _numbers(nm)
+
+    def process_chunk(self, idi: "ImageDataInterface", output_roi):
+        """``output_roi`` predicted: ``(channels, z, y, x)``, in ``output_dtype``."""
+        from bioimageio.core import Sample, Tensor
+
+        config = self.config
+        data = np.asarray(idi.to_ndarray_ts(output_roi.grow(config.context, config.context)))
+        data = data.astype(config.input_dtype, copy=False)
+        space = config.space_axes
+        if config.ndim == 3:
+            calls = [(data, space)]
+        elif config.batch_axis is not None:
+            calls = [(data, [config.batch_axis, *space])]
+        else:
+            calls = [(image, space) for image in data]
+
+        results = []
+        for array, dims in calls:
+            image = Tensor.from_numpy(_arrange(array, dims, config.input_axes), dims=config.input_axes)
+            sample = Sample(members={config.input_id: image}, stat={}, id="chunk")
+            # The tile is read with its context already, so it is not padded
+            # again; the context is cut off below, as the RDF's halo or the
+            # one asked for instead.
+            output = config.model.predict_sample_without_blocking(
+                sample, skip_input_padding=True, skip_output_cropping=True
             )
-            for a in input_axes
-        )
+            results.append(self._output(output, dims))
+        if config.ndim == 2 and config.batch_axis is None:
+            result = np.stack(results, axis=1)  # each slice's (c, y, x) into (c, z, y, x)
+        else:
+            result = results[0]
+        return np.ascontiguousarray(result.astype(config.output_dtype, copy=False))
+
+    def _output(self, sample, dims):
+        """A predicted sample's outputs, each (channels, *dims) and cropped, one after another."""
+        config = self.config
+        crop = {output_id: dict(zip(config.space_axes, cut)) for output_id, cut in config.crop.items()}
+        parts = []
+        for output_id, channel_axis in config.output_channel_axes.items():
+            tensor = sample.members[output_id]
+            # An output without a channel axis is one channel.
+            array = _arrange(np.asarray(tensor.data), tensor.dims, [channel_axis or "__channel__", *dims])
+            cut = [crop[output_id].get(d, 0) for d in dims]
+            array = array[(slice(None), *(slice(c, n - c) for c, n in zip(cut, array.shape[1:])))]
+            parts.append(array)
+        return np.concatenate(parts, axis=0)
 
     def to_dict(self):
-        """This config as a model entry, which ``registry.build_model`` rebuilds."""
-        result = self._with_name_scale({
-            "type": "bioimage",
-            "model_name": self.model_name,
-            "voxel_size": list(self.voxel_size) if hasattr(self.voxel_size, '__iter__') else self.voxel_size,
-        })
-        if self.voxels_to_process is not None:
-            # Reconstruct edge_length_to_process from voxels_to_process
-            edge_length = round(self.voxels_to_process ** (1/3))
-            result["edge_length_to_process"] = edge_length
-        return result
+        """This config as a model entry, which ``registry.build_model`` rebuilds.
 
-
-def concat_along_c(arrs, axes_list, channel_axis_name="c"):
-    """Concatenate arrays along the channel axis, adding channel dim if missing."""
-    # Find channel axis index (default to 0 if not found)
-    c_index = next(
-        (
-            axes.index(channel_axis_name)
-            for axes in axes_list
-            if channel_axis_name in axes
-        ),
-        0,
-    )
-
-    # Ensure all arrays have channel axis at c_index
-    for i, axes in enumerate(axes_list):
-        if channel_axis_name not in axes:
-            arrs[i] = np.expand_dims(arrs[i], axis=c_index)
-            axes_list[i].insert(c_index, channel_axis_name)
-
-    return np.concatenate(arrs, axis=c_index), axes_list[0]
-
-
-def reorder_axes(
-    arr: np.ndarray, axes: list[str], desired_order: list[str] = ["z", "y", "x", "c"]
-) -> tuple[np.ndarray, list[str]]:
-    """Reorder/remove axes to match desired_order, removing size-1 unwanted axes."""
-    # Remove unwanted axes (not in desired_order) if size==1
-    for i in reversed(range(len(axes))):
-        if axes[i] not in desired_order:
-            if arr.shape[i] != 1:
-                raise ValueError(
-                    f"Cannot remove axis '{axes[i]}' with size {arr.shape[i]} (must be 1)."
-                )
-            arr = np.squeeze(arr, axis=i)
-            del axes[i]
-
-    # Reorder existing axes to match desired_order
-    perm = [axes.index(ax) for ax in desired_order if ax in axes]
-    arr = arr.transpose(perm)
-    axes = [axes[i] for i in perm]
-
-    # Add missing axes as size-1 dimensions
-    for i, ax in enumerate(desired_order):
-        if ax not in axes:
-            arr = np.expand_dims(arr, axis=i)
-            axes.insert(i, ax)
-
-    return arr, axes
-
-
-def process_chunk_bioimage(self, idi: "ImageDataInterface", input_roi: Roi):
-    from bioimageio.core import predict, Sample, Tensor
-
-    input_image = idi.to_ndarray_ts(input_roi.grow(self.context, self.context))
-    input_image = input_image[self.input_slicer].astype(np.float32)
-    input_sample = Sample(
-        members={self.input_name: Tensor.from_numpy(input_image, dims=self.input_axes)},
-        stat={},
-        id="sample",
-    )
-    output = predict(
-        model=self.model,
-        inputs=input_sample,
-        skip_preprocessing=bool(input_sample.stat),
-    )
-    output, _ = self.format_output_bioimage(output)
-    return output
-
-
-def format_output_bioimage(self, output_sample, output_names=None, output_axes=None):
-    output_names = output_names or self.output_names
-    output_axes = copy.deepcopy(output_axes or self.output_axes)
-
-    if isinstance(output_names, list):
-        outputs = [output_sample.members[name].data.to_numpy() for name in output_names]
-        output, output_axes = concat_along_c(outputs, output_axes)
-    else:
-        output = output_sample.members[output_names].data.to_numpy()
-
-    output, reordered_axes = reorder_axes(
-        output, output_axes, desired_order=["c", "z", "y", "x"]
-    )
-    output = np.ascontiguousarray(output).clip(0, 1) * 255.0
-    return output.astype(np.uint8), reordered_axes
+        What the model's description decides unless told otherwise (its
+        voxel size, tile and context) is written only when it was given, so
+        that an exported entry keeps following the model.
+        """
+        result = {"type": "bioimage", "model": self.model}
+        if self.voxel_size is not None:
+            result["voxel_size"] = list(self.voxel_size)
+        if self.input_size is not None:
+            result["input_size"] = _as_given(self.input_size)
+        if self.context is not None:
+            result["context"] = _as_given(self.context)
+        if self.slices_per_chunk is not None:
+            result["slices_per_chunk"] = self.slices_per_chunk
+        if self.weight_format is not None:
+            result["weight_format"] = self.weight_format
+        return self._with_name_scale(result)

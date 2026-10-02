@@ -54,7 +54,10 @@ YAML_ALIASES = {
     "resolution": "input_voxel_size",
     "output_resolution": "output_voxel_size",
     "config_folder": "folder_path",
-    "model_path": "model_name",
+    # The bioimage type's model was model_name until 0.3.0, and the docs
+    # offered model_path for it.
+    "model_name": "model",
+    "model_path": "model",
 }
 
 # Constructor arguments that are never required from a user, even without a
@@ -640,7 +643,7 @@ def _input_type(param_name: str, param_info: Dict[str, Any]) -> str:
         return "textarea"  # for multi-line JSON
     if param_info.get("type") in ("dict",):
         return "textarea"  # for JSON dicts
-    if param_name in ("input_size", "output_size", "edge_length_to_process", "iteration"):
+    if param_name in ("input_size", "output_size", "iteration"):
         return "number"
     return "text"
 

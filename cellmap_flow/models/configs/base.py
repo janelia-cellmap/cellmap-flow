@@ -494,8 +494,6 @@ class ModelConfig:
         and blockwise read it only for whether a chunk has a channel axis:
         one that has must have it first, and its spatial axes are the raw
         data's, in the raw data's order.
-        Note: this is distinct from config.output_axes used by BioModelConfig
-        for raw bioimageio model axes.
         """
         if hasattr(self.config, "chunk_output_axes"):
             return tuple(self.config.chunk_output_axes)

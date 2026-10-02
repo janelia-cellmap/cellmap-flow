@@ -140,7 +140,8 @@ Available Model Types
      - ``checkpoint`` (required), ``classes`` (required), ``resolution`` (required)
    * - ``bioimage``
      - BioModelConfig
-     - ``model_name`` or ``model_path`` (required), ``voxel_size`` (required)
+     - ``model`` (required), ``voxel_size`` (unless the model's description
+       gives one). See :ref:`bioimage`.
    * - ``cellmap``
      - CellMapModelConfig
      - ``config_folder`` (required)
@@ -231,6 +232,92 @@ does not install it is refused when the job is submitted.
 ``cellmap_flow infer <type> --env <env>`` and the dashboard's model form take
 it too. The ``cellpose`` type runs in ``cellpose4`` without one (see
 :ref:`cellpose`).
+
+.. _bioimage:
+
+BioImage Model Zoo
+~~~~~~~~~~~~~~~~~~
+
+``type: bioimage`` runs a `BioImage Model Zoo <https://bioimage.io>`_ model
+through ``bioimageio.core``, with the model's own preprocessing (its
+normalization) and postprocessing (a sigmoid, say). It runs in the
+``bioimageio`` pixi environment unless the entry gives an ``env``.
+``example/bioimage_em.yaml`` serves "conscientious-dromedary" (a 3D
+mitochondria U-Net) on jrc_mus-salivary-1.
+
+.. code-block:: yaml
+
+    models:
+      mito_bioimageio:
+        type: bioimage
+        model: conscientious-dromedary
+        voxel_size: 16
+
+``model`` is anything ``bioimageio.core`` loads: a zoo id or nickname
+("conscientious-dromedary", "affable-shark"), a DOI or URL, or the path of a
+model's ``rdf.yaml`` (``bioimageio.yaml``) or packaged ``.zip``. The model is
+downloaded to bioimageio's cache (``$BIOIMAGEIO_CACHE_PATH``, by default
+``~/.cache/bioimageio``) when its server starts. Before 0.3.0 the key was
+``model_name``; it, and ``model_path``, are still read.
+
+The model's description says the rest, unless the entry does:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 25 20 55
+
+   * - Parameter
+     - Default
+     - Meaning
+   * - ``voxel_size``
+     - the description's
+     - nm per input voxel, one number or z, y, x: the level the model reads.
+       The description gives one when its input's space axes have a unit
+       (``scale`` and ``unit``); the zoo's EM models give none, so they need
+       it. A 2D model's z is the spacing of its slices, its y by default.
+   * - ``input_size``
+     - 256 (2D), 128 (3D)
+     - Voxels a side of the tile the model is given, one number or one per
+       space axis of the model (z, y, x; y, x for a 2D model). An axis of
+       fixed size keeps it; a parameterized one (``min + n * step``) gets the
+       smallest size it takes of at least this.
+   * - ``context``
+     - the description's halo, else 0
+     - Voxels cut off each side of the model's output, one number or one per
+       space axis, so that chunks meet where the model saw both sides of the
+       seam. The input is read that much larger. The zoo's EM U-Nets give no
+       halo, and their chunks show seams; a ``context`` of 16 or so hides them
+       at the cost of computing the overlap twice.
+   * - ``slices_per_chunk``
+     - 8
+     - z slices in a chunk of a 2D model, each segmented on its own (in one
+       call when the model's batch axis takes any size). A 3D model ignores
+       it.
+   * - ``weight_format``
+     - bioimageio.core's choice
+     - The weights to run, of those the model has: ``torchscript``,
+       ``pytorch_state_dict``, ``onnx``, ``tensorflow_saved_model_bundle``,
+       ``keras_hdf5`` or ``keras_v3``.
+
+Every output tensor is served, its channels one after another, as the
+model's postprocessing leaves it: float32, not clipped or rescaled, unless
+the description says the output is integers (labels), which keep their type.
+A 2D model's labels are its own, slice by slice and chunk by chunk:
+``MortonSegmentationRelabeling`` makes them unique across chunks, as for
+Cellpose's masks, but not from one slice to the next.
+
+It cannot run a model with more than one required input, an input with more
+than one channel (RGB), or an output that is not a map over the input's
+space, such as micro-SAM's ("noisy-ox", "humorous-crab"), whose masks come
+one per prompted object. A model whose code needs packages the
+``bioimageio`` environment lacks (its weights' ``dependencies`` name them)
+fails when its server builds it; the environment has ``timm``, which the
+zoo's BiaPy transformers need. Empanada's MitoNet ("stupendous-sheep") needs
+OpenCV and loads a file from beside its code, where bioimageio.core 0.11 does
+not put it, so it does not run.
+
+The zoo's 2D EM U-Nets ("gleeful-skunk", "jolly-duck", "good-microbe") find
+jrc_mus-salivary-1's mitochondria at 8 nm; "conscientious-dromedary" at 16 nm.
 
 .. _cellpose:
 
