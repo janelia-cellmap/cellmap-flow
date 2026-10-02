@@ -24,7 +24,7 @@ from concurrent.futures import ThreadPoolExecutor
 import neuroglancer
 import numpy as np
 
-from cellmap_flow.image_data_interface import ImageDataInterface
+from cellmap_flow.image_data_interface import ImageDataInterface, apply_norms
 from cellmap_flow.io import metadata, paths
 
 logger = logging.getLogger(__name__)
@@ -67,10 +67,27 @@ def prediction_shader(color, value_range=None):
 
 
 def _dtype_default_range(image):
-    """Fallback display range when percentiles can't be computed: the range
-    of the dtype ``image`` is shown in, which is its ``ts``'s (the input
-    chain's last declared dtype, else the array's), or [-1, 1] for a float,
-    which has none."""
+    """Fallback display range when percentiles can't be computed.
+
+    The stored dtype's range put through the input chain ``image`` is shown
+    through: uint8 is [0, 255] as it is, [0, 1] after a MinMaxNormalizer, and
+    [-1, 1] with ``x*2-1`` after that. It used to be the range of the dtype the
+    chain declares, so any float chain got [-1, 1], and a pyramid got none of
+    this: [0, 255] over [0, 1] data, one flat colour. When the chain cannot be
+    run on the two ends, the declared dtype's range, [-1, 1] for a float.
+    """
+    view = image._view()
+    stored = np.dtype(getattr(view.selected().dtype, "numpy_dtype", view.selected().dtype))
+    if stored.kind in "ui":
+        info = np.iinfo(stored)
+        ends = np.array([info.min, info.max], dtype=stored).reshape((1,) * (len(image.shape) - 1) + (2,))
+        try:
+            mapped = np.asarray(apply_norms(ends, view.norms_to_apply()), dtype=float).ravel()
+            lo, hi = float(mapped.min()), float(mapped.max())
+            if np.isfinite([lo, hi]).all() and hi > lo:
+                return lo, hi
+        except Exception as e:
+            logger.debug(f"Could not put the dtype's range through the input chain: {e}")
     dtype = image.ts.dtype
     dtype = np.dtype(getattr(dtype, "numpy_dtype", dtype))
     if dtype.kind in "ui":
@@ -305,7 +322,9 @@ def get_raw_layer(
                 neuroglancer.LayerDataSource(
                     url=ScalePyramid(layers), transform=_corner_transform(finest)
                 ),
-                lambda: _raw_shader([paths.join(dataset_path, sc) for sc in scales], normalize),
+                lambda: _raw_shader(
+                    [paths.join(dataset_path, sc) for sc in scales], normalize, image_for_fallback=finest
+                ),
                 segmentation,
                 disable_meshes,
             )

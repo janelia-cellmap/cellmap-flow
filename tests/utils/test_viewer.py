@@ -14,7 +14,7 @@ import neuroglancer
 import numpy as np
 import pytest
 
-from cellmap_flow.norm.input_normalize import MinMaxNormalizer
+from cellmap_flow.norm.input_normalize import LambdaNormalizer, MinMaxNormalizer
 from cellmap_flow.process_chain import process_chain
 from cellmap_flow.viewer.raw import ScalePyramid, get_raw_layer, neuroglancer_source
 from tests.utils.test_io_metadata import at_url  # noqa: F401  (a fixture: a directory served at URLs)
@@ -176,12 +176,23 @@ FLAT = np.zeros((16, 16, 16), np.uint8)
     # the range of its dtype...
     pytest.param(FLAT, [], (0, 255), id="uint8"),
     pytest.param(FLAT.astype(np.uint16), [], (0, 65535), id="uint16"),
-    # ...as the input chain returns it: floats have none, so [-1, 1].
-    pytest.param(FLAT, [MinMaxNormalizer(0, 255)], (-1, 1), id="through-a-float-chain"),
+    # ...put through the input chain: [0, 1] after a MinMaxNormalizer...
+    pytest.param(FLAT, [MinMaxNormalizer(0, 255)], (0, 1), id="through-a-float-chain"),
+    pytest.param(FLAT, [MinMaxNormalizer(0, 255), LambdaNormalizer("x*2-1")], (-1, 1), id="to-minus-one-to-one"),
 ])
 def test_a_single_arrays_contrast_is_sampled_or_its_dtypes(raw_zarr, data, input_norms, contrast):
     process_chain().input_norms = input_norms
     assert _contrast(get_raw_layer(raw_zarr(data))) == contrast
+
+
+def test_a_pyramid_too_big_to_sample_falls_back_through_the_input_chain(ome_pyramid, monkeypatch):
+    """jrc_fly-larva-1 never downsamples z, so even its coarsest level is too
+    big to sample: after a normalizer it was shown at [0, 255] over [-1, 1]."""
+    from cellmap_flow.viewer import raw
+
+    monkeypatch.setattr(raw, "_auto_contrast_range", lambda paths, normalize: None)
+    process_chain().input_norms = [MinMaxNormalizer(0, 255), LambdaNormalizer("x*2-1")]
+    assert _contrast(get_raw_layer(ome_pyramid())) == (-1, 1)
 
 
 def test_a_label_volume_is_a_segmentation_layer_in_the_same_place(raw_zarr):
