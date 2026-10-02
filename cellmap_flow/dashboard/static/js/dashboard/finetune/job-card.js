@@ -122,13 +122,20 @@ export function createJobCard(lossPlot) {
   }
 
   // What the job trains with, from its own parameters: submit may have
-  // replaced the form's (a distance model on scribbles trains at margin 0.5).
+  // replaced the form's (a distance model on scribbles trains on the
+  // interval loss).
   function showTraining(params) {
     if (!params || !params.loss_type) return;
-    const parts = [`${params.loss_type} loss`];
+    const interval = params.loss_type === "interval";
+    const parts = [interval ? "distance bounds from the paint" : `${params.loss_type} loss`];
     if (params.loss_type === "margin" && params.margin != null) parts.push(`margin ${params.margin}`);
     if (params.distillation_lambda != null) parts.push(`distillation ${params.distillation_lambda}`);
-    $("jobTraining").textContent = parts.join(", ");
+    const line = $("jobTraining");
+    line.textContent = parts.join(", ");
+    line.title = interval
+      ? "Interval loss: each painted voxel is held between bounds on its distance to the " +
+        "boundary (exact where the paint is dense), with the slope limited to a distance field's."
+      : "";
   }
 
   function showStatus(status) {

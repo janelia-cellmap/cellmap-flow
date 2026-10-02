@@ -11,6 +11,9 @@ All notable changes to cellmap-flow. The format follows [Keep a Changelog](https
   - An annotation volume made while it is on is at the model's own voxel sizes and remembers it (`resample` in its attrs and manifest): the finetune trains on the raw resampled, serves the result with `--resample`, and writes `resample: true` into its serving YAML.
 - **A wrong-scale warning.** When a model's server reads a level at another voxel size as if it were at the model's, which is the default without resampling, the banner above the tabs says so and how to fix it. `model_info` reports `input_relabelled_from` beside `input_resampled_from`.
 
+### Changed
+- **Distance models learn distances from scribbles.** A distance model in a painted session trains on the interval loss (`--loss-type interval`) instead of a binary target at margin 0.5, which kept only the sign. Each painted voxel is held between bounds on its distance to the boundary (the nearest voxel painted as the other class, and the nearest not painted as its own), exact where the paint is dense, and a slope limit (`--slope-weight`, default 1) keeps the field a distance field. Distillation stays at least 0.5. Fully labelled crops still train on the exact distance. See "Distance models on scribbles" in `docs/finetuning.md`.
+
 ### Fixed
 - **The raw layer's fallback contrast follows the input normalizers.** When the data cannot be sampled for a range (jrc_fly-larva-1 never downsamples z, so even its coarsest level is too big to read), a multiscale raw layer was shown at [0, 255] whatever the normalizers did, one flat colour over [-1, 1] data. The fallback is now the stored dtype's range put through them: [0, 1] after a MinMaxNormalizer, [-1, 1] with `x*2-1`. A single array got [-1, 1] for any float chain, which was wrong for one ending in [0, 1].
 

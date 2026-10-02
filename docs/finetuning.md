@@ -125,13 +125,24 @@ Switch to the **Training** tab in the Finetune section.
 | **Batch Size** | Number of samples per training step. The UI currently exposes `1`, `2`, `4`, `8`, `16`, and `32`. Higher = faster but uses more GPU memory. |
 | **Learning Rate** | Step size for optimization. The UI currently exposes values from `1e-7` through `1e-1`, with `1e-4` as the standard default. |
 | **Loss Function** | The training objective. The current UI exposes **Margin**, **MSE**, **BCE**, **Dice**, and **Combined (Dice + BCE)**. **Margin** is the default and is generally the best fit for sparse scribble-style annotations. |
-| **Margin** | Only used when **Loss Function** is set to **Margin**. Controls how strict the margin loss is; smaller values provide more learning signal, while larger values create a wider no-gradient band. |
+| **Margin** | Only used when **Loss Function** is set to **Margin**. Controls how strict the margin loss is; smaller values provide more learning signal, while larger values create a wider no-gradient band. A distance model on scribbles uses neither (see [below](#distance-models-on-scribbles)). |
 | **Distillation Weight** | Keeps the finetuned model close to the original model's predictions. The UI currently exposes `0`, `0.01`, `0.05`, `0.1`, `0.2`, `0.5`, `1.0`, `2.0`, `5.0`, and `10.0`, with `0.1` as the current default. Set to `0` to disable distillation. |
 | **Distillation Scope** | (Advanced) Where to apply distillation loss — **Unlabeled** (only on unannotated voxels) or **All** (everywhere). |
 | **Label Smoothing** | Softens hard `0/1` targets. Useful when annotations are noisy; set to `0` if you want sharp targets. |
 | **Balance fg/bg classes** | Weights foreground and background equally in the loss regardless of how much of each you've annotated. Prevents the model from overpredicting whichever class dominates the scribbles. |
 | **GPU Queue** | Which GPU queue to submit the training job to (e.g. H100, H200). |
 | **Auto-load model after training** | When checked, the finetuned model will automatically start an inference server and be added to the Neuroglancer viewer once training completes. |
+
+### Distance models on scribbles
+
+A distance model (one whose name contains `distance`, such as the cellmap `*_distance_*` models) predicts each voxel's signed distance to the object boundary, `sigmoid(2d/σ)`. Scribbles do not say where that boundary is, so on a session with painted strokes it trains on the interval loss instead of the loss picked in the form:
+
+- Each painted voxel gets bounds on its distance, in nm: at most the distance to the nearest voxel painted as the other class, and at least the distance to the nearest voxel not painted as its own class (unpainted voxels and the patch's edge count as "maybe the other class"). Where the paint is dense the two meet, and the distance is exact.
+- The loss is zero between the bounds, grows linearly outside them, and is five times steeper on the wrong side of the boundary; a voxel of slack forgives strokes that stray over an edge (after iSDF, Ortiz et al., RSS 2022).
+- The predicted field may not get steeper than a distance field (`--slope-weight`, default 1). Without this, bounds alone let the field collapse into a step.
+- Unpainted voxels get no bounds: distillation, at least 0.5, and the random anchor patches hold them.
+
+The bounds are computed on each training patch, so near its edges they are looser than the paint would allow. Fully labelled crops (imported, with no strokes) still train on the exact distance with BCE.
 
 ### Start training
 

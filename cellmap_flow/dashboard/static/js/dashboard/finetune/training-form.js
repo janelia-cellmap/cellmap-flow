@@ -126,16 +126,29 @@ export function isDistanceModel(name) {
   return /distance/i.test(name || "");
 }
 
-// What a distance model trains with on scribbles, set in the form when one is
-// picked so the form shows what the job will get: submit applies the same
-// (training_settings), and a form left at margin 0.3 and distillation 0.01
-// read as if those would be used. Only on picking a model, so values edited
-// afterwards stand.
+// What a distance model trains with on scribbles, whatever the loss picked
+// above: submit replaces it (training_settings). Set here, over the
+// template's text, which describes the sign-only margin loss this replaced.
+const DISTANCE_MODEL_HINT = "Distance model: scribbles train on distance bounds, whatever the loss above.";
+const DISTANCE_MODEL_DETAIL =
+  "Each painted voxel is kept between the nearest voxel not painted as its own class " +
+  "and the nearest painted as the other: exact where the paint is dense. The slope is " +
+  "limited to a distance field's, and distillation of at least 0.5 holds the rest.";
+
+function showDistanceModelHint(name) {
+  const hint = document.getElementById("distanceModelHint");
+  hint.textContent = DISTANCE_MODEL_HINT;
+  hint.title = DISTANCE_MODEL_DETAIL;
+  hint.hidden = !isDistanceModel(name);
+}
+
+// The distillation a distance model trains with on scribbles, set in the form
+// when one is picked so the form shows what the job will get: submit applies
+// the same (training_settings), and a form left at 0.01 read as if that would
+// be used. Only on picking a model, so values edited afterwards stand.
 export function applyModelDefaults(name) {
-  const distance = isDistanceModel(name);
-  document.getElementById("distanceModelHint").hidden = !distance;
-  if (!distance) return;
-  document.getElementById("marginValue").value = "0.5";
+  showDistanceModelHint(name);
+  if (!isDistanceModel(name)) return;
   const distillation = document.getElementById("distillationLambda");
   if (!(parseFloat(distillation.value) >= 0.5)) distillation.value = "0.5";
   saveFinetuneState();
@@ -240,7 +253,7 @@ export function initTrainingForm() {
 
   const modelSelect = document.getElementById("modelSelect");
   modelSelect.addEventListener("change", () => applyModelDefaults(modelSelect.value));
-  document.getElementById("distanceModelHint").hidden = !isDistanceModel(modelSelect.value);
+  showDistanceModelHint(modelSelect.value);
 
   ["numEpochs", "batchSize", "patchesPerEpoch"].forEach(function (id) {
     document.getElementById(id).addEventListener("change", updateAugmentAdvice);
