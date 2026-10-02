@@ -113,7 +113,15 @@ $ cellmap_flow infer script -s script_path -d data_path
 $ cellmap_flow infer bioimage -m model_path -v 8,8,8 -d data_path
 ```
 
-Currently available:
+A data path is a zarr (v2 or v3), N5 or Neuroglancer precomputed volume, on
+disk or at an `s3://`, `gs://` or `https://` URL; public buckets are read
+anonymously, private ones with your AWS or Google credentials. See
+[data paths](docs/source/data_paths.rst).
+
+A model is fed the dataset's level at its own voxel size. When the dataset has
+no such level, `--resample` (or `resample: true` in a YAML) resamples the
+nearest one to it; without it the nearest level is used as it is.
+
 ## Using custom script:
 This enables using any model by providing a script e.g. [example/model_spec.py](example/model_spec.py)
 e.g.
