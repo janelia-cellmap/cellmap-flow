@@ -155,13 +155,17 @@ def _bioimage_params(selections):
             try:
                 declared = bioimage_catalog.declared_voxel_size(found)
             except bioimage_catalog.ZooIndexError as e:
-                logger.warning(f"Could not tell whether {key} declares a voxel size: {e}")
-            else:
-                if declared is None:
-                    raise ValueError(
-                        f"{found['name']} ({key}) does not say what voxel size it was trained at: "
-                        "enter one (nm) in its row"
-                    )
+                # Its server could not read the description either, so it
+                # would fail the same way: refuse here too.
+                raise ValueError(
+                    f"Could not tell whether {found['name']} ({key}) says what voxel size it was "
+                    f"trained at ({e}): enter one (nm) in its row"
+                ) from e
+            if declared is None:
+                raise ValueError(
+                    f"{found['name']} ({key}) does not say what voxel size it was trained at: "
+                    "enter one (nm) in its row"
+                )
         params.append(bioimage_catalog.bioimage_entry(key, voxel_size, bioimage_job_name(key)))
     return params
 

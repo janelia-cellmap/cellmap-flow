@@ -164,6 +164,44 @@ def test_job_logs_list_a_job_that_is_still_starting(dashboard, monkeypatch):
     assert (job["model_name"], job["status"], job["log"]) == ("impartial_shrimp", "starting", "Installing environment...")
 
 
+def test_job_logs_keep_a_job_that_failed_to_start_until_it_is_started_again(dashboard, monkeypatch):
+    """Its log, the one being read, vanished from the page when it died."""
+    from cellmap_flow.jobs import launch as jobs_launch
+
+    class Job:
+        job_id, host = "78", None
+
+        def __init__(self, name):
+            self.model_name = name
+
+        def get_status(self):
+            return None
+
+        def peek(self):
+            return "ValueError: give voxel_size"
+
+    monkeypatch.setattr(jobs_launch, "_starting", set())
+    monkeypatch.setattr(jobs_launch, "_failed", {})
+    get_session().jobs = []
+    failing = Job("impartial_shrimp")
+    with pytest.raises(JobStartError), jobs_launch._while_starting(failing):
+        raise JobStartError("ended (failed) without reporting a server address")
+    (job,) = dashboard.get("/api/job-logs").get_json()["jobs"]
+    assert (job["model_name"], job["status"], job["log"]) == (
+        "impartial_shrimp", "failed to start", "ValueError: give voxel_size")
+
+    with jobs_launch._while_starting(Job("impartial_shrimp")):
+        (job,) = dashboard.get("/api/job-logs").get_json()["jobs"]
+        assert job["status"] == "starting"
+    assert jobs_launch.failed_starts() == []
+
+    for i in range(jobs_launch.FAILED_STARTS_KEPT + 2):
+        with pytest.raises(RuntimeError), jobs_launch._while_starting(Job(f"m{i}")):
+            raise RuntimeError("died")
+    names = [j.model_name for j in jobs_launch.failed_starts()]
+    assert names == [f"m{i}" for i in range(2, jobs_launch.FAILED_STARTS_KEPT + 2)]
+
+
 def test_a_launch_that_raises_is_reported_in_the_log(viewer, monkeypatch, caplog):
     """Launch threads' exceptions reached only the terminal."""
     def broken(*args, **kwargs):

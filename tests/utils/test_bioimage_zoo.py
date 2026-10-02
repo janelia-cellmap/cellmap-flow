@@ -218,6 +218,7 @@ def test_submit_serves_a_ticked_zoo_model_from_the_bioimageio_environment(submit
 
 def test_a_zoo_model_without_a_voxel_size_its_class_needs_refuses_the_submit(submit, monkeypatch):
     monkeypatch.setattr(catalog, "bioimage_entry", functools.partial(catalog.bioimage_entry, cls=_Before))
+    monkeypatch.setattr(catalog, "declared_voxel_size", lambda entry: [8.0, 8.0, 8.0])
     running = _Job("mito")
     get_session().jobs = [running]
     answer = submit({"id": "kind-seashell"})
@@ -270,16 +271,38 @@ def test_a_blank_voxel_size_for_a_model_that_declares_none_refuses_the_submit(su
     answer = submit({"id": "kind-seashell"})
     assert answer.status_code == 400 and "enter one (nm) in its row" in answer.get_json()["error"]
     assert submit.commands == []
-    # Given one, it starts; and an unreadable description does not block it.
+    # Given one, it starts.
     assert submit({"id": "kind-seashell", "voxel_size": "8"}).status_code == 200 and len(submit.commands) == 1
 
 
-def test_an_unreadable_description_leaves_the_voxel_size_to_the_server(submit, monkeypatch):
+def test_a_blank_voxel_size_refuses_the_submit_when_the_description_cannot_be_read(submit, monkeypatch):
+    """Its server could not read it either. This let impartial-shrimp through
+    from a cache written before entries carried their description's link."""
     def unreadable(entry):
         raise catalog.ZooIndexError("offline")
 
     monkeypatch.setattr(catalog, "declared_voxel_size", unreadable)
-    assert submit({"id": "kind-seashell"}).status_code == 200 and len(submit.commands) == 1
+    answer = submit({"id": "kind-seashell"})
+    assert answer.status_code == 400 and "offline" in answer.get_json()["error"] and submit.commands == []
+    assert submit({"id": "kind-seashell", "voxel_size": "8"}).status_code == 200 and len(submit.commands) == 1
+
+
+def test_a_cache_in_an_older_format_is_fetched_again_and_still_read_when_that_fails(zoo):
+    """One written by an older cellmap-flow lacked the entries' description links."""
+    catalog.list_bioimage_models()
+    with open(catalog.BIOIMAGE_CACHE_FILE) as f:
+        document = json.load(f)
+    del document["format"]
+    with open(catalog.BIOIMAGE_CACHE_FILE, "w") as f:
+        json.dump(document, f)
+    assert catalog.list_bioimage_models()["format"] == catalog.CACHE_FORMAT and zoo.fetches == 2
+    assert catalog.list_bioimage_models() and zoo.fetches == 2
+
+    del document["models"][1:]
+    with open(catalog.BIOIMAGE_CACHE_FILE, "w") as f:
+        json.dump(document, f)
+    zoo.index = catalog.ZooIndexError("offline")
+    assert len(catalog.list_bioimage_models()["models"]) == 1
 
 
 HYPHA_LISTING = [

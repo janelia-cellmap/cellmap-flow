@@ -37,6 +37,11 @@ HYPHA_MODELS_URL = (
 FETCH_TIMEOUT_S = 30
 BIOIMAGE_CACHE_DIR = os.path.expanduser("~/.cellmap_flow/bioimage")
 BIOIMAGE_CACHE_FILE = os.path.join(BIOIMAGE_CACHE_DIR, "models_cache.json")
+# Raised when the cached entries change shape: a cache written by an older
+# cellmap-flow is fetched again rather than read. One without the entries'
+# description links left Submit unable to tell whether a model declares a
+# voxel size.
+CACHE_FORMAT = 2
 ZOO_PAGE_URL = "https://bioimage.io/#/artifacts/{}"
 
 # Tags (lower case) that mark an electron microscopy model. The zoo has no
@@ -230,7 +235,7 @@ def _fetch_models() -> dict:
         except ZooIndexError as index_error:
             raise ZooIndexError(f"{hypha_error}; and {index_error}") from index_error
     document = {"fetched": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-                "source": source, "models": models}
+                "format": CACHE_FORMAT, "source": source, "models": models}
 
     # Written beside and moved into place: a reader never sees half a file.
     os.makedirs(os.path.dirname(BIOIMAGE_CACHE_FILE), exist_ok=True)
@@ -250,8 +255,20 @@ def _read_cache() -> Optional[dict]:
 
 
 def list_bioimage_models() -> dict:
-    """The zoo's models, from the cache when there is one."""
-    return _read_cache() or _fetch_models()
+    """The zoo's models, from the cache when there is a current one.
+
+    A cache in an older format is fetched again; when that fails it is
+    still read, as a list that is older is better than none.
+    """
+    cached = _read_cache()
+    if cached and cached.get("format") == CACHE_FORMAT:
+        return cached
+    try:
+        return _fetch_models()
+    except ZooIndexError:
+        if cached:
+            return cached
+        raise
 
 
 def refresh_bioimage_models() -> dict:

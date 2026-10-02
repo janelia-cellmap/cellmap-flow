@@ -149,14 +149,16 @@ def job_logs():
     nothing in the dashboard -- the traceback is in the LSF job's output on a
     cluster node, and reading it means logging in and running bpeek.
     """
-    from cellmap_flow.jobs.launch import starting_jobs
+    from cellmap_flow.jobs.launch import failed_starts, starting_jobs
 
     jobs = []
     # The starting ones too: from Submit until a server answers, which can be
     # minutes in a queue or installing an environment, the page said no job
-    # had been submitted.
+    # had been submitted. And the ones that failed to start: their log is the
+    # one being read, and it vanished from the page when the job died.
     starting = starting_jobs()
-    for job in list(get_session().jobs or []) + starting:
+    failed = failed_starts()
+    for job in list(get_session().jobs or []) + starting + failed:
         try:
             status = job.get_status()
             text = job.peek()
@@ -167,7 +169,9 @@ def job_logs():
                 "model_name": getattr(job, "model_name", None),
                 "job_id": getattr(job, "job_id", None),
                 "host": getattr(job, "host", None),
-                "status": "starting" if job in starting else getattr(status, "value", None),
+                "status": ("starting" if job in starting
+                           else "failed to start" if job in failed
+                           else getattr(status, "value", None)),
                 # None means "no way to read this one" (a local job), which is
                 # different from "read it and it was empty".
                 "log": text,

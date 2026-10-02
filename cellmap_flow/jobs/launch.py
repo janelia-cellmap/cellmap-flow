@@ -81,14 +81,30 @@ _started: list = []
 _starting: set = set()
 _starting_lock = threading.Lock()
 
+# The last start of each model name that failed, by name: the dashboard
+# lists it, so the traceback of a server that died on startup stays on the
+# page. It dropped out of the starting jobs the moment it failed, and with
+# it the log being read. A new start of the same name replaces it; only the
+# newest few are kept, as each costs a bpeek on every Job Logs refresh.
+_failed: dict = {}
+FAILED_STARTS_KEPT = 5
+
 
 @contextlib.contextmanager
 def _while_starting(job):
-    """Count ``job`` among the starting jobs until the block is left."""
+    """Count ``job`` among the starting jobs until the block is left, and
+    among the failed starts when it is left by an exception."""
     with _starting_lock:
         _starting.add(job)
+        _failed.pop(getattr(job, "model_name", None), None)
     try:
         yield
+    except BaseException:
+        with _starting_lock:
+            _failed[getattr(job, "model_name", None)] = job
+            while len(_failed) > FAILED_STARTS_KEPT:
+                del _failed[next(iter(_failed))]
+        raise
     finally:
         with _starting_lock:
             _starting.discard(job)
@@ -99,6 +115,13 @@ def starting_jobs() -> list:
     their server to come up), for the dashboard to show as starting."""
     with _starting_lock:
         return [job for job in _starting if job not in _started]
+
+
+def failed_starts() -> list:
+    """The last failed start of each model name not started again since,
+    for the dashboard to keep showing with its log."""
+    with _starting_lock:
+        return [job for job in _failed.values() if job not in _started and job not in _starting]
 
 
 def started_jobs() -> list:
