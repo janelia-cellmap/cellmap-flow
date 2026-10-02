@@ -192,6 +192,72 @@ does not install it is refused when the job is submitted.
 ``cellmap_flow infer <type> --env <env>`` and the dashboard's model form take
 it too. ``example/cellpose_sam.yaml`` runs Cellpose-SAM this way.
 
+Each model type's default
+^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Some model types run in an environment of their own unless the entry says
+otherwise, so their entries need no ``env``:
+
+=========================================  ======================
+Type                                       Default ``env``
+=========================================  ======================
+``cellpose``                               ``cellpose4``
+``bioimage``                               ``bioimageio``
+``dacapo``                                 ``dacapo``
+``fly``, with a raw checkpoint             ``fly``
+``finetune``                               its base model type's
+``script``, ``cellmap``, ``huggingface``   none: this environment
+=========================================  ======================
+
+An entry's own ``env`` wins. ``env: current`` runs the model in this
+environment whatever its type's default (``default`` is not that: it is
+pixi's ``default`` environment). Exported YAMLs write only an ``env`` the
+entry gave, never the type's default. A plugin type sets its own as
+``default_env`` on its ``ModelConfig`` subclass.
+
+A default this machine cannot provide does not stop the model: with no
+``pixi.toml``, no environment of that name in it, or no pixi at all (a
+conda-only account), the model runs in this environment, as before its type
+had a default, with a warning that says how to give it one. A default that
+is in ``pixi.toml`` but not installed yet is used: its first job installs it
+(several minutes), and a warning says so. An ``env`` the entry names
+itself is an error when it cannot be used.
+
+Aliases
+^^^^^^^
+
+``~/.cellmap_flow/envs.yaml`` (or the file ``CELLMAP_FLOW_ENVS_FILE`` names)
+maps environment names to conda environments or virtualenvs with cellmap-flow
+installed. An alias wins over a pixi environment of the same name, both for
+an entry's ``env`` and for a type's default, so this is how a machine without
+pixi runs the types' defaults:
+
+.. code-block:: yaml
+
+    cellpose4: /groups/lab/home/me/miniconda3/envs/cellpose4
+    dacapo: /groups/lab/home/me/miniconda3/envs/dacapo
+
+A model whose ``env`` is an alias keeps the name in exported YAMLs, so the
+YAML works on a machine that has the pixi environment instead. An alias to a
+relative path, or to a directory without ``bin/python``, is an error.
+
+``cellmap_flow envs``
+^^^^^^^^^^^^^^^^^^^^^
+
+.. code-block:: bash
+
+    cellmap_flow envs                  # each environment, as `envs list`
+    cellmap_flow envs install cellpose4
+    cellmap_flow envs check cellpose4
+
+``envs list`` shows each environment of ``pixi.toml`` and each alias: where
+it is, whether it is installed, whether it can run a finetuning job, and
+which model types default to it (a type that decides per model, as ``fly``
+does, is listed apart). ``envs install`` installs a pixi environment from the
+lockfile now (``pixi install --frozen``), rather than on its first job; an
+alias has nothing to install. ``envs check`` imports cellmap-flow with the
+environment's python, to show that it works there.
+
 .. _channel-names:
 
 Channel Names
