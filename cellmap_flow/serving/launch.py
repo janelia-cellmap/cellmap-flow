@@ -4,9 +4,10 @@ Every launcher builds it here: ``cellmap_flow infer <type>``,
 ``cellmap_flow yaml`` and the dashboard's catalog and Hugging Face models.
 It is ``<SERVER_COMMAND> --model <entry> -d <data path>``, where the entry
 is ``ModelConfig.launch_entry`` as JSON, which the server rebuilds as it
-rebuilds a YAML's model entry, then ``--resample`` when the launcher was
-asked to resample (a YAML's ``resample: true``, ``infer --resample``). The
-flag is left out otherwise, so a command without it is what it always was.
+rebuilds a YAML's model entry, then ``--resample`` or ``--no-resample``:
+always one of them, so a server reads the data as its launcher was told to
+(a YAML's ``resample``, ``infer --no-resample``, the dashboard's checkbox)
+whatever ``serve``'s own default is.
 
 The serve program is ``jobs.launch.SERVER_COMMAND``, and deployments change
 it: the fileglancer deploy sets ``"pixi run cellmap_flow serve"``. So it is
@@ -45,7 +46,7 @@ def _program(env) -> list:
     return envs.server_argv(envs.validate(env))
 
 
-def _serve_argv(entry: dict, env, data_path, resample=False) -> list:
+def _serve_argv(entry: dict, env, data_path, resample=True) -> list:
     """The server's argv for ``entry``, served from ``env`` (None: this one's SERVER_COMMAND)."""
     # The server must not get env back: in its environment it is at home.
     entry = dict(entry)
@@ -53,10 +54,10 @@ def _serve_argv(entry: dict, env, data_path, resample=False) -> list:
     # Compact, and a value JSON has no type for (a plugin's Path) as its str.
     entry_json = json.dumps(entry, separators=(",", ":"), default=str)
     argv = [*_program(env), "--model", entry_json, "-d", str(data_path)]
-    return argv + ["--resample"] if resample else argv
+    return argv + ["--resample" if resample else "--no-resample"]
 
 
-def server_argv(model_config, data_path: str, resample: bool = False) -> list:
+def server_argv(model_config, data_path: str, resample: bool = True) -> list:
     """The server's argv for ``model_config`` reading ``data_path``, resampling
     it to the model's input voxel size when ``resample``."""
     from cellmap_flow.models import envs
@@ -64,7 +65,7 @@ def server_argv(model_config, data_path: str, resample: bool = False) -> list:
     return _serve_argv(model_config.launch_entry, envs.model_env(model_config), data_path, resample)
 
 
-def server_argv_for(model_type: str, params: dict, data_path: str, resample: bool = False) -> list:
+def server_argv_for(model_type: str, params: dict, data_path: str, resample: bool = True) -> list:
     """The server's argv for a model given as its type and constructor arguments.
 
     For launchers that have no model config to hand and should not build
@@ -83,11 +84,11 @@ def server_argv_for(model_type: str, params: dict, data_path: str, resample: boo
     return _serve_argv(model_entry(cls, params), env, data_path, resample)
 
 
-def server_command(model_config, data_path: str, resample: bool = False) -> str:
+def server_command(model_config, data_path: str, resample: bool = True) -> str:
     """``server_argv`` as the shell line start_hosts takes."""
     return shell_join(server_argv(model_config, data_path, resample))
 
 
-def server_command_for(model_type: str, params: dict, data_path: str, resample: bool = False) -> str:
+def server_command_for(model_type: str, params: dict, data_path: str, resample: bool = True) -> str:
     """``server_argv_for`` as the shell line start_hosts takes."""
     return shell_join(server_argv_for(model_type, params, data_path, resample))

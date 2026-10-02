@@ -76,7 +76,7 @@ def test_env_goes_round_the_registry_and_never_reaches_the_server(manifest):
     argv = launch.server_argv(model, "/d/raw.zarr")
     assert argv == [
         "/opt/pixi", "run", "--frozen", "--manifest-path", str(manifest), "-e", "cellpose4", "cellmap_flow", "serve",
-        "--model", '{"type":"script","script_path":"/s.py","name":"cp"}', "-d", "/d/raw.zarr",
+        "--model", '{"type":"script","script_path":"/s.py","name":"cp"}', "-d", "/d/raw.zarr", "--resample",
     ]
     assert launch.server_argv_for("script", {"script_path": "/s.py", "name": "cp", "env": "cellpose4"},
                                   "/d/raw.zarr") == argv
@@ -220,7 +220,7 @@ def test_an_entrys_env_wins_over_its_types_default(manifest, venv, cellpose4_typ
     assert model.effective_env == (venv if runs_in == "venv" else runs_in)
     # Only what the entry said is written back: an exported YAML stays as it was.
     assert model.to_dict() == entry and registry.build_model(model.to_dict(), "cp").effective_env == model.effective_env
-    program = launch.server_argv(model, "/d")[:-4]
+    program = launch.server_argv(model, "/d")[:-5]
     if runs_in is None:
         assert program == shlex.split(jobs_launch.SERVER_COMMAND)
     elif runs_in == "cellpose4":
@@ -273,7 +273,7 @@ def test_a_default_env_this_machine_cannot_provide_runs_here(manifest, monkeypat
         monkeypatch.setattr(envs.shutil, "which", lambda program: None)
     model = cellpose4_type(script_path="/s.py", name="cp")
     assert model.effective_env is None
-    assert launch.server_argv(model, "/d")[:-4] == shlex.split(jobs_launch.SERVER_COMMAND)
+    assert launch.server_argv(model, "/d")[:-5] == shlex.split(jobs_launch.SERVER_COMMAND)
     (warning,) = [r.getMessage() for r in caplog.records if r.levelname == "WARNING"]
     assert "runs in this environment" in warning and "envs.yaml" in warning
     # Named by the entry, the same environment is an error: the user asked for it.

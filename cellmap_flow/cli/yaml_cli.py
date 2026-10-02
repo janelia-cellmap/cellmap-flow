@@ -97,7 +97,7 @@ def run_multiple(
     charge_group: str,
     queue: str,
     wrap_raw: bool = True,
-    resample: bool = False,
+    resample: bool = True,
 ) -> None:
     """
     Submit multiple model inference jobs.
@@ -107,7 +107,7 @@ def run_multiple(
         dataset_path: Base path to the dataset
         charge_group: Billing/chargeback group
         queue: Job queue name
-        resample: start each server with --resample (the YAML's ``resample``)
+        resample: start each server with --resample, else --no-resample (the YAML's ``resample``)
     """
     settings = launcher_settings()
     settings.queue = queue
@@ -184,8 +184,9 @@ def main(ctx, config_path: str, list_types: bool, validate_only: bool):
     cycle_gpu_queues: true # optional; false pins the job to `queue` above
                            # instead of falling back to a queue with capacity.
     wrap_raw: true         # optional; false serves raw straight from the file
-    resample: false        # optional; true resamples the data to each model's
-                           # input voxel size when it has no level at it.
+    resample: true         # optional, the default: resample the data to each
+                           # model's input voxel size when it has no level at
+                           # it; false reads the nearest level as if it were.
     extra_layers:          # optional; more volumes to show beside the raw data
       - name: mito_pred
         path: /path/to/pred.zarr/mito
@@ -336,7 +337,7 @@ def main(ctx, config_path: str, list_types: bool, validate_only: bool):
     session.extra_layers = build_extra_layers(extra_layers)
     # Also for the models launched later from the dashboard, its finetunes
     # and its blockwise runs, not only for the YAML's own models.
-    session.resample = config.get("resample", False)
+    session.resample = config.get("resample", True)
 
     # Run the models; Ctrl+C or SIGTERM from here on kills what was started.
     install_cleanup_handlers()

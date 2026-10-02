@@ -54,7 +54,7 @@ A configuration file has the following top-level fields:
      - Wrap raw data in neuroglancer (default: ``true``).
    * - ``resample``
      - No
-     - ``true`` resamples the data to each model's input voxel size when it has no level at that size (default: ``false``; see :ref:`resampling`).
+     - ``true`` (the default) resamples the data to each model's input voxel size when it has no level at that size; ``false`` reads the nearest level as if it were at that size (see :ref:`resampling`).
    * - ``extra_layers``
      - No
      - More volumes to show in the viewer beside the raw data (see below).
@@ -680,14 +680,15 @@ Data at Another Voxel Size
 
 A model reads the level of ``data_path`` at its input voxel size. When there is no such level, what happens depends on ``resample``:
 
-- **Left out, or** ``resample: false``: the level closest to the model's voxel size that is not coarser on any axis (the finest level, when every one is) is read *as if* it were at the model's voxel size, voxel for voxel, with a warning. The model then sees data at the wrong scale, and its predictions are drawn where that level really is, at a proportionally different voxel size.
-- ``resample: true``: a level is resampled to the model's voxel size, axis by axis, and the model sees the data at the size it was trained at. Its predictions are at its declared output voxel size.
+- ``resample: false``: the level closest to the model's voxel size that is not coarser on any axis (the finest level, when every one is) is read *as if* it were at the model's voxel size, voxel for voxel, with a warning. The model then sees data at the wrong scale, and its predictions are drawn where that level really is, at a proportionally different voxel size.
+- **Left out, or** ``resample: true``: a level is resampled to the model's voxel size, axis by axis, and the model sees the data at the size it was trained at. Its predictions are at its declared output voxel size.
 
 .. code-block:: yaml
 
     data_path: /nrs/cellmap/data/my_dataset/my_dataset.zarr/recon-1/em/fibsem-uint8
     charge_group: cellmap
-    resample: true   # levels 8x8x40, 16x16x80 ... nm; the model wants 16x16x16
+    # levels 8x8x40, 16x16x80 ... nm; the model wants 16x16x16, so a level is
+    # resampled to it (resample: false would read 8x8x40 as if it were)
 
     models:
       my_model:
@@ -701,9 +702,9 @@ How the data is resampled:
 - **Each axis by its own factor.** By a whole number of voxels (8 nm to 16 nm), each voxel is the mean of the voxels it covers. Otherwise (40 nm to 16 nm, or 12 nm to 16 nm), it is a linear interpolation between the two nearest voxels. Label data (bool, or integers of 32 bits or more) takes the nearest voxel instead, so no label is invented. Intensities stay in their dtype (uint8 stays uint8, rounded), and go through ``json_data``'s normalizers after resampling, as a stored level would.
 - **Where.** The resampled grid starts at the level's own corner, so the predictions lie over the data. Chunks are resampled on their own, and each gives exactly the voxels a read of the whole volume would.
 
-``cellmap_flow yaml`` starts each server with ``--resample``, and ``cellmap_flow blockwise`` reads the data resampled the same way. ``cellmap_flow infer <type> --resample`` is the same for one model (:doc:`cli`).
+``cellmap_flow yaml`` starts each server with ``--resample`` (``--no-resample`` for ``resample: false``), and ``cellmap_flow blockwise`` reads the data the same way. ``cellmap_flow infer <type>`` resamples too, unless given ``--no-resample`` (:doc:`cli`).
 
-In the dashboard it is the Models tab's *Resample if no scale matches the model* box, which ``resample: true`` (or ``cellmap_flow view --resample``) starts ticked. It applies to the models submitted from then on, to blockwise runs, and to annotation volumes made while it is on: those are at the model's own voxel sizes, and their finetunes train on the data resampled and are served resampled. When a running model reads a level as if it were at its voxel size, the banner above the tabs says so.
+In the dashboard it is the Models tab's *Resample if no scale matches the model* box, ticked unless ``resample: false`` (or ``cellmap_flow view --no-resample``) starts it unticked. It applies to the models submitted from then on, to blockwise runs, and to annotation volumes made while it is on: those are at the model's own voxel sizes, and their finetunes train on the data resampled and are served resampled. When a running model reads a level as if it were at its voxel size, the banner above the tabs says so.
 
 Extra Layers
 ------------

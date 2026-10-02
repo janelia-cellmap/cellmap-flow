@@ -243,9 +243,9 @@ PLUGIN_FILE = [
 ]
 PLUGIN_NAME = [('name', ('name',), (), 'text', True, None, False, None)]
 ENV_NAME = PLUGIN_NAME
-RESAMPLE = ('resample', ('--resample',), (), 'boolean', False, False, True,
+RESAMPLE = ('resample', ('--resample',), ('--no-resample',), 'boolean', False, True, True,
             "When the dataset has no level at the model's input voxel size, resample a level to it, "
-            "axis by axis, instead of reading the level as if it were at that size.")
+            "axis by axis (the default), or, with --no-resample, read the nearest level as if it were at that size.")
 ENV = ('env', ('--env',), (), 'text', False, None, False,
        "Run the server in this environment: a pixi environment of cellmap-flow's pixi.toml, an alias "
        "(cellmap_flow envs), or the absolute path of one with cellmap-flow installed; current: this one "

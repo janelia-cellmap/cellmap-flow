@@ -109,8 +109,8 @@ def generate_finetuned_model_yaml(
         "queue": queue,
         "models": [model_entry],
     }
-    if resample:
-        yaml_dict["resample"] = True
+    # Either way: a YAML without it resamples.
+    yaml_dict["resample"] = bool(resample)
 
     # Add json_data (normalization/postprocessing)
     if json_data:
@@ -172,7 +172,7 @@ def generate_current_config_yaml(
             the reloaded config falls back to the built-in default
         json_data: dict with "input_norm"/"postprocess" keys reflecting the
             currently active normalization/postprocessing, if any
-        resample: the dashboard's Resample setting; written only when on
+        resample: the dashboard's Resample setting, written either way
 
     Returns:
         YAML text (str) ready to write to a file.
@@ -190,8 +190,7 @@ def generate_current_config_yaml(
     }
     if walltime:
         yaml_dict["walltime"] = walltime
-    if resample:
-        yaml_dict["resample"] = True
+    yaml_dict["resample"] = bool(resample)
 
     has_json_data = json_data and (
         json_data.get("input_norm") or json_data.get("postprocess")

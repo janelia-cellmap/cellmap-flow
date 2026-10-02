@@ -51,16 +51,18 @@ def log_level_option(default=None, help="Set the logging level"):
 
 
 def resample_option():
-    """``--resample``: read the dataset resampled to the model's input voxel
-    size when it has no level at that size (ImageDataInterface's
-    ``on_voxel_size_mismatch="resample"``). Without it, the level chosen is
-    read as if it were at the model's voxel size, with a warning."""
+    """``--resample/--no-resample``, on by default: read the dataset resampled
+    to the model's input voxel size when it has no level at that size
+    (ImageDataInterface's ``on_voxel_size_mismatch="resample"``). With
+    ``--no-resample`` the level chosen is read as if it were at the model's
+    voxel size, with a warning."""
     return click.option(
-        "--resample",
-        is_flag=True,
+        "--resample/--no-resample",
+        default=True,
+        show_default=True,
         help="When the dataset has no level at the model's input voxel size, "
-        "resample a level to it, axis by axis, instead of reading the level as if "
-        "it were at that size.",
+        "resample a level to it, axis by axis (the default), or, with --no-resample, "
+        "read the nearest level as if it were at that size.",
     )
 
 

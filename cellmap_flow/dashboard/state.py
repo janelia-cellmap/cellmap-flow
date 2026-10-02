@@ -72,11 +72,12 @@ class Session:
         self.dataset_path = None
         # Whether models launched from here, their finetunes and blockwise
         # runs read the data resampled to each model's input voxel size when
-        # it has no level at that size (``--resample``), rather than reading
-        # the nearest level as if it were at that size. Set by
-        # ``cellmap_flow yaml`` (the YAML's ``resample``), ``view --resample``
-        # and the Models tab's checkbox; servers already running keep theirs.
-        self.resample = False
+        # it has no level at that size (``--resample``, the default), rather
+        # than reading the nearest level as if it were at that size. Set by
+        # ``cellmap_flow yaml`` (the YAML's ``resample``), ``view
+        # --no-resample`` and the Models tab's checkbox; servers already
+        # running keep theirs.
+        self.resample = True
         # The neuroglancer viewer; None until a dataset is opened.
         self.viewer = None
         # The raw data's layer, as last built.

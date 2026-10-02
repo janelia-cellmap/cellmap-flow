@@ -303,13 +303,14 @@ class CellMapFlowBlockwiseProcessor:
             ]
             self.inferencer = self.inferencers[0]  # Keep for backward compatibility
 
-        # resample: true reads the data resampled to the model's input voxel
-        # size when it has no level at it; the grid below is then the
-        # resampled one, starting at the level's own corner.
+        # resample (true unless the task says false) reads the data resampled
+        # to the model's input voxel size when it has no level at it; the
+        # grid below is then the resampled one, starting at the level's own
+        # corner.
         self.idi_raw = ImageDataInterface(
             self.input_path,
             voxel_size=self.input_voxel_size,
-            on_voxel_size_mismatch="resample" if self.config.get("resample", False) else "relabel",
+            on_voxel_size_mismatch="resample" if self.config.get("resample", True) else "relabel",
         )
         self.output_arrays = []
 

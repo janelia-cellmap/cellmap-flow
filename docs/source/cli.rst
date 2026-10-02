@@ -30,11 +30,11 @@ Commands
        -d data.zarr/raw``. Short flags go to the arguments in the order the
        constructor takes them, so an argument whose first letter an earlier
        one has has only its long flag (``script``'s ``--scale``). ``-d``,
-       ``-q`` (queue), ``-P`` (billing project), ``--resample`` and
-       ``--server-check`` are the command's own. ``--resample`` reads the
-       data resampled to the model's input voxel size when it has no level
-       at that size, instead of reading a level as if it were at that size
-       (:ref:`resampling`).
+       ``-q`` (queue), ``-P`` (billing project), ``--resample/--no-resample``
+       and ``--server-check`` are the command's own. The data is read
+       resampled to the model's input voxel size when it has no level at
+       that size; ``--no-resample`` reads a level as if it were at that size
+       instead (:ref:`resampling`).
    * - ``yaml CONFIG``
      - The same for every model a YAML file lists, with its normalization
        and postprocessing (:doc:`yaml_config`). ``--validate-only`` checks
@@ -87,8 +87,9 @@ The entry is the model as a YAML model entry, in JSON
     cellmap_flow serve -d /path/to/data.zarr/raw \
       --model '{"type": "script", "script_path": "/path/to/model.py", "name": "mito"}'
 
-A launcher asked to resample (``infer --resample``, or ``resample: true``
-in a YAML) adds ``--resample``; see :ref:`resampling`.
+A launcher always adds ``--resample`` or ``--no-resample`` (``infer
+--no-resample``, ``resample: false`` in a YAML, the dashboard's box), so
+the server reads the data as its launcher was told to; see :ref:`resampling`.
 
 ``CELLMAP_FLOW_SERVER_COMMAND`` is ``cellmap_flow serve`` by default. A
 deployment whose environment is not on the compute nodes' ``PATH`` sets it:

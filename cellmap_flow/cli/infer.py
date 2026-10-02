@@ -93,7 +93,7 @@ def create_dynamic_command(cli_name: str, config_class: Type[ModelConfig]):
         queue = kwargs.pop("queue", None)
         project = kwargs.pop("project", None)
         server_check = kwargs.pop("server_check", False)
-        resample = kwargs.pop("resample", False)
+        resample = kwargs.pop("resample", True)
         env = kwargs.pop("env", None)
 
         # Fall back to the saved settings if not provided

@@ -189,9 +189,10 @@ def _generate(pipeline, job_name):
     separate_zarrs = input_params.get("separate_bounding_boxes_zarrs", False)
     if separate_zarrs:
         task["separate_bounding_boxes_zarrs"] = True
-    # The dashboard's Resample setting, as the models it serves use it.
-    if get_session().resample:
-        task["resample"] = True
+    # The dashboard's Resample setting, as the models it serves use it; a
+    # task resamples unless it says resample: false.
+    if not get_session().resample:
+        task["resample"] = False
     if len(pipeline.models) > 1 and pipeline.model_mode:
         task["model_mode"] = pipeline.model_mode
     if pipeline.normalizers or pipeline.postprocessors:

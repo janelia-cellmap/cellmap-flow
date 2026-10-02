@@ -155,9 +155,10 @@ def test_chunks_go_out_in_zarr_order(shape, axes, expected):
 RESAMPLE_OR_RELABEL = {
     # 16x4x4 nm data resampled to the model's 8 nm from its corner, (-8, -2, -2).
     "--resample": ([-4.0, 2.0, 2.0], [32, 8, 8, 1], [8, 8, 8], [16, 4, 4], None),
-    # Without it, read voxel for voxel as if at 8 nm: the output really is at 16x4x4.
-    "": ([0.0, 0.0, 0.0], [16, 16, 16, 1], [16, 4, 4], None, [16, 4, 4]),
+    # With --no-resample, read voxel for voxel as if at 8 nm: the output really is at 16x4x4.
+    "--no-resample": ([0.0, 0.0, 0.0], [16, 16, 16, 1], [16, 4, 4], None, [16, 4, 4]),
 }
+RESAMPLE_OR_RELABEL[""] = RESAMPLE_OR_RELABEL["--resample"]  # the default
 
 
 @pytest.mark.parametrize("flag", RESAMPLE_OR_RELABEL)
@@ -188,7 +189,7 @@ def test_cellmap_flow_serve_resample_serves_the_model_its_own_voxel_size(ome_pyr
     assert (info["effective_output_voxel_size"], info["input_resampled_from"], info["input_relabelled_from"]) == (
         effective, resampled_from, relabelled_from)
     # Each chunk is the model (the identity) on the input read the same way.
-    reader = ImageDataInterface(path, voxel_size=(8, 8, 8), on_voxel_size_mismatch="resample" if flag else "relabel",
+    reader = ImageDataInterface(path, voxel_size=(8, 8, 8), on_voxel_size_mismatch="relabel" if flag == "--no-resample" else "resample",
                                 input_norms=[])
     for index in ("0.0.0.0", "0.1.1.0"):
         corner = server.origin + 32 * np.array([int(i) for i in index.split(".")[:3]])
