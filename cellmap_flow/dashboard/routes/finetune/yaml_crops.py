@@ -83,7 +83,7 @@ def _create_session_annotation_volume(
     What create-volume does, less the HTTP response: returns
     ``(volume_id, record)``.
     """
-    geometry = plan_volume(raw_dataset_path, config)
+    geometry = plan_volume(raw_dataset_path, config, resample=get_session().resample)
     volume_id, zarr_path, minio_url = serve_new_volume(
         geometry, corrections_dir, raw_dataset_path, model_name
     )

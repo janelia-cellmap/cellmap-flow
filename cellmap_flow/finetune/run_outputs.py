@@ -22,6 +22,8 @@ import shutil
 from datetime import datetime
 from pathlib import Path
 
+import numpy as np
+
 from cellmap_flow.finetune.model_loading import root_base_model_dict
 
 logger = logging.getLogger(__name__)
@@ -187,6 +189,7 @@ def write_serving_yaml(args, model_config, timestamp, *, is_lora: bool, export_d
     }
     yaml_path = generate_finetuned_model_yaml(
         **scheduler,
+        **trained_voxel_sizes(manifest, model_config),
         lora_adapter_path=str(export_root / "lora_adapter") if is_lora else None,
         weights_path=None if is_lora else str(export_root / "full_finetune" / "model_state_dict.pt"),
         # A LoRA adapter was trained on top of the whole base, finetune
@@ -204,3 +207,28 @@ def write_serving_yaml(args, model_config, timestamp, *, is_lora: bool, export_d
     logger.info(f"Generated YAML: {yaml_path}")
 
     return name, yaml_path
+
+
+def trained_voxel_sizes(manifest: dict, model_config) -> dict:
+    """The ``input_voxel_size``/``output_voxel_size`` the serving YAML declares:
+    the manifest's, for each that is not the model's own.
+
+    A volume made without resampling is at the raw level nearest the model's
+    voxel size, and the trainer read that level as it is, so the finetuned
+    model is a model at that level's size (FinetuneModelConfig's
+    ``trained_at_geometry``). A volume made resampling is at the model's own
+    sizes, and nothing is declared.
+    """
+    declared = {}
+    for key in ("input_voxel_size", "output_voxel_size"):
+        trained = manifest.get(f"{key}_nm")
+        if trained is None:
+            continue
+        try:
+            own = getattr(model_config.config, key)
+        except Exception as e:
+            logger.warning(f"Could not read the model's {key} to compare with the volume's: {e}")
+            continue
+        if not np.allclose(np.asarray(trained, dtype=float), np.asarray(own, dtype=float)):
+            declared[key] = [float(v) for v in trained]
+    return declared

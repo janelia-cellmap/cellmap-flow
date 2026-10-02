@@ -394,3 +394,18 @@ def test_the_cli_takes_every_model_type_the_job_manager_submits():
     for model_type in TRAINABLE_MODEL_TYPES:
         args = ["--corrections", "/c", "--output-dir", "/o", "--model-type", model_type]
         assert build_arg_parser().parse_args(args).model_type == model_type
+
+
+def test_the_serving_yaml_declares_the_voxel_size_the_finetune_was_trained_at():
+    """A volume made without resampling is at the raw level nearest the model's
+    voxel size, and the trainer read it as it is: the finetuned model is a
+    model at that size. Only a size that differs from the model's is written."""
+    from types import SimpleNamespace
+
+    from cellmap_flow.finetune.run_outputs import trained_voxel_sizes
+
+    model = SimpleNamespace(config=SimpleNamespace(input_voxel_size=(8, 8, 8), output_voxel_size=(8, 8, 8)))
+    relabelled = {"input_voxel_size_nm": [10.48, 8.0, 8.0], "output_voxel_size_nm": [8.0, 8.0, 8.0]}
+    assert trained_voxel_sizes(relabelled, model) == {"input_voxel_size": [10.48, 8.0, 8.0]}
+    assert trained_voxel_sizes({"input_voxel_size_nm": [8, 8, 8], "output_voxel_size_nm": [8, 8, 8]}, model) == {}
+    assert trained_voxel_sizes({}, model) == {}

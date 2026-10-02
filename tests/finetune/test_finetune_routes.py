@@ -787,3 +787,21 @@ def test_a_long_request_reports_its_progress_as_it_goes(routes, start, body, pro
     assert status == 200 and answer["success"]
     assert {k: answer["progress"][k] for k in ("phase", "done")} == {"phase": phase, "done": False}
     assert {"created_at", "updated_at"} <= set(answer["progress"])
+
+
+@pytest.mark.parametrize("resample", [True, False])
+def test_a_crop_import_follows_the_resample_box(monkeypatch, resample):
+    """The box was wired into creating a volume, not into importing crops,
+    which always snapped to the nearest raw level."""
+    from cellmap_flow.dashboard.routes.finetune import yaml_crops
+
+    planned = []
+    geometry = SimpleNamespace(record=lambda *a, **k: {})
+    monkeypatch.setattr(yaml_crops, "plan_volume", lambda path, config, **kw: planned.append(kw) or geometry)
+    monkeypatch.setattr(yaml_crops, "serve_new_volume", lambda *a: ("vol-1", "/v.zarr", "http://m/v"))
+    monkeypatch.setattr(yaml_crops, "session_store",
+                        lambda: SimpleNamespace(register_volume=lambda volume_id, **record: record))
+    get_session().resample = resample
+    yaml_crops._create_session_annotation_volume(
+        raw_dataset_path="/raw.zarr", corrections_dir="/c", model_name="m", config=None)
+    assert planned == [{"resample": resample}]

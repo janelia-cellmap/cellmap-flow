@@ -182,6 +182,10 @@ MODEL_OPTIONS = {
         ('base_model', ('-b', '--base-model'), (), 'text', False, None, False, 'Parameter: base_model (optional)'),
         NAME, SCALE,
         ('weights_path', ('-w', '--weights-path'), (), 'text', False, None, False, 'Parameter: weights_path (optional)'),
+        ('input_voxel_size', ('-i', '--input-voxel-size'), (), 'text', False, None, False,
+         'Parameter: input_voxel_size (optional)'),
+        ('output_voxel_size', ('-o', '--output-voxel-size'), (), 'text', False, None, False,
+         'Parameter: output_voxel_size (optional)'),
     ],
     'huggingface': [
         ('repo', ('-r', '--repo'), (), 'text', True, None, False, 'Parameter: repo'),
@@ -342,7 +346,8 @@ _LISTED = [
     ("bioimage", "BioModelConfig", "model_name, voxel_size, edge_length_to_process, name, scale", "model_name, voxel_size"),
     ("cellmap", "CellMapModelConfig", "folder_path, name, scale", "folder_path"),
     ("dacapo", "DaCapoModelConfig", "run_name, iteration, name, scale", "run_name, iteration"),
-    ("finetune", "FinetuneModelConfig", "lora_adapter_path, base_model, name, scale, weights_path", ""),
+    ("finetune", "FinetuneModelConfig",
+     "lora_adapter_path, base_model, name, scale, weights_path, input_voxel_size, output_voxel_size", ""),
     ("fly", "FlyModelConfig",
      "checkpoint_path, channels, input_voxel_size, output_voxel_size, name, input_size, output_size, scale",
      "checkpoint_path, channels, input_voxel_size, output_voxel_size"),
@@ -497,8 +502,7 @@ CONFIGS = {
                                     name="ft", scale="s1"),
         {'type': 'finetune', 'lora_adapter_path': '/runs/my run/lora_adapter', 'weights_path': None,
          'base_model': FLY_ENTRY, 'name': 'ft', 'scale': 's1', 'channels': ['mito', 'er'],
-         'checkpoint_path': '/ckpt/fly run/model.ts', 'input_voxel_size': [16, 16, 16],
-         'output_voxel_size': [8, 8, 8], 'input_size': [100, 100, 100], 'output_size': [20, 20, 20],
+         'checkpoint_path': '/ckpt/fly run/model.ts', 'input_size': [100, 100, 100], 'output_size': [20, 20, 20],
          'base_type': 'fly'},
         "finetune --lora-adapter-path '/runs/my run/lora_adapter' --base-model"
         " eyJ0eXBlIjoiZmx5IiwiY2hlY2twb2ludF9wYXRoIjoiL2NrcHQvZmx5IHJ1bi9tb2RlbC50cyIsImNoYW5uZWxzIjpbIm1pdG8iLCJlciJdLCJpbnB1dF92b3hlbF9zaXplIjpbMTYsMTYsMTZdLCJvdXRwdXRfdm94ZWxfc2l6ZSI6WzgsOCw4XSwiaW5wdXRfc2l6ZSI6WzEwMCwxMDAsMTAwXSwib3V0cHV0X3NpemUiOlsyMCwyMCwyMF0sIm5hbWUiOiJmbHkgYmFzZSJ9"
@@ -580,6 +584,8 @@ MODEL_CONFIG_TYPES = {
         _param_info("base_model", "dict", False, "textarea", None),
         _STR_NAME, _SCALE,
         _param_info("weights_path", "str", False, "file", None),
+        _param_info("input_voxel_size", "tuple", False, "textarea", None),
+        _param_info("output_voxel_size", "tuple", False, "textarea", None),
     ),
     "FlyModelConfig": _type_info(
         "FlyModelConfig", "Fly Model",

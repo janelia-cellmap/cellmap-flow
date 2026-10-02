@@ -31,7 +31,7 @@ from typing import Any
 
 import numpy as np
 
-from cellmap_flow.models.geometry import DEFAULT_OUTPUT_AXES, ModelGeometry
+from cellmap_flow.models.geometry import DEFAULT_OUTPUT_AXES, ModelGeometry, _voxels
 
 logger = logging.getLogger(__name__)
 
@@ -354,7 +354,8 @@ class ModelConfig:
             # TensorFlow/ONNX/cellpose scripts set model to None or a non-torch
             # object and run through process_chunk; there is nothing to forward.
             return
-        input_size = np.array(config.read_shape) // np.array(config.input_voxel_size)
+        # Not //: 1865.44 / 10.48 is a hair under 178 in floats.
+        input_size = _voxels(config.read_shape, config.input_voxel_size)
 
         try:
             first_param = next(model.parameters(), None)
@@ -378,10 +379,8 @@ class ModelConfig:
         contradicts the declared write_shape, block_shape or output_channels.
         """
         config = self._config
-        input_size = np.array(config.read_shape) // np.array(config.input_voxel_size)
-        declared_output_size = np.array(config.write_shape) // np.array(
-            config.output_voxel_size
-        )
+        input_size = np.array(_voxels(config.read_shape, config.input_voxel_size))
+        declared_output_size = np.array(_voxels(config.write_shape, config.output_voxel_size))
         declared_block_spatial = np.array(config.block_shape)[:3]
         actual_output = np.array(tuple(output_shape)[1:])  # drop batch dim
         # Determine actual spatial shape (skip channel dim if present)

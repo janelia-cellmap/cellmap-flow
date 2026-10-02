@@ -47,7 +47,8 @@ SERVE_FORMS = {
                                input_size=(100, 100, 100), output_size=(20, 20, 20)),
         lambda: BioModelConfig(model_name="affable-shark", voxel_size=(8, 8, 8), edge_length_to_process=64, name="bio"),
         lambda: FinetuneModelConfig(lora_adapter_path="/runs/my run/lora_adapter",
-                                    base_model={"type": "script", "script_path": "/a b/c.py"}, name="ft"),
+                                    base_model={"type": "script", "script_path": "/a b/c.py"}, name="ft",
+                                    input_voxel_size=(10.48, 8, 8), output_voxel_size=(10.48, 8, 8)),
         lambda: HuggingFaceModelConfig(repo="cellmap/mito-v1", revision="abc123", name="m v1"),
     ],
     ids=["script", "dacapo", "fly", "bio", "finetune", "huggingface"],
@@ -265,3 +266,24 @@ def test_an_unsafe_script_is_refused_only_when_asked(tmp_path, monkeypatch, sett
     else:
         with pytest.raises(ValueError, match="Unsafe script"):
             load_safe_config(str(script), force_safe=argument)
+
+
+def test_a_finetune_declares_the_voxel_size_it_was_trained_at():
+    """An 8 nm model finetuned on hela-2's 10.48x8x8 level, read as it is, is
+    a 10.48x8x8 model: the same voxel counts at that size, and a server picks
+    that level exactly instead of relabelling the nearest with a warning."""
+    from types import SimpleNamespace
+
+    from cellmap_flow.models.configs.finetune import trained_at_geometry
+
+    base = SimpleNamespace(input_voxel_size=(8, 8, 8), output_voxel_size=(8, 8, 8),
+                           read_shape=(1424, 1424, 1424), write_shape=(448, 448, 448))  # 178 and 56 voxels
+    at = trained_at_geometry(base, input_voxel_size=(10.48, 8, 8), output_voxel_size=(10.48, 8, 8))
+    assert (at["input_voxel_size"], at["read_shape"]) == ((10.48, 8, 8), (1865.44, 1424, 1424))
+    assert (at["output_voxel_size"], at["write_shape"]) == ((10.48, 8, 8), (586.88, 448, 448))
+    assert trained_at_geometry(base) == {"input_voxel_size": (8, 8, 8), "output_voxel_size": (8, 8, 8),
+                                         "read_shape": (1424, 1424, 1424), "write_shape": (448, 448, 448)}
+    # The CLI's string form, and a whole size kept an int.
+    config = FinetuneModelConfig(lora_adapter_path="/a", base_model={"type": "script", "script_path": "/s.py"},
+                                 input_voxel_size="10.48,8,8")
+    assert config.input_voxel_size == (10.48, 8, 8) and config.to_dict()["input_voxel_size"] == [10.48, 8, 8]
