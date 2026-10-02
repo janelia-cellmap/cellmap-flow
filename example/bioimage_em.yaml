@@ -1,0 +1,22 @@
+# A BioImage Model Zoo model on jrc_mus-salivary-1: "conscientious-dromedary",
+# a 3D residual U-Net for mitochondria in EM (two channels: foreground and
+# boundaries). bioimageio.core downloads it from the zoo on first use and
+# runs its own preprocessing, so the uint8 EM goes in as it is.
+#   cellmap_flow yaml example/bioimage_em.yaml
+# Its server runs in pixi.toml's `bioimageio` environment, the bioimage type's
+# default; no `env:` is needed.
+data_path: "/nrs/cellmap/data/jrc_mus-salivary-1/jrc_mus-salivary-1.zarr/recon-1/em/fibsem-uint8"
+
+charge_group: "cellmap"
+
+queue: "gpu_h100"
+
+models:
+  mito_bioimageio:
+    type: "bioimage"
+    # A zoo id (nickname), or the URL or path of a model's rdf.yaml or zip.
+    model_name: "conscientious-dromedary"
+    # A model description has no physical voxel size: this is the level read
+    # (s0, 8 nm), and the model sees 20 x 256 x 256 voxels of it per chunk.
+    voxel_size: [8, 8, 8]
+    scale: "s0"

@@ -3,7 +3,8 @@
 The shapes come from the model's test input and output. A 2-D model's
 batch axis stands in for z. Chunks go through ``process_chunk_bioimage``,
 bound onto the built Config, whose output ``format_output_bioimage``
-puts channels first and scales to uint8.
+puts channels first and scales to uint8. Its server runs in pixi.toml's
+``bioimageio`` environment unless the entry names another ``env``.
 """
 
 import copy
@@ -22,6 +23,9 @@ if TYPE_CHECKING:
 class BioModelConfig(ModelConfig):
 
     cli_name = "bioimage"
+    # bioimageio.core and its backends are not in cellmap-flow's own
+    # environment; pixi.toml's `bioimageio` environment has them.
+    default_env = "bioimageio"
 
     def __init__(
         self,
@@ -94,13 +98,13 @@ class BioModelConfig(ModelConfig):
         return config
 
     def load_input_information(self, model):
-        from bioimageio.core.digest_spec import get_test_inputs
+        from bioimageio.core.digest_spec import get_test_input_sample
 
-        input_sample = get_test_inputs(model)
+        input_sample = get_test_input_sample(model)
         if len(input_sample.members) > 1:
             raise ValueError("Only one input tensor is supported")
 
-        input_name, input_axes, input_dims, is_2d_with_batch = self.get_and_dims(
+        input_name, input_axes, input_dims, is_2d_with_batch = self.get_axes_and_dims(
             input_sample
         )
         input_spatial_dims = self.get_spatial_dims(input_axes, input_dims)
@@ -114,9 +118,9 @@ class BioModelConfig(ModelConfig):
         )
 
     def load_output_information(self, model):
-        from bioimageio.core.digest_spec import get_test_outputs
+        from bioimageio.core.digest_spec import get_test_output_sample
 
-        output_sample = get_test_outputs(model)
+        output_sample = get_test_output_sample(model)
         output_names, output_axes, _, _ = self.get_axes_and_dims(output_sample)
         finalized_output, finalized_output_axes = format_output_bioimage(
             None, output_sample, output_names, copy.deepcopy(output_axes)

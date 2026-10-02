@@ -81,8 +81,9 @@ lsd-lite = { git = "https://github.com/neptunes5thmoon/lsd-lite.git", rev = "055
 [feature.dacapo.pypi-dependencies]
 dacapo-ml = "*"
 
+# For the `bioimage` model type, which defaults to this environment.
 [feature.bioimageio.pypi-dependencies]
-bioimageio-core = { version = "==0.7.0", extras = ["onnx", "pytorch"] }
+bioimageio-core = { version = "==0.11.0", extras = ["onnx", "pytorch"] }
 
 [feature.test.dependencies]
 pytest = "*"
