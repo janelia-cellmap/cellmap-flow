@@ -97,12 +97,41 @@ export function initGoodRegions({ log }) {
   // answer that changed labels. A box too large to label without asking is
   // answered needs_confirmation, and sent again confirmed; the button stays
   // busy until that answer too.
-  function labelView(button, url, what, describe, confirmed) {
+  // The seed settings (threshold, smallest object), kept in this browser,
+  // and shown when one is set so a seed never silently uses an old one.
+  const seedSettings = document.getElementById("seedSettings");
+  const seedThreshold = document.getElementById("seedThreshold");
+  const seedMinSize = document.getElementById("seedMinSize");
+  const SETTINGS_KEY = "cellmap_flow.seed_settings";
+  try {
+    const saved = JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}");
+    if (saved.threshold !== undefined && saved.threshold !== "") seedThreshold.value = saved.threshold;
+    if (saved.min_size !== undefined) seedMinSize.value = saved.min_size;
+  } catch (e) { /* no storage: defaults */ }
+  function seedBody() {
+    const body = {};
+    if (seedThreshold.value !== "") body.threshold = Number(seedThreshold.value);
+    if (Number(seedMinSize.value) > 0) body.min_size = Number(seedMinSize.value);
+    return body;
+  }
+  function rememberSeedSettings() {
+    try {
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify({ threshold: seedThreshold.value, min_size: seedMinSize.value }));
+    } catch (e) { /* no storage */ }
+  }
+  seedThreshold.addEventListener("change", rememberSeedSettings);
+  seedMinSize.addEventListener("change", rememberSeedSettings);
+  seedSettings.hidden = Object.keys(seedBody()).length === 0;
+  document.getElementById("seedSettingsBtn").addEventListener("click", () => {
+    seedSettings.hidden = !seedSettings.hidden;
+  });
+
+  function labelView(button, url, what, describe, confirmed, body = {}) {
     setBusy(button, true);
-    return postAnswer(url, confirmed ? { confirm: true } : {})
+    return postAnswer(url, confirmed ? { ...body, confirm: true } : body)
       .then((d) => {
         if (d.needs_confirmation && !confirmed) {
-          return confirm(d.error) ? labelView(button, url, what, describe, true) : undefined;
+          return confirm(d.error) ? labelView(button, url, what, describe, true, body) : undefined;
         }
         if (!d.success) {
           log.add(`Could not ${what}: ${d.error}`);
@@ -122,7 +151,8 @@ export function initGoodRegions({ log }) {
   function describeFill(d) {
     if (!d.reload_viewer) return "Nothing to label: every voxel of the view is labelled already.";
     const from = d.model ? ` from ${d.model}` : "";
-    return `Labelled the view${from}: ${d.filled_foreground} foreground and ${d.filled_background} background voxels`;
+    const how = d.threshold !== undefined && d.threshold !== null ? ` at threshold ${d.threshold}` : "";
+    return `Labelled the view${from}${how}: ${d.filled_foreground} foreground and ${d.filled_background} background voxels`;
   }
 
   function describeSplit(d) {
@@ -136,7 +166,7 @@ export function initGoodRegions({ log }) {
 
   const seedViewBtn = document.getElementById("seedViewBtn");
   seedViewBtn.addEventListener("click", () =>
-    labelView(seedViewBtn, "/api/finetune/view-labels/seed", "seed the view", describeFill));
+    labelView(seedViewBtn, "/api/finetune/view-labels/seed", "seed the view", describeFill, false, seedBody()));
   const backgroundViewBtn = document.getElementById("backgroundViewBtn");
   backgroundViewBtn.addEventListener("click", () =>
     labelView(backgroundViewBtn, "/api/finetune/view-labels/background", "label the view background", describeFill));

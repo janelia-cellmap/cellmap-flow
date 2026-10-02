@@ -248,9 +248,12 @@ def test_split_merges_objects_a_stroke_joins_and_keeps_the_rest(dashboard, serve
     assert (labels[4:12, 4:12, 4:12] == 10).all() and (labels[0:3, 0:3, 0:3] == 20).all()
 
 
-def test_a_label_change_re_adds_the_paint_layer_so_neuroglancer_re_reads_it(dashboard, served, viewer):
+def test_a_label_change_re_adds_the_paint_layer_so_neuroglancer_re_reads_it(dashboard, served, viewer, monkeypatch):
     """Neuroglancer keeps the chunks it has read; the page used to reload the
     whole viewer, which had every server recompute the view."""
+    from cellmap_flow.dashboard.routes.finetune import overlay
+
+    monkeypatch.setattr(overlay, "LAYER_REFRESH_PAUSE_SECONDS", 0)
     served()
     with viewer.txn() as s:
         s.layers["annotation_vol-1"] = neuroglancer.SegmentationLayer(
@@ -268,3 +271,22 @@ def test_a_label_change_re_adds_the_paint_layer_so_neuroglancer_re_reads_it(dash
     assert layers["annotation_vol-1"].layer.tab == "Draw"
     # Nothing to re-read when nothing changed.
     assert dashboard.post(BACKGROUND, json={}).get_json()["layer_refreshed"] is False
+
+
+def test_the_seed_settings_raise_the_threshold_and_drop_specks(dashboard, served, server):
+    """A probability of 0.6 is foreground at the model's boundary and background
+    at 0.7; a lone voxel is a speck once min_size is 2."""
+    labels = served()
+    foreground = np.zeros((16,) * 3, bool)
+    foreground[5:9, 5:9, 5:9] = True
+    foreground[10, 10, 10] = True  # a one-voxel speck
+    server.prediction = _predicting(foreground, low=0.1, high=0.6)
+
+    body = dashboard.post(SEED, json={"threshold": 0.7, "min_size": 2}).get_json()
+    assert body["success"] and body["filled_foreground"] == 0 and body["threshold"] == 0.7, body
+    assert (labels[BOX] == 1).all()
+
+    labels[BOX] = 0
+    body = dashboard.post(SEED, json={"min_size": 2}).get_json()
+    assert body["filled_foreground"] == 4 ** 3 and labels[10, 10, 10] == 1 and (labels[5:9, 5:9, 5:9] == 2).all()
+    assert dashboard.post(SEED, json={"threshold": 1.5}).status_code == 400

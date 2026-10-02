@@ -236,8 +236,8 @@ def read_prediction(host, model_name, volume, lo, hi, info):
     return prediction, new_lo, new_hi
 
 
-def foreground_mask(prediction, output_class=None, channels=None):
-    """Where the model says foreground: its probability over 0.5.
+def foreground_mask(prediction, output_class=None, channels=None, threshold=0.5):
+    """Where the model says foreground: its probability over ``threshold``.
 
     The decision boundary depends on the output's activation: 0.5 on [0, 1]
     output (a sigmoid already applied; the cellmap distance models end in
@@ -245,7 +245,8 @@ def foreground_mask(prediction, output_class=None, channels=None):
     unbounded output, logits or a signed distance alike. Each is turned into
     a probability first, so ``channels`` -- the affinity channels, say --
     can be averaged. ``output_class`` is the server's (serving.probe), or
-    read off the values when it has none.
+    read off the values when it has none. ``threshold`` is in probability
+    whatever the activation: 0.5 is the model's own boundary.
     """
     if channels is not None:
         prediction = prediction[channels]
@@ -258,7 +259,7 @@ def foreground_mask(prediction, output_class=None, channels=None):
         probability = (prediction + 1) / 2
     else:
         probability = expit(prediction)
-    return probability.mean(axis=0) > 0.5
+    return probability.mean(axis=0) > threshold
 
 
 def _seed_plan(base_model, select_channel):
@@ -288,10 +289,18 @@ def seed_view_from_prediction():
 
     JSON body, all optional: ``size_nm`` (as for mark-view), ``confirm``
     (label a large box), ``select_channel`` (the channel the session
-    trains, when it trains one).
+    trains, when it trains one), ``threshold`` (probability, 0 to 1; the
+    model's own boundary, 0.5, when absent) and ``min_size`` (objects of
+    fewer voxels are background).
     """
     data = request.get_json(silent=True) or {}
     try:
+        threshold = data.get("threshold")
+        if threshold is not None and not 0 <= float(threshold) <= 1:
+            raise _Refused(f"threshold must be between 0 and 1, got {threshold}", 400)
+        min_size = int(data.get("min_size") or 0)
+        if min_size < 0:
+            raise _Refused(f"min_size cannot be negative, got {min_size}", 400)
         volume_id, volume, lo, hi = _target_box(data)
         refused = _confirmation_needed(data, lo, hi)
         if refused:
@@ -305,15 +314,19 @@ def seed_view_from_prediction():
         channels, affinities = _seed_plan(base_model, data.get("select_channel"))
         info = fetch_model_info(host)
         prediction, lo, hi = read_prediction(host, model_name, volume, lo, hi, info)
-        foreground = foreground_mask(prediction, info.get("output_class"), channels)
+        foreground = foreground_mask(
+            prediction, info.get("output_class"), channels, 0.5 if threshold is None else float(threshold)
+        )
 
         def labels_for(existing):
             # Ids counting up need room: an affinity target on a uint16/uint32
             # instance volume gets them; a uint8 volume reuses free ids.
-            return fill.seed_labels(foreground, existing, count_up=affinities and existing.dtype.itemsize > 1)
+            return fill.seed_labels(
+                foreground, existing, count_up=affinities and existing.dtype.itemsize > 1, min_size=min_size
+            )
 
         answer = _fill(volume_id, volume, lo, hi, labels_for)
-        return jsonify({**answer, "model": model_name})
+        return jsonify({**answer, "model": model_name, "threshold": threshold})
     except _Refused as e:
         return _error(str(e), e.status)
     except FileNotFoundError as e:

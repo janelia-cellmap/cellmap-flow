@@ -75,7 +75,7 @@ def _fresh_ids(existing, count, count_up):
     return ids
 
 
-def seed_labels(foreground, existing, count_up=False):
+def seed_labels(foreground, existing, count_up=False, min_size=0):
     """Labels for a box from a foreground mask: an id per object inside, 1 outside.
 
     ``existing`` is what the box holds now. Each connected component of
@@ -85,7 +85,8 @@ def seed_labels(foreground, existing, count_up=False):
     user has already painted part of takes the id painted there most, or
     the unpainted rest of an object would be taught as a different object
     from its painted part. A binary or distance target reads every id as
-    foreground, so the ids cost it nothing.
+    foreground, so the ids cost it nothing. Components of fewer than
+    ``min_size`` voxels are background: specks the threshold let through.
     """
     labels = np.where(foreground, 2, 1).astype(existing.dtype)
     if not foreground.any():
@@ -93,6 +94,14 @@ def seed_labels(foreground, existing, count_up=False):
     from scipy.ndimage import label
 
     components, n = label(foreground)
+    if min_size > 1:
+        small = np.flatnonzero(np.bincount(components.ravel(), minlength=n + 1) < min_size)
+        speck = np.isin(components, small[small > 0])
+        foreground = foreground & ~speck
+        labels[speck] = 1
+        components[speck] = 0
+        if not foreground.any():
+            return labels
     ids = np.zeros(n + 1, dtype=np.int64)
     painted = (existing >= 2) & (components > 0)
     if painted.any():
