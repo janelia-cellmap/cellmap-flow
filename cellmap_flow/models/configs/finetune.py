@@ -133,6 +133,23 @@ class FinetuneModelConfig(ModelConfig):
         self._env = value
 
     @property
+    def default_env(self):
+        """The base model type's ``default_env``, as the weights need the base
+        model's packages. A type that decides per model decides for the base."""
+        from cellmap_flow.config.yaml import ConfigError
+        from cellmap_flow.models import envs
+        from cellmap_flow.models.registry import model_type
+
+        base = self.base_model_dict
+        try:
+            declared = envs.declared_default(model_type(base.get("type")))
+        except ConfigError:
+            return None  # building the base says what is wrong with its type
+        if envs.decides_per_model(declared):
+            return self.base_model_config.default_env
+        return declared
+
+    @property
     def base_model_config(self):
         """Lazily build the base ModelConfig from the stored dict."""
         if self._base_model_config is None:

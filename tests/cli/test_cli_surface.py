@@ -212,8 +212,9 @@ RESAMPLE = ('resample', ('--resample',), (), 'boolean', False, False, True,
             "When the dataset has no level at the model's input voxel size, resample a level to it, "
             "axis by axis, instead of reading the level as if it were at that size.")
 ENV = ('env', ('--env',), (), 'text', False, None, False,
-       "Run the server in this environment: a pixi environment of cellmap-flow's pixi.toml, "
-       "or the absolute path of one with cellmap-flow installed (default: this one)")
+       "Run the server in this environment: a pixi environment of cellmap-flow's pixi.toml, an alias "
+       "(cellmap_flow envs), or the absolute path of one with cellmap-flow installed; current: this one "
+       "(default: the model type's, else this one)")
 INFER = {t: [*options, ENV, RESAMPLE, SERVER_CHECK, PROJECT, QUEUE, DATA_PATH] for t, options in MODEL_OPTIONS.items()}
 # The server's own options: `serve` requires the model and data, and
 # cellmap_flow_server takes them instead of a type's command.
@@ -546,7 +547,7 @@ def _param_info(name, type_, required, input_type, default=...):
 
 # Every type's form also offers env, which no constructor takes (models.envs).
 _ENV = {"name": "env", "required": False, "type": "str", "input_type": "text",
-        "description": "Environment (pixi env name or absolute path; blank: this one)"}
+        "description": "Environment (pixi env, alias or path; blank: the type's default)"}
 
 
 def _type_info(class_name, display_name, *params):

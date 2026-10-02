@@ -158,6 +158,20 @@ def test_a_model_in_its_own_environment_is_trained_there(submit, pixi_manifest, 
     assert decode_model_entry(entry)["env"] == env
 
 
+class _DefaultEnvScript(_EnvScript):
+    """Of a type whose models run in cellpose4 unless their entry says otherwise."""
+
+    default_env = "cellpose4"
+
+
+@pytest.mark.parametrize("env", [None, "current"])
+def test_a_model_trains_in_its_types_default_environment_unless_it_opts_out(submit, pixi_manifest, env):
+    manifest = pixi_manifest()
+    job = submit(_DefaultEnvScript(env), geometry=GEOMETRY)
+    program = f"/opt/pixi run --frozen --manifest-path {manifest} -e cellpose4 python" if env is None else sys.executable
+    assert f"{program} -P -m cellmap_flow.finetune.finetune_cli --model-type script" in job.command
+
+
 def test_an_environment_that_cannot_import_the_trainer_is_refused(submit, pixi_manifest, tmp_path):
     pixi_manifest(default_feature=False)
     with pytest.raises(ValueError, match="'cellpose4' does not install peft"):

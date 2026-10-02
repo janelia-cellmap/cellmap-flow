@@ -17,9 +17,11 @@ describes it. What the rest of cellmap-flow reads:
 - ``command``: the ``cellmap_flow_server <type>`` arguments that rebuild
   it, which launchers passed before 0.3.0; that form of the server goes in
   the release after it.
-- ``env``: the environment its server runs in, when not this one
-  (``models.envs``). Set after construction, never a constructor argument;
-  to_dict() and launch_entry carry it.
+- ``env``: the environment its entry names for its server, when not this
+  one (``models.envs``). Set after construction, never a constructor
+  argument; to_dict() and launch_entry carry it.
+- ``default_env``: the environment a type's models run in when their
+  entry names none; ``effective_env``: the one a model runs in, of the two.
 """
 
 import functools
@@ -239,6 +241,11 @@ class ModelConfig:
     # `env`; it is not a constructor argument, because the server rebuilds
     # the model from the same entry and must not get it back.
     env = None
+    # The environment this type's models run in when their entry gives no
+    # `env` (`env: current` opts out). A subclass sets a name, or makes it a
+    # property that decides per model. Never written by to_dict(), which
+    # says only what the entry said; read through effective_env.
+    default_env = None
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
@@ -284,6 +291,14 @@ class ModelConfig:
     def __repr__(self) -> str:
         return self.__str__()
 
+    @property
+    def effective_env(self):
+        """The environment this model's server and finetuning job run in, or
+        None for this one: ``env``, else ``default_env`` (``envs.effective``)."""
+        from cellmap_flow.models import envs
+
+        return envs.model_env(self)
+
     def _get_config(self):
         raise NotImplementedError()
 
@@ -293,14 +308,17 @@ class ModelConfig:
             try:
                 self._config = self._get_config()
             except Exception as e:
+                from cellmap_flow.models import envs
+
                 missing = _missing_module(e)
-                if self.env and missing:
+                env = self.effective_env if missing else None
+                if env and not envs.is_running_in(env):
                     # The model's packages are in its own environment, not in
                     # this process's; say so rather than show a bare
                     # ImportError from deep inside its script.
                     label = getattr(self, "name", None) or type(self).__name__
                     raise ModelEnvError(
-                        f"Model {label} runs in its own environment ({self.env}), and this "
+                        f"Model {label} runs in its own environment ({env}), and this "
                         f"process cannot build it: {missing}. Read what you need from its "
                         "running server instead."
                     ) from e
@@ -523,9 +541,10 @@ class ModelConfig:
         to_dict(), less what only the pipeline builder shows (a Hugging Face
         repo's downloaded metadata), under the name the registry has this
         class under (``registry.cli_name_of``), so that the server rebuilds
-        this class and not a parent it inherited cli_name from. With an
-        ``env``, which ``serving.launch`` takes off again to start the server
-        in that environment.
+        this class and not a parent it inherited cli_name from. With the
+        entry's own ``env``, if it has one, which ``serving.launch`` takes off
+        again; the server's environment is ``effective_env``, which it reads
+        from the config.
         """
         entry = model_entry(type(self), self._launch_params())
         if self.env:
