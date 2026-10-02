@@ -196,7 +196,7 @@ function renderVoxelSizeAdvice(m, box, wanted) {
       div.innerHTML = "<strong>Wrong scale</strong>: " + model + " expects "
                     + esc(nm(m.input_voxel_size)) + " data, but the dataset has no such level, so it reads "
                     + esc(nm(relabelled)) + " data as if it were " + esc(nm(m.input_voxel_size))
-                    + ". Tick <em>Resample to each model's voxel size</em> in the Models tab and submit it again.";
+                    + ". Tick <em>Resample if no scale matches the model</em> in the Models tab and submit it again.";
       div.appendChild(adviceButton("btn btn-sm btn-link", "Dismiss",
         function () { hideAdvice(key); }));
     } else {

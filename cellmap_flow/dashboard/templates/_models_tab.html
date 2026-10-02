@@ -155,9 +155,9 @@
         ></select>
       </div>
       <div class="form-check mb-1"
-           title="When the data has no level at a model's input voxel size, resample the nearest level to it. Unticked, that level is read as if it were at the model's size, so the model sees the wrong scale. Applies to models submitted from now on, their finetunes and blockwise runs.">
+           title="The scale matching each model's voxel size is always picked when the data has one. When it has none, ticked resamples the nearest scale to the model's voxel size; unticked reads it as if it were that size, so the model sees the wrong scale. Applies to models submitted from now on, their finetunes and blockwise runs.">
         <input class="form-check-input" type="checkbox" id="resampleCheckbox" />
-        <label class="form-check-label" for="resampleCheckbox">Resample to each model's voxel size</label>
+        <label class="form-check-label" for="resampleCheckbox">Resample if no scale matches the model</label>
       </div>
       <button type="button" class="btn btn-primary" id="submitModelsBtn">
         Submit Models
