@@ -148,7 +148,49 @@ Available Model Types
      - HuggingFaceModelConfig
      - ``repo`` (required), ``revision`` (optional). See :doc:`huggingface`.
 
-Common optional parameters: ``name``, ``scale``.
+Common optional parameters: ``name``, ``scale``, ``env`` (see :ref:`model-env`).
+
+.. _model-env:
+
+Running a model in its own environment
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+A model whose packages conflict with cellmap-flow's environment (Cellpose 4,
+transformer models) can run in an environment of its own. Give its entry an
+``env``:
+
+.. code-block:: yaml
+
+    models:
+      cellpose_sam:
+        type: script
+        script_path: example/cellpose_sam_model.py
+        env: cellpose4
+
+``env`` is either
+
+- the name of an environment in cellmap-flow's ``pixi.toml``. The server runs
+  as ``pixi run --frozen --manifest-path <pixi.toml> -e cellpose4 cellmap_flow serve ...``,
+  and pixi installs the environment from the lockfile the first time. The
+  manifest is the one in the checkout cellmap-flow is installed from; set
+  ``CELLMAP_FLOW_PIXI_MANIFEST`` to use another. cellmap-flow's ``pixi.toml``
+  has ``cellpose4`` (Cellpose 4, for Cellpose-SAM), ``dacapo`` and
+  ``bioimageio``; or
+- the absolute path of a conda environment or virtualenv with cellmap-flow
+  installed. The server runs as ``<path>/bin/python -P -m cellmap_flow.cli.main serve ...``.
+
+A value with a ``/`` in it, or starting with ``~``, is a path. An unknown name,
+or a path without ``bin/python``, is an error when the YAML is read.
+
+Only the model's inference server and its finetuning job run there. The
+dashboard reads the model's geometry from its running server rather than
+building the model itself; blockwise runs models in its own process, so run
+``pixi run -e cellpose4 cellmap_flow blockwise ...`` for such a model. A
+finetuning job needs ``peft`` in the environment: a pixi environment that
+does not install it is refused when the job is submitted.
+
+``cellmap_flow infer <type> --env <env>`` and the dashboard's model form take
+it too. ``example/cellpose_sam.yaml`` runs Cellpose-SAM this way.
 
 .. _channel-names:
 
