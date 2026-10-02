@@ -1,6 +1,8 @@
 // Good regions: views the user marks as ones the model already gets right.
 // Training rehearses them (holds the model to what it predicts there), and
-// the rehearsal setting's hint says how much that will weigh.
+// the rehearsal setting's hint says how much that will weigh. Beside them,
+// two buttons label the same patch at once (routes/finetune/view_labels.py):
+// from the model's prediction, or all background.
 import { setBusy } from "../../lib/dom.js";
 import { getAnswer, postAnswer } from "./requests.js";
 
@@ -80,6 +82,48 @@ export function initGoodRegions({ log }) {
       })
       .catch(() => {});
   });
+
+  // Neuroglancer keeps the chunks it has read, so new labels show only after
+  // it reloads. The iframe gets its state back from the dashboard: the same
+  // view, layers and position. Absent when no viewer is connected.
+  function reloadViewer() {
+    const frame = document.querySelector("#my_iframe");
+    if (frame) frame.src = frame.src;
+  }
+
+  // what: "seed the view", say, for the log. A box too large to label
+  // without asking is answered needs_confirmation, and sent again confirmed;
+  // the button stays busy until that answer too.
+  function labelView(button, url, what, confirmed) {
+    setBusy(button, true);
+    return postAnswer(url, confirmed ? { confirm: true } : {})
+      .then((d) => {
+        if (d.needs_confirmation && !confirmed) {
+          return confirm(d.error) ? labelView(button, url, what, true) : undefined;
+        }
+        if (!d.success) {
+          log.add(`Could not ${what}: ${d.error}`);
+          alert(`Could not ${what}:\n\n${d.error}`);
+        } else if (d.reload_viewer) {
+          const from = d.model ? ` from ${d.model}` : "";
+          log.add(`Labelled the view${from}: ${d.filled_foreground} foreground and ` +
+                  `${d.filled_background} background voxels; reloading the viewer`);
+          reloadViewer();
+        } else {
+          log.add("Nothing to label: every voxel of the view is labelled already.");
+        }
+        log.showEnd();
+      })
+      .catch((e) => log.add(`Could not ${what}: ${e}`))
+      .finally(() => setBusy(button, false));
+  }
+
+  const seedViewBtn = document.getElementById("seedViewBtn");
+  seedViewBtn.addEventListener("click", () =>
+    labelView(seedViewBtn, "/api/finetune/view-labels/seed", "seed the view"));
+  const backgroundViewBtn = document.getElementById("backgroundViewBtn");
+  backgroundViewBtn.addEventListener("click", () =>
+    labelView(backgroundViewBtn, "/api/finetune/view-labels/background", "label the view background"));
 
   rehearsalFraction.addEventListener("change", updateRehearsalHint);
 

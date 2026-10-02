@@ -6,7 +6,8 @@
 // - models.js: the model picker;
 // - crops.js: New Volume, Load Crops from YAML, annotated regions, Save;
 // - sessions.js: Resume Existing Volume;
-// - good-regions.js: Mark This View as Good, Clear, and the rehearsal hint;
+// - good-regions.js: Mark This View as Good, Clear, the rehearsal hint, and
+//   Seed from Prediction and All Background over the same patch;
 // - job-monitor.js: submit, the status poll, Restart, Stop Early, Cancel,
 //   and the job restored after a reload, with job-card.js (the Training
 //   Status card), log-stream.js (the Training Logs text) and loss-plot.js

@@ -87,6 +87,14 @@
             title="Remove all good regions from this session">
       Clear
     </button>
+    <button type="button" class="btn btn-outline-primary btn-sm ms-2" id="seedViewBtn"
+            title="Fills the unpainted voxels of the same patch from the model's prediction (its latest finetuned iteration, if one is served), thresholded at its decision boundary: foreground 2, or an id per object for an affinity model on an instance volume, background 1. Your strokes are kept. Then fix it with the brush. The viewer reloads to show it.">
+      Seed from Prediction
+    </button>
+    <button type="button" class="btn btn-outline-primary btn-sm ms-1" id="backgroundViewBtn"
+            title="Labels every unpainted voxel of the same patch background (1), for a region of false positives. Your strokes are kept. The viewer reloads to show it.">
+      All Background
+    </button>
     <small class="form-text text-muted d-block mt-1">Marks the patch on screen as already right.</small>
   </div>
 

@@ -12,6 +12,8 @@ dashboard.app registers. Each module has its own:
 - ``overlay``: an annotation volume's layer, the annotated-regions boxes,
   and syncing the annotations from MinIO;
 - ``good_regions``: marking the current view as a region the model gets right;
+- ``view_labels``: labelling the view from the model's prediction, or all
+  background;
 - ``instance_correction``: instance-correction volumes;
 - ``layers``: adding, removing and renaming viewer layers.
 """
@@ -24,6 +26,7 @@ from cellmap_flow.dashboard.routes.finetune import (  # noqa: F401  (each adds i
     layers,
     overlay,
     training,
+    view_labels,
     yaml_crops,
 )
 from cellmap_flow.dashboard.routes.finetune.blueprint import finetune_bp
