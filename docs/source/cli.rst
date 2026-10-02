@@ -39,6 +39,10 @@ Commands
      - The same for every model a YAML file lists, with its normalization
        and postprocessing (:doc:`yaml_config`). ``--validate-only`` checks
        the file; ``--list-types`` lists the model types.
+   * - ``add REF``
+     - Print the model entry for a path, URL, Hugging Face repo, zoo nickname
+       or Cellpose model name, as YAML for a config's ``models:``; ``--run
+       -d DATA`` serves it right away (:ref:`resolving-models`).
    * - ``view -d DATA``
      - Open a dataset in the viewer and serve the dashboard, where models are
        picked and submitted. ``-P`` bills them to a project; by default it is

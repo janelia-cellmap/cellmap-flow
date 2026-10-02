@@ -66,6 +66,15 @@ from cellmap_flow.models.registry import describe_types
 assert {"BioModelConfig", "DaCapoModelConfig"} <= set(describe_types())
 check([], LIGHT + ["bioimageio", "dacapo", "cellmap_models", "fly_organelles", "cellpose", "torch", "huggingface_hub", "peft"])
 """,
+    # The dashboard resolves what is pasted into its model form; resolving
+    # reads names and files, and loads no model's framework.
+    "resolve": """
+check(["cellmap_flow.models.resolve"], LIGHT + ["cellmap_flow.models.models_config", "numpy", "torch", "huggingface_hub"])
+from cellmap_flow.models.resolve import resolve
+resolve("cpsam", voxel_size=8, online=False)
+resolve("cellmap/mito", online=False)
+check([], LIGHT + ["torch", "huggingface_hub", "peft", "cellpose", "bioimageio", "cellmap_models", "fly_organelles"])
+""",
     # A chain is read wherever one is listed; its steps import what they need.
     "chain": """
 check(["cellmap_flow.pipeline_spec", "cellmap_flow.process_chain"], LIGHT + ["torch", "huggingface_hub", "peft",
