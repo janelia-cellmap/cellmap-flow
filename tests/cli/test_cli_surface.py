@@ -208,6 +208,7 @@ PLUGIN_FILE = [
     ('force', ('--force',), (), 'boolean', False, False, True, 'Overwrite existing plugin with the same name.'),
 ]
 PLUGIN_NAME = [('name', ('name',), (), 'text', True, None, False, None)]
+ENV_NAME = PLUGIN_NAME
 RESAMPLE = ('resample', ('--resample',), (), 'boolean', False, False, True,
             "When the dataset has no level at the model's input voxel size, resample a level to it, "
             "axis by axis, instead of reading the level as if it were at that size.")
@@ -238,6 +239,10 @@ CELLMAP_FLOW = {
     'dashboard': [('neuroglancer_url', ('-n', '--neuroglancer-url'), (), 'text', False, None, False,
                    "The viewer the dashboard's page embeds.")],
     'doctor': [('core_only', ('--core-only',), (), 'boolean', False, False, True, 'Skip the finetune checks.')],
+    'envs': [],
+    'envs check': ENV_NAME,
+    'envs install': ENV_NAME,
+    'envs list': [],
     'finetune': [],
     'finetune build-corrections': PASSED_THROUGH,
     'finetune export-merged': PASSED_THROUGH,
