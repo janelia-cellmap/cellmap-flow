@@ -589,3 +589,25 @@ textarea.form-control[readonly] {
   font-size: 13px;
   color: var(--text-muted);
 }
+
+
+/* ---------- Models tab: Add a model ---------- */
+.add-model-result {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 8px 10px;
+}
+
+.add-model-fields {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 6px 10px;
+}
+
+.add-model-fields label {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  margin: 0;
+}

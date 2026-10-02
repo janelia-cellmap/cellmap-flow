@@ -484,6 +484,109 @@ export function initModelsTab({ onModelsSubmitted } = {}) {
       });
   });
 
+  // Add a model: resolve what was pasted (POST /api/models/resolve), ask for
+  // what it still needs, and run it (POST /api/models/add). The model then
+  // gets a ticked box in the catalog's list, so Submit keeps it running.
+  const addRef = document.getElementById("addModelRef");
+  const addResult = document.getElementById("addModelResult");
+  const addFields = document.getElementById("addModelFields");
+  const addRunBtn = document.getElementById("addModelRunBtn");
+  let resolved = null;
+
+  function field(label, key, value, title) {
+    const id = "addModel_" + key;
+    const lab = document.createElement("label");
+    lab.htmlFor = id;
+    lab.textContent = label;
+    const input = document.createElement("input");
+    input.className = "form-control form-control-sm";
+    input.id = id;
+    input.dataset.key = key;
+    input.value = value || "";
+    if (title) input.title = title;
+    addFields.append(lab, input);
+  }
+
+  // A typed value as the entry wants it: numbers and lists of numbers as
+  // such, a JSON object (a finetune's base_model) parsed, else the text.
+  function typed(text) {
+    const value = text.trim();
+    if (value.startsWith("{")) return JSON.parse(value);
+    const parts = value.split(/[\s,]+/).filter(Boolean);
+    if (parts.length && parts.every((p) => /^-?\d+(\.\d+)?$/.test(p))) {
+      const numbers = parts.map(Number);
+      return numbers.length === 1 ? numbers[0] : numbers;
+    }
+    return value;
+  }
+
+  function showResolved(d) {
+    resolved = d;
+    addResult.hidden = false;
+    addFields.replaceChildren();
+    const env = d.env ? `runs in ${d.env}` : "runs in this environment";
+    document.getElementById("addModelSummary").textContent = `${d.type}: ${d.how} (${env})`;
+    document.getElementById("addModelNotes").textContent = (d.notes || []).join(" ");
+    field("Name", "name", d.name, "The model's name: its layer and job are called so.");
+    (d.needs || []).forEach((key) => field(key.replace(/_/g, " "), key, "",
+      "Not known from the reference: give it here (numbers as 8 or 16,8,8)."));
+  }
+
+  function addedBox(name) {
+    const div = document.createElement("div");
+    div.className = "form-check mb-1";
+    const input = document.createElement("input");
+    input.className = "form-check-input model-checkbox";
+    input.type = "checkbox";
+    input.value = name;
+    input.id = "chk_added_" + name;
+    input.checked = true;
+    const label = document.createElement("label");
+    label.className = "form-check-label";
+    label.htmlFor = input.id;
+    label.textContent = name;
+    div.append(input, label);
+    document.getElementById("addedModels").appendChild(div);
+  }
+
+  document.getElementById("addModelResolveBtn").addEventListener("click", function () {
+    const ref = addRef.value.trim();
+    if (!ref) return;
+    postJSON("/api/models/resolve", { ref })
+      .then(showResolved)
+      .catch((err) => {
+        addResult.hidden = true;
+        alert("Could not resolve that model: " + (err instanceof ApiError ? err.message : err));
+      });
+  });
+
+  addRunBtn.addEventListener("click", function () {
+    if (!resolved) return;
+    const entry = { type: resolved.type, ...resolved.params, name: resolved.name };
+    try {
+      addFields.querySelectorAll("input").forEach((input) => {
+        if (input.value.trim() !== "") entry[input.dataset.key] = typed(input.value);
+      });
+    } catch (e) {
+      alert("Could not read a value: " + e.message);
+      return;
+    }
+    const missing = (resolved.needs || []).filter((key) => entry[key] === undefined);
+    if (missing.length) {
+      alert("Still needed: " + missing.join(", "));
+      return;
+    }
+    postJSON("/api/models/add", { entry })
+      .then((d) => {
+        addedBox(d.name);
+        addResult.hidden = true;
+        addRef.value = "";
+        logArea.value += `Added ${d.name}: starting its server\n`;
+        if (onModelsSubmitted) onModelsSubmitted();
+      })
+      .catch((err) => alert("Could not add that model: " + (err instanceof ApiError ? err.message : err)));
+  });
+
   submitBtn.addEventListener("click", function () {
     // Gather checked local catalog models
     const checkedLocal = document.querySelectorAll("#modelSelectionForm input.model-checkbox:checked");

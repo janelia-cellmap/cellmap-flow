@@ -113,3 +113,33 @@ def test_the_resample_box_reaches_the_servers_and_the_exported_config(viewer, da
     assert len(commands) == 1 and ("--resample" in commands[0].split()) is resample
     exported = yaml.safe_load(dashboard.get("/api/export-config").data)
     assert exported.get("resample", False) is resample
+
+
+def test_add_builds_a_pasted_models_entry_and_runs_it_in_its_environment(viewer, dashboard, monkeypatch, tmp_path):
+    """POST /api/models/add: what the Models tab's Add sends once resolve's
+    needs are filled in."""
+    script = tmp_path / "m.py"
+    script.write_text("x = 1\n")
+    commands = []
+    monkeypatch.setattr(launch, "start_hosts", lambda command, *args, **kwargs: commands.append(command))
+    monkeypatch.setattr(launch.threading, "Thread", _InlineThread)
+    from cellmap_flow.dashboard.routes import model_resolve
+
+    monkeypatch.setattr(model_resolve, "threading", launch.threading, raising=False)
+    import threading as _threading
+
+    monkeypatch.setattr(_threading, "Thread", lambda target, args=(), daemon=None: _InlineThread(target, args))
+    process_chain().input_norms, process_chain().postprocess = [], []
+    session = get_session()
+    session.jobs, session.dataset_path = [], "/data/raw.zarr"
+
+    answer = dashboard.post("/api/models/add", json={"entry": {"type": "script", "script_path": str(script), "name": "mine"}})
+    assert answer.status_code == 200 and answer.get_json()["name"] == "mine"
+    assert [m.name for m in session.models_config] == ["mine"]
+    assert len(commands) == 1 and "serve" in commands[0] and str(script) in commands[0]
+
+    session.jobs = [_Job("mine")]
+    assert dashboard.post("/api/models/add", json={"entry": {"type": "script", "script_path": str(script),
+                                                             "name": "mine"}}).status_code == 409
+    bad = dashboard.post("/api/models/add", json={"entry": {"type": "nope", "name": "x"}})
+    assert bad.status_code == 400 and "nope" in bad.get_json()["error"]

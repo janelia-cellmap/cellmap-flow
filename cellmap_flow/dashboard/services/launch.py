@@ -12,7 +12,7 @@
 """
 
 from cellmap_flow.dashboard.state import get_session
-from cellmap_flow.serving.launch import server_command_for
+from cellmap_flow.serving.launch import server_command, server_command_for
 from cellmap_flow.jobs.launch import start_hosts
 from cellmap_flow.jobs.spec import JobStartError
 from cellmap_flow.viewer.raw import PREDICTION_COLORS
@@ -86,6 +86,17 @@ def run_hf_model(repo, name, st_data):
     command = server_command_for("huggingface", {"repo": repo, "name": name}, session.dataset_path, session.resample)
     logger.info(f"To be submitted HF command : {command}")
     job = _start(command, name)
+    if job is not None:
+        _show(job, st_data)
+
+
+def run_model_config(model_config, st_data):
+    """Run a model given as its config (an entry the Models tab's Add built),
+    in its environment, as Submit runs the catalog's."""
+    session = get_session()
+    command = server_command(model_config, session.dataset_path, session.resample)
+    logger.info(f"To be submitted command : {command}")
+    job = _start(command, model_config.name)
     if job is not None:
         _show(job, st_data)
 

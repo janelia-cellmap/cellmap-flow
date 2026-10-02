@@ -118,6 +118,7 @@ Commands:
   blockwise  Run the model a blockwise YAML describes over the whole...
   dashboard  Serve the dashboard alone, for a viewer already running.
   doctor     Check the environment: what is installed, what is missing,...
+  add        Resolve a model reference into a model entry, and optionally run it.
   envs       The environments models run in, besides this one.
   finetune   The finetune tools.
   infer      Start a model's inference server, then open the viewer on...
@@ -153,6 +154,17 @@ server runs in. In a YAML it is the model entry's `type`; on the command line,
 `cellmap_flow infer <type>`; in the dashboard, the Models tab lists the
 CellMap catalog, the `cellmap/*` Hugging Face models and the BioImage Model
 Zoo. `cellmap_flow models` lists every type and its arguments.
+
+You rarely need to pick the type yourself: `cellmap_flow add REF` (or the
+Models tab's *Add a model*) works it out from what you have, and prints the
+YAML entry, saying what it still needs:
+
+```bash
+$ cellmap_flow add conscientious-dromedary -v 16      # a BioImage Model Zoo model
+$ cellmap_flow add cpsam_v2 -v 64                     # Cellpose-SAM
+$ cellmap_flow add cellmap/fly_organelles_run08_438000 # a Hugging Face repo
+$ cellmap_flow add /path/to/run/model_checkpoint_20000 --run -d data_path
+```
 
 | Type | For | Runs in |
 |---|---|---|

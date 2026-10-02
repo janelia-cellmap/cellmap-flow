@@ -96,7 +96,7 @@ def _bioimage_on_disk(tmp_path, kind):
 def test_a_bioimage_description_or_package_is_a_bioimage_model(tmp_path, kind):
     pasted, model, name = _bioimage_on_disk(tmp_path, kind)
     resolved = resolve(str(pasted), voxel_size="8")
-    assert _summary(resolved) == ("bioimage", {"model_name": str(model), "voxel_size": [8, 8, 8]}, name, [])
+    assert _summary(resolved) == ("bioimage", {"model": str(model), "voxel_size": [8, 8, 8]}, name, [])
     assert resolved.env == "bioimageio"
 
 
@@ -191,9 +191,9 @@ def test_the_prefixes_say_what_a_reference_is_without_looking_it_up(tmp_path, on
     cases = {
         "hf:org/repo@v2": ("huggingface", {"repo": "org/repo", "revision": "v2"}, "repo", []),
         "huggingface:org/repo": ("huggingface", {"repo": "org/repo"}, "repo", []),
-        "bioimageio:affable-shark": ("bioimage", {"model_name": "affable-shark"}, "affable-shark", ["voxel_size"]),
+        "bioimageio:affable-shark": ("bioimage", {"model": "affable-shark"}, "affable-shark", []),
         "bioimage:https://bioimage.io/#/artifacts/affable-shark":
-            ("bioimage", {"model_name": "affable-shark"}, "affable-shark", ["voxel_size"]),
+            ("bioimage", {"model": "affable-shark"}, "affable-shark", []),
         "cellpose:my_user_model": ("cellpose", {"pretrained_model": "my_user_model"}, "my_user_model", ["voxel_size"]),
         f"fly:{run}/model_checkpoint_432000":
             ("fly", {"checkpoint_path": f"{run}/model_checkpoint_432000"}, "run07_432000", []),
@@ -232,7 +232,7 @@ def test_a_cellpose_model_name_is_a_cellpose_model(name):
 ])
 def test_a_bioimage_url_is_a_bioimage_model(url, model):
     resolved = resolve(url)
-    assert (resolved.type, resolved.params, resolved.needs) == ("bioimage", {"model_name": model}, ["voxel_size"])
+    assert (resolved.type, resolved.params, resolved.needs) == ("bioimage", {"model": model}, [])
     if url.endswith("rdf.yaml"):
         assert resolved.name == "affable-shark"
 
@@ -286,7 +286,7 @@ def test_a_relative_path_that_is_not_there_is_not_a_repo(online):
 @pytest.mark.parametrize("ref", ["affable-shark", "10.5281/zenodo.5764892", "10.5281/zenodo.11092561"])
 def test_a_zoo_id_nickname_or_doi_is_looked_up(ref):
     resolved = resolve(ref, voxel_size=[8])
-    assert _summary(resolved) == ("bioimage", {"model_name": ref, "voxel_size": [8, 8, 8]}, "affable-shark", [])
+    assert _summary(resolved) == ("bioimage", {"model": ref, "voxel_size": [8, 8, 8]}, "affable-shark", [])
 
 
 def test_what_is_not_in_the_zoo_is_refused_and_an_unreachable_zoo_assumed(online):

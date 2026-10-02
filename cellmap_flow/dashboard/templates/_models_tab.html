@@ -1,4 +1,22 @@
 <form id="modelSelectionForm">
+    <!-- Add any model by reference (models/resolve.py) -->
+    <div class="add-model mb-3">
+      <label class="form-label fw-bold mb-1" for="addModelRef">Add a model</label>
+      <div class="d-flex gap-2">
+        <input type="text" class="form-control form-control-sm" id="addModelRef"
+               placeholder="Hugging Face repo, zoo model, Cellpose model, path..."
+               title="Anything that names a model: a Hugging Face repo (org/repo), a BioImage Model Zoo id, nickname or URL, a Cellpose model (cpsam_v2) or weights, an exported folder, a fly_organelles checkpoint, a script (.py), or dacapo:run@iteration. Prefixes (hf:, bioimageio:, cellpose:, fly:, script:) settle a doubt.">
+        <button type="button" class="btn btn-sm btn-outline-secondary" id="addModelResolveBtn">Resolve</button>
+      </div>
+      <div id="addModelResult" class="add-model-result mt-2" hidden>
+        <div id="addModelSummary" class="small"></div>
+        <div id="addModelNotes" class="small text-muted"></div>
+        <div id="addModelFields" class="add-model-fields mt-2"></div>
+        <button type="button" class="btn btn-sm btn-outline-secondary mt-2" id="addModelRunBtn">Add &amp; run</button>
+      </div>
+      <div id="addedModels" class="mt-2"></div>
+    </div>
+
     <!-- Local Catalog Section -->
     <h5>Local Catalog</h5>
     <div class="accordion" id="modelAccordion">

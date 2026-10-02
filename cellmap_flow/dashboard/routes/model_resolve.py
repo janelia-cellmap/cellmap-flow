@@ -1,4 +1,5 @@
-"""``POST /api/models/resolve``: a model entry from whatever reference the user pasted.
+"""``POST /api/models/resolve``: a model entry from whatever reference the user
+pasted; ``POST /api/models/add``: run such an entry.
 
 The body is ``{"ref": ..., "name": ..., "voxel_size": ...}`` (only ``ref``
 is required; ``voxel_size`` is one number, one per axis, or "8,8,8"). The
@@ -48,3 +49,49 @@ def resolve_model():
         logger.info(f"Could not resolve model {body.ref!r}: {e}")
         return jsonify({"success": False, "error": str(e)}), 400
     return jsonify({"success": True, **resolved.to_json()})
+
+
+class AddModel(BaseModel):
+    """A model entry to run: ``type``, its parameters and ``name``, as resolve
+    answers them with what ``needs`` asked filled in."""
+
+    entry: dict
+
+
+@model_resolve_bp.route("/api/models/add", methods=["POST"])
+def add_model():
+    """Build the entry and start its server, in its environment.
+
+    The model joins the session's models and jobs like one Submit started, so
+    it stays running while it is ticked on the Models tab (the page adds a
+    ticked box for it) and is stopped when unticked. A 400 names what is
+    wrong with the entry; a 409, a model of that name already running.
+    """
+    import threading
+
+    from cellmap_flow.config.yaml import ConfigError
+    from cellmap_flow.dashboard.services.launch import run_model_config
+    from cellmap_flow.dashboard.state import get_session
+    from cellmap_flow.models.registry import build_model
+    from cellmap_flow.pipeline_spec import PipelineSpec
+
+    body, error = parse(AddModel, request.get_json(silent=True))
+    if error:
+        return error
+    entry = dict(body.entry)
+    name = str(entry.get("name") or "").strip()
+    if not name:
+        return jsonify({"success": False, "error": "The model needs a name"}), 400
+    session = get_session()
+    if any(job.model_name == name for job in session.jobs):
+        return jsonify({"success": False, "error": f"A model named {name} is already running"}), 409
+    try:
+        model_config = build_model(entry, name)
+    except (ConfigError, ValueError, TypeError) as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+    session.models_config = [mc for mc in session.models_config if getattr(mc, "name", None) != name]
+    session.models_config.append(model_config)
+    st_data = PipelineSpec.from_steps(session.input_norms, session.postprocess).to_url_blob()
+    threading.Thread(target=run_model_config, args=(model_config, st_data), daemon=True).start()
+    logger.info(f"Adding model {name} ({entry.get('type')})")
+    return jsonify({"success": True, "name": name})
