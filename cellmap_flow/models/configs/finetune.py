@@ -70,6 +70,20 @@ class FinetuneModelConfig(ModelConfig):
         self._base_model_config = None
 
     @property
+    def env(self):
+        """Its own ``env`` if it was given one, else its base model's: the
+        weights go on the base model, so they need the base's packages."""
+        own = self.__dict__.get("_env")
+        if own:
+            return own
+        base = self.base_model_dict
+        return base.get("env") if isinstance(base, dict) else None
+
+    @env.setter
+    def env(self, value):
+        self._env = value
+
+    @property
     def base_model_config(self):
         """Lazily build the base ModelConfig from the stored dict."""
         if self._base_model_config is None:

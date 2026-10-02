@@ -15,6 +15,7 @@ from cellmap_flow.dashboard.app import create_and_run_app
 from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.viewer.raw import PREDICTION_COLORS
 from cellmap_flow.serving.client import fetch_model_info
+from cellmap_flow.models.geometry_cache import build_here
 from cellmap_flow.pipeline_spec import PipelineSpec
 from cellmap_flow.viewer.bootstrap import new_viewer
 from cellmap_flow.viewer.layers import prediction_layer, prediction_shader_for, raw_layer
@@ -27,13 +28,14 @@ def _configured_output_voxel_size(model, info):
     ``info`` does not say (one older than model_info); else None.
 
     Only then: reading ``config`` builds the model, which for a script model
-    means loading its weights and taking a CUDA context here.
+    means loading its weights and taking a CUDA context here. Never for a
+    model that runs in its own environment (``build_here`` refuses it).
     """
     mc = {mc.name: mc for mc in get_session().models_config or []}.get(model)
     if mc is None or info.get("output_voxel_size"):
         return None
     try:
-        return mc.config.output_voxel_size
+        return build_here(mc).output_voxel_size
     except Exception as e:
         logger.warning(f"Could not read {model}'s output voxel size from its config: {e}")
         return None

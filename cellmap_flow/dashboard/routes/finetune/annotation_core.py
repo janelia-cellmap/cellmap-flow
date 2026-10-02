@@ -26,7 +26,7 @@ from cellmap_flow.dashboard.routes.finetune.common import (
 from cellmap_flow.dashboard.routes.finetune.overlay import refresh_annotated_regions_layer
 from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.finetune.session.volume import create_volume_zarr, new_volume_id, plan_volume
-from cellmap_flow.models.geometry_cache import resolve_model_geometry
+from cellmap_flow.models.geometry_cache import build_here, resolve_model_geometry
 from cellmap_flow.serving.client import (
     fetch_model_info,
     model_geometry,
@@ -117,7 +117,9 @@ def _geometry_from_local_load(name, model_config):
     if model_config is None or _config_retry_blocked(name):
         return None
     try:
-        config = model_config.config
+        # Refuses a model that runs in its own environment, with a message
+        # that says so, rather than half-building it with this env's packages.
+        config = build_here(model_config)
         _config_failure_until.pop(name, None)
         return {
             "write_shape": list(config.write_shape),

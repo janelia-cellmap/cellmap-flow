@@ -207,7 +207,10 @@ PLUGIN_NAME = [('name', ('name',), (), 'text', True, None, False, None)]
 RESAMPLE = ('resample', ('--resample',), (), 'boolean', False, False, True,
             "When the dataset has no level at the model's input voxel size, resample a level to it, "
             "axis by axis, instead of reading the level as if it were at that size.")
-INFER = {t: [*options, RESAMPLE, SERVER_CHECK, PROJECT, QUEUE, DATA_PATH] for t, options in MODEL_OPTIONS.items()}
+ENV = ('env', ('--env',), (), 'text', False, None, False,
+       "Run the server in this environment: a pixi environment of cellmap-flow's pixi.toml, "
+       "or the absolute path of one with cellmap-flow installed (default: this one)")
+INFER = {t: [*options, ENV, RESAMPLE, SERVER_CHECK, PROJECT, QUEUE, DATA_PATH] for t, options in MODEL_OPTIONS.items()}
 # The server's own options: `serve` requires the model and data, and
 # cellmap_flow_server takes them instead of a type's command.
 MODEL_JSON_HELP = 'The model: its launch entry (ModelConfig.launch_entry), as JSON.'
@@ -537,12 +540,17 @@ def _param_info(name, type_, required, input_type, default=...):
     return info
 
 
+# Every type's form also offers env, which no constructor takes (models.envs).
+_ENV = {"name": "env", "required": False, "type": "str", "input_type": "text",
+        "description": "Environment (pixi env name or absolute path; blank: this one)"}
+
+
 def _type_info(class_name, display_name, *params):
     return {
         "display_name": display_name,
         "description": f"Create a {display_name} model configuration",
         "class_name": class_name,
-        "parameters": {p["name"]: p for p in params},
+        "parameters": {p["name"]: p for p in (*params, _ENV)},
     }
 
 

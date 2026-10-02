@@ -12,7 +12,9 @@ Three sources, cheapest first:
 
 1. a running inference server, which already holds the model;
 2. this cache, keyed so that it invalidates itself when the model changes;
-3. building the model, which then populates the cache.
+3. building the model, which then populates the cache. Not for a model
+   that runs in its own environment (``models.envs``): its packages are
+   there, not here (``build_here``).
 
 Reading the declarations statically is deliberately *not* among them. The
 script contract allows geometry to depend on the model -- a DaCapo script
@@ -156,12 +158,37 @@ def store_geometry(model_config, config):
         _write_cache(data)
 
 
+def build_here(model_config):
+    """``model_config.config``, built in this process.
+
+    Refused for a model with an ``env``: this process lacks its packages,
+    or has other versions of them (the default environment's cellpose 3
+    for a Cellpose-SAM model), so building it here fails or, worse,
+    half-works. Its geometry comes from its running server.
+
+    Raises:
+        ModelEnvError: the model runs in its own environment.
+    """
+    env = getattr(model_config, "env", None)
+    if env:
+        from cellmap_flow.models.configs.base import ModelEnvError
+
+        label = getattr(model_config, "name", None) or type(model_config).__name__
+        raise ModelEnvError(
+            f"Model {label} runs in its own environment ({env}), so its "
+            "geometry comes from its running server; start it and try again."
+        )
+    return model_config.config
+
+
 def resolve_model_geometry(model_name, model_config):
     """The five geometry fields, by the cheapest route that can supply them.
 
     Returns an object exposing ``read_shape``, ``write_shape``,
     ``input_voxel_size``, ``output_voxel_size`` and ``output_channels`` --
     either a stand-in or, on the build path, the real ``ModelConfig.config``.
+    Raises ModelEnvError for a model that runs in its own environment when
+    neither its server nor the cache knows its geometry.
     """
     geometry = model_geometry_config(model_name)
     if geometry is not None:
@@ -174,6 +201,6 @@ def resolve_model_geometry(model_name, model_config):
     if model_config is None:
         return None
 
-    config = model_config.config
+    config = build_here(model_config)
     store_geometry(model_config, config)
     return config

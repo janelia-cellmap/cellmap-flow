@@ -264,6 +264,38 @@ def extract_data_path_from_corrections(corrections_path: Path) -> str:
     return metadata["dataset_path"]
 
 
+_TRAINER_MODULE = "cellmap_flow.finetune.finetune_cli"
+
+
+def _trainer_argv(model_config) -> List[str]:
+    """``python -P -m`` the trainer: this interpreter, or the model's ``env``'s.
+
+    A model that is served from an environment of its own is trained there
+    too, since the trainer builds it. A pixi environment that cannot import
+    the trainer is refused here (ValueError) rather than as a job that dies
+    on its first import.
+    """
+    env = getattr(model_config, "env", None)
+    if not env:
+        return [sys.executable, "-P", "-m", _TRAINER_MODULE]
+    from cellmap_flow.models import envs
+
+    problem = envs.finetune_problem(env)
+    if problem:
+        raise ValueError(f"Cannot finetune {model_config.name}: {problem}")
+    return envs.python_argv(env, _TRAINER_MODULE)
+
+
+def _trainer_lib_dir(model_config) -> str:
+    """The lib directory of the environment ``_trainer_argv`` runs in."""
+    env = getattr(model_config, "env", None)
+    if not env:
+        return os.path.join(sys.prefix, "lib")
+    from cellmap_flow.models import envs
+
+    return envs.lib_dir(env)
+
+
 def build_command(
     *,
     model_config,
@@ -301,13 +333,7 @@ def build_command(
     # sys.path, so a job started from inside another cellmap-flow checkout
     # ran that checkout's trainer instead of the installed one (and failed on
     # the flags it did not know).
-    command_parts = [
-        sys.executable,
-        "-P",
-        "-m",
-        "cellmap_flow.finetune.finetune_cli",
-        "--model-type", model_type,
-    ]
+    command_parts = [*_trainer_argv(model_config), "--model-type", model_type]
 
     entry = model_entry(model_config, model_type, checkpoint_path)
     if entry is not None:
@@ -387,7 +413,7 @@ def build_command(
     # with "version `CXXABI_1.3.15' not found" even though the
     # environment ships a libstdc++ that has it. Seen with scipy pulled in
     # via cellpose on a GCC 13+ build.
-    env_lib = os.path.join(sys.prefix, "lib")
+    env_lib = _trainer_lib_dir(model_config)
     loader_path = (
         f"LD_LIBRARY_PATH={shell_quote(env_lib)}"
         '${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH} '

@@ -51,7 +51,9 @@ def model_config_from_entry(entry: dict, name=None):
         # No such type, or none given: build_model reports it, naming the model.
         config_class = None
     if config_class is not None:
-        accepted = set(inspect.signature(config_class.__init__).parameters) - {"self"}
+        # env too, which no constructor takes but build_model does: the
+        # serving YAMLs the trainer writes from this model then keep it.
+        accepted = (set(inspect.signature(config_class.__init__).parameters) - {"self"}) | {registry.ENV_KEY}
         dropped = sorted(k for k in entry if k != "type" and k not in accepted)
         if dropped:
             logger.debug(f"Model entry keys not taken by {config_class.__name__}: {dropped}")
