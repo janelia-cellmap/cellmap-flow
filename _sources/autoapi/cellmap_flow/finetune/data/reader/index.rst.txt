@@ -60,7 +60,7 @@ Module Contents
    both shapes, so it gets the config untouched.
 
 
-.. py:class:: PatchReader(volume_zarr_path: str, raw_dataset_path: str, input_size_voxels, output_size_voxels, input_voxel_size_nm, output_voxel_size_nm, corner_nm: numpy.ndarray, shape_voxels: numpy.ndarray, input_norm_config=None)
+.. py:class:: PatchReader(volume_zarr_path: str, raw_dataset_path: str, input_size_voxels, output_size_voxels, input_voxel_size_nm, output_voxel_size_nm, corner_nm: numpy.ndarray, shape_voxels: numpy.ndarray, input_norm_config=None, resample: bool = False)
 
    Reads the annotation and raw patches of one volume, and normalizes the raw.
 
@@ -103,6 +103,11 @@ Module Contents
 
    .. py:attribute:: normalizers
       :value: []
+
+
+
+   .. py:attribute:: resample
+      :value: False
 
 
 

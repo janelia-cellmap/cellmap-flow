@@ -31,8 +31,9 @@ cellmap_flow.dashboard.state
    The rest it stores itself, in ``__slots__``, so a misspelt attribute raises
    rather than being stored beside the real one:
 
-   - The data and the viewer: ``dataset_path``, ``viewer``, ``raw``,
-     ``neuroglancer_url``, ``shaders``, ``shader_controls``, ``extra_layers``.
+   - The data and the viewer: ``dataset_path``, ``resample``, ``viewer``,
+     ``raw``, ``neuroglancer_url``, ``shaders``, ``shader_controls``,
+     ``extra_layers``.
    - The models: ``models_config``, ``model_catalog``.
    - The pipeline builder's last apply: ``builder_state``,
      ``builder_model_configs``.
@@ -74,6 +75,11 @@ Module Contents
 
    .. py:attribute:: dataset_path
       :value: None
+
+
+
+   .. py:attribute:: resample
+      :value: False
 
 
 

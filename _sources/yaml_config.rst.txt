@@ -223,6 +223,8 @@ How the data is resampled:
 
 ``cellmap_flow yaml`` starts each server with ``--resample``, and ``cellmap_flow blockwise`` reads the data resampled the same way. ``cellmap_flow infer <type> --resample`` is the same for one model (:doc:`cli`).
 
+In the dashboard it is the Models tab's *Resample if no scale matches the model* box, which ``resample: true`` (or ``cellmap_flow view --resample``) starts ticked. It applies to the models submitted from then on, to blockwise runs, and to annotation volumes made while it is on: those are at the model's own voxel sizes, and their finetunes train on the data resampled and are served resampled. When a running model reads a level as if it were at its voxel size, the banner above the tabs says so.
+
 Extra Layers
 ------------
 

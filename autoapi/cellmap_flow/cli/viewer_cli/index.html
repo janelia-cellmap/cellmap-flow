@@ -138,7 +138,7 @@
 <h2>Functions<a class="headerlink" href="#functions" title="Link to this heading"></a></h2>
 <table class="autosummary longtable docutils align-default">
 <tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.cli.viewer_cli.main" title="cellmap_flow.cli.viewer_cli.main"><code class="xref py py-obj docutils literal notranslate"><span class="pre">main</span></code></a>(dataset, project)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.cli.viewer_cli.main" title="cellmap_flow.cli.viewer_cli.main"><code class="xref py py-obj docutils literal notranslate"><span class="pre">main</span></code></a>(dataset, project, resample)</p></td>
 <td><p>Start CellMap Flow viewer with a dataset.</p></td>
 </tr>
 </tbody>
@@ -153,11 +153,13 @@
 
 <dl class="py function">
 <dt class="sig sig-object py" id="cellmap_flow.cli.viewer_cli.main">
-<span class="sig-prename descclassname"><span class="pre">cellmap_flow.cli.viewer_cli.</span></span><span class="sig-name descname"><span class="pre">main</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dataset</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">project</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.cli.viewer_cli.main" title="Link to this definition"></a></dt>
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.cli.viewer_cli.</span></span><span class="sig-name descname"><span class="pre">main</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dataset</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">project</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">resample</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.cli.viewer_cli.main" title="Link to this definition"></a></dt>
 <dd><p>Start CellMap Flow viewer with a dataset.</p>
 <p>Opens neuroglancer on the raw data and starts the dashboard, where models
 can be picked and submitted interactively. Use <cite>cellmap_flow yaml</cite> instead
 to launch models from a config file.</p>
+<p><code class="docutils literal notranslate"><span class="pre">--resample</span></code> starts the dashboard’s Resample box ticked, so the models
+launched from it read the data resampled to their voxel size.</p>
 <p>Example:</p>
 <dl class="simple">
 <dt></dt><dd><p>cellmap_flow view -d /path/to/dataset.zarr</p>

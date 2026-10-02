@@ -30,13 +30,16 @@ Module Contents
 
 .. py:data:: logger
 
-.. py:function:: main(dataset, project)
+.. py:function:: main(dataset, project, resample)
 
    Start CellMap Flow viewer with a dataset.
 
    Opens neuroglancer on the raw data and starts the dashboard, where models
    can be picked and submitted interactively. Use `cellmap_flow yaml` instead
    to launch models from a config file.
+
+   ``--resample`` starts the dashboard's Resample box ticked, so the models
+   launched from it read the data resampled to their voxel size.
 
    Example:
 

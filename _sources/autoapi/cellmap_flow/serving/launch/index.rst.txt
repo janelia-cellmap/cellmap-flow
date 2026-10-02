@@ -50,7 +50,7 @@ Module Contents
    it to the model's input voxel size when ``resample``.
 
 
-.. py:function:: server_argv_for(model_type: str, params: dict, data_path: str) -> list
+.. py:function:: server_argv_for(model_type: str, params: dict, data_path: str, resample: bool = False) -> list
 
    The server's argv for a model given as its type and constructor arguments.
 
@@ -64,7 +64,7 @@ Module Contents
    ``server_argv`` as the shell line start_hosts takes.
 
 
-.. py:function:: server_command_for(model_type: str, params: dict, data_path: str) -> str
+.. py:function:: server_command_for(model_type: str, params: dict, data_path: str, resample: bool = False) -> str
 
    ``server_argv_for`` as the shell line start_hosts takes.
 

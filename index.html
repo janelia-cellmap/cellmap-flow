@@ -180,8 +180,9 @@ disk or at an <code class="docutils literal notranslate"><span class="pre">s3://
 anonymously, private ones with your AWS or Google credentials. See
 <a class="reference internal" href="#docs/source/data_paths.rst"><span class="xref myst">data paths</span></a>.</p>
 <p>A model is fed the dataset’s level at its own voxel size. When the dataset has
-no such level, <code class="docutils literal notranslate"><span class="pre">--resample</span></code> (or <code class="docutils literal notranslate"><span class="pre">resample:</span> <span class="pre">true</span></code> in a YAML) resamples the
-nearest one to it; without it the nearest level is used as it is.</p>
+no such level, <code class="docutils literal notranslate"><span class="pre">--resample</span></code> (or <code class="docutils literal notranslate"><span class="pre">resample:</span> <span class="pre">true</span></code> in a YAML, or the dashboard’s
+<em>Resample if no scale matches the model</em> box) resamples the nearest one to it; without it the nearest level
+is used as it is, and the dashboard warns that the model sees the wrong scale.</p>
 </section>
 <section id="using-custom-script">
 <h1>Using custom script:<a class="headerlink" href="#using-custom-script" title="Link to this heading"></a></h1>

@@ -50,7 +50,7 @@ Module Contents
 
 .. py:data:: logger
 
-.. py:class:: VirtualPatchDataset(volume_zarr_path: str, raw_dataset_path: str, input_size_voxels: Tuple[int, int, int], output_size_voxels: Tuple[int, int, int], input_voxel_size_nm: Tuple[float, float, float], output_voxel_size_nm: Tuple[float, float, float], patches_per_epoch: Optional[int] = None, jitter_voxels: Optional[Tuple[int, int, int]] = None, seed: int = 0, input_norm_config: Optional[dict] = None, dense_to_sparse_ratio: Optional[float] = None, good_regions: Optional[list] = None, rehearsal_fraction: Optional[float] = None, anchor_fraction: Optional[float] = None, augment: bool = False)
+.. py:class:: VirtualPatchDataset(volume_zarr_path: str, raw_dataset_path: str, input_size_voxels: Tuple[int, int, int], output_size_voxels: Tuple[int, int, int], input_voxel_size_nm: Tuple[float, float, float], output_voxel_size_nm: Tuple[float, float, float], patches_per_epoch: Optional[int] = None, jitter_voxels: Optional[Tuple[int, int, int]] = None, seed: int = 0, input_norm_config: Optional[dict] = None, dense_to_sparse_ratio: Optional[float] = None, good_regions: Optional[list] = None, rehearsal_fraction: Optional[float] = None, anchor_fraction: Optional[float] = None, augment: bool = False, resample: bool = False)
 
 
 
@@ -88,6 +88,8 @@ Module Contents
                            point of the volume and held to the teacher there. ``None``
                            (default) means a quarter for a painted session, none otherwise.
    :param augment: flips, XY rotations, brightness and noise (augment.py).
+   :param resample: read the raw resampled to ``input_voxel_size_nm`` when it
+                    has no level at it (the volume's ``resample``).
 
 
    .. py:attribute:: volume_zarr_path

@@ -147,8 +147,9 @@ to change them: <code class="docutils literal notranslate"><span class="pre">pro
 <p>The rest it stores itself, in <code class="docutils literal notranslate"><span class="pre">__slots__</span></code>, so a misspelt attribute raises
 rather than being stored beside the real one:</p>
 <ul class="simple">
-<li><p>The data and the viewer: <code class="docutils literal notranslate"><span class="pre">dataset_path</span></code>, <code class="docutils literal notranslate"><span class="pre">viewer</span></code>, <code class="docutils literal notranslate"><span class="pre">raw</span></code>,
-<code class="docutils literal notranslate"><span class="pre">neuroglancer_url</span></code>, <code class="docutils literal notranslate"><span class="pre">shaders</span></code>, <code class="docutils literal notranslate"><span class="pre">shader_controls</span></code>, <code class="docutils literal notranslate"><span class="pre">extra_layers</span></code>.</p></li>
+<li><p>The data and the viewer: <code class="docutils literal notranslate"><span class="pre">dataset_path</span></code>, <code class="docutils literal notranslate"><span class="pre">resample</span></code>, <code class="docutils literal notranslate"><span class="pre">viewer</span></code>,
+<code class="docutils literal notranslate"><span class="pre">raw</span></code>, <code class="docutils literal notranslate"><span class="pre">neuroglancer_url</span></code>, <code class="docutils literal notranslate"><span class="pre">shaders</span></code>, <code class="docutils literal notranslate"><span class="pre">shader_controls</span></code>,
+<code class="docutils literal notranslate"><span class="pre">extra_layers</span></code>.</p></li>
 <li><p>The models: <code class="docutils literal notranslate"><span class="pre">models_config</span></code>, <code class="docutils literal notranslate"><span class="pre">model_catalog</span></code>.</p></li>
 <li><p>The pipeline builder’s last apply: <code class="docutils literal notranslate"><span class="pre">builder_state</span></code>,
 <code class="docutils literal notranslate"><span class="pre">builder_model_configs</span></code>.</p></li>
@@ -190,6 +191,11 @@ module global: tests/conftest.py installs a fresh Session for every test.</p>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="cellmap_flow.dashboard.state.Session.dataset_path">
 <span class="sig-name descname"><span class="pre">dataset_path</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.dashboard.state.Session.dataset_path" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.state.Session.resample">
+<span class="sig-name descname"><span class="pre">resample</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">False</span></span><a class="headerlink" href="#cellmap_flow.dashboard.state.Session.resample" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py attribute">

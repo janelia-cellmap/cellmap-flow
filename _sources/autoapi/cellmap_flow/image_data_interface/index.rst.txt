@@ -155,6 +155,15 @@ Module Contents
       ``to_ndarray_ts`` computes them. ``source.ts`` is the level as stored.
 
 
+   .. py:method:: read_box(box: cellmap_flow.io.geometry.Box, fill=0) -> numpy.ndarray
+
+      The voxels of ``box`` (a ``Box`` of voxel indices at ``voxel_size``)
+      through the input chain, as a numpy array padded with ``fill`` where
+      it runs past the array: ``to_ndarray_ts`` by voxels instead of nm.
+      Unlike ``ts``, works on a resampled dataset too.
+
+
+
    .. py:method:: with_input_norms(input_norms)
 
       This dataset, read through ``input_norms`` instead of the process's chain.

@@ -298,6 +298,15 @@ channel, as it always was.</p>
 </dd></dl>
 
 <dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.image_data_interface.ImageDataInterface.read_box">
+<span class="sig-name descname"><span class="pre">read_box</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">box</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../io/geometry/index.html#cellmap_flow.io.geometry.Box" title="cellmap_flow.io.geometry.Box"><span class="pre">cellmap_flow.io.geometry.Box</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">fill</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">numpy.ndarray</span></span></span><a class="headerlink" href="#cellmap_flow.image_data_interface.ImageDataInterface.read_box" title="Link to this definition"></a></dt>
+<dd><p>The voxels of <code class="docutils literal notranslate"><span class="pre">box</span></code> (a <code class="docutils literal notranslate"><span class="pre">Box</span></code> of voxel indices at <code class="docutils literal notranslate"><span class="pre">voxel_size</span></code>)
+through the input chain, as a numpy array padded with <code class="docutils literal notranslate"><span class="pre">fill</span></code> where
+it runs past the array: <code class="docutils literal notranslate"><span class="pre">to_ndarray_ts</span></code> by voxels instead of nm.
+Unlike <code class="docutils literal notranslate"><span class="pre">ts</span></code>, works on a resampled dataset too.</p>
+</dd></dl>
+
+<dl class="py method">
 <dt class="sig sig-object py" id="cellmap_flow.image_data_interface.ImageDataInterface.with_input_norms">
 <span class="sig-name descname"><span class="pre">with_input_norms</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input_norms</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.image_data_interface.ImageDataInterface.with_input_norms" title="Link to this definition"></a></dt>
 <dd><p>This dataset, read through <code class="docutils literal notranslate"><span class="pre">input_norms</span></code> instead of the process’s chain.</p>

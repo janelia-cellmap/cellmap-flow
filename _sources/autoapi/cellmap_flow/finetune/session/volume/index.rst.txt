@@ -81,7 +81,8 @@ Module Contents
    Where a volume lies and what model it is for; see ``plan_volume``.
 
    Sequences become tuples of the numbers given, ints kept ints, since the
-   root attrs are written from them as they are.
+   root attrs are written from them as they are. ``resample``: the raw is
+   read resampled to the model's voxel sizes (see ``plan_volume``).
 
 
    .. py:attribute:: output_voxel_size
@@ -116,6 +117,12 @@ Module Contents
       :type:  tuple
 
 
+   .. py:attribute:: resample
+      :type:  bool
+      :value: False
+
+
+
    .. py:method:: record(zarr_path, *, dataset_path, model_name, corrections_dir) -> dict
 
       The registry record of a volume at ``zarr_path`` with this geometry.
@@ -138,7 +145,7 @@ Module Contents
    an annotation voxel away from where it was drawn.
 
 
-.. py:function:: plan_volume(raw_dataset_path: str, model_geometry) -> VolumeGeometry
+.. py:function:: plan_volume(raw_dataset_path: str, model_geometry, resample: bool = False) -> VolumeGeometry
 
    Where a new volume over ``raw_dataset_path`` lies, for a model.
 
@@ -149,6 +156,10 @@ Module Contents
    own is kept as the claimed one); the volume lies on the output level's
    grid from its corner, one chunk per model output, and covers the data
    padded to whole chunks.
+
+   With ``resample`` (the dashboard's Resample setting) nothing is snapped:
+   the volume is at the model's own voxel sizes, and the trainer reads the
+   raw resampled to them, as a server started with --resample serves it.
 
 
 .. py:function:: create_volume_zarr(zarr_path: str, geometry: VolumeGeometry, *, dataset_path: str, model_name: str, input_norm=None, postprocess=None, annotation_dtype='uint8', annotation_type='annotation_volume') -> str

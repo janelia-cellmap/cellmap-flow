@@ -213,6 +213,8 @@ Module Contents
 
    The Models tab's Submit: the catalog models and Hugging Face repos to
    run. Every other running model is stopped (services.launch).
+   ``resample``, when given, becomes the session's (``Session.resample``)
+   before the models are started.
 
 
    .. py:attribute:: selected_models
@@ -224,6 +226,12 @@ Module Contents
    .. py:attribute:: selected_hf_models
       :type:  list[str]
       :value: []
+
+
+
+   .. py:attribute:: resample
+      :type:  Optional[bool]
+      :value: None
 
 
 
