@@ -110,6 +110,52 @@ def test_a_job_started_inside_another_checkout_runs_the_installed_trainer(submit
     assert found.returncode == 0 and str(decoy) not in found.stdout, found.stderr
 
 
+class _EnvScript(_Script):
+    """Served from an environment of its own (models.envs), so trained there."""
+
+    def __init__(self, env):
+        self.env = env
+
+
+@pytest.fixture
+def pixi_manifest(tmp_path, monkeypatch):
+    """``pixi_manifest(default_feature)``: a pixi.toml with a cellpose4 environment
+    that has the default feature, whose cellmap-flow brings peft, or not."""
+
+    def write(default_feature=True):
+        path = tmp_path / "checkout" / "pixi.toml"
+        path.parent.mkdir(exist_ok=True)
+        path.write_text(
+            '[pypi-dependencies]\ncellmap-flow = { path = ".", extras = ["finetune"] }\n[environments]\n'
+            f"cellpose4 = {{ features = [], no-default-feature = {str(not default_feature).lower()} }}\n"
+        )
+        monkeypatch.setenv("CELLMAP_FLOW_PIXI_MANIFEST", str(path))
+        monkeypatch.setenv("PIXI_EXE", "/opt/pixi")
+        return path
+
+    return write
+
+
+@pytest.mark.parametrize("kind", ["pixi", "directory"])
+def test_a_model_in_its_own_environment_is_trained_there(submit, pixi_manifest, tmp_path, kind):
+    manifest = pixi_manifest()
+    # kind: (env, the python it runs, the lib directory first on the loader path)
+    env, program, lib = {
+        "pixi": ("cellpose4", f"/opt/pixi run --frozen --manifest-path {manifest} -e cellpose4 python",
+                 f"{manifest.parent}/.pixi/envs/cellpose4/lib"),
+        "directory": (f"{tmp_path}/venv", f"{tmp_path}/venv/bin/python", f"{tmp_path}/venv/lib"),
+    }[kind]
+    job = submit(_EnvScript(env), geometry=GEOMETRY)
+    assert f"LD_LIBRARY_PATH={lib}" in job.command
+    assert f"{program} -P -m cellmap_flow.finetune.finetune_cli --model-type script" in job.command
+
+
+def test_an_environment_that_cannot_import_the_trainer_is_refused(submit, pixi_manifest):
+    pixi_manifest(default_feature=False)
+    with pytest.raises(ValueError, match="'cellpose4' does not install peft"):
+        submit(_EnvScript("cellpose4"), geometry=GEOMETRY)
+
+
 def test_a_trainer_that_fails_fails_its_job(submit, monkeypatch, tmp_path):
     """The trainer's output is piped through tee, and a pipeline's status was
     tee's: a trainer that exited 1 was DONE to LSF, and its job COMPLETED. Here

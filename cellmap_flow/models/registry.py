@@ -25,6 +25,11 @@ because each reproduces what its caller has always done:
 
 A bad YAML entry or type name is a ``config.yaml.ConfigError``.
 
+A model entry's ``env`` (the environment its server runs in, see
+``models.envs``) is not a constructor argument: ``build_model`` and
+``instantiate_model_config`` check it and set it on the built config, and
+the dashboard's form offers it beside each type's arguments.
+
 Importing this module imports neither torch, flask, huggingface_hub nor
 ``cellmap_flow.globals``. The model config classes, which bring numpy and
 funlib (most of a second), are imported only when a function needs them.
@@ -54,6 +59,22 @@ YAML_ALIASES = {
 # Constructor arguments that are never required from a user, even without a
 # default: a YAML entry's key supplies the name, and scale is optional.
 _NEVER_REQUIRED = ("name", "scale")
+
+# The model-entry key that is not a constructor argument (models.envs).
+ENV_KEY = "env"
+
+
+def _checked_env(env, model_name: str):
+    """A model entry's ``env``, checked; None when it has none (or a blank one).
+
+    Raises:
+        ConfigError: ``env`` names no environment that can be used.
+    """
+    if env is None or env == "":
+        return None
+    from cellmap_flow.models import envs
+
+    return envs.validate(env, model_name)
 
 
 def _model_config_base():
@@ -197,7 +218,7 @@ def build_model(entry: Dict[str, Any], name: str):
 
     kwargs = {}
     for yaml_key, yaml_value in entry.items():
-        if yaml_key == "type":
+        if yaml_key in ("type", ENV_KEY):
             continue
         param_name = YAML_ALIASES.get(yaml_key, yaml_key)
         # A voxel size may be written as one number or as a list.
@@ -210,6 +231,8 @@ def build_model(entry: Dict[str, Any], name: str):
 
     if "name" not in kwargs:
         kwargs["name"] = model_name
+    # Checked before the constructor, which may load files, runs.
+    env = _checked_env(entry.get(ENV_KEY), model_name)
 
     processed_kwargs = coerce_cli_args(config_class, kwargs)
 
@@ -236,7 +259,6 @@ def build_model(entry: Dict[str, Any], name: str):
     try:
         model = config_class(**processed_kwargs)
         logger.debug(f"Created model '{model_name}': {model}")
-        return model
     except TypeError as e:
         raise ConfigError(
             f"Error creating model '{model_name}' ({mtype}): {e}. "
@@ -247,6 +269,9 @@ def build_model(entry: Dict[str, Any], name: str):
         # Some constructors read files straight away (a cellmap model's
         # metadata.json), so a wrong path shows up here.
         raise ConfigError(f"Error creating model '{model_name}' ({mtype}): {e}") from e
+    if env:
+        model.env = env
+    return model
 
 
 def build_models(model_entries) -> list:
@@ -556,12 +581,18 @@ def instantiate_model_config(class_name: str, params: Dict[str, Any]) -> Any:
         raise ValueError(f"Unknown model config class: {class_name}")
 
     cls = classes[class_name]
+    params = dict(params)
+    env = params.pop(ENV_KEY, None)
     parsed_params = coerce_form_params(cls, params)
+    env = _checked_env(env, parsed_params.get("name") or class_name)
 
     try:
-        return cls(**parsed_params)
+        model = cls(**parsed_params)
     except Exception as e:
         raise ValueError(f"Failed to instantiate {class_name}: {str(e)}")
+    if env:
+        model.env = env
+    return model
 
 
 def parameter_info(cls) -> Dict[str, Any]:
@@ -632,6 +663,15 @@ def describe_types(classes=None) -> Dict[str, Dict[str, Any]]:
         params = parameter_info(cls)
         for param_name, param_info in params.items():
             param_info["input_type"] = _input_type(param_name, param_info)
+        # Every type's, though no constructor takes it; instantiate_model_config
+        # takes it off before building.
+        params.setdefault(ENV_KEY, {
+            "name": ENV_KEY,
+            "required": False,
+            "description": "Environment (pixi env name or absolute path; blank: this one)",
+            "type": "str",
+            "input_type": "text",
+        })
 
         registry[class_name] = {
             "display_name": display_name,

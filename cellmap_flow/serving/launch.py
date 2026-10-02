@@ -16,6 +16,12 @@ for a program called "pixi run cellmap_flow serve"). ``cellmap_flow_server``,
 the program before 0.3.0, takes ``--model`` too, so a deployment that
 still sets that works.
 
+A model with an ``env`` (``models.envs``) is served from that environment
+instead: the entry's ``env`` is taken off, and the program is that
+environment's (``pixi run --frozen --manifest-path <pixi.toml> -e <env>
+cellmap_flow serve``, or ``<env>/bin/python -P -m cellmap_flow.cli.main
+serve``) in place of SERVER_COMMAND, which names this deployment's own.
+
 The launchers submit it as a shell line, which ``jobs.spec.shell_join``
 quotes: the entry's JSON is full of double quotes and braces, and
 ``shlex.join`` would single-quote it, which LSF's own quoting splits apart
@@ -29,10 +35,23 @@ from cellmap_flow.jobs import launch as jobs_launch
 from cellmap_flow.jobs.spec import shell_join
 
 
+def _program(env) -> list:
+    """The serve program: ``env``'s, or this deployment's SERVER_COMMAND."""
+    if not env:
+        return shlex.split(jobs_launch.SERVER_COMMAND)
+    from cellmap_flow.models import envs
+
+    # Checked again: server_argv_for's params never went through build_model.
+    return envs.server_argv(envs.validate(env))
+
+
 def _serve_argv(entry: dict, data_path, resample=False) -> list:
+    # The server must not get env back: in its environment it is at home.
+    entry = dict(entry)
+    env = entry.pop("env", None)
     # Compact, and a value JSON has no type for (a plugin's Path) as its str.
     entry_json = json.dumps(entry, separators=(",", ":"), default=str)
-    argv = [*shlex.split(jobs_launch.SERVER_COMMAND), "--model", entry_json, "-d", str(data_path)]
+    argv = [*_program(env), "--model", entry_json, "-d", str(data_path)]
     return argv + ["--resample"] if resample else argv
 
 
@@ -47,7 +66,8 @@ def server_argv_for(model_type: str, params: dict, data_path: str, resample: boo
 
     For launchers that have no model config to hand and should not build
     one (a Hugging Face config fetches its repo's metadata); None arguments
-    are left out, as in ``ModelConfig.launch_entry``.
+    are left out, as in ``ModelConfig.launch_entry``. An ``env`` among
+    ``params`` serves the model from that environment.
     """
     from cellmap_flow.models.configs.base import model_entry
     from cellmap_flow.models.registry import model_type as lookup
