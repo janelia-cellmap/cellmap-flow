@@ -64,7 +64,7 @@ check(["cellmap_flow.models.registry", "cellmap_flow.config.yaml", "cellmap_flow
                "torch", "huggingface_hub", "peft"])
 from cellmap_flow.models.registry import describe_types
 assert {"BioModelConfig", "DaCapoModelConfig"} <= set(describe_types())
-check([], LIGHT + ["bioimageio", "dacapo", "cellmap_models", "fly_organelles", "torch", "huggingface_hub", "peft"])
+check([], LIGHT + ["bioimageio", "dacapo", "cellmap_models", "fly_organelles", "cellpose", "torch", "huggingface_hub", "peft"])
 """,
     # A chain is read wherever one is listed; its steps import what they need.
     "chain": """

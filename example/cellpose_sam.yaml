@@ -1,8 +1,9 @@
-# Cellpose-SAM on jrc_mus-salivary-1, served from the cellpose4 pixi
-# environment (`env: cellpose4`): its server, and nothing else, runs there.
+# Cellpose-SAM on jrc_mus-salivary-1:
 #   cellmap_flow yaml example/cellpose_sam.yaml
-# The model script, its output modes and its licence (non-commercial):
-# example/cellpose_sam_model.py.
+# The cellpose type runs in the cellpose4 pixi environment without an `env`
+# (Cellpose 4 cannot share the default environment's cellpose 3); give one
+# to run it elsewhere. Its parameters, output modes and licence
+# (non-commercial): "Cellpose" in docs/source/yaml_config.rst.
 data_path: "/nrs/cellmap/data/jrc_mus-salivary-1/jrc_mus-salivary-1.zarr/recon-1/em/fibsem-uint8"
 
 charge_group: "cellmap"
@@ -11,16 +12,18 @@ queue: "gpu_h100"
 
 models:
   cellpose_sam:
-    type: "script"
-    script_path: "example/cellpose_sam_model.py"
-    # A pixi environment of cellmap-flow's pixi.toml, or the absolute path
-    # of a conda environment or virtualenv that has cellmap-flow installed.
-    env: "cellpose4"
-    # 64 nm, the script's input voxel size.
-    scale: "s3"
+    type: "cellpose"
+    # The script this replaces ran cpsam; leave this out for the type's
+    # default, cpsam_v2, or give the path of finetuned Cellpose weights.
+    pretrained_model: "cpsam"
+    # "probability" (0 to 1) or "masks" (instance ids, unique within a chunk).
+    output: "probability"
+    # nm; the server reads s3. Cellpose-SAM sees objects best about 30
+    # voxels across, so pick the voxel size at which yours are roughly that.
+    voxel_size: 64
 
-# With OUTPUT = "masks" in the script, make the per-chunk ids unique across
-# chunks:
+# With output: "masks", make the per-chunk ids unique across chunks and show
+# the layer as a segmentation:
 # json_data:
 #   postprocess:
 #     - name: MortonSegmentationRelabeling

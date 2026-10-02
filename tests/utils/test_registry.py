@@ -26,11 +26,11 @@ def _built_in(types):
 
 def test_the_built_in_types_and_how_yaml_names_them():
     assert list(_built_in(registry.model_types())) == [
-        "script", "dacapo", "fly", "bioimage", "cellmap", "finetune", "huggingface",
+        "script", "dacapo", "fly", "bioimage", "cellmap", "finetune", "huggingface", "cellpose",
     ]
     assert list(_built_in(registry.model_classes()))[:3] == ["ScriptModelConfig", "DaCapoModelConfig", "FlyModelConfig"]
     assert registry.model_type("fly") is registry.model_type("FLY") is FlyModelConfig
-    with pytest.raises(ConfigError, match="Valid types are: bioimage, cellmap, dacapo"):
+    with pytest.raises(ConfigError, match="Valid types are: bioimage, cellmap, cellpose, dacapo"):
         registry.model_type("no-such-kind")
 
 

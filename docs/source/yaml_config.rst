@@ -147,6 +147,9 @@ Available Model Types
    * - ``huggingface``
      - HuggingFaceModelConfig
      - ``repo`` (required), ``revision`` (optional). See :doc:`huggingface`.
+   * - ``cellpose``
+     - CellposeModelConfig
+     - ``voxel_size`` (required), ``pretrained_model``, ``output``. See :ref:`cellpose`.
 
 Common optional parameters: ``name``, ``scale``, ``env`` (see :ref:`model-env`).
 
@@ -162,9 +165,9 @@ transformer models) can run in an environment of its own. Give its entry an
 .. code-block:: yaml
 
     models:
-      cellpose_sam:
+      my_model:
         type: script
-        script_path: example/cellpose_sam_model.py
+        script_path: /path/to/my_model.py
         env: cellpose4
 
 ``env`` is either
@@ -190,7 +193,101 @@ finetuning job needs ``peft`` in the environment: a pixi environment that
 does not install it is refused when the job is submitted.
 
 ``cellmap_flow infer <type> --env <env>`` and the dashboard's model form take
-it too. ``example/cellpose_sam.yaml`` runs Cellpose-SAM this way.
+it too. The ``cellpose`` type runs in ``cellpose4`` without one (see
+:ref:`cellpose`).
+
+.. _cellpose:
+
+Cellpose
+~~~~~~~~
+
+``type: cellpose`` runs Cellpose 4 (Cellpose-SAM) on each z slice of a
+chunk, in 2D, and serves its cell probability or its instance masks. It runs
+in the ``cellpose4`` pixi environment unless the entry gives an ``env``:
+Cellpose 4 cannot share the default environment, whose cellpose 3 pins an
+older numpy. ``example/cellpose_sam.yaml`` serves it on jrc_mus-salivary-1.
+
+.. code-block:: yaml
+
+    models:
+      cellpose_sam:
+        type: cellpose
+        voxel_size: 64
+        output: probability
+
+.. list-table::
+   :header-rows: 1
+   :widths: 25 15 60
+
+   * - Parameter
+     - Default
+     - Meaning
+   * - ``voxel_size``
+     - (required)
+     - nm per voxel, read and written; one number or one per axis. Cellpose-SAM
+       sees objects best about 30 voxels across, so pick the voxel size at
+       which yours are roughly that (or give ``diameter``).
+   * - ``pretrained_model``
+     - ``cpsam_v2``
+     - ``cpsam_v2``, ``cpsam``, ``cpdino``, ``cpdino-vitb``, or the path of
+       finetuned Cellpose weights. The named ones are downloaded from the
+       Hugging Face Hub (about 1 GB) to ``~/.cellpose/models``, or
+       ``$CELLPOSE_LOCAL_MODELS_PATH``, when the server starts. The DINO
+       models also need facebookresearch's ``dinov3`` package, which the
+       ``cellpose4`` environment does not install.
+   * - ``output``
+     - ``probability``
+     - ``probability``: the cell probability, 0 to 1 (float32). ``masks``:
+       instance ids (uint64), unique within a chunk.
+   * - ``slices_per_chunk``
+     - 8
+     - z slices in a chunk.
+   * - ``slice_size``
+     - 512
+     - Voxels a side, in y and x, of each chunk's slices.
+   * - ``context``
+     - 32
+     - Voxels read beyond them on each side in y and x, so that objects at
+       a chunk's edge are seen whole, and cut off again. None in z.
+   * - ``batch_size``
+     - the whole chunk
+     - Tiles per GPU pass. Cellpose cuts each slice into tiles (256 px for
+       ``cpsam*``, 384 for the DINO models, overlapping by 10%); by default
+       all of a chunk's tiles go in one pass. Lower it if the GPU runs out
+       of memory.
+   * - ``diameter``
+     - none
+     - Object diameter in voxels; Cellpose resizes each slice by
+       30 / ``diameter``. None keeps the model's own scale.
+   * - ``flow_threshold``, ``cellprob_threshold``
+     - 0.4, 0.0
+     - Cellpose's mask thresholds; ``masks`` only.
+
+The probability is computed voxel by voxel, so it joins up across chunks,
+and it skips the mask dynamics, which makes it the faster output. Masks are
+made per chunk: an object that crosses a chunk's edge is cut there, with an
+id on each side, and objects are not joined from slice to slice. Add the
+``MortonSegmentationRelabeling`` postprocessor to make the ids unique across
+chunks and show the layer as a segmentation:
+
+.. code-block:: yaml
+
+    json_data:
+      postprocess:
+        - name: MortonSegmentationRelabeling
+
+For masks of a whole volume, write the probability with ``pixi run -e
+cellpose4 cellmap_flow blockwise ...`` (blockwise runs the model in its own
+process) and segment that, or run Cellpose's own distributed
+segmentation (``cellpose.contrib.distributed_segmentation``), which stitches
+objects across blocks.
+
+Finetuned weights, from Cellpose's GUI or ``cellpose.train``, are a path:
+``pretrained_model: /path/to/models/my_model``. Cellpose reads from the
+weights which network they are, and the tiling follows.
+
+Licence: the Cellpose-SAM weights were trained on data that includes
+datasets licensed CC-BY-NC, so they are for non-commercial use.
 
 Each model type's default
 ^^^^^^^^^^^^^^^^^^^^^^^^^

@@ -18,6 +18,7 @@ from funlib.geometry import Coordinate
 
 from cellmap_flow.models.models_config import (
     BioModelConfig,
+    CellposeModelConfig,
     DaCapoModelConfig,
     FinetuneModelConfig,
     FlyModelConfig,
@@ -50,8 +51,10 @@ SERVE_FORMS = {
                                     base_model={"type": "script", "script_path": "/a b/c.py"}, name="ft",
                                     input_voxel_size=(10.48, 8, 8), output_voxel_size=(10.48, 8, 8)),
         lambda: HuggingFaceModelConfig(repo="cellmap/mito-v1", revision="abc123", name="m v1"),
+        lambda: CellposeModelConfig(voxel_size=(16, 8, 8), pretrained_model="/w/my model", output="masks",
+                                    slices_per_chunk=4, batch_size=12, diameter=45, flow_threshold=0.5, name="cp"),
     ],
-    ids=["script", "dacapo", "fly", "bio", "finetune", "huggingface"],
+    ids=["script", "dacapo", "fly", "bio", "finetune", "huggingface", "cellpose"],
 )
 @pytest.mark.parametrize("form", list(SERVE_FORMS))
 def test_the_server_rebuilds_the_same_config(config, form, monkeypatch):
