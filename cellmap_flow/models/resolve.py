@@ -305,11 +305,33 @@ def _file(path: str, request: _Request) -> Resolved:
         return _with_voxel_size("cellpose", {"pretrained_model": path}, "Cellpose-SAM weights", base, request)
     if path.endswith(".zip"):
         raise ValueError(f"{path} is a zip without an rdf.yaml or bioimageio.yaml in it: not a bioimage.io model")
+    if base.endswith((".yaml", ".yml")):
+        _refuse_a_config(path)
     raise ValueError(
         f"Could not tell what model {path} is from its name or contents. Say it with a prefix: "
         f"fly:{path} (a fly_organelles checkpoint), cellpose:{path} (Cellpose weights) or script:<a .py "
         "that loads it>."
     )
+
+
+def _refuse_a_config(path: str) -> None:
+    """Raise ValueError saying how to run ``path`` when it is a cellmap-flow
+    config (a YAML with ``models``), which is a whole run, not one model."""
+    import yaml
+
+    try:
+        with open(path) as f:
+            config = yaml.safe_load(f)
+    except (OSError, yaml.YAMLError):
+        return
+    if isinstance(config, dict) and "models" in config:
+        models = config["models"]
+        names = list(models) if isinstance(models, dict) else [m.get("name", "?") for m in models if isinstance(m, dict)]
+        raise ValueError(
+            f"{path} is a cellmap-flow config ({len(names)} model(s): {', '.join(map(str, names))}), a whole run "
+            f"rather than one model. Run it with `cellmap_flow yaml {path}` (in Fileglancer: Run From a Config "
+            "File), or add its models one at a time by what each loads (a script's path, a checkpoint, a repo)."
+        )
 
 
 def _bioimage_source(path: str) -> Optional[str]:

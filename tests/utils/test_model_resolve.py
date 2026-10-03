@@ -316,6 +316,13 @@ def test_a_zoo_model_gets_the_voxel_size_it_was_trained_at_and_says_where_from(o
     assert resolve("organized-badger", voxel_size=8, online=False).entry()["voxel_size"] == [8, 8, 8]
 
 
+def test_a_cellmap_flow_config_is_refused_with_how_to_run_it(tmp_path):
+    config = tmp_path / "run.yaml"
+    config.write_text("data_path: /d\nmodels:\n  mito:\n    type: script\n    script_path: /s.py\n")
+    with pytest.raises(ValueError, match=r"cellmap-flow config \(1 model\(s\): mito\).*cellmap_flow yaml"):
+        resolve(str(config), online=False)
+
+
 # --- what is given -----------------------------------------------------------------------------
 
 def test_a_name_and_voxel_size_are_given_as_asked(tmp_path):
