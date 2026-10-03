@@ -24,6 +24,8 @@ Attributes
 .. autoapisummary::
 
    cellmap_flow.finetune.cli.logger
+   cellmap_flow.finetune.cli.LOSS_TYPES
+   cellmap_flow.finetune.cli.OUTPUT_TYPES
    cellmap_flow.finetune.cli.RESTARTABLE_ARGS
 
 
@@ -44,6 +46,14 @@ Module Contents
 ---------------
 
 .. py:data:: logger
+
+.. py:data:: LOSS_TYPES
+   :value: ('dice', 'bce', 'combined', 'mse', 'margin', 'interval', 'flow')
+
+
+.. py:data:: OUTPUT_TYPES
+   :value: ('binary', 'binary_broadcast', 'affinities', 'distance', 'flows')
+
 
 .. py:function:: build_arg_parser()
 

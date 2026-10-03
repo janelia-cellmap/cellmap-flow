@@ -130,7 +130,9 @@ patch: a correction labels a few voxels of it, and the rest must not count.
 <code class="docutils literal notranslate"><span class="pre">masked_mean</span></code> is that average, <code class="docutils literal notranslate"><span class="pre">balanced_mean</span></code> gives the foreground and
 the background half the weight each, and the losses and the distillation
 term below are built from the two. <code class="docutils literal notranslate"><span class="pre">IntervalLoss</span></code>, a distance model’s loss
-on scribbles, works in logits instead of probabilities (<code class="docutils literal notranslate"><span class="pre">as_logits</span></code>).</p>
+on scribbles, works in logits instead of probabilities (<code class="docutils literal notranslate"><span class="pre">as_logits</span></code>). A
+flow model’s loss, <code class="docutils literal notranslate"><span class="pre">instance_flows.FlowLoss</span></code>, is built from
+<code class="docutils literal notranslate"><span class="pre">masked_mean</span></code> too, and lives beside the target it compares with.</p>
 <p>The float operations are kept in the order the trainer always used, so a
 run computes the same numbers bit for bit
 (tests/finetune/test_training_snapshot.py).</p>

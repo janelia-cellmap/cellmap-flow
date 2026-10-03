@@ -156,6 +156,11 @@ Module Contents
 
 
 
+   .. py:attribute:: finetunable
+      :value: True
+
+
+
    .. py:attribute:: checkpoint_path
       :value: ''
 

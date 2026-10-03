@@ -133,7 +133,8 @@ at, when it is not the one its server declares.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">prediction_url()</span></code> and <code class="docutils literal notranslate"><span class="pre">prediction_source()</span></code>: the layer’s URL, a zarr
 served by the model’s inference server with the chain in it, and its
 source, that URL with the override as its transform.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">prediction_shader_for()</span></code>: a shader over the range the chain produces.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">prediction_shader_for()</span></code>: a shader over the range the chain produces;
+for a flow model’s channels, one that shows them all at once.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">prediction_layer()</span></code>: the layer itself, a segmentation when the chain
 ends in labels and an image otherwise.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">raw_layer()</span></code>: the raw data, with the user’s shader put back.</p></li>
@@ -146,6 +147,9 @@ server once.</p>
 <table class="autosummary longtable docutils align-default">
 <tbody>
 <tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.viewer.layers.logger" title="cellmap_flow.viewer.layers.logger"><code class="xref py py-obj docutils literal notranslate"><span class="pre">logger</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.viewer.layers.FLOW_CHANNELS" title="cellmap_flow.viewer.layers.FLOW_CHANNELS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">FLOW_CHANNELS</span></code></a></p></td>
 <td><p></p></td>
 </tr>
 </tbody>
@@ -164,11 +168,17 @@ server once.</p>
 <tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.viewer.layers.prediction_source" title="cellmap_flow.viewer.layers.prediction_source"><code class="xref py py-obj docutils literal notranslate"><span class="pre">prediction_source</span></code></a>(host, model, url_blob[, ...])</p></td>
 <td><p>The source of <code class="docutils literal notranslate"><span class="pre">model</span></code>'s layer: its zarr on <code class="docutils literal notranslate"><span class="pre">host</span></code>, with <code class="docutils literal notranslate"><span class="pre">url_blob</span></code></p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.viewer.layers.prediction_shader_for" title="cellmap_flow.viewer.layers.prediction_shader_for"><code class="xref py py-obj docutils literal notranslate"><span class="pre">prediction_shader_for</span></code></a>(model, host, postprocess[, ...])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.viewer.layers.flow_channels" title="cellmap_flow.viewer.layers.flow_channels"><code class="xref py py-obj docutils literal notranslate"><span class="pre">flow_channels</span></code></a>(info, postprocess)</p></td>
+<td><p>The indices of a flow model's <code class="docutils literal notranslate"><span class="pre">flow_y</span></code> and <code class="docutils literal notranslate"><span class="pre">flow_x</span></code> channels, as its</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.viewer.layers.prediction_shader_for" title="cellmap_flow.viewer.layers.prediction_shader_for"><code class="xref py py-obj docutils literal notranslate"><span class="pre">prediction_shader_for</span></code></a>(model, host, postprocess[, ...])</p></td>
 <td><p>A shader for <code class="docutils literal notranslate"><span class="pre">model</span></code>'s layer over the range <code class="docutils literal notranslate"><span class="pre">postprocess</span></code> produces.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.viewer.layers.prediction_layer" title="cellmap_flow.viewer.layers.prediction_layer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">prediction_layer</span></code></a>(model, host, url_blob, *, ...[, ...])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.viewer.layers.prediction_layer" title="cellmap_flow.viewer.layers.prediction_layer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">prediction_layer</span></code></a>(model, host, url_blob, *, ...[, ...])</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">model</span></code>'s layer, overlaid on the raw at <code class="docutils literal notranslate"><span class="pre">dataset_path</span></code>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.viewer.layers.display_channel" title="cellmap_flow.viewer.layers.display_channel"><code class="xref py py-obj docutils literal notranslate"><span class="pre">display_channel</span></code></a>(info, postprocess)</p></td>
+<td><p>The channel a model's layer opens on: the one its server names</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.viewer.layers.raw_layer" title="cellmap_flow.viewer.layers.raw_layer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">raw_layer</span></code></a>(dataset_path, *[, wrap_raw, shader, ...])</p></td>
 <td><p>The raw data's layer (viewer.raw.get_raw_layer), with the user's</p></td>
@@ -211,7 +221,7 @@ equal.</p>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="cellmap_flow.viewer.layers.prediction_source">
-<span class="sig-prename descclassname"><span class="pre">cellmap_flow.viewer.layers.</span></span><span class="sig-name descname"><span class="pre">prediction_source</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">host</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">url_blob</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">override_scales</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">has_channel</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.viewer.layers.prediction_source" title="Link to this definition"></a></dt>
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.viewer.layers.</span></span><span class="sig-name descname"><span class="pre">prediction_source</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">host</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">url_blob</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">override_scales</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">has_channel</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">channels_shaded</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.viewer.layers.prediction_source" title="Link to this definition"></a></dt>
 <dd><p>The source of <code class="docutils literal notranslate"><span class="pre">model</span></code>’s layer: its zarr on <code class="docutils literal notranslate"><span class="pre">host</span></code>, with <code class="docutils literal notranslate"><span class="pre">url_blob</span></code>
 (PipelineSpec.to_url_blob) in the URL.</p>
 <p>With <code class="docutils literal notranslate"><span class="pre">override_scales</span></code> (z, y, x nm, as prediction_voxel_override gives
@@ -219,6 +229,25 @@ them) it is a dict whose transform declares the array at those scales.
 Neuroglancer wants the same rank on both sides of a transform, so a
 served array with a channel axis (the last, <code class="docutils literal notranslate"><span class="pre">has_channel</span></code>) keeps it as a
 unit-less <code class="docutils literal notranslate"><span class="pre">c^</span></code>.</p>
+<p>Neuroglancer reads a served channel axis as <code class="docutils literal notranslate"><span class="pre">c'</span></code>, a slider that shows
+one channel at a time. <code class="docutils literal notranslate"><span class="pre">channels_shaded</span></code> renames it <code class="docutils literal notranslate"><span class="pre">c^</span></code>, a channel
+axis, which the shader reads every channel of. A transform renames the
+source dimensions it names and passes the rest through.</p>
+</dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.viewer.layers.FLOW_CHANNELS">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.viewer.layers.</span></span><span class="sig-name descname"><span class="pre">FLOW_CHANNELS</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">('flow_y',</span> <span class="pre">'flow_x')</span></span><a class="headerlink" href="#cellmap_flow.viewer.layers.FLOW_CHANNELS" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.viewer.layers.flow_channels">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.viewer.layers.</span></span><span class="sig-name descname"><span class="pre">flow_channels</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">info</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">postprocess</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.viewer.layers.flow_channels" title="Link to this definition"></a></dt>
+<dd><p>The indices of a flow model’s <code class="docutils literal notranslate"><span class="pre">flow_y</span></code> and <code class="docutils literal notranslate"><span class="pre">flow_x</span></code> channels, as its
+server names them, while the chain keeps its channels; None otherwise.</p>
+<p>A model that predicts flows towards each object’s centre (Cellpose) has
+channels that mean different things: one at a time, the y flow alone
+says little. prediction_layer shows them together instead.</p>
 </dd></dl>
 
 <dl class="py function">
@@ -231,6 +260,10 @@ the range (serving.probe.output_display_range). The colour is the one in
 <code class="docutils literal notranslate"><span class="pre">previous_shader</span></code> if it has one, so a recomputed range does not also
 change the colours the user navigates by; else <code class="docutils literal notranslate"><span class="pre">color</span></code>; else the first
 prediction colour.</p>
+<p>For a flow model’s channels (flow_channels), the shader colours each
+voxel by its flow’s direction, dimmed by the channel the server names to
+display (<code class="docutils literal notranslate"><span class="pre">display_channel</span></code>, Cellpose’s cell probability) over the
+range; unticking <code class="docutils literal notranslate"><span class="pre">flows</span></code> shows that channel alone.</p>
 </dd></dl>
 
 <dl class="py function">
@@ -241,6 +274,14 @@ prediction colour.</p>
 ImageLayer with <code class="docutils literal notranslate"><span class="pre">shader_controls</span></code> and <code class="docutils literal notranslate"><span class="pre">shader</span></code>, the user’s; without
 one, prediction_shader_for’s in <code class="docutils literal notranslate"><span class="pre">previous_shader</span></code>’s colour or
 <code class="docutils literal notranslate"><span class="pre">color</span></code>.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.viewer.layers.display_channel">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.viewer.layers.</span></span><span class="sig-name descname"><span class="pre">display_channel</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">info</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">postprocess</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.viewer.layers.display_channel" title="Link to this definition"></a></dt>
+<dd><p>The channel a model’s layer opens on: the one its server names
+(<code class="docutils literal notranslate"><span class="pre">display_channel</span></code>, Cellpose’s cell probability rather than flow_y),
+while the chain keeps the model’s channels; None otherwise (the first).</p>
 </dd></dl>
 
 <dl class="py function">

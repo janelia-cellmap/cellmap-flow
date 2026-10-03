@@ -42,6 +42,12 @@ cellmap_flow.models.configs.bio
    space, such as micro-SAM's, whose masks have an object axis of data-dependent
    size and need prompts.
 
+   It can be finetuned (``trainable_model``) when it has torch weights (a
+   state dict, which takes LoRA too, or TorchScript): the network is rebuilt
+   from them, with the input's normalization and the output's sigmoid around
+   it, and once trained serves through the inferencer's forward instead of
+   the pipeline.
+
    ``bioimageio`` is imported only when the model is built: the CLIs and the
    dashboard's model form import every type. The server runs in pixi.toml's
    ``bioimageio`` environment unless the entry names another ``env``.
@@ -55,6 +61,7 @@ Attributes
 
    cellmap_flow.models.configs.bio.logger
    cellmap_flow.models.configs.bio.WEIGHT_FORMATS
+   cellmap_flow.models.configs.bio.TRAINABLE_WEIGHT_FORMATS
    cellmap_flow.models.configs.bio.DEFAULT_INPUT_SIZE
    cellmap_flow.models.configs.bio.DEFAULT_SLICES_PER_CHUNK
    cellmap_flow.models.configs.bio.NM_PER_UNIT
@@ -84,6 +91,8 @@ Module Contents
 .. py:data:: WEIGHT_FORMATS
    :value: ('pytorch_state_dict', 'torchscript', 'onnx', 'tensorflow_saved_model_bundle', 'keras_hdf5', 'keras_v3')
 
+
+.. py:data:: TRAINABLE_WEIGHT_FORMATS
 
 .. py:data:: DEFAULT_INPUT_SIZE
 
@@ -146,6 +155,11 @@ Module Contents
 
 
 
+   .. py:attribute:: finetunable
+      :value: True
+
+
+
    .. py:attribute:: model
       :value: ''
 
@@ -189,6 +203,53 @@ Module Contents
    .. py:method:: process_chunk(idi: cellmap_flow.image_data_interface.ImageDataInterface, output_roi)
 
       ``output_roi`` predicted: ``(channels, z, y, x)``, in ``output_dtype``.
+
+
+
+   .. py:method:: trainable_model()
+
+      The model as one torch module, for the finetune trainer: (B, 1, Z, Y, X) of the read
+      shape in, (B, channels, Z', Y', X') of the write shape out, as process_chunk serves it.
+
+      Built from the model's description, the way bioimageio.core runs it:
+      the input's preprocessing (its normalization), the network from its
+      torch weights (a 2D one on each z slice, the slices in one call when
+      its batch axis takes any size), each output's postprocessing (a
+      sigmoid) and the same crop, the outputs' channels one after another.
+      Statistics are taken per patch, over the axes the RDF names, so a
+      patch is normalized as a chunk is; an RDF that names none asks
+      bioimageio.core for statistics of all it has seen, which a patch
+      cannot reproduce, and gets the patch's own.
+
+      Refuses, with a ValueError saying why, a model whose weights are not
+      torch (ONNX, TensorFlow, Keras: no torch module to train), or whose
+      output goes through something no gradient passes (labels, a
+      threshold, Stardist or Cellpose instances). On the device the server
+      uses, in float32 and in eval mode.
+
+
+
+   .. py:method:: serve_trained(config, module)
+
+      Serve ``module`` (the trained ``trainable_model()``) through the inferencer's own forward.
+
+      process_chunk runs the pipeline's weights, as loaded from the zoo, so
+      it is switched off: the module does all process_chunk did (the
+      normalization, each slice of a 2D model, the sigmoid, the crop),
+      given (1, 1, Z, Y, X) of the read shape, and gives float32.
+
+
+
+   .. py:method:: finetune_modes()
+
+      How the dashboard can finetune this model: ("lora", "full"), ("full",) or ().
+
+      From its weight formats only, without bioimageio or torch: the
+      catalog's cached entry, else a local rdf.yaml or .zip read as YAML,
+      else (where bioimageio.core is) its description. Torch weights
+      decide, as ``trainable_model`` picks them: a state dict takes LoRA
+      and a full finetune, TorchScript a full one only, and a model
+      without either, or whose weights cannot be told, none.
 
 
 

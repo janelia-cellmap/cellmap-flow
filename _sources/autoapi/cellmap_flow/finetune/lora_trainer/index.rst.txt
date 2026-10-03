@@ -61,15 +61,17 @@ Module Contents
    :param num_epochs: Number of training epochs (default: 10)
    :param gradient_accumulation_steps: Steps to accumulate gradients (default: 1)
    :param use_mixed_precision: Enable mixed precision on CUDA (default: True; off on the CPU)
-   :param loss_type: Loss function: "dice", "bce", "combined" (Dice + BCE), "mse", "margin"
-                     or "interval" (a distance model on scribbles; needs an IntervalTargetTransform)
+   :param loss_type: Loss function: "dice", "bce", "combined" (Dice + BCE), "mse", "margin",
+                     "interval" (a distance model on scribbles; needs an IntervalTargetTransform)
+                     or "flow" (a flow model such as Cellpose; needs a FlowTargetTransform)
    :param device: Training device ("cuda" or "cpu", auto-detected if None)
    :param select_channel: Optional channel index to select from multi-channel output (default: None)
    :param mask_unannotated: If True (default), only compute loss on annotated regions (target > 0).
                             Targets are shifted down by 1 (e.g., 1->0, 2->1) after masking.
                             This allows partial annotations where 0=unannotated, 1=background, 2=foreground, etc.
                             Ignored if target_transform is provided.
-   :param label_smoothing: s moves the targets to s/2 and 1 - s/2 (default: 0; forced to 0 for margin)
+   :param label_smoothing: s moves the targets to s/2 and 1 - s/2 (default: 0; forced to 0 for
+                           margin, interval and flow)
    :param distillation_lambda: Weight of the distillation term. None means 1.0 when the
                                dataset has good regions and 0 otherwise; an explicit 0 is honoured.
    :param distillation_all_voxels: Distil on every voxel, not only the unlabeled ones

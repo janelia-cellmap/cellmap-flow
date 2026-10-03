@@ -75,6 +75,52 @@ Module Contents
 
 
 
+   .. py:attribute:: display_channel
+      :value: None
+
+
+
+   .. py:attribute:: finetunable
+      :value: False
+
+
+
+   .. py:method:: finetune_modes()
+
+      What this model can be finetuned with: ("lora", "full"), ("full",)
+      or (). For the dashboard, so it must not build the network: a type
+      whose networks differ (a compiled one takes no LoRA adapter) reads
+      it from what describes the model. The trainer checks the module it
+      gets the same way (``finetune.trainable.finetune_modes``).
+
+
+
+   .. py:method:: trainable_model()
+
+      The torch module the finetune trainer trains, or None for
+      ``config.model`` as it is (``finetune.model_loading.load_trainable_model``).
+
+      The trainer feeds it a float tensor (B, 1, Z, Y, X), normalized as
+      the dashboard's input normalization does, at the input voxel size and
+      read shape, and wants (B, C, Z', Y', X') at the write shape back. A
+      type whose ``config.model`` is not such a module (a bioimage.io
+      prediction pipeline, a Cellpose model object) returns one that is,
+      sharing its parameters, so that what is trained is what is served.
+
+
+
+   .. py:method:: serve_trained(config, module)
+
+      Make ``config`` serve ``module``, the trained ``trainable_model()``.
+
+      ``config`` is this model's own Config (the trainer's live server) or
+      a new one with its geometry (a finetuned model's,
+      ``FinetuneModelConfig``). By default the module is the model, run by
+      the inferencer's own forward; a type that predicts through its own
+      ``process_chunk`` sets that up here instead.
+
+
+
    .. py:attribute:: validate_model_shapes
       :value: True
 
@@ -177,6 +223,11 @@ Module Contents
 
 
 
+   .. py:attribute:: finetunable
+      :value: True
+
+
+
    .. py:attribute:: script_path
 
 
@@ -202,6 +253,11 @@ Module Contents
 
    .. py:attribute:: cli_name
       :value: 'dacapo'
+
+
+
+   .. py:attribute:: finetunable
+      :value: True
 
 
 
@@ -254,6 +310,11 @@ Module Contents
 
    .. py:attribute:: cli_name
       :value: 'fly'
+
+
+
+   .. py:attribute:: finetunable
+      :value: True
 
 
 
@@ -365,6 +426,11 @@ Module Contents
 
 
 
+   .. py:attribute:: finetunable
+      :value: True
+
+
+
    .. py:attribute:: model
       :value: ''
 
@@ -411,6 +477,53 @@ Module Contents
 
 
 
+   .. py:method:: trainable_model()
+
+      The model as one torch module, for the finetune trainer: (B, 1, Z, Y, X) of the read
+      shape in, (B, channels, Z', Y', X') of the write shape out, as process_chunk serves it.
+
+      Built from the model's description, the way bioimageio.core runs it:
+      the input's preprocessing (its normalization), the network from its
+      torch weights (a 2D one on each z slice, the slices in one call when
+      its batch axis takes any size), each output's postprocessing (a
+      sigmoid) and the same crop, the outputs' channels one after another.
+      Statistics are taken per patch, over the axes the RDF names, so a
+      patch is normalized as a chunk is; an RDF that names none asks
+      bioimageio.core for statistics of all it has seen, which a patch
+      cannot reproduce, and gets the patch's own.
+
+      Refuses, with a ValueError saying why, a model whose weights are not
+      torch (ONNX, TensorFlow, Keras: no torch module to train), or whose
+      output goes through something no gradient passes (labels, a
+      threshold, Stardist or Cellpose instances). On the device the server
+      uses, in float32 and in eval mode.
+
+
+
+   .. py:method:: serve_trained(config, module)
+
+      Serve ``module`` (the trained ``trainable_model()``) through the inferencer's own forward.
+
+      process_chunk runs the pipeline's weights, as loaded from the zoo, so
+      it is switched off: the module does all process_chunk did (the
+      normalization, each slice of a 2D model, the sigmoid, the crop),
+      given (1, 1, Z, Y, X) of the read shape, and gives float32.
+
+
+
+   .. py:method:: finetune_modes()
+
+      How the dashboard can finetune this model: ("lora", "full"), ("full",) or ().
+
+      From its weight formats only, without bioimageio or torch: the
+      catalog's cached entry, else a local rdf.yaml or .zip read as YAML,
+      else (where bioimageio.core is) its description. Torch weights
+      decide, as ``trainable_model`` picks them: a state dict takes LoRA
+      and a full finetune, TorchScript a full one only, and a model
+      without either, or whose weights cannot be told, none.
+
+
+
    .. py:method:: to_dict()
 
       This config as a model entry, which ``registry.build_model`` rebuilds.
@@ -430,6 +543,11 @@ Module Contents
 
    .. py:attribute:: cli_name
       :value: 'cellmap'
+
+
+
+   .. py:attribute:: finetunable
+      :value: True
 
 
 
@@ -468,6 +586,11 @@ Module Contents
 
    .. py:attribute:: cli_name
       :value: 'finetune'
+
+
+
+   .. py:attribute:: finetunable
+      :value: True
 
 
 
@@ -525,6 +648,28 @@ Module Contents
       Lazily build the base ModelConfig from the stored dict.
 
 
+   .. py:property:: display_channel
+
+      a finetune serves the same channels.
+
+      :type: Its base's
+
+
+   .. py:method:: finetune_modes()
+
+      Its base's: continuing a finetune trains the same network.
+
+
+
+   .. py:method:: trainable_model()
+
+      The module it serves (its base's trainable module with the adapter
+      or weights on), to train on from where the finetune left off; not
+      ``config.model``, which a type serving through its own process_chunk
+      (cellpose) keeps as its own model object.
+
+
+
    .. py:method:: to_dict()
 
       This config as a model entry, which ``registry.build_model`` rebuilds.
@@ -543,6 +688,11 @@ Module Contents
 
    .. py:attribute:: cli_name
       :value: 'huggingface'
+
+
+
+   .. py:attribute:: finetunable
+      :value: True
 
 
 
@@ -575,7 +725,7 @@ Module Contents
 
 
 
-.. py:class:: CellposeModelConfig(voxel_size, pretrained_model: str = 'cpsam_v2', output: str = 'probability', slices_per_chunk: int = 8, slice_size: int = 512, context: int = 32, batch_size: int = None, diameter: float = None, flow_threshold: float = 0.4, cellprob_threshold: float = 0.0, name=None, scale=None)
+.. py:class:: CellposeModelConfig(voxel_size, pretrained_model: str = 'cpsam_v2', output: str = 'flows', slices_per_chunk: int = 8, slice_size: int = 512, context: int = 32, batch_size: int = DEFAULT_BATCH_SIZE, diameter: float = None, flow_threshold: float = 0.4, cellprob_threshold: float = 0.0, stitch_threshold: float = 0.0, name=None, scale=None)
 
 
 
@@ -587,12 +737,14 @@ Module Contents
                       ``diameter``.
    :param pretrained_model: "cpsam_v2" (default), "cpsam", "cpdino",
                             "cpdino-vitb", or the path of finetuned Cellpose weights.
-   :param output: "probability" (float32, 0 to 1) or "masks" (uint64, ids
-                  unique within a chunk).
+   :param output: "flows" (the default; float32: flow_y, flow_x and the cell
+                  probability), "probability" (float32, 0 to 1, one channel) or
+                  "masks" (uint64, ids unique within a chunk).
    :param slices_per_chunk: z slices in a chunk.
    :param slice_size: voxels a side, in y and x, of each chunk's slices.
    :param context: voxels read on each side in y and x beyond those, and cut off.
-   :param batch_size: tiles per GPU pass; None puts the whole chunk's in one.
+   :param batch_size: tiles per GPU pass (``DEFAULT_BATCH_SIZE``; None, as a
+                      blank form field sends it, is that too).
    :param diameter: object diameter in input voxels; None keeps the model's
                     own scale (about 30). Cellpose resizes each slice by
                     30 / diameter.
@@ -600,6 +752,10 @@ Module Contents
                           only).
    :param cellprob_threshold: Cellpose's mask thresholds (masks
                               only).
+   :param stitch_threshold: Cellpose's own slice linking (masks only): a mask
+                            takes the id of the mask in the slice before that it overlaps by
+                            at least this IoU, within a chunk. 0, the default, leaves each
+                            slice's masks apart.
 
 
    .. py:attribute:: cli_name
@@ -612,6 +768,23 @@ Module Contents
 
 
 
+   .. py:attribute:: finetunable
+      :value: True
+
+
+
+   .. py:attribute:: finetune_output_type
+      :value: 'flows'
+
+
+
+   .. py:property:: display_channel
+
+      The cell probability's channel when the output has several (flows):
+      the layer's flow colours are dimmed by it, and its range is the
+      layer's.
+
+
    .. py:attribute:: voxel_size
 
 
@@ -621,7 +794,7 @@ Module Contents
 
 
    .. py:attribute:: output
-      :value: 'probability'
+      :value: 'flows'
 
 
 
@@ -641,7 +814,7 @@ Module Contents
 
 
    .. py:attribute:: batch_size
-      :value: None
+      :value: 16
 
 
 
@@ -654,6 +827,9 @@ Module Contents
 
 
    .. py:attribute:: cellprob_threshold
+
+
+   .. py:attribute:: stitch_threshold
 
 
    .. py:attribute:: name
@@ -675,7 +851,66 @@ Module Contents
 
    .. py:method:: process_chunk(idi, output_roi)
 
-      ``output_roi`` segmented: ``(1, z, y, x)``, probability or masks.
+      ``output_roi`` segmented: ``(channels, z, y, x)``, the ``output``'s channels.
+
+
+
+   .. py:method:: finetune_modes()
+
+      ("lora", "full"), without building the network: every Cellpose 4
+      network is a ViT whose Linear and Conv layers take adapters.
+
+
+
+   .. py:method:: training_patch_voxels()
+
+      The patch the trainer reads, (input, output) in voxels: one slice of one tile.
+
+      Not the serving geometry. Cellpose-SAM's ViT adds a fixed 32 x 32
+      grid of position embeddings to its 8-pixel tokens, so it takes
+      256 x 256 images and nothing else; Cellpose serves a slice by
+      cutting it into such tiles, and trains on random tiles of that size
+      too. The trainer does the same: it reads tiles, and supervises the
+      whole of each, as Cellpose does (an instance cut by its edge is left
+      out of the flow loss, ``instance_flows``). One slice: the network is
+      2D and sees each slice alone, so more slices would cost a network
+      pass each and add nothing, and a one-slice patch centred on a
+      painted voxel always lands on paint.
+
+
+
+   .. py:method:: trainable_model()
+
+      Cellpose's network as the trainer trains it: (B, 1, Z, Y, X) -> (B, 3, Z, Y, X).
+
+      Each slice normalized as Cellpose's eval does (1st to 99th
+      percentile), then through the network, which gives flowY, flowX and
+      the cell probability logit (``instance_flows``' channels). The
+      network is the one ``config.model`` segments with, so what
+      is trained is what is served; it is put in float32 (Cellpose loads
+      it in bfloat16), which serving then uses too. Its patch embedding is
+      kept out of LoRA (``lora_exclude_patterns``): Cellpose's forward
+      reads that layer's weight tensor directly, so an adapter on it would
+      never be used.
+
+
+
+   .. py:method:: serve_trained(config, module)
+
+      Serve ``module`` (the trained ``trainable_model()``) through Cellpose's eval.
+
+      Training changed the network in place, LoRA adapters and all, and
+      Cellpose's eval runs that network, so the chunks are segmented as
+      before. ``config`` is this model's own config (the trainer's live
+      server) or a finetuned model's new one with this geometry, which
+      gets what segmenting needs.
+
+      ``config.model`` stays Cellpose's model object, as it is for the
+      base model, so the inferencer neither moves nor forwards it. Were it
+      the module, the warmup and the shape check would forward it, and a
+      3-channel tile network fails the 1-channel serving geometry: as a
+      hard error whenever the read slice happens to be one tile. The
+      module is kept as ``config.trained_module``.
 
 
 

@@ -201,6 +201,8 @@ tree with its LoRA adapter attached (a PeftModel), or with its full
 finetuned weights loaded. Wrapping it in a new adapter folds the old
 one in first (lora_wrapper._merge_existing_adapters), so training
 continues from the finetuned model rather than from its base.</p></li>
+<li><p>A type whose <code class="docutils literal notranslate"><span class="pre">trainable_model()</span></code> gives one (bioimage, cellpose):
+that module.</p></li>
 <li><p>Anything else: <code class="docutils literal notranslate"><span class="pre">model_config.config.model</span></code> as it is.</p></li>
 </ul>
 </dd></dl>

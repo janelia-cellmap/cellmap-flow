@@ -13,6 +13,7 @@ Attributes
    cellmap_flow.dashboard.routes.finetune.common.USER_PREFS_FILE
    cellmap_flow.dashboard.routes.finetune.common.LOG_FILTER_PATTERNS
    cellmap_flow.dashboard.routes.finetune.common.RESTART_PASSTHROUGH_KEYS
+   cellmap_flow.dashboard.routes.finetune.common.INSTANCE_TARGETS
    cellmap_flow.dashboard.routes.finetune.common.SPARSE_MSE_NOTE
 
 
@@ -38,6 +39,8 @@ Functions
    cellmap_flow.dashboard.routes.finetune.common.save_user_prefs
    cellmap_flow.dashboard.routes.finetune.common.resolve_finetune_session
    cellmap_flow.dashboard.routes.finetune.common.detect_sparse_annotations
+   cellmap_flow.dashboard.routes.finetune.common.declared_output_type
+   cellmap_flow.dashboard.routes.finetune.common.annotation_dtype_for
    cellmap_flow.dashboard.routes.finetune.common.autodetect_output_type
    cellmap_flow.dashboard.routes.finetune.common.training_settings
    cellmap_flow.dashboard.routes.finetune.common.build_restart_params
@@ -100,6 +103,29 @@ Module Contents
    without a manifest cannot be trained, so it is not sparse either.
 
 
+.. py:function:: declared_output_type(model_config)
+
+   The training target a model type declares (``finetune_output_type``), or None.
+
+   Cellpose predicts flows, so its type says "flows". A finetuned model
+   trains as its base does, so its ``base_model_config`` is asked in turn
+   (building that config builds no network).
+
+
+.. py:data:: INSTANCE_TARGETS
+   :value: ('affinities', 'flows')
+
+
+.. py:function:: annotation_dtype_for(model_config)
+
+   The labels' dtype of a new annotation volume for ``model_config``.
+
+   uint8 (ids up to 255) for a model trained on foreground and background;
+   uint16 (up to 65535) for one trained on instances (affinities, Cellpose's
+   flows), whose seeds number each object: 282 of a Cellpose model's masks
+   in one box did not fit a uint8 volume.
+
+
 .. py:function:: autodetect_output_type(model_config, output_type, offsets)
 
 .. py:class:: TrainingSettings
@@ -152,7 +178,9 @@ Module Contents
    - a distance target with sparse annotations: the interval loss, on the
      bounds the paint sets on each voxel's distance, with distillation of
      at least 0.5 (see below);
-   - a distance target otherwise: bce, without label smoothing.
+   - a distance target otherwise: bce, without label smoothing;
+   - a flow target (Cellpose): the flow loss, the only one it goes with,
+     without label smoothing, sparse or not (it masks per channel itself).
    A sparse session also masks its unannotated voxels out of the loss.
 
 

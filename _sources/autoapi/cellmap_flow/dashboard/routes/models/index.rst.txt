@@ -73,7 +73,8 @@ Module Contents
 
    Run the models the Models tab has ticked (a SubmitModels), and stop
    the others: services.launch.update_run_models. A zoo model that needs a
-   voxel size and was given none is a 400, and nothing changes.
+   voxel size and was given none, or a Cellpose model without one, is a
+   400, and nothing changes.
 
 
 .. py:function:: job_logs()

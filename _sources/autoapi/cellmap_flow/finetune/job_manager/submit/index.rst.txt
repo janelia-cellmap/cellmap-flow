@@ -30,8 +30,7 @@ Attributes
 .. autoapisummary::
 
    cellmap_flow.finetune.job_manager.submit.logger
-   cellmap_flow.finetune.job_manager.submit.TRAINABLE_MODEL_TYPES
-   cellmap_flow.finetune.job_manager.submit.MODEL_ENTRY_TYPES
+   cellmap_flow.finetune.job_manager.submit.FLAG_MODEL_TYPES
    cellmap_flow.finetune.job_manager.submit.SYNCED_TEE
    cellmap_flow.finetune.job_manager.submit.TEE_PYTHON
 
@@ -41,6 +40,7 @@ Functions
 
 .. autoapisummary::
 
+   cellmap_flow.finetune.job_manager.submit.trainable_model_types
    cellmap_flow.finetune.job_manager.submit.resolve_model_type
    cellmap_flow.finetune.job_manager.submit.model_entry
    cellmap_flow.finetune.job_manager.submit.find_checkpoint
@@ -56,9 +56,12 @@ Module Contents
 
 .. py:data:: logger
 
-.. py:data:: TRAINABLE_MODEL_TYPES
+.. py:data:: FLAG_MODEL_TYPES
 
-.. py:data:: MODEL_ENTRY_TYPES
+.. py:function:: trainable_model_types() -> list
+
+   The model types the trainer can train: those that say so (``ModelConfig.finetunable``).
+
 
 .. py:function:: resolve_model_type(model_config) -> str
 
@@ -71,7 +74,7 @@ Module Contents
 .. py:function:: model_entry(model_config, model_type: str, checkpoint_path: Optional[pathlib.Path]) -> Optional[dict]
 
    The model as the trainer takes it with --model-entry, or None for a type
-   that goes by its own flags (MODEL_ENTRY_TYPES).
+   that goes by its own flags (FLAG_MODEL_TYPES).
 
    The entry is the model's to_dict(), so the trainer builds the model the
    dashboard serves; ``checkpoint_path`` (find_checkpoint's) replaces the

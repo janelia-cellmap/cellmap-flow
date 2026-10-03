@@ -8,13 +8,16 @@ cellmap_flow.dashboard.routes.finetune.view_labels
    Labelling the box on screen in one click: from the model's prediction, or all background.
 
    Two buttons beside "Mark This View as Good", over the same box (one model
-   output patch centred where the viewer looks, ``good_regions.view_box_nm``):
+   output patch centred where the viewer looks, ``good_regions.view_box_nm``,
+   or ``box_voxels`` annotation voxels when the request gives them):
 
    - POST ``/api/finetune/view-labels/seed``: the model's prediction there,
-     thresholded at its decision boundary, written as foreground 2 (an id per
-     object, 2 and up, for an affinity model on an instance volume) and
-     background 1. The user then cleans it up with the brush; it is far
-     quicker than painting a whole object from nothing.
+     segmented into objects, each written with an id of its own (2 and up),
+     and background 1. The user then cleans it up with the brush; it is far
+     quicker than painting a whole object from nothing. How it is segmented
+     is the request's ``method``, one of the ``post.segment`` segmenters that
+     fits what the model outputs (``SEED_METHODS``); ``seed_sources`` says
+     which fit each running model.
    - POST ``/api/finetune/view-labels/background``: every unannotated voxel 1,
      for a region the model fills with false positives.
 
@@ -38,7 +41,11 @@ Attributes
    cellmap_flow.dashboard.routes.finetune.view_labels.logger
    cellmap_flow.dashboard.routes.finetune.view_labels.LARGE_BOX_VOXELS
    cellmap_flow.dashboard.routes.finetune.view_labels.PREDICTION_TIMEOUT_SECONDS
+   cellmap_flow.dashboard.routes.finetune.view_labels.METADATA_TIMEOUT_SECONDS
+   cellmap_flow.dashboard.routes.finetune.view_labels.SEED_METHODS
    cellmap_flow.dashboard.routes.finetune.view_labels.UNDO_DEPTH
+   cellmap_flow.dashboard.routes.finetune.view_labels.CELLPOSE_CELL_CHANNEL
+   cellmap_flow.dashboard.routes.finetune.view_labels.UNANSWERED_RETRY_SECONDS
 
 
 Functions
@@ -46,9 +53,14 @@ Functions
 
 .. autoapisummary::
 
+   cellmap_flow.dashboard.routes.finetune.view_labels.model_output
+   cellmap_flow.dashboard.routes.finetune.view_labels.methods_for
+   cellmap_flow.dashboard.routes.finetune.view_labels.seed_methods
    cellmap_flow.dashboard.routes.finetune.view_labels.seed_sources
    cellmap_flow.dashboard.routes.finetune.view_labels.read_prediction
+   cellmap_flow.dashboard.routes.finetune.view_labels.probability
    cellmap_flow.dashboard.routes.finetune.view_labels.foreground_mask
+   cellmap_flow.dashboard.routes.finetune.view_labels.segment_prediction
    cellmap_flow.dashboard.routes.finetune.view_labels.seed_view_from_prediction
    cellmap_flow.dashboard.routes.finetune.view_labels.label_view_background
    cellmap_flow.dashboard.routes.finetune.view_labels.split_view_objects
@@ -68,44 +80,111 @@ Module Contents
    :value: 120
 
 
+.. py:data:: METADATA_TIMEOUT_SECONDS
+   :value: 5
+
+
+.. py:data:: SEED_METHODS
+   :value: ('components', 'mutex_watershed', 'distance_watershed', 'instances')
+
+
 .. py:data:: UNDO_DEPTH
    :value: 10
+
+
+.. py:data:: CELLPOSE_CELL_CHANNEL
+   :value: 2
+
+
+.. py:function:: model_output(model_name)
+
+   ``(output_type, offsets)``: what the model is trained on, as submit decides it.
+
+   ``autodetect_output_type``: "affinities" (with the offsets, a JSON
+   list) when the model's script or channel names say so, "distance" for
+   a distance model, a type's declared target ("flows" for Cellpose), else
+   "binary". A model with no config here, or affinities without offsets,
+   is "binary": a threshold is all a seed can do with it.
+
+
+.. py:function:: methods_for(output_type, serves_integers)
+
+   The seed methods that fit a model's output, the best fit first.
+
+   ``components`` fits every output (an instance label is foreground where
+   it is not 0), so it is always offered, last unless nothing else fits.
+
+
+.. py:data:: UNANSWERED_RETRY_SECONDS
+   :value: 60
+
+
+.. py:function:: seed_methods(model_name, host, base_model=None)
+
+   The methods a seed from ``model_name``'s server can use (``methods_for``).
 
 
 .. py:function:: seed_sources()
 
    The models a seed can read, for the page's picker: ``models`` (every
-   running server, oldest first) and ``default``, the one a seed reads when
-   none is chosen (None when that is a choice for the user).
+   running server, oldest first), ``default``, the one a seed reads when
+   none is chosen (None when that is a choice for the user), and
+   ``methods``, {model: the seed methods that fit its output, best first};
+   and ``box_voxels``, the volume's output patch (z, y, x), the box a label
+   action covers when it gives no other.
 
 
-.. py:function:: read_prediction(host, model_name, volume, lo, hi, info)
+.. py:function:: read_prediction(host, model_name, volume, lo, hi, info, postprocess=())
 
    The model's raw output over annotation voxels ``[lo, hi)``.
 
    Read from its server as a layer is, with the dashboard's input
    normalization and no postprocessing: the trainer's target is set on the
-   raw output, and that is where its decision boundary is. Each annotation
+   raw output, and that is where its decision boundary is. (``postprocess``
+   asks for one anyway: Cellpose's masks of a flows server's output, for a
+   seed of its instances.) Each annotation
    voxel takes the served voxel its centre lies in, placed where
    neuroglancer draws the layer (``prediction_voxel_override``), so the
    seed lies under the prediction the user sees.
 
-   Returns ``(prediction, lo, hi)``: a (channels, z, y, x) float32 array,
-   and the box, shrunk to what the server covers.
+   Returns ``(prediction, lo, hi)``: a (channels, z, y, x) array, float32
+   or, when the server serves integer labels, as served (an id past 2^24
+   is not exact in float32); and the box, shrunk to what the server covers.
+
+
+.. py:function:: probability(prediction, output_class=None, channels=None)
+
+   The prediction as a probability, (channels, z, y, x), 0.5 at the model's decision boundary.
+
+   The boundary depends on the output's activation: 0.5 on [0, 1] output
+   (a sigmoid already applied; the cellmap distance models end in one, and
+   0.5 is their object boundary), 0 on tanh's [-1, 1], and 0 on unbounded
+   output, logits or a signed distance alike. Each is turned into a
+   probability, so ``channels`` -- the affinity channels, say -- can be
+   averaged and one threshold means the same for every model.
+   ``output_class`` is the server's (serving.probe), or read off the
+   values when it has none.
 
 
 .. py:function:: foreground_mask(prediction, output_class=None, channels=None, threshold=0.5)
 
-   Where the model says foreground: its probability over ``threshold``.
+   Where the model says foreground: its ``probability``, averaged over ``channels``, over ``threshold``.
 
-   The decision boundary depends on the output's activation: 0.5 on [0, 1]
-   output (a sigmoid already applied; the cellmap distance models end in
-   one, and 0.5 is their object boundary), 0 on tanh's [-1, 1], and 0 on
-   unbounded output, logits or a signed distance alike. Each is turned into
-   a probability first, so ``channels`` -- the affinity channels, say --
-   can be averaged. ``output_class`` is the server's (serving.probe), or
-   read off the values when it has none. ``threshold`` is in probability
-   whatever the activation: 0.5 is the model's own boundary.
+   ``threshold`` is in probability whatever the activation: 0.5 is the
+   model's own boundary.
+
+
+.. py:function:: segment_prediction(method, prediction, output_class, channels, offsets, threshold=0.5, min_size=0, connectivity=1, per_slice=False)
+
+   The objects ``method`` makes of the prediction: 0 background, 1..n (``post.segment``).
+
+   ``threshold`` is a probability (``probability``) for every method that
+   thresholds: the foreground boundary for components and the distance
+   watershed, and the mutex watershed's bias, the affinity above which
+   two voxels join. ``connectivity`` and ``per_slice`` are the connected
+   components'; the watersheds take ``connectivity`` too. ``instances``
+   splits an id's disconnected parts: a server numbers each chunk's
+   objects on its own (Cellpose's from 1), and the box can span chunks.
 
 
 .. py:function:: seed_view_from_prediction()
@@ -115,9 +194,12 @@ Module Contents
    JSON body, all optional: ``size_nm`` (as for mark-view), ``confirm``
    (label a large box), ``select_channel`` (the channel the session
    trains, when it trains one), ``model`` (a name from ``seed_sources``;
-   the latest finetune, else the base, when absent), ``threshold`` (probability, 0 to 1; the
-   model's own boundary, 0.5, when absent) and ``min_size`` (objects of
-   fewer voxels are background).
+   the latest finetune, else the base, when absent), ``method`` (one of
+   the model's ``seed_sources`` methods; "components" when absent),
+   ``threshold`` (probability, 0 to 1; the model's own boundary, 0.5, when
+   absent: see ``segment_prediction``), ``min_size`` (objects of fewer
+   voxels are background), ``connectivity`` (1 faces, the default; 2 and
+   edges; 3 all neighbours) and ``per_slice`` (components per z slice).
 
 
 .. py:function:: label_view_background()
@@ -134,7 +216,10 @@ Module Contents
    For a merge the model made: paint a background wall through the object,
    in every slice it spans, and click; the two sides get ids of their own
    (``fill.relabel_objects``). A stroke joining two objects merges them.
-   JSON body, all optional: ``size_nm`` and ``confirm``, as for seed.
+   JSON body, all optional: ``size_nm`` and ``confirm``, as for seed;
+   ``connectivity`` and ``per_slice``, as for a seed's components (with
+   ``per_slice``, a wall in one slice is enough, and each slice of an
+   object gets an id of its own).
 
 
 .. py:function:: undo_view_labels()

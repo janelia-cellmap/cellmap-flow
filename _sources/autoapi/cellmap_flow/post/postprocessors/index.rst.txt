@@ -26,6 +26,7 @@ Classes
    cellmap_flow.post.postprocessors.MortonSegmentationRelabeling
    cellmap_flow.post.postprocessors.AffinityPostprocessor
    cellmap_flow.post.postprocessors.SimpleBlockwiseMerger
+   cellmap_flow.post.postprocessors.CellposeMasksPostprocessor
    cellmap_flow.post.postprocessors.ChannelSelection
    cellmap_flow.post.postprocessors.LambdaPostprocessor
 
@@ -52,6 +53,16 @@ Module Contents
 
 
    .. py:property:: is_segmentation
+
+
+   .. py:method:: problem_with(model_config)
+
+      Why this step cannot run on ``model_config``'s output, or None when it can.
+
+      Checked by the dashboard before it applies a chain: a step that
+      fails on every chunk does so inside the model's server, where the
+      page shows only an empty layer.
+
 
 
 .. py:class:: SigmoidPostprocessor
@@ -126,16 +137,32 @@ Module Contents
    .. py:property:: is_segmentation
 
 
-.. py:class:: LabelPostprocessor(channel: int = 0)
+.. py:class:: LabelPostprocessor(channel: int = 0, connectivity: int = 1, min_size: int = 0, per_slice: bool = False)
 
 
 
-   Base class for post-processing methods.
+   An id per connected object of one channel's nonzero voxels (``segment.connected_components``).
+
+   ``connectivity``: 1 faces (the default), 2 faces and edges, 3 all
+   neighbours. ``min_size``: objects of fewer voxels become background.
+   ``per_slice``: each z slice labelled on its own, in 2D. The other
+   channels pass through, as uint32.
 
 
    .. py:attribute:: channel
       :value: 0
 
+
+
+   .. py:attribute:: connectivity
+
+
+   .. py:attribute:: min_size
+      :value: 0
+
+
+
+   .. py:attribute:: per_slice
 
 
    .. py:property:: dtype
@@ -176,7 +203,12 @@ Module Contents
 
 
 
-   Base class for post-processing methods.
+   Objects from affinities by mutex watershed (``segment.mutex_watershed``).
+
+   ``bias``: the affinity above which neighbours join, and below which a
+   fragment's mean makes it background. ``neighborhood``: the offset each
+   channel compares, as the model was trained with. Ids are offset by the
+   chunk's Morton index, so they are unique across chunks.
 
 
    .. py:attribute:: bias
@@ -251,6 +283,70 @@ Module Contents
 
 
    .. py:property:: is_segmentation
+
+
+.. py:class:: CellposeMasksPostprocessor(flow_threshold: float = 0.4, cellprob_threshold: float = 0.0, min_size: int = 15, stitch_threshold: float = 0.0, niter: int = 200)
+
+
+
+   Cellpose's masks, made from a Cellpose model's flows output.
+
+   Cellpose turns its three output channels into objects by following each
+   pixel's flow to where the flows converge. Run here, on a server with
+   ``output: flows`` (channels flow_y, flow_x and cell, the probability),
+   its thresholds can be changed from the dashboard and the layer redrawn,
+   where ``output: masks`` fixes them when the server starts. Put it first
+   in the chain, on the flows as served. It needs Cellpose, which a
+   Cellpose model's server has.
+
+   Each slice is segmented on its own, as Cellpose segments a 2D image;
+   ``stitch_threshold`` above 0 joins a slice's object to the next slice's
+   one it overlaps by that IoU (Cellpose's stitch3D), else each slice's
+   ids follow the previous slice's. Ids are unique within the chunk:
+   follow with MortonSegmentationRelabeling for ids unique across chunks.
+
+   :param flow_threshold: how far an object's flows may be from those its
+                          shape implies before it is dropped (Cellpose's; 0 keeps all).
+   :param cellprob_threshold: the cell probability, as a logit, over which a
+                              pixel is followed (Cellpose's; 0 is a probability of 0.5).
+   :param min_size: objects of fewer pixels are removed (per slice; in 3D
+                    after stitching).
+   :param stitch_threshold: IoU joining objects across slices; 0 is off.
+   :param niter: flow-following steps (Cellpose's default, 200).
+
+
+   .. py:attribute:: flow_threshold
+
+
+   .. py:attribute:: cellprob_threshold
+
+
+   .. py:attribute:: min_size
+      :value: 15
+
+
+
+   .. py:attribute:: stitch_threshold
+
+
+   .. py:attribute:: niter
+      :value: 200
+
+
+
+   .. py:method:: problem_with(model_config)
+
+      None for a Cellpose model (or a finetune of one) served with ``output: flows``.
+
+
+
+   .. py:property:: dtype
+
+
+   .. py:property:: is_segmentation
+
+
+   .. py:property:: num_channels
 
 
 .. py:class:: ChannelSelection(channels: str = '0')

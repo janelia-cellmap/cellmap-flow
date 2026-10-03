@@ -11,5 +11,6 @@ Submodules
    :maxdepth: 1
 
    /autoapi/cellmap_flow/post/postprocessors/index
+   /autoapi/cellmap_flow/post/segment/index
 
 

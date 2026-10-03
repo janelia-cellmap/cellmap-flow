@@ -12,7 +12,9 @@ cellmap_flow.finetune.losses
    ``masked_mean`` is that average, ``balanced_mean`` gives the foreground and
    the background half the weight each, and the losses and the distillation
    term below are built from the two. ``IntervalLoss``, a distance model's loss
-   on scribbles, works in logits instead of probabilities (``as_logits``).
+   on scribbles, works in logits instead of probabilities (``as_logits``). A
+   flow model's loss, ``instance_flows.FlowLoss``, is built from
+   ``masked_mean`` too, and lives beside the target it compares with.
 
    The float operations are kept in the order the trainer always used, so a
    run computes the same numbers bit for bit

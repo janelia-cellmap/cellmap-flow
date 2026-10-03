@@ -32,6 +32,11 @@ Module Contents
 
 
 
+   .. py:attribute:: finetunable
+      :value: True
+
+
+
    .. py:attribute:: run_name
 
 

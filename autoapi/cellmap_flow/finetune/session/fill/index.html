@@ -133,7 +133,9 @@ Either way only unannotated voxels (0) are filled. A stroke the user painted
 is a decision about that voxel; a seed is a guess. “Split objects” relabels
 the box’s foreground by connected component (<code class="docutils literal notranslate"><span class="pre">relabel_objects</span></code>), so a
 background wall painted through a merged object gives it two ids again.</p>
-<p>Objects are 6-connected (face neighbours, scipy’s default): a one-voxel wall
+<p>The objects a seed writes come from <code class="docutils literal notranslate"><span class="pre">post.segment</span></code>, the segmenter that
+fits the model (<code class="docutils literal notranslate"><span class="pre">seed_labels</span></code> takes its labels). Split Objects is
+6-connected by default (face neighbours, scipy’s default): a one-voxel wall
 the brush paints cuts an object under it, where under 26-connectivity the
 voxels across a diagonal wall would still touch.</p>
 <p>The write goes to MinIO, as cc3d_relabel’s does, not to the volume on disk:
@@ -158,10 +160,10 @@ and the periodic sync has nothing to revert.</p>
 <tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.session.fill.box_voxels" title="cellmap_flow.finetune.session.fill.box_voxels"><code class="xref py py-obj docutils literal notranslate"><span class="pre">box_voxels</span></code></a>(volume, offset_nm, shape_nm, volume_shape)</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">(lo,</span> <span class="pre">hi)</span></code>: the annotation voxels whose centres lie in a box, clipped to the volume.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.finetune.session.fill.seed_labels" title="cellmap_flow.finetune.session.fill.seed_labels"><code class="xref py py-obj docutils literal notranslate"><span class="pre">seed_labels</span></code></a>(foreground, existing[, count_up, min_size])</p></td>
-<td><p>Labels for a box from a foreground mask: an id per object inside, 1 outside.</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.finetune.session.fill.seed_labels" title="cellmap_flow.finetune.session.fill.seed_labels"><code class="xref py py-obj docutils literal notranslate"><span class="pre">seed_labels</span></code></a>(objects, existing[, count_up])</p></td>
+<td><p>Labels for a box from a segmentation: an id per object inside, 1 outside.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.session.fill.relabel_objects" title="cellmap_flow.finetune.session.fill.relabel_objects"><code class="xref py py-obj docutils literal notranslate"><span class="pre">relabel_objects</span></code></a>(existing[, count_up])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.session.fill.relabel_objects" title="cellmap_flow.finetune.session.fill.relabel_objects"><code class="xref py py-obj docutils literal notranslate"><span class="pre">relabel_objects</span></code></a>(existing[, count_up, connectivity, ...])</p></td>
 <td><p>The box's foreground (labels 2 and up) relabelled by connected component.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.finetune.session.fill.open_served_labels" title="cellmap_flow.finetune.session.fill.open_served_labels"><code class="xref py py-obj docutils literal notranslate"><span class="pre">open_served_labels</span></code></a>(state, volume_id)</p></td>
@@ -197,22 +199,22 @@ record, for its grid. None when no voxel of the volume is in the box.</p>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="cellmap_flow.finetune.session.fill.seed_labels">
-<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.session.fill.</span></span><span class="sig-name descname"><span class="pre">seed_labels</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">foreground</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">existing</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">count_up</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">min_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.finetune.session.fill.seed_labels" title="Link to this definition"></a></dt>
-<dd><p>Labels for a box from a foreground mask: an id per object inside, 1 outside.</p>
-<p><code class="docutils literal notranslate"><span class="pre">existing</span></code> is what the box holds now. Each connected component of
-<code class="docutils literal notranslate"><span class="pre">foreground</span></code> gets an id of its own (<code class="docutils literal notranslate"><span class="pre">_fresh_ids</span></code>; <code class="docutils literal notranslate"><span class="pre">count_up</span></code> for
-an affinity target), so neighbouring objects are told apart, and a
-merge the model made shows as one colour to split; but a component the
-user has already painted part of takes the id painted there most, or
-the unpainted rest of an object would be taught as a different object
-from its painted part. A binary or distance target reads every id as
-foreground, so the ids cost it nothing. Components of fewer than
-<code class="docutils literal notranslate"><span class="pre">min_size</span></code> voxels are background: specks the threshold let through.</p>
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.session.fill.</span></span><span class="sig-name descname"><span class="pre">seed_labels</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">objects</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">existing</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">count_up</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.finetune.session.fill.seed_labels" title="Link to this definition"></a></dt>
+<dd><p>Labels for a box from a segmentation: an id per object inside, 1 outside.</p>
+<p><code class="docutils literal notranslate"><span class="pre">objects</span></code> is a <code class="docutils literal notranslate"><span class="pre">post.segment</span></code> segmenter’s output over the box (0
+background, objects 1..n), <code class="docutils literal notranslate"><span class="pre">existing</span></code> what the box holds now. Each
+object gets an id of its own (<code class="docutils literal notranslate"><span class="pre">_fresh_ids</span></code>; <code class="docutils literal notranslate"><span class="pre">count_up</span></code> for an
+instance target), so neighbouring objects are told apart, and a merge
+the model made shows as one colour to split; but an object the user has
+already painted part of takes the id painted there most, or the
+unpainted rest of it would be taught as a different object from its
+painted part. A binary or distance target reads every id as foreground,
+so the ids cost it nothing.</p>
 </dd></dl>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="cellmap_flow.finetune.session.fill.relabel_objects">
-<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.session.fill.</span></span><span class="sig-name descname"><span class="pre">relabel_objects</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">existing</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">count_up</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.finetune.session.fill.relabel_objects" title="Link to this definition"></a></dt>
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.session.fill.</span></span><span class="sig-name descname"><span class="pre">relabel_objects</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">existing</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">count_up</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">connectivity</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">per_slice</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.finetune.session.fill.relabel_objects" title="Link to this definition"></a></dt>
 <dd><p>The box’s foreground (labels 2 and up) relabelled by connected component.</p>
 <p>Each component takes the id most of its voxels hold, so a stroke that
 joins two objects merges them into the id of the bigger. An id left on
@@ -223,7 +225,10 @@ and unpainted (0) voxels are left alone. Returns <code class="docutils literal n
 <code class="docutils literal notranslate"><span class="pre">merged</span></code> (components that held more than one id).</p>
 <p>A cut has to go through every slice the object spans: the brush paints
 one slice, and an object cut in one slice is still one object above and
-below it. <code class="docutils literal notranslate"><span class="pre">split</span></code> is 0 then, which the page says.</p>
+below it. <code class="docutils literal notranslate"><span class="pre">split</span></code> is 0 then, which the page says. With <code class="docutils literal notranslate"><span class="pre">per_slice</span></code>
+each z slice’s pieces are components on their own, so a wall in one
+slice splits that slice, and every slice of an object gets its own id.
+<code class="docutils literal notranslate"><span class="pre">connectivity</span></code>: as for <code class="docutils literal notranslate"><span class="pre">post.segment.connected_components</span></code>.</p>
 </dd></dl>
 
 <dl class="py function">

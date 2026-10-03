@@ -130,18 +130,22 @@
 <li><p><code class="docutils literal notranslate"><span class="pre">update_run_models()</span></code>: stop and forget the models no longer picked,
 start the ones newly picked, each in its own thread. A finetune job’s
 server is the Finetune tab’s to stop, never this one’s.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">run_model()</span></code> / <code class="docutils literal notranslate"><span class="pre">run_hf_model()</span></code> / <code class="docutils literal notranslate"><span class="pre">run_bioimage_model()</span></code>: start
-one catalog, Hugging Face or BioImage Model Zoo model’s inference server
-(<code class="docutils literal notranslate"><span class="pre">start_hosts</span></code>, which records the job) and add its layer, the one Submit
-would give it. Each is served from its type’s <code class="docutils literal notranslate"><span class="pre">default_env</span></code>, when the
-type sets one (<code class="docutils literal notranslate"><span class="pre">serving.launch.server_argv_for</span></code>): a zoo model from
-pixi’s <code class="docutils literal notranslate"><span class="pre">bioimageio</span></code> environment.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">run_model()</span></code> / <code class="docutils literal notranslate"><span class="pre">run_hf_model()</span></code> / <code class="docutils literal notranslate"><span class="pre">run_bioimage_model()</span></code> /
+<code class="docutils literal notranslate"><span class="pre">run_cellpose_model()</span></code>: start one catalog, Hugging Face, BioImage Model
+Zoo or Cellpose model’s inference server (<code class="docutils literal notranslate"><span class="pre">start_hosts</span></code>, which records
+the job) and add its layer, the one Submit would give it. Each is served
+from its type’s <code class="docutils literal notranslate"><span class="pre">default_env</span></code>, when the type sets one
+(<code class="docutils literal notranslate"><span class="pre">serving.launch.server_argv_for</span></code>): a zoo model from pixi’s
+<code class="docutils literal notranslate"><span class="pre">bioimageio</span></code> environment, a Cellpose one from <code class="docutils literal notranslate"><span class="pre">cellpose4</span></code>.</p></li>
 </ul>
 <section id="attributes">
 <h2>Attributes<a class="headerlink" href="#attributes" title="Link to this heading"></a></h2>
 <table class="autosummary longtable docutils align-default">
 <tbody>
 <tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.services.launch.logger" title="cellmap_flow.dashboard.services.launch.logger"><code class="xref py py-obj docutils literal notranslate"><span class="pre">logger</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.services.launch.CELLPOSE_MODELS" title="cellmap_flow.dashboard.services.launch.CELLPOSE_MODELS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">CELLPOSE_MODELS</span></code></a></p></td>
 <td><p></p></td>
 </tr>
 </tbody>
@@ -166,14 +170,20 @@ pixi’s <code class="docutils literal notranslate"><span class="pre">bioimageio
 <tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.services.launch.run_bioimage_model" title="cellmap_flow.dashboard.services.launch.run_bioimage_model"><code class="xref py py-obj docutils literal notranslate"><span class="pre">run_bioimage_model</span></code></a>(params, st_data)</p></td>
 <td><p>Run a BioImage Model Zoo model: <code class="docutils literal notranslate"><span class="pre">params</span></code> are its BioModelConfig</p></td>
 </tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.services.launch.cellpose_job_name" title="cellmap_flow.dashboard.services.launch.cellpose_job_name"><code class="xref py py-obj docutils literal notranslate"><span class="pre">cellpose_job_name</span></code></a>(→ str)</p></td>
+<td><p>A Cellpose model's job, layer and config name: &quot;cpsam_v2&quot; serving all</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.services.launch.run_cellpose_model" title="cellmap_flow.dashboard.services.launch.run_cellpose_model"><code class="xref py py-obj docutils literal notranslate"><span class="pre">run_cellpose_model</span></code></a>(params, st_data)</p></td>
+<td><p>Run a Cellpose model: <code class="docutils literal notranslate"><span class="pre">params</span></code> are its CellposeModelConfig</p></td>
+</tr>
 <tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.services.launch.running_names" title="cellmap_flow.dashboard.services.launch.running_names"><code class="xref py py-obj docutils literal notranslate"><span class="pre">running_names</span></code></a>(→ set)</p></td>
 <td><p>The models running, or on their way: the session's jobs and the</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.services.launch.kill_n_remove_from_neuroglancer" title="cellmap_flow.dashboard.services.launch.kill_n_remove_from_neuroglancer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">kill_n_remove_from_neuroglancer</span></code></a>(jobs, s)</p></td>
 <td><p>Kill <code class="docutils literal notranslate"><span class="pre">jobs</span></code> and drop their layers from the viewer state <code class="docutils literal notranslate"><span class="pre">s</span></code>.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.services.launch.update_run_models" title="cellmap_flow.dashboard.services.launch.update_run_models"><code class="xref py py-obj docutils literal notranslate"><span class="pre">update_run_models</span></code></a>(names[, hf_repos, bioimage_models])</p></td>
-<td><p>Run <code class="docutils literal notranslate"><span class="pre">names</span></code> (catalog models), <code class="docutils literal notranslate"><span class="pre">hf_repos</span></code> and <code class="docutils literal notranslate"><span class="pre">bioimage_models</span></code></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.services.launch.update_run_models" title="cellmap_flow.dashboard.services.launch.update_run_models"><code class="xref py py-obj docutils literal notranslate"><span class="pre">update_run_models</span></code></a>(names[, hf_repos, bioimage_models, ...])</p></td>
+<td><p>Run <code class="docutils literal notranslate"><span class="pre">names</span></code> (catalog models), <code class="docutils literal notranslate"><span class="pre">hf_repos</span></code>, <code class="docutils literal notranslate"><span class="pre">bioimage_models</span></code></p></td>
 </tr>
 </tbody>
 </table>
@@ -217,6 +227,31 @@ by: “affable-shark” is affable_shark. A DOI’s slash and dots go too.</p>
 arguments, name included (<code class="docutils literal notranslate"><span class="pre">bioimage_catalog.bioimage_entry</span></code>).</p>
 </dd></dl>
 
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.services.launch.CELLPOSE_MODELS">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.services.launch.</span></span><span class="sig-name descname"><span class="pre">CELLPOSE_MODELS</span></span><a class="headerlink" href="#cellmap_flow.dashboard.services.launch.CELLPOSE_MODELS" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.services.launch.cellpose_job_name">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.services.launch.</span></span><span class="sig-name descname"><span class="pre">cellpose_job_name</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#cellmap_flow.dashboard.services.launch.cellpose_job_name" title="Link to this definition"></a></dt>
+<dd><p>A Cellpose model’s job, layer and config name: “cpsam_v2” serving all
+its channels (flows, the default) is cellpose_sam_v2, its probability
+alone cellpose_sam_v2_probability and its masks cellpose_sam_v2_masks.</p>
+<p>The output is in the name, so one model’s outputs can run side by side
+(the probability to look at, the masks to proofread), each its own job
+and layer; the default output keeps the plain name. The voxel size and
+the slice linking are not: changing them restarts that job instead
+(<code class="docutils literal notranslate"><span class="pre">update_run_models</span></code>), rather than leaving the old one running beside.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.services.launch.run_cellpose_model">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.services.launch.</span></span><span class="sig-name descname"><span class="pre">run_cellpose_model</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">params</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">st_data</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.services.launch.run_cellpose_model" title="Link to this definition"></a></dt>
+<dd><p>Run a Cellpose model: <code class="docutils literal notranslate"><span class="pre">params</span></code> are its CellposeModelConfig
+arguments, name included (<code class="docutils literal notranslate"><span class="pre">_cellpose_params</span></code>).</p>
+</dd></dl>
+
 <dl class="py function">
 <dt class="sig sig-object py" id="cellmap_flow.dashboard.services.launch.running_names">
 <span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.services.launch.</span></span><span class="sig-name descname"><span class="pre">running_names</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">set</span></span></span><a class="headerlink" href="#cellmap_flow.dashboard.services.launch.running_names" title="Link to this definition"></a></dt>
@@ -232,10 +267,12 @@ launches not finished yet.</p>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="cellmap_flow.dashboard.services.launch.update_run_models">
-<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.services.launch.</span></span><span class="sig-name descname"><span class="pre">update_run_models</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">names</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">hf_repos</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bioimage_models</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">dict</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.services.launch.update_run_models" title="Link to this definition"></a></dt>
-<dd><p>Run <code class="docutils literal notranslate"><span class="pre">names</span></code> (catalog models), <code class="docutils literal notranslate"><span class="pre">hf_repos</span></code> and <code class="docutils literal notranslate"><span class="pre">bioimage_models</span></code>
-({“id”, “voxel_size”} each) and stop every other model. A ValueError,
-before anything changes, when a zoo model needs a voxel size.</p>
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.services.launch.</span></span><span class="sig-name descname"><span class="pre">update_run_models</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">names</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">hf_repos</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bioimage_models</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">dict</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cellpose_models</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">dict</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.services.launch.update_run_models" title="Link to this definition"></a></dt>
+<dd><p>Run <code class="docutils literal notranslate"><span class="pre">names</span></code> (catalog models), <code class="docutils literal notranslate"><span class="pre">hf_repos</span></code>, <code class="docutils literal notranslate"><span class="pre">bioimage_models</span></code>
+({“id”, “voxel_size”} each) and <code class="docutils literal notranslate"><span class="pre">cellpose_models</span></code> ({“model”,
+“voxel_size”, “output”, “stitch_threshold”} each), and stop every other
+model. A ValueError, before anything changes, when a zoo model needs a
+voxel size or a Cellpose model’s settings are missing or wrong.</p>
 </dd></dl>
 
 </section>

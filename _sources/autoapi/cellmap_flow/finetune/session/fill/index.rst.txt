@@ -15,7 +15,9 @@ cellmap_flow.finetune.session.fill
    the box's foreground by connected component (``relabel_objects``), so a
    background wall painted through a merged object gives it two ids again.
 
-   Objects are 6-connected (face neighbours, scipy's default): a one-voxel wall
+   The objects a seed writes come from ``post.segment``, the segmenter that
+   fits the model (``seed_labels`` takes its labels). Split Objects is
+   6-connected by default (face neighbours, scipy's default): a one-voxel wall
    the brush paints cuts an object under it, where under 26-connectivity the
    voxels across a diagonal wall would still touch.
 
@@ -63,22 +65,22 @@ Module Contents
    record, for its grid. None when no voxel of the volume is in the box.
 
 
-.. py:function:: seed_labels(foreground, existing, count_up=False, min_size=0)
+.. py:function:: seed_labels(objects, existing, count_up=False)
 
-   Labels for a box from a foreground mask: an id per object inside, 1 outside.
+   Labels for a box from a segmentation: an id per object inside, 1 outside.
 
-   ``existing`` is what the box holds now. Each connected component of
-   ``foreground`` gets an id of its own (``_fresh_ids``; ``count_up`` for
-   an affinity target), so neighbouring objects are told apart, and a
-   merge the model made shows as one colour to split; but a component the
-   user has already painted part of takes the id painted there most, or
-   the unpainted rest of an object would be taught as a different object
-   from its painted part. A binary or distance target reads every id as
-   foreground, so the ids cost it nothing. Components of fewer than
-   ``min_size`` voxels are background: specks the threshold let through.
+   ``objects`` is a ``post.segment`` segmenter's output over the box (0
+   background, objects 1..n), ``existing`` what the box holds now. Each
+   object gets an id of its own (``_fresh_ids``; ``count_up`` for an
+   instance target), so neighbouring objects are told apart, and a merge
+   the model made shows as one colour to split; but an object the user has
+   already painted part of takes the id painted there most, or the
+   unpainted rest of it would be taught as a different object from its
+   painted part. A binary or distance target reads every id as foreground,
+   so the ids cost it nothing.
 
 
-.. py:function:: relabel_objects(existing, count_up=False)
+.. py:function:: relabel_objects(existing, count_up=False, connectivity=1, per_slice=False)
 
    The box's foreground (labels 2 and up) relabelled by connected component.
 
@@ -92,7 +94,10 @@ Module Contents
 
    A cut has to go through every slice the object spans: the brush paints
    one slice, and an object cut in one slice is still one object above and
-   below it. ``split`` is 0 then, which the page says.
+   below it. ``split`` is 0 then, which the page says. With ``per_slice``
+   each z slice's pieces are components on their own, so a wall in one
+   slice splits that slice, and every slice of an object gets its own id.
+   ``connectivity``: as for ``post.segment.connected_components``.
 
 
 .. py:function:: open_served_labels(state, volume_id)

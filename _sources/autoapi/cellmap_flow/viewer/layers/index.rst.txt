@@ -15,7 +15,8 @@ cellmap_flow.viewer.layers
    - ``prediction_url()`` and ``prediction_source()``: the layer's URL, a zarr
      served by the model's inference server with the chain in it, and its
      source, that URL with the override as its transform.
-   - ``prediction_shader_for()``: a shader over the range the chain produces.
+   - ``prediction_shader_for()``: a shader over the range the chain produces;
+     for a flow model's channels, one that shows them all at once.
    - ``prediction_layer()``: the layer itself, a segmentation when the chain
      ends in labels and an image otherwise.
    - ``raw_layer()``: the raw data, with the user's shader put back.
@@ -32,6 +33,7 @@ Attributes
 .. autoapisummary::
 
    cellmap_flow.viewer.layers.logger
+   cellmap_flow.viewer.layers.FLOW_CHANNELS
 
 
 Functions
@@ -42,8 +44,10 @@ Functions
    cellmap_flow.viewer.layers.prediction_voxel_override
    cellmap_flow.viewer.layers.prediction_url
    cellmap_flow.viewer.layers.prediction_source
+   cellmap_flow.viewer.layers.flow_channels
    cellmap_flow.viewer.layers.prediction_shader_for
    cellmap_flow.viewer.layers.prediction_layer
+   cellmap_flow.viewer.layers.display_channel
    cellmap_flow.viewer.layers.raw_layer
 
 
@@ -79,7 +83,7 @@ Module Contents
    (PipelineSpec.to_url_blob) in it: what the layer's source points at.
 
 
-.. py:function:: prediction_source(host, model, url_blob, override_scales=None, has_channel=True)
+.. py:function:: prediction_source(host, model, url_blob, override_scales=None, has_channel=True, channels_shaded=False)
 
    The source of ``model``'s layer: its zarr on ``host``, with ``url_blob``
    (PipelineSpec.to_url_blob) in the URL.
@@ -89,6 +93,25 @@ Module Contents
    Neuroglancer wants the same rank on both sides of a transform, so a
    served array with a channel axis (the last, ``has_channel``) keeps it as a
    unit-less ``c^``.
+
+   Neuroglancer reads a served channel axis as ``c'``, a slider that shows
+   one channel at a time. ``channels_shaded`` renames it ``c^``, a channel
+   axis, which the shader reads every channel of. A transform renames the
+   source dimensions it names and passes the rest through.
+
+
+.. py:data:: FLOW_CHANNELS
+   :value: ('flow_y', 'flow_x')
+
+
+.. py:function:: flow_channels(info, postprocess)
+
+   The indices of a flow model's ``flow_y`` and ``flow_x`` channels, as its
+   server names them, while the chain keeps its channels; None otherwise.
+
+   A model that predicts flows towards each object's centre (Cellpose) has
+   channels that mean different things: one at a time, the y flow alone
+   says little. prediction_layer shows them together instead.
 
 
 .. py:function:: prediction_shader_for(model, host, postprocess, previous_shader=None, color=None, info=None)
@@ -102,6 +125,11 @@ Module Contents
    change the colours the user navigates by; else ``color``; else the first
    prediction colour.
 
+   For a flow model's channels (flow_channels), the shader colours each
+   voxel by its flow's direction, dimmed by the channel the server names to
+   display (``display_channel``, Cellpose's cell probability) over the
+   range; unticking ``flows`` shows that channel alone.
+
 
 .. py:function:: prediction_layer(model, host, url_blob, *, dataset_path, postprocess, shader=None, shader_controls=None, color=None, previous_shader=None, info=None, fallback_output_voxel_size=None)
 
@@ -111,6 +139,13 @@ Module Contents
    ImageLayer with ``shader_controls`` and ``shader``, the user's; without
    one, prediction_shader_for's in ``previous_shader``'s colour or
    ``color``.
+
+
+.. py:function:: display_channel(info, postprocess)
+
+   The channel a model's layer opens on: the one its server names
+   (``display_channel``, Cellpose's cell probability rather than flow_y),
+   while the chain keeps the model's channels; None otherwise (the first).
 
 
 .. py:function:: raw_layer(dataset_path, *, wrap_raw=True, shader=None, shader_controls=None)

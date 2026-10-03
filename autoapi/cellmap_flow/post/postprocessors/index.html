@@ -22,7 +22,7 @@
     <script src="../../../../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../../../../genindex.html" />
     <link rel="search" title="Search" href="../../../../search.html" />
-    <link rel="next" title="cellmap_flow.process_chain" href="../../process_chain/index.html" />
+    <link rel="next" title="cellmap_flow.post.segment" href="../segment/index.html" />
     <link rel="prev" title="cellmap_flow.post" href="../index.html" /> 
 </head>
 
@@ -154,21 +154,24 @@
 <td><p>Threshold, then fill the background holes each foreground blob encloses.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.post.postprocessors.LabelPostprocessor" title="cellmap_flow.post.postprocessors.LabelPostprocessor"><code class="xref py py-obj docutils literal notranslate"><span class="pre">LabelPostprocessor</span></code></a></p></td>
-<td><p>Base class for post-processing methods.</p></td>
+<td><p>An id per connected object of one channel's nonzero voxels (<code class="docutils literal notranslate"><span class="pre">segment.connected_components</span></code>).</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.post.postprocessors.MortonSegmentationRelabeling" title="cellmap_flow.post.postprocessors.MortonSegmentationRelabeling"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MortonSegmentationRelabeling</span></code></a></p></td>
 <td><p>Base class for post-processing methods.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.post.postprocessors.AffinityPostprocessor" title="cellmap_flow.post.postprocessors.AffinityPostprocessor"><code class="xref py py-obj docutils literal notranslate"><span class="pre">AffinityPostprocessor</span></code></a></p></td>
-<td><p>Base class for post-processing methods.</p></td>
+<td><p>Objects from affinities by mutex watershed (<code class="docutils literal notranslate"><span class="pre">segment.mutex_watershed</span></code>).</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.post.postprocessors.SimpleBlockwiseMerger" title="cellmap_flow.post.postprocessors.SimpleBlockwiseMerger"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SimpleBlockwiseMerger</span></code></a></p></td>
 <td><p>Base class for post-processing methods.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.post.postprocessors.ChannelSelection" title="cellmap_flow.post.postprocessors.ChannelSelection"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ChannelSelection</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.post.postprocessors.CellposeMasksPostprocessor" title="cellmap_flow.post.postprocessors.CellposeMasksPostprocessor"><code class="xref py py-obj docutils literal notranslate"><span class="pre">CellposeMasksPostprocessor</span></code></a></p></td>
+<td><p>Cellpose's masks, made from a Cellpose model's flows output.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.post.postprocessors.ChannelSelection" title="cellmap_flow.post.postprocessors.ChannelSelection"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ChannelSelection</span></code></a></p></td>
 <td><p>Base class for post-processing methods.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.post.postprocessors.LambdaPostprocessor" title="cellmap_flow.post.postprocessors.LambdaPostprocessor"><code class="xref py py-obj docutils literal notranslate"><span class="pre">LambdaPostprocessor</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.post.postprocessors.LambdaPostprocessor" title="cellmap_flow.post.postprocessors.LambdaPostprocessor"><code class="xref py py-obj docutils literal notranslate"><span class="pre">LambdaPostprocessor</span></code></a></p></td>
 <td><p>Base class for post-processing methods.</p></td>
 </tr>
 </tbody>
@@ -202,6 +205,15 @@
 <dt class="sig sig-object py" id="cellmap_flow.post.postprocessors.PostProcessor.is_segmentation">
 <span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">is_segmentation</span></span><a class="headerlink" href="#cellmap_flow.post.postprocessors.PostProcessor.is_segmentation" title="Link to this definition"></a></dt>
 <dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.post.postprocessors.PostProcessor.problem_with">
+<span class="sig-name descname"><span class="pre">problem_with</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model_config</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.post.postprocessors.PostProcessor.problem_with" title="Link to this definition"></a></dt>
+<dd><p>Why this step cannot run on <code class="docutils literal notranslate"><span class="pre">model_config</span></code>’s output, or None when it can.</p>
+<p>Checked by the dashboard before it applies a chain: a step that
+fails on every chunk does so inside the model’s server, where the
+page shows only an empty layer.</p>
+</dd></dl>
 
 </dd></dl>
 
@@ -300,11 +312,30 @@ within the chunk and stays unfilled.</p>
 
 <dl class="py class">
 <dt class="sig sig-object py" id="cellmap_flow.post.postprocessors.LabelPostprocessor">
-<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.post.postprocessors.</span></span><span class="sig-name descname"><span class="pre">LabelPostprocessor</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">channel</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.post.postprocessors.LabelPostprocessor" title="Link to this definition"></a></dt>
-<dd><p>Base class for post-processing methods.</p>
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.post.postprocessors.</span></span><span class="sig-name descname"><span class="pre">LabelPostprocessor</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">channel</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">connectivity</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">min_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">per_slice</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.post.postprocessors.LabelPostprocessor" title="Link to this definition"></a></dt>
+<dd><p>An id per connected object of one channel’s nonzero voxels (<code class="docutils literal notranslate"><span class="pre">segment.connected_components</span></code>).</p>
+<p><code class="docutils literal notranslate"><span class="pre">connectivity</span></code>: 1 faces (the default), 2 faces and edges, 3 all
+neighbours. <code class="docutils literal notranslate"><span class="pre">min_size</span></code>: objects of fewer voxels become background.
+<code class="docutils literal notranslate"><span class="pre">per_slice</span></code>: each z slice labelled on its own, in 2D. The other
+channels pass through, as uint32.</p>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="cellmap_flow.post.postprocessors.LabelPostprocessor.channel">
 <span class="sig-name descname"><span class="pre">channel</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0</span></span><a class="headerlink" href="#cellmap_flow.post.postprocessors.LabelPostprocessor.channel" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.post.postprocessors.LabelPostprocessor.connectivity">
+<span class="sig-name descname"><span class="pre">connectivity</span></span><a class="headerlink" href="#cellmap_flow.post.postprocessors.LabelPostprocessor.connectivity" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.post.postprocessors.LabelPostprocessor.min_size">
+<span class="sig-name descname"><span class="pre">min_size</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0</span></span><a class="headerlink" href="#cellmap_flow.post.postprocessors.LabelPostprocessor.min_size" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.post.postprocessors.LabelPostprocessor.per_slice">
+<span class="sig-name descname"><span class="pre">per_slice</span></span><a class="headerlink" href="#cellmap_flow.post.postprocessors.LabelPostprocessor.per_slice" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py property">
@@ -353,7 +384,11 @@ within the chunk and stays unfilled.</p>
 <dl class="py class">
 <dt class="sig sig-object py" id="cellmap_flow.post.postprocessors.AffinityPostprocessor">
 <span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.post.postprocessors.</span></span><span class="sig-name descname"><span class="pre">AffinityPostprocessor</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">bias</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">neighborhood</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'[\n</span>&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">[1,</span> <span class="pre">0,</span> <span class="pre">0],\n</span>&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">[0,</span> <span class="pre">1,</span> <span class="pre">0],\n</span>&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">[0,</span> <span class="pre">0,</span> <span class="pre">1],\n</span>&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">[3,</span> <span class="pre">0,</span> <span class="pre">0],\n</span>&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">[0,</span> <span class="pre">3,</span> <span class="pre">0],\n</span>&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">[0,</span> <span class="pre">0,</span> <span class="pre">3],\n</span>&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">[9,</span> <span class="pre">0,</span> <span class="pre">0],\n</span>&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">[0,</span> <span class="pre">9,</span> <span class="pre">0],\n</span>&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">[0,</span> <span class="pre">0,</span> <span class="pre">9],\n</span>&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">]'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.post.postprocessors.AffinityPostprocessor" title="Link to this definition"></a></dt>
-<dd><p>Base class for post-processing methods.</p>
+<dd><p>Objects from affinities by mutex watershed (<code class="docutils literal notranslate"><span class="pre">segment.mutex_watershed</span></code>).</p>
+<p><code class="docutils literal notranslate"><span class="pre">bias</span></code>: the affinity above which neighbours join, and below which a
+fragment’s mean makes it background. <code class="docutils literal notranslate"><span class="pre">neighborhood</span></code>: the offset each
+channel compares, as the model was trained with. Ids are offset by the
+chunk’s Morton index, so they are unique across chunks.</p>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="cellmap_flow.post.postprocessors.AffinityPostprocessor.bias">
 <span class="sig-name descname"><span class="pre">bias</span></span><a class="headerlink" href="#cellmap_flow.post.postprocessors.AffinityPostprocessor.bias" title="Link to this definition"></a></dt>
@@ -454,6 +489,84 @@ within the chunk and stays unfilled.</p>
 </dd></dl>
 
 <dl class="py class">
+<dt class="sig sig-object py" id="cellmap_flow.post.postprocessors.CellposeMasksPostprocessor">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.post.postprocessors.</span></span><span class="sig-name descname"><span class="pre">CellposeMasksPostprocessor</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">flow_threshold</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.4</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cellprob_threshold</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">min_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">15</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">stitch_threshold</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">niter</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">200</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.post.postprocessors.CellposeMasksPostprocessor" title="Link to this definition"></a></dt>
+<dd><p>Cellpose’s masks, made from a Cellpose model’s flows output.</p>
+<p>Cellpose turns its three output channels into objects by following each
+pixel’s flow to where the flows converge. Run here, on a server with
+<code class="docutils literal notranslate"><span class="pre">output:</span> <span class="pre">flows</span></code> (channels flow_y, flow_x and cell, the probability),
+its thresholds can be changed from the dashboard and the layer redrawn,
+where <code class="docutils literal notranslate"><span class="pre">output:</span> <span class="pre">masks</span></code> fixes them when the server starts. Put it first
+in the chain, on the flows as served. It needs Cellpose, which a
+Cellpose model’s server has.</p>
+<p>Each slice is segmented on its own, as Cellpose segments a 2D image;
+<code class="docutils literal notranslate"><span class="pre">stitch_threshold</span></code> above 0 joins a slice’s object to the next slice’s
+one it overlaps by that IoU (Cellpose’s stitch3D), else each slice’s
+ids follow the previous slice’s. Ids are unique within the chunk:
+follow with MortonSegmentationRelabeling for ids unique across chunks.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>flow_threshold</strong> – how far an object’s flows may be from those its
+shape implies before it is dropped (Cellpose’s; 0 keeps all).</p></li>
+<li><p><strong>cellprob_threshold</strong> – the cell probability, as a logit, over which a
+pixel is followed (Cellpose’s; 0 is a probability of 0.5).</p></li>
+<li><p><strong>min_size</strong> – objects of fewer pixels are removed (per slice; in 3D
+after stitching).</p></li>
+<li><p><strong>stitch_threshold</strong> – IoU joining objects across slices; 0 is off.</p></li>
+<li><p><strong>niter</strong> – flow-following steps (Cellpose’s default, 200).</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.post.postprocessors.CellposeMasksPostprocessor.flow_threshold">
+<span class="sig-name descname"><span class="pre">flow_threshold</span></span><a class="headerlink" href="#cellmap_flow.post.postprocessors.CellposeMasksPostprocessor.flow_threshold" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.post.postprocessors.CellposeMasksPostprocessor.cellprob_threshold">
+<span class="sig-name descname"><span class="pre">cellprob_threshold</span></span><a class="headerlink" href="#cellmap_flow.post.postprocessors.CellposeMasksPostprocessor.cellprob_threshold" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.post.postprocessors.CellposeMasksPostprocessor.min_size">
+<span class="sig-name descname"><span class="pre">min_size</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">15</span></span><a class="headerlink" href="#cellmap_flow.post.postprocessors.CellposeMasksPostprocessor.min_size" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.post.postprocessors.CellposeMasksPostprocessor.stitch_threshold">
+<span class="sig-name descname"><span class="pre">stitch_threshold</span></span><a class="headerlink" href="#cellmap_flow.post.postprocessors.CellposeMasksPostprocessor.stitch_threshold" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.post.postprocessors.CellposeMasksPostprocessor.niter">
+<span class="sig-name descname"><span class="pre">niter</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">200</span></span><a class="headerlink" href="#cellmap_flow.post.postprocessors.CellposeMasksPostprocessor.niter" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.post.postprocessors.CellposeMasksPostprocessor.problem_with">
+<span class="sig-name descname"><span class="pre">problem_with</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model_config</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.post.postprocessors.CellposeMasksPostprocessor.problem_with" title="Link to this definition"></a></dt>
+<dd><p>None for a Cellpose model (or a finetune of one) served with <code class="docutils literal notranslate"><span class="pre">output:</span> <span class="pre">flows</span></code>.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cellmap_flow.post.postprocessors.CellposeMasksPostprocessor.dtype">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">dtype</span></span><a class="headerlink" href="#cellmap_flow.post.postprocessors.CellposeMasksPostprocessor.dtype" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cellmap_flow.post.postprocessors.CellposeMasksPostprocessor.is_segmentation">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">is_segmentation</span></span><a class="headerlink" href="#cellmap_flow.post.postprocessors.CellposeMasksPostprocessor.is_segmentation" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cellmap_flow.post.postprocessors.CellposeMasksPostprocessor.num_channels">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">num_channels</span></span><a class="headerlink" href="#cellmap_flow.post.postprocessors.CellposeMasksPostprocessor.num_channels" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
 <dt class="sig sig-object py" id="cellmap_flow.post.postprocessors.ChannelSelection">
 <span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.post.postprocessors.</span></span><span class="sig-name descname"><span class="pre">ChannelSelection</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">channels</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'0'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.post.postprocessors.ChannelSelection" title="Link to this definition"></a></dt>
 <dd><p>Base class for post-processing methods.</p>
@@ -505,7 +618,7 @@ within the chunk and stays unfilled.</p>
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
         <a href="../index.html" class="btn btn-neutral float-left" title="cellmap_flow.post" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
-        <a href="../../process_chain/index.html" class="btn btn-neutral float-right" title="cellmap_flow.process_chain" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="../segment/index.html" class="btn btn-neutral float-right" title="cellmap_flow.post.segment" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>

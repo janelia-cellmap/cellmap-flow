@@ -35,6 +35,11 @@ Module Contents
 
 
 
+   .. py:attribute:: finetunable
+      :value: True
+
+
+
    .. py:attribute:: cellmap_model
 
 

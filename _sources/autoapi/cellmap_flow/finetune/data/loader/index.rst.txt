@@ -20,6 +20,7 @@ Attributes
 .. autoapisummary::
 
    cellmap_flow.finetune.data.loader.logger
+   cellmap_flow.finetune.data.loader.PatchVoxels
 
 
 Functions
@@ -27,6 +28,7 @@ Functions
 
 .. autoapisummary::
 
+   cellmap_flow.finetune.data.loader.training_patch_voxels
    cellmap_flow.finetune.data.loader.dataset_from_manifest
    cellmap_flow.finetune.data.loader.create_dataloader
    cellmap_flow.finetune.data.loader.make_training_loader
@@ -38,7 +40,20 @@ Module Contents
 
 .. py:data:: logger
 
-.. py:function:: dataset_from_manifest(manifest: dict, corrections_dir: Optional[str] = None, augment: Optional[bool] = None) -> cellmap_flow.finetune.data.dataset.VirtualPatchDataset
+.. py:data:: PatchVoxels
+
+.. py:function:: training_patch_voxels(model_config) -> Optional[PatchVoxels]
+
+   The (input, output) patch in voxels ``model_config`` trains on, or
+   None for the session's (the model's read and write shapes).
+
+   A model type whose network takes a fixed tile says so with a
+   ``training_patch_voxels()`` method (Cellpose-SAM: one 256 x 256 slice).
+   A finetuned model trains as its base does, so a ``base_model_config`` is
+   asked in turn.
+
+
+.. py:function:: dataset_from_manifest(manifest: dict, corrections_dir: Optional[str] = None, augment: Optional[bool] = None, patch_voxels: Optional[PatchVoxels] = None) -> cellmap_flow.finetune.data.dataset.VirtualPatchDataset
 
    Instantiate a :class:`VirtualPatchDataset` from a manifest dict.
 
@@ -49,8 +64,15 @@ Module Contents
    ``corrections_dir`` is where the session's good regions are looked up;
    omit it and the dataset simply trains without rehearsal anchors.
 
+   ``patch_voxels``, ``(input, output)`` in voxels, replaces the manifest's
+   patch sizes, which are the model's serving geometry: for a model whose
+   network trains on another (``training_patch_voxels``). The voxel sizes
+   stay the manifest's. An epoch then counts as many more patches per
+   annotated chunk as the patch is smaller, so that it still covers what
+   was annotated.
 
-.. py:function:: create_dataloader(corrections_zarr_path: str, batch_size: int = 2, augment: bool = True, num_workers: int = 4) -> torch.utils.data.DataLoader
+
+.. py:function:: create_dataloader(corrections_zarr_path: str, batch_size: int = 2, augment: bool = True, num_workers: int = 4, patch_voxels: Optional[PatchVoxels] = None) -> torch.utils.data.DataLoader
 
    Build the training DataLoader for a corrections directory.
 
@@ -68,6 +90,9 @@ Module Contents
                    manifest's stored preference.
    :param num_workers: DataLoader workers. Spawned, not forked -- tensorstore
                        handles do not survive fork.
+   :param patch_voxels: ``(input, output)`` patch in voxels instead of the
+                        manifest's, for a model that trains on its own
+                        (``training_patch_voxels``).
 
 
 .. py:function:: make_training_loader(dataset, batch_size: int, num_workers: int) -> torch.utils.data.DataLoader

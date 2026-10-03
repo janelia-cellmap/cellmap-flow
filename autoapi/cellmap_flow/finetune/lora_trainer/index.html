@@ -187,15 +187,17 @@ from a NaN under mixed precision (restart in fp32)</p></li>
 <li><p><strong>num_epochs</strong> – Number of training epochs (default: 10)</p></li>
 <li><p><strong>gradient_accumulation_steps</strong> – Steps to accumulate gradients (default: 1)</p></li>
 <li><p><strong>use_mixed_precision</strong> – Enable mixed precision on CUDA (default: True; off on the CPU)</p></li>
-<li><p><strong>loss_type</strong> – Loss function: “dice”, “bce”, “combined” (Dice + BCE), “mse”, “margin”
-or “interval” (a distance model on scribbles; needs an IntervalTargetTransform)</p></li>
+<li><p><strong>loss_type</strong> – Loss function: “dice”, “bce”, “combined” (Dice + BCE), “mse”, “margin”,
+“interval” (a distance model on scribbles; needs an IntervalTargetTransform)
+or “flow” (a flow model such as Cellpose; needs a FlowTargetTransform)</p></li>
 <li><p><strong>device</strong> – Training device (“cuda” or “cpu”, auto-detected if None)</p></li>
 <li><p><strong>select_channel</strong> – Optional channel index to select from multi-channel output (default: None)</p></li>
 <li><p><strong>mask_unannotated</strong> – If True (default), only compute loss on annotated regions (target &gt; 0).
 Targets are shifted down by 1 (e.g., 1-&gt;0, 2-&gt;1) after masking.
 This allows partial annotations where 0=unannotated, 1=background, 2=foreground, etc.
 Ignored if target_transform is provided.</p></li>
-<li><p><strong>label_smoothing</strong> – s moves the targets to s/2 and 1 - s/2 (default: 0; forced to 0 for margin)</p></li>
+<li><p><strong>label_smoothing</strong> – s moves the targets to s/2 and 1 - s/2 (default: 0; forced to 0 for
+margin, interval and flow)</p></li>
 <li><p><strong>distillation_lambda</strong> – Weight of the distillation term. None means 1.0 when the
 dataset has good regions and 0 otherwise; an explicit 0 is honoured.</p></li>
 <li><p><strong>distillation_all_voxels</strong> – Distil on every voxel, not only the unlabeled ones

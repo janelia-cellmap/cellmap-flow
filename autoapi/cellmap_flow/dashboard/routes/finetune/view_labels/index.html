@@ -128,13 +128,16 @@
 <span id="cellmap-flow-dashboard-routes-finetune-view-labels"></span><h1>cellmap_flow.dashboard.routes.finetune.view_labels<a class="headerlink" href="#module-cellmap_flow.dashboard.routes.finetune.view_labels" title="Link to this heading"></a></h1>
 <p>Labelling the box on screen in one click: from the model’s prediction, or all background.</p>
 <p>Two buttons beside “Mark This View as Good”, over the same box (one model
-output patch centred where the viewer looks, <code class="docutils literal notranslate"><span class="pre">good_regions.view_box_nm</span></code>):</p>
+output patch centred where the viewer looks, <code class="docutils literal notranslate"><span class="pre">good_regions.view_box_nm</span></code>,
+or <code class="docutils literal notranslate"><span class="pre">box_voxels</span></code> annotation voxels when the request gives them):</p>
 <ul class="simple">
 <li><p>POST <code class="docutils literal notranslate"><span class="pre">/api/finetune/view-labels/seed</span></code>: the model’s prediction there,
-thresholded at its decision boundary, written as foreground 2 (an id per
-object, 2 and up, for an affinity model on an instance volume) and
-background 1. The user then cleans it up with the brush; it is far
-quicker than painting a whole object from nothing.</p></li>
+segmented into objects, each written with an id of its own (2 and up),
+and background 1. The user then cleans it up with the brush; it is far
+quicker than painting a whole object from nothing. How it is segmented
+is the request’s <code class="docutils literal notranslate"><span class="pre">method</span></code>, one of the <code class="docutils literal notranslate"><span class="pre">post.segment</span></code> segmenters that
+fits what the model outputs (<code class="docutils literal notranslate"><span class="pre">SEED_METHODS</span></code>); <code class="docutils literal notranslate"><span class="pre">seed_sources</span></code> says
+which fit each running model.</p></li>
 <li><p>POST <code class="docutils literal notranslate"><span class="pre">/api/finetune/view-labels/background</span></code>: every unannotated voxel 1,
 for a region the model fills with false positives.</p></li>
 </ul>
@@ -159,7 +162,19 @@ viewer afterwards to show the new labels.</p>
 <tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.view_labels.PREDICTION_TIMEOUT_SECONDS" title="cellmap_flow.dashboard.routes.finetune.view_labels.PREDICTION_TIMEOUT_SECONDS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PREDICTION_TIMEOUT_SECONDS</span></code></a></p></td>
 <td><p></p></td>
 </tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.view_labels.METADATA_TIMEOUT_SECONDS" title="cellmap_flow.dashboard.routes.finetune.view_labels.METADATA_TIMEOUT_SECONDS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">METADATA_TIMEOUT_SECONDS</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.view_labels.SEED_METHODS" title="cellmap_flow.dashboard.routes.finetune.view_labels.SEED_METHODS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SEED_METHODS</span></code></a></p></td>
+<td><p></p></td>
+</tr>
 <tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.view_labels.UNDO_DEPTH" title="cellmap_flow.dashboard.routes.finetune.view_labels.UNDO_DEPTH"><code class="xref py py-obj docutils literal notranslate"><span class="pre">UNDO_DEPTH</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.view_labels.CELLPOSE_CELL_CHANNEL" title="cellmap_flow.dashboard.routes.finetune.view_labels.CELLPOSE_CELL_CHANNEL"><code class="xref py py-obj docutils literal notranslate"><span class="pre">CELLPOSE_CELL_CHANNEL</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.view_labels.UNANSWERED_RETRY_SECONDS" title="cellmap_flow.dashboard.routes.finetune.view_labels.UNANSWERED_RETRY_SECONDS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">UNANSWERED_RETRY_SECONDS</span></code></a></p></td>
 <td><p></p></td>
 </tr>
 </tbody>
@@ -169,25 +184,40 @@ viewer afterwards to show the new labels.</p>
 <h2>Functions<a class="headerlink" href="#functions" title="Link to this heading"></a></h2>
 <table class="autosummary longtable docutils align-default">
 <tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.view_labels.seed_sources" title="cellmap_flow.dashboard.routes.finetune.view_labels.seed_sources"><code class="xref py py-obj docutils literal notranslate"><span class="pre">seed_sources</span></code></a>()</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.view_labels.model_output" title="cellmap_flow.dashboard.routes.finetune.view_labels.model_output"><code class="xref py py-obj docutils literal notranslate"><span class="pre">model_output</span></code></a>(model_name)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">(output_type,</span> <span class="pre">offsets)</span></code>: what the model is trained on, as submit decides it.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.view_labels.methods_for" title="cellmap_flow.dashboard.routes.finetune.view_labels.methods_for"><code class="xref py py-obj docutils literal notranslate"><span class="pre">methods_for</span></code></a>(output_type, serves_integers)</p></td>
+<td><p>The seed methods that fit a model's output, the best fit first.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.view_labels.seed_methods" title="cellmap_flow.dashboard.routes.finetune.view_labels.seed_methods"><code class="xref py py-obj docutils literal notranslate"><span class="pre">seed_methods</span></code></a>(model_name, host[, base_model])</p></td>
+<td><p>The methods a seed from <code class="docutils literal notranslate"><span class="pre">model_name</span></code>'s server can use (<code class="docutils literal notranslate"><span class="pre">methods_for</span></code>).</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.view_labels.seed_sources" title="cellmap_flow.dashboard.routes.finetune.view_labels.seed_sources"><code class="xref py py-obj docutils literal notranslate"><span class="pre">seed_sources</span></code></a>()</p></td>
 <td><p>The models a seed can read, for the page's picker: <code class="docutils literal notranslate"><span class="pre">models</span></code> (every</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.view_labels.read_prediction" title="cellmap_flow.dashboard.routes.finetune.view_labels.read_prediction"><code class="xref py py-obj docutils literal notranslate"><span class="pre">read_prediction</span></code></a>(host, model_name, volume, lo, hi, info)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.view_labels.read_prediction" title="cellmap_flow.dashboard.routes.finetune.view_labels.read_prediction"><code class="xref py py-obj docutils literal notranslate"><span class="pre">read_prediction</span></code></a>(host, model_name, volume, lo, hi, info)</p></td>
 <td><p>The model's raw output over annotation voxels <code class="docutils literal notranslate"><span class="pre">[lo,</span> <span class="pre">hi)</span></code>.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.view_labels.foreground_mask" title="cellmap_flow.dashboard.routes.finetune.view_labels.foreground_mask"><code class="xref py py-obj docutils literal notranslate"><span class="pre">foreground_mask</span></code></a>(prediction[, output_class, channels, ...])</p></td>
-<td><p>Where the model says foreground: its probability over <code class="docutils literal notranslate"><span class="pre">threshold</span></code>.</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.view_labels.probability" title="cellmap_flow.dashboard.routes.finetune.view_labels.probability"><code class="xref py py-obj docutils literal notranslate"><span class="pre">probability</span></code></a>(prediction[, output_class, channels])</p></td>
+<td><p>The prediction as a probability, (channels, z, y, x), 0.5 at the model's decision boundary.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.view_labels.seed_view_from_prediction" title="cellmap_flow.dashboard.routes.finetune.view_labels.seed_view_from_prediction"><code class="xref py py-obj docutils literal notranslate"><span class="pre">seed_view_from_prediction</span></code></a>()</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.view_labels.foreground_mask" title="cellmap_flow.dashboard.routes.finetune.view_labels.foreground_mask"><code class="xref py py-obj docutils literal notranslate"><span class="pre">foreground_mask</span></code></a>(prediction[, output_class, channels, ...])</p></td>
+<td><p>Where the model says foreground: its <code class="docutils literal notranslate"><span class="pre">probability</span></code>, averaged over <code class="docutils literal notranslate"><span class="pre">channels</span></code>, over <code class="docutils literal notranslate"><span class="pre">threshold</span></code>.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.view_labels.segment_prediction" title="cellmap_flow.dashboard.routes.finetune.view_labels.segment_prediction"><code class="xref py py-obj docutils literal notranslate"><span class="pre">segment_prediction</span></code></a>(method, prediction, output_class, ...)</p></td>
+<td><p>The objects <code class="docutils literal notranslate"><span class="pre">method</span></code> makes of the prediction: 0 background, 1..n (<code class="docutils literal notranslate"><span class="pre">post.segment</span></code>).</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.view_labels.seed_view_from_prediction" title="cellmap_flow.dashboard.routes.finetune.view_labels.seed_view_from_prediction"><code class="xref py py-obj docutils literal notranslate"><span class="pre">seed_view_from_prediction</span></code></a>()</p></td>
 <td><p>Fill the unannotated voxels of the box on screen from the model's prediction.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.view_labels.label_view_background" title="cellmap_flow.dashboard.routes.finetune.view_labels.label_view_background"><code class="xref py py-obj docutils literal notranslate"><span class="pre">label_view_background</span></code></a>()</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.view_labels.label_view_background" title="cellmap_flow.dashboard.routes.finetune.view_labels.label_view_background"><code class="xref py py-obj docutils literal notranslate"><span class="pre">label_view_background</span></code></a>()</p></td>
 <td><p>Label every unannotated voxel of the box on screen background (1).</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.view_labels.split_view_objects" title="cellmap_flow.dashboard.routes.finetune.view_labels.split_view_objects"><code class="xref py py-obj docutils literal notranslate"><span class="pre">split_view_objects</span></code></a>()</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.view_labels.split_view_objects" title="cellmap_flow.dashboard.routes.finetune.view_labels.split_view_objects"><code class="xref py py-obj docutils literal notranslate"><span class="pre">split_view_objects</span></code></a>()</p></td>
 <td><p>Relabel the box on screen's foreground by connected component.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.view_labels.undo_view_labels" title="cellmap_flow.dashboard.routes.finetune.view_labels.undo_view_labels"><code class="xref py py-obj docutils literal notranslate"><span class="pre">undo_view_labels</span></code></a>()</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.view_labels.undo_view_labels" title="cellmap_flow.dashboard.routes.finetune.view_labels.undo_view_labels"><code class="xref py py-obj docutils literal notranslate"><span class="pre">undo_view_labels</span></code></a>()</p></td>
 <td><p>Take back the last Seed, All Background or Split of the session's volume.</p></td>
 </tr>
 </tbody>
@@ -211,44 +241,116 @@ viewer afterwards to show the new labels.</p>
 <dd></dd></dl>
 
 <dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.view_labels.METADATA_TIMEOUT_SECONDS">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.view_labels.</span></span><span class="sig-name descname"><span class="pre">METADATA_TIMEOUT_SECONDS</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">5</span></span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.view_labels.METADATA_TIMEOUT_SECONDS" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.view_labels.SEED_METHODS">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.view_labels.</span></span><span class="sig-name descname"><span class="pre">SEED_METHODS</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">('components',</span> <span class="pre">'mutex_watershed',</span> <span class="pre">'distance_watershed',</span> <span class="pre">'instances')</span></span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.view_labels.SEED_METHODS" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
 <dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.view_labels.UNDO_DEPTH">
 <span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.view_labels.</span></span><span class="sig-name descname"><span class="pre">UNDO_DEPTH</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">10</span></span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.view_labels.UNDO_DEPTH" title="Link to this definition"></a></dt>
 <dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.view_labels.CELLPOSE_CELL_CHANNEL">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.view_labels.</span></span><span class="sig-name descname"><span class="pre">CELLPOSE_CELL_CHANNEL</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">2</span></span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.view_labels.CELLPOSE_CELL_CHANNEL" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.view_labels.model_output">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.view_labels.</span></span><span class="sig-name descname"><span class="pre">model_output</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model_name</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.view_labels.model_output" title="Link to this definition"></a></dt>
+<dd><p><code class="docutils literal notranslate"><span class="pre">(output_type,</span> <span class="pre">offsets)</span></code>: what the model is trained on, as submit decides it.</p>
+<p><code class="docutils literal notranslate"><span class="pre">autodetect_output_type</span></code>: “affinities” (with the offsets, a JSON
+list) when the model’s script or channel names say so, “distance” for
+a distance model, a type’s declared target (“flows” for Cellpose), else
+“binary”. A model with no config here, or affinities without offsets,
+is “binary”: a threshold is all a seed can do with it.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.view_labels.methods_for">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.view_labels.</span></span><span class="sig-name descname"><span class="pre">methods_for</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">output_type</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">serves_integers</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.view_labels.methods_for" title="Link to this definition"></a></dt>
+<dd><p>The seed methods that fit a model’s output, the best fit first.</p>
+<p><code class="docutils literal notranslate"><span class="pre">components</span></code> fits every output (an instance label is foreground where
+it is not 0), so it is always offered, last unless nothing else fits.</p>
+</dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.view_labels.UNANSWERED_RETRY_SECONDS">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.view_labels.</span></span><span class="sig-name descname"><span class="pre">UNANSWERED_RETRY_SECONDS</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">60</span></span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.view_labels.UNANSWERED_RETRY_SECONDS" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.view_labels.seed_methods">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.view_labels.</span></span><span class="sig-name descname"><span class="pre">seed_methods</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">host</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">base_model</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.view_labels.seed_methods" title="Link to this definition"></a></dt>
+<dd><p>The methods a seed from <code class="docutils literal notranslate"><span class="pre">model_name</span></code>’s server can use (<code class="docutils literal notranslate"><span class="pre">methods_for</span></code>).</p>
+</dd></dl>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.view_labels.seed_sources">
 <span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.view_labels.</span></span><span class="sig-name descname"><span class="pre">seed_sources</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.view_labels.seed_sources" title="Link to this definition"></a></dt>
 <dd><p>The models a seed can read, for the page’s picker: <code class="docutils literal notranslate"><span class="pre">models</span></code> (every
-running server, oldest first) and <code class="docutils literal notranslate"><span class="pre">default</span></code>, the one a seed reads when
-none is chosen (None when that is a choice for the user).</p>
+running server, oldest first), <code class="docutils literal notranslate"><span class="pre">default</span></code>, the one a seed reads when
+none is chosen (None when that is a choice for the user), and
+<code class="docutils literal notranslate"><span class="pre">methods</span></code>, {model: the seed methods that fit its output, best first};
+and <code class="docutils literal notranslate"><span class="pre">box_voxels</span></code>, the volume’s output patch (z, y, x), the box a label
+action covers when it gives no other.</p>
 </dd></dl>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.view_labels.read_prediction">
-<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.view_labels.</span></span><span class="sig-name descname"><span class="pre">read_prediction</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">host</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">volume</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lo</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">hi</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">info</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.view_labels.read_prediction" title="Link to this definition"></a></dt>
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.view_labels.</span></span><span class="sig-name descname"><span class="pre">read_prediction</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">host</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">volume</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lo</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">hi</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">info</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">postprocess</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">()</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.view_labels.read_prediction" title="Link to this definition"></a></dt>
 <dd><p>The model’s raw output over annotation voxels <code class="docutils literal notranslate"><span class="pre">[lo,</span> <span class="pre">hi)</span></code>.</p>
 <p>Read from its server as a layer is, with the dashboard’s input
 normalization and no postprocessing: the trainer’s target is set on the
-raw output, and that is where its decision boundary is. Each annotation
+raw output, and that is where its decision boundary is. (<code class="docutils literal notranslate"><span class="pre">postprocess</span></code>
+asks for one anyway: Cellpose’s masks of a flows server’s output, for a
+seed of its instances.) Each annotation
 voxel takes the served voxel its centre lies in, placed where
 neuroglancer draws the layer (<code class="docutils literal notranslate"><span class="pre">prediction_voxel_override</span></code>), so the
 seed lies under the prediction the user sees.</p>
-<p>Returns <code class="docutils literal notranslate"><span class="pre">(prediction,</span> <span class="pre">lo,</span> <span class="pre">hi)</span></code>: a (channels, z, y, x) float32 array,
-and the box, shrunk to what the server covers.</p>
+<p>Returns <code class="docutils literal notranslate"><span class="pre">(prediction,</span> <span class="pre">lo,</span> <span class="pre">hi)</span></code>: a (channels, z, y, x) array, float32
+or, when the server serves integer labels, as served (an id past 2^24
+is not exact in float32); and the box, shrunk to what the server covers.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.view_labels.probability">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.view_labels.</span></span><span class="sig-name descname"><span class="pre">probability</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">prediction</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_class</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">channels</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.view_labels.probability" title="Link to this definition"></a></dt>
+<dd><p>The prediction as a probability, (channels, z, y, x), 0.5 at the model’s decision boundary.</p>
+<p>The boundary depends on the output’s activation: 0.5 on [0, 1] output
+(a sigmoid already applied; the cellmap distance models end in one, and
+0.5 is their object boundary), 0 on tanh’s [-1, 1], and 0 on unbounded
+output, logits or a signed distance alike. Each is turned into a
+probability, so <code class="docutils literal notranslate"><span class="pre">channels</span></code> – the affinity channels, say – can be
+averaged and one threshold means the same for every model.
+<code class="docutils literal notranslate"><span class="pre">output_class</span></code> is the server’s (serving.probe), or read off the
+values when it has none.</p>
 </dd></dl>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.view_labels.foreground_mask">
 <span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.view_labels.</span></span><span class="sig-name descname"><span class="pre">foreground_mask</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">prediction</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_class</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">channels</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">threshold</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.5</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.view_labels.foreground_mask" title="Link to this definition"></a></dt>
-<dd><p>Where the model says foreground: its probability over <code class="docutils literal notranslate"><span class="pre">threshold</span></code>.</p>
-<p>The decision boundary depends on the output’s activation: 0.5 on [0, 1]
-output (a sigmoid already applied; the cellmap distance models end in
-one, and 0.5 is their object boundary), 0 on tanh’s [-1, 1], and 0 on
-unbounded output, logits or a signed distance alike. Each is turned into
-a probability first, so <code class="docutils literal notranslate"><span class="pre">channels</span></code> – the affinity channels, say –
-can be averaged. <code class="docutils literal notranslate"><span class="pre">output_class</span></code> is the server’s (serving.probe), or
-read off the values when it has none. <code class="docutils literal notranslate"><span class="pre">threshold</span></code> is in probability
-whatever the activation: 0.5 is the model’s own boundary.</p>
+<dd><p>Where the model says foreground: its <code class="docutils literal notranslate"><span class="pre">probability</span></code>, averaged over <code class="docutils literal notranslate"><span class="pre">channels</span></code>, over <code class="docutils literal notranslate"><span class="pre">threshold</span></code>.</p>
+<p><code class="docutils literal notranslate"><span class="pre">threshold</span></code> is in probability whatever the activation: 0.5 is the
+model’s own boundary.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.view_labels.segment_prediction">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.view_labels.</span></span><span class="sig-name descname"><span class="pre">segment_prediction</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">method</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">prediction</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_class</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">channels</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">offsets</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">threshold</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.5</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">min_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">connectivity</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">per_slice</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.view_labels.segment_prediction" title="Link to this definition"></a></dt>
+<dd><p>The objects <code class="docutils literal notranslate"><span class="pre">method</span></code> makes of the prediction: 0 background, 1..n (<code class="docutils literal notranslate"><span class="pre">post.segment</span></code>).</p>
+<p><code class="docutils literal notranslate"><span class="pre">threshold</span></code> is a probability (<code class="docutils literal notranslate"><span class="pre">probability</span></code>) for every method that
+thresholds: the foreground boundary for components and the distance
+watershed, and the mutex watershed’s bias, the affinity above which
+two voxels join. <code class="docutils literal notranslate"><span class="pre">connectivity</span></code> and <code class="docutils literal notranslate"><span class="pre">per_slice</span></code> are the connected
+components’; the watersheds take <code class="docutils literal notranslate"><span class="pre">connectivity</span></code> too. <code class="docutils literal notranslate"><span class="pre">instances</span></code>
+splits an id’s disconnected parts: a server numbers each chunk’s
+objects on its own (Cellpose’s from 1), and the box can span chunks.</p>
 </dd></dl>
 
 <dl class="py function">
@@ -258,9 +360,12 @@ whatever the activation: 0.5 is the model’s own boundary.</p>
 <p>JSON body, all optional: <code class="docutils literal notranslate"><span class="pre">size_nm</span></code> (as for mark-view), <code class="docutils literal notranslate"><span class="pre">confirm</span></code>
 (label a large box), <code class="docutils literal notranslate"><span class="pre">select_channel</span></code> (the channel the session
 trains, when it trains one), <code class="docutils literal notranslate"><span class="pre">model</span></code> (a name from <code class="docutils literal notranslate"><span class="pre">seed_sources</span></code>;
-the latest finetune, else the base, when absent), <code class="docutils literal notranslate"><span class="pre">threshold</span></code> (probability, 0 to 1; the
-model’s own boundary, 0.5, when absent) and <code class="docutils literal notranslate"><span class="pre">min_size</span></code> (objects of
-fewer voxels are background).</p>
+the latest finetune, else the base, when absent), <code class="docutils literal notranslate"><span class="pre">method</span></code> (one of
+the model’s <code class="docutils literal notranslate"><span class="pre">seed_sources</span></code> methods; “components” when absent),
+<code class="docutils literal notranslate"><span class="pre">threshold</span></code> (probability, 0 to 1; the model’s own boundary, 0.5, when
+absent: see <code class="docutils literal notranslate"><span class="pre">segment_prediction</span></code>), <code class="docutils literal notranslate"><span class="pre">min_size</span></code> (objects of fewer
+voxels are background), <code class="docutils literal notranslate"><span class="pre">connectivity</span></code> (1 faces, the default; 2 and
+edges; 3 all neighbours) and <code class="docutils literal notranslate"><span class="pre">per_slice</span></code> (components per z slice).</p>
 </dd></dl>
 
 <dl class="py function">
@@ -277,7 +382,10 @@ fewer voxels are background).</p>
 <p>For a merge the model made: paint a background wall through the object,
 in every slice it spans, and click; the two sides get ids of their own
 (<code class="docutils literal notranslate"><span class="pre">fill.relabel_objects</span></code>). A stroke joining two objects merges them.
-JSON body, all optional: <code class="docutils literal notranslate"><span class="pre">size_nm</span></code> and <code class="docutils literal notranslate"><span class="pre">confirm</span></code>, as for seed.</p>
+JSON body, all optional: <code class="docutils literal notranslate"><span class="pre">size_nm</span></code> and <code class="docutils literal notranslate"><span class="pre">confirm</span></code>, as for seed;
+<code class="docutils literal notranslate"><span class="pre">connectivity</span></code> and <code class="docutils literal notranslate"><span class="pre">per_slice</span></code>, as for a seed’s components (with
+<code class="docutils literal notranslate"><span class="pre">per_slice</span></code>, a wall in one slice is enough, and each slice of an
+object gets an id of its own).</p>
 </dd></dl>
 
 <dl class="py function">

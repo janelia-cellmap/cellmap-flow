@@ -159,6 +159,11 @@ once, and reused for every chunk.</p>
 more than one channel (RGB), or an output that is not a map over the input’s
 space, such as micro-SAM’s, whose masks have an object axis of data-dependent
 size and need prompts.</p>
+<p>It can be finetuned (<code class="docutils literal notranslate"><span class="pre">trainable_model</span></code>) when it has torch weights (a
+state dict, which takes LoRA too, or TorchScript): the network is rebuilt
+from them, with the input’s normalization and the output’s sigmoid around
+it, and once trained serves through the inferencer’s forward instead of
+the pipeline.</p>
 <p><code class="docutils literal notranslate"><span class="pre">bioimageio</span></code> is imported only when the model is built: the CLIs and the
 dashboard’s model form import every type. The server runs in pixi.toml’s
 <code class="docutils literal notranslate"><span class="pre">bioimageio</span></code> environment unless the entry names another <code class="docutils literal notranslate"><span class="pre">env</span></code>.</p>
@@ -172,13 +177,16 @@ dashboard’s model form import every type. The server runs in pixi.toml’s
 <tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.models.configs.bio.WEIGHT_FORMATS" title="cellmap_flow.models.configs.bio.WEIGHT_FORMATS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">WEIGHT_FORMATS</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.models.configs.bio.DEFAULT_INPUT_SIZE" title="cellmap_flow.models.configs.bio.DEFAULT_INPUT_SIZE"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DEFAULT_INPUT_SIZE</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.models.configs.bio.TRAINABLE_WEIGHT_FORMATS" title="cellmap_flow.models.configs.bio.TRAINABLE_WEIGHT_FORMATS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TRAINABLE_WEIGHT_FORMATS</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.models.configs.bio.DEFAULT_SLICES_PER_CHUNK" title="cellmap_flow.models.configs.bio.DEFAULT_SLICES_PER_CHUNK"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DEFAULT_SLICES_PER_CHUNK</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.models.configs.bio.DEFAULT_INPUT_SIZE" title="cellmap_flow.models.configs.bio.DEFAULT_INPUT_SIZE"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DEFAULT_INPUT_SIZE</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.models.configs.bio.NM_PER_UNIT" title="cellmap_flow.models.configs.bio.NM_PER_UNIT"><code class="xref py py-obj docutils literal notranslate"><span class="pre">NM_PER_UNIT</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.models.configs.bio.DEFAULT_SLICES_PER_CHUNK" title="cellmap_flow.models.configs.bio.DEFAULT_SLICES_PER_CHUNK"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DEFAULT_SLICES_PER_CHUNK</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.models.configs.bio.NM_PER_UNIT" title="cellmap_flow.models.configs.bio.NM_PER_UNIT"><code class="xref py py-obj docutils literal notranslate"><span class="pre">NM_PER_UNIT</span></code></a></p></td>
 <td><p></p></td>
 </tr>
 </tbody>
@@ -214,6 +222,11 @@ dashboard’s model form import every type. The server runs in pixi.toml’s
 <dl class="py data">
 <dt class="sig sig-object py" id="cellmap_flow.models.configs.bio.WEIGHT_FORMATS">
 <span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.configs.bio.</span></span><span class="sig-name descname"><span class="pre">WEIGHT_FORMATS</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">('pytorch_state_dict',</span> <span class="pre">'torchscript',</span> <span class="pre">'onnx',</span> <span class="pre">'tensorflow_saved_model_bundle',</span> <span class="pre">'keras_hdf5',</span> <span class="pre">'keras_v3')</span></span><a class="headerlink" href="#cellmap_flow.models.configs.bio.WEIGHT_FORMATS" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.bio.TRAINABLE_WEIGHT_FORMATS">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.configs.bio.</span></span><span class="sig-name descname"><span class="pre">TRAINABLE_WEIGHT_FORMATS</span></span><a class="headerlink" href="#cellmap_flow.models.configs.bio.TRAINABLE_WEIGHT_FORMATS" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py data">
@@ -287,6 +300,11 @@ pick of those the model has.</p></li>
 <dd></dd></dl>
 
 <dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.bio.BioModelConfig.finetunable">
+<span class="sig-name descname"><span class="pre">finetunable</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">True</span></span><a class="headerlink" href="#cellmap_flow.models.configs.bio.BioModelConfig.finetunable" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
 <dt class="sig sig-object py" id="cellmap_flow.models.configs.bio.BioModelConfig.model">
 <span class="sig-name descname"><span class="pre">model</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">''</span></span><a class="headerlink" href="#cellmap_flow.models.configs.bio.BioModelConfig.model" title="Link to this definition"></a></dt>
 <dd></dd></dl>
@@ -330,6 +348,49 @@ pick of those the model has.</p></li>
 <dt class="sig sig-object py" id="cellmap_flow.models.configs.bio.BioModelConfig.process_chunk">
 <span class="sig-name descname"><span class="pre">process_chunk</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">idi</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../../../image_data_interface/index.html#cellmap_flow.image_data_interface.ImageDataInterface" title="cellmap_flow.image_data_interface.ImageDataInterface"><span class="pre">cellmap_flow.image_data_interface.ImageDataInterface</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_roi</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.models.configs.bio.BioModelConfig.process_chunk" title="Link to this definition"></a></dt>
 <dd><p><code class="docutils literal notranslate"><span class="pre">output_roi</span></code> predicted: <code class="docutils literal notranslate"><span class="pre">(channels,</span> <span class="pre">z,</span> <span class="pre">y,</span> <span class="pre">x)</span></code>, in <code class="docutils literal notranslate"><span class="pre">output_dtype</span></code>.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.bio.BioModelConfig.trainable_model">
+<span class="sig-name descname"><span class="pre">trainable_model</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.models.configs.bio.BioModelConfig.trainable_model" title="Link to this definition"></a></dt>
+<dd><p>The model as one torch module, for the finetune trainer: (B, 1, Z, Y, X) of the read
+shape in, (B, channels, Z’, Y’, X’) of the write shape out, as process_chunk serves it.</p>
+<p>Built from the model’s description, the way bioimageio.core runs it:
+the input’s preprocessing (its normalization), the network from its
+torch weights (a 2D one on each z slice, the slices in one call when
+its batch axis takes any size), each output’s postprocessing (a
+sigmoid) and the same crop, the outputs’ channels one after another.
+Statistics are taken per patch, over the axes the RDF names, so a
+patch is normalized as a chunk is; an RDF that names none asks
+bioimageio.core for statistics of all it has seen, which a patch
+cannot reproduce, and gets the patch’s own.</p>
+<p>Refuses, with a ValueError saying why, a model whose weights are not
+torch (ONNX, TensorFlow, Keras: no torch module to train), or whose
+output goes through something no gradient passes (labels, a
+threshold, Stardist or Cellpose instances). On the device the server
+uses, in float32 and in eval mode.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.bio.BioModelConfig.serve_trained">
+<span class="sig-name descname"><span class="pre">serve_trained</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">module</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.models.configs.bio.BioModelConfig.serve_trained" title="Link to this definition"></a></dt>
+<dd><p>Serve <code class="docutils literal notranslate"><span class="pre">module</span></code> (the trained <code class="docutils literal notranslate"><span class="pre">trainable_model()</span></code>) through the inferencer’s own forward.</p>
+<p>process_chunk runs the pipeline’s weights, as loaded from the zoo, so
+it is switched off: the module does all process_chunk did (the
+normalization, each slice of a 2D model, the sigmoid, the crop),
+given (1, 1, Z, Y, X) of the read shape, and gives float32.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.bio.BioModelConfig.finetune_modes">
+<span class="sig-name descname"><span class="pre">finetune_modes</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.models.configs.bio.BioModelConfig.finetune_modes" title="Link to this definition"></a></dt>
+<dd><p>How the dashboard can finetune this model: (“lora”, “full”), (“full”,) or ().</p>
+<p>From its weight formats only, without bioimageio or torch: the
+catalog’s cached entry, else a local rdf.yaml or .zip read as YAML,
+else (where bioimageio.core is) its description. Torch weights
+decide, as <code class="docutils literal notranslate"><span class="pre">trainable_model</span></code> picks them: a state dict takes LoRA
+and a full finetune, TorchScript a full one only, and a model
+without either, or whose weights cannot be told, none.</p>
 </dd></dl>
 
 <dl class="py method">

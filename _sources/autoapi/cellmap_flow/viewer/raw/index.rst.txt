@@ -33,6 +33,7 @@ Attributes
    cellmap_flow.viewer.raw.RAW_SHADER
    cellmap_flow.viewer.raw.PREDICTION_SHADER
    cellmap_flow.viewer.raw.PREDICTION_COLORS
+   cellmap_flow.viewer.raw.FLOW_SHADER
 
 
 Classes
@@ -49,6 +50,7 @@ Functions
 .. autoapisummary::
 
    cellmap_flow.viewer.raw.prediction_shader
+   cellmap_flow.viewer.raw.flow_shader
    cellmap_flow.viewer.raw.neuroglancer_source
    cellmap_flow.viewer.raw.get_raw_layer
 
@@ -109,6 +111,42 @@ Module Contents
    step function rather than a ramp, so every value above 0.5 rendered as
    solid colour. After a DefaultPostprocessor (0-255) that is the entire
    prediction.
+
+
+.. py:data:: FLOW_SHADER
+   :value: Multiline-String
+
+   .. raw:: html
+
+      <details><summary>Show Value</summary>
+
+   .. code-block:: python
+
+      """#uicontrol bool flows checkbox(default=true);
+      #uicontrol float flow_length slider(min=0.5, max=10, default=5);
+      {cell_control}#uicontrol vec3 color color(default="{color}");
+      void main(){{
+        float shown = {cell};
+        if (!flows) {{ emitRGB(color * shown); return; }}
+        vec2 flow = vec2(toNormalized(getDataValue({flow_x})), toNormalized(getDataValue({flow_y})));
+        float len = length(flow);
+        vec2 dir = flow / max(len, 1e-6);
+        // cos(angle + 0, -120, 120 degrees), from the direction without atan.
+        vec3 hue = 0.5 + 0.5 * (dir.x * vec3(1.0, -0.5, -0.5) - dir.y * vec3(0.0, -0.866, 0.866));
+        emitRGB(hue * clamp(len / flow_length, 0.0, 1.0) * shown);
+      }}"""
+
+   .. raw:: html
+
+      </details>
+
+
+
+.. py:function:: flow_shader(color, value_range, flow_y, flow_x, display_channel=None)
+
+   FLOW_SHADER over channels ``flow_y`` and ``flow_x``, dimmed by channel
+   ``display_channel`` over ``value_range`` (as prediction_shader's), or
+   not dimmed without one.
 
 
 .. py:function:: neuroglancer_source(dataset_path)

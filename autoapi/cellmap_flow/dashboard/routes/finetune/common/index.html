@@ -142,7 +142,10 @@
 <tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.common.RESTART_PASSTHROUGH_KEYS" title="cellmap_flow.dashboard.routes.finetune.common.RESTART_PASSTHROUGH_KEYS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RESTART_PASSTHROUGH_KEYS</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.common.SPARSE_MSE_NOTE" title="cellmap_flow.dashboard.routes.finetune.common.SPARSE_MSE_NOTE"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SPARSE_MSE_NOTE</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.common.INSTANCE_TARGETS" title="cellmap_flow.dashboard.routes.finetune.common.INSTANCE_TARGETS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">INSTANCE_TARGETS</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.common.SPARSE_MSE_NOTE" title="cellmap_flow.dashboard.routes.finetune.common.SPARSE_MSE_NOTE"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SPARSE_MSE_NOTE</span></code></a></p></td>
 <td><p></p></td>
 </tr>
 </tbody>
@@ -188,6 +191,12 @@
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.common.detect_sparse_annotations" title="cellmap_flow.dashboard.routes.finetune.common.detect_sparse_annotations"><code class="xref py py-obj docutils literal notranslate"><span class="pre">detect_sparse_annotations</span></code></a>(corrections_path)</p></td>
 <td><p>Whether the session trains on painted (sparse) annotations.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.common.declared_output_type" title="cellmap_flow.dashboard.routes.finetune.common.declared_output_type"><code class="xref py py-obj docutils literal notranslate"><span class="pre">declared_output_type</span></code></a>(model_config)</p></td>
+<td><p>The training target a model type declares (<code class="docutils literal notranslate"><span class="pre">finetune_output_type</span></code>), or None.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.common.annotation_dtype_for" title="cellmap_flow.dashboard.routes.finetune.common.annotation_dtype_for"><code class="xref py py-obj docutils literal notranslate"><span class="pre">annotation_dtype_for</span></code></a>(model_config)</p></td>
+<td><p>The labels' dtype of a new annotation volume for <code class="docutils literal notranslate"><span class="pre">model_config</span></code>.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.common.autodetect_output_type" title="cellmap_flow.dashboard.routes.finetune.common.autodetect_output_type"><code class="xref py py-obj docutils literal notranslate"><span class="pre">autodetect_output_type</span></code></a>(model_config, output_type, offsets)</p></td>
 <td><p></p></td>
@@ -291,6 +300,30 @@ without a manifest cannot be trained, so it is not sparse either.</p>
 </dd></dl>
 
 <dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.common.declared_output_type">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.common.</span></span><span class="sig-name descname"><span class="pre">declared_output_type</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model_config</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.common.declared_output_type" title="Link to this definition"></a></dt>
+<dd><p>The training target a model type declares (<code class="docutils literal notranslate"><span class="pre">finetune_output_type</span></code>), or None.</p>
+<p>Cellpose predicts flows, so its type says “flows”. A finetuned model
+trains as its base does, so its <code class="docutils literal notranslate"><span class="pre">base_model_config</span></code> is asked in turn
+(building that config builds no network).</p>
+</dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.common.INSTANCE_TARGETS">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.common.</span></span><span class="sig-name descname"><span class="pre">INSTANCE_TARGETS</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">('affinities',</span> <span class="pre">'flows')</span></span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.common.INSTANCE_TARGETS" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.common.annotation_dtype_for">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.common.</span></span><span class="sig-name descname"><span class="pre">annotation_dtype_for</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model_config</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.common.annotation_dtype_for" title="Link to this definition"></a></dt>
+<dd><p>The labels’ dtype of a new annotation volume for <code class="docutils literal notranslate"><span class="pre">model_config</span></code>.</p>
+<p>uint8 (ids up to 255) for a model trained on foreground and background;
+uint16 (up to 65535) for one trained on instances (affinities, Cellpose’s
+flows), whose seeds number each object: 282 of a Cellpose model’s masks
+in one box did not fit a uint8 volume.</p>
+</dd></dl>
+
+<dl class="py function">
 <dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.common.autodetect_output_type">
 <span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.common.</span></span><span class="sig-name descname"><span class="pre">autodetect_output_type</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model_config</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_type</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">offsets</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.common.autodetect_output_type" title="Link to this definition"></a></dt>
 <dd></dd></dl>
@@ -352,7 +385,9 @@ distance case below);</p>
 <li><p>a distance target with sparse annotations: the interval loss, on the
 bounds the paint sets on each voxel’s distance, with distillation of
 at least 0.5 (see below);</p></li>
-<li><p>a distance target otherwise: bce, without label smoothing.</p></li>
+<li><p>a distance target otherwise: bce, without label smoothing;</p></li>
+<li><p>a flow target (Cellpose): the flow loss, the only one it goes with,
+without label smoothing, sparse or not (it masks per channel itself).</p></li>
 </ul>
 <p>A sparse session also masks its unannotated voxels out of the loss.</p>
 </dd></dl>

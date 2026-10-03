@@ -52,7 +52,7 @@ Functions
 Package Contents
 ----------------
 
-.. py:class:: VirtualPatchDataset(volume_zarr_path: str, raw_dataset_path: str, input_size_voxels: Tuple[int, int, int], output_size_voxels: Tuple[int, int, int], input_voxel_size_nm: Tuple[float, float, float], output_voxel_size_nm: Tuple[float, float, float], patches_per_epoch: Optional[int] = None, jitter_voxels: Optional[Tuple[int, int, int]] = None, seed: int = 0, input_norm_config: Optional[dict] = None, dense_to_sparse_ratio: Optional[float] = None, good_regions: Optional[list] = None, rehearsal_fraction: Optional[float] = None, anchor_fraction: Optional[float] = None, augment: bool = False, resample: bool = False)
+.. py:class:: VirtualPatchDataset(volume_zarr_path: str, raw_dataset_path: str, input_size_voxels: Tuple[int, int, int], output_size_voxels: Tuple[int, int, int], input_voxel_size_nm: Tuple[float, float, float], output_voxel_size_nm: Tuple[float, float, float], patches_per_epoch: Optional[int] = None, patches_per_chunk: int = 1, jitter_voxels: Optional[Tuple[int, int, int]] = None, seed: int = 0, input_norm_config: Optional[dict] = None, dense_to_sparse_ratio: Optional[float] = None, good_regions: Optional[list] = None, rehearsal_fraction: Optional[float] = None, anchor_fraction: Optional[float] = None, augment: bool = False, resample: bool = False)
 
 
 
@@ -71,6 +71,11 @@ Package Contents
                              comprise one epoch. ``None`` (the default) means "auto:
                              substitute the number of annotated chunks" -- every annotated
                              chunk gets ~one patch per epoch on average.
+   :param patches_per_chunk: how many patches the auto epoch length counts
+                             per annotated chunk (default 1). A patch much smaller than the
+                             chunks (a model trained on tiles, see
+                             ``loader.dataset_from_manifest``'s ``patch_voxels``) takes more
+                             to cover them.
    :param jitter_voxels: half-range of the random offset applied to the patch
                          center, in **annotation voxels**. Defaults to
                          ``output_size_voxels // 4``.
@@ -134,7 +139,7 @@ Package Contents
       its original 2-tuple contract.
 
 
-.. py:function:: create_dataloader(corrections_zarr_path: str, batch_size: int = 2, augment: bool = True, num_workers: int = 4) -> torch.utils.data.DataLoader
+.. py:function:: create_dataloader(corrections_zarr_path: str, batch_size: int = 2, augment: bool = True, num_workers: int = 4, patch_voxels: Optional[PatchVoxels] = None) -> torch.utils.data.DataLoader
 
    Build the training DataLoader for a corrections directory.
 
@@ -152,9 +157,12 @@ Package Contents
                    manifest's stored preference.
    :param num_workers: DataLoader workers. Spawned, not forked -- tensorstore
                        handles do not survive fork.
+   :param patch_voxels: ``(input, output)`` patch in voxels instead of the
+                        manifest's, for a model that trains on its own
+                        (``training_patch_voxels``).
 
 
-.. py:function:: dataset_from_manifest(manifest: dict, corrections_dir: Optional[str] = None, augment: Optional[bool] = None) -> cellmap_flow.finetune.data.dataset.VirtualPatchDataset
+.. py:function:: dataset_from_manifest(manifest: dict, corrections_dir: Optional[str] = None, augment: Optional[bool] = None, patch_voxels: Optional[PatchVoxels] = None) -> cellmap_flow.finetune.data.dataset.VirtualPatchDataset
 
    Instantiate a :class:`VirtualPatchDataset` from a manifest dict.
 
@@ -164,6 +172,13 @@ Package Contents
 
    ``corrections_dir`` is where the session's good regions are looked up;
    omit it and the dataset simply trains without rehearsal anchors.
+
+   ``patch_voxels``, ``(input, output)`` in voxels, replaces the manifest's
+   patch sizes, which are the model's serving geometry: for a model whose
+   network trains on another (``training_patch_voxels``). The voxel sizes
+   stay the manifest's. An epoch then counts as many more patches per
+   annotated chunk as the patch is smaller, so that it still covers what
+   was annotated.
 
 
 .. py:function:: make_training_loader(dataset, batch_size: int, num_workers: int) -> torch.utils.data.DataLoader

@@ -69,6 +69,11 @@ Module Contents
 
 
 
+   .. py:attribute:: finetunable
+      :value: True
+
+
+
    .. py:attribute:: lora_adapter_path
       :value: None
 
@@ -121,6 +126,28 @@ Module Contents
    .. py:property:: base_model_config
 
       Lazily build the base ModelConfig from the stored dict.
+
+
+   .. py:property:: display_channel
+
+      a finetune serves the same channels.
+
+      :type: Its base's
+
+
+   .. py:method:: finetune_modes()
+
+      Its base's: continuing a finetune trains the same network.
+
+
+
+   .. py:method:: trainable_model()
+
+      The module it serves (its base's trainable module with the adapter
+      or weights on), to train on from where the finetune left off; not
+      ``config.model``, which a type serving through its own process_chunk
+      (cellpose) keeps as its own model object.
+
 
 
    .. py:method:: to_dict()

@@ -491,7 +491,8 @@ Cellpose
 ~~~~~~~~
 
 ``type: cellpose`` runs Cellpose 4 (Cellpose-SAM) on each z slice of a
-chunk, in 2D, and serves its cell probability or its instance masks. It runs
+chunk, in 2D, and serves its cell probability, its flows or its instance
+masks. It runs
 in the ``cellpose4`` pixi environment unless the entry gives an ``env``:
 Cellpose 4 cannot share the default environment, whose cellpose 3 pins an
 older numpy. ``example/cellpose_sam.yaml`` serves it on jrc_mus-salivary-1.
@@ -502,7 +503,7 @@ older numpy. ``example/cellpose_sam.yaml`` serves it on jrc_mus-salivary-1.
       cellpose_sam:
         type: cellpose
         voxel_size: 64
-        output: probability
+        output: flows      # the default: all three channels
 
 .. list-table::
    :header-rows: 1
@@ -525,9 +526,8 @@ older numpy. ``example/cellpose_sam.yaml`` serves it on jrc_mus-salivary-1.
        models also need facebookresearch's ``dinov3`` package, which the
        ``cellpose4`` environment does not install.
    * - ``output``
-     - ``probability``
-     - ``probability``: the cell probability, 0 to 1 (float32). ``masks``:
-       instance ids (uint64), unique within a chunk.
+     - ``flows``
+     - ``flows``, ``probability`` or ``masks``: see the table below.
    * - ``slices_per_chunk``
      - 8
      - z slices in a chunk.
@@ -539,11 +539,14 @@ older numpy. ``example/cellpose_sam.yaml`` serves it on jrc_mus-salivary-1.
      - Voxels read beyond them on each side in y and x, so that objects at
        a chunk's edge are seen whole, and cut off again. None in z.
    * - ``batch_size``
-     - the whole chunk
+     - 16
      - Tiles per GPU pass. Cellpose cuts each slice into tiles (256 px for
-       ``cpsam*``, 384 for the DINO models, overlapping by 10%); by default
-       all of a chunk's tiles go in one pass. Lower it if the GPU runs out
-       of memory.
+       ``cpsam*``, 384 for the DINO models, overlapping by 10%), and runs
+       this many at a time, from any of the chunk's slices. More is no
+       faster: Cellpose-SAM took about as long per tile at 16 as at 72 or
+       128 on an L4 and an H100, and 2.4 GB at 16 against 9 GB at 72. A
+       network finetuned in the trainer's live server runs half as many,
+       as it is float32 there.
    * - ``diameter``
      - none
      - Object diameter in voxels; Cellpose resizes each slice by
@@ -551,11 +554,51 @@ older numpy. ``example/cellpose_sam.yaml`` serves it on jrc_mus-salivary-1.
    * - ``flow_threshold``, ``cellprob_threshold``
      - 0.4, 0.0
      - Cellpose's mask thresholds; ``masks`` only.
+   * - ``stitch_threshold``
+     - 0 (off)
+     - ``masks`` only: Cellpose's own linking of masks from slice to slice.
+       A mask takes the id of the mask in the slice before that it overlaps
+       by at least this IoU (0 to 1), so an object keeps one id through the
+       chunk's slices. Within a chunk only, and Cellpose then normalizes the
+       chunk's slices together rather than each on its own. Another output
+       refuses it.
 
-The probability is computed voxel by voxel, so it joins up across chunks,
-and it skips the mask dynamics, which makes it the faster output. Masks are
-made per chunk: an object that crosses a chunk's edge is cut there, with an
-id on each side, and objects are not joined from slice to slice. Add the
+What each output serves:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 15 25 15 45
+
+   * - ``output``
+     - Channels
+     - dtype
+     - What it is
+   * - ``flows`` (the default)
+     - ``flow_y``, ``flow_x``, ``cell``
+     - float32
+     - "Flows + probability" on the Models tab, and not masks: all the
+       network predicts, the flows towards each object's centre,
+       in y and in x (Cellpose's ``dP``, about -5 to 5), then the cell
+       probability, 0 to 1 (the sigmoid of its logit). The layer shows
+       them together: each voxel coloured by its flow's direction, dimmed
+       by ``cell`` (the model's ``display_channel``); untick the shader's
+       ``flows`` box to see ``cell`` alone. ``CellposeMasksPostprocessor``
+       makes masks of them on the server, with thresholds that can be
+       changed from the dashboard.
+   * - ``probability``
+     - ``cell``
+     - float32
+     - The cell probability alone.
+   * - ``masks``
+     - ``cell``
+     - uint64
+     - Instance ids, unique within a chunk.
+
+The probability and the flows are computed voxel by voxel, so they join up
+across chunks, and they skip the mask dynamics, which makes them the faster
+outputs. Masks are made per chunk: an object that crosses a chunk's edge is
+cut there, with an id on each side, and objects are joined from slice to
+slice only by ``stitch_threshold``, within the chunk. Add the
 ``MortonSegmentationRelabeling`` postprocessor to make the ids unique across
 chunks and show the layer as a segmentation:
 
@@ -570,6 +613,20 @@ cellpose4 cellmap_flow blockwise ...`` (blockwise runs the model in its own
 process) and segment that, or run Cellpose's own distributed
 segmentation (``cellpose.contrib.distributed_segmentation``), which stitches
 objects across blocks.
+
+In the dashboard, the Models tab's *Cellpose* panel lists Cellpose-SAM v2
+(``cpsam_v2``) and Cellpose-SAM (``cpsam``); the DINO models are left out,
+as the ``cellpose4`` environment cannot run them. Tick one, enter its voxel
+size (required: the scale at which the objects are about 30 voxels across)
+and pick its output (and for masks, *Link slices*: ``stitch_threshold``),
+then *Submit Models*. Its job and layer are named after the model and any
+output but the default (``cellpose_sam_v2``, ``cellpose_sam_v2_masks``),
+so *+ output* runs another output of the same model beside it. Unticking
+stops it; changing the voxel size or the linking of a running one restarts
+it; a reloaded page ticks the running ones with their settings.
+
+A finetuned Cellpose model is trained on the flows whatever its output, and
+served after training with its base model's output.
 
 Finetuned weights, from Cellpose's GUI or ``cellpose.train``, are a path:
 ``pretrained_model: /path/to/models/my_model``. Cellpose reads from the

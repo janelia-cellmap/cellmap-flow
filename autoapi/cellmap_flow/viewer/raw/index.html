@@ -153,6 +153,9 @@ shaders, their contrast windows sampled from the data where it can be read.</p>
 <tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.viewer.raw.PREDICTION_COLORS" title="cellmap_flow.viewer.raw.PREDICTION_COLORS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PREDICTION_COLORS</span></code></a></p></td>
 <td><p></p></td>
 </tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.viewer.raw.FLOW_SHADER" title="cellmap_flow.viewer.raw.FLOW_SHADER"><code class="xref py py-obj docutils literal notranslate"><span class="pre">FLOW_SHADER</span></code></a></p></td>
+<td><p></p></td>
+</tr>
 </tbody>
 </table>
 </section>
@@ -173,10 +176,13 @@ shaders, their contrast windows sampled from the data where it can be read.</p>
 <tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.viewer.raw.prediction_shader" title="cellmap_flow.viewer.raw.prediction_shader"><code class="xref py py-obj docutils literal notranslate"><span class="pre">prediction_shader</span></code></a>(color[, value_range])</p></td>
 <td><p>Shader for a model output layer, over the range the chain produces.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.viewer.raw.neuroglancer_source" title="cellmap_flow.viewer.raw.neuroglancer_source"><code class="xref py py-obj docutils literal notranslate"><span class="pre">neuroglancer_source</span></code></a>(dataset_path)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.viewer.raw.flow_shader" title="cellmap_flow.viewer.raw.flow_shader"><code class="xref py py-obj docutils literal notranslate"><span class="pre">flow_shader</span></code></a>(color, value_range, flow_y, flow_x[, ...])</p></td>
+<td><p>FLOW_SHADER over channels <code class="docutils literal notranslate"><span class="pre">flow_y</span></code> and <code class="docutils literal notranslate"><span class="pre">flow_x</span></code>, dimmed by channel</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.viewer.raw.neuroglancer_source" title="cellmap_flow.viewer.raw.neuroglancer_source"><code class="xref py py-obj docutils literal notranslate"><span class="pre">neuroglancer_source</span></code></a>(dataset_path)</p></td>
 <td><p>The source neuroglancer reads <code class="docutils literal notranslate"><span class="pre">dataset_path</span></code> from itself, in the</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.viewer.raw.get_raw_layer" title="cellmap_flow.viewer.raw.get_raw_layer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_raw_layer</span></code></a>(dataset_path[, normalize, wrap_raw, ...])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.viewer.raw.get_raw_layer" title="cellmap_flow.viewer.raw.get_raw_layer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_raw_layer</span></code></a>(dataset_path[, normalize, wrap_raw, ...])</p></td>
 <td><p>A neuroglancer layer showing a zarr, n5 or precomputed volume.</p></td>
 </tr>
 </tbody>
@@ -223,6 +229,34 @@ the previous default was <code class="docutils literal notranslate"><span class=
 step function rather than a ramp, so every value above 0.5 rendered as
 solid colour. After a DefaultPostprocessor (0-255) that is the entire
 prediction.</p>
+</dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.viewer.raw.FLOW_SHADER">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.viewer.raw.</span></span><span class="sig-name descname"><span class="pre">FLOW_SHADER</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">Multiline-String</span></span><a class="headerlink" href="#cellmap_flow.viewer.raw.FLOW_SHADER" title="Link to this definition"></a></dt>
+<dd><details><summary>Show Value</summary><div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="sd">"""#uicontrol bool flows checkbox(default=true);</span>
+<span class="sd">#uicontrol float flow_length slider(min=0.5, max=10, default=5);</span>
+<span class="sd">{cell_control}#uicontrol vec3 color color(default="{color}");</span>
+<span class="sd">void main(){{</span>
+<span class="sd">  float shown = {cell};</span>
+<span class="sd">  if (!flows) {{ emitRGB(color * shown); return; }}</span>
+<span class="sd">  vec2 flow = vec2(toNormalized(getDataValue({flow_x})), toNormalized(getDataValue({flow_y})));</span>
+<span class="sd">  float len = length(flow);</span>
+<span class="sd">  vec2 dir = flow / max(len, 1e-6);</span>
+<span class="sd">  // cos(angle + 0, -120, 120 degrees), from the direction without atan.</span>
+<span class="sd">  vec3 hue = 0.5 + 0.5 * (dir.x * vec3(1.0, -0.5, -0.5) - dir.y * vec3(0.0, -0.866, 0.866));</span>
+<span class="sd">  emitRGB(hue * clamp(len / flow_length, 0.0, 1.0) * shown);</span>
+<span class="sd">}}"""</span>
+</pre></div>
+</div>
+</details></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.viewer.raw.flow_shader">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.viewer.raw.</span></span><span class="sig-name descname"><span class="pre">flow_shader</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">color</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">value_range</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">flow_y</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">flow_x</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">display_channel</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.viewer.raw.flow_shader" title="Link to this definition"></a></dt>
+<dd><p>FLOW_SHADER over channels <code class="docutils literal notranslate"><span class="pre">flow_y</span></code> and <code class="docutils literal notranslate"><span class="pre">flow_x</span></code>, dimmed by channel
+<code class="docutils literal notranslate"><span class="pre">display_channel</span></code> over <code class="docutils literal notranslate"><span class="pre">value_range</span></code> (as prediction_shader’s), or
+not dimmed without one.</p>
 </dd></dl>
 
 <dl class="py function">

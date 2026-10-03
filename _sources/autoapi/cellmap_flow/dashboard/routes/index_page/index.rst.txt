@@ -20,6 +20,7 @@ Functions
 
    cellmap_flow.dashboard.routes.index_page.viewer_url_for
    cellmap_flow.dashboard.routes.index_page.chain_items
+   cellmap_flow.dashboard.routes.index_page.cellpose_panel_data
    cellmap_flow.dashboard.routes.index_page.index
    cellmap_flow.dashboard.routes.index_page.set_data
 
@@ -55,6 +56,17 @@ Module Contents
 
    ``available`` is get_input_normalizers() / get_postprocessors_list();
    ``configured`` is the live chain (the session's input_norms / postprocess).
+
+
+.. py:function:: cellpose_panel_data(models_config, running_job_names)
+
+   What the Models tab's Cellpose panel is built from (models-tab.js):
+   each model it lists, and the settings of those running, which start
+   ticked.
+
+   ``{"models": [{"model", "label", "description"}], "running": [{"model",
+   "output", "voxel_size", "stitch_threshold"}]}``; a model running with
+   two outputs is two entries, so two rows.
 
 
 .. py:function:: index()

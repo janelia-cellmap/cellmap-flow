@@ -184,6 +184,11 @@ weights go on top of it.</p>
 <dd></dd></dl>
 
 <dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.finetune.FinetuneModelConfig.finetunable">
+<span class="sig-name descname"><span class="pre">finetunable</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">True</span></span><a class="headerlink" href="#cellmap_flow.models.configs.finetune.FinetuneModelConfig.finetunable" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
 <dt class="sig sig-object py" id="cellmap_flow.models.configs.finetune.FinetuneModelConfig.lora_adapter_path">
 <span class="sig-name descname"><span class="pre">lora_adapter_path</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.models.configs.finetune.FinetuneModelConfig.lora_adapter_path" title="Link to this definition"></a></dt>
 <dd></dd></dl>
@@ -241,6 +246,32 @@ model’s packages. A type that decides per model decides for the base.</p>
 <dt class="sig sig-object py" id="cellmap_flow.models.configs.finetune.FinetuneModelConfig.base_model_config">
 <span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">base_model_config</span></span><a class="headerlink" href="#cellmap_flow.models.configs.finetune.FinetuneModelConfig.base_model_config" title="Link to this definition"></a></dt>
 <dd><p>Lazily build the base ModelConfig from the stored dict.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.finetune.FinetuneModelConfig.display_channel">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">display_channel</span></span><a class="headerlink" href="#cellmap_flow.models.configs.finetune.FinetuneModelConfig.display_channel" title="Link to this definition"></a></dt>
+<dd><p>a finetune serves the same channels.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Its base’s</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.finetune.FinetuneModelConfig.finetune_modes">
+<span class="sig-name descname"><span class="pre">finetune_modes</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.models.configs.finetune.FinetuneModelConfig.finetune_modes" title="Link to this definition"></a></dt>
+<dd><p>Its base’s: continuing a finetune trains the same network.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.finetune.FinetuneModelConfig.trainable_model">
+<span class="sig-name descname"><span class="pre">trainable_model</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.models.configs.finetune.FinetuneModelConfig.trainable_model" title="Link to this definition"></a></dt>
+<dd><p>The module it serves (its base’s trainable module with the adapter
+or weights on), to train on from where the finetune left off; not
+<code class="docutils literal notranslate"><span class="pre">config.model</span></code>, which a type serving through its own process_chunk
+(cellpose) keeps as its own model object.</p>
 </dd></dl>
 
 <dl class="py method">

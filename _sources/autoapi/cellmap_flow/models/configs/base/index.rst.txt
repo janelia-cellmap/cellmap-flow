@@ -143,6 +143,52 @@ Module Contents
 
 
 
+   .. py:attribute:: display_channel
+      :value: None
+
+
+
+   .. py:attribute:: finetunable
+      :value: False
+
+
+
+   .. py:method:: finetune_modes()
+
+      What this model can be finetuned with: ("lora", "full"), ("full",)
+      or (). For the dashboard, so it must not build the network: a type
+      whose networks differ (a compiled one takes no LoRA adapter) reads
+      it from what describes the model. The trainer checks the module it
+      gets the same way (``finetune.trainable.finetune_modes``).
+
+
+
+   .. py:method:: trainable_model()
+
+      The torch module the finetune trainer trains, or None for
+      ``config.model`` as it is (``finetune.model_loading.load_trainable_model``).
+
+      The trainer feeds it a float tensor (B, 1, Z, Y, X), normalized as
+      the dashboard's input normalization does, at the input voxel size and
+      read shape, and wants (B, C, Z', Y', X') at the write shape back. A
+      type whose ``config.model`` is not such a module (a bioimage.io
+      prediction pipeline, a Cellpose model object) returns one that is,
+      sharing its parameters, so that what is trained is what is served.
+
+
+
+   .. py:method:: serve_trained(config, module)
+
+      Make ``config`` serve ``module``, the trained ``trainable_model()``.
+
+      ``config`` is this model's own Config (the trainer's live server) or
+      a new one with its geometry (a finetuned model's,
+      ``FinetuneModelConfig``). By default the module is the model, run by
+      the inferencer's own forward; a type that predicts through its own
+      ``process_chunk`` sets that up here instead.
+
+
+
    .. py:attribute:: validate_model_shapes
       :value: True
 

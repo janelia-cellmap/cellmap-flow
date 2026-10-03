@@ -37,7 +37,7 @@ Module Contents
 
 .. py:data:: logger
 
-.. py:function:: serve_new_volume(geometry, corrections_dir, dataset_path, model_name)
+.. py:function:: serve_new_volume(geometry, corrections_dir, dataset_path, model_name, annotation_dtype='uint8')
 
    Write a new volume with ``geometry`` into ``corrections_dir`` and serve it.
 

@@ -170,6 +170,12 @@ pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </s
 MinIO server (conda-forge only) and a Neuroglancer fork with voxel-annotation
 support — so <code class="docutils literal notranslate"><span class="pre">pip</span> <span class="pre">install</span> <span class="pre">cellmap-flow[finetune]</span></code> on its own is not enough.
 See <a class="reference internal" href="#docs/finetuning.md"><span class="xref myst">docs/finetuning.md</span></a> for the full setup.</p>
+<p>Any model whose network is plain PyTorch can be finetuned from the dashboard,
+with LoRA or in full: cellmap and Hugging Face exports, fly checkpoints,
+DaCapo runs, scripts, BioImage Model Zoo models with PyTorch weights, and
+Cellpose (on its flows, from sparsely painted instances). A compiled
+(TorchScript) zoo model is finetuned in full only, and ONNX or TensorFlow ones
+not at all; the Finetune tab offers only what the selected model allows.</p>
 </section>
 </section>
 <section id="usage">
@@ -221,8 +227,8 @@ dashboard warns that the model sees the wrong scale.</p>
 <p>Each model has a type, which says how it is loaded and which environment its
 server runs in. In a YAML it is the model entry’s <code class="docutils literal notranslate"><span class="pre">type</span></code>; on the command line,
 <code class="docutils literal notranslate"><span class="pre">cellmap_flow</span> <span class="pre">infer</span> <span class="pre">&lt;type&gt;</span></code>; in the dashboard, the Models tab lists the
-CellMap catalog, the <code class="docutils literal notranslate"><span class="pre">cellmap/*</span></code> Hugging Face models and the BioImage Model
-Zoo. <code class="docutils literal notranslate"><span class="pre">cellmap_flow</span> <span class="pre">models</span></code> lists every type and its arguments.</p>
+CellMap catalog, the <code class="docutils literal notranslate"><span class="pre">cellmap/*</span></code> Hugging Face models, the BioImage Model
+Zoo and Cellpose-SAM. <code class="docutils literal notranslate"><span class="pre">cellmap_flow</span> <span class="pre">models</span></code> lists every type and its arguments.</p>
 <p>You rarely need to pick the type yourself: <code class="docutils literal notranslate"><span class="pre">cellmap_flow</span> <span class="pre">add</span> <span class="pre">REF</span></code> works it out
 from what you have, and prints the YAML entry, saying what it still needs. In
 the dashboard, paste the same <code class="docutils literal notranslate"><span class="pre">REF</span></code> into the Models tab’s <em>Add a model</em> box:
@@ -299,12 +305,47 @@ are about that size:</p>
 <span class="w">    </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cellpose</span>
 <span class="w">    </span><span class="nt">voxel_size</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">64</span>
 <span class="w">    </span><span class="nt">pretrained_model</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cpsam_v2</span><span class="w">   </span><span class="c1"># or cpsam, or the path of finetuned weights</span>
-<span class="w">    </span><span class="nt">output</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">probability</span><span class="w">          </span><span class="c1"># or masks</span>
+<span class="w">    </span><span class="nt">output</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">flows</span><span class="w">                </span><span class="c1"># the default: all three channels; or probability, or masks</span>
 </pre></div>
 </div>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p><code class="docutils literal notranslate"><span class="pre">output</span></code></p></th>
+<th class="head"><p>Channels</p></th>
+<th class="head"><p>dtype</p></th>
+<th class="head"><p></p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">flows</span></code> (default)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">flow_y</span></code>, <code class="docutils literal notranslate"><span class="pre">flow_x</span></code>, <code class="docutils literal notranslate"><span class="pre">cell</span></code></p></td>
+<td><p>float32</p></td>
+<td><p>“Flows + probability” on the Models tab, not masks: Cellpose’s flows towards each object’s centre (its <code class="docutils literal notranslate"><span class="pre">dP</span></code>, about -5 to 5), then the cell probability; the layer colours each voxel by its flow’s direction, dimmed by <code class="docutils literal notranslate"><span class="pre">cell</span></code> (untick the shader’s <code class="docutils literal notranslate"><span class="pre">flows</span></code> box for <code class="docutils literal notranslate"><span class="pre">cell</span></code> alone), and <code class="docutils literal notranslate"><span class="pre">CellposeMasksPostprocessor</span></code> makes masks of them</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">probability</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">cell</span></code></p></td>
+<td><p>float32</p></td>
+<td><p>The cell probability alone, 0 to 1 (the sigmoid of Cellpose’s logit)</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">masks</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">cell</span></code></p></td>
+<td><p>uint64</p></td>
+<td><p>Instance ids, unique within a chunk</p></td>
+</tr>
+</tbody>
+</table>
 <p>Masks are made chunk by chunk: add <code class="docutils literal notranslate"><span class="pre">MortonSegmentationRelabeling</span></code> to the
-postprocessing so that ids differ between chunks. Cellpose-SAM’s weights are
-for non-commercial use. See <a class="reference internal" href="#example/cellpose_sam.yaml"><span class="xref myst">example/cellpose_sam.yaml</span></a>.</p>
+postprocessing so that ids differ between chunks. Each slice’s masks are
+separate unless <code class="docutils literal notranslate"><span class="pre">stitch_threshold</span></code> (0 to 1, masks only) links them: a mask
+takes the id of the one in the slice before that it overlaps by at least that
+IoU, within a chunk. Cellpose-SAM’s weights are for non-commercial use. See
+<a class="reference internal" href="#example/cellpose_sam.yaml"><span class="xref myst">example/cellpose_sam.yaml</span></a>.</p>
+<p>In the dashboard, the Models tab’s <em>Cellpose</em> panel lists <code class="docutils literal notranslate"><span class="pre">cpsam_v2</span></code> and
+<code class="docutils literal notranslate"><span class="pre">cpsam</span></code> (the DINO models need a package the <code class="docutils literal notranslate"><span class="pre">cellpose4</span></code> environment lacks).
+Tick one, give its voxel size (required) and output, and <em>Submit Models</em>: it
+runs as <code class="docutils literal notranslate"><span class="pre">cellpose_sam_v2</span></code> for the default <em>Flows + probability</em>
+(<code class="docutils literal notranslate"><span class="pre">cellpose_sam_v2_probability</span></code>, <code class="docutils literal notranslate"><span class="pre">cellpose_sam_v2_masks</span></code> for the other outputs,
+so <em>+ output</em> can run two side by side).</p>
 </section>
 <section id="bioimage-model-zoo">
 <h2>BioImage Model Zoo<a class="headerlink" href="#bioimage-model-zoo" title="Link to this heading"></a></h2>

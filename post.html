@@ -83,6 +83,10 @@
 <li class="toctree-l4"><a class="reference internal" href="#LabelPostprocessor"><code class="docutils literal notranslate"><span class="pre">LabelPostprocessor</span></code></a></li>
 </ul>
 </li>
+<li class="toctree-l3"><a class="reference internal" href="#cellposemaskspostprocessor">CellposeMasksPostprocessor</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#CellposeMasksPostprocessor"><code class="docutils literal notranslate"><span class="pre">CellposeMasksPostprocessor</span></code></a></li>
+</ul>
+</li>
 <li class="toctree-l3"><a class="reference internal" href="#mortonsegmentationrelabeling">MortonSegmentationRelabeling</a><ul>
 <li class="toctree-l4"><a class="reference internal" href="#MortonSegmentationRelabeling"><code class="docutils literal notranslate"><span class="pre">MortonSegmentationRelabeling</span></code></a></li>
 </ul>
@@ -228,10 +232,30 @@
 <h3>LabelPostprocessor<a class="headerlink" href="#labelpostprocessor" title="Link to this heading"></a></h3>
 <dl class="py class">
 <dt class="sig sig-object py" id="LabelPostprocessor">
-<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">LabelPostprocessor</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">channel</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#LabelPostprocessor" title="Link to this definition"></a></dt>
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">LabelPostprocessor</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">channel</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">connectivity</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">min_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">per_slice</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#LabelPostprocessor" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
-<p>Applies connected-component labeling to a selected channel using <cite>scipy.ndimage.label</cite>.</p>
+<p>Labels the connected objects of a selected channel (<code class="docutils literal notranslate"><span class="pre">post.segment.connected_components</span></code>),
+an id per object, within the chunk. <code class="docutils literal notranslate"><span class="pre">connectivity</span></code> is which neighbours touch: 1 faces only
+(the default, as <code class="docutils literal notranslate"><span class="pre">scipy.ndimage.label</span></code>), 2 faces and edges, 3 corners too. Objects of fewer
+than <code class="docutils literal notranslate"><span class="pre">min_size</span></code> voxels become background. <code class="docutils literal notranslate"><span class="pre">per_slice</span></code> labels each z slice on its own, for
+2D models. Ids are unique within a chunk; follow it with MortonSegmentationRelabeling for ids
+unique across chunks.</p>
+</section>
+<section id="cellposemaskspostprocessor">
+<h3>CellposeMasksPostprocessor<a class="headerlink" href="#cellposemaskspostprocessor" title="Link to this heading"></a></h3>
+<dl class="py class">
+<dt class="sig sig-object py" id="CellposeMasksPostprocessor">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">CellposeMasksPostprocessor</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">flow_threshold</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.4</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cellprob_threshold</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">min_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">15</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">stitch_threshold</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">niter</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">200</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#CellposeMasksPostprocessor" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<p>Cellpose’s masks, made from a Cellpose model’s <code class="docutils literal notranslate"><span class="pre">output:</span> <span class="pre">flows</span></code> (channels flow_y, flow_x, cell) by
+following each pixel’s flow, as Cellpose does, slice by slice; <code class="docutils literal notranslate"><span class="pre">stitch_threshold</span></code> above 0 joins
+objects across slices by IoU. Put it first in the chain, on a Cellpose server (it needs Cellpose).
+Unlike <code class="docutils literal notranslate"><span class="pre">output:</span> <span class="pre">masks</span></code>, its thresholds can be changed from the dashboard without restarting the
+model; it sees each chunk without the context the server’s own masks are followed over, so objects
+at chunk edges can differ. Ids are unique within the chunk: follow it with
+MortonSegmentationRelabeling.</p>
 </section>
 <section id="mortonsegmentationrelabeling">
 <h3>MortonSegmentationRelabeling<a class="headerlink" href="#mortonsegmentationrelabeling" title="Link to this heading"></a></h3>

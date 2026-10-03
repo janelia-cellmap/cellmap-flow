@@ -282,6 +282,50 @@ x, y, z.</p>
 <dd></dd></dl>
 
 <dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.base.ModelConfig.display_channel">
+<span class="sig-name descname"><span class="pre">display_channel</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.models.configs.base.ModelConfig.display_channel" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.base.ModelConfig.finetunable">
+<span class="sig-name descname"><span class="pre">finetunable</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">False</span></span><a class="headerlink" href="#cellmap_flow.models.configs.base.ModelConfig.finetunable" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.base.ModelConfig.finetune_modes">
+<span class="sig-name descname"><span class="pre">finetune_modes</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.models.configs.base.ModelConfig.finetune_modes" title="Link to this definition"></a></dt>
+<dd><p>What this model can be finetuned with: (“lora”, “full”), (“full”,)
+or (). For the dashboard, so it must not build the network: a type
+whose networks differ (a compiled one takes no LoRA adapter) reads
+it from what describes the model. The trainer checks the module it
+gets the same way (<code class="docutils literal notranslate"><span class="pre">finetune.trainable.finetune_modes</span></code>).</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.base.ModelConfig.trainable_model">
+<span class="sig-name descname"><span class="pre">trainable_model</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.models.configs.base.ModelConfig.trainable_model" title="Link to this definition"></a></dt>
+<dd><p>The torch module the finetune trainer trains, or None for
+<code class="docutils literal notranslate"><span class="pre">config.model</span></code> as it is (<code class="docutils literal notranslate"><span class="pre">finetune.model_loading.load_trainable_model</span></code>).</p>
+<p>The trainer feeds it a float tensor (B, 1, Z, Y, X), normalized as
+the dashboard’s input normalization does, at the input voxel size and
+read shape, and wants (B, C, Z’, Y’, X’) at the write shape back. A
+type whose <code class="docutils literal notranslate"><span class="pre">config.model</span></code> is not such a module (a bioimage.io
+prediction pipeline, a Cellpose model object) returns one that is,
+sharing its parameters, so that what is trained is what is served.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.base.ModelConfig.serve_trained">
+<span class="sig-name descname"><span class="pre">serve_trained</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">module</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.models.configs.base.ModelConfig.serve_trained" title="Link to this definition"></a></dt>
+<dd><p>Make <code class="docutils literal notranslate"><span class="pre">config</span></code> serve <code class="docutils literal notranslate"><span class="pre">module</span></code>, the trained <code class="docutils literal notranslate"><span class="pre">trainable_model()</span></code>.</p>
+<p><code class="docutils literal notranslate"><span class="pre">config</span></code> is this model’s own Config (the trainer’s live server) or
+a new one with its geometry (a finetuned model’s,
+<code class="docutils literal notranslate"><span class="pre">FinetuneModelConfig</span></code>). By default the module is the model, run by
+the inferencer’s own forward; a type that predicts through its own
+<code class="docutils literal notranslate"><span class="pre">process_chunk</span></code> sets that up here instead.</p>
+</dd></dl>
+
+<dl class="py attribute">
 <dt class="sig sig-object py" id="cellmap_flow.models.configs.base.ModelConfig.validate_model_shapes">
 <span class="sig-name descname"><span class="pre">validate_model_shapes</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">True</span></span><a class="headerlink" href="#cellmap_flow.models.configs.base.ModelConfig.validate_model_shapes" title="Link to this definition"></a></dt>
 <dd></dd></dl>

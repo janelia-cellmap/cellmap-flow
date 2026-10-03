@@ -68,9 +68,27 @@ Applies a threshold to binarize data. Produces `uint8` output.
 LabelPostprocessor
 ~~~~~~~~~~~~~~~~~~
 
-.. class:: LabelPostprocessor(channel=0)
+.. class:: LabelPostprocessor(channel=0, connectivity=1, min_size=0, per_slice=False)
 
-Applies connected-component labeling to a selected channel using `scipy.ndimage.label`.
+Labels the connected objects of a selected channel (``post.segment.connected_components``),
+an id per object, within the chunk. ``connectivity`` is which neighbours touch: 1 faces only
+(the default, as ``scipy.ndimage.label``), 2 faces and edges, 3 corners too. Objects of fewer
+than ``min_size`` voxels become background. ``per_slice`` labels each z slice on its own, for
+2D models. Ids are unique within a chunk; follow it with MortonSegmentationRelabeling for ids
+unique across chunks.
+
+CellposeMasksPostprocessor
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. class:: CellposeMasksPostprocessor(flow_threshold=0.4, cellprob_threshold=0.0, min_size=15, stitch_threshold=0.0, niter=200)
+
+Cellpose's masks, made from a Cellpose model's ``output: flows`` (channels flow_y, flow_x, cell) by
+following each pixel's flow, as Cellpose does, slice by slice; ``stitch_threshold`` above 0 joins
+objects across slices by IoU. Put it first in the chain, on a Cellpose server (it needs Cellpose).
+Unlike ``output: masks``, its thresholds can be changed from the dashboard without restarting the
+model; it sees each chunk without the context the server's own masks are followed over, so objects
+at chunk edges can differ. Ids are unique within the chunk: follow it with
+MortonSegmentationRelabeling.
 
 MortonSegmentationRelabeling
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~

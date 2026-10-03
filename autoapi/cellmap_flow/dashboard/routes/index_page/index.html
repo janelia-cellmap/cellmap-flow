@@ -148,10 +148,13 @@
 <tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.index_page.chain_items" title="cellmap_flow.dashboard.routes.index_page.chain_items"><code class="xref py py-obj docutils literal notranslate"><span class="pre">chain_items</span></code></a>(available, configured)</p></td>
 <td><p>The rows of an Input/Postprocess list, in the order to render them.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.index_page.index" title="cellmap_flow.dashboard.routes.index_page.index"><code class="xref py py-obj docutils literal notranslate"><span class="pre">index</span></code></a>()</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.index_page.cellpose_panel_data" title="cellmap_flow.dashboard.routes.index_page.cellpose_panel_data"><code class="xref py py-obj docutils literal notranslate"><span class="pre">cellpose_panel_data</span></code></a>(models_config, running_job_names)</p></td>
+<td><p>What the Models tab's Cellpose panel is built from (models-tab.js):</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.index_page.index" title="cellmap_flow.dashboard.routes.index_page.index"><code class="xref py py-obj docutils literal notranslate"><span class="pre">index</span></code></a>()</p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.index_page.set_data" title="cellmap_flow.dashboard.routes.index_page.set_data"><code class="xref py py-obj docutils literal notranslate"><span class="pre">set_data</span></code></a>()</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.index_page.set_data" title="cellmap_flow.dashboard.routes.index_page.set_data"><code class="xref py py-obj docutils literal notranslate"><span class="pre">set_data</span></code></a>()</p></td>
 <td><p>Set up neuroglancer viewer with a dataset path.</p></td>
 </tr>
 </tbody>
@@ -192,6 +195,17 @@ ticked rows in display order, so rendering the configured chain in
 registry order instead would reorder it on the next submit.</p>
 <p><code class="docutils literal notranslate"><span class="pre">available</span></code> is get_input_normalizers() / get_postprocessors_list();
 <code class="docutils literal notranslate"><span class="pre">configured</span></code> is the live chain (the session’s input_norms / postprocess).</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.index_page.cellpose_panel_data">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.index_page.</span></span><span class="sig-name descname"><span class="pre">cellpose_panel_data</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">models_config</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">running_job_names</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.routes.index_page.cellpose_panel_data" title="Link to this definition"></a></dt>
+<dd><p>What the Models tab’s Cellpose panel is built from (models-tab.js):
+each model it lists, and the settings of those running, which start
+ticked.</p>
+<p><code class="docutils literal notranslate"><span class="pre">{&quot;models&quot;:</span> <span class="pre">[{&quot;model&quot;,</span> <span class="pre">&quot;label&quot;,</span> <span class="pre">&quot;description&quot;}],</span> <span class="pre">&quot;running&quot;:</span> <span class="pre">[{&quot;model&quot;,</span>
+<span class="pre">&quot;output&quot;,</span> <span class="pre">&quot;voxel_size&quot;,</span> <span class="pre">&quot;stitch_threshold&quot;}]}</span></code>; a model running with
+two outputs is two entries, so two rows.</p>
 </dd></dl>
 
 <dl class="py function">

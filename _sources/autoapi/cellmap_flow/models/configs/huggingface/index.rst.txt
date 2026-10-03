@@ -46,6 +46,11 @@ Module Contents
 
 
 
+   .. py:attribute:: finetunable
+      :value: True
+
+
+
    .. py:attribute:: METADATA_RETRY_SECONDS
       :value: 60
 

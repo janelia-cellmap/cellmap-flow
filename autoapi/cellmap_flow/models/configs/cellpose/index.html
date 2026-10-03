@@ -131,20 +131,33 @@ read with <code class="docutils literal notranslate"><span class="pre">context</
 that objects at the chunk’s edge are seen whole. What the layer shows is
 <code class="docutils literal notranslate"><span class="pre">output</span></code>:</p>
 <ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">&quot;probability&quot;</span></code>: Cellpose’s cell probability, from 0 to 1 (float32), the
-sigmoid of its logit. It is computed per voxel, so it joins up across
-chunks, and the mask dynamics are skipped, which makes it the faster of
-the two.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;flows&quot;</span></code> (the default): all of what Cellpose’s network predicts, three
+float32 channels named flow_y, flow_x and cell: the flows towards each
+object’s centre (Cellpose’s <code class="docutils literal notranslate"><span class="pre">dP</span></code>, about -5 to 5) and the cell
+probability, 0 to 1, the sigmoid of its logit. The layer colours each
+voxel by its flow’s direction, dimmed by the cell probability
+(<code class="docutils literal notranslate"><span class="pre">display_channel</span></code>; viewer.layers.flow_channels); the
+CellposeMasksPostprocessor makes masks of them on the server, with
+thresholds changeable from the dashboard; a seed reads the probability.
+Computed per voxel, so it joins up across chunks.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&quot;probability&quot;</span></code>: the cell probability alone, one channel.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">&quot;masks&quot;</span></code>: Cellpose’s instance masks (uint64), ids unique within a
 chunk. Masks are made per chunk: an object that crosses a chunk’s edge is
-cut there, with another id on each side, and objects are not joined from
-slice to slice. The <code class="docutils literal notranslate"><span class="pre">MortonSegmentationRelabeling</span></code> postprocessor makes
-the ids unique across chunks and shows the layer as a segmentation; it is
-not applied here (see <code class="docutils literal notranslate"><span class="pre">_masks</span></code>).</p></li>
+cut there, with another id on each side. Objects are joined from slice to
+slice only with <code class="docutils literal notranslate"><span class="pre">stitch_threshold</span></code> (Cellpose’s own: a mask takes the id
+of the one in the slice before that it overlaps by at least that IoU),
+and only within a chunk. The <code class="docutils literal notranslate"><span class="pre">MortonSegmentationRelabeling</span></code>
+postprocessor makes the ids unique across chunks and shows the layer as a
+segmentation; it is not applied here (see <code class="docutils literal notranslate"><span class="pre">_masks</span></code>).</p></li>
 </ul>
 <p>Cellpose 4 cannot share cellmap-flow’s default environment, whose cellpose 3
 pins an older numpy, so this type runs in the <code class="docutils literal notranslate"><span class="pre">cellpose4</span></code> pixi
 environment unless its entry names another (<code class="docutils literal notranslate"><span class="pre">default_env</span></code>).</p>
+<p>It can be finetuned, with LoRA or in full, on painted instances
+(<code class="docutils literal notranslate"><span class="pre">trainable_model</span></code>): the network learns Cellpose’s own outputs, the flows
+towards each instance’s centre and the cell probability, from flow targets
+(<code class="docutils literal notranslate"><span class="pre">finetune.instance_flows</span></code>), and is served afterwards as before, through
+Cellpose’s eval, which runs the network training changed in place.</p>
 <p><code class="docutils literal notranslate"><span class="pre">cellpose</span></code> is imported only when the model is built, as every type imports
 its framework: the CLIs, <code class="docutils literal notranslate"><span class="pre">--help</span></code> and the dashboard’s model form import
 every type, and none of them has (or needs) Cellpose 4.</p>
@@ -163,16 +176,22 @@ datasets licensed CC-BY-NC, so they are for non-commercial use.</p>
 <tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.models.configs.cellpose.OUTPUTS" title="cellmap_flow.models.configs.cellpose.OUTPUTS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">OUTPUTS</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.models.configs.cellpose.SAM_TILE_SIZE" title="cellmap_flow.models.configs.cellpose.SAM_TILE_SIZE"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SAM_TILE_SIZE</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.models.configs.cellpose.OUTPUT_CHANNELS" title="cellmap_flow.models.configs.cellpose.OUTPUT_CHANNELS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">OUTPUT_CHANNELS</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.models.configs.cellpose.DINO_TILE_SIZE" title="cellmap_flow.models.configs.cellpose.DINO_TILE_SIZE"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DINO_TILE_SIZE</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.models.configs.cellpose.SAM_TILE_SIZE" title="cellmap_flow.models.configs.cellpose.SAM_TILE_SIZE"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SAM_TILE_SIZE</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.models.configs.cellpose.TILE_OVERLAP" title="cellmap_flow.models.configs.cellpose.TILE_OVERLAP"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TILE_OVERLAP</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.models.configs.cellpose.DINO_TILE_SIZE" title="cellmap_flow.models.configs.cellpose.DINO_TILE_SIZE"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DINO_TILE_SIZE</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.models.configs.cellpose.CELLPOSE_DIAMETER" title="cellmap_flow.models.configs.cellpose.CELLPOSE_DIAMETER"><code class="xref py py-obj docutils literal notranslate"><span class="pre">CELLPOSE_DIAMETER</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.models.configs.cellpose.TILE_OVERLAP" title="cellmap_flow.models.configs.cellpose.TILE_OVERLAP"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TILE_OVERLAP</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.models.configs.cellpose.CELLPOSE_DIAMETER" title="cellmap_flow.models.configs.cellpose.CELLPOSE_DIAMETER"><code class="xref py py-obj docutils literal notranslate"><span class="pre">CELLPOSE_DIAMETER</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.models.configs.cellpose.DEFAULT_BATCH_SIZE" title="cellmap_flow.models.configs.cellpose.DEFAULT_BATCH_SIZE"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DEFAULT_BATCH_SIZE</span></code></a></p></td>
 <td><p></p></td>
 </tr>
 </tbody>
@@ -215,7 +234,12 @@ datasets licensed CC-BY-NC, so they are for non-commercial use.</p>
 
 <dl class="py data">
 <dt class="sig sig-object py" id="cellmap_flow.models.configs.cellpose.OUTPUTS">
-<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.configs.cellpose.</span></span><span class="sig-name descname"><span class="pre">OUTPUTS</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">('probability',</span> <span class="pre">'masks')</span></span><a class="headerlink" href="#cellmap_flow.models.configs.cellpose.OUTPUTS" title="Link to this definition"></a></dt>
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.configs.cellpose.</span></span><span class="sig-name descname"><span class="pre">OUTPUTS</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">('probability',</span> <span class="pre">'flows',</span> <span class="pre">'masks')</span></span><a class="headerlink" href="#cellmap_flow.models.configs.cellpose.OUTPUTS" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.cellpose.OUTPUT_CHANNELS">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.configs.cellpose.</span></span><span class="sig-name descname"><span class="pre">OUTPUT_CHANNELS</span></span><a class="headerlink" href="#cellmap_flow.models.configs.cellpose.OUTPUT_CHANNELS" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py data">
@@ -238,6 +262,11 @@ datasets licensed CC-BY-NC, so they are for non-commercial use.</p>
 <span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.configs.cellpose.</span></span><span class="sig-name descname"><span class="pre">CELLPOSE_DIAMETER</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">30.0</span></span><a class="headerlink" href="#cellmap_flow.models.configs.cellpose.CELLPOSE_DIAMETER" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.cellpose.DEFAULT_BATCH_SIZE">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.configs.cellpose.</span></span><span class="sig-name descname"><span class="pre">DEFAULT_BATCH_SIZE</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">16</span></span><a class="headerlink" href="#cellmap_flow.models.configs.cellpose.DEFAULT_BATCH_SIZE" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
 <dl class="py function">
 <dt class="sig sig-object py" id="cellmap_flow.models.configs.cellpose.tile_size">
 <span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.configs.cellpose.</span></span><span class="sig-name descname"><span class="pre">tile_size</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">backbone</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">int</span></span></span><a class="headerlink" href="#cellmap_flow.models.configs.cellpose.tile_size" title="Link to this definition"></a></dt>
@@ -257,7 +286,7 @@ fits in a tile.</p>
 
 <dl class="py class">
 <dt class="sig sig-object py" id="cellmap_flow.models.configs.cellpose.CellposeModelConfig">
-<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.configs.cellpose.</span></span><span class="sig-name descname"><span class="pre">CellposeModelConfig</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">voxel_size</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pretrained_model</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'cpsam_v2'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'probability'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">slices_per_chunk</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">8</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">slice_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">512</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">context</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">32</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">batch_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">diameter</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">flow_threshold</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.4</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cellprob_threshold</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scale</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.models.configs.cellpose.CellposeModelConfig" title="Link to this definition"></a></dt>
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.configs.cellpose.</span></span><span class="sig-name descname"><span class="pre">CellposeModelConfig</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">voxel_size</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pretrained_model</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'cpsam_v2'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'flows'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">slices_per_chunk</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">8</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">slice_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">512</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">context</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">32</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">batch_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">DEFAULT_BATCH_SIZE</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">diameter</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">flow_threshold</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.4</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cellprob_threshold</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">stitch_threshold</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scale</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.models.configs.cellpose.CellposeModelConfig" title="Link to this definition"></a></dt>
 <dd><p>Cellpose 4 run on each z slice of a chunk.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -268,12 +297,14 @@ pick the scale at which yours are roughly that, or give
 <code class="docutils literal notranslate"><span class="pre">diameter</span></code>.</p></li>
 <li><p><strong>pretrained_model</strong> – “cpsam_v2” (default), “cpsam”, “cpdino”,
 “cpdino-vitb”, or the path of finetuned Cellpose weights.</p></li>
-<li><p><strong>output</strong> – “probability” (float32, 0 to 1) or “masks” (uint64, ids
-unique within a chunk).</p></li>
+<li><p><strong>output</strong> – “flows” (the default; float32: flow_y, flow_x and the cell
+probability), “probability” (float32, 0 to 1, one channel) or
+“masks” (uint64, ids unique within a chunk).</p></li>
 <li><p><strong>slices_per_chunk</strong> – z slices in a chunk.</p></li>
 <li><p><strong>slice_size</strong> – voxels a side, in y and x, of each chunk’s slices.</p></li>
 <li><p><strong>context</strong> – voxels read on each side in y and x beyond those, and cut off.</p></li>
-<li><p><strong>batch_size</strong> – tiles per GPU pass; None puts the whole chunk’s in one.</p></li>
+<li><p><strong>batch_size</strong> – tiles per GPU pass (<code class="docutils literal notranslate"><span class="pre">DEFAULT_BATCH_SIZE</span></code>; None, as a
+blank form field sends it, is that too).</p></li>
 <li><p><strong>diameter</strong> – object diameter in input voxels; None keeps the model’s
 own scale (about 30). Cellpose resizes each slice by
 30 / diameter.</p></li>
@@ -281,6 +312,10 @@ own scale (about 30). Cellpose resizes each slice by
 only).</p></li>
 <li><p><strong>cellprob_threshold</strong> – Cellpose’s mask thresholds (masks
 only).</p></li>
+<li><p><strong>stitch_threshold</strong> – Cellpose’s own slice linking (masks only): a mask
+takes the id of the mask in the slice before that it overlaps by
+at least this IoU, within a chunk. 0, the default, leaves each
+slice’s masks apart.</p></li>
 </ul>
 </dd>
 </dl>
@@ -295,6 +330,24 @@ only).</p></li>
 <dd></dd></dl>
 
 <dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.cellpose.CellposeModelConfig.finetunable">
+<span class="sig-name descname"><span class="pre">finetunable</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">True</span></span><a class="headerlink" href="#cellmap_flow.models.configs.cellpose.CellposeModelConfig.finetunable" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.cellpose.CellposeModelConfig.finetune_output_type">
+<span class="sig-name descname"><span class="pre">finetune_output_type</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'flows'</span></span><a class="headerlink" href="#cellmap_flow.models.configs.cellpose.CellposeModelConfig.finetune_output_type" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.cellpose.CellposeModelConfig.display_channel">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">display_channel</span></span><a class="headerlink" href="#cellmap_flow.models.configs.cellpose.CellposeModelConfig.display_channel" title="Link to this definition"></a></dt>
+<dd><p>The cell probability’s channel when the output has several (flows):
+the layer’s flow colours are dimmed by it, and its range is the
+layer’s.</p>
+</dd></dl>
+
+<dl class="py attribute">
 <dt class="sig sig-object py" id="cellmap_flow.models.configs.cellpose.CellposeModelConfig.voxel_size">
 <span class="sig-name descname"><span class="pre">voxel_size</span></span><a class="headerlink" href="#cellmap_flow.models.configs.cellpose.CellposeModelConfig.voxel_size" title="Link to this definition"></a></dt>
 <dd></dd></dl>
@@ -306,7 +359,7 @@ only).</p></li>
 
 <dl class="py attribute">
 <dt class="sig sig-object py" id="cellmap_flow.models.configs.cellpose.CellposeModelConfig.output">
-<span class="sig-name descname"><span class="pre">output</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'probability'</span></span><a class="headerlink" href="#cellmap_flow.models.configs.cellpose.CellposeModelConfig.output" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">output</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'flows'</span></span><a class="headerlink" href="#cellmap_flow.models.configs.cellpose.CellposeModelConfig.output" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py attribute">
@@ -326,7 +379,7 @@ only).</p></li>
 
 <dl class="py attribute">
 <dt class="sig sig-object py" id="cellmap_flow.models.configs.cellpose.CellposeModelConfig.batch_size">
-<span class="sig-name descname"><span class="pre">batch_size</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.models.configs.cellpose.CellposeModelConfig.batch_size" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">batch_size</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">16</span></span><a class="headerlink" href="#cellmap_flow.models.configs.cellpose.CellposeModelConfig.batch_size" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py attribute">
@@ -342,6 +395,11 @@ only).</p></li>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="cellmap_flow.models.configs.cellpose.CellposeModelConfig.cellprob_threshold">
 <span class="sig-name descname"><span class="pre">cellprob_threshold</span></span><a class="headerlink" href="#cellmap_flow.models.configs.cellpose.CellposeModelConfig.cellprob_threshold" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.cellpose.CellposeModelConfig.stitch_threshold">
+<span class="sig-name descname"><span class="pre">stitch_threshold</span></span><a class="headerlink" href="#cellmap_flow.models.configs.cellpose.CellposeModelConfig.stitch_threshold" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py attribute">
@@ -363,7 +421,62 @@ only).</p></li>
 <dl class="py method">
 <dt class="sig sig-object py" id="cellmap_flow.models.configs.cellpose.CellposeModelConfig.process_chunk">
 <span class="sig-name descname"><span class="pre">process_chunk</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">idi</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_roi</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.models.configs.cellpose.CellposeModelConfig.process_chunk" title="Link to this definition"></a></dt>
-<dd><p><code class="docutils literal notranslate"><span class="pre">output_roi</span></code> segmented: <code class="docutils literal notranslate"><span class="pre">(1,</span> <span class="pre">z,</span> <span class="pre">y,</span> <span class="pre">x)</span></code>, probability or masks.</p>
+<dd><p><code class="docutils literal notranslate"><span class="pre">output_roi</span></code> segmented: <code class="docutils literal notranslate"><span class="pre">(channels,</span> <span class="pre">z,</span> <span class="pre">y,</span> <span class="pre">x)</span></code>, the <code class="docutils literal notranslate"><span class="pre">output</span></code>’s channels.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.cellpose.CellposeModelConfig.finetune_modes">
+<span class="sig-name descname"><span class="pre">finetune_modes</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.models.configs.cellpose.CellposeModelConfig.finetune_modes" title="Link to this definition"></a></dt>
+<dd><p>(“lora”, “full”), without building the network: every Cellpose 4
+network is a ViT whose Linear and Conv layers take adapters.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.cellpose.CellposeModelConfig.training_patch_voxels">
+<span class="sig-name descname"><span class="pre">training_patch_voxels</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.models.configs.cellpose.CellposeModelConfig.training_patch_voxels" title="Link to this definition"></a></dt>
+<dd><p>The patch the trainer reads, (input, output) in voxels: one slice of one tile.</p>
+<p>Not the serving geometry. Cellpose-SAM’s ViT adds a fixed 32 x 32
+grid of position embeddings to its 8-pixel tokens, so it takes
+256 x 256 images and nothing else; Cellpose serves a slice by
+cutting it into such tiles, and trains on random tiles of that size
+too. The trainer does the same: it reads tiles, and supervises the
+whole of each, as Cellpose does (an instance cut by its edge is left
+out of the flow loss, <code class="docutils literal notranslate"><span class="pre">instance_flows</span></code>). One slice: the network is
+2D and sees each slice alone, so more slices would cost a network
+pass each and add nothing, and a one-slice patch centred on a
+painted voxel always lands on paint.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.cellpose.CellposeModelConfig.trainable_model">
+<span class="sig-name descname"><span class="pre">trainable_model</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.models.configs.cellpose.CellposeModelConfig.trainable_model" title="Link to this definition"></a></dt>
+<dd><p>Cellpose’s network as the trainer trains it: (B, 1, Z, Y, X) -&gt; (B, 3, Z, Y, X).</p>
+<p>Each slice normalized as Cellpose’s eval does (1st to 99th
+percentile), then through the network, which gives flowY, flowX and
+the cell probability logit (<code class="docutils literal notranslate"><span class="pre">instance_flows</span></code>’ channels). The
+network is the one <code class="docutils literal notranslate"><span class="pre">config.model</span></code> segments with, so what
+is trained is what is served; it is put in float32 (Cellpose loads
+it in bfloat16), which serving then uses too. Its patch embedding is
+kept out of LoRA (<code class="docutils literal notranslate"><span class="pre">lora_exclude_patterns</span></code>): Cellpose’s forward
+reads that layer’s weight tensor directly, so an adapter on it would
+never be used.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.cellpose.CellposeModelConfig.serve_trained">
+<span class="sig-name descname"><span class="pre">serve_trained</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">module</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.models.configs.cellpose.CellposeModelConfig.serve_trained" title="Link to this definition"></a></dt>
+<dd><p>Serve <code class="docutils literal notranslate"><span class="pre">module</span></code> (the trained <code class="docutils literal notranslate"><span class="pre">trainable_model()</span></code>) through Cellpose’s eval.</p>
+<p>Training changed the network in place, LoRA adapters and all, and
+Cellpose’s eval runs that network, so the chunks are segmented as
+before. <code class="docutils literal notranslate"><span class="pre">config</span></code> is this model’s own config (the trainer’s live
+server) or a finetuned model’s new one with this geometry, which
+gets what segmenting needs.</p>
+<p><code class="docutils literal notranslate"><span class="pre">config.model</span></code> stays Cellpose’s model object, as it is for the
+base model, so the inferencer neither moves nor forwards it. Were it
+the module, the warmup and the shape check would forward it, and a
+3-channel tile network fails the 1-channel serving geometry: as a
+hard error whenever the read slice happens to be one tile. The
+module is kept as <code class="docutils literal notranslate"><span class="pre">config.trained_module</span></code>.</p>
 </dd></dl>
 
 <dl class="py method">

@@ -275,7 +275,12 @@ Typical: 2*r, default 16</p></li>
 <li><p><strong>lora_dropout</strong> – Dropout probability for LoRA layers (0.0-0.5, default 0.1)</p></li>
 <li><p><strong>lora_min_channels</strong> – When auto-detecting, skip layers narrower than this
 on either side; see detect_adaptable_layers. Ignored when
-target_modules is given explicitly. Default 0 (adapt all).</p></li>
+target_modules is given explicitly. Default 0 (adapt all).
+A model with a <code class="docutils literal notranslate"><span class="pre">lora_exclude_patterns</span></code> attribute (name
+substrings, as detect_adaptable_layers’ exclude_patterns)
+has those layers left out of auto-detection too, besides the
+norm layers: a <code class="docutils literal notranslate"><span class="pre">trainable_model()</span></code> sets it for layers its
+network uses in a way an adapter would not reach.</p></li>
 <li><p><strong>modules_to_save</strong> – Additional modules to make trainable (e.g., final layer)</p></li>
 <li><p><strong>task_type</strong> – PEFT task type. Options:
 - “FEATURE_EXTRACTION” (default, for general models)

@@ -31,6 +31,7 @@ Submodules
    /autoapi/cellmap_flow/finetune/export_merged/index
    /autoapi/cellmap_flow/finetune/finetune_cli/index
    /autoapi/cellmap_flow/finetune/finetuned_model_templates/index
+   /autoapi/cellmap_flow/finetune/instance_flows/index
    /autoapi/cellmap_flow/finetune/job_manager/index
    /autoapi/cellmap_flow/finetune/json_files/index
    /autoapi/cellmap_flow/finetune/lora_trainer/index
@@ -42,5 +43,6 @@ Submodules
    /autoapi/cellmap_flow/finetune/session/index
    /autoapi/cellmap_flow/finetune/session_loop/index
    /autoapi/cellmap_flow/finetune/target_transforms/index
+   /autoapi/cellmap_flow/finetune/trainable/index
 
 

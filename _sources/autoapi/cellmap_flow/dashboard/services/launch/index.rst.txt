@@ -10,12 +10,13 @@ cellmap_flow.dashboard.services.launch
    - ``update_run_models()``: stop and forget the models no longer picked,
      start the ones newly picked, each in its own thread. A finetune job's
      server is the Finetune tab's to stop, never this one's.
-   - ``run_model()`` / ``run_hf_model()`` / ``run_bioimage_model()``: start
-     one catalog, Hugging Face or BioImage Model Zoo model's inference server
-     (``start_hosts``, which records the job) and add its layer, the one Submit
-     would give it. Each is served from its type's ``default_env``, when the
-     type sets one (``serving.launch.server_argv_for``): a zoo model from
-     pixi's ``bioimageio`` environment.
+   - ``run_model()`` / ``run_hf_model()`` / ``run_bioimage_model()`` /
+     ``run_cellpose_model()``: start one catalog, Hugging Face, BioImage Model
+     Zoo or Cellpose model's inference server (``start_hosts``, which records
+     the job) and add its layer, the one Submit would give it. Each is served
+     from its type's ``default_env``, when the type sets one
+     (``serving.launch.server_argv_for``): a zoo model from pixi's
+     ``bioimageio`` environment, a Cellpose one from ``cellpose4``.
 
 
 
@@ -25,6 +26,7 @@ Attributes
 .. autoapisummary::
 
    cellmap_flow.dashboard.services.launch.logger
+   cellmap_flow.dashboard.services.launch.CELLPOSE_MODELS
 
 
 Functions
@@ -37,6 +39,8 @@ Functions
    cellmap_flow.dashboard.services.launch.run_model_config
    cellmap_flow.dashboard.services.launch.bioimage_job_name
    cellmap_flow.dashboard.services.launch.run_bioimage_model
+   cellmap_flow.dashboard.services.launch.cellpose_job_name
+   cellmap_flow.dashboard.services.launch.run_cellpose_model
    cellmap_flow.dashboard.services.launch.running_names
    cellmap_flow.dashboard.services.launch.kill_n_remove_from_neuroglancer
    cellmap_flow.dashboard.services.launch.update_run_models
@@ -72,6 +76,27 @@ Module Contents
    arguments, name included (``bioimage_catalog.bioimage_entry``).
 
 
+.. py:data:: CELLPOSE_MODELS
+
+.. py:function:: cellpose_job_name(model: str, output: str) -> str
+
+   A Cellpose model's job, layer and config name: "cpsam_v2" serving all
+   its channels (flows, the default) is cellpose_sam_v2, its probability
+   alone cellpose_sam_v2_probability and its masks cellpose_sam_v2_masks.
+
+   The output is in the name, so one model's outputs can run side by side
+   (the probability to look at, the masks to proofread), each its own job
+   and layer; the default output keeps the plain name. The voxel size and
+   the slice linking are not: changing them restarts that job instead
+   (``update_run_models``), rather than leaving the old one running beside.
+
+
+.. py:function:: run_cellpose_model(params, st_data)
+
+   Run a Cellpose model: ``params`` are its CellposeModelConfig
+   arguments, name included (``_cellpose_params``).
+
+
 .. py:function:: running_names() -> set
 
    The models running, or on their way: the session's jobs and the
@@ -83,10 +108,12 @@ Module Contents
    Kill ``jobs`` and drop their layers from the viewer state ``s``.
 
 
-.. py:function:: update_run_models(names: List[str], hf_repos: List[str] = None, bioimage_models: List[dict] = None)
+.. py:function:: update_run_models(names: List[str], hf_repos: List[str] = None, bioimage_models: List[dict] = None, cellpose_models: List[dict] = None)
 
-   Run ``names`` (catalog models), ``hf_repos`` and ``bioimage_models``
-   ({"id", "voxel_size"} each) and stop every other model. A ValueError,
-   before anything changes, when a zoo model needs a voxel size.
+   Run ``names`` (catalog models), ``hf_repos``, ``bioimage_models``
+   ({"id", "voxel_size"} each) and ``cellpose_models`` ({"model",
+   "voxel_size", "output", "stitch_threshold"} each), and stop every other
+   model. A ValueError, before anything changes, when a zoo model needs a
+   voxel size or a Cellpose model's settings are missing or wrong.
 
 
