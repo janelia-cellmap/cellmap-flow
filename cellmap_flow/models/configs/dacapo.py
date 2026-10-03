@@ -13,6 +13,9 @@ from cellmap_flow.models.configs.base import Config, ModelConfig, _get_device
 class DaCapoModelConfig(ModelConfig):
 
     cli_name = "dacapo"
+    # No default_env: pixi.toml's `dacapo` environment does not import DaCapo
+    # (its comment there says why), so a run is served from the environment
+    # an entry's `env` names, or this one.
 
     def __init__(self, run_name: str, iteration: int, name=None, scale=None):
         super().__init__()

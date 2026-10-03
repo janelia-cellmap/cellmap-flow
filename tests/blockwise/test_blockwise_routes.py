@@ -209,6 +209,14 @@ def test_generate_answers_with_the_task_it_wrote(dashboard, tasks):
     }
 
 
+def test_a_task_generated_with_resample_unticked_says_so(dashboard, tasks, monkeypatch):
+    """A task without it resamples, so unticked is written."""
+    monkeypatch.setattr(get_session(), "resample", False)
+    answer = dashboard.post("/api/blockwise/generate",
+                            **as_the_builder_sends({"pipeline": PIPELINE, "job_name": "run"})).get_json()
+    assert answer["task_config"]["resample"] is False
+
+
 # --- what each route answers ------------------------------------------------------
 
 

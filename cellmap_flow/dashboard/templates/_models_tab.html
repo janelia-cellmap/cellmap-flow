@@ -1,4 +1,23 @@
 <form id="modelSelectionForm">
+    <!-- Add any model by reference (models/resolve.py) -->
+    <div class="add-model mb-3">
+      <label class="form-label fw-bold mb-1" for="addModelRef">Add a model</label>
+      <div class="d-flex gap-2">
+        <input type="text" class="form-control form-control-sm" id="addModelRef"
+               placeholder="Hugging Face repo, zoo model, Cellpose model, path..."
+               title="Anything that names a model: a Hugging Face repo (org/repo), a BioImage Model Zoo id, nickname or URL, a Cellpose model (cpsam_v2) or weights, an exported folder, a fly_organelles checkpoint, a script (.py), or dacapo:run@iteration. Prefixes (hf:, bioimageio:, cellpose:, fly:, script:) settle a doubt.">
+        <button type="button" class="btn btn-sm btn-outline-secondary" id="addModelResolveBtn">Resolve</button>
+      </div>
+      <div id="addModelResult" class="add-model-result mt-2" hidden>
+        <div id="addModelSummary" class="small"></div>
+        <div id="addModelNotes" class="small text-muted"></div>
+        <div id="addModelFields" class="add-model-fields mt-2"></div>
+        <button type="button" class="btn btn-sm btn-outline-secondary mt-2" id="addModelRunBtn"
+                title="Start its server now; it joins the models below, ticked, until unticked">Run</button>
+      </div>
+      <div id="addedModels" class="mt-2"></div>
+    </div>
+
     <!-- Local Catalog Section -->
     <h5>Local Catalog</h5>
     <div class="accordion" id="modelAccordion">
@@ -77,6 +96,58 @@
               <button type="button" class="btn btn-sm btn-outline-secondary" id="hfRefreshBtn" style="display: none; white-space: nowrap;" title="Refresh from Hugging Face">Refresh</button>
             </div>
             <p class="text-muted" id="hfPlaceholder">Click to load Hugging Face models...</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- BioImage Model Zoo Section: loaded when opened, like Hugging Face's.
+         Its rows are built by models-tab.js from the zoo's index. -->
+    <h5>BioImage Model Zoo</h5>
+    <div class="accordion" id="zooModelAccordion">
+      <div class="accordion-item">
+        <h2 class="accordion-header" id="heading_zoo">
+          <button
+            class="accordion-button collapsed"
+            type="button"
+            data-bs-toggle="collapse"
+            data-bs-target="#collapse_zoo"
+            aria-expanded="false"
+            aria-controls="collapse_zoo"
+          >
+            bioimage.io
+            <span id="zooLoadingSpinner" class="spinner-border spinner-border-sm ms-2 d-none" role="status"></span>
+          </button>
+        </h2>
+        <div
+          id="collapse_zoo"
+          class="accordion-collapse collapse"
+          aria-labelledby="heading_zoo"
+        >
+          <div class="accordion-body" id="zooModelsContainer">
+            <div id="zooControls" style="display: none;">
+              <div class="d-flex gap-2 mb-2">
+                <input type="text" class="form-control" id="zooSearchBar" placeholder="Search models..." title="Name, description or tags" />
+                <button type="button" class="btn btn-sm btn-outline-secondary" id="zooRefreshBtn" style="white-space: nowrap;" title="Refresh from bioimage.io">Refresh</button>
+              </div>
+              <div class="d-flex align-items-center gap-3 mb-2 flex-wrap">
+                <div class="form-check mb-0" title="Only models whose tags, name or description say electron microscopy">
+                  <input class="form-check-input" type="checkbox" id="zooEmOnly" checked />
+                  <label class="form-check-label" for="zooEmOnly">EM only</label>
+                </div>
+                <div class="form-check mb-0" title="Models tagged 2D">
+                  <input class="form-check-input" type="checkbox" id="zoo2d" />
+                  <label class="form-check-label" for="zoo2d">2D</label>
+                </div>
+                <div class="form-check mb-0" title="Models tagged 3D">
+                  <input class="form-check-input" type="checkbox" id="zoo3d" />
+                  <label class="form-check-label" for="zoo3d">3D</label>
+                </div>
+                <span class="zoo-count ms-auto" id="zooCount" title="Shown / listed. Ticked models are always shown."></span>
+              </div>
+            </div>
+            <p class="text-muted" id="zooPlaceholder">Click to load BioImage Model Zoo models...</p>
+            <div class="zoo-model-list" id="zooModelList"></div>
           </div>
         </div>
       </div>

@@ -38,34 +38,39 @@ LAUNCHERS = {
     "cellmap_flow-infer": (
         lambda data: _cli("infer", "script", "--script-path", "/s.py", "--name", "m", "-d", data),
         {"type": "script", "script_path": "/s.py", "name": "m"},
-    ),
-    "cellmap_flow-infer-resample": (
-        lambda data: _cli("infer", "script", "--script-path", "/s.py", "--name", "m", "-d", data, "--resample"),
-        {"type": "script", "script_path": "/s.py", "name": "m"},
         ["--resample"],
+    ),
+    "cellmap_flow-infer-no-resample": (
+        lambda data: _cli("infer", "script", "--script-path", "/s.py", "--name", "m", "-d", data, "--no-resample"),
+        {"type": "script", "script_path": "/s.py", "name": "m"},
+        ["--no-resample"],
     ),
     "cellmap_flow-run": (
         lambda data: _cli("run", "-m", "script", "-c", "script_path=/s.py", "-c", "name=m", "-d", data),
         {"type": "script", "script_path": "/s.py", "name": "m"},
+        ["--resample"],
     ),
     "cellmap_flow-yaml": (
         lambda data: yaml_cli.run_multiple([ScriptModelConfig(script_path="/s.py", name="m", scale="s3")], data, "grp", "q"),
         {"type": "script", "script_path": "/s.py", "name": "m", "scale": "s3"},
-    ),
-    # The YAML's resample: true.
-    "cellmap_flow-yaml-resample": (
-        lambda data: yaml_cli.run_multiple([ScriptModelConfig(script_path="/s.py", name="m")], data, "grp", "q",
-                                           resample=True),
-        {"type": "script", "script_path": "/s.py", "name": "m"},
         ["--resample"],
+    ),
+    # The YAML's resample: false.
+    "cellmap_flow-yaml-no-resample": (
+        lambda data: yaml_cli.run_multiple([ScriptModelConfig(script_path="/s.py", name="m")], data, "grp", "q",
+                                           resample=False),
+        {"type": "script", "script_path": "/s.py", "name": "m"},
+        ["--no-resample"],
     ),
     "dashboard-catalog": (
         lambda data: dashboard_launch.run_model("/models/mito v2", "mito", "blob"),
         {"type": "cellmap", "folder_path": "/models/mito v2", "name": "mito"},
+        ["--resample"],
     ),
     "dashboard-huggingface": (
         lambda data: dashboard_launch.run_hf_model("cellmap/mito-v1", "mito v1", "blob"),
         {"type": "huggingface", "repo": "cellmap/mito-v1", "name": "mito_v1"},
+        ["--resample"],
     ),
 }
 
@@ -114,6 +119,7 @@ def test_a_command_from_type_and_arguments_is_the_config_s_own(monkeypatch):
     argv = launch.server_argv_for("huggingface", {"repo": "cellmap/mito", "name": "m v1"}, "/d/my raw.zarr")
     assert argv == launch.server_argv(config, "/d/my raw.zarr") == shlex.split(jobs_launch.SERVER_COMMAND) + [
         "--model", '{"type":"huggingface","repo":"cellmap/mito","name":"m v1"}', "-d", "/d/my raw.zarr",
+        "--resample",
     ]
     assert shlex.split(launch.server_command(config, "/d/my raw.zarr")) == argv
 

@@ -82,23 +82,61 @@ def refresh_huggingface_models_route():
         return jsonify({'error': str(e)}), 500
 
 
+def _bioimage_answer(read):
+    """``read()``'s zoo list as JSON, or its failure as {"error": ...}: a 502
+    when the zoo's index could not be fetched, which the tab shows."""
+    from cellmap_flow.models.bioimage_catalog import ZooIndexError
+
+    try:
+        return jsonify(read())
+    except ZooIndexError as e:
+        logger.error(str(e))
+        return jsonify({"error": str(e)}), 502
+    except Exception as e:
+        logger.error(f"Error listing BioImage Model Zoo models: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@models_bp.route("/api/bioimage-models")
+def get_bioimage_models():
+    """The BioImage Model Zoo's models (cached): bioimage_catalog.list_bioimage_models."""
+    from cellmap_flow.models.bioimage_catalog import list_bioimage_models
+
+    return _bioimage_answer(list_bioimage_models)
+
+
+@models_bp.route("/api/bioimage-models/refresh", methods=["POST"])
+def refresh_bioimage_models_route():
+    """Fetch the zoo's index again."""
+    from cellmap_flow.models.bioimage_catalog import refresh_bioimage_models
+
+    return _bioimage_answer(refresh_bioimage_models)
+
+
 @models_bp.route("/api/models", methods=["POST"])
 def submit_models():
     """Run the models the Models tab has ticked (a SubmitModels), and stop
-    the others: services.launch.update_run_models."""
+    the others: services.launch.update_run_models. A zoo model that needs a
+    voxel size and was given none is a 400, and nothing changes."""
     body, error = parse(SubmitModels, request.get_json(silent=True))
     if error:
         return error
     selected_models, selected_hf_models = body.selected_models, body.selected_hf_models
+    selected_bioimage = [s.model_dump() for s in body.selected_bioimage_models]
     if body.resample is not None:
         get_session().resample = body.resample
-    update_run_models(selected_models, selected_hf_models)
-    logger.info(f"Selected models: {selected_models}, HF models: {selected_hf_models}")
+    try:
+        update_run_models(selected_models, selected_hf_models, selected_bioimage)
+    except ValueError as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+    logger.info(f"Selected models: {selected_models}, HF models: {selected_hf_models}, "
+                f"bioimage models: {selected_bioimage}")
     return jsonify(
         {
             "message": "Data received successfully",
             "models": selected_models,
             "hf_models": selected_hf_models,
+            "bioimage_models": selected_bioimage,
         }
     )
 
@@ -111,8 +149,16 @@ def job_logs():
     nothing in the dashboard -- the traceback is in the LSF job's output on a
     cluster node, and reading it means logging in and running bpeek.
     """
+    from cellmap_flow.jobs.launch import failed_starts, starting_jobs
+
     jobs = []
-    for job in get_session().jobs or []:
+    # The starting ones too: from Submit until a server answers, which can be
+    # minutes in a queue or installing an environment, the page said no job
+    # had been submitted. And the ones that failed to start: their log is the
+    # one being read, and it vanished from the page when the job died.
+    starting = starting_jobs()
+    failed = failed_starts()
+    for job in list(get_session().jobs or []) + starting + failed:
         try:
             status = job.get_status()
             text = job.peek()
@@ -123,7 +169,9 @@ def job_logs():
                 "model_name": getattr(job, "model_name", None),
                 "job_id": getattr(job, "job_id", None),
                 "host": getattr(job, "host", None),
-                "status": getattr(status, "value", None),
+                "status": ("starting" if job in starting
+                           else "failed to start" if job in failed
+                           else getattr(status, "value", None)),
                 # None means "no way to read this one" (a local job), which is
                 # different from "read it and it was empty".
                 "log": text,

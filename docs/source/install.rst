@@ -17,13 +17,13 @@ To install CellMapFlow with BioImage.io support, use the following command:
 
 .. code-block:: bash
 
-   pip install cellmap-flow[bioimage]
+   pip install cellmap-flow[bioimageio]
 
 To install CellMapFlow with both DaCapo and BioImage.io support, use the following command:
 
 .. code-block:: bash
 
-   pip install cellmap-flow[dacapo,bioimage]
+   pip install cellmap-flow[dacapo,bioimageio]
 
 Deployment with pixi
 --------------------
@@ -41,4 +41,7 @@ From a checkout:
 ``runnables.yaml`` registers the same commands as Fileglancer apps. Inside a
 pixi environment, inference servers submitted to the cluster start with
 ``pixi run cellmap_flow serve`` (``CELLMAP_FLOW_SERVER_COMMAND``), so they run
-from the same lockfile. :doc:`cli` lists the commands.
+from the same lockfile. :doc:`cli` lists the commands. Models whose packages
+the default environment lacks (fly_organelles checkpoints, BioImage Model Zoo
+models, Cellpose 4) are served from the lockfile's other environments; see
+:ref:`model-env`.

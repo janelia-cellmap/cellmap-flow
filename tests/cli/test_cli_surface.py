@@ -31,6 +31,7 @@ from cellmap_flow.cli.server_cli import cli as server_cli
 from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.models.models_config import (
     BioModelConfig,
+    CellposeModelConfig,
     DaCapoModelConfig,
     FinetuneModelConfig,
     FlyModelConfig,
@@ -143,7 +144,31 @@ LONG_SCALE = ('scale', ('--scale',), (), 'text', False, None, False, 'Parameter:
 DATA_PATH = ('data_path', ('-d', '--data-path'), (), 'text', True, None, False, 'Path to the dataset')
 LOG_LEVEL = [('log_level', ('--log-level',), (), 'choice', False, 'INFO', False, 'Set the logging level')]
 
-# Each model type's own options, the same in both CLIs.
+
+
+def _cellpose_options(*pretrained_model_opts):
+    return [
+        ('voxel_size', ('-v', '--voxel-size'), (), 'text', True, None, False, 'Parameter: voxel_size'),
+        ('pretrained_model', pretrained_model_opts, (), 'text', False, 'cpsam_v2', False,
+         'Parameter: pretrained_model (default: cpsam_v2)'),
+        ('output', ('-o', '--output'), (), 'text', False, 'probability', False,
+         'Parameter: output (default: probability)'),
+        ('slices_per_chunk', ('-s', '--slices-per-chunk'), (), 'integer', False, 8, False,
+         'Parameter: slices_per_chunk (default: 8)'),
+        ('slice_size', ('--slice-size',), (), 'integer', False, 512, False, 'Parameter: slice_size (default: 512)'),
+        ('context', ('-c', '--context'), (), 'integer', False, 32, False, 'Parameter: context (default: 32)'),
+        ('batch_size', ('-b', '--batch-size'), (), 'integer', False, None, False, 'Parameter: batch_size (optional)'),
+        ('diameter', ('--diameter',), (), 'float', False, None, False, 'Parameter: diameter (optional)'),
+        ('flow_threshold', ('-f', '--flow-threshold'), (), 'float', False, 0.4, False,
+         'Parameter: flow_threshold (default: 0.4)'),
+        ('cellprob_threshold', ('--cellprob-threshold',), (), 'float', False, 0.0, False,
+         'Parameter: cellprob_threshold (default: 0.0)'),
+        NAME, LONG_SCALE,
+    ]
+
+
+# Each model type's own options, the same in both CLIs but for cellpose's
+# --pretrained-model: cellmap_flow_server's -p is its port.
 MODEL_OPTIONS = {
     'script': [
         ('script_path', ('-s', '--script-path'), (), 'text', True, None, False, 'Parameter: script_path'),
@@ -156,21 +181,28 @@ MODEL_OPTIONS = {
     ],
     'fly': [
         ('checkpoint_path', ('-c', '--checkpoint-path'), (), 'text', True, None, False, 'Parameter: checkpoint_path'),
-        ('channels', ('--channels',), (), 'text', True, None, False, 'Parameter: channels [comma-separated values]'),
-        ('input_voxel_size', ('-i', '--input-voxel-size'), (), 'text', True, None, False, 'Parameter: input_voxel_size'),
-        ('output_voxel_size', ('-o', '--output-voxel-size'), (), 'text', True, None, False,
-         'Parameter: output_voxel_size'),
+        ('channels', ('--channels',), (), 'text', False, None, False,
+         'Parameter: channels (optional) [comma-separated values]'),
+        ('input_voxel_size', ('-i', '--input-voxel-size'), (), 'text', False, None, False,
+         'Parameter: input_voxel_size (optional)'),
+        ('output_voxel_size', ('-o', '--output-voxel-size'), (), 'text', False, None, False,
+         'Parameter: output_voxel_size (optional)'),
         NAME,
         ('input_size', ('--input-size',), (), 'text', False, None, False, 'Parameter: input_size (optional)'),
         ('output_size', ('--output-size',), (), 'text', False, None, False, 'Parameter: output_size (optional)'),
         SCALE,
+        ('sigmoid', ('--sigmoid',), (), 'boolean', False, True, False, 'Parameter: sigmoid (default: True)'),
     ],
     'bioimage': [
-        ('model_name', ('-m', '--model-name'), (), 'text', True, None, False, 'Parameter: model_name'),
-        ('voxel_size', ('-v', '--voxel-size'), (), 'text', True, None, False, 'Parameter: voxel_size'),
-        ('edge_length_to_process', ('-e', '--edge-length-to-process'), (), 'text', False, None, False,
-         'Parameter: edge_length_to_process (optional)'),
-        NAME, SCALE,
+        ('model', ('-m', '--model'), (), 'text', True, None, False, 'Parameter: model'),
+        ('voxel_size', ('-v', '--voxel-size'), (), 'text', False, None, False, 'Parameter: voxel_size (optional)'),
+        ('input_size', ('-i', '--input-size'), (), 'text', False, None, False, 'Parameter: input_size (optional)'),
+        ('context', ('-c', '--context'), (), 'text', False, None, False, 'Parameter: context (optional)'),
+        ('slices_per_chunk', ('-s', '--slices-per-chunk'), (), 'integer', False, None, False,
+         'Parameter: slices_per_chunk (optional)'),
+        ('weight_format', ('-w', '--weight-format'), (), 'text', False, None, False,
+         'Parameter: weight_format (optional)'),
+        NAME, LONG_SCALE,
     ],
     'cellmap': [
         ('folder_path', ('-f', '--folder-path'), (), 'text', True, None, False, 'Parameter: folder_path'),
@@ -192,7 +224,9 @@ MODEL_OPTIONS = {
         ('revision', ('--revision',), (), 'text', False, None, False, 'Parameter: revision (optional)'),
         NAME, SCALE,
     ],
+    'cellpose': _cellpose_options('-p', '--pretrained-model'),
 }
+SERVER_MODEL_OPTIONS = {**MODEL_OPTIONS, 'cellpose': _cellpose_options('--pretrained-model')}
 
 SERVER_CHECK = ('server_check', ('--server-check',), (), 'boolean', False, False, True,
                 'Run server check instead of full inference')
@@ -208,12 +242,14 @@ PLUGIN_FILE = [
     ('force', ('--force',), (), 'boolean', False, False, True, 'Overwrite existing plugin with the same name.'),
 ]
 PLUGIN_NAME = [('name', ('name',), (), 'text', True, None, False, None)]
-RESAMPLE = ('resample', ('--resample',), (), 'boolean', False, False, True,
+ENV_NAME = PLUGIN_NAME
+RESAMPLE = ('resample', ('--resample',), ('--no-resample',), 'boolean', False, True, True,
             "When the dataset has no level at the model's input voxel size, resample a level to it, "
-            "axis by axis, instead of reading the level as if it were at that size.")
+            "axis by axis (the default), or, with --no-resample, read the nearest level as if it were at that size.")
 ENV = ('env', ('--env',), (), 'text', False, None, False,
-       "Run the server in this environment: a pixi environment of cellmap-flow's pixi.toml, "
-       "or the absolute path of one with cellmap-flow installed (default: this one)")
+       "Run the server in this environment: a pixi environment of cellmap-flow's pixi.toml, an alias "
+       "(cellmap_flow envs), or the absolute path of one with cellmap-flow installed; current: this one "
+       "(default: the model type's, else this one)")
 INFER = {t: [*options, ENV, RESAMPLE, SERVER_CHECK, PROJECT, QUEUE, DATA_PATH] for t, options in MODEL_OPTIONS.items()}
 # The server's own options: `serve` requires the model and data, and
 # cellmap_flow_server takes them instead of a type's command.
@@ -229,6 +265,21 @@ SERVE = [('model_json', ('--model',), (), 'text', True, None, False, MODEL_JSON_
 # --log-level (yaml, view, blockwise) defaults to the group's.
 CELLMAP_FLOW = {
     '': LOG_LEVEL,
+    'add': [
+        ('ref', ('ref',), (), 'text', True, None, False, None),
+        ('name', ('-n', '--name'), (), 'text', False, None, False, "The model's name (default: one made from REF)."),
+        ('voxel_size', ('-v', '--voxel-size'), (), 'text', False, None, False,
+         "nm per voxel, '8' or '16,8,8', for a model that does not say its own (Cellpose, bioimage.io)."),
+        ('offline', ('--offline',), (), 'boolean', False, False, True,
+         'Do not look REF up on Hugging Face or in the BioImage Model Zoo.'),
+        ('run_now', ('--run',), (), 'boolean', False, False, True,
+         'Serve the model on --data-path right away and open the viewer, as `cellmap_flow yaml` does.'),
+        ('data_path', ('-d', '--data-path'), (), 'text', False, None, False, 'The dataset --run serves it on.'),
+        ('queue', ('-q', '--queue'), (), 'text', False, None, False, "Queue for --run's job (default: the saved queue)"),
+        ('project', ('-P', '--project'), (), 'text', False, None, False,
+         "Project/chargeback group for --run's job (default: the saved one)"),
+        RESAMPLE,
+    ],
     'blockwise': [
         ('yaml_configs', ('yaml_configs',), (), 'path', True, None, False, None, 'nargs=-1'),
         ('client', ('-c', '--client'), (), 'boolean', False, False, True, 'Run as client if this flag is set.'),
@@ -237,6 +288,10 @@ CELLMAP_FLOW = {
     'dashboard': [('neuroglancer_url', ('-n', '--neuroglancer-url'), (), 'text', False, None, False,
                    "The viewer the dashboard's page embeds.")],
     'doctor': [('core_only', ('--core-only',), (), 'boolean', False, False, True, 'Skip the finetune checks.')],
+    'envs': [],
+    'envs check': ENV_NAME,
+    'envs install': ENV_NAME,
+    'envs list': [],
     'finetune': [],
     'finetune build-corrections': PASSED_THROUGH,
     'finetune export-merged': PASSED_THROUGH,
@@ -283,7 +338,7 @@ CELLMAP_FLOW_SERVER = {
          PORT, DEBUG, CERTFILE, KEYFILE, RESAMPLE],
     **dict(sorted({
     'list-models': [],
-    **{t: [*options, KEYFILE, CERTFILE, PORT, DEBUG, DATA_PATH] for t, options in MODEL_OPTIONS.items()},
+    **{t: [*options, KEYFILE, CERTFILE, PORT, DEBUG, DATA_PATH] for t, options in SERVER_MODEL_OPTIONS.items()},
     }.items())),
 }
 
@@ -343,14 +398,18 @@ def test_cellmap_flow_type_is_a_hidden_alias_of_infer_type():
 
 
 _LISTED = [
-    ("bioimage", "BioModelConfig", "model_name, voxel_size, edge_length_to_process, name, scale", "model_name, voxel_size"),
+    ("bioimage", "BioModelConfig", "model, voxel_size, input_size, context, slices_per_chunk, weight_format, name, scale",
+     "model"),
     ("cellmap", "CellMapModelConfig", "folder_path, name, scale", "folder_path"),
+    ("cellpose", "CellposeModelConfig",
+     "voxel_size, pretrained_model, output, slices_per_chunk, slice_size, context, batch_size, diameter, "
+     "flow_threshold, cellprob_threshold, name, scale", "voxel_size"),
     ("dacapo", "DaCapoModelConfig", "run_name, iteration, name, scale", "run_name, iteration"),
     ("finetune", "FinetuneModelConfig",
      "lora_adapter_path, base_model, name, scale, weights_path, input_voxel_size, output_voxel_size", ""),
     ("fly", "FlyModelConfig",
-     "checkpoint_path, channels, input_voxel_size, output_voxel_size, name, input_size, output_size, scale",
-     "checkpoint_path, channels, input_voxel_size, output_voxel_size"),
+     "checkpoint_path, channels, input_voxel_size, output_voxel_size, name, input_size, output_size, scale, sigmoid",
+     "checkpoint_path"),
     ("huggingface", "HuggingFaceModelConfig", "repo, revision, name, scale", "repo"),
     ("script", "ScriptModelConfig", "script_path, name, scale", "script_path"),
 ]
@@ -458,22 +517,29 @@ CONFIGS = {
         "fly --checkpoint-path /ckpt/model_checkpoint_1000 --channels mito,er --input-voxel-size 16,16,16"
         " --output-voxel-size 8,8,8 --name fly --input-size 100,100,100 --output-size 20,20,20 --scale s1",
     ),
-    # As the server CLI passes them: strings, and no sizes.
+    # As the server CLI passes them: strings, and no sizes, which are the
+    # training tile's and computed from the network when it is built.
     "fly_from_cli": (
         lambda: FlyModelConfig(checkpoint_path="/c.ts", channels="mito, er",
-                               input_voxel_size="8,8,8", output_voxel_size="8,8,8"),
+                               input_voxel_size="8,8,8", output_voxel_size="8,8,8", sigmoid="false"),
         {'type': 'fly', 'checkpoint_path': '/c.ts', 'channels': ['mito', 'er'],
-         'input_voxel_size': [8, 8, 8], 'output_voxel_size': [8, 8, 8],
-         'input_size': [178, 178, 178], 'output_size': [56, 56, 56]},
+         'input_voxel_size': [8, 8, 8], 'output_voxel_size': [8, 8, 8], 'sigmoid': False},
         "fly --checkpoint-path /c.ts --channels mito,er --input-voxel-size 8,8,8 --output-voxel-size 8,8,8"
-        " --input-size 178,178,178 --output-size 56,56,56",
+        " --sigmoid False",
     ),
     "bio": (
-        lambda: BioModelConfig(model_name="affable-shark", voxel_size=(8, 8, 8),
-                               edge_length_to_process=64, name="bio", scale="s0"),
-        {'type': 'bioimage', 'model_name': 'affable-shark', 'voxel_size': [8, 8, 8], 'name': 'bio',
-         'scale': 's0', 'edge_length_to_process': 64},
-        "bioimage --model-name affable-shark --voxel-size 8,8,8 --edge-length-to-process 64 --name bio --scale s0",
+        lambda: BioModelConfig(model="affable-shark", voxel_size=(16, 8, 8), input_size=(20, 256, 256), context=8,
+                               slices_per_chunk=4, weight_format="onnx", name="bio", scale="s0"),
+        {'type': 'bioimage', 'model': 'affable-shark', 'voxel_size': [16, 8, 8], 'input_size': [20, 256, 256],
+         'context': 8, 'slices_per_chunk': 4, 'weight_format': 'onnx', 'name': 'bio', 'scale': 's0'},
+        "bioimage --model affable-shark --voxel-size 16,8,8 --input-size 20,256,256 --context 8"
+        " --slices-per-chunk 4 --weight-format onnx --name bio --scale s0",
+    ),
+    # Only the model: the rest follows its description.
+    "bio_bare": (
+        lambda: BioModelConfig(model="/models/my mito/rdf.yaml"),
+        {'type': 'bioimage', 'model': '/models/my mito/rdf.yaml'},
+        "bioimage --model '/models/my mito/rdf.yaml'",
     ),
     "cellmap": (
         lambda: _cellmap(folder_path="/models/my mito/"),
@@ -507,6 +573,16 @@ CONFIGS = {
         "finetune --lora-adapter-path '/runs/my run/lora_adapter' --base-model"
         " eyJ0eXBlIjoiZmx5IiwiY2hlY2twb2ludF9wYXRoIjoiL2NrcHQvZmx5IHJ1bi9tb2RlbC50cyIsImNoYW5uZWxzIjpbIm1pdG8iLCJlciJdLCJpbnB1dF92b3hlbF9zaXplIjpbMTYsMTYsMTZdLCJvdXRwdXRfdm94ZWxfc2l6ZSI6WzgsOCw4XSwiaW5wdXRfc2l6ZSI6WzEwMCwxMDAsMTAwXSwib3V0cHV0X3NpemUiOlsyMCwyMCwyMF0sIm5hbWUiOiJmbHkgYmFzZSJ9"
         " --name ft --scale s1",
+    ),
+    "cellpose": (
+        lambda: CellposeModelConfig(voxel_size=(16, 8, 8), pretrained_model="/w/my model", output="masks",
+                                    batch_size=12, diameter=45, name="cp", scale="s2"),
+        {'type': 'cellpose', 'voxel_size': [16, 8, 8], 'pretrained_model': '/w/my model', 'output': 'masks',
+         'slices_per_chunk': 8, 'slice_size': 512, 'context': 32, 'batch_size': 12, 'diameter': 45.0,
+         'flow_threshold': 0.4, 'cellprob_threshold': 0.0, 'name': 'cp', 'scale': 's2'},
+        "cellpose --voxel-size 16,8,8 --pretrained-model '/w/my model' --output masks --slices-per-chunk 8"
+        " --slice-size 512 --context 32 --batch-size 12 --diameter 45.0 --flow-threshold 0.4"
+        " --cellprob-threshold 0.0 --name cp --scale s2",
     ),
     "finetune_of_finetune": (
         lambda: FinetuneModelConfig(weights_path="/runs/r2/full_finetune/model_state_dict.pt",
@@ -546,7 +622,7 @@ def _param_info(name, type_, required, input_type, default=...):
 
 # Every type's form also offers env, which no constructor takes (models.envs).
 _ENV = {"name": "env", "required": False, "type": "str", "input_type": "text",
-        "description": "Environment (pixi env name or absolute path; blank: this one)"}
+        "description": "Environment (pixi env, alias or path; blank: the type's default)"}
 
 
 def _type_info(class_name, display_name, *params):
@@ -565,13 +641,30 @@ _SCALE = _param_info("scale", "string", False, "text", None)
 MODEL_CONFIG_TYPES = {
     "BioModelConfig": _type_info(
         "BioModelConfig", "Bio Model",
-        _param_info("model_name", "str", True, "text"),
-        _param_info("voxel_size", "string", True, "textarea"),
-        _param_info("edge_length_to_process", "string", False, "number", None),
+        _param_info("model", "str", True, "text"),
+        _param_info("voxel_size", "string", False, "textarea", None),
+        _param_info("input_size", "string", False, "number", None),
+        _param_info("context", "string", False, "text", None),
+        _param_info("slices_per_chunk", "int", False, "text", None),
+        _param_info("weight_format", "str", False, "text", None),
         _NAME, _SCALE,
     ),
     "CellMapModelConfig": _type_info(
         "CellMapModelConfig", "Cell Map Model", _param_info("folder_path", "string", True, "file"), _NAME, _SCALE,
+    ),
+    "CellposeModelConfig": _type_info(
+        "CellposeModelConfig", "Cellpose Model",
+        _param_info("voxel_size", "string", True, "textarea"),
+        _param_info("pretrained_model", "str", False, "text", "cpsam_v2"),
+        _param_info("output", "str", False, "text", "probability"),
+        _param_info("slices_per_chunk", "int", False, "text", 8),
+        _param_info("slice_size", "int", False, "text", 512),
+        _param_info("context", "int", False, "text", 32),
+        _param_info("batch_size", "int", False, "text", None),
+        _param_info("diameter", "float", False, "text", None),
+        _param_info("flow_threshold", "float", False, "text", 0.4),
+        _param_info("cellprob_threshold", "float", False, "text", 0.0),
+        _NAME, _SCALE,
     ),
     "DaCapoModelConfig": _type_info(
         "DaCapoModelConfig", "Da Capo Model",
@@ -590,13 +683,14 @@ MODEL_CONFIG_TYPES = {
     "FlyModelConfig": _type_info(
         "FlyModelConfig", "Fly Model",
         _param_info("checkpoint_path", "str", True, "file"),
-        _param_info("channels", "list", True, "textarea"),
-        _param_info("input_voxel_size", "tuple", True, "textarea"),
-        _param_info("output_voxel_size", "tuple", True, "textarea"),
+        _param_info("channels", "list", False, "textarea", None),
+        _param_info("input_voxel_size", "tuple", False, "textarea", None),
+        _param_info("output_voxel_size", "tuple", False, "textarea", None),
         _STR_NAME,
         _param_info("input_size", "string", False, "number", None),
         _param_info("output_size", "string", False, "number", None),
         _SCALE,
+        _param_info("sigmoid", "bool", False, "text", True),
     ),
     "HuggingFaceModelConfig": _type_info(
         "HuggingFaceModelConfig", "Hugging Face Model",
@@ -628,15 +722,14 @@ def test_the_model_form_is_offered_the_same_types(dashboard):
 @pytest.mark.parametrize(
     "class_name, params, status, expected",
     [
-        # Form tuples become floats (the CLI's become ints), and a list of
-        # strings is split on commas when it is not JSON.
+        # Form tuples become floats, a whole voxel size an int again, and a
+        # list of strings is split on commas when it is not JSON.
         ("FlyModelConfig",
          {"checkpoint_path": "/c.ts", "channels": "mito, er", "input_voxel_size": "16,16,16",
           "output_voxel_size": "[8, 8, 8]", "input_size": "", "name": "fly"},
          200,
          {"type": "fly", "checkpoint_path": "/c.ts", "channels": ["mito", "er"],
-          "input_voxel_size": [16.0, 16.0, 16.0], "output_voxel_size": [8, 8, 8], "name": "fly",
-          "input_size": [178, 178, 178], "output_size": [56, 56, 56]}),
+          "input_voxel_size": [16, 16, 16], "output_voxel_size": [8, 8, 8], "name": "fly"}),
         ("NoSuchModelConfig", {}, 400, "Unknown model config class: NoSuchModelConfig"),
         ("DaCapoModelConfig", {"run_name": "r", "iteration": ""}, 400, "Required parameter 'iteration' is missing"),
         ("DaCapoModelConfig", {"run_name": "r"}, 400, "Failed to instantiate DaCapoModelConfig: "),

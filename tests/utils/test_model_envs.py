@@ -7,8 +7,11 @@ runs the server in that environment instead. The command is still one LSF
 shell line, with no single quote in it (jobs.spec.shell_join).
 """
 
+import contextlib
+import gc
 import json
 import shlex
+import sys
 import textwrap
 from types import SimpleNamespace
 
@@ -16,8 +19,9 @@ import pytest
 from click.testing import CliRunner
 
 from cellmap_flow.config.yaml import ConfigError
-from cellmap_flow.models import geometry_cache, registry
-from cellmap_flow.models.configs.base import ModelEnvError
+from cellmap_flow.jobs import launch as jobs_launch
+from cellmap_flow.models import envs, geometry_cache, registry
+from cellmap_flow.models.configs.base import ModelConfig, ModelEnvError
 from cellmap_flow.models.models_config import FinetuneModelConfig, ScriptModelConfig
 from cellmap_flow.serving import launch
 
@@ -72,7 +76,7 @@ def test_env_goes_round_the_registry_and_never_reaches_the_server(manifest):
     argv = launch.server_argv(model, "/d/raw.zarr")
     assert argv == [
         "/opt/pixi", "run", "--frozen", "--manifest-path", str(manifest), "-e", "cellpose4", "cellmap_flow", "serve",
-        "--model", '{"type":"script","script_path":"/s.py","name":"cp"}', "-d", "/d/raw.zarr",
+        "--model", '{"type":"script","script_path":"/s.py","name":"cp"}', "-d", "/d/raw.zarr", "--resample",
     ]
     assert launch.server_argv_for("script", {"script_path": "/s.py", "name": "cp", "env": "cellpose4"},
                                   "/d/raw.zarr") == argv
@@ -167,3 +171,144 @@ def test_building_it_where_its_packages_are_missing_names_its_env(tmp_path):
     model.env = "cellpose4"
     with pytest.raises(ModelEnvError, match="cp runs in its own environment .cellpose4.*cellpose5_is_not_installed"):
         model.config
+
+
+# --- a type's default environment, and aliases -------------------------------------
+
+
+@pytest.fixture(autouse=True)
+def _fresh_warnings(monkeypatch):
+    """Each test sees its own warnings and no type an earlier test defined
+    (collected before the test: a fixture's value lives until it ends)."""
+    monkeypatch.setattr(envs, "_warned", set())
+    gc.collect()
+
+
+@pytest.fixture
+def cellpose4_type():
+    """A type whose models run in cellpose4 when their entry names no env."""
+
+    class Cellpose4ModelConfig(ModelConfig):
+        cli_name = "cellpose4-test"
+        default_env = "cellpose4"
+
+        def __init__(self, script_path: str, name: str = None):
+            super().__init__()
+            self.script_path, self.name = script_path, name
+
+    return Cellpose4ModelConfig
+
+
+@pytest.fixture
+def aliases(tmp_path, monkeypatch):
+    """``aliases(text)``: the aliases file, with ``text`` in it."""
+    path = tmp_path / "envs.yaml"
+    monkeypatch.setenv("CELLMAP_FLOW_ENVS_FILE", str(path))
+    return lambda text: path.write_text(text) and path
+
+
+PIXI_CELLPOSE4 = ["/opt/pixi", "run", "--frozen", "--manifest-path", "MANIFEST", "-e", "cellpose4"]
+
+
+@pytest.mark.parametrize("env, runs_in", [(None, "cellpose4"), ("venv", "venv"), ("current", None)],
+                         ids=["default", "explicit", "current"])
+def test_an_entrys_env_wins_over_its_types_default(manifest, venv, cellpose4_type, env, runs_in):
+    entry = {"type": "cellpose4-test", "script_path": "/s.py", "name": "cp"}
+    if env:
+        entry["env"] = venv if env == "venv" else env
+    model = registry.build_model(entry, "cp")
+    assert model.effective_env == (venv if runs_in == "venv" else runs_in)
+    # Only what the entry said is written back: an exported YAML stays as it was.
+    assert model.to_dict() == entry and registry.build_model(model.to_dict(), "cp").effective_env == model.effective_env
+    program = launch.server_argv(model, "/d")[:-5]
+    if runs_in is None:
+        assert program == shlex.split(jobs_launch.SERVER_COMMAND)
+    elif runs_in == "cellpose4":
+        assert program == [str(manifest) if a == "MANIFEST" else a for a in PIXI_CELLPOSE4] + ["cellmap_flow", "serve"]
+    assert ScriptModelConfig(script_path="/s.py").effective_env is None
+
+
+def test_a_finetune_runs_in_its_base_types_default(manifest, cellpose4_type):
+    base = {"type": "cellpose4-test", "script_path": "/s.py"}
+    assert FinetuneModelConfig(lora_adapter_path="/a", base_model=base).effective_env == "cellpose4"
+    opted_out = FinetuneModelConfig(lora_adapter_path="/a", base_model={**base, "env": "current"})
+    assert opted_out.effective_env is None
+
+
+def test_the_models_tab_serves_a_catalog_model_from_its_types_default(manifest, monkeypatch):
+    from cellmap_flow.dashboard.services import launch as models_tab
+    from cellmap_flow.dashboard.state import get_session
+    from cellmap_flow.models.models_config import CellMapModelConfig
+
+    monkeypatch.setattr(CellMapModelConfig, "default_env", "cellpose4", raising=False)
+    commands = []
+    monkeypatch.setattr(models_tab, "start_hosts", lambda command, **kwargs: commands.append(command))
+    get_session().dataset_path = "/d/raw.zarr"
+    models_tab.run_model("/models/mito", "mito", None)
+    (argv,) = [shlex.split(c) for c in commands]
+    assert argv[:7] == [str(manifest) if a == "MANIFEST" else a for a in PIXI_CELLPOSE4]
+
+
+def test_a_default_env_not_installed_is_used_and_warned_about_once(manifest, cellpose4_type, caplog):
+    model = cellpose4_type(script_path="/s.py", name="cp")
+    assert [model.effective_env, model.effective_env] == ["cellpose4", "cellpose4"]
+    (warning,) = [r.getMessage() for r in caplog.records if r.levelname == "WARNING"]
+    assert "not installed" in warning and "cellmap_flow envs install cellpose4" in warning
+
+    caplog.clear()
+    envs._warned.clear()
+    (manifest.parent / ".pixi" / "envs" / "cellpose4" / "bin").mkdir(parents=True)
+    (manifest.parent / ".pixi" / "envs" / "cellpose4" / "bin" / "python").write_text("")
+    assert model.effective_env == "cellpose4" and not caplog.records
+
+
+@pytest.mark.parametrize("machine", ["no pixi.toml", "not in pixi.toml", "no pixi"])
+def test_a_default_env_this_machine_cannot_provide_runs_here(manifest, monkeypatch, cellpose4_type, caplog, machine):
+    if machine == "no pixi.toml":
+        manifest.unlink()
+    elif machine == "not in pixi.toml":
+        manifest.write_text("[environments]\n")
+    else:
+        monkeypatch.delenv("PIXI_EXE")
+        monkeypatch.setattr(envs.shutil, "which", lambda program: None)
+    model = cellpose4_type(script_path="/s.py", name="cp")
+    assert model.effective_env is None
+    assert launch.server_argv(model, "/d")[:-5] == shlex.split(jobs_launch.SERVER_COMMAND)
+    (warning,) = [r.getMessage() for r in caplog.records if r.levelname == "WARNING"]
+    assert "runs in this environment" in warning and "envs.yaml" in warning
+    # Named by the entry, the same environment is an error: the user asked for it.
+    with pytest.raises(ConfigError) if machine != "no pixi" else contextlib.nullcontext():
+        registry.build_model({"type": "script", "script_path": "/s.py", "env": "cellpose4"}, "cp")
+
+
+def test_an_alias_is_a_directory_env_by_name_and_wins_over_pixi(manifest, venv, aliases, cellpose4_type, caplog):
+    aliases(f"cellpose4: {venv}\n")
+    explicit = registry.build_model({"type": "script", "script_path": "/s.py", "env": "cellpose4"}, "cp")
+    # The name is kept, so an exported YAML works on a machine with the pixi env.
+    assert explicit.to_dict()["env"] == "cellpose4"
+    defaulted = cellpose4_type(script_path="/s.py", name="cp")
+    for model in (explicit, defaulted):
+        assert launch.server_argv(model, "/d")[:5] == [f"{venv}/bin/python", "-P", "-m", "cellmap_flow.cli.main",
+                                                       "serve"]
+    assert envs.lib_dir("cellpose4") == f"{venv}/lib" and envs.finetune_problem("cellpose4") is None
+    assert not caplog.records, "an alias is installed already"
+
+
+@pytest.mark.parametrize("text, error", [
+    ("cellpose4: relative/env\n", "must be an absolute path"),
+    ("cellpose4: /no/such/env\n", r"\(/no/such/env, in .*envs.yaml\) has no bin/python"),
+    ("- cellpose4\n", "must map environment names to paths"),
+])
+def test_a_bad_alias_is_an_error_even_for_a_default(manifest, aliases, cellpose4_type, text, error):
+    aliases(text)
+    with pytest.raises(ConfigError, match=error):
+        registry.build_model({"type": "script", "script_path": "/s.py", "env": "cellpose4"}, "cp")
+    with pytest.raises(ConfigError, match=error):
+        cellpose4_type(script_path="/s.py").effective_env
+
+
+def test_a_model_already_in_its_environment_is_built_there(aliases):
+    """Its server, or its trainer: what it was moved there for."""
+    aliases(f"cellpose4: {sys.prefix}\n")
+    built = SimpleNamespace(read_shape=(8, 8, 8))
+    assert geometry_cache.build_here(SimpleNamespace(name="cp", env="cellpose4", config=built)) is built

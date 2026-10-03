@@ -103,6 +103,8 @@ def world(tmp_path, monkeypatch):
     for name, value in dict(
         minio_state=state, annotation_volumes=volumes, output_sessions=sessions, viewer=neuroglancer.Viewer(),
         raw=None, dataset_path=str(tmp_path / "raw.zarr" / "em"), models_config=[SimpleNamespace(name="m")],
+        # The volumes as made with Resample unticked: at the data's voxel sizes.
+        resample=False,
     ).items():
         monkeypatch.setattr(get_session(), name, value)
     for name, value in dict(input_norm_config=NORM, postprocess_config=POST).items():

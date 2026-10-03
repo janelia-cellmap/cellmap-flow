@@ -1,6 +1,6 @@
-// The Models tab (templates/_models_tab.html): the local catalog and
-// Hugging Face models to serve, the LSF server config, the GPU queue picker,
-// and the inference jobs' own output.
+// The Models tab (templates/_models_tab.html): the local catalog, Hugging
+// Face and BioImage Model Zoo models to serve, the LSF server config, the GPU
+// queue picker, and the inference jobs' own output.
 import { ApiError, getJSON, postJSON } from "../lib/api.js";
 import { pageData } from "../lib/page-data.js";
 import { poll } from "../lib/poll.js";
@@ -124,6 +124,202 @@ export function initModelsTab({ onModelsSubmitted } = {}) {
     });
   });
 
+  // The BioImage Model Zoo: listed like the Hugging Face models, from the
+  // zoo's index (models/bioimage_catalog.py), and filtered to EM by default.
+  // The zoo models already running are ticked on load, with the voxel size
+  // each was given.
+  const zooRunning = new Map((pageData().default_bioimage_models || []).map((m) => [m.id, m.voxel_size]));
+  let zooModelsLoaded = false;
+  const ZOO_VOXEL_TITLE =
+    "Voxel size in nm, z,y,x or one number: the scale the model reads the data at. Filled in with what it "
+    + "was trained at when cellmap-flow knows it; blank, the model's own if its description declares one.";
+
+  function zooTag(text, title) {
+    const tag = document.createElement("span");
+    tag.className = "zoo-tag";
+    tag.textContent = text;
+    if (title) tag.title = title;
+    return tag;
+  }
+
+  // One row, built from nodes rather than an HTML string: every text in it
+  // comes from the zoo's uploaders. voxelSize is the value to start with
+  // (an array, a string or undefined); a row starts ticked when it is given.
+  function zooRow(model, voxelSize) {
+    const div = document.createElement("div");
+    div.className = "form-check zoo-model-item";
+    div.dataset.search = [model.name, model.key, model.id, model.description, ...model.tags].join(" ").toLowerCase();
+    div.dataset.em = model.em ? "1" : "";
+    div.dataset.dims = model.dims || "";
+
+    const input = document.createElement("input");
+    input.className = "form-check-input zoo-model-checkbox";
+    input.type = "checkbox";
+    input.id = "chk_zoo_" + model.key.replace(/\W+/g, "_");
+    input.value = model.key;
+    input.checked = voxelSize !== undefined;
+    const label = document.createElement("label");
+    label.className = "form-check-label";
+    label.htmlFor = input.id;
+    label.textContent = model.name;
+    label.title = [model.description, model.key, model.license].filter(Boolean).join("\n");
+    div.append(input, label);
+
+    if (model.dims) div.append(zooTag(model.dims.toUpperCase()));
+    // What it was trained at, from cellmap-flow's own table: no zoo model
+    // says it in its description.
+    const trained = model.trained || null;
+    const trainedNm = trained && trained.voxel_size ? trained.voxel_size.join("\u00d7") + " nm" : "";
+    if (trainedNm) div.append(zooTag(trainedNm, "Trained at (z\u00d7y\u00d7x) on " + trained.trained_on));
+    model.weight_formats.forEach((format) => div.append(zooTag(format, "Weight format")));
+    if (/^https?:\/\//.test(model.url || "")) {
+      const link = document.createElement("a");
+      link.className = "zoo-link";
+      link.href = model.url;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      link.title = "Open on bioimage.io";
+      link.textContent = "\u2197";
+      div.append(link);
+    }
+    if (model.description) {
+      const desc = document.createElement("div");
+      desc.className = "zoo-desc";
+      desc.textContent = model.description;
+      desc.title = model.description;
+      div.append(desc);
+    }
+
+    // Shown only while the row is ticked.
+    const voxelRow = document.createElement("div");
+    voxelRow.className = "zoo-voxel-row d-flex align-items-center gap-2 mt-1";
+    const voxelLabel = document.createElement("label");
+    voxelLabel.textContent = "Voxel (nm)";
+    voxelLabel.htmlFor = input.id + "_voxel";
+    const voxel = document.createElement("input");
+    voxel.type = "text";
+    voxel.className = "form-control form-control-sm zoo-voxel";
+    voxel.id = input.id + "_voxel";
+    voxel.placeholder = "from model";
+    voxel.title = ZOO_VOXEL_TITLE;
+    if (voxelSize === undefined && trained && trained.voxel_size) voxelSize = trained.voxel_size;
+    voxel.value = Array.isArray(voxelSize) ? voxelSize.join(",") : (voxelSize || "");
+    voxelRow.append(voxelLabel, voxel);
+    const shown = [voxelRow];
+    if (trained) {
+      const hint = document.createElement("div");
+      hint.className = "zoo-trained";
+      hint.textContent = (trainedNm ? "Trained at " + trainedNm + " (z,y,x) on " : "Trained on ")
+        + trained.trained_on + "." + (trained.note ? " " + trained.note : "")
+        + (trainedNm ? "" : " Enter the voxel size of the data to run it on.");
+      hint.title = trained.confidence + " confidence: " + trained.source;
+      shown.push(hint);
+    }
+    const showTicked = () => shown.forEach((el) => { el.style.display = input.checked ? "" : "none"; });
+    showTicked();
+    input.addEventListener("change", showTicked);
+    div.append(...shown);
+    return div;
+  }
+
+  // Search words (all must match), EM only, and 2D/3D (neither ticked: any).
+  // A ticked row stays in view, so nothing is submitted unseen.
+  function filterZooModels() {
+    const words = document.getElementById("zooSearchBar").value.toLowerCase().split(/\s+/).filter(Boolean);
+    const emOnly = document.getElementById("zooEmOnly").checked;
+    const dims = [["zoo2d", "2d"], ["zoo3d", "3d"]]
+      .filter(([id]) => document.getElementById(id).checked)
+      .map(([, d]) => d);
+    const rows = document.querySelectorAll("#zooModelList .zoo-model-item");
+    let shown = 0;
+    rows.forEach((row) => {
+      const matches = words.every((w) => row.dataset.search.includes(w))
+        && (!emOnly || row.dataset.em)
+        && (!dims.length || dims.includes(row.dataset.dims));
+      const show = matches || row.querySelector(".zoo-model-checkbox").checked;
+      row.style.display = show ? "" : "none";
+      if (show) shown += 1;
+    });
+    document.getElementById("zooCount").textContent = rows.length ? shown + " / " + rows.length : "";
+  }
+
+  function renderZooModels(data) {
+    const list = document.getElementById("zooModelList");
+    // A refresh keeps what is ticked, and the voxel sizes typed.
+    const ticked = new Map(zooRunning);
+    list.querySelectorAll(".zoo-model-item").forEach((row) => {
+      const box = row.querySelector(".zoo-model-checkbox");
+      if (box.checked) ticked.set(box.value, row.querySelector(".zoo-voxel").value);
+      else ticked.delete(box.value);
+    });
+    list.replaceChildren();
+    const placeholder = document.getElementById("zooPlaceholder");
+    if (placeholder) placeholder.remove();
+
+    if (data.error) {
+      const p = document.createElement("p");
+      p.className = "text-danger";
+      p.textContent = "Error: " + data.error;
+      list.appendChild(p);
+      return;
+    }
+    const models = data.models || [];
+    if (!models.length) {
+      const p = document.createElement("p");
+      p.className = "text-muted";
+      p.textContent = "No models found.";
+      list.appendChild(p);
+      return;
+    }
+    document.getElementById("zooControls").style.display = "";
+    document.getElementById("zooRefreshBtn").title =
+      "Refresh from bioimage.io" + (data.fetched ? " (listed " + data.fetched + ")" : "");
+    models.forEach((model) => {
+      list.appendChild(zooRow(model, ticked.has(model.key) ? ticked.get(model.key) : undefined));
+    });
+    filterZooModels();
+  }
+
+  // The zoo changes under the page: a list cached over an hour ago comes
+  // back "stale" and is fetched again behind it, and an open page fetches it
+  // again every hour. Quietly: a failure leaves the list shown as it was.
+  const ZOO_REFRESH_MS = 60 * 60 * 1000;
+  let zooRefreshTimer = null;
+
+  function refreshZooQuietly() {
+    postJSON("/api/bioimage-models/refresh")
+      .then((data) => { if (!data.error) renderZooModels(data); })
+      .catch(() => {});
+  }
+
+  function loadZooModels(refresh) {
+    const spinner = document.getElementById("zooLoadingSpinner");
+    spinner.classList.remove("d-none");
+    (refresh ? postJSON("/api/bioimage-models/refresh") : getJSON("/api/bioimage-models"))
+      .then((data) => {
+        renderZooModels(data);
+        zooModelsLoaded = true;
+        if (data.stale) refreshZooQuietly();
+        if (!zooRefreshTimer) zooRefreshTimer = setInterval(refreshZooQuietly, ZOO_REFRESH_MS);
+      })
+      .catch((err) => {
+        // The routes answer a failed fetch of the zoo's index with
+        // {"error": ...}; anything else never reached them.
+        renderZooModels({ error: err instanceof ApiError ? err.message : "Error loading models: " + err });
+        zooModelsLoaded = err instanceof ApiError;
+      })
+      .finally(() => spinner.classList.add("d-none"));
+  }
+
+  document.getElementById("collapse_zoo").addEventListener("show.bs.collapse", function () {
+    if (!zooModelsLoaded) loadZooModels(false);
+  });
+  document.getElementById("zooRefreshBtn").addEventListener("click", () => loadZooModels(true));
+  document.getElementById("zooSearchBar").addEventListener("input", filterZooModels);
+  ["zooEmOnly", "zoo2d", "zoo3d"].forEach((id) => {
+    document.getElementById(id).addEventListener("change", filterZooModels);
+  });
+
   // Inference job output.
   //
   // The dashboard's own log stream only carries what this process logs. A
@@ -198,6 +394,31 @@ export function initModelsTab({ onModelsSubmitted } = {}) {
       jobLogsFollower = poll(refreshJobLogs, { intervalMs: JOB_LOGS_POLL_MS, immediate: false });
     }
   });
+
+  // After a Submit, show Job Logs and keep it current until no job is still
+  // starting (waiting in a queue, or installing its environment), even with
+  // Follow off: until then the page showed nothing of what Submit started.
+  // A tick resolving false stops the poll.
+  let startingWatcher = null;
+
+  function watchStartingJobs() {
+    const area = document.getElementById("jobLogsArea");
+    if (area.style.display === "none") document.getElementById("jobLogsBtn").click();
+    if (startingWatcher) startingWatcher.stop();
+    // The first ticks can come before a job is handed to LSF at all, which
+    // lists nothing: only a list with no starting job in it ends the watch.
+    let ticks = 0;
+    startingWatcher = poll(function () {
+      if (jobLogsFollower) return Promise.resolve(false);  // Follow keeps it current
+      ticks += 1;
+      return getJSON("/api/job-logs").then(function (data) {
+        renderJobLogs(data);
+        const jobs = (data && data.jobs) || [];
+        const starting = jobs.some(function (j) { return j.status === "starting"; });
+        return starting || (jobs.length === 0 && ticks < 6) ? undefined : false;
+      }).catch(function () { return false; });
+    }, { intervalMs: JOB_LOGS_POLL_MS, maxTicks: 60 });
+  }
 
   // GPU queue picker: the one next to Submit and the Server Config one show
   // the same configured queue.
@@ -318,6 +539,121 @@ export function initModelsTab({ onModelsSubmitted } = {}) {
       });
   });
 
+  // Add a model: resolve what was pasted (POST /api/models/resolve), ask for
+  // what it still needs, and run it (POST /api/models/add). The model then
+  // gets a ticked box in the catalog's list, so Submit keeps it running.
+  const addRef = document.getElementById("addModelRef");
+  const addResult = document.getElementById("addModelResult");
+  const addFields = document.getElementById("addModelFields");
+  const addRunBtn = document.getElementById("addModelRunBtn");
+  let resolved = null;
+
+  // How a needed value is asked for: its label and an example.
+  const NEEDED = {
+    voxel_size: ["Voxel (nm)", "8, or 40,4,4"],
+    input_voxel_size: ["Input voxel (nm)", "8, or 40,4,4"],
+    channels: ["Channels", "mito, er"],
+    base_model: ["Base model", '{"type": ...}'],
+  };
+
+  function field(label, key, value, title, placeholder) {
+    const id = "addModel_" + key;
+    const lab = document.createElement("label");
+    lab.htmlFor = id;
+    lab.textContent = label;
+    const input = document.createElement("input");
+    input.className = "form-control form-control-sm";
+    input.id = id;
+    input.dataset.key = key;
+    input.value = value || "";
+    if (title) input.title = title;
+    if (placeholder) input.placeholder = placeholder;
+    addFields.append(lab, input);
+  }
+
+  // A typed value as the entry wants it: numbers and lists of numbers as
+  // such, a JSON object (a finetune's base_model) parsed, else the text.
+  function typed(text) {
+    const value = text.trim();
+    if (value.startsWith("{")) return JSON.parse(value);
+    const parts = value.split(/[\s,]+/).filter(Boolean);
+    if (parts.length && parts.every((p) => /^-?\d+(\.\d+)?$/.test(p))) {
+      const numbers = parts.map(Number);
+      return numbers.length === 1 ? numbers[0] : numbers;
+    }
+    return value;
+  }
+
+  function showResolved(d) {
+    resolved = d;
+    addResult.hidden = false;
+    addFields.replaceChildren();
+    const env = d.env ? `runs in ${d.env}` : "runs in this environment";
+    document.getElementById("addModelSummary").textContent = `${d.type}: ${d.how} (${env})`;
+    document.getElementById("addModelNotes").textContent = (d.notes || []).join(" ");
+    field("Name", "name", d.name, "The model's name: its layer and job are called so.");
+    (d.needs || []).forEach((key) => {
+      const [label, example] = NEEDED[key]
+        || [key.charAt(0).toUpperCase() + key.slice(1).replace(/_/g, " "), ""];
+      field(label, key, "", "Not known from the reference: give it here (numbers as 8 or 40,4,4).", example);
+    });
+  }
+
+  function addedBox(name) {
+    const div = document.createElement("div");
+    div.className = "form-check mb-1";
+    const input = document.createElement("input");
+    input.className = "form-check-input model-checkbox";
+    input.type = "checkbox";
+    input.value = name;
+    input.id = "chk_added_" + name;
+    input.checked = true;
+    const label = document.createElement("label");
+    label.className = "form-check-label";
+    label.htmlFor = input.id;
+    label.textContent = name;
+    div.append(input, label);
+    document.getElementById("addedModels").appendChild(div);
+  }
+
+  document.getElementById("addModelResolveBtn").addEventListener("click", function () {
+    const ref = addRef.value.trim();
+    if (!ref) return;
+    postJSON("/api/models/resolve", { ref })
+      .then(showResolved)
+      .catch((err) => {
+        addResult.hidden = true;
+        alert("Could not resolve that model: " + (err instanceof ApiError ? err.message : err));
+      });
+  });
+
+  addRunBtn.addEventListener("click", function () {
+    if (!resolved) return;
+    const entry = { type: resolved.type, ...resolved.params, name: resolved.name };
+    try {
+      addFields.querySelectorAll("input").forEach((input) => {
+        if (input.value.trim() !== "") entry[input.dataset.key] = typed(input.value);
+      });
+    } catch (e) {
+      alert("Could not read a value: " + e.message);
+      return;
+    }
+    const missing = (resolved.needs || []).filter((key) => entry[key] === undefined);
+    if (missing.length) {
+      alert("Still needed: " + missing.join(", "));
+      return;
+    }
+    postJSON("/api/models/add", { entry })
+      .then((d) => {
+        addedBox(d.name);
+        addResult.hidden = true;
+        addRef.value = "";
+        logArea.value += `Added ${d.name}: starting its server\n`;
+        if (onModelsSubmitted) onModelsSubmitted();
+      })
+      .catch((err) => alert("Could not add that model: " + (err instanceof ApiError ? err.message : err)));
+  });
+
   submitBtn.addEventListener("click", function () {
     // Gather checked local catalog models
     const checkedLocal = document.querySelectorAll("#modelSelectionForm input.model-checkbox:checked");
@@ -333,20 +669,38 @@ export function initModelsTab({ onModelsSubmitted } = {}) {
       selectedHf.push(checkbox.value);
     });
 
-    console.log("Selected models:", selected, "HF models:", selectedHf);
+    // Ticked zoo models, with the voxel size typed (blank: the model's own).
+    const selectedZoo = [];
+    document.querySelectorAll("#zooModelList .zoo-model-item").forEach((row) => {
+      const box = row.querySelector(".zoo-model-checkbox");
+      if (!box.checked) return;
+      const voxel = row.querySelector(".zoo-voxel").value.trim();
+      selectedZoo.push({ id: box.value, voxel_size: voxel || null });
+    });
+
+    console.log("Selected models:", selected, "HF models:", selectedHf, "zoo models:", selectedZoo);
     postJSON("/api/models", {
       selected_models: selected,
       selected_hf_models: selectedHf,
+      selected_bioimage_models: selectedZoo,
       resample: resampleCheckbox.checked,
     })
       .then((data) => {
         console.log("Server response:", data);
-        logArea.value += "Server response:\n" + JSON.stringify(data, null, 2) + "\n";
+        const started = [...(data.models || []), ...(data.hf_models || []),
+                         ...(data.bioimage_models || []).map((m) => m.id)];
+        logArea.value += started.length
+          ? `Submitted ${started.join(", ")}: starting (see Job Logs)\n`
+          : "Submitted: no model selected; any running ones are stopped\n";
+        logArea.scrollTop = logArea.scrollHeight;
+        if (started.length) watchStartingJobs();
         if (onModelsSubmitted) onModelsSubmitted();
       })
       .catch((err) => {
         console.error("Error:", err);
-        alert("Error submitting model selection" + err);
+        const message = err instanceof ApiError ? err.message : String(err);
+        logArea.value += `Not submitted: ${message}\n`;
+        alert("Could not submit: " + message);
       });
   });
 }

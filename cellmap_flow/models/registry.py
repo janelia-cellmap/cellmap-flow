@@ -28,7 +28,8 @@ A bad YAML entry or type name is a ``config.yaml.ConfigError``.
 A model entry's ``env`` (the environment its server runs in, see
 ``models.envs``) is not a constructor argument: ``build_model`` and
 ``instantiate_model_config`` check it and set it on the built config, and
-the dashboard's form offers it beside each type's arguments.
+the dashboard's form offers it beside each type's arguments. Left out, the
+type's ``default_env`` applies (``ModelConfig.effective_env``).
 
 Importing this module imports neither torch, flask, huggingface_hub nor
 ``cellmap_flow.globals``. The model config classes, which bring numpy and
@@ -53,7 +54,10 @@ YAML_ALIASES = {
     "resolution": "input_voxel_size",
     "output_resolution": "output_voxel_size",
     "config_folder": "folder_path",
-    "model_path": "model_name",
+    # The bioimage type's model was model_name until 0.3.0, and the docs
+    # offered model_path for it.
+    "model_name": "model",
+    "model_path": "model",
 }
 
 # Constructor arguments that are never required from a user, even without a
@@ -639,7 +643,7 @@ def _input_type(param_name: str, param_info: Dict[str, Any]) -> str:
         return "textarea"  # for multi-line JSON
     if param_info.get("type") in ("dict",):
         return "textarea"  # for JSON dicts
-    if param_name in ("input_size", "output_size", "edge_length_to_process", "iteration"):
+    if param_name in ("input_size", "output_size", "iteration"):
         return "number"
     return "text"
 
@@ -668,7 +672,7 @@ def describe_types(classes=None) -> Dict[str, Dict[str, Any]]:
         params.setdefault(ENV_KEY, {
             "name": ENV_KEY,
             "required": False,
-            "description": "Environment (pixi env name or absolute path; blank: this one)",
+            "description": "Environment (pixi env, alias or path; blank: the type's default)",
             "type": "str",
             "input_type": "text",
         })

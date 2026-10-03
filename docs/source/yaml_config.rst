@@ -54,7 +54,7 @@ A configuration file has the following top-level fields:
      - Wrap raw data in neuroglancer (default: ``true``).
    * - ``resample``
      - No
-     - ``true`` resamples the data to each model's input voxel size when it has no level at that size (default: ``false``; see :ref:`resampling`).
+     - ``true`` (the default) resamples the data to each model's input voxel size when it has no level at that size; ``false`` reads the nearest level as if it were at that size (see :ref:`resampling`).
    * - ``extra_layers``
      - No
      - More volumes to show in the viewer beside the raw data (see below).
@@ -137,18 +137,88 @@ Available Model Types
      - ``run_name`` (required), ``iteration`` (required)
    * - ``fly``
      - FlyModelConfig
-     - ``checkpoint`` (required), ``classes`` (required), ``resolution`` (required)
-   * - ``bio``
+     - ``checkpoint`` (required); ``classes``, ``resolution``, ``input_size`` and
+       ``output_size`` when the run's folder does not say them; ``sigmoid``.
+       See :ref:`fly`.
+   * - ``bioimage``
      - BioModelConfig
-     - ``model_path`` (required)
+     - ``model_name`` or ``model_path`` (required), ``voxel_size`` (required)
    * - ``cellmap``
      - CellMapModelConfig
      - ``config_folder`` (required)
    * - ``huggingface``
      - HuggingFaceModelConfig
      - ``repo`` (required), ``revision`` (optional). See :doc:`huggingface`.
+   * - ``cellpose``
+     - CellposeModelConfig
+     - ``voxel_size`` (required), ``pretrained_model``, ``output``. See :ref:`cellpose`.
 
 Common optional parameters: ``name``, ``scale``, ``env`` (see :ref:`model-env`).
+
+.. _resolving-models:
+
+An entry from what you have
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+``cellmap_flow add REF`` writes the entry for you. ``REF`` is whatever you
+have in hand, and the entry is printed as YAML to paste under ``models:``,
+with comments saying what ``REF`` was taken to be, where it runs, and what
+it still needs:
+
+.. code-block:: console
+
+    $ cellmap_flow add cpsam
+    # cellpose: a Cellpose 4 pretrained model
+    # runs in the cellpose4 environment (its type's default)
+    # still needs: voxel_size (add to the entry)
+    models:
+      cpsam:
+        type: cellpose
+        pretrained_model: cpsam
+
+``-n`` names the model and ``-v 16,8,8`` gives the voxel size of a model
+that does not say its own (Cellpose, a bioimage.io model cellmap-flow has no
+trained voxel size for); a zoo EM model's entry gets the one it was trained
+at, with a note saying where it comes from. ``--run -d DATA`` (with ``-q``,
+``-P`` and ``--resample`` as ``infer`` takes them) serves the model right
+away, as ``cellmap_flow yaml`` would.
+
+In the dashboard, the same ``REF`` goes in the Models tab's *Add a model* box.
+*Resolve* (``POST /api/models/resolve``) shows what it was taken to be and
+where it runs, with a box for each value it still needs; *Run*
+(``POST /api/models/add``) starts it, and it joins the models with a ticked
+box, stopped when unticked like any other. A config YAML (one with
+``models:``) is refused with how to run it: it is a whole run, for
+``cellmap_flow yaml``.
+
+``REF`` is checked against these in order, and the first that matches wins:
+
+1. A local file or folder: a ``.py`` is a ``script``; a folder with
+   ``metadata.json`` (and ``model.ts``) a ``cellmap`` export; a folder with
+   ``rdf.yaml`` or ``bioimageio.yaml``, such a file, or a ``.zip`` with one
+   inside a ``bioimage`` model; ``model_checkpoint_<n>``, a ``.ts`` or a
+   ``model.pt`` a ``fly`` model (its channels and voxel sizes read from its
+   run's folder, see :ref:`fly`); a folder with ``adapter_config.json`` (a
+   LoRA adapter) or a full finetune's ``model_state_dict.pt`` a
+   ``finetune``, which still needs its ``base_model``; Cellpose-SAM weights a
+   ``cellpose`` model.
+2. A prefix that says outright what it is: ``hf:org/repo[@revision]``,
+   ``bioimageio:<id, nickname, URL or path>``, ``cellpose:<name or path>``,
+   ``fly:<path>``, ``dacapo:<run>@<iteration>``, ``script:<path>``.
+3. A Cellpose model name: ``cpsam_v2``, ``cpsam``, ``cpdino``, ``cpdino-vitb``.
+4. A URL: a bioimage.io model page, a Zenodo record, a DOI link or the URL of
+   an ``rdf.yaml`` or zip is a ``bioimage`` model; ``huggingface.co/org/repo``
+   is as 5.
+5. ``org/repo``: a Hugging Face repo, which must be a cellmap-models export
+   (``metadata.json`` and ``model.ts``). Any other model on the Hub is
+   refused: wrap it in a script (:doc:`custom_script`).
+6. A BioImage Model Zoo nickname or id (``affable-shark``,
+   ``10.5281/zenodo.5764892``), looked up in the zoo's model list, the one
+   the Models tab shows (bioimage.io's server, else its legacy index).
+
+5 and 6 are checked online; with ``--offline`` (or when the Hub or zoo
+cannot be reached) a repo or zoo-shaped name is taken on trust, with a note.
+Anything else is an error saying what was tried; a prefix settles it.
 
 .. _model-env:
 
@@ -162,9 +232,9 @@ transformer models) can run in an environment of its own. Give its entry an
 .. code-block:: yaml
 
     models:
-      cellpose_sam:
+      my_model:
         type: script
-        script_path: example/cellpose_sam_model.py
+        script_path: /path/to/my_model.py
         env: cellpose4
 
 ``env`` is either
@@ -173,14 +243,50 @@ transformer models) can run in an environment of its own. Give its entry an
   as ``pixi run --frozen --manifest-path <pixi.toml> -e cellpose4 cellmap_flow serve ...``,
   and pixi installs the environment from the lockfile the first time. The
   manifest is the one in the checkout cellmap-flow is installed from; set
-  ``CELLMAP_FLOW_PIXI_MANIFEST`` to use another. cellmap-flow's ``pixi.toml``
-  has ``cellpose4`` (Cellpose 4, for Cellpose-SAM), ``dacapo`` and
-  ``bioimageio``; or
+  ``CELLMAP_FLOW_PIXI_MANIFEST`` to use another. The environments of
+  cellmap-flow's ``pixi.toml`` are listed below; or
 - the absolute path of a conda environment or virtualenv with cellmap-flow
   installed. The server runs as ``<path>/bin/python -P -m cellmap_flow.cli.main serve ...``.
 
 A value with a ``/`` in it, or starting with ``~``, is a path. An unknown name,
 or a path without ``bin/python``, is an error when the YAML is read.
+
+The environments of cellmap-flow's ``pixi.toml``. A model type with a default
+runs there when its entry gives no ``env``; an explicit ``env`` wins, and
+``env: current`` keeps it in the environment cellmap-flow runs in.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 15 55 30
+
+   * - Environment
+     - What it is for
+     - Default for
+   * - ``default``
+     - The dashboard, the catalog, Cellpose 3 and finetuning; what Fileglancer
+       deploys. ``test`` and ``dev`` add pytest and the linters to it.
+     - types without a default of their own, which run where cellmap-flow runs
+   * - ``fly``
+     - fly_organelles (``mzouink/fly-organelles`` at ``ab89c10``), whose
+       ``StandardUnet`` loads a raw training checkpoint and whose classes an
+       eager ``model.pt`` unpickles. Solved on its own.
+     - ``fly``, unless the checkpoint is TorchScript (``.ts``)
+   * - ``bioimageio``
+     - ``bioimageio.core`` 0.11 with its ONNX and PyTorch backends, for BioImage
+       Model Zoo models. ``example/bioimage_em.yaml`` runs one.
+     - ``bioimage``
+   * - ``cellpose4``
+     - Cellpose 4 (Cellpose-SAM), which needs a newer torch and numpy than
+       Cellpose 3. Solved on its own.
+     - none: give ``env: cellpose4``
+   * - ``dacapo``
+     - ``dacapo-ml``. Its lock does not import DaCapo yet (``dacapo-ml`` 0.3.0
+       with fibsem-tools 7, which dropped ``fibsem_tools.metadata``), so a
+       DaCapo model is served from a conda environment that has it.
+     - none
+   * - ``docs``
+     - Building these docs.
+     - none
 
 Only the model's inference server and its finetuning job run there. The
 dashboard reads the model's geometry from its running server rather than
@@ -190,7 +296,355 @@ finetuning job needs ``peft`` in the environment: a pixi environment that
 does not install it is refused when the job is submitted.
 
 ``cellmap_flow infer <type> --env <env>`` and the dashboard's model form take
-it too. ``example/cellpose_sam.yaml`` runs Cellpose-SAM this way.
+it too. The ``cellpose`` type runs in ``cellpose4`` without one (see
+:ref:`cellpose`).
+
+.. _fly:
+
+fly_organelles checkpoints
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+``type: fly`` serves a network fly_organelles trained, from one checkpoint
+file:
+
+- a training checkpoint (``model_checkpoint_<iteration>``), loaded into
+  fly_organelles' ``StandardUnet``; its feature maps, levels and kernel sizes
+  are read from the weights;
+- a TorchScript file (``.ts``);
+- a whole pickled model (``model.pt``), unpickled only when
+  ``CELLMAP_FLOW_ALLOW_PICKLE=1`` is set.
+
+A training checkpoint or a ``model.pt`` runs in the ``fly`` pixi environment
+unless the entry gives an ``env``; a ``.ts`` runs in any. A folder that
+cellmap_models exported (``metadata.json`` and ``model.ts``) is served as
+exported by ``type: cellmap``, ``folder_path: <the folder>``, and refused here.
+The ``model.pt`` in such a folder can be served here, at a larger
+``input_size`` than the one it was exported at.
+
+What the entry does not give is read from the checkpoint's folder. A
+fly_organelles training run is enough as it is:
+
+.. code-block:: yaml
+
+    models:
+      mito_distance_16:
+        type: fly
+        checkpoint: /groups/cellmap/cellmap/zouinkhim/salevary/train/v2/distance/mito_16_all/model_checkpoint_20000
+
+reads the channel names from the run's ``train.py`` and the voxel sizes and
+tile from its training snapshots. Each value comes from the first of these
+files that has it; a key the entry gives always wins:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 22 78
+
+   * - File
+     - What is read
+   * - ``metadata.json``
+     - A cellmap_models export's: ``channels_names``, the voxel sizes,
+       ``input_shape`` and ``output_shape``.
+   * - ``config.yaml``
+     - fly_organelles' run configuration: ``run.labels``, ``run.voxel_size``,
+       ``checkpoint.input_shape`` and ``output_shape``.
+   * - ``snapshots/``
+     - The newest training snapshot's ``raw`` and ``output`` arrays: input and
+       output size, their voxel sizes, and how many channels the network
+       outputs.
+   * - ``train.py``
+     - Its top-level ``labels = [...]`` and ``voxel_size = ...``, when they are
+       written out as literals. The script is parsed, never run.
+
+Labels are taken as channel names only when the snapshots show one channel
+per label; an affinity or LSD run's network outputs several per label, and
+its entry has to name them. The voxel sizes are read only when the entry
+gives neither, and the input and output size only when it gives neither: an
+output size belongs to the input size it came with.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 25 20 55
+
+   * - Parameter
+     - Default
+     - Meaning
+   * - ``checkpoint`` (``checkpoint_path``)
+     - (required)
+     - The checkpoint file.
+   * - ``classes`` (``channels``)
+     - read from the folder
+     - The name of each output channel, one per channel. An error when
+       neither the entry nor the folder gives them.
+   * - ``resolution`` (``input_voxel_size``), ``output_resolution``
+       (``output_voxel_size``)
+     - read from the folder
+     - nm per voxel, one number or one per axis; fractions are kept. One
+       stands for the other, as fly_organelles trains at one voxel size. An
+       error when neither the entry nor the folder gives one.
+   * - ``input_size``, ``output_size``
+     - read from the folder, else 178 and computed
+     - Voxels a side of a tile in and out. Without either, 178 goes in
+       (fly_organelles' training tile) and what comes out is computed from the
+       network. ``input_size`` alone is enough; ``output_size`` alone is an
+       error. Larger tiles waste less context: a StandardUnet takes
+       178 + 16k (194, 338, ...).
+   * - ``sigmoid``
+     - ``true``
+     - Pass the output through a sigmoid, which is added unless the network
+       ends in one already (a cellmap_models export does). fly_organelles
+       trains on logits, so a training checkpoint gets one. ``false`` serves
+       the network's output as it is.
+
+.. _bioimage:
+
+BioImage Model Zoo
+~~~~~~~~~~~~~~~~~~
+
+``type: bioimage`` runs a `BioImage Model Zoo <https://bioimage.io>`_ model
+through ``bioimageio.core``, with the model's own preprocessing (its
+normalization) and postprocessing (a sigmoid, say). It runs in the
+``bioimageio`` pixi environment unless the entry gives an ``env``.
+``example/bioimage_em.yaml`` serves "conscientious-dromedary" (a 3D
+mitochondria U-Net) on jrc_mus-salivary-1.
+
+.. code-block:: yaml
+
+    models:
+      mito_bioimageio:
+        type: bioimage
+        model: conscientious-dromedary
+        voxel_size: 16     # without it: 30x8x8, the voxel size it was trained at
+
+``model`` is anything ``bioimageio.core`` loads: a zoo id or nickname
+("conscientious-dromedary", "affable-shark"), a DOI or URL, or the path of a
+model's ``rdf.yaml`` (``bioimageio.yaml``) or packaged ``.zip``. The model is
+downloaded to bioimageio's cache (``$BIOIMAGEIO_CACHE_PATH``, by default
+``~/.cache/bioimageio``) when its server starts. Before 0.3.0 the key was
+``model_name``; it, and ``model_path``, are still read.
+
+The model's description says the rest, unless the entry does:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 25 20 55
+
+   * - Parameter
+     - Default
+     - Meaning
+   * - ``voxel_size``
+     - the description's, else the one it was trained at
+     - nm per input voxel, one number or z, y, x: the level the model reads.
+       The description gives one when its input's space axes have a unit
+       (``scale`` and ``unit``). No zoo model does, so for the zoo's EM models
+       cellmap-flow uses the voxel size each was trained at, looked up by hand
+       (``cellmap_flow/models/bioimage_voxel_sizes.yaml``, with each number's
+       source; some were trained on downsampled data, the Platynereis nuclei
+       model at 100x80x80). Any other model needs it. A 2D model's z is the
+       spacing of its slices, its y by default.
+   * - ``input_size``
+     - 256 (2D), 128 (3D)
+     - Voxels a side of the tile the model is given, one number or one per
+       space axis of the model (z, y, x; y, x for a 2D model). An axis of
+       fixed size keeps it; a parameterized one (``min + n * step``) gets the
+       smallest size it takes of at least this.
+   * - ``context``
+     - the description's halo, else 0
+     - Voxels cut off each side of the model's output, one number or one per
+       space axis, so that chunks meet where the model saw both sides of the
+       seam. The input is read that much larger. The zoo's EM U-Nets give no
+       halo, and their chunks show seams; a ``context`` of 16 or so hides them
+       at the cost of computing the overlap twice.
+   * - ``slices_per_chunk``
+     - 8
+     - z slices in a chunk of a 2D model, each segmented on its own (in one
+       call when the model's batch axis takes any size). A 3D model ignores
+       it.
+   * - ``weight_format``
+     - bioimageio.core's choice
+     - The weights to run, of those the model has: ``torchscript``,
+       ``pytorch_state_dict``, ``onnx``, ``tensorflow_saved_model_bundle``,
+       ``keras_hdf5`` or ``keras_v3``.
+
+Every output tensor is served, its channels one after another, as the
+model's postprocessing leaves it: float32, not clipped or rescaled, unless
+the description says the output is integers (labels), which keep their type.
+A 2D model's labels are its own, slice by slice and chunk by chunk:
+``MortonSegmentationRelabeling`` makes them unique across chunks, as for
+Cellpose's masks, but not from one slice to the next.
+
+It cannot run a model with more than one required input, an input with more
+than one channel (RGB), or an output that is not a map over the input's
+space, such as micro-SAM's ("noisy-ox", "humorous-crab"), whose masks come
+one per prompted object. A model whose code needs packages the
+``bioimageio`` environment lacks (its weights' ``dependencies`` name them)
+fails when its server builds it; the environment has ``timm``, which the
+zoo's BiaPy transformers need. Empanada's MitoNet ("stupendous-sheep") needs
+OpenCV and loads a file from beside its code, where bioimageio.core 0.11 does
+not put it, so it does not run.
+
+The zoo's 2D EM U-Nets ("gleeful-skunk", "jolly-duck", "good-microbe") find
+jrc_mus-salivary-1's mitochondria at 8 nm; "conscientious-dromedary" at 16 nm.
+
+.. _cellpose:
+
+Cellpose
+~~~~~~~~
+
+``type: cellpose`` runs Cellpose 4 (Cellpose-SAM) on each z slice of a
+chunk, in 2D, and serves its cell probability or its instance masks. It runs
+in the ``cellpose4`` pixi environment unless the entry gives an ``env``:
+Cellpose 4 cannot share the default environment, whose cellpose 3 pins an
+older numpy. ``example/cellpose_sam.yaml`` serves it on jrc_mus-salivary-1.
+
+.. code-block:: yaml
+
+    models:
+      cellpose_sam:
+        type: cellpose
+        voxel_size: 64
+        output: probability
+
+.. list-table::
+   :header-rows: 1
+   :widths: 25 15 60
+
+   * - Parameter
+     - Default
+     - Meaning
+   * - ``voxel_size``
+     - (required)
+     - nm per voxel, read and written; one number or one per axis. Cellpose-SAM
+       sees objects best about 30 voxels across, so pick the voxel size at
+       which yours are roughly that (or give ``diameter``).
+   * - ``pretrained_model``
+     - ``cpsam_v2``
+     - ``cpsam_v2``, ``cpsam``, ``cpdino``, ``cpdino-vitb``, or the path of
+       finetuned Cellpose weights. The named ones are downloaded from the
+       Hugging Face Hub (about 1 GB) to ``~/.cellpose/models``, or
+       ``$CELLPOSE_LOCAL_MODELS_PATH``, when the server starts. The DINO
+       models also need facebookresearch's ``dinov3`` package, which the
+       ``cellpose4`` environment does not install.
+   * - ``output``
+     - ``probability``
+     - ``probability``: the cell probability, 0 to 1 (float32). ``masks``:
+       instance ids (uint64), unique within a chunk.
+   * - ``slices_per_chunk``
+     - 8
+     - z slices in a chunk.
+   * - ``slice_size``
+     - 512
+     - Voxels a side, in y and x, of each chunk's slices.
+   * - ``context``
+     - 32
+     - Voxels read beyond them on each side in y and x, so that objects at
+       a chunk's edge are seen whole, and cut off again. None in z.
+   * - ``batch_size``
+     - the whole chunk
+     - Tiles per GPU pass. Cellpose cuts each slice into tiles (256 px for
+       ``cpsam*``, 384 for the DINO models, overlapping by 10%); by default
+       all of a chunk's tiles go in one pass. Lower it if the GPU runs out
+       of memory.
+   * - ``diameter``
+     - none
+     - Object diameter in voxels; Cellpose resizes each slice by
+       30 / ``diameter``. None keeps the model's own scale.
+   * - ``flow_threshold``, ``cellprob_threshold``
+     - 0.4, 0.0
+     - Cellpose's mask thresholds; ``masks`` only.
+
+The probability is computed voxel by voxel, so it joins up across chunks,
+and it skips the mask dynamics, which makes it the faster output. Masks are
+made per chunk: an object that crosses a chunk's edge is cut there, with an
+id on each side, and objects are not joined from slice to slice. Add the
+``MortonSegmentationRelabeling`` postprocessor to make the ids unique across
+chunks and show the layer as a segmentation:
+
+.. code-block:: yaml
+
+    json_data:
+      postprocess:
+        - name: MortonSegmentationRelabeling
+
+For masks of a whole volume, write the probability with ``pixi run -e
+cellpose4 cellmap_flow blockwise ...`` (blockwise runs the model in its own
+process) and segment that, or run Cellpose's own distributed
+segmentation (``cellpose.contrib.distributed_segmentation``), which stitches
+objects across blocks.
+
+Finetuned weights, from Cellpose's GUI or ``cellpose.train``, are a path:
+``pretrained_model: /path/to/models/my_model``. Cellpose reads from the
+weights which network they are, and the tiling follows.
+
+Licence: the Cellpose-SAM weights were trained on data that includes
+datasets licensed CC-BY-NC, so they are for non-commercial use.
+
+Each model type's default
+^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Some model types run in an environment of their own unless the entry says
+otherwise, so their entries need no ``env``:
+
+=========================================  ======================
+Type                                       Default ``env``
+=========================================  ======================
+``cellpose``                               ``cellpose4``
+``bioimage``                               ``bioimageio``
+``dacapo``                                 ``dacapo``
+``fly``, with a raw checkpoint             ``fly``
+``finetune``                               its base model type's
+``script``, ``cellmap``, ``huggingface``   none: this environment
+=========================================  ======================
+
+An entry's own ``env`` wins. ``env: current`` runs the model in this
+environment whatever its type's default (``default`` is not that: it is
+pixi's ``default`` environment). Exported YAMLs write only an ``env`` the
+entry gave, never the type's default. A plugin type sets its own as
+``default_env`` on its ``ModelConfig`` subclass.
+
+A default this machine cannot provide does not stop the model: with no
+``pixi.toml``, no environment of that name in it, or no pixi at all (a
+conda-only account), the model runs in this environment, as before its type
+had a default, with a warning that says how to give it one. A default that
+is in ``pixi.toml`` but not installed yet is used: it is installed before the
+model's first job is submitted (several minutes, once; Job Logs shows pixi's
+output meanwhile), not in the job, whose time to start a server would run
+out first. An ``env`` the entry names
+itself is an error when it cannot be used.
+
+Aliases
+^^^^^^^
+
+``~/.cellmap_flow/envs.yaml`` (or the file ``CELLMAP_FLOW_ENVS_FILE`` names)
+maps environment names to conda environments or virtualenvs with cellmap-flow
+installed. An alias wins over a pixi environment of the same name, both for
+an entry's ``env`` and for a type's default, so this is how a machine without
+pixi runs the types' defaults:
+
+.. code-block:: yaml
+
+    cellpose4: /groups/lab/home/me/miniconda3/envs/cellpose4
+    dacapo: /groups/lab/home/me/miniconda3/envs/dacapo
+
+A model whose ``env`` is an alias keeps the name in exported YAMLs, so the
+YAML works on a machine that has the pixi environment instead. An alias to a
+relative path, or to a directory without ``bin/python``, is an error.
+
+``cellmap_flow envs``
+^^^^^^^^^^^^^^^^^^^^^
+
+.. code-block:: bash
+
+    cellmap_flow envs                  # each environment, as `envs list`
+    cellmap_flow envs install cellpose4
+    cellmap_flow envs check cellpose4
+
+``envs list`` shows each environment of ``pixi.toml`` and each alias: where
+it is, whether it is installed, whether it can run a finetuning job, and
+which model types default to it (a type that decides per model, as ``fly``
+does, is listed apart). ``envs install`` installs a pixi environment from the
+lockfile now (``pixi install --frozen``), rather than on its first job; an
+alias has nothing to install. ``envs check`` imports cellmap-flow with the
+environment's python, to show that it works there.
 
 .. _channel-names:
 
@@ -242,14 +696,15 @@ Data at Another Voxel Size
 
 A model reads the level of ``data_path`` at its input voxel size. When there is no such level, what happens depends on ``resample``:
 
-- **Left out, or** ``resample: false``: the level closest to the model's voxel size that is not coarser on any axis (the finest level, when every one is) is read *as if* it were at the model's voxel size, voxel for voxel, with a warning. The model then sees data at the wrong scale, and its predictions are drawn where that level really is, at a proportionally different voxel size.
-- ``resample: true``: a level is resampled to the model's voxel size, axis by axis, and the model sees the data at the size it was trained at. Its predictions are at its declared output voxel size.
+- ``resample: false``: the level closest to the model's voxel size that is not coarser on any axis (the finest level, when every one is) is read *as if* it were at the model's voxel size, voxel for voxel, with a warning. The model then sees data at the wrong scale, and its predictions are drawn where that level really is, at a proportionally different voxel size.
+- **Left out, or** ``resample: true``: a level is resampled to the model's voxel size, axis by axis, and the model sees the data at the size it was trained at. Its predictions are at its declared output voxel size.
 
 .. code-block:: yaml
 
     data_path: /nrs/cellmap/data/my_dataset/my_dataset.zarr/recon-1/em/fibsem-uint8
     charge_group: cellmap
-    resample: true   # levels 8x8x40, 16x16x80 ... nm; the model wants 16x16x16
+    # levels 8x8x40, 16x16x80 ... nm; the model wants 16x16x16, so a level is
+    # resampled to it (resample: false would read 8x8x40 as if it were)
 
     models:
       my_model:
@@ -263,9 +718,9 @@ How the data is resampled:
 - **Each axis by its own factor.** By a whole number of voxels (8 nm to 16 nm), each voxel is the mean of the voxels it covers. Otherwise (40 nm to 16 nm, or 12 nm to 16 nm), it is a linear interpolation between the two nearest voxels. Label data (bool, or integers of 32 bits or more) takes the nearest voxel instead, so no label is invented. Intensities stay in their dtype (uint8 stays uint8, rounded), and go through ``json_data``'s normalizers after resampling, as a stored level would.
 - **Where.** The resampled grid starts at the level's own corner, so the predictions lie over the data. Chunks are resampled on their own, and each gives exactly the voxels a read of the whole volume would.
 
-``cellmap_flow yaml`` starts each server with ``--resample``, and ``cellmap_flow blockwise`` reads the data resampled the same way. ``cellmap_flow infer <type> --resample`` is the same for one model (:doc:`cli`).
+``cellmap_flow yaml`` starts each server with ``--resample`` (``--no-resample`` for ``resample: false``), and ``cellmap_flow blockwise`` reads the data the same way. ``cellmap_flow infer <type>`` resamples too, unless given ``--no-resample`` (:doc:`cli`).
 
-In the dashboard it is the Models tab's *Resample if no scale matches the model* box, which ``resample: true`` (or ``cellmap_flow view --resample``) starts ticked. It applies to the models submitted from then on, to blockwise runs, and to annotation volumes made while it is on: those are at the model's own voxel sizes, and their finetunes train on the data resampled and are served resampled. When a running model reads a level as if it were at its voxel size, the banner above the tabs says so.
+In the dashboard it is the Models tab's *Resample if no scale matches the model* box, ticked unless ``resample: false`` (or ``cellmap_flow view --no-resample``) starts it unticked. It applies to the models submitted from then on, to blockwise runs, and to annotation volumes made while it is on: those are at the model's own voxel sizes, and their finetunes train on the data resampled and are served resampled. When a running model reads a level as if it were at its voxel size, the banner above the tabs says so.
 
 Extra Layers
 ------------

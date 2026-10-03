@@ -87,8 +87,8 @@ def pytest_collection_modifyitems(config, items):
 def _fresh_process_state(monkeypatch):
     """Give every test the state a new process starts with: the launcher
     settings at their defaults (not the HOME file, so a test that saved them
-    cannot leak into later ones), an empty chain, no started jobs and a new
-    dashboard session.
+    cannot leak into later ones), an empty chain, no started, starting or
+    failed jobs and a new dashboard session.
 
     The owners are swapped for new ones rather than copied back afterwards.
     That holds only because every reader asks for them when it needs them;
@@ -102,6 +102,8 @@ def _fresh_process_state(monkeypatch):
     monkeypatch.setattr(settings, "_current", settings.LauncherSettings())
     monkeypatch.setattr(process_chain, "_current", process_chain.ProcessChain())
     monkeypatch.setattr(launch, "_started", [])
+    monkeypatch.setattr(launch, "_starting", set())
+    monkeypatch.setattr(launch, "_failed", {})
     monkeypatch.setattr(state, "_session", state.Session())
 
 

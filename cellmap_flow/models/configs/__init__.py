@@ -12,13 +12,15 @@
   LoRA adapter or full weights on top.
 - ``huggingface``: ``HuggingFaceModelConfig``, a cellmap_models export on
   the Hugging Face Hub.
+- ``cellpose``: ``CellposeModelConfig``, Cellpose 4 (Cellpose-SAM) run on
+  each z slice, in its own environment by default.
 
 Import the classes from ``cellmap_flow.models.models_config``, their public
 path: the docs name it, and plugins subclass the classes by it.
 
 Each type imports its framework (torch, dacapo, bioimageio,
-cellmap_models, ...) inside the methods that build the model, because the
-CLIs import every type to build their commands.
+cellmap_models, cellpose, ...) inside the methods that build the model,
+because the CLIs import every type to build their commands.
 
 Every type module is imported here, in this order, however the package is
 first reached. The registry lists the types in the order ModelConfig's
@@ -35,4 +37,5 @@ from cellmap_flow.models.configs import (  # noqa: F401
     cellmap,
     finetune,
     huggingface,
+    cellpose,
 )

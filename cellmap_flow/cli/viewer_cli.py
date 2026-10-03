@@ -35,8 +35,9 @@ def main(dataset, project, resample):
     can be picked and submitted interactively. Use `cellmap_flow yaml` instead
     to launch models from a config file.
 
-    ``--resample`` starts the dashboard's Resample box ticked, so the models
-    launched from it read the data resampled to their voxel size.
+    The dashboard's Resample box starts ticked, so the models launched from
+    it read the data resampled to their voxel size when it has no level at
+    it; ``--no-resample`` starts it unticked.
 
     Example:
 

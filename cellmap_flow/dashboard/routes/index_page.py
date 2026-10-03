@@ -109,6 +109,14 @@ def index():
         mc.repo for mc in session.models_config
         if isinstance(mc, HuggingFaceModelConfig) and mc.name in running_job_names
     ]
+    # And the running zoo models, with the voxel size each was given.
+    from cellmap_flow.models.bioimage_catalog import entry_model_id
+    from cellmap_flow.models.models_config import BioModelConfig
+    default_bioimage_models = [
+        {"id": entry_model_id(mc), "voxel_size": mc.to_dict().get("voxel_size")}
+        for mc in session.models_config
+        if isinstance(mc, BioModelConfig) and mc.name in running_job_names
+    ]
 
     return render_template(
         "index.html",
@@ -118,6 +126,7 @@ def index():
         model_catalog=model_catalog,
         default_models=[j.model_name for j in session.jobs],
         default_hf_repos=default_hf_repos,
+        default_bioimage_models=default_bioimage_models,
         resample=session.resample,
         server_config_cached=session.server_config_cached,
     )

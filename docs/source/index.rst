@@ -9,6 +9,7 @@
    yaml_config
    data_paths
    huggingface
+   bioimage
    custom_script
    post
    plugins

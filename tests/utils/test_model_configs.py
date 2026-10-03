@@ -7,7 +7,9 @@ import json
 import shlex
 import sys
 import time
+import tomllib
 import types
+from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
@@ -18,6 +20,7 @@ from funlib.geometry import Coordinate
 
 from cellmap_flow.models.models_config import (
     BioModelConfig,
+    CellposeModelConfig,
     DaCapoModelConfig,
     FinetuneModelConfig,
     FlyModelConfig,
@@ -45,13 +48,16 @@ SERVE_FORMS = {
         lambda: FlyModelConfig(checkpoint_path="/ckpt/model_checkpoint_1000", channels=["mito", "er"],
                                input_voxel_size=(16, 16, 16), output_voxel_size=(16, 16, 16), name="fly",
                                input_size=(100, 100, 100), output_size=(20, 20, 20)),
-        lambda: BioModelConfig(model_name="affable-shark", voxel_size=(8, 8, 8), edge_length_to_process=64, name="bio"),
+        lambda: BioModelConfig(model="affable-shark", voxel_size=(8, 8, 8), input_size=(20, 256, 256), context=8,
+                               slices_per_chunk=4, weight_format="onnx", name="bio"),
         lambda: FinetuneModelConfig(lora_adapter_path="/runs/my run/lora_adapter",
                                     base_model={"type": "script", "script_path": "/a b/c.py"}, name="ft",
                                     input_voxel_size=(10.48, 8, 8), output_voxel_size=(10.48, 8, 8)),
         lambda: HuggingFaceModelConfig(repo="cellmap/mito-v1", revision="abc123", name="m v1"),
+        lambda: CellposeModelConfig(voxel_size=(16, 8, 8), pretrained_model="/w/my model", output="masks",
+                                    slices_per_chunk=4, batch_size=12, diameter=45, flow_threshold=0.5, name="cp"),
     ],
-    ids=["script", "dacapo", "fly", "bio", "finetune", "huggingface"],
+    ids=["script", "dacapo", "fly", "bio", "finetune", "huggingface", "cellpose"],
 )
 @pytest.mark.parametrize("form", list(SERVE_FORMS))
 def test_the_server_rebuilds_the_same_config(config, form, monkeypatch):
@@ -78,15 +84,13 @@ def test_the_server_rebuilds_the_same_config(config, form, monkeypatch):
 
 @pytest.fixture
 def fake_frameworks(monkeypatch):
-    """Just enough of dacapo and bioimageio to import them."""
-    for name in ("dacapo", "dacapo.experiments", "dacapo.store", "dacapo.store.create_store", "bioimageio"):
+    """Just enough of dacapo to import it. (The bioimage type's stand-in
+    bioimageio is in test_bio_model.py.)"""
+    for name in ("dacapo", "dacapo.experiments", "dacapo.store", "dacapo.store.create_store"):
         monkeypatch.setitem(sys.modules, name, types.ModuleType(name))
     sys.modules["dacapo.experiments"].Run = object
     store = sys.modules["dacapo.store.create_store"]
     store.create_config_store = store.create_weights_store = lambda: None
-    core = types.ModuleType("bioimageio.core")
-    core.load_description = lambda name: object()
-    monkeypatch.setitem(sys.modules, "bioimageio.core", core)
 
 
 def _dacapo_run(out_channels):
@@ -132,15 +136,12 @@ def test_a_shape_mismatch_names_the_models_type():
         _fly_whose_model_outputs(10, name="mito").config
 
 
-@pytest.mark.parametrize("given, missing", [
-    pytest.param({"input_size": (100, 100, 100)}, "output_size", id="input-size-only"),
-    pytest.param({"output_size": (20, 20, 20)}, "input_size", id="output-size-only"),
-])
-def test_a_fly_model_given_one_size_asks_for_the_other(given, missing):
-    """Both used to be replaced by the 178/56 default."""
-    with pytest.raises(ValueError, match=f"no {missing}"):
+def test_a_fly_model_given_an_output_size_asks_for_its_input_size():
+    """Both used to be replaced by the 178/56 default. An input size alone
+    is enough: its output size is computed (tests/utils/test_fly_model.py)."""
+    with pytest.raises(ValueError, match="no input_size"):
         FlyModelConfig(checkpoint_path="unused", channels=["mito"], input_voxel_size=(8, 8, 8),
-                       output_voxel_size=(8, 8, 8), **given)
+                       output_voxel_size=(8, 8, 8), output_size=(20, 20, 20))
 
 
 @pytest.mark.parametrize("out_channels, channels", [
@@ -156,12 +157,26 @@ def test_a_dacapo_models_geometry_and_channels_follow_the_model(fake_frameworks,
     assert (config.channels[3] if out_channels == 9 else config.channels) == channels
 
 
-def test_a_bioimage_model_declares_its_uint8_output(fake_frameworks, monkeypatch):
-    bio = BioModelConfig(model_name="m", voxel_size="8,8,8")
-    axes = ["b", "c", "z", "y", "x"]
-    monkeypatch.setattr(bio, "load_input_information", lambda model: ("in", axes, [16] * 3, (slice(None),) * 5, False))
-    monkeypatch.setattr(bio, "load_output_information", lambda model: (["out"], [axes], [16, 16, 16, 1], [16] * 3, 1))
-    assert np.dtype(bio.output_dtype) == np.uint8 and tuple(bio.config.input_voxel_size) == (8, 8, 8)
+@pytest.mark.parametrize("config, env", [
+    pytest.param(lambda: FlyModelConfig(checkpoint_path="/ckpt/model_checkpoint_1000", channels=["mito"],
+                                        input_voxel_size=(8, 8, 8), output_voxel_size=(8, 8, 8)),
+                 "fly", id="fly-raw-checkpoint"),
+    pytest.param(lambda: FlyModelConfig(checkpoint_path="/ckpt/model.pt", channels=["mito"],
+                                        input_voxel_size=(8, 8, 8), output_voxel_size=(8, 8, 8)),
+                 "fly", id="fly-eager-model-pt"),
+    pytest.param(lambda: FlyModelConfig(checkpoint_path="/ckpt/model.ts", channels=["mito"],
+                                        input_voxel_size=(8, 8, 8), output_voxel_size=(8, 8, 8)),
+                 None, id="fly-torchscript"),
+    pytest.param(lambda: BioModelConfig(model="affable-shark", voxel_size=(8, 8, 8)), "bioimageio", id="bio"),
+    # pixi.toml's dacapo environment does not import DaCapo yet.
+    pytest.param(lambda: DaCapoModelConfig(run_name="r", iteration=0), None, id="dacapo"),
+])
+def test_a_model_types_default_environment(config, env):
+    """The pixi environment a type's server runs in when its entry names none."""
+    assert getattr(config(), "default_env", None) == env
+    if env is not None:
+        pixi = tomllib.loads((Path(__file__).resolve().parents[2] / "pixi.toml").read_text())
+        assert env in pixi["environments"]
 
 
 @pytest.mark.parametrize("seconds_later, model_type, downloads", [

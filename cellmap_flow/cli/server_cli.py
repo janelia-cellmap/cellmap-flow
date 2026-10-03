@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 
 def run_server(
-    model_config, data_path, debug=False, port=0, certfile=None, keyfile=None, resample=False
+    model_config, data_path, debug=False, port=0, certfile=None, keyfile=None, resample=True
 ):
     """Run the CellMapFlow server with the given configuration; ``resample``
     as CellMapFlowServer takes it."""
@@ -45,7 +45,7 @@ def run_server(
     )
 
 
-def serve_entry(model_json, data_path, debug=False, port=0, certfile=None, keyfile=None, resample=False):
+def serve_entry(model_json, data_path, debug=False, port=0, certfile=None, keyfile=None, resample=True):
     """Build the model ``model_json`` describes, and serve it.
 
     ``model_json`` is a model entry (``ModelConfig.launch_entry``) as JSON.

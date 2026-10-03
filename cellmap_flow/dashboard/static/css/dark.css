@@ -533,3 +533,88 @@ textarea.form-control[readonly] {
   color: var(--text-muted);
   margin: 0;
 }
+
+/* ---------- BioImage Model Zoo list (Models tab) ---------- */
+/* Up to 125 rows with the filters off: scroll inside the panel. */
+.zoo-model-list {
+  max-height: 26rem;
+  overflow-y: auto;
+}
+
+.zoo-model-item {
+  margin-bottom: 6px;
+}
+
+.zoo-tag {
+  display: inline-block;
+  margin-left: 4px;
+  padding: 0 5px;
+  font-size: 11px;
+  line-height: 1.5;
+  vertical-align: middle;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-hover);
+  border-radius: var(--radius-sm);
+}
+
+.zoo-link {
+  margin-left: 4px;
+  color: var(--text-muted);
+  text-decoration: none;
+}
+
+.zoo-link:hover {
+  color: var(--accent-hover);
+}
+
+/* One line; the full text is the row's tooltip. */
+.zoo-desc {
+  font-size: 13px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.zoo-voxel-row {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+/* Where the filled-in voxel size comes from; its source is the tooltip. */
+.zoo-trained {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.zoo-voxel {
+  width: 9rem;
+}
+
+.zoo-count {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+
+/* ---------- Models tab: Add a model ---------- */
+.add-model-result {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 8px 10px;
+}
+
+.add-model-fields {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 6px 10px;
+}
+
+.add-model-fields label {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  margin: 0;
+}

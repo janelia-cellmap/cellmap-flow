@@ -22,7 +22,9 @@ started.
 import contextlib
 import logging
 import os
+import shlex
 import signal
+import subprocess
 import sys
 import threading
 from pathlib import Path
@@ -38,7 +40,7 @@ from cellmap_flow.jobs.queues import candidates as gpu_queue_candidates
 from cellmap_flow.jobs.ready import READY_ENV, ready_path
 from cellmap_flow.jobs.settings import launcher_settings
 from cellmap_flow.jobs.site import current_site
-from cellmap_flow.jobs.spec import Job, JobSpec, JobStartError, JobStatus
+from cellmap_flow.jobs.spec import Job, JobSpec, JobStartError, JobStatus, tail
 
 logger = logging.getLogger(__name__)
 
@@ -81,17 +83,114 @@ _started: list = []
 _starting: set = set()
 _starting_lock = threading.Lock()
 
+# The last start of each model name that failed, by name: the dashboard
+# lists it, so the traceback of a server that died on startup stays on the
+# page. It dropped out of the starting jobs the moment it failed, and with
+# it the log being read. A new start of the same name replaces it; only the
+# newest few are kept, as each costs a bpeek on every Job Logs refresh.
+_failed: dict = {}
+FAILED_STARTS_KEPT = 5
+
 
 @contextlib.contextmanager
 def _while_starting(job):
-    """Count ``job`` among the starting jobs until the block is left."""
+    """Count ``job`` among the starting jobs until the block is left, and
+    among the failed starts when it is left by an exception."""
     with _starting_lock:
         _starting.add(job)
+        _failed.pop(getattr(job, "model_name", None), None)
     try:
         yield
+    except BaseException:
+        with _starting_lock:
+            _failed[getattr(job, "model_name", None)] = job
+            while len(_failed) > FAILED_STARTS_KEPT:
+                del _failed[next(iter(_failed))]
+        raise
     finally:
         with _starting_lock:
             _starting.discard(job)
+
+
+class _Installing:
+    """A job's stand-in while the pixi environment its server runs in is
+    installed, before it is submitted: listed among the starting jobs with
+    pixi's output as its log, so the page says what the minutes go on."""
+
+    job_id = host = None
+
+    def __init__(self, model_name, env, log_file):
+        self.model_name, self.env, self.log_file = model_name, env, log_file
+
+    def get_status(self):
+        return None
+
+    def peek(self, max_chars: int = 4000):
+        text = tail(self.log_file, max_chars) or ""
+        return (f"Installing the pixi environment {self.env!r} its server runs in "
+                f"(once; several minutes)...\n{text}").rstrip()
+
+    def kill(self):
+        pass  # pixi finishes the install; the job is not submitted after a Ctrl+C
+
+
+_install_locks: dict = {}
+
+
+def _install_env_first(command: str, job_name: str) -> None:
+    """Install the pixi environment ``command`` runs in, when it is not yet.
+
+    ``pixi run --frozen`` would install it in the job itself, but a job gets
+    STARTUP_TIMEOUT_SECONDS to report a server, and installing torch and
+    its company takes longer: a first model in an environment nobody had
+    used yet (a new Fileglancer user's) was killed while installing. One
+    install per environment at a time; the others wait for it.
+
+    Raises:
+        JobStartError: the install failed; the message ends with pixi's output.
+    """
+    from cellmap_flow.models import envs
+
+    try:
+        argv = shlex.split(command)
+    except ValueError:
+        return
+    env = envs.pixi_env_of(argv)
+    if env is None or envs.is_installed(env):
+        return
+    with _starting_lock:
+        lock = _install_locks.setdefault(env, threading.Lock())
+    with lock:
+        if envs.is_installed(env):
+            return
+        log_file = SERVER_LOG_DIR / f"{job_name}_install_{env}.log"
+        log_file.parent.mkdir(parents=True, exist_ok=True)
+        logger.info(f"Installing the pixi environment {env!r} for {job_name} before submitting it "
+                    f"(once; several minutes); pixi's output is in {log_file}")
+        with _while_starting(_Installing(job_name, env, log_file)):
+            with open(log_file, "w") as out:
+                result = subprocess.run([argv[0], *envs.install_argv(env)[1:]], stdout=out,
+                                        stderr=subprocess.STDOUT)
+            if result.returncode:
+                raise _logged(JobStartError(
+                    f"Could not install the pixi environment {env!r} for {job_name} "
+                    f"(pixi exited {result.returncode}): {tail(log_file, 2000)}"
+                ))
+        logger.info(f"Installed the pixi environment {env!r}")
+
+
+def starting_jobs() -> list:
+    """The jobs submitted but not yet serving (waiting in their queue, or for
+    their server to come up), for the dashboard to show as starting."""
+    with _starting_lock:
+        return [job for job in _starting if job not in _started]
+
+
+def failed_starts() -> list:
+    """The last failed start of each model name not started again since,
+    for the dashboard to keep showing with its log."""
+    with _starting_lock:
+        return [job for job in _failed.values() if job not in _started and job not in _starting]
 
 
 def started_jobs() -> list:
@@ -253,6 +352,8 @@ def start_hosts(
     # Add HTTPS flags if needed
     if use_https:
         command = f"{command} --certfile=host.cert --keyfile=host.key"
+
+    _install_env_first(command, job_name)
 
     job: Job
 

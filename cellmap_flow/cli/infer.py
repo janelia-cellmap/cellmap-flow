@@ -93,7 +93,7 @@ def create_dynamic_command(cli_name: str, config_class: Type[ModelConfig]):
         queue = kwargs.pop("queue", None)
         project = kwargs.pop("project", None)
         server_check = kwargs.pop("server_check", False)
-        resample = kwargs.pop("resample", False)
+        resample = kwargs.pop("resample", True)
         env = kwargs.pop("env", None)
 
         # Fall back to the saved settings if not provided
@@ -201,8 +201,9 @@ def create_dynamic_command(cli_name: str, config_class: Type[ModelConfig]):
         default=None,
         type=str,
         help="Run the server in this environment: a pixi environment of "
-        "cellmap-flow's pixi.toml, or the absolute path of one with "
-        "cellmap-flow installed (default: this one)",
+        "cellmap-flow's pixi.toml, an alias (cellmap_flow envs), or the absolute "
+        "path of one with cellmap-flow installed; current: this one "
+        "(default: the model type's, else this one)",
     )(command_func)
 
     # Add model-specific options based on constructor parameters; -d, -q

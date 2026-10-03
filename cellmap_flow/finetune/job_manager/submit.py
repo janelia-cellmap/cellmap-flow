@@ -38,8 +38,8 @@ logger = logging.getLogger(__name__)
 # The --model-type values finetune_cli accepts, and the ones among them that
 # it takes as --model-entry (the model's to_dict()): cellmap and finetune
 # have no dedicated flags, and fly's flags (its checkpoint and voxel sizes)
-# leave out its input and output sizes, which the trainer then took to be
-# 178 and 56 whatever the model's were.
+# leave out its input and output sizes and its sigmoid, which the trainer
+# then took to be 178 and 56 whatever the model's were.
 TRAINABLE_MODEL_TYPES = frozenset({"fly", "dacapo", "huggingface", "script", "cellmap", "finetune"})
 MODEL_ENTRY_TYPES = frozenset({"cellmap", "finetune", "fly"})
 
@@ -73,7 +73,9 @@ def model_entry(model_config, model_type: str, checkpoint_path: Optional[Path]) 
     entry's own checkpoint, which is how an override reaches a Fly model.
     A model with an ``env`` always goes as an entry: no other flag carries
     the env, and without it the serving YAMLs the trainer writes would run
-    the finetuned model in the default environment.
+    the finetuned model in the default environment. Its type's
+    ``default_env`` needs no entry: the trainer builds the same type, and
+    a finetuned model runs where its base type does.
     """
     if model_type not in MODEL_ENTRY_TYPES and not getattr(model_config, "env", None):
         return None
@@ -278,15 +280,23 @@ SYNCED_TEE = str(Path(__file__).resolve().parents[2] / "jobs" / "synced_tee.py")
 TEE_PYTHON = sys.executable
 
 
+def _model_env(model_config):
+    """The environment the model is served from (``envs.model_env``: its
+    ``env``, else its type's ``default_env``), or None for this one."""
+    from cellmap_flow.models import envs
+
+    return envs.model_env(model_config)
+
+
 def _trainer_argv(model_config) -> List[str]:
-    """``python -P -m`` the trainer: this interpreter, or the model's ``env``'s.
+    """``python -P -m`` the trainer: this interpreter, or the model's environment's.
 
     A model that is served from an environment of its own is trained there
     too, since the trainer builds it. A pixi environment that cannot import
     the trainer is refused here (ValueError) rather than as a job that dies
     on its first import.
     """
-    env = getattr(model_config, "env", None)
+    env = _model_env(model_config)
     if not env:
         return [sys.executable, "-P", "-m", _TRAINER_MODULE]
     from cellmap_flow.models import envs
@@ -296,8 +306,8 @@ def _trainer_argv(model_config) -> List[str]:
 
 
 def _check_env_can_finetune(model_config) -> None:
-    """Raise ValueError when the model's ``env`` cannot run the trainer."""
-    env = getattr(model_config, "env", None)
+    """Raise ValueError when the model's environment cannot run the trainer."""
+    env = _model_env(model_config)
     if not env:
         return
     from cellmap_flow.models import envs
@@ -309,7 +319,7 @@ def _check_env_can_finetune(model_config) -> None:
 
 def _trainer_lib_dir(model_config) -> str:
     """The lib directory of the environment ``_trainer_argv`` runs in."""
-    env = getattr(model_config, "env", None)
+    env = _model_env(model_config)
     if not env:
         return os.path.join(sys.prefix, "lib")
     from cellmap_flow.models import envs
