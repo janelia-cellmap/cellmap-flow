@@ -92,6 +92,7 @@ def fake_cellpose(monkeypatch):
 
 
 def _cellpose(**kw):
+    kw.setdefault("output", "probability")  # one channel, which these serving checks read
     return CellposeModelConfig(voxel_size=8, slices_per_chunk=2, slice_size=TILE, context=16, **kw)
 
 

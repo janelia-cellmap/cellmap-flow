@@ -73,7 +73,11 @@ def _fresh_ids(existing, count, count_up):
         candidates = np.arange(2, min(biggest, len(used) + count + 2) + 1)
         ids = np.setdiff1d(candidates, used, assume_unique=True)[:count]
     if ids.size < count or (ids.size and ids[-1] > biggest):
-        raise ValueError(f"{count} new objects do not fit in the volume's {existing.dtype} labels")
+        raise ValueError(
+            f"{count} new objects do not fit in the volume's {existing.dtype} labels: make a new annotation "
+            "volume, which for an instance model (Cellpose, affinities) now holds uint16 ids, or raise Min "
+            "size or the threshold so the seed makes fewer objects"
+        )
     return ids
 
 

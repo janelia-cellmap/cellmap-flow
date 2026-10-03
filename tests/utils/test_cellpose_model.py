@@ -142,7 +142,7 @@ def test_the_model_is_built_once(fake_cellpose):
 
 
 def test_the_probability_is_the_sigmoid_of_the_inner_logits(fake_cellpose):
-    model = CellposeModelConfig(voxel_size=8, slices_per_chunk=3, slice_size=20, context=5)
+    model = CellposeModelConfig(voxel_size=8, output="probability", slices_per_chunk=3, slice_size=20, context=5)
     idi = ArrayIDI(np.zeros((10, 60, 60), dtype=np.uint8), (8, 8, 8))
     roi = Roi((8, 80, 160), (3 * 8, 20 * 8, 20 * 8))
 
@@ -237,12 +237,12 @@ def test_an_entry_round_trips_through_to_dict_and_the_launch_entry():
 
     # A bare entry: the defaults, written out, so an exported YAML says what ran.
     assert registry.build_model({"type": "cellpose", "voxel_size": 64}, "cp").to_dict() == {
-        "type": "cellpose", "voxel_size": [64, 64, 64], "pretrained_model": "cpsam_v2", "output": "probability",
+        "type": "cellpose", "voxel_size": [64, 64, 64], "pretrained_model": "cpsam_v2", "output": "flows",
         "slices_per_chunk": 8, "slice_size": 512, "context": 32, "batch_size": 16, "flow_threshold": 0.4,
         "cellprob_threshold": 0.0, "name": "cp",
     }
-    flows = registry.build_model({"type": "cellpose", "voxel_size": 64, "output": "flows"}, "cp")
-    assert registry.build_model(flows.to_dict(), "cp").output == "flows"
+    probability = registry.build_model({"type": "cellpose", "voxel_size": 64, "output": "probability"}, "cp")
+    assert registry.build_model(probability.to_dict(), "cp").output == "probability"
 
 
 def test_the_form_builds_one_from_its_strings():
@@ -291,3 +291,18 @@ def test_a_non_integer_voxel_size_is_kept(fake_cellpose):
     config = CellposeModelConfig(voxel_size="5.24,4,4", slices_per_chunk=2, slice_size=64, context=8).config
     assert (config.input_voxel_size, config.write_shape, config.read_shape) == (
         (5.24, 4, 4), (10.48, 256, 256), (10.48, 320, 320))
+
+
+def test_all_channels_are_served_by_default_and_the_layer_opens_on_the_cell_probability():
+    """flow_y, channel 0, looks like noise; the probability is what to look at."""
+    from cellmap_flow.post.postprocessors import CellposeMasksPostprocessor
+    from cellmap_flow.viewer.layers import display_channel
+
+    model = CellposeModelConfig(voxel_size=8)
+    assert model.output == "flows" and model.display_channel == 2
+    assert CellposeModelConfig(voxel_size=8, output="probability").display_channel is None
+    info = {"display_channel": 2, "output_channels": 3, "has_channel": True}
+    assert display_channel(info, []) == 2
+    # Masks made of the flows are one channel: nothing to choose.
+    assert display_channel(info, [CellposeMasksPostprocessor()]) is None
+    assert display_channel({**info, "display_channel": None}, []) is None

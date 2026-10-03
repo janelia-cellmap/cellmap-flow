@@ -40,6 +40,7 @@ from scipy.special import expit
 from cellmap_flow.dashboard.finetune_utils import sync_annotation_volume_from_minio
 from cellmap_flow.dashboard.routes.finetune.blueprint import finetune_bp
 from cellmap_flow.dashboard.routes.finetune.common import (
+    INSTANCE_TARGETS,
     autodetect_output_type,
     find_model_config,
     session_store,
@@ -86,7 +87,6 @@ SEED_METHODS = (
 
 # Training targets made of instances, where ids must differ between nearby
 # objects (finetune.cli's output types).
-INSTANCE_TARGETS = ("affinities", "flows")
 
 
 class _Refused(Exception):

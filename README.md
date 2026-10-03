@@ -223,13 +223,13 @@ models:
     type: cellpose
     voxel_size: 64
     pretrained_model: cpsam_v2   # or cpsam, or the path of finetuned weights
-    output: probability          # or flows, or masks
+    output: flows                # the default: all three channels; or probability, or masks
 ```
 
 | `output` | Channels | dtype | |
 |---|---|---|---|
-| `probability` | `cell` | float32 | The cell probability, 0 to 1 (the sigmoid of Cellpose's logit) |
-| `flows` | `flow_y`, `flow_x`, `cell` | float32 | Cellpose's flows towards each object's centre (its `dP`), then the cell probability |
+| `flows` (default) | `flow_y`, `flow_x`, `cell` | float32 | Cellpose's flows towards each object's centre (its `dP`, about -5 to 5), then the cell probability; the layer opens on `cell`, and `CellposeMasksPostprocessor` makes masks of them |
+| `probability` | `cell` | float32 | The cell probability alone, 0 to 1 (the sigmoid of Cellpose's logit) |
 | `masks` | `cell` | uint64 | Instance ids, unique within a chunk |
 
 Masks are made chunk by chunk: add `MortonSegmentationRelabeling` to the

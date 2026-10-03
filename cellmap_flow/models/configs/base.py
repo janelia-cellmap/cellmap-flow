@@ -260,6 +260,11 @@ class ModelConfig:
     # property that decides per model. Never written by to_dict(), which
     # says only what the entry said; read through effective_env.
     default_env = None
+    # The channel a layer of this model opens on, when its output has several
+    # that mean different things (Cellpose's flow_y, flow_x and cell), and the
+    # one its display range is measured on; None for the first, with the
+    # range over all of them. The server reports it (model_info).
+    display_channel = None
     # Whether the finetune trainer can train this type's models: it trains
     # the module ``trainable_model()`` gives, and serves the result through
     # ``serve_trained``. A type sets it once those two do the right thing for

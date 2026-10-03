@@ -5,16 +5,15 @@ read with ``context`` voxels of margin in y and x that are cut off again, so
 that objects at the chunk's edge are seen whole. What the layer shows is
 ``output``:
 
-- ``"probability"``: Cellpose's cell probability, from 0 to 1 (float32), the
-  sigmoid of its logit; one channel. It is computed per voxel, so it joins
-  up across chunks, and the mask dynamics are skipped, which makes it (and
-  ``"flows"``) faster than masks.
-- ``"flows"``: what Cellpose's network predicts, three float32 channels:
-  flowY and flowX (the flows towards each object's centre, about -1 to 1
-  inside objects; Cellpose's ``dP``) and the cell probability as above.
-  Per voxel too, so it joins up across chunks; for segmenting a whole
-  volume elsewhere from Cellpose's own outputs, or for seeing what a
-  finetune changed.
+- ``"flows"`` (the default): all of what Cellpose's network predicts, three
+  float32 channels named flow_y, flow_x and cell: the flows towards each
+  object's centre (Cellpose's ``dP``, about -5 to 5) and the cell
+  probability, 0 to 1, the sigmoid of its logit. The layer opens on the
+  cell probability (``display_channel``), the flows a channel away; the
+  CellposeMasksPostprocessor makes masks of them on the server, with
+  thresholds changeable from the dashboard; a seed reads the probability.
+  Computed per voxel, so it joins up across chunks.
+- ``"probability"``: the cell probability alone, one channel.
 - ``"masks"``: Cellpose's instance masks (uint64), ids unique within a
   chunk. Masks are made per chunk: an object that crosses a chunk's edge is
   cut there, with another id on each side. Objects are joined from slice to
@@ -226,9 +225,9 @@ class CellposeModelConfig(ModelConfig):
             ``diameter``.
         pretrained_model: "cpsam_v2" (default), "cpsam", "cpdino",
             "cpdino-vitb", or the path of finetuned Cellpose weights.
-        output: "probability" (float32, 0 to 1, one channel), "flows"
-            (float32: flowY, flowX and the cell probability) or "masks"
-            (uint64, ids unique within a chunk).
+        output: "flows" (the default; float32: flow_y, flow_x and the cell
+            probability), "probability" (float32, 0 to 1, one channel) or
+            "masks" (uint64, ids unique within a chunk).
         slices_per_chunk: z slices in a chunk.
         slice_size: voxels a side, in y and x, of each chunk's slices.
         context: voxels read on each side in y and x beyond those, and cut off.
@@ -255,11 +254,18 @@ class CellposeModelConfig(ModelConfig):
     # dashboard reads this to pick the target; finetune.cli's --output-type).
     finetune_output_type = "flows"
 
+    @property
+    def display_channel(self):
+        """The cell probability's channel when the output has several (flows):
+        the layer opens on it rather than on flow_y."""
+        channels = OUTPUT_CHANNELS[self.output]
+        return channels.index("cell") if len(channels) > 1 else None
+
     def __init__(
         self,
         voxel_size,
         pretrained_model: str = "cpsam_v2",
-        output: str = "probability",
+        output: str = "flows",
         slices_per_chunk: int = 8,
         slice_size: int = 512,
         context: int = 32,

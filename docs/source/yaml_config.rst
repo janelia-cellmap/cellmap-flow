@@ -503,7 +503,7 @@ older numpy. ``example/cellpose_sam.yaml`` serves it on jrc_mus-salivary-1.
       cellpose_sam:
         type: cellpose
         voxel_size: 64
-        output: probability
+        output: flows      # the default: all three channels
 
 .. list-table::
    :header-rows: 1
@@ -526,8 +526,8 @@ older numpy. ``example/cellpose_sam.yaml`` serves it on jrc_mus-salivary-1.
        models also need facebookresearch's ``dinov3`` package, which the
        ``cellpose4`` environment does not install.
    * - ``output``
-     - ``probability``
-     - ``probability``, ``flows`` or ``masks``: see the table below.
+     - ``flows``
+     - ``flows``, ``probability`` or ``masks``: see the table below.
    * - ``slices_per_chunk``
      - 8
      - z slices in a chunk.
@@ -573,18 +573,19 @@ What each output serves:
      - Channels
      - dtype
      - What it is
+   * - ``flows`` (the default)
+     - ``flow_y``, ``flow_x``, ``cell``
+     - float32
+     - All the network predicts: the flows towards each object's centre,
+       in y and in x (Cellpose's ``dP``, about -5 to 5), then the cell
+       probability, 0 to 1 (the sigmoid of its logit). The layer opens on
+       ``cell`` (the model's ``display_channel``), the flows on its channel
+       slider; ``CellposeMasksPostprocessor`` makes masks of them on the
+       server, with thresholds that can be changed from the dashboard.
    * - ``probability``
      - ``cell``
      - float32
-     - The cell probability, 0 to 1: the sigmoid of the logit Cellpose's
-       network predicts.
-   * - ``flows``
-     - ``flow_y``, ``flow_x``, ``cell``
-     - float32
-     - What the network predicts: the flows towards each object's centre,
-       in y and in x (Cellpose's ``dP``, about -1 to 1 inside objects), then
-       the cell probability as above. For computing masks elsewhere, or for
-       seeing what a finetune changed.
+     - The cell probability alone.
    * - ``masks``
      - ``cell``
      - uint64
@@ -616,7 +617,7 @@ as the ``cellpose4`` environment cannot run them. Tick one, enter its voxel
 size (required: the scale at which the objects are about 30 voxels across)
 and pick its output (and for masks, *Link slices*: ``stitch_threshold``),
 then *Submit Models*. Its job and layer are named after the model and any
-output but the probability (``cellpose_sam_v2``, ``cellpose_sam_v2_masks``),
+output but the default (``cellpose_sam_v2``, ``cellpose_sam_v2_masks``),
 so *+ output* runs another output of the same model beside it. Unticking
 stops it; changing the voxel size or the linking of a running one restarts
 it; a reloaded page ticks the running ones with their settings.

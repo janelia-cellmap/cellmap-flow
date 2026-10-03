@@ -171,7 +171,7 @@ class CellposeSelection(BaseModel):
 
     model: Annotated[str, _required("model", strip=True)] = Field(None, validate_default=True)
     voxel_size: Annotated[Optional[list], BeforeValidator(_voxel_size)] = None
-    output: str = "probability"
+    output: str = "flows"
     stitch_threshold: Annotated[Optional[float], BeforeValidator(
         lambda v: None if v is None or (isinstance(v, str) and not v.strip())
         else _number(v, float, "stitch_threshold"))] = None

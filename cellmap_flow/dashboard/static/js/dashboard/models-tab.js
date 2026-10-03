@@ -328,8 +328,8 @@ export function initModelsTab({ onModelsSubmitted } = {}) {
   // "+ output" adds a row to run another output of the same model beside.
   const cellposeData = pageData("cellpose-data");
   const CELLPOSE_OUTPUTS = [
-    ["probability", "Probability", "The cell probability, 0 to 1: one channel, joins up across chunks."],
-    ["flows", "Flows", "Cellpose's flows towards each cell's centre (flowY, flowX) and its cell probability: three channels. Pick this for the CellposeMasksPostprocessor, whose thresholds can then be changed live."],
+    ["flows", "All channels", "Cellpose's three channels: flow_y and flow_x (the flows towards each cell's centre) and cell (its probability, which the layer opens on; the flows are on its channel slider). The CellposeMasksPostprocessor makes masks of them, with thresholds you can change live."],
+    ["probability", "Probability only", "The cell probability, 0 to 1: one channel."],
     ["masks", "Masks", "Instance masks, made chunk by chunk: an object crossing a chunk's edge gets an id on each side."],
   ];
   const CELLPOSE_VOXEL_TITLE =
@@ -384,7 +384,7 @@ export function initModelsTab({ onModelsSubmitted } = {}) {
       const row = cellposeRow(model, null, true);
       row.querySelector(".cellpose-voxel").value = voxel;
       const select = row.querySelector(".cellpose-output");
-      select.value = free || "probability";
+      select.value = free || "flows";
       select.dispatchEvent(new Event("change"));
       rows[rows.length - 1].after(row);
     });
@@ -424,7 +424,7 @@ export function initModelsTab({ onModelsSubmitted } = {}) {
       option.title = title;
       output.append(option);
     });
-    output.value = (settings && settings.output) || "probability";
+    output.value = (settings && settings.output) || "flows";
 
     // Masks only: linking each slice's masks to the slice before's.
     const stitchLabel = document.createElement("label");

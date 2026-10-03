@@ -24,7 +24,7 @@ import re
 import neuroglancer
 
 from cellmap_flow.io.multiscale import closest_raw_scale
-from cellmap_flow.pipeline_spec import chain_is_segmentation
+from cellmap_flow.pipeline_spec import chain_is_segmentation, chain_num_channels
 from cellmap_flow.serving.probe import output_display_range
 from cellmap_flow.viewer.raw import PREDICTION_COLORS, get_raw_layer, prediction_shader
 from cellmap_flow.serving.client import fetch_model_info
@@ -142,7 +142,25 @@ def prediction_layer(model, host, url_blob, *, dataset_path, postprocess, shader
     layer = {"source": source, "shader": shader}
     if shader_controls:
         layer["shaderControls"] = shader_controls
+    channel = display_channel(info, postprocess)
+    if channel is not None:
+        # Neuroglancer's channel axis is a local dimension, its position the
+        # channel shown; at the channel's centre, as neuroglancer places them.
+        layer["local_position"] = [channel + 0.5]
     return neuroglancer.ImageLayer(**layer)
+
+
+def display_channel(info, postprocess):
+    """The channel a model's layer opens on: the one its server names
+    (``display_channel``, Cellpose's cell probability rather than flow_y),
+    while the chain keeps the model's channels; None otherwise (the first)."""
+    channel = info.get("display_channel")
+    channels = info.get("output_channels")
+    if channel is None or not channels or not info.get("has_channel", True):
+        return None
+    if chain_num_channels(postprocess, channels) != channels:
+        return None
+    return int(channel)
 
 
 def raw_layer(dataset_path, *, wrap_raw=True, shader=None, shader_controls=None):

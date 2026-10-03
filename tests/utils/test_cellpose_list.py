@@ -76,10 +76,10 @@ def _panel(dashboard):
 
 
 @pytest.mark.parametrize("model, output, name", [
-    ("cpsam_v2", "probability", "cellpose_sam_v2"),
-    ("cpsam_v2", "flows", "cellpose_sam_v2_flows"),
+    ("cpsam_v2", "flows", "cellpose_sam_v2"),
+    ("cpsam_v2", "probability", "cellpose_sam_v2_probability"),
     ("cpsam_v2", "masks", "cellpose_sam_v2_masks"),
-    ("cpsam", "probability", "cellpose_sam"),
+    ("cpsam", "flows", "cellpose_sam"),
 ])
 def test_a_job_is_named_by_its_model_and_any_output_but_the_default(model, output, name):
     assert launch.cellpose_job_name(model, output) == name
@@ -97,24 +97,24 @@ def test_submit_serves_a_ticked_model_from_the_cellpose4_environment(submit, tmp
     monkeypatch.setenv("CELLMAP_FLOW_PIXI_MANIFEST", str(manifest))
     monkeypatch.setenv("PIXI_EXE", "/opt/pixi")
 
-    answer = submit({"model": "cpsam_v2", "voxel_size": "64", "output": "probability"})
+    answer = submit({"model": "cpsam_v2", "voxel_size": "64", "output": "flows"})
     assert answer.status_code == 200
     assert answer.get_json()["cellpose_models"][0]["model"] == "cpsam_v2"
     (command,) = submit.commands
     argv, entry = _served_entry(command)
     assert argv[:7] == ["/opt/pixi", "run", "--frozen", "--manifest-path", str(manifest), "-e", "cellpose4"]
     assert entry == {"type": "cellpose", "pretrained_model": "cpsam_v2", "voxel_size": [64, 64, 64],
-                     "output": "probability", "name": "cellpose_sam_v2"}
+                     "output": "flows", "name": "cellpose_sam_v2"}
     assert [mc.name for mc in get_session().models_config if isinstance(mc, CellposeModelConfig)] == [
         "cellpose_sam_v2"]
 
 
 def test_one_models_outputs_run_side_by_side_and_masks_take_the_slice_linking(submit):
-    answer = submit({"model": "cpsam_v2", "voxel_size": "64", "output": "probability", "stitch_threshold": 0.5},
+    answer = submit({"model": "cpsam_v2", "voxel_size": "64", "output": "flows", "stitch_threshold": 0.5},
                     {"model": "cpsam_v2", "voxel_size": "64", "output": "masks", "stitch_threshold": "0.5"})
     assert answer.status_code == 200
     probability, masks = (_served_entry(c)[1] for c in submit.commands)
-    # Read for masks only: the probability's is dropped, as the tab hides it.
+    # Read for masks only: the flows' is dropped, as the tab hides it.
     assert (probability["name"], "stitch_threshold" in probability) == ("cellpose_sam_v2", False)
     assert (masks["name"], masks["output"], masks["stitch_threshold"]) == ("cellpose_sam_v2_masks", "masks", 0.5)
 
@@ -171,5 +171,5 @@ def test_the_page_lists_the_models_and_ticks_the_running_ones_with_their_setting
     assert [m["model"] for m in panel["models"]] == ["cpsam_v2", "cpsam"]
     assert panel["running"] == [
         {"model": "cpsam_v2", "output": "masks", "voxel_size": [16, 8, 8], "stitch_threshold": 0.3},
-        {"model": "cpsam_v2", "output": "probability", "voxel_size": [64, 64, 64], "stitch_threshold": 0.0},
+        {"model": "cpsam_v2", "output": "flows", "voxel_size": [64, 64, 64], "stitch_threshold": 0.0},
     ]

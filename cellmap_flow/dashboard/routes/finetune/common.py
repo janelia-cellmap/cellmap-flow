@@ -202,6 +202,27 @@ def declared_output_type(model_config):
     return None
 
 
+# The targets trained on instances, whose annotation volumes hold an id per
+# object rather than foreground and background alone.
+INSTANCE_TARGETS = ("affinities", "flows")
+
+
+def annotation_dtype_for(model_config):
+    """The labels' dtype of a new annotation volume for ``model_config``.
+
+    uint8 (ids up to 255) for a model trained on foreground and background;
+    uint16 (up to 65535) for one trained on instances (affinities, Cellpose's
+    flows), whose seeds number each object: 282 of a Cellpose model's masks
+    in one box did not fit a uint8 volume.
+    """
+    try:
+        output_type, _ = autodetect_output_type(model_config, None, None)
+    except Exception as e:
+        logger.info(f"Could not tell what {getattr(model_config, 'name', 'the model')} trains on ({e}): uint8 labels")
+        return "uint8"
+    return "uint16" if output_type in INSTANCE_TARGETS else "uint8"
+
+
 def autodetect_output_type(model_config, output_type, offsets):
     from cellmap_flow.finetune.target_transforms import read_offsets_from_script
 

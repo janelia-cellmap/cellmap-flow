@@ -559,3 +559,23 @@ def test_a_cellpose_flows_server_seeds_its_instances_from_the_masks_it_makes(mon
     channels = view_labels._seed_plan("cp", None)[0]
     # Thresholding a flows server reads its probability, not the flows beside it.
     assert channels == (slice(2, 3) if instances else None)
+
+
+@pytest.mark.parametrize("output_type, dtype", [("flows", "uint16"), ("affinities", "uint16"), ("binary", "uint8"),
+                                                ("distance", "uint8")])
+def test_a_new_volume_for_an_instance_model_holds_uint16_ids(monkeypatch, output_type, dtype):
+    """282 objects of a Cellpose model's masks in one box did not fit a uint8 volume."""
+    from cellmap_flow.dashboard.routes.finetune import common
+
+    monkeypatch.setattr(common, "autodetect_output_type", lambda config, output_type_, offsets: (output_type, None))
+    assert common.annotation_dtype_for(object()) == dtype
+
+
+def test_a_model_whose_target_cannot_be_told_gets_uint8_labels(monkeypatch):
+    from cellmap_flow.dashboard.routes.finetune import common
+
+    def unknown(config, output_type, offsets):
+        raise ValueError("no offsets")
+
+    monkeypatch.setattr(common, "autodetect_output_type", unknown)
+    assert common.annotation_dtype_for(object()) == "uint8"

@@ -138,7 +138,7 @@ def test_cellpose_masks_say_which_models_cannot_take_them():
     flows = CellposeModelConfig(voxel_size=8, output="flows", name="cp_flows")
     assert step.problem_with(flows) is None
     assert step.problem_with(SimpleNamespace(name="ft", base_model_config=flows)) is None
-    assert "Output: Flows" in step.problem_with(CellposeModelConfig(voxel_size=8, name="cp"))
+    assert "Output: All channels" in step.problem_with(CellposeModelConfig(voxel_size=8, output="probability", name="cp"))
     assert "not a Cellpose model" in step.problem_with(ScriptModelConfig(script_path="/s.py", name="mito"))
 
 

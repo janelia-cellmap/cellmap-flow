@@ -14,6 +14,7 @@ from cellmap_flow.dashboard.finetune_utils import ensure_minio_serving
 from cellmap_flow.dashboard.requests import CreateVolume, parse
 from cellmap_flow.dashboard.routes.finetune.blueprint import finetune_bp
 from cellmap_flow.dashboard.routes.finetune.common import (
+    annotation_dtype_for,
     current_chain,
     ensure_corrections_storage,
     find_model_config,
@@ -36,7 +37,7 @@ from cellmap_flow.serving.client import (
 logger = logging.getLogger(__name__)
 
 
-def serve_new_volume(geometry, corrections_dir, dataset_path, model_name):
+def serve_new_volume(geometry, corrections_dir, dataset_path, model_name, annotation_dtype="uint8"):
     """Write a new volume with ``geometry`` into ``corrections_dir`` and serve it.
 
     The volume records the dashboard's current normalization and
@@ -55,6 +56,7 @@ def serve_new_volume(geometry, corrections_dir, dataset_path, model_name):
         model_name=model_name,
         input_norm=input_norm,
         postprocess=postprocess,
+        annotation_dtype=annotation_dtype,
     )
     minio_url = ensure_minio_serving(zarr_path, volume_id, output_base_dir=corrections_dir)
     return volume_id, zarr_path, rewrite_minio_url_for_proxy(minio_url)
@@ -222,7 +224,7 @@ def create_annotation_volume():
         geometry = plan_volume(dataset_path, config, resample=session.resample)
         _, corrections_dir = ensure_corrections_storage(output_path)
         volume_id, zarr_path, minio_url = serve_new_volume(
-            geometry, corrections_dir, dataset_path, model_name
+            geometry, corrections_dir, dataset_path, model_name, annotation_dtype_for(model_config)
         )
         session_store().register_volume(
             volume_id,

@@ -187,9 +187,9 @@ CELLPOSE_MODELS = {
 
 
 def cellpose_job_name(model: str, output: str) -> str:
-    """A Cellpose model's job, layer and config name: "cpsam_v2" serving its
-    probability is cellpose_sam_v2, its flows cellpose_sam_v2_flows and its
-    masks cellpose_sam_v2_masks.
+    """A Cellpose model's job, layer and config name: "cpsam_v2" serving all
+    its channels (flows, the default) is cellpose_sam_v2, its probability
+    alone cellpose_sam_v2_probability and its masks cellpose_sam_v2_masks.
 
     The output is in the name, so one model's outputs can run side by side
     (the probability to look at, the masks to proofread), each its own job
@@ -198,7 +198,7 @@ def cellpose_job_name(model: str, output: str) -> str:
     (``update_run_models``), rather than leaving the old one running beside.
     """
     base = "cellpose_" + re.sub(r"^cp", "", model)
-    if output != "probability":
+    if output != "flows":
         base += "_" + output
     return re.sub(r"\W+", "_", base).strip("_")
 
@@ -229,7 +229,7 @@ def _cellpose_params(selections):
     """
     params, names = [], set()
     for selection in selections:
-        model, output = selection["model"], selection.get("output") or "probability"
+        model, output = selection["model"], selection.get("output") or "flows"
         label = CELLPOSE_MODELS[model][0] if model in CELLPOSE_MODELS else model
         if model not in CELLPOSE_MODELS:
             raise ValueError(f"{model} is not one of the Models tab's Cellpose models ({', '.join(CELLPOSE_MODELS)})")
