@@ -189,6 +189,10 @@ def test_the_voxel_size_comes_from_the_rdf_unless_given(fake_bioimageio):
     fake_bioimageio["no unit"] = unet_3d()
     with pytest.raises(ValueError, match="no physical voxel size .* give voxel_size"):
         BioModelConfig(model="no unit").config
+    # A zoo EM model without a unit reads at the size it was trained at.
+    fake_bioimageio["organized-badger"] = unet_3d()
+    assert BioModelConfig(model="organized-badger").config.input_voxel_size == (100, 80, 80)
+    assert BioModelConfig(model="organized-badger", voxel_size=8).config.input_voxel_size == (8, 8, 8)
 
 
 @pytest.mark.parametrize("dtypes, served", [

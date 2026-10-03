@@ -16,8 +16,9 @@ RDF, read as format 0.5; a 0.4 one is converted) gives the rest:
   chunks meet where the model saw both sides of the seam. ``context`` sets
   it; the zoo's EM U-Nets give none.
 - The voxel size: the input's space axes' ``scale`` and ``unit``, in nm,
-  unless ``voxel_size`` is given. The zoo's EM models give no unit, so they
-  need ``voxel_size``: the level the model should read.
+  unless ``voxel_size`` is given. No zoo model gives a unit, so the zoo's EM
+  models read at the voxel size they were trained at, from cellmap-flow's
+  own table (``bioimage_voxel_sizes.yaml``); any other needs ``voxel_size``.
 - The output: every output tensor's channels, one tensor after another, as
   the model's own postprocessing leaves them (a sigmoid, if it has one;
   nothing clipped or rescaled), served as float32 unless the RDF says the
@@ -230,8 +231,10 @@ class BioModelConfig(ModelConfig):
             packaged .zip.
         voxel_size: nm per input voxel (one number, or z, y, x): the level
             the model reads. By default the RDF's, from its input's space
-            axes' scale and unit; a model whose RDF gives no unit (the zoo's
-            EM models) needs it. A 2D model's z is the spacing of its slices,
+            axes' scale and unit; for a model whose RDF gives no unit (all of
+            the zoo's), the one it was trained at when cellmap-flow's table
+            knows it (``bioimage_catalog.trained_at``: the zoo's EM models);
+            else it is needed. A 2D model's z is the spacing of its slices,
             its y by default.
         input_size: voxels a side of the tile the model is given, one number
             or one per space axis of the model (z, y, x; y, x for a 2D
@@ -429,13 +432,21 @@ class BioModelConfig(ModelConfig):
         return crop
 
     def _input_voxel_size(self, space) -> tuple:
-        """nm per input voxel, z, y, x: voxel_size, else the RDF's space axes' scale and unit."""
+        """nm per input voxel, z, y, x: voxel_size, else the RDF's space axes'
+        scale and unit, else the one it was trained at (``trained_at``)."""
         if self.voxel_size is not None:
             return self.voxel_size
         nm = []
         for axis in space:
             per_unit = NM_PER_UNIT.get(axis.unit) if axis.unit else None
             if per_unit is None:
+                from cellmap_flow.models.bioimage_catalog import trained_at
+
+                trained = trained_at(str(self.model)) or {}
+                if trained.get("voxel_size"):
+                    logger.info(f"{self.model}: at {trained['voxel_size']} nm, the voxel size it was trained at "
+                                f"({trained['trained_on']}); its description gives none")
+                    return _numbers(trained["voxel_size"])
                 raise ValueError(
                     f"{self.model}'s description gives its input no physical voxel size (axis {axis.id} "
                     f"has unit {axis.unit!r}); give voxel_size, the nm per voxel of the level it should read"

@@ -177,10 +177,19 @@ it still needs:
         pretrained_model: cpsam
 
 ``-n`` names the model and ``-v 16,8,8`` gives the voxel size of a model
-that does not say its own (Cellpose, bioimage.io). ``--run -d DATA`` (with
-``-q``, ``-P`` and ``--resample`` as ``infer`` takes them) serves the model
-right away, as ``cellmap_flow yaml`` would. The dashboard does the same for
-a reference pasted into it (``POST /api/models/resolve``).
+that does not say its own (Cellpose, a bioimage.io model cellmap-flow has no
+trained voxel size for); a zoo EM model's entry gets the one it was trained
+at, with a note saying where it comes from. ``--run -d DATA`` (with ``-q``,
+``-P`` and ``--resample`` as ``infer`` takes them) serves the model right
+away, as ``cellmap_flow yaml`` would.
+
+In the dashboard, the same ``REF`` goes in the Models tab's *Add a model* box.
+*Resolve* (``POST /api/models/resolve``) shows what it was taken to be and
+where it runs, with a box for each value it still needs; *Run*
+(``POST /api/models/add``) starts it, and it joins the models with a ticked
+box, stopped when unticked like any other. A config YAML (one with
+``models:``) is refused with how to run it: it is a whole run, for
+``cellmap_flow yaml``.
 
 ``REF`` is checked against these in order, and the first that matches wins:
 
@@ -204,7 +213,8 @@ a reference pasted into it (``POST /api/models/resolve``).
    (``metadata.json`` and ``model.ts``). Any other model on the Hub is
    refused: wrap it in a script (:doc:`custom_script`).
 6. A BioImage Model Zoo nickname or id (``affable-shark``,
-   ``10.5281/zenodo.5764892``), looked up in the zoo's index.
+   ``10.5281/zenodo.5764892``), looked up in the zoo's model list, the one
+   the Models tab shows (bioimage.io's server, else its legacy index).
 
 5 and 6 are checked online; with ``--offline`` (or when the Hub or zoo
 cannot be reached) a repo or zoo-shaped name is taken on trust, with a note.
@@ -403,7 +413,7 @@ mitochondria U-Net) on jrc_mus-salivary-1.
       mito_bioimageio:
         type: bioimage
         model: conscientious-dromedary
-        voxel_size: 16
+        voxel_size: 16     # without it: 30x8x8, the voxel size it was trained at
 
 ``model`` is anything ``bioimageio.core`` loads: a zoo id or nickname
 ("conscientious-dromedary", "affable-shark"), a DOI or URL, or the path of a
@@ -422,11 +432,15 @@ The model's description says the rest, unless the entry does:
      - Default
      - Meaning
    * - ``voxel_size``
-     - the description's
+     - the description's, else the one it was trained at
      - nm per input voxel, one number or z, y, x: the level the model reads.
        The description gives one when its input's space axes have a unit
-       (``scale`` and ``unit``); the zoo's EM models give none, so they need
-       it. A 2D model's z is the spacing of its slices, its y by default.
+       (``scale`` and ``unit``). No zoo model does, so for the zoo's EM models
+       cellmap-flow uses the voxel size each was trained at, looked up by hand
+       (``cellmap_flow/models/bioimage_voxel_sizes.yaml``, with each number's
+       source; some were trained on downsampled data, the Platynereis nuclei
+       model at 100x80x80). Any other model needs it. A 2D model's z is the
+       spacing of its slices, its y by default.
    * - ``input_size``
      - 256 (2D), 128 (3D)
      - Voxels a side of the tile the model is given, one number or one per

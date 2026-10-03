@@ -18,8 +18,10 @@ models:
     # A zoo id (nickname), a DOI or URL, or the path of a model's rdf.yaml
     # or .zip.
     model: "conscientious-dromedary"
-    # Its description gives no physical voxel size: this is the level read
-    # (s1, 16 nm). It fixes its tile at 20 x 256 x 256 voxels.
+    # Its description gives no physical voxel size. Without this line it
+    # reads at the one it was trained at, 30x8x8 nm (MitoEM; cellmap-flow's
+    # bioimage_voxel_sizes.yaml); this example reads s1 (16 nm) as it is,
+    # the level it was checked at. It fixes its tile at 20 x 256 x 256 voxels.
     voxel_size: 16
     # Its description gives no halo either: cut 16 voxels off each side of
     # the tile's output in y and x, so chunks meet where it saw both sides

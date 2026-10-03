@@ -48,9 +48,12 @@ pixi run cellmap_flow view -d data_path
 
 Model families whose dependencies clash with the default environment run in
 their own pixi environment, chosen by the model's type (see
-[Model types](#model-types)). Each is installed the first time a model needs
-it, or ahead of time with `pixi run cellmap_flow envs install <name>`;
-`cellmap_flow envs` lists them and what is installed.
+[Model types](#model-types)); nobody picks one by hand. Each is installed from
+the lockfile the first time a model needs it, before that model's job is
+submitted (several minutes, once; the dashboard's Job Logs shows pixi's
+output meanwhile), so a new user, Fileglancer's included, needs nothing
+beforehand. `pixi run cellmap_flow envs install <name>` installs one ahead of
+time, and `cellmap_flow envs` lists them and what is installed.
 
 ### With pip
 
@@ -132,10 +135,15 @@ $ cellmap_flow view -d data_path                       # pick models in the dash
 $ cellmap_flow yaml config.yaml                        # the models a YAML lists
 $ cellmap_flow infer huggingface -r cellmap/fly_organelles_run08_438000 -d data_path
 $ cellmap_flow infer cellpose -v 64 -d data_path                 # Cellpose-SAM
-$ cellmap_flow infer bioimage -m conscientious-dromedary -v 16 -d data_path
+$ cellmap_flow infer bioimage -m conscientious-dromedary -d data_path
 $ cellmap_flow infer fly -c /path/to/run/model_checkpoint_20000 -d data_path
 $ cellmap_flow infer script -s script_path -d data_path
 ```
+
+In the dashboard, the Models tab's *Job Logs* shows each model's server output
+as it runs: `starting` while it waits in its queue, installs its environment or
+loads, then its status, and `failed to start` with its traceback when it dies
+before serving.
 
 A data path is a zarr (v2 or v3), N5 or Neuroglancer precomputed volume, on
 disk or at an `s3://`, `gs://` or `https://` URL; public buckets are read
@@ -156,12 +164,19 @@ server runs in. In a YAML it is the model entry's `type`; on the command line,
 CellMap catalog, the `cellmap/*` Hugging Face models and the BioImage Model
 Zoo. `cellmap_flow models` lists every type and its arguments.
 
-You rarely need to pick the type yourself: `cellmap_flow add REF` (or the
-Models tab's *Add a model*) works it out from what you have, and prints the
-YAML entry, saying what it still needs:
+You rarely need to pick the type yourself: `cellmap_flow add REF` works it out
+from what you have, and prints the YAML entry, saying what it still needs. In
+the dashboard, paste the same `REF` into the Models tab's *Add a model* box:
+*Resolve* says what it is and where it runs and asks for anything missing
+(a Cellpose model's voxel size, say), and *Run* starts it, ticked among the
+models, without a YAML or a restart. `REF` is a path (a model script, an
+exported folder, a checkpoint, Cellpose weights), a zoo nickname or bioimage.io
+link, a Cellpose model name, a Hugging Face `org/repo`, or
+`dacapo:run@iteration`. A whole config YAML is a run, not a model: run it with
+`cellmap_flow yaml`.
 
 ```bash
-$ cellmap_flow add conscientious-dromedary -v 16      # a BioImage Model Zoo model
+$ cellmap_flow add conscientious-dromedary            # a BioImage Model Zoo model
 $ cellmap_flow add cpsam_v2 -v 64                     # Cellpose-SAM
 $ cellmap_flow add cellmap/fly_organelles_run08_438000 # a Hugging Face repo
 $ cellmap_flow add /path/to/run/model_checkpoint_20000 --run -d data_path
@@ -170,11 +185,11 @@ $ cellmap_flow add /path/to/run/model_checkpoint_20000 --run -d data_path
 | Type | For | Runs in |
 |---|---|---|
 | `cellmap` | A folder cellmap_models exported (`metadata.json` + `model.ts`) | this environment |
-| `huggingface` | A `cellmap/*` repo on Hugging Face, in that format | this environment |
+| `huggingface` | A Hugging Face repo in that format (the dashboard lists `cellmap/*`; any other model on the Hub needs a script) | this environment |
 | `fly` | A fly_organelles training checkpoint, `.ts` or `model.pt` | `fly` (a `.ts`: this environment) |
 | `cellpose` | Cellpose 4: Cellpose-SAM (`cpsam_v2`, `cpsam`) or finetuned weights | `cellpose4` |
 | `bioimage` | Any BioImage Model Zoo model: id, nickname, DOI, URL or `rdf.yaml` | `bioimageio` |
-| `dacapo` | A DaCapo run and iteration | this environment |
+| `dacapo` | A DaCapo run and iteration | this environment (DaCapo does not install in pixi's `dacapo` environment yet: give `env:` a conda environment with it) |
 | `script` | Any model, from a Python script that defines it | this environment |
 | `finetune` | A LoRA adapter or full finetune on top of another model | its base model's |
 
@@ -212,22 +227,25 @@ for non-commercial use. See [example/cellpose_sam.yaml](example/cellpose_sam.yam
 
 `type: bioimage` runs a [BioImage Model Zoo](https://bioimage.io) model
 through bioimageio.core, with the model's own pre- and postprocessing. Its
-tile size, halo, output type and (when the model declares units) voxel size
-come from the model's description. The zoo's EM models declare no units, so
-give `voxel_size`, and a `context` of about 16 voxels to hide seams between
-chunks:
+tile size, halo and output type come from the model's description. No zoo
+model declares the voxel size it was trained at, so cellmap-flow keeps them for
+the zoo's EM models, looked up by hand with their sources
+([bioimage_voxel_sizes.yaml](cellmap_flow/models/bioimage_voxel_sizes.yaml)),
+and runs each at its own unless `voxel_size` says otherwise; any other model
+needs `voxel_size`. A `context` of about 16 voxels hides seams between chunks:
 
 ```yaml
 models:
   mito:
     type: bioimage
-    model: conscientious-dromedary   # a 3D mitochondria U-Net
-    voxel_size: 16
+    model: conscientious-dromedary   # a 3D mitochondria U-Net, trained at 30x8x8 nm (MitoEM)
     context: [0, 16, 16]
 ```
 
 In the dashboard, the Models tab's *BioImage Model Zoo* list searches the
-whole zoo (EM models by default). Models that need prompts or several inputs
+whole zoo (EM models by default), refreshed from bioimage.io hourly, and fills
+in a ticked model's voxel size with the one it was trained at, saying where
+that number comes from. Models that need prompts or several inputs
 (micro-SAM) are not supported. See [example/bioimage_em.yaml](example/bioimage_em.yaml).
 
 ### fly_organelles checkpoints

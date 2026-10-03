@@ -27,7 +27,7 @@ In the dashboard
    No zoo model says it in its description, so cellmap-flow keeps them in
    ``cellmap_flow/models/bioimage_voxel_sizes.yaml``, looked up by hand.
    Some were trained on downsampled data (the Platynereis nuclei model at
-   80x80x100 nm), and a few across several resolutions, for which you enter
+   100x80x80 nm, z,y,x), and a few across several resolutions, for which you enter
    one. Other models need one entered.
 4. Click **Submit Models**. As for the other models, unticking one and
    submitting again stops it, and a running one is ticked when the page is
@@ -47,8 +47,10 @@ The same model, without the dashboard:
       mito:
         type: bioimage
         model: kind-seashell
-        voxel_size: [8, 8, 8]
+        # voxel_size: [8, 8, 8]   # without it, the one it was trained at: 30x8x8 (MitoEM)
 
+As in the dashboard, a zoo EM model reads at the voxel size it was trained at
+unless ``voxel_size`` says otherwise; any other model needs it.
 ``example/bioimage_em.yaml`` is a complete one.
 
 From Python
