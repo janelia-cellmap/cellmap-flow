@@ -53,6 +53,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../../../../yaml_config.html">YAML Configuration</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../data_paths.html">Data paths</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../huggingface.html">HuggingFace Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../bioimage.html">BioImage Model Zoo</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../custom_script.html">Custom Model</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../post.html">PostProcessors</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../plugins.html">Plugins</a></li>
@@ -197,7 +198,7 @@ is logged and left out, rather than stopping the dashboard.</p>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="cellmap_flow.cli.yaml_cli.run_multiple">
-<span class="sig-prename descclassname"><span class="pre">cellmap_flow.cli.yaml_cli.</span></span><span class="sig-name descname"><span class="pre">run_multiple</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">models</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="../../models/models_config/index.html#cellmap_flow.models.models_config.ModelConfig" title="cellmap_flow.models.models_config.ModelConfig"><span class="pre">cellmap_flow.models.models_config.ModelConfig</span></a><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dataset_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">charge_group</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">queue</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">wrap_raw</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">resample</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#cellmap_flow.cli.yaml_cli.run_multiple" title="Link to this definition"></a></dt>
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.cli.yaml_cli.</span></span><span class="sig-name descname"><span class="pre">run_multiple</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">models</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><a class="reference internal" href="../../models/models_config/index.html#cellmap_flow.models.models_config.ModelConfig" title="cellmap_flow.models.models_config.ModelConfig"><span class="pre">cellmap_flow.models.models_config.ModelConfig</span></a><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dataset_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">charge_group</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">queue</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">wrap_raw</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">resample</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#cellmap_flow.cli.yaml_cli.run_multiple" title="Link to this definition"></a></dt>
 <dd><p>Submit multiple model inference jobs.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -206,7 +207,7 @@ is logged and left out, rather than stopping the dashboard.</p>
 <li><p><strong>dataset_path</strong> – Base path to the dataset</p></li>
 <li><p><strong>charge_group</strong> – Billing/chargeback group</p></li>
 <li><p><strong>queue</strong> – Job queue name</p></li>
-<li><p><strong>resample</strong> – start each server with –resample (the YAML’s <code class="docutils literal notranslate"><span class="pre">resample</span></code>)</p></li>
+<li><p><strong>resample</strong> – start each server with –resample, else –no-resample (the YAML’s <code class="docutils literal notranslate"><span class="pre">resample</span></code>)</p></li>
 </ul>
 </dd>
 </dl>
@@ -231,9 +232,10 @@ walltime: “08:00”      # optional; LSF run limit, “HH:MM” or minutes.</p
 </dd>
 </dl>
 <p>wrap_raw: true         # optional; false serves raw straight from the file
-resample: false        # optional; true resamples the data to each model’s</p>
+resample: true         # optional, the default: resample the data to each</p>
 <blockquote>
-<div><p># input voxel size when it has no level at it.</p>
+<div><p># model’s input voxel size when it has no level at
+# it; false reads the nearest level as if it were.</p>
 </div></blockquote>
 <dl class="simple">
 <dt>extra_layers:          # optional; more volumes to show beside the raw data</dt><dd><ul class="simple">

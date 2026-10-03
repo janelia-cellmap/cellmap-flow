@@ -96,7 +96,7 @@ Module Contents
                     the reloaded config falls back to the built-in default
    :param json_data: dict with "input_norm"/"postprocess" keys reflecting the
                      currently active normalization/postprocessing, if any
-   :param resample: the dashboard's Resample setting; written only when on
+   :param resample: the dashboard's Resample setting, written either way
 
    :returns: YAML text (str) ready to write to a file.
 

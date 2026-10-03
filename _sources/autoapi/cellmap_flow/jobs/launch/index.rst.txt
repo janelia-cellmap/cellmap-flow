@@ -37,6 +37,7 @@ Attributes
    cellmap_flow.jobs.launch.SERVER_LOG_DIR
    cellmap_flow.jobs.launch.PENDING_FALLBACK_SECONDS
    cellmap_flow.jobs.launch.STARTUP_TIMEOUT_SECONDS
+   cellmap_flow.jobs.launch.FAILED_STARTS_KEPT
 
 
 Functions
@@ -44,6 +45,8 @@ Functions
 
 .. autoapisummary::
 
+   cellmap_flow.jobs.launch.starting_jobs
+   cellmap_flow.jobs.launch.failed_starts
    cellmap_flow.jobs.launch.started_jobs
    cellmap_flow.jobs.launch.cleanup_handler
    cellmap_flow.jobs.launch.install_cleanup_handlers
@@ -66,6 +69,22 @@ Module Contents
 
 .. py:data:: STARTUP_TIMEOUT_SECONDS
    :value: 300
+
+
+.. py:data:: FAILED_STARTS_KEPT
+   :value: 5
+
+
+.. py:function:: starting_jobs() -> list
+
+   The jobs submitted but not yet serving (waiting in their queue, or for
+   their server to come up), for the dashboard to show as starting.
+
+
+.. py:function:: failed_starts() -> list
+
+   The last failed start of each model name not started again since,
+   for the dashboard to keep showing with its log.
 
 
 .. py:function:: started_jobs() -> list

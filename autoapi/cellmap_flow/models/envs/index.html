@@ -53,6 +53,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../../../../yaml_config.html">YAML Configuration</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../data_paths.html">Data paths</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../huggingface.html">HuggingFace Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../bioimage.html">BioImage Model Zoo</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../custom_script.html">Custom Model</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../post.html">PostProcessors</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../plugins.html">Plugins</a></li>
@@ -130,9 +131,9 @@ environment’s cellpose 3 allows, and transformer models pin their own
 stacks. A model entry’s <code class="docutils literal notranslate"><span class="pre">env</span></code> says where such a model’s inference server,
 and its finetuning job, run instead:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">models</span><span class="p">:</span>
-  <span class="n">cpsam</span><span class="p">:</span>
+  <span class="n">my_model</span><span class="p">:</span>
     <span class="nb">type</span><span class="p">:</span> <span class="n">script</span>
-    <span class="n">script_path</span><span class="p">:</span> <span class="n">example</span><span class="o">/</span><span class="n">cellpose_sam_model</span><span class="o">.</span><span class="n">py</span>
+    <span class="n">script_path</span><span class="p">:</span> <span class="o">/</span><span class="n">path</span><span class="o">/</span><span class="n">to</span><span class="o">/</span><span class="n">my_model</span><span class="o">.</span><span class="n">py</span>
     <span class="n">env</span><span class="p">:</span> <span class="n">cellpose4</span>
 </pre></div>
 </div>
@@ -140,7 +141,9 @@ and its finetuning job, run instead:</p>
 <ul class="simple">
 <li><p>the name of an environment in cellmap-flow’s <code class="docutils literal notranslate"><span class="pre">pixi.toml</span></code>. The program
 runs as <code class="docutils literal notranslate"><span class="pre">pixi</span> <span class="pre">run</span> <span class="pre">--frozen</span> <span class="pre">--manifest-path</span> <span class="pre">&lt;pixi.toml&gt;</span> <span class="pre">-e</span> <span class="pre">&lt;name&gt;</span> <span class="pre">...</span></code>,
-which installs the environment from the lockfile on first use. The
+which installs the environment from the lockfile on first use (a
+server’s launcher installs it before submitting the job:
+<code class="docutils literal notranslate"><span class="pre">jobs.launch._install_env_first</span></code>). The
 manifest is the one in the checkout cellmap-flow is installed from, or
 <code class="docutils literal notranslate"><span class="pre">CELLMAP_FLOW_PIXI_MANIFEST</span></code>; pixi is <code class="docutils literal notranslate"><span class="pre">PIXI_EXE</span></code> (which <code class="docutils literal notranslate"><span class="pre">pixi</span> <span class="pre">run</span></code>
 sets), else the <code class="docutils literal notranslate"><span class="pre">pixi</span></code> on PATH.</p></li>
@@ -150,11 +153,29 @@ cellmap-flow installed. The program runs as <code class="docutils literal notran
 </ul>
 <p>A value with a <code class="docutils literal notranslate"><span class="pre">/</span></code> in it, or starting with <code class="docutils literal notranslate"><span class="pre">~</span></code>, is a path; anything
 else is a pixi environment’s name.</p>
+<p>A name that <code class="docutils literal notranslate"><span class="pre">~/.cellmap_flow/envs.yaml</span></code> maps to a path is that path: an
+alias, which wins over a pixi environment of the same name. It is how a
+machine without pixi (a conda-only cluster account) supplies the
+environments the model types default to:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">cellpose4</span><span class="p">:</span> <span class="o">/</span><span class="n">groups</span><span class="o">/</span><span class="n">lab</span><span class="o">/</span><span class="n">home</span><span class="o">/</span><span class="n">me</span><span class="o">/</span><span class="n">miniconda3</span><span class="o">/</span><span class="n">envs</span><span class="o">/</span><span class="n">cellpose4</span>
+</pre></div>
+</div>
+<p>The file is read each time it is needed, and <code class="docutils literal notranslate"><span class="pre">CELLMAP_FLOW_ENVS_FILE</span></code>
+names another.</p>
+<p>A model type can name the environment its models run in when the entry
+gives none, as <code class="docutils literal notranslate"><span class="pre">ModelConfig.default_env</span></code>: a class attribute, or a
+property that decides per model. The environment a model runs in
+(<code class="docutils literal notranslate"><span class="pre">model_env</span></code>) is its entry’s <code class="docutils literal notranslate"><span class="pre">env</span></code>, else its type’s <code class="docutils literal notranslate"><span class="pre">default_env</span></code>,
+else this one; <code class="docutils literal notranslate"><span class="pre">env:</span> <span class="pre">current</span></code> runs it in this one whatever its type’s
+default. A default that cannot be used here falls back to this
+environment with a warning (<code class="docutils literal notranslate"><span class="pre">_usable_default</span></code> says when and why), where
+an explicit <code class="docutils literal notranslate"><span class="pre">env</span></code> that cannot be used is an error.</p>
 <p><code class="docutils literal notranslate"><span class="pre">env</span></code> is not a constructor argument of any model type, so it is not on
 the model’s own form or command line: <code class="docutils literal notranslate"><span class="pre">registry.build_model</span></code> takes it
 off the entry and sets <code class="docutils literal notranslate"><span class="pre">ModelConfig.env</span></code>, <code class="docutils literal notranslate"><span class="pre">to_dict()</span></code> and
-<code class="docutils literal notranslate"><span class="pre">launch_entry</span></code> write it back, and <code class="docutils literal notranslate"><span class="pre">serving.launch</span></code> takes it off again
-to put the server in the environment, so the server never sees it.</p>
+<code class="docutils literal notranslate"><span class="pre">launch_entry</span></code> write it back (never the type’s default, so an exported
+YAML says only what its author chose), and <code class="docutils literal notranslate"><span class="pre">serving.launch</span></code> takes it off
+again to put the server in the environment, so the server never sees it.</p>
 <p>Only the server and the trainer move. Everything else (the dashboard,
 blockwise, <code class="docutils literal notranslate"><span class="pre">infer</span> <span class="pre">--server-check</span></code>) runs the model, when it runs it at
 all, in the process’s own environment.</p>
@@ -162,7 +183,16 @@ all, in the process’s own environment.</p>
 <h2>Attributes<a class="headerlink" href="#attributes" title="Link to this heading"></a></h2>
 <table class="autosummary longtable docutils align-default">
 <tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.models.envs.PIXI_MANIFEST_ENV" title="cellmap_flow.models.envs.PIXI_MANIFEST_ENV"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PIXI_MANIFEST_ENV</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.models.envs.logger" title="cellmap_flow.models.envs.logger"><code class="xref py py-obj docutils literal notranslate"><span class="pre">logger</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.models.envs.PIXI_MANIFEST_ENV" title="cellmap_flow.models.envs.PIXI_MANIFEST_ENV"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PIXI_MANIFEST_ENV</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.models.envs.ALIASES_FILE_ENV" title="cellmap_flow.models.envs.ALIASES_FILE_ENV"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ALIASES_FILE_ENV</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.models.envs.CURRENT" title="cellmap_flow.models.envs.CURRENT"><code class="xref py py-obj docutils literal notranslate"><span class="pre">CURRENT</span></code></a></p></td>
 <td><p></p></td>
 </tr>
 </tbody>
@@ -175,25 +205,70 @@ all, in the process’s own environment.</p>
 <tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.models.envs.is_path" title="cellmap_flow.models.envs.is_path"><code class="xref py py-obj docutils literal notranslate"><span class="pre">is_path</span></code></a>(→ bool)</p></td>
 <td><p>Whether <code class="docutils literal notranslate"><span class="pre">env</span></code> names a directory rather than a pixi environment.</p></td>
 </tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.models.envs.aliases_file" title="cellmap_flow.models.envs.aliases_file"><code class="xref py py-obj docutils literal notranslate"><span class="pre">aliases_file</span></code></a>(→ pathlib.Path)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">CELLMAP_FLOW_ENVS_FILE</span></code>, else <code class="docutils literal notranslate"><span class="pre">~/.cellmap_flow/envs.yaml</span></code>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.models.envs.aliases" title="cellmap_flow.models.envs.aliases"><code class="xref py py-obj docutils literal notranslate"><span class="pre">aliases</span></code></a>(→ Dict[str, str])</p></td>
+<td><p>The aliases file's names and their paths, <code class="docutils literal notranslate"><span class="pre">~</span></code> expanded; {} without one.</p></td>
+</tr>
 <tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.models.envs.pixi_manifest" title="cellmap_flow.models.envs.pixi_manifest"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pixi_manifest</span></code></a>(→ pathlib.Path)</p></td>
 <td><p>The pixi.toml whose environments <code class="docutils literal notranslate"><span class="pre">env</span></code> names.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.models.envs.pixi_environments" title="cellmap_flow.models.envs.pixi_environments"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pixi_environments</span></code></a>(→ Dict[str, dict])</p></td>
 <td><p>Each environment <code class="docutils literal notranslate"><span class="pre">manifest</span></code> declares, as a table with <code class="docutils literal notranslate"><span class="pre">features</span></code>.</p></td>
 </tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.models.envs.pixi_program" title="cellmap_flow.models.envs.pixi_program"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pixi_program</span></code></a>(→ str)</p></td>
+<td><p>The pixi to run: <code class="docutils literal notranslate"><span class="pre">PIXI_EXE</span></code>, else the one on PATH, else <code class="docutils literal notranslate"><span class="pre">&quot;pixi&quot;</span></code>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.models.envs.has_pixi" title="cellmap_flow.models.envs.has_pixi"><code class="xref py py-obj docutils literal notranslate"><span class="pre">has_pixi</span></code></a>(→ bool)</p></td>
+<td><p>Whether this machine has a pixi to run (<code class="docutils literal notranslate"><span class="pre">PIXI_EXE</span></code> or one on PATH).</p></td>
+</tr>
 <tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.models.envs.validate" title="cellmap_flow.models.envs.validate"><code class="xref py py-obj docutils literal notranslate"><span class="pre">validate</span></code></a>(→ str)</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">env</span></code> checked, with a path's <code class="docutils literal notranslate"><span class="pre">~</span></code> expanded; what the model keeps.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.models.envs.prefix" title="cellmap_flow.models.envs.prefix"><code class="xref py py-obj docutils literal notranslate"><span class="pre">prefix</span></code></a>(→ str)</p></td>
+<td><p>The directory <code class="docutils literal notranslate"><span class="pre">env</span></code> is installed in.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.models.envs.is_installed" title="cellmap_flow.models.envs.is_installed"><code class="xref py py-obj docutils literal notranslate"><span class="pre">is_installed</span></code></a>(→ bool)</p></td>
+<td><p>Whether <code class="docutils literal notranslate"><span class="pre">env</span></code> has a python yet (a pixi one is installed on first use).</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.models.envs.is_running_in" title="cellmap_flow.models.envs.is_running_in"><code class="xref py py-obj docutils literal notranslate"><span class="pre">is_running_in</span></code></a>(→ bool)</p></td>
+<td><p>Whether this process already runs in <code class="docutils literal notranslate"><span class="pre">env</span></code>: the server or trainer a</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.models.envs.effective" title="cellmap_flow.models.envs.effective"><code class="xref py py-obj docutils literal notranslate"><span class="pre">effective</span></code></a>(→ Optional[str])</p></td>
+<td><p>The environment a model runs in, or None for this one.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.models.envs.model_env" title="cellmap_flow.models.envs.model_env"><code class="xref py py-obj docutils literal notranslate"><span class="pre">model_env</span></code></a>(→ Optional[str])</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">effective</span></code> of a model config's <code class="docutils literal notranslate"><span class="pre">env</span></code> and <code class="docutils literal notranslate"><span class="pre">default_env</span></code>.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.models.envs.declared_default" title="cellmap_flow.models.envs.declared_default"><code class="xref py py-obj docutils literal notranslate"><span class="pre">declared_default</span></code></a>(cls)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">cls.default_env</span></code> as the class declares it: a name, None, or the</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.models.envs.decides_per_model" title="cellmap_flow.models.envs.decides_per_model"><code class="xref py py-obj docutils literal notranslate"><span class="pre">decides_per_model</span></code></a>(→ bool)</p></td>
+<td><p>Whether a <code class="docutils literal notranslate"><span class="pre">declared_default</span></code> is decided per model, not one name.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.models.envs.type_default" title="cellmap_flow.models.envs.type_default"><code class="xref py py-obj docutils literal notranslate"><span class="pre">type_default</span></code></a>(→ Optional[str])</p></td>
+<td><p>The default environment of <code class="docutils literal notranslate"><span class="pre">cls</span></code>'s models when it is one for all of</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.models.envs.install_argv" title="cellmap_flow.models.envs.install_argv"><code class="xref py py-obj docutils literal notranslate"><span class="pre">install_argv</span></code></a>(→ List[str])</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">pixi</span> <span class="pre">install</span></code> of <code class="docutils literal notranslate"><span class="pre">env</span></code> from pixi.lock as it is (<code class="docutils literal notranslate"><span class="pre">--frozen</span></code>), as</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.models.envs.pixi_env_of" title="cellmap_flow.models.envs.pixi_env_of"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pixi_env_of</span></code></a>(→ Optional[str])</p></td>
+<td><p>The pixi environment <code class="docutils literal notranslate"><span class="pre">argv</span></code> runs in when it is <code class="docutils literal notranslate"><span class="pre">server_argv</span></code>'s</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.models.envs.server_argv" title="cellmap_flow.models.envs.server_argv"><code class="xref py py-obj docutils literal notranslate"><span class="pre">server_argv</span></code></a>(→ List[str])</p></td>
 <td><p>The program that serves a model in <code class="docutils literal notranslate"><span class="pre">env</span></code>, before its <code class="docutils literal notranslate"><span class="pre">--model</span></code> and <code class="docutils literal notranslate"><span class="pre">-d</span></code>.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.models.envs.python_argv" title="cellmap_flow.models.envs.python_argv"><code class="xref py py-obj docutils literal notranslate"><span class="pre">python_argv</span></code></a>(→ List[str])</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.models.envs.python" title="cellmap_flow.models.envs.python"><code class="xref py py-obj docutils literal notranslate"><span class="pre">python</span></code></a>(→ List[str])</p></td>
+<td><p>The python of <code class="docutils literal notranslate"><span class="pre">env</span></code>: a directory's <code class="docutils literal notranslate"><span class="pre">bin/python</span></code>, or <code class="docutils literal notranslate"><span class="pre">pixi</span> <span class="pre">run</span> <span class="pre">...</span> <span class="pre">python</span></code>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.models.envs.python_argv" title="cellmap_flow.models.envs.python_argv"><code class="xref py py-obj docutils literal notranslate"><span class="pre">python_argv</span></code></a>(→ List[str])</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">python</span> <span class="pre">-P</span> <span class="pre">-m</span> <span class="pre">&lt;module&gt;</span></code> in <code class="docutils literal notranslate"><span class="pre">env</span></code>.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.models.envs.lib_dir" title="cellmap_flow.models.envs.lib_dir"><code class="xref py py-obj docutils literal notranslate"><span class="pre">lib_dir</span></code></a>(→ str)</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.models.envs.lib_dir" title="cellmap_flow.models.envs.lib_dir"><code class="xref py py-obj docutils literal notranslate"><span class="pre">lib_dir</span></code></a>(→ str)</p></td>
 <td><p>The lib directory of <code class="docutils literal notranslate"><span class="pre">env</span></code>, for LD_LIBRARY_PATH.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.models.envs.finetune_problem" title="cellmap_flow.models.envs.finetune_problem"><code class="xref py py-obj docutils literal notranslate"><span class="pre">finetune_problem</span></code></a>(→ Optional[str])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.models.envs.finetune_problem" title="cellmap_flow.models.envs.finetune_problem"><code class="xref py py-obj docutils literal notranslate"><span class="pre">finetune_problem</span></code></a>(→ Optional[str])</p></td>
 <td><p>Why the trainer cannot run in <code class="docutils literal notranslate"><span class="pre">env</span></code>, or None when it can (as far as</p></td>
 </tr>
 </tbody>
@@ -202,14 +277,48 @@ all, in the process’s own environment.</p>
 <section id="module-contents">
 <h2>Module Contents<a class="headerlink" href="#module-contents" title="Link to this heading"></a></h2>
 <dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.models.envs.logger">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.envs.</span></span><span class="sig-name descname"><span class="pre">logger</span></span><a class="headerlink" href="#cellmap_flow.models.envs.logger" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
 <dt class="sig sig-object py" id="cellmap_flow.models.envs.PIXI_MANIFEST_ENV">
 <span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.envs.</span></span><span class="sig-name descname"><span class="pre">PIXI_MANIFEST_ENV</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'CELLMAP_FLOW_PIXI_MANIFEST'</span></span><a class="headerlink" href="#cellmap_flow.models.envs.PIXI_MANIFEST_ENV" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.models.envs.ALIASES_FILE_ENV">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.envs.</span></span><span class="sig-name descname"><span class="pre">ALIASES_FILE_ENV</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'CELLMAP_FLOW_ENVS_FILE'</span></span><a class="headerlink" href="#cellmap_flow.models.envs.ALIASES_FILE_ENV" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.models.envs.CURRENT">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.envs.</span></span><span class="sig-name descname"><span class="pre">CURRENT</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'current'</span></span><a class="headerlink" href="#cellmap_flow.models.envs.CURRENT" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="cellmap_flow.models.envs.is_path">
 <span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.envs.</span></span><span class="sig-name descname"><span class="pre">is_path</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">env</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#cellmap_flow.models.envs.is_path" title="Link to this definition"></a></dt>
 <dd><p>Whether <code class="docutils literal notranslate"><span class="pre">env</span></code> names a directory rather than a pixi environment.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.models.envs.aliases_file">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.envs.</span></span><span class="sig-name descname"><span class="pre">aliases_file</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">pathlib.Path</span></span></span><a class="headerlink" href="#cellmap_flow.models.envs.aliases_file" title="Link to this definition"></a></dt>
+<dd><p><code class="docutils literal notranslate"><span class="pre">CELLMAP_FLOW_ENVS_FILE</span></code>, else <code class="docutils literal notranslate"><span class="pre">~/.cellmap_flow/envs.yaml</span></code>.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.models.envs.aliases">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.envs.</span></span><span class="sig-name descname"><span class="pre">aliases</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#cellmap_flow.models.envs.aliases" title="Link to this definition"></a></dt>
+<dd><p>The aliases file’s names and their paths, <code class="docutils literal notranslate"><span class="pre">~</span></code> expanded; {} without one.</p>
+<p>Read on each call, so an alias added while the dashboard runs is used
+by the next launch.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference internal" href="../../config/yaml/index.html#cellmap_flow.config.yaml.ConfigError" title="cellmap_flow.config.yaml.ConfigError"><strong>ConfigError</strong></a> – the file is not a mapping of names to paths.</p>
+</dd>
+</dl>
 </dd></dl>
 
 <dl class="py function">
@@ -230,16 +339,102 @@ declared. The list form (<code class="docutils literal notranslate"><span class=
 </dd></dl>
 
 <dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.models.envs.pixi_program">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.envs.</span></span><span class="sig-name descname"><span class="pre">pixi_program</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#cellmap_flow.models.envs.pixi_program" title="Link to this definition"></a></dt>
+<dd><p>The pixi to run: <code class="docutils literal notranslate"><span class="pre">PIXI_EXE</span></code>, else the one on PATH, else <code class="docutils literal notranslate"><span class="pre">&quot;pixi&quot;</span></code>.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.models.envs.has_pixi">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.envs.</span></span><span class="sig-name descname"><span class="pre">has_pixi</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#cellmap_flow.models.envs.has_pixi" title="Link to this definition"></a></dt>
+<dd><p>Whether this machine has a pixi to run (<code class="docutils literal notranslate"><span class="pre">PIXI_EXE</span></code> or one on PATH).</p>
+</dd></dl>
+
+<dl class="py function">
 <dt class="sig sig-object py" id="cellmap_flow.models.envs.validate">
 <span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.envs.</span></span><span class="sig-name descname"><span class="pre">validate</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">env</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'model'</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#cellmap_flow.models.envs.validate" title="Link to this definition"></a></dt>
 <dd><p><code class="docutils literal notranslate"><span class="pre">env</span></code> checked, with a path’s <code class="docutils literal notranslate"><span class="pre">~</span></code> expanded; what the model keeps.</p>
+<p>An alias stays a name, so an exported YAML names the environment the
+same way on every machine, and each machine’s aliases file says where
+it is. <code class="docutils literal notranslate"><span class="pre">current</span></code> is kept as it is.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Raises<span class="colon">:</span></dt>
-<dd class="field-odd"><p><a class="reference internal" href="../../config/yaml/index.html#cellmap_flow.config.yaml.ConfigError" title="cellmap_flow.config.yaml.ConfigError"><strong>ConfigError</strong></a> – <code class="docutils literal notranslate"><span class="pre">env</span></code> is not a string, a path is relative or has no
-<code class="docutils literal notranslate"><span class="pre">bin/python</span></code>, or no pixi.toml declares an environment by that
-name.</p>
+<dd class="field-odd"><p><a class="reference internal" href="../../config/yaml/index.html#cellmap_flow.config.yaml.ConfigError" title="cellmap_flow.config.yaml.ConfigError"><strong>ConfigError</strong></a> – <code class="docutils literal notranslate"><span class="pre">env</span></code> is not a string, a path (an alias’s included)
+is relative or has no <code class="docutils literal notranslate"><span class="pre">bin/python</span></code>, or no pixi.toml declares
+an environment by that name.</p>
 </dd>
 </dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.models.envs.prefix">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.envs.</span></span><span class="sig-name descname"><span class="pre">prefix</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">env</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#cellmap_flow.models.envs.prefix" title="Link to this definition"></a></dt>
+<dd><p>The directory <code class="docutils literal notranslate"><span class="pre">env</span></code> is installed in.</p>
+<p>For a pixi environment that is where pixi installs it by default,
+<code class="docutils literal notranslate"><span class="pre">.pixi/envs/&lt;name&gt;</span></code> beside the manifest; a pixi configured with
+detached environments puts it elsewhere.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.models.envs.is_installed">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.envs.</span></span><span class="sig-name descname"><span class="pre">is_installed</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">env</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#cellmap_flow.models.envs.is_installed" title="Link to this definition"></a></dt>
+<dd><p>Whether <code class="docutils literal notranslate"><span class="pre">env</span></code> has a python yet (a pixi one is installed on first use).</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.models.envs.is_running_in">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.envs.</span></span><span class="sig-name descname"><span class="pre">is_running_in</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">env</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#cellmap_flow.models.envs.is_running_in" title="Link to this definition"></a></dt>
+<dd><p>Whether this process already runs in <code class="docutils literal notranslate"><span class="pre">env</span></code>: the server or trainer a
+model was moved into, where building the model is what it is there for.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.models.envs.effective">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.envs.</span></span><span class="sig-name descname"><span class="pre">effective</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">env</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">default_env</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'model'</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#cellmap_flow.models.envs.effective" title="Link to this definition"></a></dt>
+<dd><p>The environment a model runs in, or None for this one.</p>
+<p><code class="docutils literal notranslate"><span class="pre">env</span></code> is the entry’s own (validated when the entry was read):
+itself, unless it is <code class="docutils literal notranslate"><span class="pre">current</span></code>. Without one, <code class="docutils literal notranslate"><span class="pre">default_env</span></code>, its
+type’s, when it can be used here (<code class="docutils literal notranslate"><span class="pre">_usable_default</span></code>).</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.models.envs.model_env">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.envs.</span></span><span class="sig-name descname"><span class="pre">model_env</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model_config</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#cellmap_flow.models.envs.model_env" title="Link to this definition"></a></dt>
+<dd><p><code class="docutils literal notranslate"><span class="pre">effective</span></code> of a model config’s <code class="docutils literal notranslate"><span class="pre">env</span></code> and <code class="docutils literal notranslate"><span class="pre">default_env</span></code>.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.models.envs.declared_default">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.envs.</span></span><span class="sig-name descname"><span class="pre">declared_default</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">cls</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.models.envs.declared_default" title="Link to this definition"></a></dt>
+<dd><p><code class="docutils literal notranslate"><span class="pre">cls.default_env</span></code> as the class declares it: a name, None, or the
+property (or other descriptor) that decides it per model.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.models.envs.decides_per_model">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.envs.</span></span><span class="sig-name descname"><span class="pre">decides_per_model</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">declared</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#cellmap_flow.models.envs.decides_per_model" title="Link to this definition"></a></dt>
+<dd><p>Whether a <code class="docutils literal notranslate"><span class="pre">declared_default</span></code> is decided per model, not one name.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.models.envs.type_default">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.envs.</span></span><span class="sig-name descname"><span class="pre">type_default</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">cls</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#cellmap_flow.models.envs.type_default" title="Link to this definition"></a></dt>
+<dd><p>The default environment of <code class="docutils literal notranslate"><span class="pre">cls</span></code>’s models when it is one for all of
+them, without building one; None when it has none or decides per model.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.models.envs.install_argv">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.envs.</span></span><span class="sig-name descname"><span class="pre">install_argv</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">env</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#cellmap_flow.models.envs.install_argv" title="Link to this definition"></a></dt>
+<dd><p><code class="docutils literal notranslate"><span class="pre">pixi</span> <span class="pre">install</span></code> of <code class="docutils literal notranslate"><span class="pre">env</span></code> from pixi.lock as it is (<code class="docutils literal notranslate"><span class="pre">--frozen</span></code>), as
+<code class="docutils literal notranslate"><span class="pre">pixi</span> <span class="pre">run</span> <span class="pre">--frozen</span></code> would install it, so the lock is never rewritten.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.models.envs.pixi_env_of">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.envs.</span></span><span class="sig-name descname"><span class="pre">pixi_env_of</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">argv</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#cellmap_flow.models.envs.pixi_env_of" title="Link to this definition"></a></dt>
+<dd><p>The pixi environment <code class="docutils literal notranslate"><span class="pre">argv</span></code> runs in when it is <code class="docutils literal notranslate"><span class="pre">server_argv</span></code>’s
+<code class="docutils literal notranslate"><span class="pre">pixi</span> <span class="pre">run</span> <span class="pre">...</span> <span class="pre">-e</span> <span class="pre">&lt;env&gt;</span> <span class="pre">...</span></code>, else None.</p>
 </dd></dl>
 
 <dl class="py function">
@@ -254,6 +449,12 @@ checkout does not run that checkout’s cellmap_flow.</p>
 </dd></dl>
 
 <dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.models.envs.python">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.envs.</span></span><span class="sig-name descname"><span class="pre">python</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">env</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#cellmap_flow.models.envs.python" title="Link to this definition"></a></dt>
+<dd><p>The python of <code class="docutils literal notranslate"><span class="pre">env</span></code>: a directory’s <code class="docutils literal notranslate"><span class="pre">bin/python</span></code>, or <code class="docutils literal notranslate"><span class="pre">pixi</span> <span class="pre">run</span> <span class="pre">...</span> <span class="pre">python</span></code>.</p>
+</dd></dl>
+
+<dl class="py function">
 <dt class="sig sig-object py" id="cellmap_flow.models.envs.python_argv">
 <span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.envs.</span></span><span class="sig-name descname"><span class="pre">python_argv</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">env</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">module</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#cellmap_flow.models.envs.python_argv" title="Link to this definition"></a></dt>
 <dd><p><code class="docutils literal notranslate"><span class="pre">python</span> <span class="pre">-P</span> <span class="pre">-m</span> <span class="pre">&lt;module&gt;</span></code> in <code class="docutils literal notranslate"><span class="pre">env</span></code>.</p>
@@ -263,9 +464,8 @@ checkout does not run that checkout’s cellmap_flow.</p>
 <dt class="sig sig-object py" id="cellmap_flow.models.envs.lib_dir">
 <span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.envs.</span></span><span class="sig-name descname"><span class="pre">lib_dir</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">env</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#cellmap_flow.models.envs.lib_dir" title="Link to this definition"></a></dt>
 <dd><p>The lib directory of <code class="docutils literal notranslate"><span class="pre">env</span></code>, for LD_LIBRARY_PATH.</p>
-<p>For a pixi environment that is where pixi installs it by default,
-<code class="docutils literal notranslate"><span class="pre">.pixi/envs/&lt;name&gt;</span></code> beside the manifest; a pixi configured with
-detached environments puts it elsewhere, and the job then loads
+<p>A pixi environment’s is in its default place (<code class="docutils literal notranslate"><span class="pre">prefix</span></code>); with
+detached environments it is elsewhere, and the job then loads
 libraries as <code class="docutils literal notranslate"><span class="pre">pixi</span> <span class="pre">run</span></code> alone would.</p>
 </dd></dl>
 
@@ -276,8 +476,8 @@ libraries as <code class="docutils literal notranslate"><span class="pre">pixi</
 can be told cheaply).</p>
 <p>A pixi environment is checked against the manifest: one of its features,
 the default feature included unless it sets <code class="docutils literal notranslate"><span class="pre">no-default-feature</span></code>, must
-install peft. A directory is not checked; a trainer that cannot import
-there fails in its job’s log.</p>
+install peft. A directory (a path or an alias) is not checked; a trainer
+that cannot import there fails in its job’s log.</p>
 </dd></dl>
 
 </section>

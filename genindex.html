@@ -50,6 +50,7 @@
 <li class="toctree-l1"><a class="reference internal" href="yaml_config.html">YAML Configuration</a></li>
 <li class="toctree-l1"><a class="reference internal" href="data_paths.html">Data paths</a></li>
 <li class="toctree-l1"><a class="reference internal" href="huggingface.html">HuggingFace Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="bioimage.html">BioImage Model Zoo</a></li>
 <li class="toctree-l1"><a class="reference internal" href="custom_script.html">Custom Model</a></li>
 <li class="toctree-l1"><a class="reference internal" href="post.html">PostProcessors</a></li>
 <li class="toctree-l1"><a class="reference internal" href="plugins.html">Plugins</a></li>
@@ -135,9 +136,13 @@
 </li>
       <li><a href="autoapi/cellmap_flow/finetune/adaptation/index.html#cellmap_flow.finetune.adaptation.AdaptationStrategy">AdaptationStrategy (class in cellmap_flow.finetune.adaptation)</a>
 </li>
+      <li><a href="autoapi/cellmap_flow/models/resolve/index.html#cellmap_flow.models.resolve.ADAPTER_CONFIG">ADAPTER_CONFIG (in module cellmap_flow.models.resolve)</a>
+</li>
       <li><a href="autoapi/cellmap_flow/finetune/job_manager/listener/index.html#cellmap_flow.finetune.job_manager.listener.Listeners.add">add() (cellmap_flow.finetune.job_manager.listener.Listeners method)</a>
 
       <ul>
+        <li><a href="autoapi/cellmap_flow/cli/add_cli/index.html#cellmap_flow.cli.add_cli.add">(in module cellmap_flow.cli.add_cli)</a>
+</li>
         <li><a href="autoapi/cellmap_flow/inference/timing/index.html#cellmap_flow.inference.timing.add">(in module cellmap_flow.inference.timing)</a>
 </li>
       </ul></li>
@@ -151,7 +156,11 @@
 </li>
       <li><a href="autoapi/cellmap_flow/finetune/job_manager/manager/index.html#cellmap_flow.finetune.job_manager.manager.FinetuneJobManager.add_listener">add_listener() (cellmap_flow.finetune.job_manager.manager.FinetuneJobManager method)</a>
 </li>
+      <li><a href="autoapi/cellmap_flow/dashboard/routes/model_resolve/index.html#cellmap_flow.dashboard.routes.model_resolve.add_model">add_model() (in module cellmap_flow.dashboard.routes.model_resolve)</a>
+</li>
       <li><a href="autoapi/cellmap_flow/dashboard/routes/finetune/layers/index.html#cellmap_flow.dashboard.routes.finetune.layers.add_segmentation_layer_to_viewer">add_segmentation_layer_to_viewer() (in module cellmap_flow.dashboard.routes.finetune.layers)</a>
+</li>
+      <li><a href="autoapi/cellmap_flow/dashboard/routes/model_resolve/index.html#cellmap_flow.dashboard.routes.model_resolve.AddModel">AddModel (class in cellmap_flow.dashboard.routes.model_resolve)</a>
 </li>
       <li><a href="post.html#AffinityPostprocessor">AffinityPostprocessor (built-in class)</a>
 
@@ -160,6 +169,12 @@
 </li>
       </ul></li>
       <li><a href="autoapi/cellmap_flow/finetune/target_transforms/index.html#cellmap_flow.finetune.target_transforms.AffinityTargetTransform">AffinityTargetTransform (class in cellmap_flow.finetune.target_transforms)</a>
+</li>
+      <li><a href="autoapi/cellmap_flow/models/envs/index.html#cellmap_flow.models.envs.aliases">aliases() (in module cellmap_flow.models.envs)</a>
+</li>
+      <li><a href="autoapi/cellmap_flow/models/envs/index.html#cellmap_flow.models.envs.aliases_file">aliases_file() (in module cellmap_flow.models.envs)</a>
+</li>
+      <li><a href="autoapi/cellmap_flow/models/envs/index.html#cellmap_flow.models.envs.ALIASES_FILE_ENV">ALIASES_FILE_ENV (in module cellmap_flow.models.envs)</a>
 </li>
       <li><a href="autoapi/cellmap_flow/finetune/adaptation/index.html#cellmap_flow.finetune.adaptation.LoraStrategy.alpha">alpha (cellmap_flow.finetune.adaptation.LoraStrategy attribute)</a>
 </li>
@@ -189,14 +204,14 @@
         <li><a href="autoapi/cellmap_flow/dashboard/app/index.html#cellmap_flow.dashboard.app.app">(in module cellmap_flow.dashboard.app)</a>
 </li>
       </ul></li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="autoapi/cellmap_flow/finetune/session_loop/index.html#cellmap_flow.finetune.session_loop.TrainingSession.applied_restarts">applied_restarts (cellmap_flow.finetune.session_loop.TrainingSession attribute)</a>
 </li>
       <li><a href="autoapi/cellmap_flow/finetune/export_merged/index.html#cellmap_flow.finetune.export_merged.apply_finetune">apply_finetune() (in module cellmap_flow.finetune.export_merged)</a>
 </li>
       <li><a href="autoapi/cellmap_flow/image_data_interface/index.html#cellmap_flow.image_data_interface.apply_norms">apply_norms() (in module cellmap_flow.image_data_interface)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="autoapi/cellmap_flow/dashboard/routes/pipeline/index.html#cellmap_flow.dashboard.routes.pipeline.apply_pipeline">apply_pipeline() (in module cellmap_flow.dashboard.routes.pipeline)</a>
 </li>
       <li><a href="autoapi/cellmap_flow/inferencer/index.html#cellmap_flow.inferencer.apply_postprocess">apply_postprocess() (in module cellmap_flow.inferencer)</a>
@@ -298,7 +313,13 @@
 </li>
       </ul></li>
       <li><a href="autoapi/cellmap_flow/dashboard/requests/index.html#cellmap_flow.dashboard.requests.FinetuneSubmit.batch_size">batch_size (cellmap_flow.dashboard.requests.FinetuneSubmit attribute)</a>
+
+      <ul>
+        <li><a href="autoapi/cellmap_flow/models/configs/cellpose/index.html#cellmap_flow.models.configs.cellpose.CellposeModelConfig.batch_size">(cellmap_flow.models.configs.cellpose.CellposeModelConfig attribute)</a>
 </li>
+        <li><a href="autoapi/cellmap_flow/models/models_config/index.html#cellmap_flow.models.models_config.CellposeModelConfig.batch_size">(cellmap_flow.models.models_config.CellposeModelConfig attribute)</a>
+</li>
+      </ul></li>
       <li><a href="autoapi/cellmap_flow/finetune/lora_wrapper/index.html#cellmap_flow.finetune.lora_wrapper.BatchLoopWrapper">BatchLoopWrapper (class in cellmap_flow.finetune.lora_wrapper)</a>
 </li>
       <li><a href="autoapi/cellmap_flow/dashboard/routes/bbx_generator/index.html#cellmap_flow.dashboard.routes.bbx_generator.BBOX_LAYER_NAME">BBOX_LAYER_NAME (in module cellmap_flow.dashboard.routes.bbx_generator)</a>
@@ -327,6 +348,18 @@
       </ul></li>
       <li><a href="autoapi/cellmap_flow/finetune/target_transforms/index.html#cellmap_flow.finetune.target_transforms.BinaryTargetTransform">BinaryTargetTransform (class in cellmap_flow.finetune.target_transforms)</a>
 </li>
+      <li><a href="autoapi/cellmap_flow/models/bioimage_catalog/index.html#cellmap_flow.models.bioimage_catalog.BIOIMAGE_CACHE_DIR">BIOIMAGE_CACHE_DIR (in module cellmap_flow.models.bioimage_catalog)</a>
+</li>
+      <li><a href="autoapi/cellmap_flow/models/bioimage_catalog/index.html#cellmap_flow.models.bioimage_catalog.BIOIMAGE_CACHE_FILE">BIOIMAGE_CACHE_FILE (in module cellmap_flow.models.bioimage_catalog)</a>
+</li>
+      <li><a href="autoapi/cellmap_flow/models/bioimage_catalog/index.html#cellmap_flow.models.bioimage_catalog.bioimage_entry">bioimage_entry() (in module cellmap_flow.models.bioimage_catalog)</a>
+</li>
+      <li><a href="autoapi/cellmap_flow/dashboard/services/launch/index.html#cellmap_flow.dashboard.services.launch.bioimage_job_name">bioimage_job_name() (in module cellmap_flow.dashboard.services.launch)</a>
+</li>
+      <li><a href="autoapi/cellmap_flow/models/resolve/index.html#cellmap_flow.models.resolve.bioimage_params">bioimage_params() (in module cellmap_flow.models.resolve)</a>
+</li>
+      <li><a href="autoapi/cellmap_flow/dashboard/requests/index.html#cellmap_flow.dashboard.requests.BioimageSelection">BioimageSelection (class in cellmap_flow.dashboard.requests)</a>
+</li>
       <li><a href="autoapi/cellmap_flow/models/configs/bio/index.html#cellmap_flow.models.configs.bio.BioModelConfig">BioModelConfig (class in cellmap_flow.models.configs.bio)</a>
 
       <ul>
@@ -347,6 +380,8 @@
 </li>
       <li><a href="autoapi/cellmap_flow/cli/aliases/index.html#cellmap_flow.cli.aliases.blockwise_multiple">blockwise_multiple (in module cellmap_flow.cli.aliases)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="autoapi/cellmap_flow/dashboard/requests/index.html#cellmap_flow.dashboard.requests.BlockwiseSettings.blockwise_tasks_dir">blockwise_tasks_dir (cellmap_flow.dashboard.requests.BlockwiseSettings attribute)</a>
 
       <ul>
@@ -357,8 +392,6 @@
 </li>
       <li><a href="autoapi/cellmap_flow/dashboard/requests/index.html#cellmap_flow.dashboard.requests.BlockwiseGenerate">BlockwiseGenerate (class in cellmap_flow.dashboard.requests)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="autoapi/cellmap_flow/dashboard/requests/index.html#cellmap_flow.dashboard.requests.BlockwisePipeline">BlockwisePipeline (class in cellmap_flow.dashboard.requests)</a>
 </li>
       <li><a href="autoapi/cellmap_flow/dashboard/requests/index.html#cellmap_flow.dashboard.requests.BlockwisePrecheck">BlockwisePrecheck (class in cellmap_flow.dashboard.requests)</a>
@@ -443,6 +476,8 @@
         <li><a href="autoapi/cellmap_flow/io/source/index.html#cellmap_flow.io.source.ArraySource.cache_bytes">(cellmap_flow.io.source.ArraySource attribute)</a>
 </li>
       </ul></li>
+      <li><a href="autoapi/cellmap_flow/models/bioimage_catalog/index.html#cellmap_flow.models.bioimage_catalog.CACHE_FORMAT">CACHE_FORMAT (in module cellmap_flow.models.bioimage_catalog)</a>
+</li>
       <li><a href="autoapi/cellmap_flow/models/geometry_cache/index.html#cellmap_flow.models.geometry_cache.cache_key">cache_key() (in module cellmap_flow.models.geometry_cache)</a>
 </li>
       <li><a href="autoapi/cellmap_flow/models/geometry_cache/index.html#cellmap_flow.models.geometry_cache.CACHE_PATH">CACHE_PATH (in module cellmap_flow.models.geometry_cache)</a>
@@ -514,6 +549,13 @@
 </li>
       </ul></li>
       <li>
+    cellmap_flow.cli.add_cli
+
+      <ul>
+        <li><a href="autoapi/cellmap_flow/cli/add_cli/index.html#module-cellmap_flow.cli.add_cli">module</a>
+</li>
+      </ul></li>
+      <li>
     cellmap_flow.cli.aliases
 
       <ul>
@@ -539,6 +581,13 @@
 
       <ul>
         <li><a href="autoapi/cellmap_flow/cli/doctor/index.html#module-cellmap_flow.cli.doctor">module</a>
+</li>
+      </ul></li>
+      <li>
+    cellmap_flow.cli.envs_cli
+
+      <ul>
+        <li><a href="autoapi/cellmap_flow/cli/envs_cli/index.html#module-cellmap_flow.cli.envs_cli">module</a>
 </li>
       </ul></li>
       <li>
@@ -756,6 +805,13 @@
 
       <ul>
         <li><a href="autoapi/cellmap_flow/dashboard/routes/model_advice/index.html#module-cellmap_flow.dashboard.routes.model_advice">module</a>
+</li>
+      </ul></li>
+      <li>
+    cellmap_flow.dashboard.routes.model_resolve
+
+      <ul>
+        <li><a href="autoapi/cellmap_flow/dashboard/routes/model_resolve/index.html#module-cellmap_flow.dashboard.routes.model_resolve">module</a>
 </li>
       </ul></li>
       <li>
@@ -1269,8 +1325,6 @@
         <li><a href="autoapi/cellmap_flow/jobs/synced_tee/index.html#module-cellmap_flow.jobs.synced_tee">module</a>
 </li>
       </ul></li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li>
     cellmap_flow.logging_setup
 
@@ -1285,6 +1339,15 @@
         <li><a href="autoapi/cellmap_flow/models/index.html#module-cellmap_flow.models">module</a>
 </li>
       </ul></li>
+      <li>
+    cellmap_flow.models.bioimage_catalog
+
+      <ul>
+        <li><a href="autoapi/cellmap_flow/models/bioimage_catalog/index.html#module-cellmap_flow.models.bioimage_catalog">module</a>
+</li>
+      </ul></li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li>
     cellmap_flow.models.configs
 
@@ -1311,6 +1374,13 @@
 
       <ul>
         <li><a href="autoapi/cellmap_flow/models/configs/cellmap/index.html#module-cellmap_flow.models.configs.cellmap">module</a>
+</li>
+      </ul></li>
+      <li>
+    cellmap_flow.models.configs.cellpose
+
+      <ul>
+        <li><a href="autoapi/cellmap_flow/models/configs/cellpose/index.html#module-cellmap_flow.models.configs.cellpose">module</a>
 </li>
       </ul></li>
       <li>
@@ -1402,6 +1472,13 @@
 
       <ul>
         <li><a href="autoapi/cellmap_flow/models/registry/index.html#module-cellmap_flow.models.registry">module</a>
+</li>
+      </ul></li>
+      <li>
+    cellmap_flow.models.resolve
+
+      <ul>
+        <li><a href="autoapi/cellmap_flow/models/resolve/index.html#module-cellmap_flow.models.resolve">module</a>
 </li>
       </ul></li>
       <li>
@@ -1601,6 +1678,20 @@
         <li><a href="autoapi/cellmap_flow/models/models_config/index.html#cellmap_flow.models.models_config.CellMapModelConfig">(class in cellmap_flow.models.models_config)</a>
 </li>
       </ul></li>
+      <li><a href="autoapi/cellmap_flow/models/configs/cellpose/index.html#cellmap_flow.models.configs.cellpose.CELLPOSE_DIAMETER">CELLPOSE_DIAMETER (in module cellmap_flow.models.configs.cellpose)</a>
+</li>
+      <li><a href="autoapi/cellmap_flow/models/configs/cellpose/index.html#cellmap_flow.models.configs.cellpose.CellposeModelConfig">CellposeModelConfig (class in cellmap_flow.models.configs.cellpose)</a>
+
+      <ul>
+        <li><a href="autoapi/cellmap_flow/models/models_config/index.html#cellmap_flow.models.models_config.CellposeModelConfig">(class in cellmap_flow.models.models_config)</a>
+</li>
+      </ul></li>
+      <li><a href="autoapi/cellmap_flow/models/configs/cellpose/index.html#cellmap_flow.models.configs.cellpose.CellposeModelConfig.cellprob_threshold">cellprob_threshold (cellmap_flow.models.configs.cellpose.CellposeModelConfig attribute)</a>
+
+      <ul>
+        <li><a href="autoapi/cellmap_flow/models/models_config/index.html#cellmap_flow.models.models_config.CellposeModelConfig.cellprob_threshold">(cellmap_flow.models.models_config.CellposeModelConfig attribute)</a>
+</li>
+      </ul></li>
       <li><a href="autoapi/cellmap_flow/image_data_interface/index.html#cellmap_flow.image_data_interface.LazyNormalization.chain">chain() (cellmap_flow.image_data_interface.LazyNormalization method)</a>
 </li>
       <li><a href="autoapi/cellmap_flow/server/index.html#cellmap_flow.server.CHAIN_CACHE_SIZE">CHAIN_CACHE_SIZE (in module cellmap_flow.server)</a>
@@ -1669,6 +1760,8 @@
 </li>
       <li><a href="autoapi/cellmap_flow/blockwise/blockwise_processor/index.html#cellmap_flow.blockwise.blockwise_processor.check_block">check_block() (in module cellmap_flow.blockwise.blockwise_processor)</a>
 </li>
+      <li><a href="autoapi/cellmap_flow/cli/envs_cli/index.html#cellmap_flow.cli.envs_cli.check_cmd">check_cmd() (in module cellmap_flow.cli.envs_cli)</a>
+</li>
       <li><a href="autoapi/cellmap_flow/finetune/export_merged/index.html#cellmap_flow.finetune.export_merged.check_equivalence">check_equivalence() (in module cellmap_flow.finetune.export_merged)</a>
 </li>
       <li><a href="autoapi/cellmap_flow/finetune/job_manager/persistence/index.html#cellmap_flow.finetune.job_manager.persistence.check_export">check_export() (in module cellmap_flow.finetune.job_manager.persistence)</a>
@@ -1693,6 +1786,8 @@
         <li><a href="autoapi/cellmap_flow/finetune/adaptation/index.html#cellmap_flow.finetune.adaptation.LoraStrategy.checkpoint">(cellmap_flow.finetune.adaptation.LoraStrategy method)</a>
 </li>
       </ul></li>
+      <li><a href="autoapi/cellmap_flow/models/configs/fly/index.html#cellmap_flow.models.configs.fly.checkpoint_format">checkpoint_format() (in module cellmap_flow.models.configs.fly)</a>
+</li>
       <li><a href="autoapi/cellmap_flow/dashboard/requests/index.html#cellmap_flow.dashboard.requests.FinetuneSubmit.checkpoint_path">checkpoint_path (cellmap_flow.dashboard.requests.FinetuneSubmit attribute)</a>
 
       <ul>
@@ -1752,6 +1847,8 @@
       <ul>
         <li><a href="autoapi/cellmap_flow/models/configs/cellmap/index.html#cellmap_flow.models.configs.cellmap.CellMapModelConfig.cli_name">(cellmap_flow.models.configs.cellmap.CellMapModelConfig attribute)</a>
 </li>
+        <li><a href="autoapi/cellmap_flow/models/configs/cellpose/index.html#cellmap_flow.models.configs.cellpose.CellposeModelConfig.cli_name">(cellmap_flow.models.configs.cellpose.CellposeModelConfig attribute)</a>
+</li>
         <li><a href="autoapi/cellmap_flow/models/configs/dacapo/index.html#cellmap_flow.models.configs.dacapo.DaCapoModelConfig.cli_name">(cellmap_flow.models.configs.dacapo.DaCapoModelConfig attribute)</a>
 </li>
         <li><a href="autoapi/cellmap_flow/models/configs/finetune/index.html#cellmap_flow.models.configs.finetune.FinetuneModelConfig.cli_name">(cellmap_flow.models.configs.finetune.FinetuneModelConfig attribute)</a>
@@ -1765,6 +1862,8 @@
         <li><a href="autoapi/cellmap_flow/models/models_config/index.html#cellmap_flow.models.models_config.BioModelConfig.cli_name">(cellmap_flow.models.models_config.BioModelConfig attribute)</a>
 </li>
         <li><a href="autoapi/cellmap_flow/models/models_config/index.html#cellmap_flow.models.models_config.CellMapModelConfig.cli_name">(cellmap_flow.models.models_config.CellMapModelConfig attribute)</a>
+</li>
+        <li><a href="autoapi/cellmap_flow/models/models_config/index.html#cellmap_flow.models.models_config.CellposeModelConfig.cli_name">(cellmap_flow.models.models_config.CellposeModelConfig attribute)</a>
 </li>
         <li><a href="autoapi/cellmap_flow/models/models_config/index.html#cellmap_flow.models.models_config.DaCapoModelConfig.cli_name">(cellmap_flow.models.models_config.DaCapoModelConfig attribute)</a>
 </li>
@@ -1823,8 +1922,6 @@
         <li><a href="autoapi/cellmap_flow/jobs/spec/index.html#cellmap_flow.jobs.spec.JobStatus.COMPLETED">(cellmap_flow.jobs.spec.JobStatus attribute)</a>
 </li>
       </ul></li>
-      <li><a href="autoapi/cellmap_flow/models/configs/bio/index.html#cellmap_flow.models.configs.bio.concat_along_c">concat_along_c() (in module cellmap_flow.models.configs.bio)</a>
-</li>
       <li><a href="autoapi/cellmap_flow/image_data_interface/index.html#cellmap_flow.image_data_interface.ImageDataInterface.concurrency_limit">concurrency_limit (cellmap_flow.image_data_interface.ImageDataInterface attribute)</a>
 
       <ul>
@@ -1856,7 +1953,15 @@
       <li><a href="autoapi/cellmap_flow/inference/runner/index.html#cellmap_flow.inference.runner.ModelRunner.context">context (cellmap_flow.inference.runner.ModelRunner attribute)</a>
 
       <ul>
+        <li><a href="autoapi/cellmap_flow/models/configs/bio/index.html#cellmap_flow.models.configs.bio.BioModelConfig.context">(cellmap_flow.models.configs.bio.BioModelConfig attribute)</a>
+</li>
+        <li><a href="autoapi/cellmap_flow/models/configs/cellpose/index.html#cellmap_flow.models.configs.cellpose.CellposeModelConfig.context">(cellmap_flow.models.configs.cellpose.CellposeModelConfig attribute)</a>
+</li>
         <li><a href="autoapi/cellmap_flow/models/geometry/index.html#cellmap_flow.models.geometry.ModelGeometry.context">(cellmap_flow.models.geometry.ModelGeometry property)</a>
+</li>
+        <li><a href="autoapi/cellmap_flow/models/models_config/index.html#cellmap_flow.models.models_config.BioModelConfig.context">(cellmap_flow.models.models_config.BioModelConfig attribute)</a>
+</li>
+        <li><a href="autoapi/cellmap_flow/models/models_config/index.html#cellmap_flow.models.models_config.CellposeModelConfig.context">(cellmap_flow.models.models_config.CellposeModelConfig attribute)</a>
 </li>
       </ul></li>
       <li><a href="autoapi/cellmap_flow/finetune/export_merged/index.html#cellmap_flow.finetune.export_merged.CONTEXT">CONTEXT (in module cellmap_flow.finetune.export_merged)</a>
@@ -1919,6 +2024,8 @@
 </li>
       <li><a href="autoapi/cellmap_flow/blockwise/blockwise_processor/index.html#cellmap_flow.blockwise.blockwise_processor.CellMapFlowBlockwiseProcessor.cross_channels_mode">cross_channels_mode (cellmap_flow.blockwise.blockwise_processor.CellMapFlowBlockwiseProcessor attribute)</a>
 </li>
+      <li><a href="autoapi/cellmap_flow/models/envs/index.html#cellmap_flow.models.envs.CURRENT">CURRENT (in module cellmap_flow.models.envs)</a>
+</li>
       <li><a href="autoapi/cellmap_flow/dashboard/routes/finetune/common/index.html#cellmap_flow.dashboard.routes.finetune.common.current_chain">current_chain() (in module cellmap_flow.dashboard.routes.finetune.common)</a>
 </li>
       <li><a href="autoapi/cellmap_flow/finetune/job_manager/state/index.html#cellmap_flow.finetune.job_manager.state.FinetuneJob.current_epoch">current_epoch (cellmap_flow.finetune.job_manager.state.FinetuneJob attribute)</a>
@@ -1977,7 +2084,13 @@
 </li>
       <li><a href="autoapi/cellmap_flow/review/index.html#cellmap_flow.review.DB_SUFFIXES">DB_SUFFIXES (in module cellmap_flow.review)</a>
 </li>
+      <li><a href="autoapi/cellmap_flow/models/envs/index.html#cellmap_flow.models.envs.decides_per_model">decides_per_model() (in module cellmap_flow.models.envs)</a>
+</li>
       <li><a href="autoapi/cellmap_flow/models/geometry/index.html#cellmap_flow.models.geometry.ModelGeometry.declared_block_shape">declared_block_shape (cellmap_flow.models.geometry.ModelGeometry attribute)</a>
+</li>
+      <li><a href="autoapi/cellmap_flow/models/envs/index.html#cellmap_flow.models.envs.declared_default">declared_default() (in module cellmap_flow.models.envs)</a>
+</li>
+      <li><a href="autoapi/cellmap_flow/models/bioimage_catalog/index.html#cellmap_flow.models.bioimage_catalog.declared_voxel_size">declared_voxel_size() (in module cellmap_flow.models.bioimage_catalog)</a>
 </li>
       <li><a href="autoapi/cellmap_flow/finetune/model_loading/index.html#cellmap_flow.finetune.model_loading.decode_model_entry">decode_model_entry() (in module cellmap_flow.finetune.model_loading)</a>
 </li>
@@ -1987,7 +2100,31 @@
 </li>
       <li><a href="autoapi/cellmap_flow/jobs/site/index.html#cellmap_flow.jobs.site.SiteProfile.default_charge_group">default_charge_group (cellmap_flow.jobs.site.SiteProfile attribute)</a>
 </li>
+      <li><a href="autoapi/cellmap_flow/models/configs/base/index.html#cellmap_flow.models.configs.base.ModelConfig.default_env">default_env (cellmap_flow.models.configs.base.ModelConfig attribute)</a>
+
+      <ul>
+        <li><a href="autoapi/cellmap_flow/models/configs/bio/index.html#cellmap_flow.models.configs.bio.BioModelConfig.default_env">(cellmap_flow.models.configs.bio.BioModelConfig attribute)</a>
+</li>
+        <li><a href="autoapi/cellmap_flow/models/configs/cellpose/index.html#cellmap_flow.models.configs.cellpose.CellposeModelConfig.default_env">(cellmap_flow.models.configs.cellpose.CellposeModelConfig attribute)</a>
+</li>
+        <li><a href="autoapi/cellmap_flow/models/configs/finetune/index.html#cellmap_flow.models.configs.finetune.FinetuneModelConfig.default_env">(cellmap_flow.models.configs.finetune.FinetuneModelConfig property)</a>
+</li>
+        <li><a href="autoapi/cellmap_flow/models/configs/fly/index.html#cellmap_flow.models.configs.fly.FlyModelConfig.default_env">(cellmap_flow.models.configs.fly.FlyModelConfig property)</a>
+</li>
+        <li><a href="autoapi/cellmap_flow/models/models_config/index.html#cellmap_flow.models.models_config.BioModelConfig.default_env">(cellmap_flow.models.models_config.BioModelConfig attribute)</a>
+</li>
+        <li><a href="autoapi/cellmap_flow/models/models_config/index.html#cellmap_flow.models.models_config.CellposeModelConfig.default_env">(cellmap_flow.models.models_config.CellposeModelConfig attribute)</a>
+</li>
+        <li><a href="autoapi/cellmap_flow/models/models_config/index.html#cellmap_flow.models.models_config.FinetuneModelConfig.default_env">(cellmap_flow.models.models_config.FinetuneModelConfig property)</a>
+</li>
+        <li><a href="autoapi/cellmap_flow/models/models_config/index.html#cellmap_flow.models.models_config.FlyModelConfig.default_env">(cellmap_flow.models.models_config.FlyModelConfig property)</a>
+</li>
+        <li><a href="autoapi/cellmap_flow/models/models_config/index.html#cellmap_flow.models.models_config.ModelConfig.default_env">(cellmap_flow.models.models_config.ModelConfig attribute)</a>
+</li>
+      </ul></li>
       <li><a href="autoapi/cellmap_flow/finetune/build_corrections/index.html#cellmap_flow.finetune.build_corrections.DEFAULT_INPUT_NORM">DEFAULT_INPUT_NORM (in module cellmap_flow.finetune.build_corrections)</a>
+</li>
+      <li><a href="autoapi/cellmap_flow/models/configs/bio/index.html#cellmap_flow.models.configs.bio.DEFAULT_INPUT_SIZE">DEFAULT_INPUT_SIZE (in module cellmap_flow.models.configs.bio)</a>
 </li>
       <li><a href="autoapi/cellmap_flow/jobs/spec/index.html#cellmap_flow.jobs.spec.default_log_dir">default_log_dir() (in module cellmap_flow.jobs.spec)</a>
 </li>
@@ -1998,6 +2135,8 @@
       <li><a href="autoapi/cellmap_flow/review_index/index.html#cellmap_flow.review_index.DEFAULT_QUEUES">DEFAULT_QUEUES (in module cellmap_flow.review_index)</a>
 </li>
       <li><a href="autoapi/cellmap_flow/dashboard/routes/finetune/good_regions/index.html#cellmap_flow.dashboard.routes.finetune.good_regions.DEFAULT_REGION_SIZE_NM">DEFAULT_REGION_SIZE_NM (in module cellmap_flow.dashboard.routes.finetune.good_regions)</a>
+</li>
+      <li><a href="autoapi/cellmap_flow/models/configs/bio/index.html#cellmap_flow.models.configs.bio.DEFAULT_SLICES_PER_CHUNK">DEFAULT_SLICES_PER_CHUNK (in module cellmap_flow.models.configs.bio)</a>
 </li>
       <li><a href="autoapi/cellmap_flow/serving/client/index.html#cellmap_flow.serving.client.DEFAULT_TIMEOUT_SECONDS">DEFAULT_TIMEOUT_SECONDS (in module cellmap_flow.serving.client)</a>
 </li>
@@ -2017,6 +2156,8 @@
         <li><a href="autoapi/cellmap_flow/finetune/data/sampler/index.html#cellmap_flow.finetune.data.sampler.PatchSampler.dense_to_sparse_ratio">(cellmap_flow.finetune.data.sampler.PatchSampler attribute)</a>
 </li>
       </ul></li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="autoapi/cellmap_flow/cli/common/index.html#cellmap_flow.cli.common.deprecated">deprecated() (in module cellmap_flow.cli.common)</a>
 </li>
       <li><a href="autoapi/cellmap_flow/cli/common/index.html#cellmap_flow.cli.common.deprecation_notice">deprecation_notice() (in module cellmap_flow.cli.common)</a>
@@ -2027,8 +2168,6 @@
 </li>
       <li><a href="autoapi/cellmap_flow/cli/doctor/index.html#cellmap_flow.cli.doctor.Result.detail">detail (cellmap_flow.cli.doctor.Result attribute)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="autoapi/cellmap_flow/finetune/lora_wrapper/index.html#cellmap_flow.finetune.lora_wrapper.detect_adaptable_layers">detect_adaptable_layers() (in module cellmap_flow.finetune.lora_wrapper)</a>
 </li>
       <li><a href="autoapi/cellmap_flow/dashboard/routes/finetune/common/index.html#cellmap_flow.dashboard.routes.finetune.common.detect_sparse_annotations">detect_sparse_annotations() (in module cellmap_flow.dashboard.routes.finetune.common)</a>
@@ -2037,6 +2176,12 @@
 </li>
       <li><a href="autoapi/cellmap_flow/inference/runner/index.html#cellmap_flow.inference.runner.DeviceSlots">DeviceSlots (class in cellmap_flow.inference.runner)</a>
 </li>
+      <li><a href="autoapi/cellmap_flow/models/configs/cellpose/index.html#cellmap_flow.models.configs.cellpose.CellposeModelConfig.diameter">diameter (cellmap_flow.models.configs.cellpose.CellposeModelConfig attribute)</a>
+
+      <ul>
+        <li><a href="autoapi/cellmap_flow/models/models_config/index.html#cellmap_flow.models.models_config.CellposeModelConfig.diameter">(cellmap_flow.models.models_config.CellposeModelConfig attribute)</a>
+</li>
+      </ul></li>
       <li><a href="autoapi/cellmap_flow/finetune/losses/index.html#cellmap_flow.finetune.losses.CombinedLoss.dice_loss">dice_loss (cellmap_flow.finetune.losses.CombinedLoss attribute)</a>
 </li>
       <li><a href="autoapi/cellmap_flow/finetune/losses/index.html#cellmap_flow.finetune.losses.CombinedLoss.dice_weight">dice_weight (cellmap_flow.finetune.losses.CombinedLoss attribute)</a>
@@ -2050,6 +2195,8 @@
       <li><a href="autoapi/cellmap_flow/norm/input_normalize/index.html#cellmap_flow.norm.input_normalize.Dilate">Dilate (class in cellmap_flow.norm.input_normalize)</a>
 </li>
       <li><a href="autoapi/cellmap_flow/viewer/raw/index.html#cellmap_flow.viewer.raw.ScalePyramid.dims">dims (cellmap_flow.viewer.raw.ScalePyramid attribute)</a>
+</li>
+      <li><a href="autoapi/cellmap_flow/models/configs/cellpose/index.html#cellmap_flow.models.configs.cellpose.DINO_TILE_SIZE">DINO_TILE_SIZE (in module cellmap_flow.models.configs.cellpose)</a>
 </li>
       <li><a href="autoapi/cellmap_flow/plugins/index.html#cellmap_flow.plugins.DISALLOWED_FUNCTIONS">DISALLOWED_FUNCTIONS (in module cellmap_flow.plugins)</a>
 </li>
@@ -2123,10 +2270,18 @@
   <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="autoapi/cellmap_flow/dashboard/routes/pipeline/index.html#cellmap_flow.dashboard.routes.pipeline.BuilderCanvas.edges">edges (cellmap_flow.dashboard.routes.pipeline.BuilderCanvas attribute)</a>
 </li>
+      <li><a href="autoapi/cellmap_flow/models/envs/index.html#cellmap_flow.models.envs.effective">effective() (in module cellmap_flow.models.envs)</a>
+</li>
       <li><a href="autoapi/cellmap_flow/finetune/data/sampler/index.html#cellmap_flow.finetune.data.sampler.PatchSampler.effective_anchor_fraction">effective_anchor_fraction (cellmap_flow.finetune.data.sampler.PatchSampler attribute)</a>
 </li>
       <li><a href="autoapi/cellmap_flow/finetune/data/sampler/index.html#cellmap_flow.finetune.data.sampler.PatchSampler.effective_dense_ratio">effective_dense_ratio (cellmap_flow.finetune.data.sampler.PatchSampler attribute)</a>
 </li>
+      <li><a href="autoapi/cellmap_flow/models/configs/base/index.html#cellmap_flow.models.configs.base.ModelConfig.effective_env">effective_env (cellmap_flow.models.configs.base.ModelConfig property)</a>
+
+      <ul>
+        <li><a href="autoapi/cellmap_flow/models/models_config/index.html#cellmap_flow.models.models_config.ModelConfig.effective_env">(cellmap_flow.models.models_config.ModelConfig property)</a>
+</li>
+      </ul></li>
       <li><a href="autoapi/cellmap_flow/server/index.html#cellmap_flow.server.ServedChain.effective_postprocess">effective_postprocess() (cellmap_flow.server.ServedChain method)</a>
 </li>
       <li><a href="autoapi/cellmap_flow/finetune/data/sampler/index.html#cellmap_flow.finetune.data.sampler.PatchSampler.effective_rehearsal_fraction">effective_rehearsal_fraction (cellmap_flow.finetune.data.sampler.PatchSampler attribute)</a>
@@ -2153,6 +2308,14 @@
 </li>
       <li><a href="autoapi/cellmap_flow/finetune/session/minio/index.html#cellmap_flow.finetune.session.minio.MinioServer.ensure_serving">ensure_serving() (cellmap_flow.finetune.session.minio.MinioServer method)</a>
 </li>
+      <li><a href="autoapi/cellmap_flow/dashboard/routes/model_resolve/index.html#cellmap_flow.dashboard.routes.model_resolve.AddModel.entry">entry (cellmap_flow.dashboard.routes.model_resolve.AddModel attribute)</a>
+</li>
+      <li><a href="autoapi/cellmap_flow/models/resolve/index.html#cellmap_flow.models.resolve.Resolved.entry">entry() (cellmap_flow.models.resolve.Resolved method)</a>
+</li>
+      <li><a href="autoapi/cellmap_flow/models/bioimage_catalog/index.html#cellmap_flow.models.bioimage_catalog.entry_model_id">entry_model_id() (in module cellmap_flow.models.bioimage_catalog)</a>
+</li>
+      <li><a href="autoapi/cellmap_flow/cli/add_cli/index.html#cellmap_flow.cli.add_cli.entry_yaml">entry_yaml() (in module cellmap_flow.cli.add_cli)</a>
+</li>
       <li><a href="autoapi/cellmap_flow/jobs/spec/index.html#cellmap_flow.jobs.spec.JobSpec.env">env (cellmap_flow.jobs.spec.JobSpec attribute)</a>
 
       <ul>
@@ -2164,8 +2327,14 @@
 </li>
         <li><a href="autoapi/cellmap_flow/models/models_config/index.html#cellmap_flow.models.models_config.ModelConfig.env">(cellmap_flow.models.models_config.ModelConfig attribute)</a>
 </li>
+        <li><a href="autoapi/cellmap_flow/models/resolve/index.html#cellmap_flow.models.resolve.Resolved.env">(cellmap_flow.models.resolve.Resolved attribute)</a>, <a href="autoapi/cellmap_flow/models/resolve/index.html#id3">[1]</a>
+</li>
       </ul></li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="autoapi/cellmap_flow/models/registry/index.html#cellmap_flow.models.registry.ENV_KEY">ENV_KEY (in module cellmap_flow.models.registry)</a>
+</li>
+      <li><a href="autoapi/cellmap_flow/cli/envs_cli/index.html#cellmap_flow.cli.envs_cli.envs_group">envs_group() (in module cellmap_flow.cli.envs_cli)</a>
 </li>
       <li><a href="autoapi/cellmap_flow/finetune/markers/index.html#cellmap_flow.finetune.markers.EPOCH_START_RE">EPOCH_START_RE (in module cellmap_flow.finetune.markers)</a>
 </li>
@@ -2177,8 +2346,6 @@
         <li><a href="autoapi/cellmap_flow/post/postprocessors/index.html#cellmap_flow.post.postprocessors.SimpleBlockwiseMerger.equivalences">(cellmap_flow.post.postprocessors.SimpleBlockwiseMerger attribute)</a>
 </li>
       </ul></li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="autoapi/cellmap_flow/dashboard/requests/index.html#cellmap_flow.dashboard.requests.Equivalences">Equivalences (class in cellmap_flow.dashboard.requests)</a>
 </li>
       <li><a href="autoapi/cellmap_flow/post/postprocessors/index.html#cellmap_flow.post.postprocessors.SimpleBlockwiseMerger.equivalences_json">equivalences_json() (cellmap_flow.post.postprocessors.SimpleBlockwiseMerger method)</a>
@@ -2247,9 +2414,15 @@
         <li><a href="autoapi/cellmap_flow/jobs/spec/index.html#cellmap_flow.jobs.spec.JobStatus.FAILED">(cellmap_flow.jobs.spec.JobStatus attribute)</a>
 </li>
       </ul></li>
+      <li><a href="autoapi/cellmap_flow/jobs/launch/index.html#cellmap_flow.jobs.launch.failed_starts">failed_starts() (in module cellmap_flow.jobs.launch)</a>
+</li>
+      <li><a href="autoapi/cellmap_flow/jobs/launch/index.html#cellmap_flow.jobs.launch.FAILED_STARTS_KEPT">FAILED_STARTS_KEPT (in module cellmap_flow.jobs.launch)</a>
+</li>
       <li><a href="autoapi/cellmap_flow/finetune/job_manager/tailer/index.html#cellmap_flow.finetune.job_manager.tailer.Iterations.feed">feed() (cellmap_flow.finetune.job_manager.tailer.Iterations method)</a>
 </li>
       <li><a href="autoapi/cellmap_flow/serving/client/index.html#cellmap_flow.serving.client.fetch_model_info">fetch_model_info() (in module cellmap_flow.serving.client)</a>
+</li>
+      <li><a href="autoapi/cellmap_flow/models/bioimage_catalog/index.html#cellmap_flow.models.bioimage_catalog.FETCH_TIMEOUT_S">FETCH_TIMEOUT_S (in module cellmap_flow.models.bioimage_catalog)</a>
 </li>
       <li><a href="autoapi/cellmap_flow/finetune/crop_loader/index.html#cellmap_flow.finetune.crop_loader.CropEntry.fg_ids">fg_ids (cellmap_flow.finetune.crop_loader.CropEntry attribute)</a>
 </li>
@@ -2262,6 +2435,8 @@
       <li><a href="autoapi/cellmap_flow/dashboard/routes/bbx_generator/index.html#cellmap_flow.dashboard.routes.bbx_generator.finalize_bbx_generation">finalize_bbx_generation() (in module cellmap_flow.dashboard.routes.bbx_generator)</a>
 </li>
       <li><a href="autoapi/cellmap_flow/finetune/session/minio/index.html#cellmap_flow.finetune.session.minio.find_available_port">find_available_port() (in module cellmap_flow.finetune.session.minio)</a>
+</li>
+      <li><a href="autoapi/cellmap_flow/models/bioimage_catalog/index.html#cellmap_flow.models.bioimage_catalog.find_bioimage_model">find_bioimage_model() (in module cellmap_flow.models.bioimage_catalog)</a>
 </li>
       <li><a href="autoapi/cellmap_flow/finetune/job_manager/submit/index.html#cellmap_flow.finetune.job_manager.submit.find_checkpoint">find_checkpoint() (in module cellmap_flow.finetune.job_manager.submit)</a>
 </li>
@@ -2297,10 +2472,10 @@
 </li>
       <li><a href="autoapi/cellmap_flow/finetune/job_manager/manager/index.html#cellmap_flow.finetune.job_manager.manager.FinetuneJobManager">FinetuneJobManager (class in cellmap_flow.finetune.job_manager.manager)</a>
 </li>
-      <li><a href="autoapi/cellmap_flow/dashboard/finetune_layers/index.html#cellmap_flow.dashboard.finetune_layers.FinetuneLayerListener">FinetuneLayerListener (class in cellmap_flow.dashboard.finetune_layers)</a>
-</li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="autoapi/cellmap_flow/dashboard/finetune_layers/index.html#cellmap_flow.dashboard.finetune_layers.FinetuneLayerListener">FinetuneLayerListener (class in cellmap_flow.dashboard.finetune_layers)</a>
+</li>
       <li><a href="autoapi/cellmap_flow/models/configs/finetune/index.html#cellmap_flow.models.configs.finetune.FinetuneModelConfig">FinetuneModelConfig (class in cellmap_flow.models.configs.finetune)</a>
 
       <ul>
@@ -2319,6 +2494,12 @@
 </li>
       <li><a href="autoapi/cellmap_flow/globals/index.html#cellmap_flow.globals.Flow">Flow (class in cellmap_flow.globals)</a>
 </li>
+      <li><a href="autoapi/cellmap_flow/models/configs/cellpose/index.html#cellmap_flow.models.configs.cellpose.CellposeModelConfig.flow_threshold">flow_threshold (cellmap_flow.models.configs.cellpose.CellposeModelConfig attribute)</a>
+
+      <ul>
+        <li><a href="autoapi/cellmap_flow/models/models_config/index.html#cellmap_flow.models.models_config.CellposeModelConfig.flow_threshold">(cellmap_flow.models.models_config.CellposeModelConfig attribute)</a>
+</li>
+      </ul></li>
       <li><a href="autoapi/cellmap_flow/models/configs/fly/index.html#cellmap_flow.models.configs.fly.FlyModelConfig">FlyModelConfig (class in cellmap_flow.models.configs.fly)</a>
 
       <ul>
@@ -2332,8 +2513,6 @@
       <li><a href="autoapi/cellmap_flow/finetune/data/sampler/index.html#cellmap_flow.finetune.data.sampler.FOREGROUND_SHARE">FOREGROUND_SHARE (in module cellmap_flow.finetune.data.sampler)</a>
 </li>
       <li><a href="autoapi/cellmap_flow/io/metadata/index.html#cellmap_flow.io.metadata.ArrayMeta.format">format (cellmap_flow.io.metadata.ArrayMeta attribute)</a>
-</li>
-      <li><a href="autoapi/cellmap_flow/models/configs/bio/index.html#cellmap_flow.models.configs.bio.format_output_bioimage">format_output_bioimage() (in module cellmap_flow.models.configs.bio)</a>
 </li>
       <li><a href="autoapi/cellmap_flow/finetune/lora_wrapper/index.html#cellmap_flow.finetune.lora_wrapper.BatchLoopWrapper.forward">forward() (cellmap_flow.finetune.lora_wrapper.BatchLoopWrapper method)</a>
 
@@ -2362,6 +2541,8 @@
       <li><a href="autoapi/cellmap_flow/pipeline_spec/index.html#cellmap_flow.pipeline_spec.PipelineSpec.from_url_blob">from_url_blob() (cellmap_flow.pipeline_spec.PipelineSpec class method)</a>
 </li>
       <li><a href="autoapi/cellmap_flow/finetune/adaptation/index.html#cellmap_flow.finetune.adaptation.frozen_teacher_copy">frozen_teacher_copy() (in module cellmap_flow.finetune.adaptation)</a>
+</li>
+      <li><a href="autoapi/cellmap_flow/models/resolve/index.html#cellmap_flow.models.resolve.FULL_FINETUNE_WEIGHTS">FULL_FINETUNE_WEIGHTS (in module cellmap_flow.models.resolve)</a>
 </li>
       <li><a href="autoapi/cellmap_flow/blockwise/blockwise_processor/index.html#cellmap_flow.blockwise.blockwise_processor.CellMapFlowBlockwiseProcessor.full_output_roi">full_output_roi (cellmap_flow.blockwise.blockwise_processor.CellMapFlowBlockwiseProcessor attribute)</a>
 </li>
@@ -2407,15 +2588,11 @@
         <li><a href="autoapi/cellmap_flow/models/models_config/index.html#cellmap_flow.models.models_config.Config.get">(cellmap_flow.models.models_config.Config method)</a>
 </li>
       </ul></li>
-      <li><a href="autoapi/cellmap_flow/models/configs/bio/index.html#cellmap_flow.models.configs.bio.BioModelConfig.get_axes_and_dims">get_axes_and_dims() (cellmap_flow.models.configs.bio.BioModelConfig method)</a>
-
-      <ul>
-        <li><a href="autoapi/cellmap_flow/models/models_config/index.html#cellmap_flow.models.models_config.BioModelConfig.get_axes_and_dims">(cellmap_flow.models.models_config.BioModelConfig method)</a>
-</li>
-      </ul></li>
       <li><a href="autoapi/cellmap_flow/dashboard/routes/logging_routes/index.html#cellmap_flow.dashboard.routes.logging_routes.get_bbox_json_template">get_bbox_json_template() (in module cellmap_flow.dashboard.routes.logging_routes)</a>
 </li>
       <li><a href="autoapi/cellmap_flow/dashboard/routes/bbx_generator/index.html#cellmap_flow.dashboard.routes.bbx_generator.get_bbx_generator_status">get_bbx_generator_status() (in module cellmap_flow.dashboard.routes.bbx_generator)</a>
+</li>
+      <li><a href="autoapi/cellmap_flow/dashboard/routes/models/index.html#cellmap_flow.dashboard.routes.models.get_bioimage_models">get_bioimage_models() (in module cellmap_flow.dashboard.routes.models)</a>
 </li>
       <li><a href="autoapi/cellmap_flow/cli/common/index.html#cellmap_flow.cli.common.ModelTypeGroup.get_command">get_command() (cellmap_flow.cli.common.ModelTypeGroup method)</a>
 
@@ -2437,12 +2614,6 @@
 </li>
       <li><a href="autoapi/cellmap_flow/norm/input_normalize/index.html#cellmap_flow.norm.input_normalize.get_input_normalizers">get_input_normalizers() (in module cellmap_flow.norm.input_normalize)</a>
 </li>
-      <li><a href="autoapi/cellmap_flow/models/configs/bio/index.html#cellmap_flow.models.configs.bio.BioModelConfig.get_input_slicer">get_input_slicer() (cellmap_flow.models.configs.bio.BioModelConfig method)</a>
-
-      <ul>
-        <li><a href="autoapi/cellmap_flow/models/models_config/index.html#cellmap_flow.models.models_config.BioModelConfig.get_input_slicer">(cellmap_flow.models.models_config.BioModelConfig method)</a>
-</li>
-      </ul></li>
       <li><a href="autoapi/cellmap_flow/review/index.html#cellmap_flow.review.get_instance">get_instance() (in module cellmap_flow.review)</a>
 </li>
       <li><a href="autoapi/cellmap_flow/finetune/job_manager/manager/index.html#cellmap_flow.finetune.job_manager.manager.FinetuneJobManager.get_job">get_job() (cellmap_flow.finetune.job_manager.manager.FinetuneJobManager method)</a>
@@ -2501,12 +2672,6 @@
 </li>
       <li><a href="autoapi/cellmap_flow/dashboard/state/index.html#cellmap_flow.dashboard.state.get_session">get_session() (in module cellmap_flow.dashboard.state)</a>
 </li>
-      <li><a href="autoapi/cellmap_flow/models/configs/bio/index.html#cellmap_flow.models.configs.bio.BioModelConfig.get_spatial_dims">get_spatial_dims() (cellmap_flow.models.configs.bio.BioModelConfig method)</a>
-
-      <ul>
-        <li><a href="autoapi/cellmap_flow/models/models_config/index.html#cellmap_flow.models.models_config.BioModelConfig.get_spatial_dims">(cellmap_flow.models.models_config.BioModelConfig method)</a>
-</li>
-      </ul></li>
       <li><a href="autoapi/cellmap_flow/jobs/local/index.html#cellmap_flow.jobs.local.LocalJob.get_status">get_status() (cellmap_flow.jobs.local.LocalJob method)</a>
 
       <ul>
@@ -2563,15 +2728,19 @@
 </li>
       <li><a href="autoapi/cellmap_flow/finetune/session/manifest/index.html#cellmap_flow.finetune.session.manifest.has_painted_annotations">has_painted_annotations() (in module cellmap_flow.finetune.session.manifest)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="autoapi/cellmap_flow/models/envs/index.html#cellmap_flow.models.envs.has_pixi">has_pixi() (in module cellmap_flow.models.envs)</a>
+</li>
       <li><a href="autoapi/cellmap_flow/models/hf_catalog/index.html#cellmap_flow.models.hf_catalog.HF_CACHE_DIR">HF_CACHE_DIR (in module cellmap_flow.models.hf_catalog)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="autoapi/cellmap_flow/models/hf_catalog/index.html#cellmap_flow.models.hf_catalog.HF_CACHE_FILE">HF_CACHE_FILE (in module cellmap_flow.models.hf_catalog)</a>
 </li>
       <li><a href="autoapi/cellmap_flow/inference/runner/index.html#cellmap_flow.inference.runner.DeviceSlots.hold">hold() (cellmap_flow.inference.runner.DeviceSlots method)</a>
 </li>
       <li><a href="autoapi/cellmap_flow/jobs/spec/index.html#cellmap_flow.jobs.spec.Job.host">host (cellmap_flow.jobs.spec.Job attribute)</a>
+</li>
+      <li><a href="autoapi/cellmap_flow/models/resolve/index.html#cellmap_flow.models.resolve.Resolved.how">how (cellmap_flow.models.resolve.Resolved attribute)</a>, <a href="autoapi/cellmap_flow/models/resolve/index.html#id4">[1]</a>
 </li>
       <li><a href="autoapi/cellmap_flow/models/hf_catalog/index.html#cellmap_flow.models.hf_catalog.HUGGING_FACE_ORGS_NAME">HUGGING_FACE_ORGS_NAME (in module cellmap_flow.models.hf_catalog)</a>
 </li>
@@ -2581,12 +2750,18 @@
         <li><a href="autoapi/cellmap_flow/models/models_config/index.html#cellmap_flow.models.models_config.HuggingFaceModelConfig">(class in cellmap_flow.models.models_config)</a>
 </li>
       </ul></li>
+      <li><a href="autoapi/cellmap_flow/models/bioimage_catalog/index.html#cellmap_flow.models.bioimage_catalog.HYPHA_ARTIFACTS">HYPHA_ARTIFACTS (in module cellmap_flow.models.bioimage_catalog)</a>
+</li>
+      <li><a href="autoapi/cellmap_flow/models/bioimage_catalog/index.html#cellmap_flow.models.bioimage_catalog.HYPHA_MODELS_URL">HYPHA_MODELS_URL (in module cellmap_flow.models.bioimage_catalog)</a>
+</li>
   </ul></td>
 </tr></table>
 
 <h2 id="I">I</h2>
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="autoapi/cellmap_flow/dashboard/requests/index.html#cellmap_flow.dashboard.requests.BioimageSelection.id">id (cellmap_flow.dashboard.requests.BioimageSelection attribute)</a>
+</li>
       <li><a href="autoapi/cellmap_flow/blockwise/blockwise_processor/index.html#cellmap_flow.blockwise.blockwise_processor.CellMapFlowBlockwiseProcessor.idi_raw">idi_raw (cellmap_flow.blockwise.blockwise_processor.CellMapFlowBlockwiseProcessor attribute)</a>
 
       <ul>
@@ -2674,7 +2849,11 @@
       <ul>
         <li><a href="autoapi/cellmap_flow/finetune/session/volume/index.html#cellmap_flow.finetune.session.volume.VolumeGeometry.input_size">(cellmap_flow.finetune.session.volume.VolumeGeometry attribute)</a>
 </li>
+        <li><a href="autoapi/cellmap_flow/models/configs/bio/index.html#cellmap_flow.models.configs.bio.BioModelConfig.input_size">(cellmap_flow.models.configs.bio.BioModelConfig attribute)</a>
+</li>
         <li><a href="autoapi/cellmap_flow/models/configs/fly/index.html#cellmap_flow.models.configs.fly.FlyModelConfig.input_size">(cellmap_flow.models.configs.fly.FlyModelConfig attribute)</a>
+</li>
+        <li><a href="autoapi/cellmap_flow/models/models_config/index.html#cellmap_flow.models.models_config.BioModelConfig.input_size">(cellmap_flow.models.models_config.BioModelConfig attribute)</a>
 </li>
         <li><a href="autoapi/cellmap_flow/models/models_config/index.html#cellmap_flow.models.models_config.FlyModelConfig.input_size">(cellmap_flow.models.models_config.FlyModelConfig attribute)</a>
 </li>
@@ -2709,7 +2888,11 @@
         <li><a href="autoapi/cellmap_flow/dashboard/routes/pipeline/index.html#cellmap_flow.dashboard.routes.pipeline.BuilderCanvas.inputs">(cellmap_flow.dashboard.routes.pipeline.BuilderCanvas attribute)</a>
 </li>
       </ul></li>
+      <li><a href="autoapi/cellmap_flow/models/envs/index.html#cellmap_flow.models.envs.install_argv">install_argv() (in module cellmap_flow.models.envs)</a>
+</li>
       <li><a href="autoapi/cellmap_flow/jobs/launch/index.html#cellmap_flow.jobs.launch.install_cleanup_handlers">install_cleanup_handlers() (in module cellmap_flow.jobs.launch)</a>
+</li>
+      <li><a href="autoapi/cellmap_flow/cli/envs_cli/index.html#cellmap_flow.cli.envs_cli.install_cmd">install_cmd() (in module cellmap_flow.cli.envs_cli)</a>
 </li>
       <li><a href="autoapi/cellmap_flow/models/registry/index.html#cellmap_flow.models.registry.instantiate_model_config">instantiate_model_config() (in module cellmap_flow.models.registry)</a>
 </li>
@@ -2725,6 +2908,8 @@
 </li>
       <li><a href="autoapi/cellmap_flow/pipeline_spec/index.html#cellmap_flow.pipeline_spec.PipelineSpec.is_empty">is_empty() (cellmap_flow.pipeline_spec.PipelineSpec method)</a>
 </li>
+      <li><a href="autoapi/cellmap_flow/models/envs/index.html#cellmap_flow.models.envs.is_installed">is_installed() (in module cellmap_flow.models.envs)</a>
+</li>
       <li><a href="autoapi/cellmap_flow/io/metadata/index.html#cellmap_flow.io.metadata.is_integral">is_integral() (in module cellmap_flow.io.metadata)</a>
 </li>
       <li><a href="autoapi/cellmap_flow/io/resample/index.html#cellmap_flow.io.resample.is_label_dtype">is_label_dtype() (in module cellmap_flow.io.resample)</a>
@@ -2738,6 +2923,8 @@
       <li><a href="autoapi/cellmap_flow/io/paths/index.html#cellmap_flow.io.paths.is_remote">is_remote() (in module cellmap_flow.io.paths)</a>
 </li>
       <li><a href="autoapi/cellmap_flow/jobs/spec/index.html#cellmap_flow.jobs.spec.Job.is_running">is_running() (cellmap_flow.jobs.spec.Job method)</a>
+</li>
+      <li><a href="autoapi/cellmap_flow/models/envs/index.html#cellmap_flow.models.envs.is_running_in">is_running_in() (in module cellmap_flow.models.envs)</a>
 </li>
       <li><a href="autoapi/cellmap_flow/post/postprocessors/index.html#cellmap_flow.post.postprocessors.AffinityPostprocessor.is_segmentation">is_segmentation (cellmap_flow.post.postprocessors.AffinityPostprocessor property)</a>
 
@@ -2939,6 +3126,10 @@
 </li>
       <li><a href="autoapi/cellmap_flow/models/envs/index.html#cellmap_flow.models.envs.lib_dir">lib_dir() (in module cellmap_flow.models.envs)</a>
 </li>
+      <li><a href="autoapi/cellmap_flow/models/bioimage_catalog/index.html#cellmap_flow.models.bioimage_catalog.list_bioimage_models">list_bioimage_models() (in module cellmap_flow.models.bioimage_catalog)</a>
+</li>
+      <li><a href="autoapi/cellmap_flow/cli/envs_cli/index.html#cellmap_flow.cli.envs_cli.list_cmd">list_cmd() (in module cellmap_flow.cli.envs_cli)</a>
+</li>
       <li><a href="autoapi/cellmap_flow/cli/common/index.html#cellmap_flow.cli.common.ModelTypeGroup.list_commands">list_commands() (cellmap_flow.cli.common.ModelTypeGroup method)</a>
 </li>
       <li><a href="autoapi/cellmap_flow/dashboard/routes/finetune/annotation_sessions/index.html#cellmap_flow.dashboard.routes.finetune.annotation_sessions.list_existing_sessions">list_existing_sessions() (in module cellmap_flow.dashboard.routes.finetune.annotation_sessions)</a>
@@ -2993,20 +3184,8 @@
 </li>
       <li><a href="autoapi/cellmap_flow/dashboard/requests/index.html#cellmap_flow.dashboard.requests.LoadCrops.load_id">load_id (cellmap_flow.dashboard.requests.LoadCrops attribute)</a>
 </li>
-      <li><a href="autoapi/cellmap_flow/models/configs/bio/index.html#cellmap_flow.models.configs.bio.BioModelConfig.load_input_information">load_input_information() (cellmap_flow.models.configs.bio.BioModelConfig method)</a>
-
-      <ul>
-        <li><a href="autoapi/cellmap_flow/models/models_config/index.html#cellmap_flow.models.models_config.BioModelConfig.load_input_information">(cellmap_flow.models.models_config.BioModelConfig method)</a>
-</li>
-      </ul></li>
       <li><a href="autoapi/cellmap_flow/finetune/lora_wrapper/index.html#cellmap_flow.finetune.lora_wrapper.load_lora_adapter">load_lora_adapter() (in module cellmap_flow.finetune.lora_wrapper)</a>
 </li>
-      <li><a href="autoapi/cellmap_flow/models/configs/bio/index.html#cellmap_flow.models.configs.bio.BioModelConfig.load_output_information">load_output_information() (cellmap_flow.models.configs.bio.BioModelConfig method)</a>
-
-      <ul>
-        <li><a href="autoapi/cellmap_flow/models/models_config/index.html#cellmap_flow.models.models_config.BioModelConfig.load_output_information">(cellmap_flow.models.models_config.BioModelConfig method)</a>
-</li>
-      </ul></li>
       <li><a href="autoapi/cellmap_flow/plugins/index.html#cellmap_flow.plugins.load_plugins">load_plugins() (in module cellmap_flow.plugins)</a>
 </li>
       <li><a href="autoapi/cellmap_flow/models/configs/script/index.html#cellmap_flow.models.configs.script.load_safe_config">load_safe_config() (in module cellmap_flow.models.configs.script)</a>
@@ -3101,6 +3280,8 @@
         <li><a href="autoapi/cellmap_flow/dashboard/routes/logging_routes/index.html#cellmap_flow.dashboard.routes.logging_routes.logger">(in module cellmap_flow.dashboard.routes.logging_routes)</a>
 </li>
         <li><a href="autoapi/cellmap_flow/dashboard/routes/model_advice/index.html#cellmap_flow.dashboard.routes.model_advice.logger">(in module cellmap_flow.dashboard.routes.model_advice)</a>
+</li>
+        <li><a href="autoapi/cellmap_flow/dashboard/routes/model_resolve/index.html#cellmap_flow.dashboard.routes.model_resolve.logger">(in module cellmap_flow.dashboard.routes.model_resolve)</a>
 </li>
         <li><a href="autoapi/cellmap_flow/dashboard/routes/models/index.html#cellmap_flow.dashboard.routes.models.logger">(in module cellmap_flow.dashboard.routes.models)</a>
 </li>
@@ -3208,11 +3389,17 @@
 </li>
         <li><a href="autoapi/cellmap_flow/models/configs/base/index.html#cellmap_flow.models.configs.base.logger">(in module cellmap_flow.models.configs.base)</a>
 </li>
+        <li><a href="autoapi/cellmap_flow/models/configs/bio/index.html#cellmap_flow.models.configs.bio.logger">(in module cellmap_flow.models.configs.bio)</a>
+</li>
+        <li><a href="autoapi/cellmap_flow/models/configs/cellpose/index.html#cellmap_flow.models.configs.cellpose.logger">(in module cellmap_flow.models.configs.cellpose)</a>
+</li>
         <li><a href="autoapi/cellmap_flow/models/configs/fly/index.html#cellmap_flow.models.configs.fly.logger">(in module cellmap_flow.models.configs.fly)</a>
 </li>
         <li><a href="autoapi/cellmap_flow/models/configs/huggingface/index.html#cellmap_flow.models.configs.huggingface.logger">(in module cellmap_flow.models.configs.huggingface)</a>
 </li>
         <li><a href="autoapi/cellmap_flow/models/configs/script/index.html#cellmap_flow.models.configs.script.logger">(in module cellmap_flow.models.configs.script)</a>
+</li>
+        <li><a href="autoapi/cellmap_flow/models/envs/index.html#cellmap_flow.models.envs.logger">(in module cellmap_flow.models.envs)</a>
 </li>
         <li><a href="autoapi/cellmap_flow/models/geometry_cache/index.html#cellmap_flow.models.geometry_cache.logger">(in module cellmap_flow.models.geometry_cache)</a>
 </li>
@@ -3412,7 +3599,11 @@
 </li>
         <li><a href="autoapi/cellmap_flow/finetune/session_loop/index.html#cellmap_flow.finetune.session_loop.TrainingSession.model">(cellmap_flow.finetune.session_loop.TrainingSession attribute)</a>
 </li>
+        <li><a href="autoapi/cellmap_flow/models/configs/bio/index.html#cellmap_flow.models.configs.bio.BioModelConfig.model">(cellmap_flow.models.configs.bio.BioModelConfig attribute)</a>
+</li>
         <li><a href="autoapi/cellmap_flow/models/configs/fly/index.html#cellmap_flow.models.configs.fly.FlyModelConfig.model">(cellmap_flow.models.configs.fly.FlyModelConfig property)</a>
+</li>
+        <li><a href="autoapi/cellmap_flow/models/models_config/index.html#cellmap_flow.models.models_config.BioModelConfig.model">(cellmap_flow.models.models_config.BioModelConfig attribute)</a>
 </li>
         <li><a href="autoapi/cellmap_flow/models/models_config/index.html#cellmap_flow.models.models_config.FlyModelConfig.model">(cellmap_flow.models.models_config.FlyModelConfig property)</a>
 </li>
@@ -3451,6 +3642,8 @@
       </ul></li>
       <li><a href="autoapi/cellmap_flow/finetune/job_manager/submit/index.html#cellmap_flow.finetune.job_manager.submit.MODEL_ENTRY_TYPES">MODEL_ENTRY_TYPES (in module cellmap_flow.finetune.job_manager.submit)</a>
 </li>
+      <li><a href="autoapi/cellmap_flow/models/envs/index.html#cellmap_flow.models.envs.model_env">model_env() (in module cellmap_flow.models.envs)</a>
+</li>
       <li><a href="autoapi/cellmap_flow/serving/client/index.html#cellmap_flow.serving.client.model_geometry">model_geometry() (in module cellmap_flow.serving.client)</a>
 </li>
       <li><a href="autoapi/cellmap_flow/serving/client/index.html#cellmap_flow.serving.client.model_geometry_config">model_geometry_config() (in module cellmap_flow.serving.client)</a>
@@ -3474,11 +3667,9 @@
 </li>
         <li><a href="autoapi/cellmap_flow/jobs/spec/index.html#cellmap_flow.jobs.spec.Job.model_name">(cellmap_flow.jobs.spec.Job attribute)</a>
 </li>
-        <li><a href="autoapi/cellmap_flow/models/configs/bio/index.html#cellmap_flow.models.configs.bio.BioModelConfig.model_name">(cellmap_flow.models.configs.bio.BioModelConfig attribute)</a>
-</li>
-        <li><a href="autoapi/cellmap_flow/models/models_config/index.html#cellmap_flow.models.models_config.BioModelConfig.model_name">(cellmap_flow.models.models_config.BioModelConfig attribute)</a>
-</li>
       </ul></li>
+      <li><a href="autoapi/cellmap_flow/dashboard/routes/model_resolve/index.html#cellmap_flow.dashboard.routes.model_resolve.model_resolve_bp">model_resolve_bp (in module cellmap_flow.dashboard.routes.model_resolve)</a>
+</li>
       <li><a href="autoapi/cellmap_flow/finetune/job_manager/submit/index.html#cellmap_flow.finetune.job_manager.submit.model_settings">model_settings() (in module cellmap_flow.finetune.job_manager.submit)</a>
 </li>
       <li><a href="autoapi/cellmap_flow/models/registry/index.html#cellmap_flow.models.registry.model_type">model_type() (in module cellmap_flow.models.registry)</a>
@@ -3539,6 +3730,8 @@
 </li>
         <li><a href="autoapi/cellmap_flow/cli/index.html#module-cellmap_flow.cli">cellmap_flow.cli</a>
 </li>
+        <li><a href="autoapi/cellmap_flow/cli/add_cli/index.html#module-cellmap_flow.cli.add_cli">cellmap_flow.cli.add_cli</a>
+</li>
         <li><a href="autoapi/cellmap_flow/cli/aliases/index.html#module-cellmap_flow.cli.aliases">cellmap_flow.cli.aliases</a>
 </li>
         <li><a href="autoapi/cellmap_flow/cli/cli/index.html#module-cellmap_flow.cli.cli">cellmap_flow.cli.cli</a>
@@ -3546,6 +3739,8 @@
         <li><a href="autoapi/cellmap_flow/cli/common/index.html#module-cellmap_flow.cli.common">cellmap_flow.cli.common</a>
 </li>
         <li><a href="autoapi/cellmap_flow/cli/doctor/index.html#module-cellmap_flow.cli.doctor">cellmap_flow.cli.doctor</a>
+</li>
+        <li><a href="autoapi/cellmap_flow/cli/envs_cli/index.html#module-cellmap_flow.cli.envs_cli">cellmap_flow.cli.envs_cli</a>
 </li>
         <li><a href="autoapi/cellmap_flow/cli/infer/index.html#module-cellmap_flow.cli.infer">cellmap_flow.cli.infer</a>
 </li>
@@ -3608,6 +3803,8 @@
         <li><a href="autoapi/cellmap_flow/dashboard/routes/logging_routes/index.html#module-cellmap_flow.dashboard.routes.logging_routes">cellmap_flow.dashboard.routes.logging_routes</a>
 </li>
         <li><a href="autoapi/cellmap_flow/dashboard/routes/model_advice/index.html#module-cellmap_flow.dashboard.routes.model_advice">cellmap_flow.dashboard.routes.model_advice</a>
+</li>
+        <li><a href="autoapi/cellmap_flow/dashboard/routes/model_resolve/index.html#module-cellmap_flow.dashboard.routes.model_resolve">cellmap_flow.dashboard.routes.model_resolve</a>
 </li>
         <li><a href="autoapi/cellmap_flow/dashboard/routes/models/index.html#module-cellmap_flow.dashboard.routes.models">cellmap_flow.dashboard.routes.models</a>
 </li>
@@ -3759,6 +3956,8 @@
 </li>
         <li><a href="autoapi/cellmap_flow/models/index.html#module-cellmap_flow.models">cellmap_flow.models</a>
 </li>
+        <li><a href="autoapi/cellmap_flow/models/bioimage_catalog/index.html#module-cellmap_flow.models.bioimage_catalog">cellmap_flow.models.bioimage_catalog</a>
+</li>
         <li><a href="autoapi/cellmap_flow/models/configs/index.html#module-cellmap_flow.models.configs">cellmap_flow.models.configs</a>
 </li>
         <li><a href="autoapi/cellmap_flow/models/configs/base/index.html#module-cellmap_flow.models.configs.base">cellmap_flow.models.configs.base</a>
@@ -3766,6 +3965,8 @@
         <li><a href="autoapi/cellmap_flow/models/configs/bio/index.html#module-cellmap_flow.models.configs.bio">cellmap_flow.models.configs.bio</a>
 </li>
         <li><a href="autoapi/cellmap_flow/models/configs/cellmap/index.html#module-cellmap_flow.models.configs.cellmap">cellmap_flow.models.configs.cellmap</a>
+</li>
+        <li><a href="autoapi/cellmap_flow/models/configs/cellpose/index.html#module-cellmap_flow.models.configs.cellpose">cellmap_flow.models.configs.cellpose</a>
 </li>
         <li><a href="autoapi/cellmap_flow/models/configs/dacapo/index.html#module-cellmap_flow.models.configs.dacapo">cellmap_flow.models.configs.dacapo</a>
 </li>
@@ -3792,6 +3993,8 @@
         <li><a href="autoapi/cellmap_flow/models/models_config/index.html#module-cellmap_flow.models.models_config">cellmap_flow.models.models_config</a>
 </li>
         <li><a href="autoapi/cellmap_flow/models/registry/index.html#module-cellmap_flow.models.registry">cellmap_flow.models.registry</a>
+</li>
+        <li><a href="autoapi/cellmap_flow/models/resolve/index.html#module-cellmap_flow.models.resolve">cellmap_flow.models.resolve</a>
 </li>
         <li><a href="autoapi/cellmap_flow/norm/index.html#module-cellmap_flow.norm">cellmap_flow.norm</a>
 </li>
@@ -3883,6 +4086,8 @@
       <ul>
         <li><a href="autoapi/cellmap_flow/dashboard/requests/index.html#cellmap_flow.dashboard.requests.PipelineNode.name">(cellmap_flow.dashboard.requests.PipelineNode attribute)</a>
 </li>
+        <li><a href="autoapi/cellmap_flow/dashboard/routes/model_resolve/index.html#cellmap_flow.dashboard.routes.model_resolve.ResolveModel.name">(cellmap_flow.dashboard.routes.model_resolve.ResolveModel attribute)</a>
+</li>
         <li><a href="autoapi/cellmap_flow/finetune/crop_loader/index.html#cellmap_flow.finetune.crop_loader.CropEntry.name">(cellmap_flow.finetune.crop_loader.CropEntry attribute)</a>
 </li>
         <li><a href="autoapi/cellmap_flow/finetune/job_manager/tailer/index.html#cellmap_flow.finetune.job_manager.tailer.Iterations.name">(cellmap_flow.finetune.job_manager.tailer.Iterations attribute)</a>
@@ -3892,6 +4097,8 @@
         <li><a href="autoapi/cellmap_flow/models/configs/bio/index.html#cellmap_flow.models.configs.bio.BioModelConfig.name">(cellmap_flow.models.configs.bio.BioModelConfig attribute)</a>
 </li>
         <li><a href="autoapi/cellmap_flow/models/configs/cellmap/index.html#cellmap_flow.models.configs.cellmap.CellMapModelConfig.name">(cellmap_flow.models.configs.cellmap.CellMapModelConfig attribute)</a>
+</li>
+        <li><a href="autoapi/cellmap_flow/models/configs/cellpose/index.html#cellmap_flow.models.configs.cellpose.CellposeModelConfig.name">(cellmap_flow.models.configs.cellpose.CellposeModelConfig attribute)</a>
 </li>
         <li><a href="autoapi/cellmap_flow/models/configs/dacapo/index.html#cellmap_flow.models.configs.dacapo.DaCapoModelConfig.name">(cellmap_flow.models.configs.dacapo.DaCapoModelConfig attribute)</a>
 </li>
@@ -3907,6 +4114,8 @@
 </li>
         <li><a href="autoapi/cellmap_flow/models/models_config/index.html#cellmap_flow.models.models_config.CellMapModelConfig.name">(cellmap_flow.models.models_config.CellMapModelConfig attribute)</a>
 </li>
+        <li><a href="autoapi/cellmap_flow/models/models_config/index.html#cellmap_flow.models.models_config.CellposeModelConfig.name">(cellmap_flow.models.models_config.CellposeModelConfig attribute)</a>
+</li>
         <li><a href="autoapi/cellmap_flow/models/models_config/index.html#cellmap_flow.models.models_config.DaCapoModelConfig.name">(cellmap_flow.models.models_config.DaCapoModelConfig attribute)</a>
 </li>
         <li><a href="autoapi/cellmap_flow/models/models_config/index.html#cellmap_flow.models.models_config.FinetuneModelConfig.name">(cellmap_flow.models.models_config.FinetuneModelConfig attribute)</a>
@@ -3916,6 +4125,8 @@
         <li><a href="autoapi/cellmap_flow/models/models_config/index.html#cellmap_flow.models.models_config.HuggingFaceModelConfig.name">(cellmap_flow.models.models_config.HuggingFaceModelConfig attribute)</a>
 </li>
         <li><a href="autoapi/cellmap_flow/models/models_config/index.html#cellmap_flow.models.models_config.ScriptModelConfig.name">(cellmap_flow.models.models_config.ScriptModelConfig attribute)</a>
+</li>
+        <li><a href="autoapi/cellmap_flow/models/resolve/index.html#cellmap_flow.models.resolve.Resolved.name">(cellmap_flow.models.resolve.Resolved attribute)</a>, <a href="autoapi/cellmap_flow/models/resolve/index.html#id2">[1]</a>
 </li>
       </ul></li>
       <li><a href="autoapi/cellmap_flow/norm/input_normalize/index.html#cellmap_flow.norm.input_normalize.SerializableInterface.name">name() (cellmap_flow.norm.input_normalize.SerializableInterface class method)</a>
@@ -3952,6 +4163,8 @@
       </ul></li>
       <li><a href="autoapi/cellmap_flow/models/geometry/index.html#cellmap_flow.models.geometry.ModelGeometry.ndim">ndim (cellmap_flow.models.geometry.ModelGeometry property)</a>
 </li>
+      <li><a href="autoapi/cellmap_flow/models/resolve/index.html#cellmap_flow.models.resolve.Resolved.needs">needs (cellmap_flow.models.resolve.Resolved attribute)</a>, <a href="autoapi/cellmap_flow/models/resolve/index.html#id5">[1]</a>
+</li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="autoapi/cellmap_flow/post/postprocessors/index.html#cellmap_flow.post.postprocessors.AffinityPostprocessor.neighborhood">neighborhood (cellmap_flow.post.postprocessors.AffinityPostprocessor attribute)</a>
@@ -3970,9 +4183,15 @@
 </li>
       <li><a href="autoapi/cellmap_flow/finetune/session/volume/index.html#cellmap_flow.finetune.session.volume.new_volume_id">new_volume_id() (in module cellmap_flow.finetune.session.volume)</a>
 </li>
+      <li><a href="autoapi/cellmap_flow/models/configs/bio/index.html#cellmap_flow.models.configs.bio.NM_PER_UNIT">NM_PER_UNIT (in module cellmap_flow.models.configs.bio)</a>
+</li>
       <li><a href="autoapi/cellmap_flow/io/metadata/index.html#cellmap_flow.io.metadata.nm_per_unit">nm_per_unit() (in module cellmap_flow.io.metadata)</a>
 </li>
       <li><a href="autoapi/cellmap_flow/io/metadata/index.html#cellmap_flow.io.metadata.node_type">node_type() (in module cellmap_flow.io.metadata)</a>
+</li>
+      <li><a href="autoapi/cellmap_flow/models/bioimage_catalog/index.html#cellmap_flow.models.bioimage_catalog.normalise">normalise() (in module cellmap_flow.models.bioimage_catalog)</a>
+</li>
+      <li><a href="autoapi/cellmap_flow/models/bioimage_catalog/index.html#cellmap_flow.models.bioimage_catalog.normalise_artifact">normalise_artifact() (in module cellmap_flow.models.bioimage_catalog)</a>
 </li>
       <li><a href="autoapi/cellmap_flow/image_data_interface/index.html#cellmap_flow.image_data_interface.ImageDataInterface.normalize">normalize (cellmap_flow.image_data_interface.ImageDataInterface attribute)</a>
 
@@ -4001,6 +4220,8 @@
       <li><a href="autoapi/cellmap_flow/finetune/session/volume/index.html#cellmap_flow.finetune.session.volume.NotAnAnnotationVolume">NotAnAnnotationVolume</a>
 </li>
       <li><a href="autoapi/cellmap_flow/dashboard/routes/finetune/common/index.html#cellmap_flow.dashboard.routes.finetune.common.TrainingSettings.note">note (cellmap_flow.dashboard.routes.finetune.common.TrainingSettings attribute)</a>
+</li>
+      <li><a href="autoapi/cellmap_flow/models/resolve/index.html#cellmap_flow.models.resolve.Resolved.notes">notes (cellmap_flow.models.resolve.Resolved attribute)</a>, <a href="autoapi/cellmap_flow/models/resolve/index.html#id6">[1]</a>
 </li>
       <li><a href="autoapi/cellmap_flow/finetune/job_manager/listener/index.html#cellmap_flow.finetune.job_manager.listener.Listeners.notify">notify() (cellmap_flow.finetune.job_manager.listener.Listeners method)</a>
 </li>
@@ -4082,6 +4303,8 @@
 </li>
       <li><a href="autoapi/cellmap_flow/image_data_interface/index.html#cellmap_flow.image_data_interface.ON_VOXEL_SIZE_MISMATCH">ON_VOXEL_SIZE_MISMATCH (in module cellmap_flow.image_data_interface)</a>
 </li>
+      <li><a href="autoapi/cellmap_flow/models/resolve/index.html#cellmap_flow.models.resolve.ONLINE_TIMEOUT">ONLINE_TIMEOUT (in module cellmap_flow.models.resolve)</a>
+</li>
       <li><a href="autoapi/cellmap_flow/io/source/index.html#cellmap_flow.io.source.open_array">open_array() (in module cellmap_flow.io.source)</a>
 </li>
       <li><a href="autoapi/cellmap_flow/review/index.html#cellmap_flow.review.open_db">open_db() (in module cellmap_flow.review)</a>
@@ -4099,7 +4322,13 @@
       <li><a href="autoapi/cellmap_flow/models/model_merger/index.html#cellmap_flow.models.model_merger.OrModelMerger">OrModelMerger (class in cellmap_flow.models.model_merger)</a>
 </li>
       <li><a href="autoapi/cellmap_flow/jobs/lsf/index.html#cellmap_flow.jobs.lsf.JobIdMissingError.output">output (cellmap_flow.jobs.lsf.JobIdMissingError attribute)</a>
+
+      <ul>
+        <li><a href="autoapi/cellmap_flow/models/configs/cellpose/index.html#cellmap_flow.models.configs.cellpose.CellposeModelConfig.output">(cellmap_flow.models.configs.cellpose.CellposeModelConfig attribute)</a>
 </li>
+        <li><a href="autoapi/cellmap_flow/models/models_config/index.html#cellmap_flow.models.models_config.CellposeModelConfig.output">(cellmap_flow.models.models_config.CellposeModelConfig attribute)</a>
+</li>
+      </ul></li>
       <li><a href="autoapi/cellmap_flow/blockwise/blockwise_processor/index.html#cellmap_flow.blockwise.blockwise_processor.CellMapFlowBlockwiseProcessor.output_arrays">output_arrays (cellmap_flow.blockwise.blockwise_processor.CellMapFlowBlockwiseProcessor attribute)</a>
 </li>
       <li><a href="autoapi/cellmap_flow/models/geometry/index.html#cellmap_flow.models.geometry.ModelGeometry.output_channels">output_channels (cellmap_flow.models.geometry.ModelGeometry attribute)</a>
@@ -4112,14 +4341,14 @@
 </li>
       <li><a href="autoapi/cellmap_flow/inference/runner/index.html#cellmap_flow.inference.runner.ModelRunner.output_class">output_class (cellmap_flow.inference.runner.ModelRunner attribute)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="autoapi/cellmap_flow/finetune/job_manager/state/index.html#cellmap_flow.finetune.job_manager.state.FinetuneJob.output_dir">output_dir (cellmap_flow.finetune.job_manager.state.FinetuneJob attribute)</a>
 
       <ul>
         <li><a href="autoapi/cellmap_flow/finetune/lora_trainer/index.html#cellmap_flow.finetune.lora_trainer.LoRAFinetuner.output_dir">(cellmap_flow.finetune.lora_trainer.LoRAFinetuner attribute)</a>
 </li>
       </ul></li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="autoapi/cellmap_flow/serving/probe/index.html#cellmap_flow.serving.probe.output_display_range">output_display_range() (in module cellmap_flow.serving.probe)</a>
 </li>
       <li><a href="autoapi/cellmap_flow/models/configs/base/index.html#cellmap_flow.models.configs.base.ModelConfig.output_dtype">output_dtype (cellmap_flow.models.configs.base.ModelConfig property)</a>
@@ -4192,6 +4421,8 @@
         <li><a href="autoapi/cellmap_flow/dashboard/routes/pipeline/index.html#cellmap_flow.dashboard.routes.pipeline.BuilderCanvas.outputs">(cellmap_flow.dashboard.routes.pipeline.BuilderCanvas attribute)</a>
 </li>
       </ul></li>
+      <li><a href="autoapi/cellmap_flow/models/configs/cellpose/index.html#cellmap_flow.models.configs.cellpose.OUTPUTS">OUTPUTS (in module cellmap_flow.models.configs.cellpose)</a>
+</li>
   </ul></td>
 </tr></table>
 
@@ -4214,6 +4445,8 @@
         <li><a href="autoapi/cellmap_flow/dashboard/requests/index.html#cellmap_flow.dashboard.requests.PipelineNode.params">(cellmap_flow.dashboard.requests.PipelineNode attribute)</a>
 </li>
         <li><a href="autoapi/cellmap_flow/finetune/job_manager/state/index.html#cellmap_flow.finetune.job_manager.state.FinetuneJob.params">(cellmap_flow.finetune.job_manager.state.FinetuneJob attribute)</a>
+</li>
+        <li><a href="autoapi/cellmap_flow/models/resolve/index.html#cellmap_flow.models.resolve.Resolved.params">(cellmap_flow.models.resolve.Resolved attribute)</a>, <a href="autoapi/cellmap_flow/models/resolve/index.html#id1">[1]</a>
 </li>
       </ul></li>
       <li><a href="autoapi/cellmap_flow/io/paths/index.html#cellmap_flow.io.paths.parent">parent() (in module cellmap_flow.io.paths)</a>
@@ -4296,11 +4529,15 @@
 </li>
       <li><a href="autoapi/cellmap_flow/dashboard/routes/pipeline/index.html#cellmap_flow.dashboard.routes.pipeline.PipelineUpdate">PipelineUpdate (class in cellmap_flow.dashboard.routes.pipeline)</a>
 </li>
+      <li><a href="autoapi/cellmap_flow/models/envs/index.html#cellmap_flow.models.envs.pixi_env_of">pixi_env_of() (in module cellmap_flow.models.envs)</a>
+</li>
       <li><a href="autoapi/cellmap_flow/models/envs/index.html#cellmap_flow.models.envs.pixi_environments">pixi_environments() (in module cellmap_flow.models.envs)</a>
 </li>
       <li><a href="autoapi/cellmap_flow/models/envs/index.html#cellmap_flow.models.envs.pixi_manifest">pixi_manifest() (in module cellmap_flow.models.envs)</a>
 </li>
       <li><a href="autoapi/cellmap_flow/models/envs/index.html#cellmap_flow.models.envs.PIXI_MANIFEST_ENV">PIXI_MANIFEST_ENV (in module cellmap_flow.models.envs)</a>
+</li>
+      <li><a href="autoapi/cellmap_flow/models/envs/index.html#cellmap_flow.models.envs.pixi_program">pixi_program() (in module cellmap_flow.models.envs)</a>
 </li>
       <li><a href="autoapi/cellmap_flow/finetune/finetuned_model_templates/index.html#cellmap_flow.finetune.finetuned_model_templates.PLACEHOLDER_DATA_PATHS">PLACEHOLDER_DATA_PATHS (in module cellmap_flow.finetune.finetuned_model_templates)</a>
 </li>
@@ -4314,14 +4551,14 @@
 </li>
       <li><a href="autoapi/cellmap_flow/inference/runner/index.html#cellmap_flow.inference.runner.DeviceSlots.POLL_SECONDS">POLL_SECONDS (cellmap_flow.inference.runner.DeviceSlots attribute)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="autoapi/cellmap_flow/finetune/data/sampler/index.html#cellmap_flow.finetune.data.sampler.POOL_DTYPE">POOL_DTYPE (in module cellmap_flow.finetune.data.sampler)</a>
 </li>
       <li><a href="autoapi/cellmap_flow/finetune/export_merged/index.html#cellmap_flow.finetune.export_merged.POOL_FACTOR">POOL_FACTOR (in module cellmap_flow.finetune.export_merged)</a>
 </li>
       <li><a href="autoapi/cellmap_flow/finetune/session/instance/index.html#cellmap_flow.finetune.session.instance.populated_backing_store">populated_backing_store() (in module cellmap_flow.finetune.session.instance)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="autoapi/cellmap_flow/dashboard/routes/review_routes/index.html#cellmap_flow.dashboard.routes.review_routes.PickBoard.post">post() (cellmap_flow.dashboard.routes.review_routes.PickBoard method)</a>
 </li>
       <li><a href="autoapi/cellmap_flow/dashboard/routes/pipeline/index.html#cellmap_flow.dashboard.routes.pipeline.PipelineUpdate.postprocess">postprocess (cellmap_flow.dashboard.routes.pipeline.PipelineUpdate attribute)</a>
@@ -4384,6 +4621,8 @@
 </li>
       <li><a href="autoapi/cellmap_flow/viewer/layers/index.html#cellmap_flow.viewer.layers.prediction_voxel_override">prediction_voxel_override() (in module cellmap_flow.viewer.layers)</a>
 </li>
+      <li><a href="autoapi/cellmap_flow/models/envs/index.html#cellmap_flow.models.envs.prefix">prefix() (in module cellmap_flow.models.envs)</a>
+</li>
       <li><a href="autoapi/cellmap_flow/finetune/session/minio/index.html#cellmap_flow.finetune.session.minio.MinioServer.preflight">preflight (cellmap_flow.finetune.session.minio.MinioServer attribute)</a>
 </li>
       <li><a href="autoapi/cellmap_flow/finetune/adaptation/index.html#cellmap_flow.finetune.adaptation.AdaptationStrategy.prepare">prepare() (cellmap_flow.finetune.adaptation.AdaptationStrategy method)</a>
@@ -4394,6 +4633,14 @@
         <li><a href="autoapi/cellmap_flow/finetune/adaptation/index.html#cellmap_flow.finetune.adaptation.LoraStrategy.prepare">(cellmap_flow.finetune.adaptation.LoraStrategy method)</a>
 </li>
       </ul></li>
+      <li><a href="autoapi/cellmap_flow/models/configs/cellpose/index.html#cellmap_flow.models.configs.cellpose.CellposeModelConfig.pretrained_model">pretrained_model (cellmap_flow.models.configs.cellpose.CellposeModelConfig attribute)</a>
+
+      <ul>
+        <li><a href="autoapi/cellmap_flow/models/models_config/index.html#cellmap_flow.models.models_config.CellposeModelConfig.pretrained_model">(cellmap_flow.models.models_config.CellposeModelConfig attribute)</a>
+</li>
+      </ul></li>
+      <li><a href="autoapi/cellmap_flow/models/configs/cellpose/index.html#cellmap_flow.models.configs.cellpose.PRETRAINED_MODELS">PRETRAINED_MODELS (in module cellmap_flow.models.configs.cellpose)</a>
+</li>
       <li><a href="autoapi/cellmap_flow/server/index.html#cellmap_flow.server.CellMapFlowServer.previous_refresh_time">previous_refresh_time (cellmap_flow.server.CellMapFlowServer attribute)</a>
 </li>
       <li><a href="autoapi/cellmap_flow/models/registry/index.html#cellmap_flow.models.registry.print_available_models">print_available_models() (in module cellmap_flow.models.registry)</a>
@@ -4413,10 +4660,18 @@
       <li><a href="autoapi/cellmap_flow/process_chain/index.html#cellmap_flow.process_chain.process_chain">process_chain() (in module cellmap_flow.process_chain)</a>
 </li>
       <li><a href="autoapi/cellmap_flow/inferencer/index.html#cellmap_flow.inferencer.Inferencer.process_chunk">process_chunk() (cellmap_flow.inferencer.Inferencer method)</a>
+
+      <ul>
+        <li><a href="autoapi/cellmap_flow/models/configs/bio/index.html#cellmap_flow.models.configs.bio.BioModelConfig.process_chunk">(cellmap_flow.models.configs.bio.BioModelConfig method)</a>
 </li>
+        <li><a href="autoapi/cellmap_flow/models/configs/cellpose/index.html#cellmap_flow.models.configs.cellpose.CellposeModelConfig.process_chunk">(cellmap_flow.models.configs.cellpose.CellposeModelConfig method)</a>
+</li>
+        <li><a href="autoapi/cellmap_flow/models/models_config/index.html#cellmap_flow.models.models_config.BioModelConfig.process_chunk">(cellmap_flow.models.models_config.BioModelConfig method)</a>
+</li>
+        <li><a href="autoapi/cellmap_flow/models/models_config/index.html#cellmap_flow.models.models_config.CellposeModelConfig.process_chunk">(cellmap_flow.models.models_config.CellposeModelConfig method)</a>
+</li>
+      </ul></li>
       <li><a href="autoapi/cellmap_flow/inference/runner/index.html#cellmap_flow.inference.runner.ModelRunner.process_chunk_basic">process_chunk_basic() (cellmap_flow.inference.runner.ModelRunner method)</a>
-</li>
-      <li><a href="autoapi/cellmap_flow/models/configs/bio/index.html#cellmap_flow.models.configs.bio.process_chunk_bioimage">process_chunk_bioimage() (in module cellmap_flow.models.configs.bio)</a>
 </li>
       <li><a href="autoapi/cellmap_flow/blockwise/blockwise_processor/index.html#cellmap_flow.blockwise.blockwise_processor.CellMapFlowBlockwiseProcessor.process_fn">process_fn() (cellmap_flow.blockwise.blockwise_processor.CellMapFlowBlockwiseProcessor method)</a>
 </li>
@@ -4433,6 +4688,8 @@
       <li><a href="autoapi/cellmap_flow/jobs/spec/index.html#cellmap_flow.jobs.spec.public_server_url">public_server_url() (in module cellmap_flow.jobs.spec)</a>
 </li>
       <li><a href="autoapi/cellmap_flow/dashboard/routes/pipeline/index.html#cellmap_flow.dashboard.routes.pipeline.put_pipeline">put_pipeline() (in module cellmap_flow.dashboard.routes.pipeline)</a>
+</li>
+      <li><a href="autoapi/cellmap_flow/models/envs/index.html#cellmap_flow.models.envs.python">python() (in module cellmap_flow.models.envs)</a>
 </li>
       <li><a href="autoapi/cellmap_flow/models/envs/index.html#cellmap_flow.models.envs.python_argv">python_argv() (in module cellmap_flow.models.envs)</a>
 </li>
@@ -4534,6 +4791,12 @@
 </li>
       <li><a href="autoapi/cellmap_flow/models/geometry/index.html#cellmap_flow.models.geometry.ModelGeometry.read_shape">read_shape (cellmap_flow.models.geometry.ModelGeometry attribute)</a>
 </li>
+      <li><a href="autoapi/cellmap_flow/models/configs/cellpose/index.html#cellmap_flow.models.configs.cellpose.CellposeModelConfig.read_size">read_size (cellmap_flow.models.configs.cellpose.CellposeModelConfig property)</a>
+
+      <ul>
+        <li><a href="autoapi/cellmap_flow/models/models_config/index.html#cellmap_flow.models.models_config.CellposeModelConfig.read_size">(cellmap_flow.models.models_config.CellposeModelConfig property)</a>
+</li>
+      </ul></li>
       <li><a href="autoapi/cellmap_flow/finetune/session/volume/index.html#cellmap_flow.finetune.session.volume.read_volume">read_volume() (in module cellmap_flow.finetune.session.volume)</a>
 </li>
       <li><a href="autoapi/cellmap_flow/dashboard/routes/finetune/yaml_crops/index.html#cellmap_flow.dashboard.routes.finetune.yaml_crops.read_yaml">read_yaml() (in module cellmap_flow.dashboard.routes.finetune.yaml_crops)</a>
@@ -4568,11 +4831,17 @@
 </li>
       <li><a href="autoapi/cellmap_flow/finetune/job_manager/persistence/index.html#cellmap_flow.finetune.job_manager.persistence.recorded_model_entry">recorded_model_entry() (in module cellmap_flow.finetune.job_manager.persistence)</a>
 </li>
+      <li><a href="autoapi/cellmap_flow/dashboard/routes/model_resolve/index.html#cellmap_flow.dashboard.routes.model_resolve.ResolveModel.ref">ref (cellmap_flow.dashboard.routes.model_resolve.ResolveModel attribute)</a>
+</li>
       <li><a href="autoapi/cellmap_flow/dashboard/routes/finetune/overlay/index.html#cellmap_flow.dashboard.routes.finetune.overlay.refresh_annotated_regions">refresh_annotated_regions() (in module cellmap_flow.dashboard.routes.finetune.overlay)</a>
 </li>
       <li><a href="autoapi/cellmap_flow/dashboard/routes/finetune/overlay/index.html#cellmap_flow.dashboard.routes.finetune.overlay.refresh_annotated_regions_layer">refresh_annotated_regions_layer() (in module cellmap_flow.dashboard.routes.finetune.overlay)</a>
 </li>
       <li><a href="autoapi/cellmap_flow/dashboard/routes/finetune/overlay/index.html#cellmap_flow.dashboard.routes.finetune.overlay.refresh_annotation_layer">refresh_annotation_layer() (in module cellmap_flow.dashboard.routes.finetune.overlay)</a>
+</li>
+      <li><a href="autoapi/cellmap_flow/models/bioimage_catalog/index.html#cellmap_flow.models.bioimage_catalog.refresh_bioimage_models">refresh_bioimage_models() (in module cellmap_flow.models.bioimage_catalog)</a>
+</li>
+      <li><a href="autoapi/cellmap_flow/dashboard/routes/models/index.html#cellmap_flow.dashboard.routes.models.refresh_bioimage_models_route">refresh_bioimage_models_route() (in module cellmap_flow.dashboard.routes.models)</a>
 </li>
       <li><a href="autoapi/cellmap_flow/dashboard/routes/finetune/good_regions/index.html#cellmap_flow.dashboard.routes.finetune.good_regions.refresh_good_regions_layer">refresh_good_regions_layer() (in module cellmap_flow.dashboard.routes.finetune.good_regions)</a>
 </li>
@@ -4616,8 +4885,6 @@
 </li>
       <li><a href="autoapi/cellmap_flow/dashboard/routes/finetune/layers/index.html#cellmap_flow.dashboard.routes.finetune.layers.rename_layer_in_viewer">rename_layer_in_viewer() (in module cellmap_flow.dashboard.routes.finetune.layers)</a>
 </li>
-      <li><a href="autoapi/cellmap_flow/models/configs/bio/index.html#cellmap_flow.models.configs.bio.reorder_axes">reorder_axes() (in module cellmap_flow.models.configs.bio)</a>
-</li>
       <li><a href="autoapi/cellmap_flow/serving/virtual_zarr/index.html#cellmap_flow.serving.virtual_zarr.reorder_to_zarr_axes">reorder_to_zarr_axes() (in module cellmap_flow.serving.virtual_zarr)</a>
 </li>
       <li><a href="autoapi/cellmap_flow/models/configs/huggingface/index.html#cellmap_flow.models.configs.huggingface.HuggingFaceModelConfig.repo">repo (cellmap_flow.models.configs.huggingface.HuggingFaceModelConfig attribute)</a>
@@ -4632,14 +4899,14 @@
         <li><a href="autoapi/cellmap_flow/cli/doctor/index.html#cellmap_flow.cli.doctor.report">(in module cellmap_flow.cli.doctor)</a>
 </li>
       </ul></li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="autoapi/cellmap_flow/finetune/session_loop/index.html#cellmap_flow.finetune.session_loop.RestartController.request_restart">request_restart() (cellmap_flow.finetune.session_loop.RestartController method)</a>
 
       <ul>
         <li><a href="autoapi/cellmap_flow/finetune/job_manager/restart/index.html#cellmap_flow.finetune.job_manager.restart.request_restart">(in module cellmap_flow.finetune.job_manager.restart)</a>
 </li>
       </ul></li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="autoapi/cellmap_flow/image_data_interface/index.html#cellmap_flow.image_data_interface.ImageDataInterface.requested_voxel_size">requested_voxel_size (cellmap_flow.image_data_interface.ImageDataInterface attribute)</a>
 </li>
       <li><a href="autoapi/cellmap_flow/models/registry/index.html#cellmap_flow.models.registry.required_params">required_params() (in module cellmap_flow.models.registry)</a>
@@ -4672,15 +4939,23 @@
         <li><a href="autoapi/cellmap_flow/finetune/adaptation/index.html#cellmap_flow.finetune.adaptation.LoraStrategy.reset">(cellmap_flow.finetune.adaptation.LoraStrategy method)</a>
 </li>
       </ul></li>
+      <li><a href="autoapi/cellmap_flow/models/resolve/index.html#cellmap_flow.models.resolve.resolve">resolve() (in module cellmap_flow.models.resolve)</a>
+</li>
       <li><a href="autoapi/cellmap_flow/config/yaml/index.html#cellmap_flow.config.yaml.resolve_data_path">resolve_data_path() (in module cellmap_flow.config.yaml)</a>
 </li>
       <li><a href="autoapi/cellmap_flow/review/index.html#cellmap_flow.review.resolve_db_path">resolve_db_path() (in module cellmap_flow.review)</a>
 </li>
       <li><a href="autoapi/cellmap_flow/dashboard/routes/finetune/common/index.html#cellmap_flow.dashboard.routes.finetune.common.resolve_finetune_session">resolve_finetune_session() (in module cellmap_flow.dashboard.routes.finetune.common)</a>
 </li>
+      <li><a href="autoapi/cellmap_flow/dashboard/routes/model_resolve/index.html#cellmap_flow.dashboard.routes.model_resolve.resolve_model">resolve_model() (in module cellmap_flow.dashboard.routes.model_resolve)</a>
+</li>
       <li><a href="autoapi/cellmap_flow/models/geometry_cache/index.html#cellmap_flow.models.geometry_cache.resolve_model_geometry">resolve_model_geometry() (in module cellmap_flow.models.geometry_cache)</a>
 </li>
       <li><a href="autoapi/cellmap_flow/finetune/job_manager/submit/index.html#cellmap_flow.finetune.job_manager.submit.resolve_model_type">resolve_model_type() (in module cellmap_flow.finetune.job_manager.submit)</a>
+</li>
+      <li><a href="autoapi/cellmap_flow/models/resolve/index.html#cellmap_flow.models.resolve.Resolved">Resolved (class in cellmap_flow.models.resolve)</a>
+</li>
+      <li><a href="autoapi/cellmap_flow/dashboard/routes/model_resolve/index.html#cellmap_flow.dashboard.routes.model_resolve.ResolveModel">ResolveModel (class in cellmap_flow.dashboard.routes.model_resolve)</a>
 </li>
       <li><a href="autoapi/cellmap_flow/dashboard/progress/index.html#cellmap_flow.dashboard.progress.Progress.response">response() (cellmap_flow.dashboard.progress.Progress method)</a>
 </li>
@@ -4770,13 +5045,19 @@
         <li><a href="autoapi/cellmap_flow/jobs/local/index.html#cellmap_flow.jobs.local.run">(in module cellmap_flow.jobs.local)</a>
 </li>
       </ul></li>
+      <li><a href="autoapi/cellmap_flow/dashboard/services/launch/index.html#cellmap_flow.dashboard.services.launch.run_bioimage_model">run_bioimage_model() (in module cellmap_flow.dashboard.services.launch)</a>
+</li>
       <li><a href="autoapi/cellmap_flow/cli/doctor/index.html#cellmap_flow.cli.doctor.run_checks">run_checks() (in module cellmap_flow.cli.doctor)</a>
 </li>
       <li><a href="autoapi/cellmap_flow/cli/infer/index.html#cellmap_flow.cli.infer.run_generic">run_generic() (in module cellmap_flow.cli.infer)</a>
 </li>
       <li><a href="autoapi/cellmap_flow/dashboard/services/launch/index.html#cellmap_flow.dashboard.services.launch.run_hf_model">run_hf_model() (in module cellmap_flow.dashboard.services.launch)</a>
 </li>
+      <li><a href="autoapi/cellmap_flow/models/configs/fly/index.html#cellmap_flow.models.configs.fly.run_metadata">run_metadata() (in module cellmap_flow.models.configs.fly)</a>
+</li>
       <li><a href="autoapi/cellmap_flow/dashboard/services/launch/index.html#cellmap_flow.dashboard.services.launch.run_model">run_model() (in module cellmap_flow.dashboard.services.launch)</a>
+</li>
+      <li><a href="autoapi/cellmap_flow/dashboard/services/launch/index.html#cellmap_flow.dashboard.services.launch.run_model_config">run_model_config() (in module cellmap_flow.dashboard.services.launch)</a>
 </li>
       <li><a href="autoapi/cellmap_flow/cli/yaml_cli/index.html#cellmap_flow.cli.yaml_cli.run_multiple">run_multiple() (in module cellmap_flow.cli.yaml_cli)</a>
 </li>
@@ -4798,12 +5079,16 @@
 </li>
       <li><a href="autoapi/cellmap_flow/serving/client/index.html#cellmap_flow.serving.client.running_job_host">running_job_host() (in module cellmap_flow.serving.client)</a>
 </li>
+      <li><a href="autoapi/cellmap_flow/dashboard/services/launch/index.html#cellmap_flow.dashboard.services.launch.running_names">running_names() (in module cellmap_flow.dashboard.services.launch)</a>
+</li>
   </ul></td>
 </tr></table>
 
 <h2 id="S">S</h2>
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="autoapi/cellmap_flow/models/configs/cellpose/index.html#cellmap_flow.models.configs.cellpose.SAM_TILE_SIZE">SAM_TILE_SIZE (in module cellmap_flow.models.configs.cellpose)</a>
+</li>
       <li><a href="autoapi/cellmap_flow/io/multiscale/index.html#cellmap_flow.io.multiscale.same_voxel_size">same_voxel_size() (in module cellmap_flow.io.multiscale)</a>
 </li>
       <li><a href="autoapi/cellmap_flow/finetune/data/dataset/index.html#cellmap_flow.finetune.data.dataset.VirtualPatchDataset.sampler">sampler (cellmap_flow.finetune.data.dataset.VirtualPatchDataset attribute)</a>
@@ -4845,6 +5130,8 @@
       <ul>
         <li><a href="autoapi/cellmap_flow/models/configs/cellmap/index.html#cellmap_flow.models.configs.cellmap.CellMapModelConfig.scale">(cellmap_flow.models.configs.cellmap.CellMapModelConfig attribute)</a>
 </li>
+        <li><a href="autoapi/cellmap_flow/models/configs/cellpose/index.html#cellmap_flow.models.configs.cellpose.CellposeModelConfig.scale">(cellmap_flow.models.configs.cellpose.CellposeModelConfig attribute)</a>
+</li>
         <li><a href="autoapi/cellmap_flow/models/configs/dacapo/index.html#cellmap_flow.models.configs.dacapo.DaCapoModelConfig.scale">(cellmap_flow.models.configs.dacapo.DaCapoModelConfig attribute)</a>
 </li>
         <li><a href="autoapi/cellmap_flow/models/configs/finetune/index.html#cellmap_flow.models.configs.finetune.FinetuneModelConfig.scale">(cellmap_flow.models.configs.finetune.FinetuneModelConfig attribute)</a>
@@ -4858,6 +5145,8 @@
         <li><a href="autoapi/cellmap_flow/models/models_config/index.html#cellmap_flow.models.models_config.BioModelConfig.scale">(cellmap_flow.models.models_config.BioModelConfig attribute)</a>
 </li>
         <li><a href="autoapi/cellmap_flow/models/models_config/index.html#cellmap_flow.models.models_config.CellMapModelConfig.scale">(cellmap_flow.models.models_config.CellMapModelConfig attribute)</a>
+</li>
+        <li><a href="autoapi/cellmap_flow/models/models_config/index.html#cellmap_flow.models.models_config.CellposeModelConfig.scale">(cellmap_flow.models.models_config.CellposeModelConfig attribute)</a>
 </li>
         <li><a href="autoapi/cellmap_flow/models/models_config/index.html#cellmap_flow.models.models_config.DaCapoModelConfig.scale">(cellmap_flow.models.models_config.DaCapoModelConfig attribute)</a>
 </li>
@@ -4918,6 +5207,8 @@
 </li>
       <li><a href="autoapi/cellmap_flow/image_data_interface/index.html#cellmap_flow.image_data_interface.LazyNormalization.selected">selected() (cellmap_flow.image_data_interface.LazyNormalization method)</a>
 </li>
+      <li><a href="autoapi/cellmap_flow/dashboard/requests/index.html#cellmap_flow.dashboard.requests.SubmitModels.selected_bioimage_models">selected_bioimage_models (cellmap_flow.dashboard.requests.SubmitModels attribute)</a>
+</li>
       <li><a href="autoapi/cellmap_flow/image_data_interface/index.html#cellmap_flow.image_data_interface.selected_channel">selected_channel() (in module cellmap_flow.image_data_interface)</a>
 </li>
       <li><a href="autoapi/cellmap_flow/dashboard/requests/index.html#cellmap_flow.dashboard.requests.SubmitModels.selected_hf_models">selected_hf_models (cellmap_flow.dashboard.requests.SubmitModels attribute)</a>
@@ -4937,6 +5228,8 @@
       <li><a href="autoapi/cellmap_flow/cli/server_cli/index.html#cellmap_flow.cli.server_cli.serve_entry">serve_entry() (in module cellmap_flow.cli.server_cli)</a>
 </li>
       <li><a href="autoapi/cellmap_flow/dashboard/routes/finetune/annotation_core/index.html#cellmap_flow.dashboard.routes.finetune.annotation_core.serve_new_volume">serve_new_volume() (in module cellmap_flow.dashboard.routes.finetune.annotation_core)</a>
+</li>
+      <li><a href="autoapi/cellmap_flow/models/configs/bio/index.html#cellmap_flow.models.configs.bio.served_dtype">served_dtype() (in module cellmap_flow.models.configs.bio)</a>
 </li>
       <li><a href="autoapi/cellmap_flow/serving/virtual_zarr/index.html#cellmap_flow.serving.virtual_zarr.served_spatial_shape">served_spatial_shape() (in module cellmap_flow.serving.virtual_zarr)</a>
 </li>
@@ -5008,8 +5301,6 @@
 </li>
       <li><a href="autoapi/cellmap_flow/dashboard/state/index.html#cellmap_flow.dashboard.state.Session.shader_controls">shader_controls (cellmap_flow.dashboard.state.Session attribute)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="autoapi/cellmap_flow/dashboard/state/index.html#cellmap_flow.dashboard.state.Session.shaders">shaders (cellmap_flow.dashboard.state.Session attribute)</a>
 </li>
       <li><a href="autoapi/cellmap_flow/dashboard/requests/index.html#cellmap_flow.dashboard.requests.BoundingBox.shape">shape (cellmap_flow.dashboard.requests.BoundingBox attribute)</a>
@@ -5024,6 +5315,8 @@
         <li><a href="autoapi/cellmap_flow/io/resample/index.html#cellmap_flow.io.resample.Resampling.shape">(cellmap_flow.io.resample.Resampling property)</a>
 </li>
       </ul></li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="autoapi/cellmap_flow/finetune/data/reader/index.html#cellmap_flow.finetune.data.reader.PatchReader.shape_voxels">shape_voxels (cellmap_flow.finetune.data.reader.PatchReader attribute)</a>
 </li>
       <li><a href="autoapi/cellmap_flow/jobs/spec/index.html#cellmap_flow.jobs.spec.JobSpec.shell">shell (cellmap_flow.jobs.spec.JobSpec attribute)</a>
@@ -5038,6 +5331,12 @@
 </li>
       <li><a href="autoapi/cellmap_flow/finetune/target_transforms/index.html#cellmap_flow.finetune.target_transforms.IntervalTargetTransform.sigma_nm">sigma_nm (cellmap_flow.finetune.target_transforms.IntervalTargetTransform attribute)</a>
 </li>
+      <li><a href="autoapi/cellmap_flow/models/configs/fly/index.html#cellmap_flow.models.configs.fly.FlyModelConfig.sigmoid">sigmoid (cellmap_flow.models.configs.fly.FlyModelConfig attribute)</a>
+
+      <ul>
+        <li><a href="autoapi/cellmap_flow/models/models_config/index.html#cellmap_flow.models.models_config.FlyModelConfig.sigmoid">(cellmap_flow.models.models_config.FlyModelConfig attribute)</a>
+</li>
+      </ul></li>
       <li><a href="autoapi/cellmap_flow/post/postprocessors/index.html#cellmap_flow.post.postprocessors.SigmoidPostprocessor">SigmoidPostprocessor (class in cellmap_flow.post.postprocessors)</a>
 </li>
       <li><a href="autoapi/cellmap_flow/finetune/losses/index.html#cellmap_flow.finetune.losses.IntervalLoss.sign_weight">sign_weight (cellmap_flow.finetune.losses.IntervalLoss attribute)</a>
@@ -5058,8 +5357,24 @@
 </li>
       <li><a href="autoapi/cellmap_flow/finetune/losses/index.html#cellmap_flow.finetune.losses.IntervalLoss.slack">slack (cellmap_flow.finetune.losses.IntervalLoss attribute)</a>
 </li>
+      <li><a href="autoapi/cellmap_flow/models/configs/cellpose/index.html#cellmap_flow.models.configs.cellpose.CellposeModelConfig.slice_size">slice_size (cellmap_flow.models.configs.cellpose.CellposeModelConfig attribute)</a>
+
+      <ul>
+        <li><a href="autoapi/cellmap_flow/models/models_config/index.html#cellmap_flow.models.models_config.CellposeModelConfig.slice_size">(cellmap_flow.models.models_config.CellposeModelConfig attribute)</a>
+</li>
+      </ul></li>
       <li><a href="autoapi/cellmap_flow/post/postprocessors/index.html#cellmap_flow.post.postprocessors.SimpleBlockwiseMerger.slices">slices (cellmap_flow.post.postprocessors.SimpleBlockwiseMerger attribute)</a>
 </li>
+      <li><a href="autoapi/cellmap_flow/models/configs/bio/index.html#cellmap_flow.models.configs.bio.BioModelConfig.slices_per_chunk">slices_per_chunk (cellmap_flow.models.configs.bio.BioModelConfig attribute)</a>
+
+      <ul>
+        <li><a href="autoapi/cellmap_flow/models/configs/cellpose/index.html#cellmap_flow.models.configs.cellpose.CellposeModelConfig.slices_per_chunk">(cellmap_flow.models.configs.cellpose.CellposeModelConfig attribute)</a>
+</li>
+        <li><a href="autoapi/cellmap_flow/models/models_config/index.html#cellmap_flow.models.models_config.BioModelConfig.slices_per_chunk">(cellmap_flow.models.models_config.BioModelConfig attribute)</a>
+</li>
+        <li><a href="autoapi/cellmap_flow/models/models_config/index.html#cellmap_flow.models.models_config.CellposeModelConfig.slices_per_chunk">(cellmap_flow.models.models_config.CellposeModelConfig attribute)</a>
+</li>
+      </ul></li>
       <li><a href="autoapi/cellmap_flow/finetune/losses/index.html#cellmap_flow.finetune.losses.IntervalLoss.slope_term">slope_term() (cellmap_flow.finetune.losses.IntervalLoss method)</a>
 </li>
       <li><a href="autoapi/cellmap_flow/finetune/losses/index.html#cellmap_flow.finetune.losses.IntervalLoss.slope_weight">slope_weight (cellmap_flow.finetune.losses.IntervalLoss attribute)</a>
@@ -5110,6 +5425,8 @@
 </li>
       <li><a href="autoapi/cellmap_flow/inference/timing/index.html#cellmap_flow.inference.timing.stage">stage() (in module cellmap_flow.inference.timing)</a>
 </li>
+      <li><a href="autoapi/cellmap_flow/models/bioimage_catalog/index.html#cellmap_flow.models.bioimage_catalog.STALE_AFTER_S">STALE_AFTER_S (in module cellmap_flow.models.bioimage_catalog)</a>
+</li>
       <li><a href="autoapi/cellmap_flow/inference/timing/index.html#cellmap_flow.inference.timing.start">start() (in module cellmap_flow.inference.timing)</a>
 </li>
       <li><a href="autoapi/cellmap_flow/dashboard/routes/bbx_generator/index.html#cellmap_flow.dashboard.routes.bbx_generator.start_bbx_generator">start_bbx_generator() (in module cellmap_flow.dashboard.routes.bbx_generator)</a>
@@ -5121,6 +5438,8 @@
       <li><a href="autoapi/cellmap_flow/finetune/session/sync/index.html#cellmap_flow.finetune.session.sync.start_periodic_sync">start_periodic_sync() (in module cellmap_flow.finetune.session.sync)</a>
 </li>
       <li><a href="autoapi/cellmap_flow/jobs/launch/index.html#cellmap_flow.jobs.launch.started_jobs">started_jobs() (in module cellmap_flow.jobs.launch)</a>
+</li>
+      <li><a href="autoapi/cellmap_flow/jobs/launch/index.html#cellmap_flow.jobs.launch.starting_jobs">starting_jobs() (in module cellmap_flow.jobs.launch)</a>
 </li>
       <li><a href="autoapi/cellmap_flow/jobs/site/index.html#cellmap_flow.jobs.site.SiteProfile.startup_timeout_seconds">startup_timeout_seconds (cellmap_flow.jobs.site.SiteProfile attribute)</a>
 </li>
@@ -5278,6 +5597,12 @@
         <li><a href="autoapi/cellmap_flow/post/postprocessors/index.html#cellmap_flow.post.postprocessors.ThresholdPostprocessor">(class in cellmap_flow.post.postprocessors)</a>
 </li>
       </ul></li>
+      <li><a href="autoapi/cellmap_flow/models/configs/cellpose/index.html#cellmap_flow.models.configs.cellpose.TILE_OVERLAP">TILE_OVERLAP (in module cellmap_flow.models.configs.cellpose)</a>
+</li>
+      <li><a href="autoapi/cellmap_flow/models/configs/cellpose/index.html#cellmap_flow.models.configs.cellpose.tile_size">tile_size() (in module cellmap_flow.models.configs.cellpose)</a>
+</li>
+      <li><a href="autoapi/cellmap_flow/models/configs/cellpose/index.html#cellmap_flow.models.configs.cellpose.tiles_per_slice">tiles_per_slice() (in module cellmap_flow.models.configs.cellpose)</a>
+</li>
       <li><a href="autoapi/cellmap_flow/dashboard/requests/index.html#cellmap_flow.dashboard.requests.BlockwiseSettings.tmp_dir">tmp_dir (cellmap_flow.dashboard.requests.BlockwiseSettings attribute)</a>
 
       <ul>
@@ -5297,6 +5622,8 @@
 </li>
         <li><a href="autoapi/cellmap_flow/models/configs/cellmap/index.html#cellmap_flow.models.configs.cellmap.CellMapModelConfig.to_dict">(cellmap_flow.models.configs.cellmap.CellMapModelConfig method)</a>
 </li>
+        <li><a href="autoapi/cellmap_flow/models/configs/cellpose/index.html#cellmap_flow.models.configs.cellpose.CellposeModelConfig.to_dict">(cellmap_flow.models.configs.cellpose.CellposeModelConfig method)</a>
+</li>
         <li><a href="autoapi/cellmap_flow/models/configs/dacapo/index.html#cellmap_flow.models.configs.dacapo.DaCapoModelConfig.to_dict">(cellmap_flow.models.configs.dacapo.DaCapoModelConfig method)</a>
 </li>
         <li><a href="autoapi/cellmap_flow/models/configs/finetune/index.html#cellmap_flow.models.configs.finetune.FinetuneModelConfig.to_dict">(cellmap_flow.models.configs.finetune.FinetuneModelConfig method)</a>
@@ -5310,6 +5637,8 @@
         <li><a href="autoapi/cellmap_flow/models/models_config/index.html#cellmap_flow.models.models_config.BioModelConfig.to_dict">(cellmap_flow.models.models_config.BioModelConfig method)</a>
 </li>
         <li><a href="autoapi/cellmap_flow/models/models_config/index.html#cellmap_flow.models.models_config.CellMapModelConfig.to_dict">(cellmap_flow.models.models_config.CellMapModelConfig method)</a>
+</li>
+        <li><a href="autoapi/cellmap_flow/models/models_config/index.html#cellmap_flow.models.models_config.CellposeModelConfig.to_dict">(cellmap_flow.models.models_config.CellposeModelConfig method)</a>
 </li>
         <li><a href="autoapi/cellmap_flow/models/models_config/index.html#cellmap_flow.models.models_config.Config.to_dict">(cellmap_flow.models.models_config.Config method)</a>
 </li>
@@ -5332,6 +5661,8 @@
       </ul></li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="autoapi/cellmap_flow/models/resolve/index.html#cellmap_flow.models.resolve.Resolved.to_json">to_json() (cellmap_flow.models.resolve.Resolved method)</a>
+</li>
       <li><a href="autoapi/cellmap_flow/pipeline_spec/index.html#cellmap_flow.pipeline_spec.PipelineSpec.to_json_data">to_json_data() (cellmap_flow.pipeline_spec.PipelineSpec method)</a>
 </li>
       <li><a href="autoapi/cellmap_flow/models/geometry/index.html#cellmap_flow.models.geometry.ModelGeometry.to_model_info">to_model_info() (cellmap_flow.models.geometry.ModelGeometry method)</a>
@@ -5376,9 +5707,13 @@
         <li><a href="autoapi/cellmap_flow/finetune/adaptation/index.html#cellmap_flow.finetune.adaptation.LoraStrategy.trainable_state">(cellmap_flow.finetune.adaptation.LoraStrategy method)</a>
 </li>
       </ul></li>
+      <li><a href="autoapi/cellmap_flow/models/bioimage_catalog/index.html#cellmap_flow.models.bioimage_catalog.trained_at">trained_at() (in module cellmap_flow.models.bioimage_catalog)</a>
+</li>
       <li><a href="autoapi/cellmap_flow/models/configs/finetune/index.html#cellmap_flow.models.configs.finetune.trained_at_geometry">trained_at_geometry() (in module cellmap_flow.models.configs.finetune)</a>
 </li>
       <li><a href="autoapi/cellmap_flow/finetune/run_outputs/index.html#cellmap_flow.finetune.run_outputs.trained_voxel_sizes">trained_voxel_sizes() (in module cellmap_flow.finetune.run_outputs)</a>
+</li>
+      <li><a href="autoapi/cellmap_flow/models/bioimage_catalog/index.html#cellmap_flow.models.bioimage_catalog.TRAINED_VOXEL_SIZES_FILE">TRAINED_VOXEL_SIZES_FILE (in module cellmap_flow.models.bioimage_catalog)</a>
 </li>
       <li><a href="autoapi/cellmap_flow/finetune/job_manager/tailer/index.html#cellmap_flow.finetune.job_manager.tailer.trainer_outputs_from_log">trainer_outputs_from_log() (in module cellmap_flow.finetune.job_manager.tailer)</a>
 </li>
@@ -5389,6 +5724,8 @@
       <li><a href="autoapi/cellmap_flow/dashboard/routes/finetune/common/index.html#cellmap_flow.dashboard.routes.finetune.common.training_settings">training_settings() (in module cellmap_flow.dashboard.routes.finetune.common)</a>
 </li>
       <li><a href="autoapi/cellmap_flow/finetune/lora_trainer/index.html#cellmap_flow.finetune.lora_trainer.LoRAFinetuner.training_stats">training_stats (cellmap_flow.finetune.lora_trainer.LoRAFinetuner attribute)</a>
+</li>
+      <li><a href="autoapi/cellmap_flow/models/configs/fly/index.html#cellmap_flow.models.configs.fly.TRAINING_TILE">TRAINING_TILE (in module cellmap_flow.models.configs.fly)</a>
 </li>
       <li><a href="autoapi/cellmap_flow/finetune/session_loop/index.html#cellmap_flow.finetune.session_loop.TrainingSession">TrainingSession (class in cellmap_flow.finetune.session_loop)</a>
 </li>
@@ -5408,7 +5745,13 @@
       </ul></li>
       <li><a href="autoapi/cellmap_flow/image_data_interface/index.html#cellmap_flow.image_data_interface.LazyNormalization.ts_dataset">ts_dataset (cellmap_flow.image_data_interface.LazyNormalization attribute)</a>
 </li>
-      <li><a href="autoapi/cellmap_flow/norm/input_normalize/index.html#cellmap_flow.norm.input_normalize.EuclideanDistance.type">type (cellmap_flow.norm.input_normalize.EuclideanDistance attribute)</a>
+      <li><a href="autoapi/cellmap_flow/models/resolve/index.html#cellmap_flow.models.resolve.Resolved.type">type (cellmap_flow.models.resolve.Resolved attribute)</a>, <a href="autoapi/cellmap_flow/models/resolve/index.html#id0">[1]</a>
+
+      <ul>
+        <li><a href="autoapi/cellmap_flow/norm/input_normalize/index.html#cellmap_flow.norm.input_normalize.EuclideanDistance.type">(cellmap_flow.norm.input_normalize.EuclideanDistance attribute)</a>
+</li>
+      </ul></li>
+      <li><a href="autoapi/cellmap_flow/models/envs/index.html#cellmap_flow.models.envs.type_default">type_default() (in module cellmap_flow.models.envs)</a>
 </li>
   </ul></td>
 </tr></table>
@@ -5423,6 +5766,8 @@
       <li><a href="autoapi/cellmap_flow/review/index.html#cellmap_flow.review.undo_verdict">undo_verdict() (in module cellmap_flow.review)</a>
 </li>
       <li><a href="autoapi/cellmap_flow/dashboard/routes/finetune/view_labels/index.html#cellmap_flow.dashboard.routes.finetune.view_labels.undo_view_labels">undo_view_labels() (in module cellmap_flow.dashboard.routes.finetune.view_labels)</a>
+</li>
+      <li><a href="autoapi/cellmap_flow/models/configs/fly/index.html#cellmap_flow.models.configs.fly.unet_arguments">unet_arguments() (in module cellmap_flow.models.configs.fly)</a>
 </li>
       <li><a href="autoapi/cellmap_flow/serving/probe/index.html#cellmap_flow.serving.probe.UNIT">UNIT (in module cellmap_flow.serving.probe)</a>
 </li>
@@ -5512,10 +5857,10 @@
 </li>
       <li><a href="autoapi/cellmap_flow/viewer/raw/index.html#cellmap_flow.viewer.raw.ScalePyramid.volume_layers">volume_layers (cellmap_flow.viewer.raw.ScalePyramid attribute)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="autoapi/cellmap_flow/finetune/session/sync/index.html#cellmap_flow.finetune.session.sync.volume_record">volume_record() (in module cellmap_flow.finetune.session.sync)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="autoapi/cellmap_flow/viewer/raw/index.html#cellmap_flow.viewer.raw.ScalePyramid.volume_type">volume_type (cellmap_flow.viewer.raw.ScalePyramid property)</a>
 </li>
       <li><a href="autoapi/cellmap_flow/finetune/data/dataset/index.html#cellmap_flow.finetune.data.dataset.VirtualPatchDataset.volume_zarr_path">volume_zarr_path (cellmap_flow.finetune.data.dataset.VirtualPatchDataset attribute)</a>
@@ -5534,16 +5879,24 @@
 </li>
       <li><a href="autoapi/cellmap_flow/finetune/session/store/index.html#cellmap_flow.finetune.session.store.SessionStore.volumes">volumes() (cellmap_flow.finetune.session.store.SessionStore method)</a>
 </li>
-      <li><a href="autoapi/cellmap_flow/image_data_interface/index.html#cellmap_flow.image_data_interface.ImageDataInterface.voxel_size">voxel_size (cellmap_flow.image_data_interface.ImageDataInterface attribute)</a>
+      <li><a href="autoapi/cellmap_flow/dashboard/requests/index.html#cellmap_flow.dashboard.requests.BioimageSelection.voxel_size">voxel_size (cellmap_flow.dashboard.requests.BioimageSelection attribute)</a>
 
       <ul>
+        <li><a href="autoapi/cellmap_flow/dashboard/routes/model_resolve/index.html#cellmap_flow.dashboard.routes.model_resolve.ResolveModel.voxel_size">(cellmap_flow.dashboard.routes.model_resolve.ResolveModel attribute)</a>
+</li>
+        <li><a href="autoapi/cellmap_flow/image_data_interface/index.html#cellmap_flow.image_data_interface.ImageDataInterface.voxel_size">(cellmap_flow.image_data_interface.ImageDataInterface attribute)</a>
+</li>
         <li><a href="autoapi/cellmap_flow/io/geometry/index.html#cellmap_flow.io.geometry.Grid.voxel_size">(cellmap_flow.io.geometry.Grid attribute)</a>
 </li>
         <li><a href="autoapi/cellmap_flow/io/metadata/index.html#cellmap_flow.io.metadata.ArrayMeta.voxel_size">(cellmap_flow.io.metadata.ArrayMeta attribute)</a>
 </li>
         <li><a href="autoapi/cellmap_flow/models/configs/bio/index.html#cellmap_flow.models.configs.bio.BioModelConfig.voxel_size">(cellmap_flow.models.configs.bio.BioModelConfig attribute)</a>
 </li>
+        <li><a href="autoapi/cellmap_flow/models/configs/cellpose/index.html#cellmap_flow.models.configs.cellpose.CellposeModelConfig.voxel_size">(cellmap_flow.models.configs.cellpose.CellposeModelConfig attribute)</a>
+</li>
         <li><a href="autoapi/cellmap_flow/models/models_config/index.html#cellmap_flow.models.models_config.BioModelConfig.voxel_size">(cellmap_flow.models.models_config.BioModelConfig attribute)</a>
+</li>
+        <li><a href="autoapi/cellmap_flow/models/models_config/index.html#cellmap_flow.models.models_config.CellposeModelConfig.voxel_size">(cellmap_flow.models.models_config.CellposeModelConfig attribute)</a>
 </li>
       </ul></li>
       <li><a href="autoapi/cellmap_flow/finetune/losses/index.html#cellmap_flow.finetune.losses.IntervalLoss.voxel_size_nm">voxel_size_nm (cellmap_flow.finetune.losses.IntervalLoss attribute)</a>
@@ -5554,12 +5907,6 @@
       </ul></li>
       <li><a href="autoapi/cellmap_flow/finetune/session/manifest/index.html#cellmap_flow.finetune.session.manifest.voxels_inside_any_bbox">voxels_inside_any_bbox() (in module cellmap_flow.finetune.session.manifest)</a>
 </li>
-      <li><a href="autoapi/cellmap_flow/models/configs/bio/index.html#cellmap_flow.models.configs.bio.BioModelConfig.voxels_to_process">voxels_to_process (cellmap_flow.models.configs.bio.BioModelConfig attribute)</a>
-
-      <ul>
-        <li><a href="autoapi/cellmap_flow/models/models_config/index.html#cellmap_flow.models.models_config.BioModelConfig.voxels_to_process">(cellmap_flow.models.models_config.BioModelConfig attribute)</a>
-</li>
-      </ul></li>
   </ul></td>
 </tr></table>
 
@@ -5594,18 +5941,26 @@
 </li>
       <li><a href="autoapi/cellmap_flow/cli/doctor/index.html#cellmap_flow.cli.doctor.WARN">WARN (in module cellmap_flow.cli.doctor)</a>
 </li>
+      <li><a href="autoapi/cellmap_flow/models/configs/bio/index.html#cellmap_flow.models.configs.bio.BioModelConfig.weight_format">weight_format (cellmap_flow.models.configs.bio.BioModelConfig attribute)</a>
+
+      <ul>
+        <li><a href="autoapi/cellmap_flow/models/models_config/index.html#cellmap_flow.models.models_config.BioModelConfig.weight_format">(cellmap_flow.models.models_config.BioModelConfig attribute)</a>
+</li>
+      </ul></li>
+      <li><a href="autoapi/cellmap_flow/models/configs/bio/index.html#cellmap_flow.models.configs.bio.WEIGHT_FORMATS">WEIGHT_FORMATS (in module cellmap_flow.models.configs.bio)</a>
+</li>
       <li><a href="autoapi/cellmap_flow/models/configs/finetune/index.html#cellmap_flow.models.configs.finetune.FinetuneModelConfig.weights_path">weights_path (cellmap_flow.models.configs.finetune.FinetuneModelConfig attribute)</a>
 
       <ul>
         <li><a href="autoapi/cellmap_flow/models/models_config/index.html#cellmap_flow.models.models_config.FinetuneModelConfig.weights_path">(cellmap_flow.models.models_config.FinetuneModelConfig attribute)</a>
 </li>
       </ul></li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="autoapi/cellmap_flow/dashboard/requests/index.html#cellmap_flow.dashboard.requests.WholeNumber">WholeNumber (in module cellmap_flow.dashboard.requests)</a>
 </li>
       <li><a href="autoapi/cellmap_flow/io/store/index.html#cellmap_flow.io.store.with_access">with_access() (in module cellmap_flow.io.store)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="autoapi/cellmap_flow/image_data_interface/index.html#cellmap_flow.image_data_interface.ImageDataInterface.with_input_norms">with_input_norms() (cellmap_flow.image_data_interface.ImageDataInterface method)</a>
 </li>
       <li><a href="autoapi/cellmap_flow/finetune/session/sync/index.html#cellmap_flow.finetune.session.sync.worker_count">worker_count() (in module cellmap_flow.finetune.session.sync)</a>
@@ -5678,9 +6033,15 @@
 </li>
       <li><a href="autoapi/cellmap_flow/serving/virtual_zarr/index.html#cellmap_flow.serving.virtual_zarr.zarray">zarray() (in module cellmap_flow.serving.virtual_zarr)</a>
 </li>
+      <li><a href="autoapi/cellmap_flow/serving/virtual_zarr/index.html#cellmap_flow.serving.virtual_zarr.zattrs">zattrs() (in module cellmap_flow.serving.virtual_zarr)</a>
+</li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
-      <li><a href="autoapi/cellmap_flow/serving/virtual_zarr/index.html#cellmap_flow.serving.virtual_zarr.zattrs">zattrs() (in module cellmap_flow.serving.virtual_zarr)</a>
+      <li><a href="autoapi/cellmap_flow/models/bioimage_catalog/index.html#cellmap_flow.models.bioimage_catalog.ZOO_INDEX_URL">ZOO_INDEX_URL (in module cellmap_flow.models.bioimage_catalog)</a>
+</li>
+      <li><a href="autoapi/cellmap_flow/models/bioimage_catalog/index.html#cellmap_flow.models.bioimage_catalog.ZOO_PAGE_URL">ZOO_PAGE_URL (in module cellmap_flow.models.bioimage_catalog)</a>
+</li>
+      <li><a href="autoapi/cellmap_flow/models/bioimage_catalog/index.html#cellmap_flow.models.bioimage_catalog.ZooIndexError">ZooIndexError</a>
 </li>
       <li><a href="autoapi/cellmap_flow/norm/input_normalize/index.html#cellmap_flow.norm.input_normalize.ZScoreNormalizer">ZScoreNormalizer (class in cellmap_flow.norm.input_normalize)</a>
 </li>

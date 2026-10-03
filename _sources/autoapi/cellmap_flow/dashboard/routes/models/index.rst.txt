@@ -22,6 +22,8 @@ Functions
    cellmap_flow.dashboard.routes.models.create_model_config
    cellmap_flow.dashboard.routes.models.get_huggingface_models
    cellmap_flow.dashboard.routes.models.refresh_huggingface_models_route
+   cellmap_flow.dashboard.routes.models.get_bioimage_models
+   cellmap_flow.dashboard.routes.models.refresh_bioimage_models_route
    cellmap_flow.dashboard.routes.models.submit_models
    cellmap_flow.dashboard.routes.models.job_logs
    cellmap_flow.dashboard.routes.models.gpu_queues
@@ -57,10 +59,21 @@ Module Contents
    Force refresh the Hugging Face models cache
 
 
+.. py:function:: get_bioimage_models()
+
+   The BioImage Model Zoo's models (cached): bioimage_catalog.list_bioimage_models.
+
+
+.. py:function:: refresh_bioimage_models_route()
+
+   Fetch the zoo's index again.
+
+
 .. py:function:: submit_models()
 
    Run the models the Models tab has ticked (a SubmitModels), and stop
-   the others: services.launch.update_run_models.
+   the others: services.launch.update_run_models. A zoo model that needs a
+   voxel size and was given none is a 400, and nothing changes.
 
 
 .. py:function:: job_logs()

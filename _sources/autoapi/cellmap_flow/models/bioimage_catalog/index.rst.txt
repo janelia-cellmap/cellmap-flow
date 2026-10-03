@@ -1,0 +1,194 @@
+cellmap_flow.models.bioimage_catalog
+====================================
+
+.. py:module:: cellmap_flow.models.bioimage_catalog
+
+.. autoapi-nested-parse::
+
+   The BioImage Model Zoo's models, for the dashboard's picker.
+
+   They come from bioimage.io's artifact server (Hypha), whose listing holds
+   each model's whole description: its axes (so 2D or 3D, and any declared
+   voxel size, without a fetch per model) and weights. The legacy
+   ``collection.json`` index, which lags it (125 models to its 157 in
+   October 2026), is the fallback when the server cannot be reached.
+
+   ``list_bioimage_models`` answers from a cache file under
+   ``~/.cellmap_flow/bioimage`` once there is one, so opening the Models tab
+   does not download the zoo's index each time; ``refresh_bioimage_models``
+   fetches it again. Both give ``{"fetched": <ISO time>, "models": [...]}``,
+   the index's models in its order, each as ``normalise`` gives it. A failed
+   fetch raises ``ZooIndexError``, whose message says why, and leaves the
+   cache as it was.
+
+   None of the zoo's models declares the voxel size it was trained at, so the
+   EM ones' were looked up by hand, in ``bioimage_voxel_sizes.yaml`` beside
+   this module: ``trained_at`` reads it, and each listed model carries its
+   row as ``trained`` (None for a model not in it).
+
+   ``bioimage_entry`` turns a ticked model into ``BioModelConfig``'s
+   constructor arguments: the one place that knows their names.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.models.bioimage_catalog.ZOO_INDEX_URL
+   cellmap_flow.models.bioimage_catalog.HYPHA_ARTIFACTS
+   cellmap_flow.models.bioimage_catalog.HYPHA_MODELS_URL
+   cellmap_flow.models.bioimage_catalog.FETCH_TIMEOUT_S
+   cellmap_flow.models.bioimage_catalog.BIOIMAGE_CACHE_DIR
+   cellmap_flow.models.bioimage_catalog.BIOIMAGE_CACHE_FILE
+   cellmap_flow.models.bioimage_catalog.CACHE_FORMAT
+   cellmap_flow.models.bioimage_catalog.STALE_AFTER_S
+   cellmap_flow.models.bioimage_catalog.ZOO_PAGE_URL
+   cellmap_flow.models.bioimage_catalog.TRAINED_VOXEL_SIZES_FILE
+
+
+Exceptions
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.models.bioimage_catalog.ZooIndexError
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.models.bioimage_catalog.normalise
+   cellmap_flow.models.bioimage_catalog.normalise_artifact
+   cellmap_flow.models.bioimage_catalog.trained_at
+   cellmap_flow.models.bioimage_catalog.list_bioimage_models
+   cellmap_flow.models.bioimage_catalog.refresh_bioimage_models
+   cellmap_flow.models.bioimage_catalog.find_bioimage_model
+   cellmap_flow.models.bioimage_catalog.declared_voxel_size
+   cellmap_flow.models.bioimage_catalog.bioimage_entry
+   cellmap_flow.models.bioimage_catalog.entry_model_id
+
+
+Module Contents
+---------------
+
+.. py:data:: ZOO_INDEX_URL
+   :value: 'https://uk1s3.embassy.ebi.ac.uk/public-datasets/bioimage.io/collection.json'
+
+
+.. py:data:: HYPHA_ARTIFACTS
+   :value: 'https://hypha.aicell.io/bioimage-io/artifacts'
+
+
+.. py:data:: HYPHA_MODELS_URL
+   :value: ''
+
+
+.. py:data:: FETCH_TIMEOUT_S
+   :value: 30
+
+
+.. py:data:: BIOIMAGE_CACHE_DIR
+
+.. py:data:: BIOIMAGE_CACHE_FILE
+
+.. py:data:: CACHE_FORMAT
+   :value: 2
+
+
+.. py:data:: STALE_AFTER_S
+   :value: 3600
+
+
+.. py:data:: ZOO_PAGE_URL
+   :value: 'https://bioimage.io/#/artifacts/{}'
+
+
+.. py:exception:: ZooIndexError
+
+
+
+   The zoo's index could not be fetched or read.
+
+
+.. py:function:: normalise(raw: dict) -> dict
+
+   One index entry as the picker shows it.
+
+   ``id`` is the index's (a Zenodo DOI for older models, the nickname for
+   newer ones), ``nickname`` the animal name ("affable-shark") or None, and
+   ``key`` the one to load it by, the nickname when there is one. ``dims``
+   is "2d", "3d" or None; ``em`` whether its tags, name or description say
+   electron microscopy; ``weight_formats`` short names ("pytorch", "onnx").
+
+
+.. py:function:: normalise_artifact(artifact: dict) -> Optional[dict]
+
+   One Hypha artifact as the picker shows it: ``normalise``'s fields from
+   its description, with 2D/3D and the declared voxel size from its input's
+   axes. None for an artifact with no description.
+
+
+.. py:data:: TRAINED_VOXEL_SIZES_FILE
+
+.. py:function:: trained_at(model) -> Optional[dict]
+
+   What ``bioimage_voxel_sizes.yaml`` says the model (an entry, or its
+   nickname) was trained at: {"voxel_size" (absent when trained across
+   resolutions), "trained_on", "confidence", "source", "note"?}, or None.
+
+
+.. py:function:: list_bioimage_models() -> dict
+
+   The zoo's models, from the cache when there is a current one, with
+   ``stale`` saying whether it is older than STALE_AFTER_S.
+
+   A cache in an older format is fetched again; when that fails it is
+   still read, as a list that is older is better than none.
+
+
+.. py:function:: refresh_bioimage_models() -> dict
+
+   Fetch the zoo's index again, and cache it.
+
+
+.. py:function:: find_bioimage_model(key: str) -> Optional[dict]
+
+   The cached model whose id, nickname or key is ``key``, or None.
+
+   Only the cache is read: the Models tab's submit must not wait on the
+   network, and a model the tab listed is in it.
+
+
+.. py:function:: declared_voxel_size(entry: dict) -> Optional[list]
+
+   The voxel size (nm, z y x) the model's description declares, None when it declares none.
+
+   Read from its RDF (``rdf_source``) with a plain fetch, so the dashboard,
+   which has no bioimageio.core, can refuse a blank voxel size at Submit:
+   the server would otherwise refuse it after its job started, out of
+   sight. Remembered per model. Raises ZooIndexError when the description
+   cannot be read, which the caller treats as "don't know".
+
+
+.. py:function:: bioimage_entry(model_id: str, voxel_size=None, name: Optional[str] = None, cls=None) -> dict
+
+   ``BioModelConfig``'s constructor arguments for the zoo model ``model_id``
+   (an id or nickname bioimageio.core loads), at ``voxel_size`` (nm, z y x)
+   and called ``name``.
+
+   The argument names come from the signature, so this holds whether the
+   model is called ``model_name`` or ``model``. A ``voxel_size`` of None
+   is left out when the class can read it from the model; when it cannot,
+   a ValueError says to give it. ``cls`` is for tests.
+
+
+.. py:function:: entry_model_id(model_config) -> Optional[str]
+
+   The zoo model a ``BioModelConfig`` runs, read from its ``to_dict()``,
+   which ``bioimage_entry``'s names round-trip through.
+
+

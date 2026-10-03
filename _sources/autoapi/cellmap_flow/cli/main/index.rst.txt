@@ -10,6 +10,7 @@ cellmap_flow.cli.main
    
      infer <type>   start a model's inference server and open the viewer on it
      yaml           the same for the models a YAML file lists
+     add REF        the model entry for a path, URL, repo or model name
      view           open a dataset in the viewer; pick models in the dashboard
      dashboard      serve the dashboard alone, for a viewer already running
      serve          serve one model's predictions (the launchers run this)
@@ -17,6 +18,7 @@ cellmap_flow.cli.main
      finetune       the finetune tools: train, export-merged, build-corrections
      models         list the model types and their arguments
      plugins        register, unregister and list plugins
+     envs           the environments models run in: list, install, check
      doctor         check the environment
 
    Before 0.3.0 these were separate console scripts (``cellmap_flow_yaml`` and

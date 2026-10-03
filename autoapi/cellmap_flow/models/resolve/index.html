@@ -1,0 +1,405 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>cellmap_flow.models.resolve &mdash; CellMap Flow  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=4ae1632d" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css" />
+
+  
+    <link rel="shortcut icon" href="../../../../_static/favicon.ico"/>
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link rel="next" title="cellmap_flow.norm" href="../../norm/index.html" />
+    <link rel="prev" title="cellmap_flow.models.registry" href="../registry/index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            CellMap Flow
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">CellMap-Flow API:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../../../../install.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../cli.html">Command line</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../scripts.html">Python Scripts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../yaml_config.html">YAML Configuration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../data_paths.html">Data paths</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../huggingface.html">HuggingFace Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../bioimage.html">BioImage Model Zoo</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../custom_script.html">Custom Model</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../post.html">PostProcessors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../plugins.html">Plugins</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../review.html">Reviewing instances</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../viewer_api.html">Viewer layer API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../architecture.html">Architecture</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../../../index.html">API Reference</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="../../index.html">cellmap_flow</a><ul class="current">
+<li class="toctree-l3 current"><a class="reference internal" href="../../index.html#submodules">Submodules</a><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="../../blockwise/index.html">cellmap_flow.blockwise</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../cli/index.html">cellmap_flow.cli</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../config/index.html">cellmap_flow.config</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../dashboard/index.html">cellmap_flow.dashboard</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../finetune/index.html">cellmap_flow.finetune</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../globals/index.html">cellmap_flow.globals</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../image_data_interface/index.html">cellmap_flow.image_data_interface</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../inference/index.html">cellmap_flow.inference</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../inferencer/index.html">cellmap_flow.inferencer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../io/index.html">cellmap_flow.io</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../jobs/index.html">cellmap_flow.jobs</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../logging_setup/index.html">cellmap_flow.logging_setup</a></li>
+<li class="toctree-l4 current"><a class="reference internal" href="../index.html">cellmap_flow.models</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../norm/index.html">cellmap_flow.norm</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../pipeline_spec/index.html">cellmap_flow.pipeline_spec</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../plugins/index.html">cellmap_flow.plugins</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../post/index.html">cellmap_flow.post</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../process_chain/index.html">cellmap_flow.process_chain</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../review/index.html">cellmap_flow.review</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../review_index/index.html">cellmap_flow.review_index</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../server/index.html">cellmap_flow.server</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../serving/index.html">cellmap_flow.serving</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../utils/index.html">cellmap_flow.utils</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../viewer/index.html">cellmap_flow.viewer</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">CellMap Flow</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">API Reference</a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">cellmap_flow</a></li>
+          <li class="breadcrumb-item"><a href="../index.html">cellmap_flow.models</a></li>
+      <li class="breadcrumb-item active">cellmap_flow.models.resolve</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../../../../_sources/autoapi/cellmap_flow/models/resolve/index.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-cellmap_flow.models.resolve">
+<span id="cellmap-flow-models-resolve"></span><h1>cellmap_flow.models.resolve<a class="headerlink" href="#module-cellmap_flow.models.resolve" title="Link to this heading"></a></h1>
+<p>A model from whatever reference a user has in hand, without knowing the model types.</p>
+<p><code class="docutils literal notranslate"><span class="pre">resolve(ref)</span></code> turns a path, a URL, a Hugging Face repo, a zoo nickname or
+a Cellpose model name into a <code class="docutils literal notranslate"><span class="pre">Resolved</span></code>: the model type, its constructor
+arguments, a name, and what the user must still give. <code class="docutils literal notranslate"><span class="pre">Resolved.entry()</span></code>
+is the model entry that <code class="docutils literal notranslate"><span class="pre">registry.build_model</span></code> (and so a YAML’s
+<code class="docutils literal notranslate"><span class="pre">models:</span></code>) takes. The dashboard’s <code class="docutils literal notranslate"><span class="pre">POST</span> <span class="pre">/api/models/resolve</span></code> and
+<code class="docutils literal notranslate"><span class="pre">cellmap_flow</span> <span class="pre">add</span></code> answer with it.</p>
+<p>The checks, in this order; the first that matches wins. Each is cheap: a
+stat, a file name, a regex, or (only when <code class="docutils literal notranslate"><span class="pre">online</span></code>) one request.</p>
+<ol class="arabic simple">
+<li><p>A local file or folder (<code class="docutils literal notranslate"><span class="pre">~</span></code> expanded; the entry gets its absolute path):</p>
+<ul class="simple">
+<li><p>a <code class="docutils literal notranslate"><span class="pre">.py</span></code> file: <code class="docutils literal notranslate"><span class="pre">script</span></code>;</p></li>
+<li><p>a folder with <code class="docutils literal notranslate"><span class="pre">metadata.json</span></code>: <code class="docutils literal notranslate"><span class="pre">cellmap</span></code> (a cellmap-models export,
+which is served from its <code class="docutils literal notranslate"><span class="pre">model.ts</span></code>);</p></li>
+<li><p>a folder with <code class="docutils literal notranslate"><span class="pre">rdf.yaml</span></code> or <code class="docutils literal notranslate"><span class="pre">bioimageio.yaml</span></code>, such a file itself
+(<code class="docutils literal notranslate"><span class="pre">*.rdf.yaml</span></code> too), or a <code class="docutils literal notranslate"><span class="pre">.zip</span></code> with one inside: <code class="docutils literal notranslate"><span class="pre">bioimage</span></code>;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">model_checkpoint_&lt;n&gt;</span></code>, a <code class="docutils literal notranslate"><span class="pre">.ts</span></code> or a <code class="docutils literal notranslate"><span class="pre">model.pt</span></code>: <code class="docutils literal notranslate"><span class="pre">fly</span></code>, which
+reads the channels and voxel sizes from the files beside it; what it
+cannot find is reported in <code class="docutils literal notranslate"><span class="pre">needs</span></code>;</p></li>
+<li><p>a folder with <code class="docutils literal notranslate"><span class="pre">adapter_config.json</span></code> (a PEFT LoRA adapter), or a full
+finetune’s <code class="docutils literal notranslate"><span class="pre">model_state_dict.pt</span></code>: <code class="docutils literal notranslate"><span class="pre">finetune</span></code>, which needs its
+<code class="docutils literal notranslate"><span class="pre">base_model</span></code>;</p></li>
+<li><p>Cellpose-SAM weights (Cellpose 4 saves a torch state dict without an
+extension; its keys say what it is): <code class="docutils literal notranslate"><span class="pre">cellpose</span></code>.</p></li>
+</ul>
+</li>
+<li><p>A prefix, to say outright what a reference is: <code class="docutils literal notranslate"><span class="pre">hf:org/repo[&#64;revision]</span></code>,
+<code class="docutils literal notranslate"><span class="pre">bioimageio:&lt;id,</span> <span class="pre">nickname,</span> <span class="pre">URL</span> <span class="pre">or</span> <span class="pre">path&gt;</span></code>, <code class="docutils literal notranslate"><span class="pre">cellpose:&lt;name</span> <span class="pre">or</span> <span class="pre">path&gt;</span></code>,
+<code class="docutils literal notranslate"><span class="pre">fly:&lt;path&gt;</span></code>, <code class="docutils literal notranslate"><span class="pre">dacapo:&lt;run&gt;&#64;&lt;iteration&gt;</span></code>, <code class="docutils literal notranslate"><span class="pre">script:&lt;path&gt;</span></code>. The
+type’s own name works as its prefix too (<code class="docutils literal notranslate"><span class="pre">huggingface:</span></code>,
+<code class="docutils literal notranslate"><span class="pre">bioimage:</span></code>). Nothing after a prefix is looked up online.</p></li>
+<li><p>A Cellpose model name (<code class="docutils literal notranslate"><span class="pre">cpsam_v2</span></code>, <code class="docutils literal notranslate"><span class="pre">cpsam</span></code>, <code class="docutils literal notranslate"><span class="pre">cpdino</span></code>,
+<code class="docutils literal notranslate"><span class="pre">cpdino-vitb</span></code>): <code class="docutils literal notranslate"><span class="pre">cellpose</span></code>.</p></li>
+<li><p>A URL: a bioimage.io model page, a Zenodo record, a DOI link, a Hypha
+artifact or the URL of an <code class="docutils literal notranslate"><span class="pre">rdf.yaml</span></code> or zip: <code class="docutils literal notranslate"><span class="pre">bioimage</span></code>;
+<code class="docutils literal notranslate"><span class="pre">huggingface.co/&lt;org&gt;/&lt;repo&gt;</span></code> (<code class="docutils literal notranslate"><span class="pre">/tree/&lt;revision&gt;</span></code> too): as 5.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">org/repo</span></code> (<code class="docutils literal notranslate"><span class="pre">&#64;revision</span></code> optional; not a DOI, which is 6’s): a Hugging
+Face repo. Online, its file list is read: with <code class="docutils literal notranslate"><span class="pre">metadata.json</span></code> and
+<code class="docutils literal notranslate"><span class="pre">model.ts</span></code> it is a cellmap-models export, <code class="docutils literal notranslate"><span class="pre">huggingface</span></code>; anything
+else is refused with what to do instead. Offline, or when the Hub cannot
+be reached, it is taken to be one, with a note.</p></li>
+<li><p>A BioImage Model Zoo id or nickname (<code class="docutils literal notranslate"><span class="pre">affable-shark</span></code>,
+<code class="docutils literal notranslate"><span class="pre">10.5281/zenodo.5764892</span></code>): <code class="docutils literal notranslate"><span class="pre">bioimage</span></code>. Online, it is looked up in
+the zoo’s model list; offline, a nickname- or DOI-shaped one is taken to be
+one, with a note.</p></li>
+</ol>
+<p>Anything else is a ValueError that says what was tried.</p>
+<p>Importing this module imports only the standard library. Resolving imports
+the model config classes (numpy and funlib, as the registry does), and the
+online checks huggingface_hub; nothing imports torch or a model’s framework,
+and <code class="docutils literal notranslate"><span class="pre">Resolved.entry()</span></code> is a plain dict.</p>
+<section id="attributes">
+<h2>Attributes<a class="headerlink" href="#attributes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.models.resolve.ONLINE_TIMEOUT" title="cellmap_flow.models.resolve.ONLINE_TIMEOUT"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ONLINE_TIMEOUT</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.models.resolve.ADAPTER_CONFIG" title="cellmap_flow.models.resolve.ADAPTER_CONFIG"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ADAPTER_CONFIG</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.models.resolve.FULL_FINETUNE_WEIGHTS" title="cellmap_flow.models.resolve.FULL_FINETUNE_WEIGHTS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">FULL_FINETUNE_WEIGHTS</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="classes">
+<h2>Classes<a class="headerlink" href="#classes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.models.resolve.Resolved" title="cellmap_flow.models.resolve.Resolved"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Resolved</span></code></a></p></td>
+<td><p>What a reference resolved to.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="functions">
+<h2>Functions<a class="headerlink" href="#functions" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.models.resolve.resolve" title="cellmap_flow.models.resolve.resolve"><code class="xref py py-obj docutils literal notranslate"><span class="pre">resolve</span></code></a>(→ Resolved)</p></td>
+<td><p>The model <code class="docutils literal notranslate"><span class="pre">ref</span></code> refers to (see the module docstring for the checks, in order).</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.models.resolve.bioimage_params" title="cellmap_flow.models.resolve.bioimage_params"><code class="xref py py-obj docutils literal notranslate"><span class="pre">bioimage_params</span></code></a>(→ Tuple[Dict[str, Any], List[str]])</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">BioModelConfig</span></code>'s arguments for <code class="docutils literal notranslate"><span class="pre">model</span></code>, and the ones still needed, from its signature.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="module-contents">
+<h2>Module Contents<a class="headerlink" href="#module-contents" title="Link to this heading"></a></h2>
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.models.resolve.ONLINE_TIMEOUT">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.resolve.</span></span><span class="sig-name descname"><span class="pre">ONLINE_TIMEOUT</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">20</span></span><a class="headerlink" href="#cellmap_flow.models.resolve.ONLINE_TIMEOUT" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.models.resolve.ADAPTER_CONFIG">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.resolve.</span></span><span class="sig-name descname"><span class="pre">ADAPTER_CONFIG</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'adapter_config.json'</span></span><a class="headerlink" href="#cellmap_flow.models.resolve.ADAPTER_CONFIG" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.models.resolve.FULL_FINETUNE_WEIGHTS">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.resolve.</span></span><span class="sig-name descname"><span class="pre">FULL_FINETUNE_WEIGHTS</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'model_state_dict.pt'</span></span><a class="headerlink" href="#cellmap_flow.models.resolve.FULL_FINETUNE_WEIGHTS" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="cellmap_flow.models.resolve.Resolved">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.resolve.</span></span><span class="sig-name descname"><span class="pre">Resolved</span></span><a class="headerlink" href="#cellmap_flow.models.resolve.Resolved" title="Link to this definition"></a></dt>
+<dd><p>What a reference resolved to.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.models.resolve.Resolved.type">
+<span class="sig-name descname"><span class="pre">type</span></span><a class="headerlink" href="#cellmap_flow.models.resolve.Resolved.type" title="Link to this definition"></a></dt>
+<dd><p>the model type’s name (<code class="docutils literal notranslate"><span class="pre">registry.model_types</span></code>).</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.models.resolve.Resolved.params">
+<span class="sig-name descname"><span class="pre">params</span></span><a class="headerlink" href="#cellmap_flow.models.resolve.Resolved.params" title="Link to this definition"></a></dt>
+<dd><p>its constructor arguments, as a YAML entry gives them.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.models.resolve.Resolved.name">
+<span class="sig-name descname"><span class="pre">name</span></span><a class="headerlink" href="#cellmap_flow.models.resolve.Resolved.name" title="Link to this definition"></a></dt>
+<dd><p>the model’s name: the one asked for, else one from the reference.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.models.resolve.Resolved.env">
+<span class="sig-name descname"><span class="pre">env</span></span><a class="headerlink" href="#cellmap_flow.models.resolve.Resolved.env" title="Link to this definition"></a></dt>
+<dd><p>the type’s default environment for this model (<code class="docutils literal notranslate"><span class="pre">default_env</span></code>),
+for display; None runs it in cellmap-flow’s own. Not in <code class="docutils literal notranslate"><span class="pre">entry()</span></code>.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.models.resolve.Resolved.how">
+<span class="sig-name descname"><span class="pre">how</span></span><a class="headerlink" href="#cellmap_flow.models.resolve.Resolved.how" title="Link to this definition"></a></dt>
+<dd><p>one line saying what the reference was taken to be.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.models.resolve.Resolved.needs">
+<span class="sig-name descname"><span class="pre">needs</span></span><a class="headerlink" href="#cellmap_flow.models.resolve.Resolved.needs" title="Link to this definition"></a></dt>
+<dd><p>constructor arguments the user must still give (a key of
+<code class="docutils literal notranslate"><span class="pre">params</span></code> once given), e.g. <code class="docutils literal notranslate"><span class="pre">voxel_size</span></code> for Cellpose.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.models.resolve.Resolved.notes">
+<span class="sig-name descname"><span class="pre">notes</span></span><a class="headerlink" href="#cellmap_flow.models.resolve.Resolved.notes" title="Link to this definition"></a></dt>
+<dd><p>anything else worth saying: what was assumed, or ignored.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="id0">
+<span class="sig-name descname"><span class="pre">type</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></span><a class="headerlink" href="#id0" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="id1">
+<span class="sig-name descname"><span class="pre">params</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span><a class="headerlink" href="#id1" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="id2">
+<span class="sig-name descname"><span class="pre">name</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></span><a class="headerlink" href="#id2" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="id3">
+<span class="sig-name descname"><span class="pre">env</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#id3" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="id4">
+<span class="sig-name descname"><span class="pre">how</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></span><a class="headerlink" href="#id4" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="id5">
+<span class="sig-name descname"><span class="pre">needs</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">[]</span></span><a class="headerlink" href="#id5" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="id6">
+<span class="sig-name descname"><span class="pre">notes</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">[]</span></span><a class="headerlink" href="#id6" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.models.resolve.Resolved.entry">
+<span class="sig-name descname"><span class="pre">entry</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#cellmap_flow.models.resolve.Resolved.entry" title="Link to this definition"></a></dt>
+<dd><p>The model entry <code class="docutils literal notranslate"><span class="pre">registry.build_model</span></code> takes: type, params and name.</p>
+<p>While <code class="docutils literal notranslate"><span class="pre">needs</span></code> is not empty, building it fails on what is missing.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.models.resolve.Resolved.to_json">
+<span class="sig-name descname"><span class="pre">to_json</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#cellmap_flow.models.resolve.Resolved.to_json" title="Link to this definition"></a></dt>
+<dd><p>Every field, as the dashboard’s route answers with them.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.models.resolve.resolve">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.resolve.</span></span><span class="sig-name descname"><span class="pre">resolve</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ref</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">voxel_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">online</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#cellmap_flow.models.resolve.Resolved" title="cellmap_flow.models.resolve.Resolved"><span class="pre">Resolved</span></a></span></span><a class="headerlink" href="#cellmap_flow.models.resolve.resolve" title="Link to this definition"></a></dt>
+<dd><p>The model <code class="docutils literal notranslate"><span class="pre">ref</span></code> refers to (see the module docstring for the checks, in order).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>ref</strong> – what the user pasted.</p></li>
+<li><p><strong>name</strong> – the model’s name; by default one is made from <code class="docutils literal notranslate"><span class="pre">ref</span></code>.</p></li>
+<li><p><strong>voxel_size</strong> – nm per voxel (one number, one per axis, or “8,8,8”), for
+the types that do not read it from the model: given to Cellpose
+and bioimage.io models as <code class="docutils literal notranslate"><span class="pre">voxel_size</span></code> and to a fly model as
+<code class="docutils literal notranslate"><span class="pre">input_voxel_size</span></code>, and ignored, with a note, by the others.</p></li>
+<li><p><strong>online</strong> – whether a Hugging Face repo or zoo id may be checked online.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>ValueError</strong> – <code class="docutils literal notranslate"><span class="pre">ref</span></code> is none of the things checked, or is one that
+cellmap-flow cannot serve; the message says which and why.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.models.resolve.bioimage_params">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.resolve.</span></span><span class="sig-name descname"><span class="pre">bioimage_params</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">voxel_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cls</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">Any</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#cellmap_flow.models.resolve.bioimage_params" title="Link to this definition"></a></dt>
+<dd><p><code class="docutils literal notranslate"><span class="pre">BioModelConfig</span></code>’s arguments for <code class="docutils literal notranslate"><span class="pre">model</span></code>, and the ones still needed, from its signature.</p>
+<p>Its model argument is <code class="docutils literal notranslate"><span class="pre">model</span></code> or (before) <code class="docutils literal notranslate"><span class="pre">model_name</span></code>, and its
+<code class="docutils literal notranslate"><span class="pre">voxel_size</span></code> may be required or not; whichever it is, the entry names
+it as the constructor does. <code class="docutils literal notranslate"><span class="pre">voxel_size</span></code> goes in when given and taken,
+and is needed when not given and required.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>ValueError</strong> – the constructor takes neither <code class="docutils literal notranslate"><span class="pre">model</span></code> nor <code class="docutils literal notranslate"><span class="pre">model_name</span></code>.</p>
+</dd>
+</dl>
+</dd></dl>
+
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../registry/index.html" class="btn btn-neutral float-left" title="cellmap_flow.models.registry" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../../norm/index.html" class="btn btn-neutral float-right" title="cellmap_flow.norm" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, David Ackerman,  Marwan Zouinkhi, Jeff Rhoades, Larissa Heinrich, Aubrey Weigel.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

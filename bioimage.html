@@ -1,0 +1,199 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BioImage Model Zoo &mdash; CellMap Flow  documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="_static/graphviz.css?v=4ae1632d" />
+      <link rel="stylesheet" type="text/css" href="_static/css/custom.css" />
+
+  
+    <link rel="shortcut icon" href="_static/favicon.ico"/>
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Custom Model" href="custom_script.html" />
+    <link rel="prev" title="HuggingFace Models" href="huggingface.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            CellMap Flow
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">CellMap-Flow API:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="install.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="cli.html">Command line</a></li>
+<li class="toctree-l1"><a class="reference internal" href="scripts.html">Python Scripts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="yaml_config.html">YAML Configuration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="data_paths.html">Data paths</a></li>
+<li class="toctree-l1"><a class="reference internal" href="huggingface.html">HuggingFace Models</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">BioImage Model Zoo</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#in-the-dashboard">In the dashboard</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#in-a-yaml-file">In a YAML file</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#from-python">From Python</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="custom_script.html">Custom Model</a></li>
+<li class="toctree-l1"><a class="reference internal" href="post.html">PostProcessors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plugins.html">Plugins</a></li>
+<li class="toctree-l1"><a class="reference internal" href="review.html">Reviewing instances</a></li>
+<li class="toctree-l1"><a class="reference internal" href="viewer_api.html">Viewer layer API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="architecture.html">Architecture</a></li>
+<li class="toctree-l1"><a class="reference internal" href="autoapi/index.html">API Reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">CellMap Flow</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">BioImage Model Zoo</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/bioimage.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="bioimage-model-zoo">
+<h1>BioImage Model Zoo<a class="headerlink" href="#bioimage-model-zoo" title="Link to this heading"></a></h1>
+<p>The Models tab lists the models of the <a class="reference external" href="https://bioimage.io">BioImage Model Zoo</a>
+beside cellmap’s Hugging Face models, and runs the ones you tick as
+<code class="docutils literal notranslate"><span class="pre">type:</span> <span class="pre">bioimage</span></code> models. Their servers run in <code class="docutils literal notranslate"><span class="pre">pixi.toml</span></code>’s <code class="docutils literal notranslate"><span class="pre">bioimageio</span></code>
+environment, the type’s default (see <a class="reference internal" href="yaml_config.html#model-env"><span class="std std-ref">Running a model in its own environment</span></a>).</p>
+<section id="in-the-dashboard">
+<h2>In the dashboard<a class="headerlink" href="#in-the-dashboard" title="Link to this heading"></a></h2>
+<ol class="arabic simple">
+<li><p>Open the <strong>Models</strong> tab and expand <strong>BioImage Model Zoo</strong>. The list is
+read from bioimage.io’s artifact server (<code class="docutils literal notranslate"><span class="pre">hypha.aicell.io</span></code>) the first
+time and cached in <code class="docutils literal notranslate"><span class="pre">~/.cellmap_flow/bioimage/</span></code>; <strong>Refresh</strong> reads it
+again, and so does the page by itself once the cached list is an hour old,
+and every hour while it is open. Its listing holds each model’s description, so 2D or 3D comes
+from the model’s input axes. When the server cannot be reached the legacy
+<code class="docutils literal notranslate"><span class="pre">collection.json</span></code> index is read instead, which lists fewer models.</p></li>
+<li><p>Narrow it with the search box (name, description and tags), <strong>EM only</strong>
+(on by default: models whose tags, name or description say electron
+microscopy) and <strong>2D</strong> / <strong>3D</strong>. The arrow beside a model opens its page
+on bioimage.io; hovering over its name shows the full description.</p></li>
+<li><p>Tick a model and check its <strong>Voxel (nm)</strong>: <code class="docutils literal notranslate"><span class="pre">z,y,x</span></code> or one number for all
+three, the voxel size the model reads the data at. For the zoo’s EM models
+it is filled in with the one the model was trained at, and the line below
+says on what data and where that number comes from (hover for the source).
+No zoo model says it in its description, so cellmap-flow keeps them in
+<code class="docutils literal notranslate"><span class="pre">cellmap_flow/models/bioimage_voxel_sizes.yaml</span></code>, looked up by hand.
+Some were trained on downsampled data (the Platynereis nuclei model at
+100x80x80 nm, z,y,x), and a few across several resolutions, for which you enter
+one. Other models need one entered.</p></li>
+<li><p>Click <strong>Submit Models</strong>. As for the other models, unticking one and
+submitting again stops it, and a running one is ticked when the page is
+reloaded.</p></li>
+</ol>
+<p>A ticked model is entered as its nickname (<code class="docutils literal notranslate"><span class="pre">kind-seashell</span></code>), and its
+layer and job are named after it (<code class="docutils literal notranslate"><span class="pre">kind_seashell</span></code>).</p>
+</section>
+<section id="in-a-yaml-file">
+<h2>In a YAML file<a class="headerlink" href="#in-a-yaml-file" title="Link to this heading"></a></h2>
+<p>The same model, without the dashboard:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">models</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">mito</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">bioimage</span>
+<span class="w">    </span><span class="nt">model</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">kind-seashell</span>
+<span class="w">    </span><span class="c1"># voxel_size: [8, 8, 8]   # without it, the one it was trained at: 30x8x8 (MitoEM)</span>
+</pre></div>
+</div>
+<p>As in the dashboard, a zoo EM model reads at the voxel size it was trained at
+unless <code class="docutils literal notranslate"><span class="pre">voxel_size</span></code> says otherwise; any other model needs it.
+<code class="docutils literal notranslate"><span class="pre">example/bioimage_em.yaml</span></code> is a complete one.</p>
+</section>
+<section id="from-python">
+<h2>From Python<a class="headerlink" href="#from-python" title="Link to this heading"></a></h2>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">cellmap_flow.models.bioimage_catalog</span><span class="w"> </span><span class="kn">import</span> <span class="n">list_bioimage_models</span><span class="p">,</span> <span class="n">refresh_bioimage_models</span>
+
+<span class="k">for</span> <span class="n">model</span> <span class="ow">in</span> <span class="n">list_bioimage_models</span><span class="p">()[</span><span class="s2">"models"</span><span class="p">]:</span>
+    <span class="k">if</span> <span class="n">model</span><span class="p">[</span><span class="s2">"em"</span><span class="p">]:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="n">model</span><span class="p">[</span><span class="s2">"key"</span><span class="p">],</span> <span class="n">model</span><span class="p">[</span><span class="s2">"dims"</span><span class="p">],</span> <span class="n">model</span><span class="p">[</span><span class="s2">"name"</span><span class="p">])</span>
+</pre></div>
+</div>
+<p>Each model has <code class="docutils literal notranslate"><span class="pre">id</span></code> (its alias on the server; in the legacy index a
+Zenodo DOI for older models), <code class="docutils literal notranslate"><span class="pre">nickname</span></code>, <code class="docutils literal notranslate"><span class="pre">key</span></code> (what it is loaded by),
+<code class="docutils literal notranslate"><span class="pre">name</span></code>, <code class="docutils literal notranslate"><span class="pre">description</span></code>, <code class="docutils literal notranslate"><span class="pre">tags</span></code>, <code class="docutils literal notranslate"><span class="pre">dims</span></code> (<code class="docutils literal notranslate"><span class="pre">&quot;2d&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;3d&quot;</span></code> or None),
+<code class="docutils literal notranslate"><span class="pre">em</span></code>, <code class="docutils literal notranslate"><span class="pre">weight_formats</span></code>, <code class="docutils literal notranslate"><span class="pre">license</span></code>, <code class="docutils literal notranslate"><span class="pre">cover</span></code>, <code class="docutils literal notranslate"><span class="pre">url</span></code> (its bioimage.io
+page), <code class="docutils literal notranslate"><span class="pre">trained</span></code> (its row of <code class="docutils literal notranslate"><span class="pre">bioimage_voxel_sizes.yaml</span></code>, or None:
+<code class="docutils literal notranslate"><span class="pre">voxel_size</span></code>, <code class="docutils literal notranslate"><span class="pre">trained_on</span></code>, <code class="docutils literal notranslate"><span class="pre">confidence</span></code>, <code class="docutils literal notranslate"><span class="pre">source</span></code>, <code class="docutils literal notranslate"><span class="pre">note</span></code>) and, from
+the server, <code class="docutils literal notranslate"><span class="pre">declared_voxel_size</span></code> (nm, or None when its
+axes carry no unit: none of the zoo’s models declared one in October 2026,
+so a blank voxel size is refused at Submit unless <code class="docutils literal notranslate"><span class="pre">trained</span></code> gives one). <code class="docutils literal notranslate"><span class="pre">refresh_bioimage_models()</span></code>
+fetches the list again; a failed fetch raises <code class="docutils literal notranslate"><span class="pre">ZooIndexError</span></code> and keeps
+the cache.</p>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="huggingface.html" class="btn btn-neutral float-left" title="HuggingFace Models" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="custom_script.html" class="btn btn-neutral float-right" title="Custom Model" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, David Ackerman,  Marwan Zouinkhi, Jeff Rhoades, Larissa Heinrich, Aubrey Weigel.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

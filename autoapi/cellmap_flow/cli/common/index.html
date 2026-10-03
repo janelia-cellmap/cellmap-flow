@@ -53,6 +53,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../../../../yaml_config.html">YAML Configuration</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../data_paths.html">Data paths</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../huggingface.html">HuggingFace Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../bioimage.html">BioImage Model Zoo</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../custom_script.html">Custom Model</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../post.html">PostProcessors</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../plugins.html">Plugins</a></li>
@@ -164,7 +165,7 @@ what replaces it and then runs it.</p></li>
 <td><p><code class="docutils literal notranslate"><span class="pre">--log-level</span></code>, applied when it is parsed rather than passed on.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.cli.common.resample_option" title="cellmap_flow.cli.common.resample_option"><code class="xref py py-obj docutils literal notranslate"><span class="pre">resample_option</span></code></a>()</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">--resample</span></code>: read the dataset resampled to the model's input voxel</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">--resample/--no-resample</span></code>, on by default: read the dataset resampled</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.cli.common.deprecation_notice" title="cellmap_flow.cli.common.deprecation_notice"><code class="xref py py-obj docutils literal notranslate"><span class="pre">deprecation_notice</span></code></a>(→ None)</p></td>
 <td><p>Tell the user, on stderr, that <code class="docutils literal notranslate"><span class="pre">old</span></code> is going and <code class="docutils literal notranslate"><span class="pre">new</span></code> replaces it.</p></td>
@@ -202,10 +203,11 @@ INFO unless told otherwise.</p>
 <dl class="py function">
 <dt class="sig sig-object py" id="cellmap_flow.cli.common.resample_option">
 <span class="sig-prename descclassname"><span class="pre">cellmap_flow.cli.common.</span></span><span class="sig-name descname"><span class="pre">resample_option</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.cli.common.resample_option" title="Link to this definition"></a></dt>
-<dd><p><code class="docutils literal notranslate"><span class="pre">--resample</span></code>: read the dataset resampled to the model’s input voxel
-size when it has no level at that size (ImageDataInterface’s
-<code class="docutils literal notranslate"><span class="pre">on_voxel_size_mismatch=&quot;resample&quot;</span></code>). Without it, the level chosen is
-read as if it were at the model’s voxel size, with a warning.</p>
+<dd><p><code class="docutils literal notranslate"><span class="pre">--resample/--no-resample</span></code>, on by default: read the dataset resampled
+to the model’s input voxel size when it has no level at that size
+(ImageDataInterface’s <code class="docutils literal notranslate"><span class="pre">on_voxel_size_mismatch=&quot;resample&quot;</span></code>). With
+<code class="docutils literal notranslate"><span class="pre">--no-resample</span></code> the level chosen is read as if it were at the model’s
+voxel size, with a warning.</p>
 </dd></dl>
 
 <dl class="py class">

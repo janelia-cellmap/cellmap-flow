@@ -35,7 +35,8 @@ cellmap_flow.models.registry
    A model entry's ``env`` (the environment its server runs in, see
    ``models.envs``) is not a constructor argument: ``build_model`` and
    ``instantiate_model_config`` check it and set it on the built config, and
-   the dashboard's form offers it beside each type's arguments.
+   the dashboard's form offers it beside each type's arguments. Left out, the
+   type's ``default_env`` applies (``ModelConfig.effective_env``).
 
    Importing this module imports neither torch, flask, huggingface_hub nor
    ``cellmap_flow.globals``. The model config classes, which bring numpy and

@@ -1,0 +1,224 @@
+cellmap_flow.models.configs.cellpose
+====================================
+
+.. py:module:: cellmap_flow.models.configs.cellpose
+
+.. autoapi-nested-parse::
+
+   ``CellposeModelConfig``: Cellpose 4 (Cellpose-SAM and its successors), slice by slice.
+
+   Each z slice of a chunk is segmented in 2D by ``cellpose.models.CellposeModel``,
+   read with ``context`` voxels of margin in y and x that are cut off again, so
+   that objects at the chunk's edge are seen whole. What the layer shows is
+   ``output``:
+
+   - ``"probability"``: Cellpose's cell probability, from 0 to 1 (float32), the
+     sigmoid of its logit. It is computed per voxel, so it joins up across
+     chunks, and the mask dynamics are skipped, which makes it the faster of
+     the two.
+   - ``"masks"``: Cellpose's instance masks (uint64), ids unique within a
+     chunk. Masks are made per chunk: an object that crosses a chunk's edge is
+     cut there, with another id on each side, and objects are not joined from
+     slice to slice. The ``MortonSegmentationRelabeling`` postprocessor makes
+     the ids unique across chunks and shows the layer as a segmentation; it is
+     not applied here (see ``_masks``).
+
+   Cellpose 4 cannot share cellmap-flow's default environment, whose cellpose 3
+   pins an older numpy, so this type runs in the ``cellpose4`` pixi
+   environment unless its entry names another (``default_env``).
+
+   ``cellpose`` is imported only when the model is built, as every type imports
+   its framework: the CLIs, ``--help`` and the dashboard's model form import
+   every type, and none of them has (or needs) Cellpose 4.
+
+   Licence: the Cellpose-SAM weights were trained on data that includes
+   datasets licensed CC-BY-NC, so they are for non-commercial use.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.models.configs.cellpose.logger
+   cellmap_flow.models.configs.cellpose.PRETRAINED_MODELS
+   cellmap_flow.models.configs.cellpose.OUTPUTS
+   cellmap_flow.models.configs.cellpose.SAM_TILE_SIZE
+   cellmap_flow.models.configs.cellpose.DINO_TILE_SIZE
+   cellmap_flow.models.configs.cellpose.TILE_OVERLAP
+   cellmap_flow.models.configs.cellpose.CELLPOSE_DIAMETER
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.models.configs.cellpose.CellposeModelConfig
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.models.configs.cellpose.tile_size
+   cellmap_flow.models.configs.cellpose.tiles_per_slice
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:data:: PRETRAINED_MODELS
+   :value: ('cpsam_v2', 'cpsam', 'cpdino', 'cpdino-vitb')
+
+
+.. py:data:: OUTPUTS
+   :value: ('probability', 'masks')
+
+
+.. py:data:: SAM_TILE_SIZE
+   :value: 256
+
+
+.. py:data:: DINO_TILE_SIZE
+   :value: 384
+
+
+.. py:data:: TILE_OVERLAP
+   :value: 0.1
+
+
+.. py:data:: CELLPOSE_DIAMETER
+   :value: 30.0
+
+
+.. py:function:: tile_size(backbone: str) -> int
+
+   The tile edge, in pixels, Cellpose runs ``backbone`` on (``CellposeModel._run_net``).
+
+
+.. py:function:: tiles_per_slice(length: int, tile: int, rescale: float = 1.0) -> int
+
+   How many tiles Cellpose cuts a ``length`` x ``length`` slice into.
+
+   ``cellpose.core.run_net``'s arithmetic: the slice is resized by
+   ``rescale``, padded by ``transforms.get_pad_yx`` (to a multiple of 16
+   plus 16, or up to one tile), then cut into
+   ``ceil((1 + 2 * overlap) * padded / tile)`` tiles a side, or one when it
+   fits in a tile.
+
+
+.. py:class:: CellposeModelConfig(voxel_size, pretrained_model: str = 'cpsam_v2', output: str = 'probability', slices_per_chunk: int = 8, slice_size: int = 512, context: int = 32, batch_size: int = None, diameter: float = None, flow_threshold: float = 0.4, cellprob_threshold: float = 0.0, name=None, scale=None)
+
+
+
+   Cellpose 4 run on each z slice of a chunk.
+
+   :param voxel_size: nm per voxel, input and output (one number or one per
+                      axis). Cellpose-SAM sees objects best about 30 voxels across, so
+                      pick the scale at which yours are roughly that, or give
+                      ``diameter``.
+   :param pretrained_model: "cpsam_v2" (default), "cpsam", "cpdino",
+                            "cpdino-vitb", or the path of finetuned Cellpose weights.
+   :param output: "probability" (float32, 0 to 1) or "masks" (uint64, ids
+                  unique within a chunk).
+   :param slices_per_chunk: z slices in a chunk.
+   :param slice_size: voxels a side, in y and x, of each chunk's slices.
+   :param context: voxels read on each side in y and x beyond those, and cut off.
+   :param batch_size: tiles per GPU pass; None puts the whole chunk's in one.
+   :param diameter: object diameter in input voxels; None keeps the model's
+                    own scale (about 30). Cellpose resizes each slice by
+                    30 / diameter.
+   :param flow_threshold: Cellpose's mask thresholds (masks
+                          only).
+   :param cellprob_threshold: Cellpose's mask thresholds (masks
+                              only).
+
+
+   .. py:attribute:: cli_name
+      :value: 'cellpose'
+
+
+
+   .. py:attribute:: default_env
+      :value: 'cellpose4'
+
+
+
+   .. py:attribute:: voxel_size
+
+
+   .. py:attribute:: pretrained_model
+      :value: ''
+
+
+
+   .. py:attribute:: output
+      :value: 'probability'
+
+
+
+   .. py:attribute:: slices_per_chunk
+      :value: 8
+
+
+
+   .. py:attribute:: slice_size
+      :value: 512
+
+
+
+   .. py:attribute:: context
+      :value: 32
+
+
+
+   .. py:attribute:: batch_size
+      :value: None
+
+
+
+   .. py:attribute:: diameter
+      :value: None
+
+
+
+   .. py:attribute:: flow_threshold
+
+
+   .. py:attribute:: cellprob_threshold
+
+
+   .. py:attribute:: name
+      :value: None
+
+
+
+   .. py:attribute:: scale
+      :value: None
+
+
+
+   .. py:property:: read_size
+      :type: int
+
+
+      Voxels a side, in y and x, of each slice Cellpose is given.
+
+
+   .. py:method:: process_chunk(idi, output_roi)
+
+      ``output_roi`` segmented: ``(1, z, y, x)``, probability or masks.
+
+
+
+   .. py:method:: to_dict()
+
+      This config as a model entry, which ``registry.build_model`` rebuilds.
+
+
+

@@ -53,6 +53,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../../../../../yaml_config.html">YAML Configuration</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../../data_paths.html">Data paths</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../../huggingface.html">HuggingFace Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../bioimage.html">BioImage Model Zoo</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../../custom_script.html">Custom Model</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../../post.html">PostProcessors</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../../plugins.html">Plugins</a></li>
@@ -227,6 +228,13 @@ weights go on the base model, so they need the base’s packages.</p>
 <dd class="field-odd"><p>Its own <code class="docutils literal notranslate"><span class="pre">env</span></code> if it was given one, else its base model’s</p>
 </dd>
 </dl>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.finetune.FinetuneModelConfig.default_env">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">default_env</span></span><a class="headerlink" href="#cellmap_flow.models.configs.finetune.FinetuneModelConfig.default_env" title="Link to this definition"></a></dt>
+<dd><p>The base model type’s <code class="docutils literal notranslate"><span class="pre">default_env</span></code>, as the weights need the base
+model’s packages. A type that decides per model decides for the base.</p>
 </dd></dl>
 
 <dl class="py property">

@@ -63,7 +63,7 @@ Module Contents
    is logged and left out, rather than stopping the dashboard.
 
 
-.. py:function:: run_multiple(models: List[cellmap_flow.models.models_config.ModelConfig], dataset_path: str, charge_group: str, queue: str, wrap_raw: bool = True, resample: bool = False) -> None
+.. py:function:: run_multiple(models: List[cellmap_flow.models.models_config.ModelConfig], dataset_path: str, charge_group: str, queue: str, wrap_raw: bool = True, resample: bool = True) -> None
 
    Submit multiple model inference jobs.
 
@@ -71,7 +71,7 @@ Module Contents
    :param dataset_path: Base path to the dataset
    :param charge_group: Billing/chargeback group
    :param queue: Job queue name
-   :param resample: start each server with --resample (the YAML's ``resample``)
+   :param resample: start each server with --resample, else --no-resample (the YAML's ``resample``)
 
 
 .. py:function:: main(ctx, config_path: str, list_types: bool, validate_only: bool)
@@ -90,8 +90,9 @@ Module Contents
    cycle_gpu_queues: true # optional; false pins the job to `queue` above
                           # instead of falling back to a queue with capacity.
    wrap_raw: true         # optional; false serves raw straight from the file
-   resample: false        # optional; true resamples the data to each model's
-                          # input voxel size when it has no level at it.
+   resample: true         # optional, the default: resample the data to each
+                          # model's input voxel size when it has no level at
+                          # it; false reads the nearest level as if it were.
    extra_layers:          # optional; more volumes to show beside the raw data
      - name: mito_pred
        path: /path/to/pred.zarr/mito

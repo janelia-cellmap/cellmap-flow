@@ -55,7 +55,16 @@
 <li class="toctree-l2"><a class="reference internal" href="#yaml-structure">YAML Structure</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#model-entries">Model Entries</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="#available-model-types">Available Model Types</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#an-entry-from-what-you-have">An entry from what you have</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#running-a-model-in-its-own-environment">Running a model in its own environment</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#fly-organelles-checkpoints">fly_organelles checkpoints</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#bioimage-model-zoo">BioImage Model Zoo</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#cellpose">Cellpose</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#each-model-type-s-default">Each model type’s default</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#aliases">Aliases</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#cellmap-flow-envs"><code class="docutils literal notranslate"><span class="pre">cellmap_flow</span> <span class="pre">envs</span></code></a></li>
+</ul>
+</li>
 <li class="toctree-l3"><a class="reference internal" href="#channel-names">Channel Names</a></li>
 </ul>
 </li>
@@ -75,6 +84,7 @@
 </li>
 <li class="toctree-l1"><a class="reference internal" href="data_paths.html">Data paths</a></li>
 <li class="toctree-l1"><a class="reference internal" href="huggingface.html">HuggingFace Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="bioimage.html">BioImage Model Zoo</a></li>
 <li class="toctree-l1"><a class="reference internal" href="custom_script.html">Custom Model</a></li>
 <li class="toctree-l1"><a class="reference internal" href="post.html">PostProcessors</a></li>
 <li class="toctree-l1"><a class="reference internal" href="plugins.html">Plugins</a></li>
@@ -171,7 +181,7 @@ cellmap_flow<span class="w"> </span>yaml<span class="w"> </span>config.yaml<span
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">resample</span></code></p></td>
 <td><p>No</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">true</span></code> resamples the data to each model’s input voxel size when it has no level at that size (default: <code class="docutils literal notranslate"><span class="pre">false</span></code>; see <a class="reference internal" href="#resampling"><span class="std std-ref">Data at Another Voxel Size</span></a>).</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">true</span></code> (the default) resamples the data to each model’s input voxel size when it has no level at that size; <code class="docutils literal notranslate"><span class="pre">false</span></code> reads the nearest level as if it were at that size (see <a class="reference internal" href="#resampling"><span class="std std-ref">Data at Another Voxel Size</span></a>).</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">extra_layers</span></code></p></td>
 <td><p>No</p></td>
@@ -266,11 +276,13 @@ Use <code class="docutils literal notranslate"><span class="pre">cellmap_flow</s
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">fly</span></code></p></td>
 <td><p>FlyModelConfig</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">checkpoint</span></code> (required), <code class="docutils literal notranslate"><span class="pre">classes</span></code> (required), <code class="docutils literal notranslate"><span class="pre">resolution</span></code> (required)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">checkpoint</span></code> (required); <code class="docutils literal notranslate"><span class="pre">classes</span></code>, <code class="docutils literal notranslate"><span class="pre">resolution</span></code>, <code class="docutils literal notranslate"><span class="pre">input_size</span></code> and
+<code class="docutils literal notranslate"><span class="pre">output_size</span></code> when the run’s folder does not say them; <code class="docutils literal notranslate"><span class="pre">sigmoid</span></code>.
+See <a class="reference internal" href="#fly"><span class="std std-ref">fly_organelles checkpoints</span></a>.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">bio</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">bioimage</span></code></p></td>
 <td><p>BioModelConfig</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">model_path</span></code> (required)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">model_name</span></code> or <code class="docutils literal notranslate"><span class="pre">model_path</span></code> (required), <code class="docutils literal notranslate"><span class="pre">voxel_size</span></code> (required)</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">cellmap</span></code></p></td>
 <td><p>CellMapModelConfig</p></td>
@@ -280,9 +292,71 @@ Use <code class="docutils literal notranslate"><span class="pre">cellmap_flow</s
 <td><p>HuggingFaceModelConfig</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">repo</span></code> (required), <code class="docutils literal notranslate"><span class="pre">revision</span></code> (optional). See <a class="reference internal" href="huggingface.html"><span class="doc">HuggingFace Models</span></a>.</p></td>
 </tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">cellpose</span></code></p></td>
+<td><p>CellposeModelConfig</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">voxel_size</span></code> (required), <code class="docutils literal notranslate"><span class="pre">pretrained_model</span></code>, <code class="docutils literal notranslate"><span class="pre">output</span></code>. See <a class="reference internal" href="#cellpose"><span class="std std-ref">Cellpose</span></a>.</p></td>
+</tr>
 </tbody>
 </table>
 <p>Common optional parameters: <code class="docutils literal notranslate"><span class="pre">name</span></code>, <code class="docutils literal notranslate"><span class="pre">scale</span></code>, <code class="docutils literal notranslate"><span class="pre">env</span></code> (see <a class="reference internal" href="#model-env"><span class="std std-ref">Running a model in its own environment</span></a>).</p>
+</section>
+<section id="an-entry-from-what-you-have">
+<span id="resolving-models"></span><h3>An entry from what you have<a class="headerlink" href="#an-entry-from-what-you-have" title="Link to this heading"></a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">cellmap_flow</span> <span class="pre">add</span> <span class="pre">REF</span></code> writes the entry for you. <code class="docutils literal notranslate"><span class="pre">REF</span></code> is whatever you
+have in hand, and the entry is printed as YAML to paste under <code class="docutils literal notranslate"><span class="pre">models:</span></code>,
+with comments saying what <code class="docutils literal notranslate"><span class="pre">REF</span></code> was taken to be, where it runs, and what
+it still needs:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>cellmap_flow<span class="w"> </span>add<span class="w"> </span>cpsam
+<span class="gp"># </span>cellpose:<span class="w"> </span>a<span class="w"> </span>Cellpose<span class="w"> </span><span class="m">4</span><span class="w"> </span>pretrained<span class="w"> </span>model
+<span class="gp"># </span>runs<span class="w"> </span><span class="k">in</span><span class="w"> </span>the<span class="w"> </span>cellpose4<span class="w"> </span>environment<span class="w"> </span><span class="o">(</span>its<span class="w"> </span>type<span class="err">'</span>s<span class="w"> </span>default<span class="o">)</span>
+<span class="gp"># </span>still<span class="w"> </span>needs:<span class="w"> </span>voxel_size<span class="w"> </span><span class="o">(</span>add<span class="w"> </span>to<span class="w"> </span>the<span class="w"> </span>entry<span class="o">)</span>
+<span class="go">models:</span>
+<span class="go">  cpsam:</span>
+<span class="go">    type: cellpose</span>
+<span class="go">    pretrained_model: cpsam</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">-n</span></code> names the model and <code class="docutils literal notranslate"><span class="pre">-v</span> <span class="pre">16,8,8</span></code> gives the voxel size of a model
+that does not say its own (Cellpose, a bioimage.io model cellmap-flow has no
+trained voxel size for); a zoo EM model’s entry gets the one it was trained
+at, with a note saying where it comes from. <code class="docutils literal notranslate"><span class="pre">--run</span> <span class="pre">-d</span> <span class="pre">DATA</span></code> (with <code class="docutils literal notranslate"><span class="pre">-q</span></code>,
+<code class="docutils literal notranslate"><span class="pre">-P</span></code> and <code class="docutils literal notranslate"><span class="pre">--resample</span></code> as <code class="docutils literal notranslate"><span class="pre">infer</span></code> takes them) serves the model right
+away, as <code class="docutils literal notranslate"><span class="pre">cellmap_flow</span> <span class="pre">yaml</span></code> would.</p>
+<p>In the dashboard, the same <code class="docutils literal notranslate"><span class="pre">REF</span></code> goes in the Models tab’s <em>Add a model</em> box.
+<em>Resolve</em> (<code class="docutils literal notranslate"><span class="pre">POST</span> <span class="pre">/api/models/resolve</span></code>) shows what it was taken to be and
+where it runs, with a box for each value it still needs; <em>Run</em>
+(<code class="docutils literal notranslate"><span class="pre">POST</span> <span class="pre">/api/models/add</span></code>) starts it, and it joins the models with a ticked
+box, stopped when unticked like any other. A config YAML (one with
+<code class="docutils literal notranslate"><span class="pre">models:</span></code>) is refused with how to run it: it is a whole run, for
+<code class="docutils literal notranslate"><span class="pre">cellmap_flow</span> <span class="pre">yaml</span></code>.</p>
+<p><code class="docutils literal notranslate"><span class="pre">REF</span></code> is checked against these in order, and the first that matches wins:</p>
+<ol class="arabic simple">
+<li><p>A local file or folder: a <code class="docutils literal notranslate"><span class="pre">.py</span></code> is a <code class="docutils literal notranslate"><span class="pre">script</span></code>; a folder with
+<code class="docutils literal notranslate"><span class="pre">metadata.json</span></code> (and <code class="docutils literal notranslate"><span class="pre">model.ts</span></code>) a <code class="docutils literal notranslate"><span class="pre">cellmap</span></code> export; a folder with
+<code class="docutils literal notranslate"><span class="pre">rdf.yaml</span></code> or <code class="docutils literal notranslate"><span class="pre">bioimageio.yaml</span></code>, such a file, or a <code class="docutils literal notranslate"><span class="pre">.zip</span></code> with one
+inside a <code class="docutils literal notranslate"><span class="pre">bioimage</span></code> model; <code class="docutils literal notranslate"><span class="pre">model_checkpoint_&lt;n&gt;</span></code>, a <code class="docutils literal notranslate"><span class="pre">.ts</span></code> or a
+<code class="docutils literal notranslate"><span class="pre">model.pt</span></code> a <code class="docutils literal notranslate"><span class="pre">fly</span></code> model (its channels and voxel sizes read from its
+run’s folder, see <a class="reference internal" href="#fly"><span class="std std-ref">fly_organelles checkpoints</span></a>); a folder with <code class="docutils literal notranslate"><span class="pre">adapter_config.json</span></code> (a
+LoRA adapter) or a full finetune’s <code class="docutils literal notranslate"><span class="pre">model_state_dict.pt</span></code> a
+<code class="docutils literal notranslate"><span class="pre">finetune</span></code>, which still needs its <code class="docutils literal notranslate"><span class="pre">base_model</span></code>; Cellpose-SAM weights a
+<code class="docutils literal notranslate"><span class="pre">cellpose</span></code> model.</p></li>
+<li><p>A prefix that says outright what it is: <code class="docutils literal notranslate"><span class="pre">hf:org/repo[&#64;revision]</span></code>,
+<code class="docutils literal notranslate"><span class="pre">bioimageio:&lt;id,</span> <span class="pre">nickname,</span> <span class="pre">URL</span> <span class="pre">or</span> <span class="pre">path&gt;</span></code>, <code class="docutils literal notranslate"><span class="pre">cellpose:&lt;name</span> <span class="pre">or</span> <span class="pre">path&gt;</span></code>,
+<code class="docutils literal notranslate"><span class="pre">fly:&lt;path&gt;</span></code>, <code class="docutils literal notranslate"><span class="pre">dacapo:&lt;run&gt;&#64;&lt;iteration&gt;</span></code>, <code class="docutils literal notranslate"><span class="pre">script:&lt;path&gt;</span></code>.</p></li>
+<li><p>A Cellpose model name: <code class="docutils literal notranslate"><span class="pre">cpsam_v2</span></code>, <code class="docutils literal notranslate"><span class="pre">cpsam</span></code>, <code class="docutils literal notranslate"><span class="pre">cpdino</span></code>, <code class="docutils literal notranslate"><span class="pre">cpdino-vitb</span></code>.</p></li>
+<li><p>A URL: a bioimage.io model page, a Zenodo record, a DOI link or the URL of
+an <code class="docutils literal notranslate"><span class="pre">rdf.yaml</span></code> or zip is a <code class="docutils literal notranslate"><span class="pre">bioimage</span></code> model; <code class="docutils literal notranslate"><span class="pre">huggingface.co/org/repo</span></code>
+is as 5.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">org/repo</span></code>: a Hugging Face repo, which must be a cellmap-models export
+(<code class="docutils literal notranslate"><span class="pre">metadata.json</span></code> and <code class="docutils literal notranslate"><span class="pre">model.ts</span></code>). Any other model on the Hub is
+refused: wrap it in a script (<a class="reference internal" href="custom_script.html"><span class="doc">Custom Model</span></a>).</p></li>
+<li><p>A BioImage Model Zoo nickname or id (<code class="docutils literal notranslate"><span class="pre">affable-shark</span></code>,
+<code class="docutils literal notranslate"><span class="pre">10.5281/zenodo.5764892</span></code>), looked up in the zoo’s model list, the one
+the Models tab shows (bioimage.io’s server, else its legacy index).</p></li>
+</ol>
+<p>5 and 6 are checked online; with <code class="docutils literal notranslate"><span class="pre">--offline</span></code> (or when the Hub or zoo
+cannot be reached) a repo or zoo-shaped name is taken on trust, with a note.
+Anything else is an error saying what was tried; a prefix settles it.</p>
 </section>
 <section id="running-a-model-in-its-own-environment">
 <span id="model-env"></span><h3>Running a model in its own environment<a class="headerlink" href="#running-a-model-in-its-own-environment" title="Link to this heading"></a></h3>
@@ -290,9 +364,9 @@ Use <code class="docutils literal notranslate"><span class="pre">cellmap_flow</s
 transformer models) can run in an environment of its own. Give its entry an
 <code class="docutils literal notranslate"><span class="pre">env</span></code>:</p>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">models</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">cellpose_sam</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">my_model</span><span class="p">:</span>
 <span class="w">    </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">script</span>
-<span class="w">    </span><span class="nt">script_path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">example/cellpose_sam_model.py</span>
+<span class="w">    </span><span class="nt">script_path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/path/to/my_model.py</span>
 <span class="w">    </span><span class="nt">env</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cellpose4</span>
 </pre></div>
 </div>
@@ -302,14 +376,62 @@ transformer models) can run in an environment of its own. Give its entry an
 as <code class="docutils literal notranslate"><span class="pre">pixi</span> <span class="pre">run</span> <span class="pre">--frozen</span> <span class="pre">--manifest-path</span> <span class="pre">&lt;pixi.toml&gt;</span> <span class="pre">-e</span> <span class="pre">cellpose4</span> <span class="pre">cellmap_flow</span> <span class="pre">serve</span> <span class="pre">...</span></code>,
 and pixi installs the environment from the lockfile the first time. The
 manifest is the one in the checkout cellmap-flow is installed from; set
-<code class="docutils literal notranslate"><span class="pre">CELLMAP_FLOW_PIXI_MANIFEST</span></code> to use another. cellmap-flow’s <code class="docutils literal notranslate"><span class="pre">pixi.toml</span></code>
-has <code class="docutils literal notranslate"><span class="pre">cellpose4</span></code> (Cellpose 4, for Cellpose-SAM), <code class="docutils literal notranslate"><span class="pre">dacapo</span></code> and
-<code class="docutils literal notranslate"><span class="pre">bioimageio</span></code>; or</p></li>
+<code class="docutils literal notranslate"><span class="pre">CELLMAP_FLOW_PIXI_MANIFEST</span></code> to use another. The environments of
+cellmap-flow’s <code class="docutils literal notranslate"><span class="pre">pixi.toml</span></code> are listed below; or</p></li>
 <li><p>the absolute path of a conda environment or virtualenv with cellmap-flow
 installed. The server runs as <code class="docutils literal notranslate"><span class="pre">&lt;path&gt;/bin/python</span> <span class="pre">-P</span> <span class="pre">-m</span> <span class="pre">cellmap_flow.cli.main</span> <span class="pre">serve</span> <span class="pre">...</span></code>.</p></li>
 </ul>
 <p>A value with a <code class="docutils literal notranslate"><span class="pre">/</span></code> in it, or starting with <code class="docutils literal notranslate"><span class="pre">~</span></code>, is a path. An unknown name,
 or a path without <code class="docutils literal notranslate"><span class="pre">bin/python</span></code>, is an error when the YAML is read.</p>
+<p>The environments of cellmap-flow’s <code class="docutils literal notranslate"><span class="pre">pixi.toml</span></code>. A model type with a default
+runs there when its entry gives no <code class="docutils literal notranslate"><span class="pre">env</span></code>; an explicit <code class="docutils literal notranslate"><span class="pre">env</span></code> wins, and
+<code class="docutils literal notranslate"><span class="pre">env:</span> <span class="pre">current</span></code> keeps it in the environment cellmap-flow runs in.</p>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 15.0%" />
+<col style="width: 55.0%" />
+<col style="width: 30.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Environment</p></th>
+<th class="head"><p>What it is for</p></th>
+<th class="head"><p>Default for</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">default</span></code></p></td>
+<td><p>The dashboard, the catalog, Cellpose 3 and finetuning; what Fileglancer
+deploys. <code class="docutils literal notranslate"><span class="pre">test</span></code> and <code class="docutils literal notranslate"><span class="pre">dev</span></code> add pytest and the linters to it.</p></td>
+<td><p>types without a default of their own, which run where cellmap-flow runs</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">fly</span></code></p></td>
+<td><p>fly_organelles (<code class="docutils literal notranslate"><span class="pre">mzouink/fly-organelles</span></code> at <code class="docutils literal notranslate"><span class="pre">ab89c10</span></code>), whose
+<code class="docutils literal notranslate"><span class="pre">StandardUnet</span></code> loads a raw training checkpoint and whose classes an
+eager <code class="docutils literal notranslate"><span class="pre">model.pt</span></code> unpickles. Solved on its own.</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">fly</span></code>, unless the checkpoint is TorchScript (<code class="docutils literal notranslate"><span class="pre">.ts</span></code>)</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">bioimageio</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">bioimageio.core</span></code> 0.11 with its ONNX and PyTorch backends, for BioImage
+Model Zoo models. <code class="docutils literal notranslate"><span class="pre">example/bioimage_em.yaml</span></code> runs one.</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">bioimage</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">cellpose4</span></code></p></td>
+<td><p>Cellpose 4 (Cellpose-SAM), which needs a newer torch and numpy than
+Cellpose 3. Solved on its own.</p></td>
+<td><p>none: give <code class="docutils literal notranslate"><span class="pre">env:</span> <span class="pre">cellpose4</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">dacapo</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">dacapo-ml</span></code>. Its lock does not import DaCapo yet (<code class="docutils literal notranslate"><span class="pre">dacapo-ml</span></code> 0.3.0
+with fibsem-tools 7, which dropped <code class="docutils literal notranslate"><span class="pre">fibsem_tools.metadata</span></code>), so a
+DaCapo model is served from a conda environment that has it.</p></td>
+<td><p>none</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">docs</span></code></p></td>
+<td><p>Building these docs.</p></td>
+<td><p>none</p></td>
+</tr>
+</tbody>
+</table>
 <p>Only the model’s inference server and its finetuning job run there. The
 dashboard reads the model’s geometry from its running server rather than
 building the model itself; blockwise runs models in its own process, so run
@@ -317,10 +439,391 @@ building the model itself; blockwise runs models in its own process, so run
 finetuning job needs <code class="docutils literal notranslate"><span class="pre">peft</span></code> in the environment: a pixi environment that
 does not install it is refused when the job is submitted.</p>
 <p><code class="docutils literal notranslate"><span class="pre">cellmap_flow</span> <span class="pre">infer</span> <span class="pre">&lt;type&gt;</span> <span class="pre">--env</span> <span class="pre">&lt;env&gt;</span></code> and the dashboard’s model form take
-it too. <code class="docutils literal notranslate"><span class="pre">example/cellpose_sam.yaml</span></code> runs Cellpose-SAM this way.</p>
+it too. The <code class="docutils literal notranslate"><span class="pre">cellpose</span></code> type runs in <code class="docutils literal notranslate"><span class="pre">cellpose4</span></code> without one (see
+<a class="reference internal" href="#cellpose"><span class="std std-ref">Cellpose</span></a>).</p>
+</section>
+<section id="fly-organelles-checkpoints">
+<span id="fly"></span><h3>fly_organelles checkpoints<a class="headerlink" href="#fly-organelles-checkpoints" title="Link to this heading"></a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">type:</span> <span class="pre">fly</span></code> serves a network fly_organelles trained, from one checkpoint
+file:</p>
+<ul class="simple">
+<li><p>a training checkpoint (<code class="docutils literal notranslate"><span class="pre">model_checkpoint_&lt;iteration&gt;</span></code>), loaded into
+fly_organelles’ <code class="docutils literal notranslate"><span class="pre">StandardUnet</span></code>; its feature maps, levels and kernel sizes
+are read from the weights;</p></li>
+<li><p>a TorchScript file (<code class="docutils literal notranslate"><span class="pre">.ts</span></code>);</p></li>
+<li><p>a whole pickled model (<code class="docutils literal notranslate"><span class="pre">model.pt</span></code>), unpickled only when
+<code class="docutils literal notranslate"><span class="pre">CELLMAP_FLOW_ALLOW_PICKLE=1</span></code> is set.</p></li>
+</ul>
+<p>A training checkpoint or a <code class="docutils literal notranslate"><span class="pre">model.pt</span></code> runs in the <code class="docutils literal notranslate"><span class="pre">fly</span></code> pixi environment
+unless the entry gives an <code class="docutils literal notranslate"><span class="pre">env</span></code>; a <code class="docutils literal notranslate"><span class="pre">.ts</span></code> runs in any. A folder that
+cellmap_models exported (<code class="docutils literal notranslate"><span class="pre">metadata.json</span></code> and <code class="docutils literal notranslate"><span class="pre">model.ts</span></code>) is served as
+exported by <code class="docutils literal notranslate"><span class="pre">type:</span> <span class="pre">cellmap</span></code>, <code class="docutils literal notranslate"><span class="pre">folder_path:</span> <span class="pre">&lt;the</span> <span class="pre">folder&gt;</span></code>, and refused here.
+The <code class="docutils literal notranslate"><span class="pre">model.pt</span></code> in such a folder can be served here, at a larger
+<code class="docutils literal notranslate"><span class="pre">input_size</span></code> than the one it was exported at.</p>
+<p>What the entry does not give is read from the checkpoint’s folder. A
+fly_organelles training run is enough as it is:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">models</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">mito_distance_16</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">fly</span>
+<span class="w">    </span><span class="nt">checkpoint</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/groups/cellmap/cellmap/zouinkhim/salevary/train/v2/distance/mito_16_all/model_checkpoint_20000</span>
+</pre></div>
+</div>
+<p>reads the channel names from the run’s <code class="docutils literal notranslate"><span class="pre">train.py</span></code> and the voxel sizes and
+tile from its training snapshots. Each value comes from the first of these
+files that has it; a key the entry gives always wins:</p>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 22.0%" />
+<col style="width: 78.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>File</p></th>
+<th class="head"><p>What is read</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">metadata.json</span></code></p></td>
+<td><p>A cellmap_models export’s: <code class="docutils literal notranslate"><span class="pre">channels_names</span></code>, the voxel sizes,
+<code class="docutils literal notranslate"><span class="pre">input_shape</span></code> and <code class="docutils literal notranslate"><span class="pre">output_shape</span></code>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">config.yaml</span></code></p></td>
+<td><p>fly_organelles’ run configuration: <code class="docutils literal notranslate"><span class="pre">run.labels</span></code>, <code class="docutils literal notranslate"><span class="pre">run.voxel_size</span></code>,
+<code class="docutils literal notranslate"><span class="pre">checkpoint.input_shape</span></code> and <code class="docutils literal notranslate"><span class="pre">output_shape</span></code>.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">snapshots/</span></code></p></td>
+<td><p>The newest training snapshot’s <code class="docutils literal notranslate"><span class="pre">raw</span></code> and <code class="docutils literal notranslate"><span class="pre">output</span></code> arrays: input and
+output size, their voxel sizes, and how many channels the network
+outputs.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">train.py</span></code></p></td>
+<td><p>Its top-level <code class="docutils literal notranslate"><span class="pre">labels</span> <span class="pre">=</span> <span class="pre">[...]</span></code> and <code class="docutils literal notranslate"><span class="pre">voxel_size</span> <span class="pre">=</span> <span class="pre">...</span></code>, when they are
+written out as literals. The script is parsed, never run.</p></td>
+</tr>
+</tbody>
+</table>
+<p>Labels are taken as channel names only when the snapshots show one channel
+per label; an affinity or LSD run’s network outputs several per label, and
+its entry has to name them. The voxel sizes are read only when the entry
+gives neither, and the input and output size only when it gives neither: an
+output size belongs to the input size it came with.</p>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 25.0%" />
+<col style="width: 20.0%" />
+<col style="width: 55.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Parameter</p></th>
+<th class="head"><p>Default</p></th>
+<th class="head"><p>Meaning</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">checkpoint</span></code> (<code class="docutils literal notranslate"><span class="pre">checkpoint_path</span></code>)</p></td>
+<td><p>(required)</p></td>
+<td><p>The checkpoint file.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">classes</span></code> (<code class="docutils literal notranslate"><span class="pre">channels</span></code>)</p></td>
+<td><p>read from the folder</p></td>
+<td><p>The name of each output channel, one per channel. An error when
+neither the entry nor the folder gives them.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">resolution</span></code> (<code class="docutils literal notranslate"><span class="pre">input_voxel_size</span></code>), <code class="docutils literal notranslate"><span class="pre">output_resolution</span></code>
+(<code class="docutils literal notranslate"><span class="pre">output_voxel_size</span></code>)</p></td>
+<td><p>read from the folder</p></td>
+<td><p>nm per voxel, one number or one per axis; fractions are kept. One
+stands for the other, as fly_organelles trains at one voxel size. An
+error when neither the entry nor the folder gives one.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">input_size</span></code>, <code class="docutils literal notranslate"><span class="pre">output_size</span></code></p></td>
+<td><p>read from the folder, else 178 and computed</p></td>
+<td><p>Voxels a side of a tile in and out. Without either, 178 goes in
+(fly_organelles’ training tile) and what comes out is computed from the
+network. <code class="docutils literal notranslate"><span class="pre">input_size</span></code> alone is enough; <code class="docutils literal notranslate"><span class="pre">output_size</span></code> alone is an
+error. Larger tiles waste less context: a StandardUnet takes
+178 + 16k (194, 338, …).</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">sigmoid</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">true</span></code></p></td>
+<td><p>Pass the output through a sigmoid, which is added unless the network
+ends in one already (a cellmap_models export does). fly_organelles
+trains on logits, so a training checkpoint gets one. <code class="docutils literal notranslate"><span class="pre">false</span></code> serves
+the network’s output as it is.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="bioimage-model-zoo">
+<span id="bioimage"></span><h3>BioImage Model Zoo<a class="headerlink" href="#bioimage-model-zoo" title="Link to this heading"></a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">type:</span> <span class="pre">bioimage</span></code> runs a <a class="reference external" href="https://bioimage.io">BioImage Model Zoo</a> model
+through <code class="docutils literal notranslate"><span class="pre">bioimageio.core</span></code>, with the model’s own preprocessing (its
+normalization) and postprocessing (a sigmoid, say). It runs in the
+<code class="docutils literal notranslate"><span class="pre">bioimageio</span></code> pixi environment unless the entry gives an <code class="docutils literal notranslate"><span class="pre">env</span></code>.
+<code class="docutils literal notranslate"><span class="pre">example/bioimage_em.yaml</span></code> serves “conscientious-dromedary” (a 3D
+mitochondria U-Net) on jrc_mus-salivary-1.</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">models</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">mito_bioimageio</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">bioimage</span>
+<span class="w">    </span><span class="nt">model</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">conscientious-dromedary</span>
+<span class="w">    </span><span class="nt">voxel_size</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">16</span><span class="w">     </span><span class="c1"># without it: 30x8x8, the voxel size it was trained at</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">model</span></code> is anything <code class="docutils literal notranslate"><span class="pre">bioimageio.core</span></code> loads: a zoo id or nickname
+(“conscientious-dromedary”, “affable-shark”), a DOI or URL, or the path of a
+model’s <code class="docutils literal notranslate"><span class="pre">rdf.yaml</span></code> (<code class="docutils literal notranslate"><span class="pre">bioimageio.yaml</span></code>) or packaged <code class="docutils literal notranslate"><span class="pre">.zip</span></code>. The model is
+downloaded to bioimageio’s cache (<code class="docutils literal notranslate"><span class="pre">$BIOIMAGEIO_CACHE_PATH</span></code>, by default
+<code class="docutils literal notranslate"><span class="pre">~/.cache/bioimageio</span></code>) when its server starts. Before 0.3.0 the key was
+<code class="docutils literal notranslate"><span class="pre">model_name</span></code>; it, and <code class="docutils literal notranslate"><span class="pre">model_path</span></code>, are still read.</p>
+<p>The model’s description says the rest, unless the entry does:</p>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 25.0%" />
+<col style="width: 20.0%" />
+<col style="width: 55.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Parameter</p></th>
+<th class="head"><p>Default</p></th>
+<th class="head"><p>Meaning</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">voxel_size</span></code></p></td>
+<td><p>the description’s, else the one it was trained at</p></td>
+<td><p>nm per input voxel, one number or z, y, x: the level the model reads.
+The description gives one when its input’s space axes have a unit
+(<code class="docutils literal notranslate"><span class="pre">scale</span></code> and <code class="docutils literal notranslate"><span class="pre">unit</span></code>). No zoo model does, so for the zoo’s EM models
+cellmap-flow uses the voxel size each was trained at, looked up by hand
+(<code class="docutils literal notranslate"><span class="pre">cellmap_flow/models/bioimage_voxel_sizes.yaml</span></code>, with each number’s
+source; some were trained on downsampled data, the Platynereis nuclei
+model at 100x80x80). Any other model needs it. A 2D model’s z is the
+spacing of its slices, its y by default.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">input_size</span></code></p></td>
+<td><p>256 (2D), 128 (3D)</p></td>
+<td><p>Voxels a side of the tile the model is given, one number or one per
+space axis of the model (z, y, x; y, x for a 2D model). An axis of
+fixed size keeps it; a parameterized one (<code class="docutils literal notranslate"><span class="pre">min</span> <span class="pre">+</span> <span class="pre">n</span> <span class="pre">*</span> <span class="pre">step</span></code>) gets the
+smallest size it takes of at least this.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">context</span></code></p></td>
+<td><p>the description’s halo, else 0</p></td>
+<td><p>Voxels cut off each side of the model’s output, one number or one per
+space axis, so that chunks meet where the model saw both sides of the
+seam. The input is read that much larger. The zoo’s EM U-Nets give no
+halo, and their chunks show seams; a <code class="docutils literal notranslate"><span class="pre">context</span></code> of 16 or so hides them
+at the cost of computing the overlap twice.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">slices_per_chunk</span></code></p></td>
+<td><p>8</p></td>
+<td><p>z slices in a chunk of a 2D model, each segmented on its own (in one
+call when the model’s batch axis takes any size). A 3D model ignores
+it.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">weight_format</span></code></p></td>
+<td><p>bioimageio.core’s choice</p></td>
+<td><p>The weights to run, of those the model has: <code class="docutils literal notranslate"><span class="pre">torchscript</span></code>,
+<code class="docutils literal notranslate"><span class="pre">pytorch_state_dict</span></code>, <code class="docutils literal notranslate"><span class="pre">onnx</span></code>, <code class="docutils literal notranslate"><span class="pre">tensorflow_saved_model_bundle</span></code>,
+<code class="docutils literal notranslate"><span class="pre">keras_hdf5</span></code> or <code class="docutils literal notranslate"><span class="pre">keras_v3</span></code>.</p></td>
+</tr>
+</tbody>
+</table>
+<p>Every output tensor is served, its channels one after another, as the
+model’s postprocessing leaves it: float32, not clipped or rescaled, unless
+the description says the output is integers (labels), which keep their type.
+A 2D model’s labels are its own, slice by slice and chunk by chunk:
+<code class="docutils literal notranslate"><span class="pre">MortonSegmentationRelabeling</span></code> makes them unique across chunks, as for
+Cellpose’s masks, but not from one slice to the next.</p>
+<p>It cannot run a model with more than one required input, an input with more
+than one channel (RGB), or an output that is not a map over the input’s
+space, such as micro-SAM’s (“noisy-ox”, “humorous-crab”), whose masks come
+one per prompted object. A model whose code needs packages the
+<code class="docutils literal notranslate"><span class="pre">bioimageio</span></code> environment lacks (its weights’ <code class="docutils literal notranslate"><span class="pre">dependencies</span></code> name them)
+fails when its server builds it; the environment has <code class="docutils literal notranslate"><span class="pre">timm</span></code>, which the
+zoo’s BiaPy transformers need. Empanada’s MitoNet (“stupendous-sheep”) needs
+OpenCV and loads a file from beside its code, where bioimageio.core 0.11 does
+not put it, so it does not run.</p>
+<p>The zoo’s 2D EM U-Nets (“gleeful-skunk”, “jolly-duck”, “good-microbe”) find
+jrc_mus-salivary-1’s mitochondria at 8 nm; “conscientious-dromedary” at 16 nm.</p>
+</section>
+<section id="cellpose">
+<span id="id2"></span><h3>Cellpose<a class="headerlink" href="#cellpose" title="Link to this heading"></a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">type:</span> <span class="pre">cellpose</span></code> runs Cellpose 4 (Cellpose-SAM) on each z slice of a
+chunk, in 2D, and serves its cell probability or its instance masks. It runs
+in the <code class="docutils literal notranslate"><span class="pre">cellpose4</span></code> pixi environment unless the entry gives an <code class="docutils literal notranslate"><span class="pre">env</span></code>:
+Cellpose 4 cannot share the default environment, whose cellpose 3 pins an
+older numpy. <code class="docutils literal notranslate"><span class="pre">example/cellpose_sam.yaml</span></code> serves it on jrc_mus-salivary-1.</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">models</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">cellpose_sam</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cellpose</span>
+<span class="w">    </span><span class="nt">voxel_size</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">64</span>
+<span class="w">    </span><span class="nt">output</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">probability</span>
+</pre></div>
+</div>
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 25.0%" />
+<col style="width: 15.0%" />
+<col style="width: 60.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Parameter</p></th>
+<th class="head"><p>Default</p></th>
+<th class="head"><p>Meaning</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">voxel_size</span></code></p></td>
+<td><p>(required)</p></td>
+<td><p>nm per voxel, read and written; one number or one per axis. Cellpose-SAM
+sees objects best about 30 voxels across, so pick the voxel size at
+which yours are roughly that (or give <code class="docutils literal notranslate"><span class="pre">diameter</span></code>).</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">pretrained_model</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">cpsam_v2</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">cpsam_v2</span></code>, <code class="docutils literal notranslate"><span class="pre">cpsam</span></code>, <code class="docutils literal notranslate"><span class="pre">cpdino</span></code>, <code class="docutils literal notranslate"><span class="pre">cpdino-vitb</span></code>, or the path of
+finetuned Cellpose weights. The named ones are downloaded from the
+Hugging Face Hub (about 1 GB) to <code class="docutils literal notranslate"><span class="pre">~/.cellpose/models</span></code>, or
+<code class="docutils literal notranslate"><span class="pre">$CELLPOSE_LOCAL_MODELS_PATH</span></code>, when the server starts. The DINO
+models also need facebookresearch’s <code class="docutils literal notranslate"><span class="pre">dinov3</span></code> package, which the
+<code class="docutils literal notranslate"><span class="pre">cellpose4</span></code> environment does not install.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">output</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">probability</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">probability</span></code>: the cell probability, 0 to 1 (float32). <code class="docutils literal notranslate"><span class="pre">masks</span></code>:
+instance ids (uint64), unique within a chunk.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">slices_per_chunk</span></code></p></td>
+<td><p>8</p></td>
+<td><p>z slices in a chunk.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">slice_size</span></code></p></td>
+<td><p>512</p></td>
+<td><p>Voxels a side, in y and x, of each chunk’s slices.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">context</span></code></p></td>
+<td><p>32</p></td>
+<td><p>Voxels read beyond them on each side in y and x, so that objects at
+a chunk’s edge are seen whole, and cut off again. None in z.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">batch_size</span></code></p></td>
+<td><p>the whole chunk</p></td>
+<td><p>Tiles per GPU pass. Cellpose cuts each slice into tiles (256 px for
+<code class="docutils literal notranslate"><span class="pre">cpsam*</span></code>, 384 for the DINO models, overlapping by 10%); by default
+all of a chunk’s tiles go in one pass. Lower it if the GPU runs out
+of memory.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">diameter</span></code></p></td>
+<td><p>none</p></td>
+<td><p>Object diameter in voxels; Cellpose resizes each slice by
+30 / <code class="docutils literal notranslate"><span class="pre">diameter</span></code>. None keeps the model’s own scale.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">flow_threshold</span></code>, <code class="docutils literal notranslate"><span class="pre">cellprob_threshold</span></code></p></td>
+<td><p>0.4, 0.0</p></td>
+<td><p>Cellpose’s mask thresholds; <code class="docutils literal notranslate"><span class="pre">masks</span></code> only.</p></td>
+</tr>
+</tbody>
+</table>
+<p>The probability is computed voxel by voxel, so it joins up across chunks,
+and it skips the mask dynamics, which makes it the faster output. Masks are
+made per chunk: an object that crosses a chunk’s edge is cut there, with an
+id on each side, and objects are not joined from slice to slice. Add the
+<code class="docutils literal notranslate"><span class="pre">MortonSegmentationRelabeling</span></code> postprocessor to make the ids unique across
+chunks and show the layer as a segmentation:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">json_data</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">postprocess</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">MortonSegmentationRelabeling</span>
+</pre></div>
+</div>
+<p>For masks of a whole volume, write the probability with <code class="docutils literal notranslate"><span class="pre">pixi</span> <span class="pre">run</span> <span class="pre">-e</span>
+<span class="pre">cellpose4</span> <span class="pre">cellmap_flow</span> <span class="pre">blockwise</span> <span class="pre">...</span></code> (blockwise runs the model in its own
+process) and segment that, or run Cellpose’s own distributed
+segmentation (<code class="docutils literal notranslate"><span class="pre">cellpose.contrib.distributed_segmentation</span></code>), which stitches
+objects across blocks.</p>
+<p>Finetuned weights, from Cellpose’s GUI or <code class="docutils literal notranslate"><span class="pre">cellpose.train</span></code>, are a path:
+<code class="docutils literal notranslate"><span class="pre">pretrained_model:</span> <span class="pre">/path/to/models/my_model</span></code>. Cellpose reads from the
+weights which network they are, and the tiling follows.</p>
+<p>Licence: the Cellpose-SAM weights were trained on data that includes
+datasets licensed CC-BY-NC, so they are for non-commercial use.</p>
+<section id="each-model-type-s-default">
+<h4>Each model type’s default<a class="headerlink" href="#each-model-type-s-default" title="Link to this heading"></a></h4>
+<p>Some model types run in an environment of their own unless the entry says
+otherwise, so their entries need no <code class="docutils literal notranslate"><span class="pre">env</span></code>:</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Type</p></th>
+<th class="head"><p>Default <code class="docutils literal notranslate"><span class="pre">env</span></code></p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">cellpose</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">cellpose4</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">bioimage</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">bioimageio</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">dacapo</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">dacapo</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">fly</span></code>, with a raw checkpoint</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">fly</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">finetune</span></code></p></td>
+<td><p>its base model type’s</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">script</span></code>, <code class="docutils literal notranslate"><span class="pre">cellmap</span></code>, <code class="docutils literal notranslate"><span class="pre">huggingface</span></code></p></td>
+<td><p>none: this environment</p></td>
+</tr>
+</tbody>
+</table>
+<p>An entry’s own <code class="docutils literal notranslate"><span class="pre">env</span></code> wins. <code class="docutils literal notranslate"><span class="pre">env:</span> <span class="pre">current</span></code> runs the model in this
+environment whatever its type’s default (<code class="docutils literal notranslate"><span class="pre">default</span></code> is not that: it is
+pixi’s <code class="docutils literal notranslate"><span class="pre">default</span></code> environment). Exported YAMLs write only an <code class="docutils literal notranslate"><span class="pre">env</span></code> the
+entry gave, never the type’s default. A plugin type sets its own as
+<code class="docutils literal notranslate"><span class="pre">default_env</span></code> on its <code class="docutils literal notranslate"><span class="pre">ModelConfig</span></code> subclass.</p>
+<p>A default this machine cannot provide does not stop the model: with no
+<code class="docutils literal notranslate"><span class="pre">pixi.toml</span></code>, no environment of that name in it, or no pixi at all (a
+conda-only account), the model runs in this environment, as before its type
+had a default, with a warning that says how to give it one. A default that
+is in <code class="docutils literal notranslate"><span class="pre">pixi.toml</span></code> but not installed yet is used: it is installed before the
+model’s first job is submitted (several minutes, once; Job Logs shows pixi’s
+output meanwhile), not in the job, whose time to start a server would run
+out first. An <code class="docutils literal notranslate"><span class="pre">env</span></code> the entry names
+itself is an error when it cannot be used.</p>
+</section>
+<section id="aliases">
+<h4>Aliases<a class="headerlink" href="#aliases" title="Link to this heading"></a></h4>
+<p><code class="docutils literal notranslate"><span class="pre">~/.cellmap_flow/envs.yaml</span></code> (or the file <code class="docutils literal notranslate"><span class="pre">CELLMAP_FLOW_ENVS_FILE</span></code> names)
+maps environment names to conda environments or virtualenvs with cellmap-flow
+installed. An alias wins over a pixi environment of the same name, both for
+an entry’s <code class="docutils literal notranslate"><span class="pre">env</span></code> and for a type’s default, so this is how a machine without
+pixi runs the types’ defaults:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">cellpose4</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/groups/lab/home/me/miniconda3/envs/cellpose4</span>
+<span class="nt">dacapo</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/groups/lab/home/me/miniconda3/envs/dacapo</span>
+</pre></div>
+</div>
+<p>A model whose <code class="docutils literal notranslate"><span class="pre">env</span></code> is an alias keeps the name in exported YAMLs, so the
+YAML works on a machine that has the pixi environment instead. An alias to a
+relative path, or to a directory without <code class="docutils literal notranslate"><span class="pre">bin/python</span></code>, is an error.</p>
+</section>
+<section id="cellmap-flow-envs">
+<h4><code class="docutils literal notranslate"><span class="pre">cellmap_flow</span> <span class="pre">envs</span></code><a class="headerlink" href="#cellmap-flow-envs" title="Link to this heading"></a></h4>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>cellmap_flow<span class="w"> </span>envs<span class="w">                  </span><span class="c1"># each environment, as `envs list`</span>
+cellmap_flow<span class="w"> </span>envs<span class="w"> </span>install<span class="w"> </span>cellpose4
+cellmap_flow<span class="w"> </span>envs<span class="w"> </span>check<span class="w"> </span>cellpose4
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">envs</span> <span class="pre">list</span></code> shows each environment of <code class="docutils literal notranslate"><span class="pre">pixi.toml</span></code> and each alias: where
+it is, whether it is installed, whether it can run a finetuning job, and
+which model types default to it (a type that decides per model, as <code class="docutils literal notranslate"><span class="pre">fly</span></code>
+does, is listed apart). <code class="docutils literal notranslate"><span class="pre">envs</span> <span class="pre">install</span></code> installs a pixi environment from the
+lockfile now (<code class="docutils literal notranslate"><span class="pre">pixi</span> <span class="pre">install</span> <span class="pre">--frozen</span></code>), rather than on its first job; an
+alias has nothing to install. <code class="docutils literal notranslate"><span class="pre">envs</span> <span class="pre">check</span></code> imports cellmap-flow with the
+environment’s python, to show that it works there.</p>
+</section>
 </section>
 <section id="channel-names">
-<span id="id1"></span><h3>Channel Names<a class="headerlink" href="#channel-names" title="Link to this heading"></a></h3>
+<span id="id3"></span><h3>Channel Names<a class="headerlink" href="#channel-names" title="Link to this heading"></a></h3>
 <p>A model names its output channels, in order, with one of:</p>
 <ul class="simple">
 <li><p><code class="docutils literal notranslate"><span class="pre">channels</span></code>: a list in a model script, or a <code class="docutils literal notranslate"><span class="pre">fly</span></code> entry’s parameter. In a <code class="docutils literal notranslate"><span class="pre">fly</span></code> entry, <code class="docutils literal notranslate"><span class="pre">classes</span></code> is the same parameter under another name, so give one of them; a <code class="docutils literal notranslate"><span class="pre">fly</span></code> entry may also give its names as one comma-separated string, <code class="docutils literal notranslate"><span class="pre">classes:</span> <span class="pre">mito,er</span></code>.</p></li>
@@ -359,12 +862,13 @@ it too. <code class="docutils literal notranslate"><span class="pre">example/cel
 <span id="resampling"></span><h2>Data at Another Voxel Size<a class="headerlink" href="#data-at-another-voxel-size" title="Link to this heading"></a></h2>
 <p>A model reads the level of <code class="docutils literal notranslate"><span class="pre">data_path</span></code> at its input voxel size. When there is no such level, what happens depends on <code class="docutils literal notranslate"><span class="pre">resample</span></code>:</p>
 <ul class="simple">
-<li><p><strong>Left out, or</strong> <code class="docutils literal notranslate"><span class="pre">resample:</span> <span class="pre">false</span></code>: the level closest to the model’s voxel size that is not coarser on any axis (the finest level, when every one is) is read <em>as if</em> it were at the model’s voxel size, voxel for voxel, with a warning. The model then sees data at the wrong scale, and its predictions are drawn where that level really is, at a proportionally different voxel size.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">resample:</span> <span class="pre">true</span></code>: a level is resampled to the model’s voxel size, axis by axis, and the model sees the data at the size it was trained at. Its predictions are at its declared output voxel size.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">resample:</span> <span class="pre">false</span></code>: the level closest to the model’s voxel size that is not coarser on any axis (the finest level, when every one is) is read <em>as if</em> it were at the model’s voxel size, voxel for voxel, with a warning. The model then sees data at the wrong scale, and its predictions are drawn where that level really is, at a proportionally different voxel size.</p></li>
+<li><p><strong>Left out, or</strong> <code class="docutils literal notranslate"><span class="pre">resample:</span> <span class="pre">true</span></code>: a level is resampled to the model’s voxel size, axis by axis, and the model sees the data at the size it was trained at. Its predictions are at its declared output voxel size.</p></li>
 </ul>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">data_path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/nrs/cellmap/data/my_dataset/my_dataset.zarr/recon-1/em/fibsem-uint8</span>
 <span class="nt">charge_group</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cellmap</span>
-<span class="nt">resample</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span><span class="w">   </span><span class="c1"># levels 8x8x40, 16x16x80 ... nm; the model wants 16x16x16</span>
+<span class="c1"># levels 8x8x40, 16x16x80 ... nm; the model wants 16x16x16, so a level is</span>
+<span class="c1"># resampled to it (resample: false would read 8x8x40 as if it were)</span>
 
 <span class="nt">models</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">my_model</span><span class="p">:</span>
@@ -379,8 +883,8 @@ it too. <code class="docutils literal notranslate"><span class="pre">example/cel
 <li><p><strong>Each axis by its own factor.</strong> By a whole number of voxels (8 nm to 16 nm), each voxel is the mean of the voxels it covers. Otherwise (40 nm to 16 nm, or 12 nm to 16 nm), it is a linear interpolation between the two nearest voxels. Label data (bool, or integers of 32 bits or more) takes the nearest voxel instead, so no label is invented. Intensities stay in their dtype (uint8 stays uint8, rounded), and go through <code class="docutils literal notranslate"><span class="pre">json_data</span></code>’s normalizers after resampling, as a stored level would.</p></li>
 <li><p><strong>Where.</strong> The resampled grid starts at the level’s own corner, so the predictions lie over the data. Chunks are resampled on their own, and each gives exactly the voxels a read of the whole volume would.</p></li>
 </ul>
-<p><code class="docutils literal notranslate"><span class="pre">cellmap_flow</span> <span class="pre">yaml</span></code> starts each server with <code class="docutils literal notranslate"><span class="pre">--resample</span></code>, and <code class="docutils literal notranslate"><span class="pre">cellmap_flow</span> <span class="pre">blockwise</span></code> reads the data resampled the same way. <code class="docutils literal notranslate"><span class="pre">cellmap_flow</span> <span class="pre">infer</span> <span class="pre">&lt;type&gt;</span> <span class="pre">--resample</span></code> is the same for one model (<a class="reference internal" href="cli.html"><span class="doc">Command line</span></a>).</p>
-<p>In the dashboard it is the Models tab’s <em>Resample if no scale matches the model</em> box, which <code class="docutils literal notranslate"><span class="pre">resample:</span> <span class="pre">true</span></code> (or <code class="docutils literal notranslate"><span class="pre">cellmap_flow</span> <span class="pre">view</span> <span class="pre">--resample</span></code>) starts ticked. It applies to the models submitted from then on, to blockwise runs, and to annotation volumes made while it is on: those are at the model’s own voxel sizes, and their finetunes train on the data resampled and are served resampled. When a running model reads a level as if it were at its voxel size, the banner above the tabs says so.</p>
+<p><code class="docutils literal notranslate"><span class="pre">cellmap_flow</span> <span class="pre">yaml</span></code> starts each server with <code class="docutils literal notranslate"><span class="pre">--resample</span></code> (<code class="docutils literal notranslate"><span class="pre">--no-resample</span></code> for <code class="docutils literal notranslate"><span class="pre">resample:</span> <span class="pre">false</span></code>), and <code class="docutils literal notranslate"><span class="pre">cellmap_flow</span> <span class="pre">blockwise</span></code> reads the data the same way. <code class="docutils literal notranslate"><span class="pre">cellmap_flow</span> <span class="pre">infer</span> <span class="pre">&lt;type&gt;</span></code> resamples too, unless given <code class="docutils literal notranslate"><span class="pre">--no-resample</span></code> (<a class="reference internal" href="cli.html"><span class="doc">Command line</span></a>).</p>
+<p>In the dashboard it is the Models tab’s <em>Resample if no scale matches the model</em> box, ticked unless <code class="docutils literal notranslate"><span class="pre">resample:</span> <span class="pre">false</span></code> (or <code class="docutils literal notranslate"><span class="pre">cellmap_flow</span> <span class="pre">view</span> <span class="pre">--no-resample</span></code>) starts it unticked. It applies to the models submitted from then on, to blockwise runs, and to annotation volumes made while it is on: those are at the model’s own voxel sizes, and their finetunes train on the data resampled and are served resampled. When a running model reads a level as if it were at its voxel size, the banner above the tabs says so.</p>
 </section>
 <section id="extra-layers">
 <h2>Extra Layers<a class="headerlink" href="#extra-layers" title="Link to this heading"></a></h2>
@@ -416,7 +920,7 @@ it too. <code class="docutils literal notranslate"><span class="pre">example/cel
 <p>Set <code class="docutils literal notranslate"><span class="pre">separate_bounding_boxes_zarrs:</span> <span class="pre">true</span></code> to write each bounding box to its own zarr subdirectory (<code class="docutils literal notranslate"><span class="pre">box_1</span></code>, <code class="docutils literal notranslate"><span class="pre">box_2</span></code>, etc).</p>
 </section>
 <section id="output-channels">
-<span id="id2"></span><h2>Output Channels<a class="headerlink" href="#output-channels" title="Link to this heading"></a></h2>
+<span id="id4"></span><h2>Output Channels<a class="headerlink" href="#output-channels" title="Link to this heading"></a></h2>
 <p>Blockwise writes each output to its own group, <code class="docutils literal notranslate"><span class="pre">&lt;output_path&gt;/&lt;output</span> <span class="pre">name&gt;/s0</span></code>. <code class="docutils literal notranslate"><span class="pre">output_channels</span></code> says which of the model’s channels go to which output:</p>
 <ul>
 <li><p><strong>Left out</strong>: one output per model channel, named by the model’s channel names (see <a class="reference internal" href="#channel-names"><span class="std std-ref">Channel Names</span></a>).</p></li>

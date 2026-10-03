@@ -22,7 +22,7 @@
     <script src="../../../../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../../../../genindex.html" />
     <link rel="search" title="Search" href="../../../../search.html" />
-    <link rel="next" title="cellmap_flow.norm" href="../../norm/index.html" />
+    <link rel="next" title="cellmap_flow.models.resolve" href="../resolve/index.html" />
     <link rel="prev" title="cellmap_flow.models.models_config" href="../models_config/index.html" /> 
 </head>
 
@@ -53,6 +53,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../../../../yaml_config.html">YAML Configuration</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../data_paths.html">Data paths</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../huggingface.html">HuggingFace Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../bioimage.html">BioImage Model Zoo</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../custom_script.html">Custom Model</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../post.html">PostProcessors</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../plugins.html">Plugins</a></li>
@@ -149,7 +150,8 @@ shorthands, then <code class="docutils literal notranslate"><span class="pre">co
 <p>A model entry’s <code class="docutils literal notranslate"><span class="pre">env</span></code> (the environment its server runs in, see
 <code class="docutils literal notranslate"><span class="pre">models.envs</span></code>) is not a constructor argument: <code class="docutils literal notranslate"><span class="pre">build_model</span></code> and
 <code class="docutils literal notranslate"><span class="pre">instantiate_model_config</span></code> check it and set it on the built config, and
-the dashboard’s form offers it beside each type’s arguments.</p>
+the dashboard’s form offers it beside each type’s arguments. Left out, the
+type’s <code class="docutils literal notranslate"><span class="pre">default_env</span></code> applies (<code class="docutils literal notranslate"><span class="pre">ModelConfig.effective_env</span></code>).</p>
 <p>Importing this module imports neither torch, flask, huggingface_hub nor
 <code class="docutils literal notranslate"><span class="pre">cellmap_flow.globals</span></code>. The model config classes, which bring numpy and
 funlib (most of a second), are imported only when a function needs them.
@@ -239,7 +241,7 @@ bioimageio, dacapo or cellmap_models either.</p>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="cellmap_flow.models.registry.cli_name_of">
-<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.registry.</span></span><span class="sig-name descname"><span class="pre">cli_name_of</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">cls</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../../norm/input_normalize/index.html#cellmap_flow.norm.input_normalize.EuclideanDistance.type" title="cellmap_flow.norm.input_normalize.EuclideanDistance.type"><span class="pre">type</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#cellmap_flow.models.registry.cli_name_of" title="Link to this definition"></a></dt>
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.registry.</span></span><span class="sig-name descname"><span class="pre">cli_name_of</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">cls</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../resolve/index.html#id0" title="cellmap_flow.models.resolve.Resolved.type"><span class="pre">type</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#cellmap_flow.models.registry.cli_name_of" title="Link to this definition"></a></dt>
 <dd><p>The name <code class="docutils literal notranslate"><span class="pre">cls</span></code> is registered under: its own <code class="docutils literal notranslate"><span class="pre">cli_name</span></code>, else one from its class name.</p>
 <p>Only a <code class="docutils literal notranslate"><span class="pre">cli_name</span></code> the class sets itself counts. A plugin’s
 <code class="docutils literal notranslate"><span class="pre">class</span> <span class="pre">MyScript(ScriptModelConfig)</span></code> inherits <code class="docutils literal notranslate"><span class="pre">cli_name</span> <span class="pre">=</span> <span class="pre">&quot;script&quot;</span></code>;
@@ -250,7 +252,7 @@ would ask the server for a plain ScriptModelConfig. It is “myscript”.</p>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="cellmap_flow.models.registry.model_types">
-<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.registry.</span></span><span class="sig-name descname"><span class="pre">model_types</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="../../norm/input_normalize/index.html#cellmap_flow.norm.input_normalize.EuclideanDistance.type" title="cellmap_flow.norm.input_normalize.EuclideanDistance.type"><span class="pre">type</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#cellmap_flow.models.registry.model_types" title="Link to this definition"></a></dt>
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.registry.</span></span><span class="sig-name descname"><span class="pre">model_types</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="../resolve/index.html#id0" title="cellmap_flow.models.resolve.Resolved.type"><span class="pre">type</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#cellmap_flow.models.registry.model_types" title="Link to this definition"></a></dt>
 <dd><p>Every model type, by the name the CLIs and YAML <code class="docutils literal notranslate"><span class="pre">type:</span></code> use.</p>
 <p>Plugins included, subclasses of subclasses too. When two classes claim a
 name the first one found keeps it, and the other is left out with a
@@ -259,7 +261,7 @@ warning.</p>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="cellmap_flow.models.registry.model_type">
-<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.registry.</span></span><span class="sig-name descname"><span class="pre">model_type</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="../../norm/input_normalize/index.html#cellmap_flow.norm.input_normalize.EuclideanDistance.type" title="cellmap_flow.norm.input_normalize.EuclideanDistance.type"><span class="pre">type</span></a></span></span><a class="headerlink" href="#cellmap_flow.models.registry.model_type" title="Link to this definition"></a></dt>
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.registry.</span></span><span class="sig-name descname"><span class="pre">model_type</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="../resolve/index.html#id0" title="cellmap_flow.models.resolve.Resolved.type"><span class="pre">type</span></a></span></span><a class="headerlink" href="#cellmap_flow.models.registry.model_type" title="Link to this definition"></a></dt>
 <dd><p>The class registered as <code class="docutils literal notranslate"><span class="pre">name</span></code>, matched as a YAML <code class="docutils literal notranslate"><span class="pre">type:</span></code> is.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Raises<span class="colon">:</span></dt>
@@ -270,7 +272,7 @@ warning.</p>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="cellmap_flow.models.registry.model_classes">
-<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.registry.</span></span><span class="sig-name descname"><span class="pre">model_classes</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="../../norm/input_normalize/index.html#cellmap_flow.norm.input_normalize.EuclideanDistance.type" title="cellmap_flow.norm.input_normalize.EuclideanDistance.type"><span class="pre">type</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#cellmap_flow.models.registry.model_classes" title="Link to this definition"></a></dt>
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.registry.</span></span><span class="sig-name descname"><span class="pre">model_classes</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="../resolve/index.html#id0" title="cellmap_flow.models.resolve.Resolved.type"><span class="pre">type</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#cellmap_flow.models.registry.model_classes" title="Link to this definition"></a></dt>
 <dd><p>Every model type by class name (<code class="docutils literal notranslate"><span class="pre">&quot;ScriptModelConfig&quot;</span></code>), plugins included.</p>
 </dd></dl>
 
@@ -387,7 +389,7 @@ plugins’ included, and <code class="docutils literal notranslate"><span class=
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
         <a href="../models_config/index.html" class="btn btn-neutral float-left" title="cellmap_flow.models.models_config" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
-        <a href="../../norm/index.html" class="btn btn-neutral float-right" title="cellmap_flow.norm" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="../resolve/index.html" class="btn btn-neutral float-right" title="cellmap_flow.models.resolve" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>

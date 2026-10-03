@@ -53,6 +53,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../../../../yaml_config.html">YAML Configuration</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../data_paths.html">Data paths</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../huggingface.html">HuggingFace Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../bioimage.html">BioImage Model Zoo</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../custom_script.html">Custom Model</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../post.html">PostProcessors</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../plugins.html">Plugins</a></li>
@@ -228,10 +229,11 @@ geometry attributes, a ModelGeometry included.</p>
 <dt class="sig sig-object py" id="cellmap_flow.models.geometry_cache.build_here">
 <span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.geometry_cache.</span></span><span class="sig-name descname"><span class="pre">build_here</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model_config</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.models.geometry_cache.build_here" title="Link to this definition"></a></dt>
 <dd><p><code class="docutils literal notranslate"><span class="pre">model_config.config</span></code>, built in this process.</p>
-<p>Refused for a model with an <code class="docutils literal notranslate"><span class="pre">env</span></code>: this process lacks its packages,
-or has other versions of them (the default environment’s cellpose 3
-for a Cellpose-SAM model), so building it here fails or, worse,
-half-works. Its geometry comes from its running server.</p>
+<p>Refused for a model that runs in another environment (its <code class="docutils literal notranslate"><span class="pre">env</span></code>, or
+its type’s <code class="docutils literal notranslate"><span class="pre">default_env</span></code>): this process lacks its packages, or has
+other versions of them (the default environment’s cellpose 3 for a
+Cellpose-SAM model), so building it here fails or, worse, half-works.
+Its geometry comes from its running server.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Raises<span class="colon">:</span></dt>
 <dd class="field-odd"><p><a class="reference internal" href="../configs/base/index.html#cellmap_flow.models.configs.base.ModelEnvError" title="cellmap_flow.models.configs.base.ModelEnvError"><strong>ModelEnvError</strong></a> – the model runs in its own environment.</p>

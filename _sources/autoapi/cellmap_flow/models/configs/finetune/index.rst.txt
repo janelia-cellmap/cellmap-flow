@@ -112,6 +112,12 @@ Module Contents
       :type: Its own ``env`` if it was given one, else its base model's
 
 
+   .. py:property:: default_env
+
+      The base model type's ``default_env``, as the weights need the base
+      model's packages. A type that decides per model decides for the base.
+
+
    .. py:property:: base_model_config
 
       Lazily build the base ModelConfig from the stored dict.

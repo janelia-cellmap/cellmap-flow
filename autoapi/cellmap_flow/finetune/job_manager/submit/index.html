@@ -53,6 +53,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../../../../../yaml_config.html">YAML Configuration</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../../data_paths.html">Data paths</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../../huggingface.html">HuggingFace Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../bioimage.html">BioImage Model Zoo</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../../custom_script.html">Custom Model</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../../post.html">PostProcessors</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../../plugins.html">Plugins</a></li>
@@ -228,7 +229,9 @@ dashboard serves; <code class="docutils literal notranslate"><span class="pre">c
 entry’s own checkpoint, which is how an override reaches a Fly model.
 A model with an <code class="docutils literal notranslate"><span class="pre">env</span></code> always goes as an entry: no other flag carries
 the env, and without it the serving YAMLs the trainer writes would run
-the finetuned model in the default environment.</p>
+the finetuned model in the default environment. Its type’s
+<code class="docutils literal notranslate"><span class="pre">default_env</span></code> needs no entry: the trainer builds the same type, and
+a finetuned model runs where its base type does.</p>
 </dd></dl>
 
 <dl class="py function">

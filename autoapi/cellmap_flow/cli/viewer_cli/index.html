@@ -53,6 +53,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../../../../yaml_config.html">YAML Configuration</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../data_paths.html">Data paths</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../huggingface.html">HuggingFace Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../bioimage.html">BioImage Model Zoo</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../custom_script.html">Custom Model</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../post.html">PostProcessors</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../plugins.html">Plugins</a></li>
@@ -158,8 +159,9 @@
 <p>Opens neuroglancer on the raw data and starts the dashboard, where models
 can be picked and submitted interactively. Use <cite>cellmap_flow yaml</cite> instead
 to launch models from a config file.</p>
-<p><code class="docutils literal notranslate"><span class="pre">--resample</span></code> starts the dashboard’s Resample box ticked, so the models
-launched from it read the data resampled to their voxel size.</p>
+<p>The dashboard’s Resample box starts ticked, so the models launched from
+it read the data resampled to their voxel size when it has no level at
+it; <code class="docutils literal notranslate"><span class="pre">--no-resample</span></code> starts it unticked.</p>
 <p>Example:</p>
 <dl class="simple">
 <dt></dt><dd><p>cellmap_flow view -d /path/to/dataset.zarr</p>

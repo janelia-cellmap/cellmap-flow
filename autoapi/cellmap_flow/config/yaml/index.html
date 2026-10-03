@@ -53,6 +53,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../../../../yaml_config.html">YAML Configuration</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../data_paths.html">Data paths</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../huggingface.html">HuggingFace Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../bioimage.html">BioImage Model Zoo</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../custom_script.html">Custom Model</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../post.html">PostProcessors</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../plugins.html">Plugins</a></li>
@@ -129,10 +130,11 @@
 site’s default queue) when the file leaves them out; the model entries under
 <code class="docutils literal notranslate"><span class="pre">models</span></code> are built by <code class="docutils literal notranslate"><span class="pre">models.registry.build_models</span></code>. Every problem is a <code class="docutils literal notranslate"><span class="pre">ConfigError</span></code>.
 <code class="docutils literal notranslate"><span class="pre">resolve_data_path</span></code> is the one rule for a model’s <code class="docutils literal notranslate"><span class="pre">data_path</span></code> and
-<code class="docutils literal notranslate"><span class="pre">scale</span></code>, used by every launcher. A top-level <code class="docutils literal notranslate"><span class="pre">resample:</span> <span class="pre">true</span></code> has every
-model’s input resampled to its voxel size when the data has no level at it
-(<code class="docutils literal notranslate"><span class="pre">cellmap_flow</span> <span class="pre">yaml</span></code> passes <code class="docutils literal notranslate"><span class="pre">--resample</span></code> to each server; blockwise reads
-with <code class="docutils literal notranslate"><span class="pre">on_voxel_size_mismatch=&quot;resample&quot;</span></code>).</p>
+<code class="docutils literal notranslate"><span class="pre">scale</span></code>, used by every launcher. Every model’s input is resampled to its
+voxel size when the data has no level at it (<code class="docutils literal notranslate"><span class="pre">cellmap_flow</span> <span class="pre">yaml</span></code> passes
+<code class="docutils literal notranslate"><span class="pre">--resample</span></code> to each server; blockwise reads with
+<code class="docutils literal notranslate"><span class="pre">on_voxel_size_mismatch=&quot;resample&quot;</span></code>) unless the YAML says
+<code class="docutils literal notranslate"><span class="pre">resample:</span> <span class="pre">false</span></code>.</p>
 <section id="attributes">
 <h2>Attributes<a class="headerlink" href="#attributes" title="Link to this heading"></a></h2>
 <table class="autosummary longtable docutils align-default">

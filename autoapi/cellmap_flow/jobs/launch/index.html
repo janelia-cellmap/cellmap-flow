@@ -53,6 +53,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../../../../yaml_config.html">YAML Configuration</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../data_paths.html">Data paths</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../huggingface.html">HuggingFace Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../bioimage.html">BioImage Model Zoo</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../custom_script.html">Custom Model</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../post.html">PostProcessors</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../plugins.html">Plugins</a></li>
@@ -159,6 +160,9 @@ started.</p>
 <tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.jobs.launch.STARTUP_TIMEOUT_SECONDS" title="cellmap_flow.jobs.launch.STARTUP_TIMEOUT_SECONDS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">STARTUP_TIMEOUT_SECONDS</span></code></a></p></td>
 <td><p></p></td>
 </tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.jobs.launch.FAILED_STARTS_KEPT" title="cellmap_flow.jobs.launch.FAILED_STARTS_KEPT"><code class="xref py py-obj docutils literal notranslate"><span class="pre">FAILED_STARTS_KEPT</span></code></a></p></td>
+<td><p></p></td>
+</tr>
 </tbody>
 </table>
 </section>
@@ -166,6 +170,12 @@ started.</p>
 <h2>Functions<a class="headerlink" href="#functions" title="Link to this heading"></a></h2>
 <table class="autosummary longtable docutils align-default">
 <tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.jobs.launch.starting_jobs" title="cellmap_flow.jobs.launch.starting_jobs"><code class="xref py py-obj docutils literal notranslate"><span class="pre">starting_jobs</span></code></a>(→ list)</p></td>
+<td><p>The jobs submitted but not yet serving (waiting in their queue, or for</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.jobs.launch.failed_starts" title="cellmap_flow.jobs.launch.failed_starts"><code class="xref py py-obj docutils literal notranslate"><span class="pre">failed_starts</span></code></a>(→ list)</p></td>
+<td><p>The last failed start of each model name not started again since,</p></td>
+</tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.jobs.launch.started_jobs" title="cellmap_flow.jobs.launch.started_jobs"><code class="xref py py-obj docutils literal notranslate"><span class="pre">started_jobs</span></code></a>(→ list)</p></td>
 <td><p>The jobs this process started: the live list, which start_hosts</p></td>
 </tr>
@@ -210,6 +220,25 @@ started.</p>
 <dt class="sig sig-object py" id="cellmap_flow.jobs.launch.STARTUP_TIMEOUT_SECONDS">
 <span class="sig-prename descclassname"><span class="pre">cellmap_flow.jobs.launch.</span></span><span class="sig-name descname"><span class="pre">STARTUP_TIMEOUT_SECONDS</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">300</span></span><a class="headerlink" href="#cellmap_flow.jobs.launch.STARTUP_TIMEOUT_SECONDS" title="Link to this definition"></a></dt>
 <dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.jobs.launch.FAILED_STARTS_KEPT">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.jobs.launch.</span></span><span class="sig-name descname"><span class="pre">FAILED_STARTS_KEPT</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">5</span></span><a class="headerlink" href="#cellmap_flow.jobs.launch.FAILED_STARTS_KEPT" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.jobs.launch.starting_jobs">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.jobs.launch.</span></span><span class="sig-name descname"><span class="pre">starting_jobs</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">list</span></span></span><a class="headerlink" href="#cellmap_flow.jobs.launch.starting_jobs" title="Link to this definition"></a></dt>
+<dd><p>The jobs submitted but not yet serving (waiting in their queue, or for
+their server to come up), for the dashboard to show as starting.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.jobs.launch.failed_starts">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.jobs.launch.</span></span><span class="sig-name descname"><span class="pre">failed_starts</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">list</span></span></span><a class="headerlink" href="#cellmap_flow.jobs.launch.failed_starts" title="Link to this definition"></a></dt>
+<dd><p>The last failed start of each model name not started again since,
+for the dashboard to keep showing with its log.</p>
+</dd></dl>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="cellmap_flow.jobs.launch.started_jobs">

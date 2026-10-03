@@ -49,6 +49,7 @@ Classes
    cellmap_flow.dashboard.requests.BlockwiseSettings
    cellmap_flow.dashboard.requests.CreateModelConfig
    cellmap_flow.dashboard.requests.SetData
+   cellmap_flow.dashboard.requests.BioimageSelection
    cellmap_flow.dashboard.requests.SubmitModels
    cellmap_flow.dashboard.requests.Equivalences
    cellmap_flow.dashboard.requests.BoundingBox
@@ -207,14 +208,34 @@ Module Contents
 
 
 
+.. py:class:: BioimageSelection(/, **data: Any)
+
+
+
+   A BioImage Model Zoo model ticked on the Models tab: its id or
+   nickname, and the voxel size typed beside it (blank: the model's own).
+
+
+   .. py:attribute:: id
+      :type:  Annotated[str, _required('id', strip=True)]
+      :value: None
+
+
+
+   .. py:attribute:: voxel_size
+      :type:  Annotated[Optional[list], BeforeValidator(_voxel_size)]
+      :value: None
+
+
+
 .. py:class:: SubmitModels(/, **data: Any)
 
 
 
-   The Models tab's Submit: the catalog models and Hugging Face repos to
-   run. Every other running model is stopped (services.launch).
-   ``resample``, when given, becomes the session's (``Session.resample``)
-   before the models are started.
+   The Models tab's Submit: the catalog models, Hugging Face repos and
+   BioImage Model Zoo models to run. Every other running model is stopped
+   (services.launch). ``resample``, when given, becomes the session's
+   (``Session.resample``) before the models are started.
 
 
    .. py:attribute:: selected_models
@@ -225,6 +246,12 @@ Module Contents
 
    .. py:attribute:: selected_hf_models
       :type:  list[str]
+      :value: []
+
+
+
+   .. py:attribute:: selected_bioimage_models
+      :type:  list[BioimageSelection]
       :value: []
 
 

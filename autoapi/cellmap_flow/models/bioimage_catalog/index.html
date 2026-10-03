@@ -1,0 +1,399 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>cellmap_flow.models.bioimage_catalog &mdash; CellMap Flow  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=4ae1632d" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css" />
+
+  
+    <link rel="shortcut icon" href="../../../../_static/favicon.ico"/>
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link rel="next" title="cellmap_flow.models.configs" href="../configs/index.html" />
+    <link rel="prev" title="cellmap_flow.models" href="../index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            CellMap Flow
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">CellMap-Flow API:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../../../../install.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../cli.html">Command line</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../scripts.html">Python Scripts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../yaml_config.html">YAML Configuration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../data_paths.html">Data paths</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../huggingface.html">HuggingFace Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../bioimage.html">BioImage Model Zoo</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../custom_script.html">Custom Model</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../post.html">PostProcessors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../plugins.html">Plugins</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../review.html">Reviewing instances</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../viewer_api.html">Viewer layer API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../architecture.html">Architecture</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../../../index.html">API Reference</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="../../index.html">cellmap_flow</a><ul class="current">
+<li class="toctree-l3 current"><a class="reference internal" href="../../index.html#submodules">Submodules</a><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="../../blockwise/index.html">cellmap_flow.blockwise</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../cli/index.html">cellmap_flow.cli</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../config/index.html">cellmap_flow.config</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../dashboard/index.html">cellmap_flow.dashboard</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../finetune/index.html">cellmap_flow.finetune</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../globals/index.html">cellmap_flow.globals</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../image_data_interface/index.html">cellmap_flow.image_data_interface</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../inference/index.html">cellmap_flow.inference</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../inferencer/index.html">cellmap_flow.inferencer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../io/index.html">cellmap_flow.io</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../jobs/index.html">cellmap_flow.jobs</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../logging_setup/index.html">cellmap_flow.logging_setup</a></li>
+<li class="toctree-l4 current"><a class="reference internal" href="../index.html">cellmap_flow.models</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../norm/index.html">cellmap_flow.norm</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../pipeline_spec/index.html">cellmap_flow.pipeline_spec</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../plugins/index.html">cellmap_flow.plugins</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../post/index.html">cellmap_flow.post</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../process_chain/index.html">cellmap_flow.process_chain</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../review/index.html">cellmap_flow.review</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../review_index/index.html">cellmap_flow.review_index</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../server/index.html">cellmap_flow.server</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../serving/index.html">cellmap_flow.serving</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../utils/index.html">cellmap_flow.utils</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../viewer/index.html">cellmap_flow.viewer</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">CellMap Flow</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">API Reference</a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">cellmap_flow</a></li>
+          <li class="breadcrumb-item"><a href="../index.html">cellmap_flow.models</a></li>
+      <li class="breadcrumb-item active">cellmap_flow.models.bioimage_catalog</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../../../../_sources/autoapi/cellmap_flow/models/bioimage_catalog/index.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-cellmap_flow.models.bioimage_catalog">
+<span id="cellmap-flow-models-bioimage-catalog"></span><h1>cellmap_flow.models.bioimage_catalog<a class="headerlink" href="#module-cellmap_flow.models.bioimage_catalog" title="Link to this heading"></a></h1>
+<p>The BioImage Model Zoo’s models, for the dashboard’s picker.</p>
+<p>They come from bioimage.io’s artifact server (Hypha), whose listing holds
+each model’s whole description: its axes (so 2D or 3D, and any declared
+voxel size, without a fetch per model) and weights. The legacy
+<code class="docutils literal notranslate"><span class="pre">collection.json</span></code> index, which lags it (125 models to its 157 in
+October 2026), is the fallback when the server cannot be reached.</p>
+<p><code class="docutils literal notranslate"><span class="pre">list_bioimage_models</span></code> answers from a cache file under
+<code class="docutils literal notranslate"><span class="pre">~/.cellmap_flow/bioimage</span></code> once there is one, so opening the Models tab
+does not download the zoo’s index each time; <code class="docutils literal notranslate"><span class="pre">refresh_bioimage_models</span></code>
+fetches it again. Both give <code class="docutils literal notranslate"><span class="pre">{&quot;fetched&quot;:</span> <span class="pre">&lt;ISO</span> <span class="pre">time&gt;,</span> <span class="pre">&quot;models&quot;:</span> <span class="pre">[...]}</span></code>,
+the index’s models in its order, each as <code class="docutils literal notranslate"><span class="pre">normalise</span></code> gives it. A failed
+fetch raises <code class="docutils literal notranslate"><span class="pre">ZooIndexError</span></code>, whose message says why, and leaves the
+cache as it was.</p>
+<p>None of the zoo’s models declares the voxel size it was trained at, so the
+EM ones’ were looked up by hand, in <code class="docutils literal notranslate"><span class="pre">bioimage_voxel_sizes.yaml</span></code> beside
+this module: <code class="docutils literal notranslate"><span class="pre">trained_at</span></code> reads it, and each listed model carries its
+row as <code class="docutils literal notranslate"><span class="pre">trained</span></code> (None for a model not in it).</p>
+<p><code class="docutils literal notranslate"><span class="pre">bioimage_entry</span></code> turns a ticked model into <code class="docutils literal notranslate"><span class="pre">BioModelConfig</span></code>’s
+constructor arguments: the one place that knows their names.</p>
+<section id="attributes">
+<h2>Attributes<a class="headerlink" href="#attributes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.models.bioimage_catalog.ZOO_INDEX_URL" title="cellmap_flow.models.bioimage_catalog.ZOO_INDEX_URL"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ZOO_INDEX_URL</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.models.bioimage_catalog.HYPHA_ARTIFACTS" title="cellmap_flow.models.bioimage_catalog.HYPHA_ARTIFACTS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">HYPHA_ARTIFACTS</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.models.bioimage_catalog.HYPHA_MODELS_URL" title="cellmap_flow.models.bioimage_catalog.HYPHA_MODELS_URL"><code class="xref py py-obj docutils literal notranslate"><span class="pre">HYPHA_MODELS_URL</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.models.bioimage_catalog.FETCH_TIMEOUT_S" title="cellmap_flow.models.bioimage_catalog.FETCH_TIMEOUT_S"><code class="xref py py-obj docutils literal notranslate"><span class="pre">FETCH_TIMEOUT_S</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.models.bioimage_catalog.BIOIMAGE_CACHE_DIR" title="cellmap_flow.models.bioimage_catalog.BIOIMAGE_CACHE_DIR"><code class="xref py py-obj docutils literal notranslate"><span class="pre">BIOIMAGE_CACHE_DIR</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.models.bioimage_catalog.BIOIMAGE_CACHE_FILE" title="cellmap_flow.models.bioimage_catalog.BIOIMAGE_CACHE_FILE"><code class="xref py py-obj docutils literal notranslate"><span class="pre">BIOIMAGE_CACHE_FILE</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.models.bioimage_catalog.CACHE_FORMAT" title="cellmap_flow.models.bioimage_catalog.CACHE_FORMAT"><code class="xref py py-obj docutils literal notranslate"><span class="pre">CACHE_FORMAT</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.models.bioimage_catalog.STALE_AFTER_S" title="cellmap_flow.models.bioimage_catalog.STALE_AFTER_S"><code class="xref py py-obj docutils literal notranslate"><span class="pre">STALE_AFTER_S</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.models.bioimage_catalog.ZOO_PAGE_URL" title="cellmap_flow.models.bioimage_catalog.ZOO_PAGE_URL"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ZOO_PAGE_URL</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.models.bioimage_catalog.TRAINED_VOXEL_SIZES_FILE" title="cellmap_flow.models.bioimage_catalog.TRAINED_VOXEL_SIZES_FILE"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TRAINED_VOXEL_SIZES_FILE</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="exceptions">
+<h2>Exceptions<a class="headerlink" href="#exceptions" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.models.bioimage_catalog.ZooIndexError" title="cellmap_flow.models.bioimage_catalog.ZooIndexError"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ZooIndexError</span></code></a></p></td>
+<td><p>The zoo's index could not be fetched or read.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="functions">
+<h2>Functions<a class="headerlink" href="#functions" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.models.bioimage_catalog.normalise" title="cellmap_flow.models.bioimage_catalog.normalise"><code class="xref py py-obj docutils literal notranslate"><span class="pre">normalise</span></code></a>(→ dict)</p></td>
+<td><p>One index entry as the picker shows it.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.models.bioimage_catalog.normalise_artifact" title="cellmap_flow.models.bioimage_catalog.normalise_artifact"><code class="xref py py-obj docutils literal notranslate"><span class="pre">normalise_artifact</span></code></a>(→ Optional[dict])</p></td>
+<td><p>One Hypha artifact as the picker shows it: <code class="docutils literal notranslate"><span class="pre">normalise</span></code>'s fields from</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.models.bioimage_catalog.trained_at" title="cellmap_flow.models.bioimage_catalog.trained_at"><code class="xref py py-obj docutils literal notranslate"><span class="pre">trained_at</span></code></a>(→ Optional[dict])</p></td>
+<td><p>What <code class="docutils literal notranslate"><span class="pre">bioimage_voxel_sizes.yaml</span></code> says the model (an entry, or its</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.models.bioimage_catalog.list_bioimage_models" title="cellmap_flow.models.bioimage_catalog.list_bioimage_models"><code class="xref py py-obj docutils literal notranslate"><span class="pre">list_bioimage_models</span></code></a>(→ dict)</p></td>
+<td><p>The zoo's models, from the cache when there is a current one, with</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.models.bioimage_catalog.refresh_bioimage_models" title="cellmap_flow.models.bioimage_catalog.refresh_bioimage_models"><code class="xref py py-obj docutils literal notranslate"><span class="pre">refresh_bioimage_models</span></code></a>(→ dict)</p></td>
+<td><p>Fetch the zoo's index again, and cache it.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.models.bioimage_catalog.find_bioimage_model" title="cellmap_flow.models.bioimage_catalog.find_bioimage_model"><code class="xref py py-obj docutils literal notranslate"><span class="pre">find_bioimage_model</span></code></a>(→ Optional[dict])</p></td>
+<td><p>The cached model whose id, nickname or key is <code class="docutils literal notranslate"><span class="pre">key</span></code>, or None.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.models.bioimage_catalog.declared_voxel_size" title="cellmap_flow.models.bioimage_catalog.declared_voxel_size"><code class="xref py py-obj docutils literal notranslate"><span class="pre">declared_voxel_size</span></code></a>(→ Optional[list])</p></td>
+<td><p>The voxel size (nm, z y x) the model's description declares, None when it declares none.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.models.bioimage_catalog.bioimage_entry" title="cellmap_flow.models.bioimage_catalog.bioimage_entry"><code class="xref py py-obj docutils literal notranslate"><span class="pre">bioimage_entry</span></code></a>(→ dict)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">BioModelConfig</span></code>'s constructor arguments for the zoo model <code class="docutils literal notranslate"><span class="pre">model_id</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.models.bioimage_catalog.entry_model_id" title="cellmap_flow.models.bioimage_catalog.entry_model_id"><code class="xref py py-obj docutils literal notranslate"><span class="pre">entry_model_id</span></code></a>(→ Optional[str])</p></td>
+<td><p>The zoo model a <code class="docutils literal notranslate"><span class="pre">BioModelConfig</span></code> runs, read from its <code class="docutils literal notranslate"><span class="pre">to_dict()</span></code>,</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="module-contents">
+<h2>Module Contents<a class="headerlink" href="#module-contents" title="Link to this heading"></a></h2>
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.models.bioimage_catalog.ZOO_INDEX_URL">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.bioimage_catalog.</span></span><span class="sig-name descname"><span class="pre">ZOO_INDEX_URL</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'https://uk1s3.embassy.ebi.ac.uk/public-datasets/bioimage.io/collection.json'</span></span><a class="headerlink" href="#cellmap_flow.models.bioimage_catalog.ZOO_INDEX_URL" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.models.bioimage_catalog.HYPHA_ARTIFACTS">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.bioimage_catalog.</span></span><span class="sig-name descname"><span class="pre">HYPHA_ARTIFACTS</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'https://hypha.aicell.io/bioimage-io/artifacts'</span></span><a class="headerlink" href="#cellmap_flow.models.bioimage_catalog.HYPHA_ARTIFACTS" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.models.bioimage_catalog.HYPHA_MODELS_URL">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.bioimage_catalog.</span></span><span class="sig-name descname"><span class="pre">HYPHA_MODELS_URL</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">''</span></span><a class="headerlink" href="#cellmap_flow.models.bioimage_catalog.HYPHA_MODELS_URL" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.models.bioimage_catalog.FETCH_TIMEOUT_S">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.bioimage_catalog.</span></span><span class="sig-name descname"><span class="pre">FETCH_TIMEOUT_S</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">30</span></span><a class="headerlink" href="#cellmap_flow.models.bioimage_catalog.FETCH_TIMEOUT_S" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.models.bioimage_catalog.BIOIMAGE_CACHE_DIR">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.bioimage_catalog.</span></span><span class="sig-name descname"><span class="pre">BIOIMAGE_CACHE_DIR</span></span><a class="headerlink" href="#cellmap_flow.models.bioimage_catalog.BIOIMAGE_CACHE_DIR" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.models.bioimage_catalog.BIOIMAGE_CACHE_FILE">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.bioimage_catalog.</span></span><span class="sig-name descname"><span class="pre">BIOIMAGE_CACHE_FILE</span></span><a class="headerlink" href="#cellmap_flow.models.bioimage_catalog.BIOIMAGE_CACHE_FILE" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.models.bioimage_catalog.CACHE_FORMAT">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.bioimage_catalog.</span></span><span class="sig-name descname"><span class="pre">CACHE_FORMAT</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">2</span></span><a class="headerlink" href="#cellmap_flow.models.bioimage_catalog.CACHE_FORMAT" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.models.bioimage_catalog.STALE_AFTER_S">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.bioimage_catalog.</span></span><span class="sig-name descname"><span class="pre">STALE_AFTER_S</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">3600</span></span><a class="headerlink" href="#cellmap_flow.models.bioimage_catalog.STALE_AFTER_S" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.models.bioimage_catalog.ZOO_PAGE_URL">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.bioimage_catalog.</span></span><span class="sig-name descname"><span class="pre">ZOO_PAGE_URL</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'https://bioimage.io/#/artifacts/{}'</span></span><a class="headerlink" href="#cellmap_flow.models.bioimage_catalog.ZOO_PAGE_URL" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py exception">
+<dt class="sig sig-object py" id="cellmap_flow.models.bioimage_catalog.ZooIndexError">
+<span class="property"><span class="k"><span class="pre">exception</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.bioimage_catalog.</span></span><span class="sig-name descname"><span class="pre">ZooIndexError</span></span><a class="headerlink" href="#cellmap_flow.models.bioimage_catalog.ZooIndexError" title="Link to this definition"></a></dt>
+<dd><p>The zoo’s index could not be fetched or read.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.models.bioimage_catalog.normalise">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.bioimage_catalog.</span></span><span class="sig-name descname"><span class="pre">normalise</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">raw</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span></span></span><a class="headerlink" href="#cellmap_flow.models.bioimage_catalog.normalise" title="Link to this definition"></a></dt>
+<dd><p>One index entry as the picker shows it.</p>
+<p><code class="docutils literal notranslate"><span class="pre">id</span></code> is the index’s (a Zenodo DOI for older models, the nickname for
+newer ones), <code class="docutils literal notranslate"><span class="pre">nickname</span></code> the animal name (“affable-shark”) or None, and
+<code class="docutils literal notranslate"><span class="pre">key</span></code> the one to load it by, the nickname when there is one. <code class="docutils literal notranslate"><span class="pre">dims</span></code>
+is “2d”, “3d” or None; <code class="docutils literal notranslate"><span class="pre">em</span></code> whether its tags, name or description say
+electron microscopy; <code class="docutils literal notranslate"><span class="pre">weight_formats</span></code> short names (“pytorch”, “onnx”).</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.models.bioimage_catalog.normalise_artifact">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.bioimage_catalog.</span></span><span class="sig-name descname"><span class="pre">normalise_artifact</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">artifact</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#cellmap_flow.models.bioimage_catalog.normalise_artifact" title="Link to this definition"></a></dt>
+<dd><p>One Hypha artifact as the picker shows it: <code class="docutils literal notranslate"><span class="pre">normalise</span></code>’s fields from
+its description, with 2D/3D and the declared voxel size from its input’s
+axes. None for an artifact with no description.</p>
+</dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.models.bioimage_catalog.TRAINED_VOXEL_SIZES_FILE">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.bioimage_catalog.</span></span><span class="sig-name descname"><span class="pre">TRAINED_VOXEL_SIZES_FILE</span></span><a class="headerlink" href="#cellmap_flow.models.bioimage_catalog.TRAINED_VOXEL_SIZES_FILE" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.models.bioimage_catalog.trained_at">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.bioimage_catalog.</span></span><span class="sig-name descname"><span class="pre">trained_at</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#cellmap_flow.models.bioimage_catalog.trained_at" title="Link to this definition"></a></dt>
+<dd><p>What <code class="docutils literal notranslate"><span class="pre">bioimage_voxel_sizes.yaml</span></code> says the model (an entry, or its
+nickname) was trained at: {“voxel_size” (absent when trained across
+resolutions), “trained_on”, “confidence”, “source”, “note”?}, or None.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.models.bioimage_catalog.list_bioimage_models">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.bioimage_catalog.</span></span><span class="sig-name descname"><span class="pre">list_bioimage_models</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span></span></span><a class="headerlink" href="#cellmap_flow.models.bioimage_catalog.list_bioimage_models" title="Link to this definition"></a></dt>
+<dd><p>The zoo’s models, from the cache when there is a current one, with
+<code class="docutils literal notranslate"><span class="pre">stale</span></code> saying whether it is older than STALE_AFTER_S.</p>
+<p>A cache in an older format is fetched again; when that fails it is
+still read, as a list that is older is better than none.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.models.bioimage_catalog.refresh_bioimage_models">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.bioimage_catalog.</span></span><span class="sig-name descname"><span class="pre">refresh_bioimage_models</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span></span></span><a class="headerlink" href="#cellmap_flow.models.bioimage_catalog.refresh_bioimage_models" title="Link to this definition"></a></dt>
+<dd><p>Fetch the zoo’s index again, and cache it.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.models.bioimage_catalog.find_bioimage_model">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.bioimage_catalog.</span></span><span class="sig-name descname"><span class="pre">find_bioimage_model</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#cellmap_flow.models.bioimage_catalog.find_bioimage_model" title="Link to this definition"></a></dt>
+<dd><p>The cached model whose id, nickname or key is <code class="docutils literal notranslate"><span class="pre">key</span></code>, or None.</p>
+<p>Only the cache is read: the Models tab’s submit must not wait on the
+network, and a model the tab listed is in it.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.models.bioimage_catalog.declared_voxel_size">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.bioimage_catalog.</span></span><span class="sig-name descname"><span class="pre">declared_voxel_size</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">entry</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">list</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#cellmap_flow.models.bioimage_catalog.declared_voxel_size" title="Link to this definition"></a></dt>
+<dd><p>The voxel size (nm, z y x) the model’s description declares, None when it declares none.</p>
+<p>Read from its RDF (<code class="docutils literal notranslate"><span class="pre">rdf_source</span></code>) with a plain fetch, so the dashboard,
+which has no bioimageio.core, can refuse a blank voxel size at Submit:
+the server would otherwise refuse it after its job started, out of
+sight. Remembered per model. Raises ZooIndexError when the description
+cannot be read, which the caller treats as “don’t know”.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.models.bioimage_catalog.bioimage_entry">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.bioimage_catalog.</span></span><span class="sig-name descname"><span class="pre">bioimage_entry</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">voxel_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cls</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span></span></span><a class="headerlink" href="#cellmap_flow.models.bioimage_catalog.bioimage_entry" title="Link to this definition"></a></dt>
+<dd><p><code class="docutils literal notranslate"><span class="pre">BioModelConfig</span></code>’s constructor arguments for the zoo model <code class="docutils literal notranslate"><span class="pre">model_id</span></code>
+(an id or nickname bioimageio.core loads), at <code class="docutils literal notranslate"><span class="pre">voxel_size</span></code> (nm, z y x)
+and called <code class="docutils literal notranslate"><span class="pre">name</span></code>.</p>
+<p>The argument names come from the signature, so this holds whether the
+model is called <code class="docutils literal notranslate"><span class="pre">model_name</span></code> or <code class="docutils literal notranslate"><span class="pre">model</span></code>. A <code class="docutils literal notranslate"><span class="pre">voxel_size</span></code> of None
+is left out when the class can read it from the model; when it cannot,
+a ValueError says to give it. <code class="docutils literal notranslate"><span class="pre">cls</span></code> is for tests.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.models.bioimage_catalog.entry_model_id">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.bioimage_catalog.</span></span><span class="sig-name descname"><span class="pre">entry_model_id</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model_config</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#cellmap_flow.models.bioimage_catalog.entry_model_id" title="Link to this definition"></a></dt>
+<dd><p>The zoo model a <code class="docutils literal notranslate"><span class="pre">BioModelConfig</span></code> runs, read from its <code class="docutils literal notranslate"><span class="pre">to_dict()</span></code>,
+which <code class="docutils literal notranslate"><span class="pre">bioimage_entry</span></code>’s names round-trip through.</p>
+</dd></dl>
+
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../index.html" class="btn btn-neutral float-left" title="cellmap_flow.models" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../configs/index.html" class="btn btn-neutral float-right" title="cellmap_flow.models.configs" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, David Ackerman,  Marwan Zouinkhi, Jeff Rhoades, Larissa Heinrich, Aubrey Weigel.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

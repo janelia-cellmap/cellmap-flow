@@ -60,6 +60,7 @@
 <li class="toctree-l1"><a class="reference internal" href="yaml_config.html">YAML Configuration</a></li>
 <li class="toctree-l1"><a class="reference internal" href="data_paths.html">Data paths</a></li>
 <li class="toctree-l1"><a class="reference internal" href="huggingface.html">HuggingFace Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="bioimage.html">BioImage Model Zoo</a></li>
 <li class="toctree-l1"><a class="reference internal" href="custom_script.html">Custom Model</a></li>
 <li class="toctree-l1"><a class="reference internal" href="post.html">PostProcessors</a></li>
 <li class="toctree-l1"><a class="reference internal" href="plugins.html">Plugins</a></li>
@@ -125,48 +126,53 @@ type’s constructor arguments: <code class="docutils literal notranslate"><span
 <span class="pre">-d</span> <span class="pre">data.zarr/raw</span></code>. Short flags go to the arguments in the order the
 constructor takes them, so an argument whose first letter an earlier
 one has has only its long flag (<code class="docutils literal notranslate"><span class="pre">script</span></code>’s <code class="docutils literal notranslate"><span class="pre">--scale</span></code>). <code class="docutils literal notranslate"><span class="pre">-d</span></code>,
-<code class="docutils literal notranslate"><span class="pre">-q</span></code> (queue), <code class="docutils literal notranslate"><span class="pre">-P</span></code> (billing project), <code class="docutils literal notranslate"><span class="pre">--resample</span></code> and
-<code class="docutils literal notranslate"><span class="pre">--server-check</span></code> are the command’s own. <code class="docutils literal notranslate"><span class="pre">--resample</span></code> reads the
-data resampled to the model’s input voxel size when it has no level
-at that size, instead of reading a level as if it were at that size
-(<a class="reference internal" href="yaml_config.html#resampling"><span class="std std-ref">Data at Another Voxel Size</span></a>).</p></td>
+<code class="docutils literal notranslate"><span class="pre">-q</span></code> (queue), <code class="docutils literal notranslate"><span class="pre">-P</span></code> (billing project), <code class="docutils literal notranslate"><span class="pre">--resample/--no-resample</span></code>
+and <code class="docutils literal notranslate"><span class="pre">--server-check</span></code> are the command’s own. The data is read
+resampled to the model’s input voxel size when it has no level at
+that size; <code class="docutils literal notranslate"><span class="pre">--no-resample</span></code> reads a level as if it were at that size
+instead (<a class="reference internal" href="yaml_config.html#resampling"><span class="std std-ref">Data at Another Voxel Size</span></a>).</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">yaml</span> <span class="pre">CONFIG</span></code></p></td>
 <td><p>The same for every model a YAML file lists, with its normalization
 and postprocessing (<a class="reference internal" href="yaml_config.html"><span class="doc">YAML Configuration</span></a>). <code class="docutils literal notranslate"><span class="pre">--validate-only</span></code> checks
 the file; <code class="docutils literal notranslate"><span class="pre">--list-types</span></code> lists the model types.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">view</span> <span class="pre">-d</span> <span class="pre">DATA</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">add</span> <span class="pre">REF</span></code></p></td>
+<td><p>Print the model entry for a path, URL, Hugging Face repo, zoo nickname
+or Cellpose model name, as YAML for a config’s <code class="docutils literal notranslate"><span class="pre">models:</span></code>; <code class="docutils literal notranslate"><span class="pre">--run</span>
+<span class="pre">-d</span> <span class="pre">DATA</span></code> serves it right away (<a class="reference internal" href="yaml_config.html#resolving-models"><span class="std std-ref">An entry from what you have</span></a>).</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">view</span> <span class="pre">-d</span> <span class="pre">DATA</span></code></p></td>
 <td><p>Open a dataset in the viewer and serve the dashboard, where models are
 picked and submitted. <code class="docutils literal notranslate"><span class="pre">-P</span></code> bills them to a project; by default it is
 the launching job’s own (<code class="docutils literal notranslate"><span class="pre">LSB_PROJECT_NAME</span></code>).</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">dashboard</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">dashboard</span></code></p></td>
 <td><p>Serve the dashboard on its own, for a viewer already running
 (<code class="docutils literal notranslate"><span class="pre">-n</span></code> names the viewer the page embeds).</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">blockwise</span> <span class="pre">YAML...</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">blockwise</span> <span class="pre">YAML...</span></code></p></td>
 <td><p>Run a model over a whole volume, block by block, writing its
 predictions to disk (<a class="reference internal" href="yaml_config.html"><span class="doc">YAML Configuration</span></a>). Several YAMLs run one after
 another; the command fails at the end if any left blocks unprocessed.
 <code class="docutils literal notranslate"><span class="pre">--client</span></code> runs one worker, which the run submits itself.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">serve</span> <span class="pre">--model</span> <span class="pre">ENTRY</span> <span class="pre">-d</span> <span class="pre">DATA</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">serve</span> <span class="pre">--model</span> <span class="pre">ENTRY</span> <span class="pre">-d</span> <span class="pre">DATA</span></code></p></td>
 <td><p>Serve one model’s predictions. The launchers (<code class="docutils literal notranslate"><span class="pre">infer</span></code>, <code class="docutils literal notranslate"><span class="pre">yaml</span></code>, the
 dashboard) run it on a GPU node for you; see <a class="reference internal" href="#starting-a-server">Starting a server</a>.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">finetune</span> <span class="pre">train</span></code>, <code class="docutils literal notranslate"><span class="pre">export-merged</span></code>, <code class="docutils literal notranslate"><span class="pre">build-corrections</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">finetune</span> <span class="pre">train</span></code>, <code class="docutils literal notranslate"><span class="pre">export-merged</span></code>, <code class="docutils literal notranslate"><span class="pre">build-corrections</span></code></p></td>
 <td><p>The finetune tools (<code class="docutils literal notranslate"><span class="pre">docs/finetuning.md</span></code> in the repository). The
 dashboard’s finetune tab runs <code class="docutils literal notranslate"><span class="pre">train</span></code> for you; each takes the flags of
 <code class="docutils literal notranslate"><span class="pre">python</span> <span class="pre">-m</span> <span class="pre">cellmap_flow.finetune.&lt;module&gt;</span></code>, which <code class="docutils literal notranslate"><span class="pre">--help</span></code> lists.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">models</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">models</span></code></p></td>
 <td><p>List the model types and the arguments each takes.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">plugins</span> <span class="pre">register</span> <span class="pre">FILE</span></code>, <code class="docutils literal notranslate"><span class="pre">unregister</span> <span class="pre">NAME</span></code>, <code class="docutils literal notranslate"><span class="pre">list</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">plugins</span> <span class="pre">register</span> <span class="pre">FILE</span></code>, <code class="docutils literal notranslate"><span class="pre">unregister</span> <span class="pre">NAME</span></code>, <code class="docutils literal notranslate"><span class="pre">list</span></code></p></td>
 <td><p>Manage plugins (<a class="reference internal" href="plugins.html"><span class="doc">Plugins</span></a>).</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">doctor</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">doctor</span></code></p></td>
 <td><p>Check the environment: what is installed, what is missing, and the
 command that fixes each gap. <code class="docutils literal notranslate"><span class="pre">--core-only</span></code> skips the finetune checks.</p></td>
 </tr>
@@ -187,8 +193,9 @@ where there is no <code class="docutils literal notranslate"><span class="pre">b
 <span class="w">  </span>--model<span class="w"> </span><span class="s1">'{"type": "script", "script_path": "/path/to/model.py", "name": "mito"}'</span>
 </pre></div>
 </div>
-<p>A launcher asked to resample (<code class="docutils literal notranslate"><span class="pre">infer</span> <span class="pre">--resample</span></code>, or <code class="docutils literal notranslate"><span class="pre">resample:</span> <span class="pre">true</span></code>
-in a YAML) adds <code class="docutils literal notranslate"><span class="pre">--resample</span></code>; see <a class="reference internal" href="yaml_config.html#resampling"><span class="std std-ref">Data at Another Voxel Size</span></a>.</p>
+<p>A launcher always adds <code class="docutils literal notranslate"><span class="pre">--resample</span></code> or <code class="docutils literal notranslate"><span class="pre">--no-resample</span></code> (<code class="docutils literal notranslate"><span class="pre">infer</span>
+<span class="pre">--no-resample</span></code>, <code class="docutils literal notranslate"><span class="pre">resample:</span> <span class="pre">false</span></code> in a YAML, the dashboard’s box), so
+the server reads the data as its launcher was told to; see <a class="reference internal" href="yaml_config.html#resampling"><span class="std std-ref">Data at Another Voxel Size</span></a>.</p>
 <p><code class="docutils literal notranslate"><span class="pre">CELLMAP_FLOW_SERVER_COMMAND</span></code> is <code class="docutils literal notranslate"><span class="pre">cellmap_flow</span> <span class="pre">serve</span></code> by default. A
 deployment whose environment is not on the compute nodes’ <code class="docutils literal notranslate"><span class="pre">PATH</span></code> sets it:
 the pixi environment sets <code class="docutils literal notranslate"><span class="pre">pixi</span> <span class="pre">run</span> <span class="pre">cellmap_flow</span> <span class="pre">serve</span></code>

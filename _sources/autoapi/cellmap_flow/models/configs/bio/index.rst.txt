@@ -5,13 +5,59 @@ cellmap_flow.models.configs.bio
 
 .. autoapi-nested-parse::
 
-   ``BioModelConfig``: a bioimage.io model, run through ``bioimageio.core``.
+   ``BioModelConfig``: a BioImage Model Zoo model, run through ``bioimageio.core``.
 
-   The shapes come from the model's test input and output. A 2-D model's
-   batch axis stands in for z. Chunks go through ``process_chunk_bioimage``,
-   bound onto the built Config, whose output ``format_output_bioimage``
-   puts channels first and scales to uint8.
+   ``model`` is any source ``bioimageio.core`` loads: a zoo id or nickname
+   ("conscientious-dromedary"), a DOI or URL, or the path of a model's
+   ``rdf.yaml`` (``bioimageio.yaml``) or packaged ``.zip``. Its description (the
+   RDF, read as format 0.5; a 0.4 one is converted) gives the rest:
 
+   - What a chunk is. A 3D model (space axes z, y, x) is given one tile a
+     chunk. A 2D model (y, x) is given ``slices_per_chunk`` z slices a chunk, each
+     segmented on its own: in one call when its batch axis takes any size, a
+     call a slice when the RDF fixes the batch at 1 or has no batch axis.
+   - The tile's size. An axis of fixed size keeps it; a parameterized one
+     (``min + n * step``) gets the smallest size it takes of at least
+     ``input_size``: 256 a side for a 2D model and 128 for a 3D one by default.
+   - The context: the halo of the model's output, cut off on each side so that
+     chunks meet where the model saw both sides of the seam. ``context`` sets
+     it; the zoo's EM U-Nets give none.
+   - The voxel size: the input's space axes' ``scale`` and ``unit``, in nm,
+     unless ``voxel_size`` is given. No zoo model gives a unit, so the zoo's EM
+     models read at the voxel size they were trained at, from cellmap-flow's
+     own table (``bioimage_voxel_sizes.yaml``); any other needs ``voxel_size``.
+   - The output: every output tensor's channels, one tensor after another, as
+     the model's own postprocessing leaves them (a sigmoid, if it has one;
+     nothing clipped or rescaled), served as float32 unless the RDF says the
+     output is integers (labels), which keep an integer type.
+   - The weights: whichever ``bioimageio.core`` prefers of those the model has,
+     or ``weight_format``.
+
+   The model's preprocessing (normalization) and postprocessing run in
+   ``bioimageio.core``'s prediction pipeline, which is built with the config,
+   once, and reused for every chunk.
+
+   What it cannot run: a model with more than one required input, an input with
+   more than one channel (RGB), or an output that is not a map over the input's
+   space, such as micro-SAM's, whose masks have an object axis of data-dependent
+   size and need prompts.
+
+   ``bioimageio`` is imported only when the model is built: the CLIs and the
+   dashboard's model form import every type. The server runs in pixi.toml's
+   ``bioimageio`` environment unless the entry names another ``env``.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.models.configs.bio.logger
+   cellmap_flow.models.configs.bio.WEIGHT_FORMATS
+   cellmap_flow.models.configs.bio.DEFAULT_INPUT_SIZE
+   cellmap_flow.models.configs.bio.DEFAULT_SLICES_PER_CHUNK
+   cellmap_flow.models.configs.bio.NM_PER_UNIT
 
 
 Classes
@@ -27,17 +73,67 @@ Functions
 
 .. autoapisummary::
 
-   cellmap_flow.models.configs.bio.concat_along_c
-   cellmap_flow.models.configs.bio.reorder_axes
-   cellmap_flow.models.configs.bio.process_chunk_bioimage
-   cellmap_flow.models.configs.bio.format_output_bioimage
+   cellmap_flow.models.configs.bio.served_dtype
 
 
 Module Contents
 ---------------
 
-.. py:class:: BioModelConfig(model_name: str, voxel_size, edge_length_to_process=None, name=None, scale=None)
+.. py:data:: logger
 
+.. py:data:: WEIGHT_FORMATS
+   :value: ('pytorch_state_dict', 'torchscript', 'onnx', 'tensorflow_saved_model_bundle', 'keras_hdf5', 'keras_v3')
+
+
+.. py:data:: DEFAULT_INPUT_SIZE
+
+.. py:data:: DEFAULT_SLICES_PER_CHUNK
+   :value: 8
+
+
+.. py:data:: NM_PER_UNIT
+
+.. py:function:: served_dtype(outputs) -> numpy.dtype
+
+   What chunks of ``outputs`` (output tensor descriptions) are served as.
+
+   float32 unless every output is declared as integers: the model's own
+   postprocessing (a sigmoid, labels from a watershed) has run by then, so
+   the RDF's dtype is what the values are. bool is served as uint8 and
+   int64 as uint64, which neuroglancer shows; integer outputs are ids or
+   classes, which are not negative.
+
+
+.. py:class:: BioModelConfig(model: str, voxel_size=None, input_size=None, context=None, slices_per_chunk: int = None, weight_format: str = None, name=None, scale=None)
+
+
+
+   A BioImage Model Zoo model, run through bioimageio.core.
+
+   :param model: a zoo id or nickname ("conscientious-dromedary"), a DOI or
+                 URL, or the path of a model's rdf.yaml (bioimageio.yaml) or
+                 packaged .zip.
+   :param voxel_size: nm per input voxel (one number, or z, y, x): the level
+                      the model reads. By default the RDF's, from its input's space
+                      axes' scale and unit; for a model whose RDF gives no unit (all of
+                      the zoo's), the one it was trained at when cellmap-flow's table
+                      knows it (``bioimage_catalog.trained_at``: the zoo's EM models);
+                      else it is needed. A 2D model's z is the spacing of its slices,
+                      its y by default.
+   :param input_size: voxels a side of the tile the model is given, one number
+                      or one per space axis of the model (z, y, x; y, x for a 2D
+                      model). An axis the RDF fixes keeps its size; a parameterized
+                      one gets the smallest size it takes of at least this. By default
+                      256 for a 2D model and 128 for a 3D one.
+   :param context: voxels cut off each side of the model's output (one number,
+                   or one per space axis of the model), so chunks meet where the
+                   model saw both sides of the seam; the input is read that much
+                   larger. By default the RDF's halo, 0 where it gives none.
+   :param slices_per_chunk: z slices in a chunk of a 2D model; 8 by default. A
+                            3D model ignores it.
+   :param weight_format: the weights to run ("torchscript",
+                         "pytorch_state_dict", "onnx", ...); by default bioimageio.core's
+                         pick of those the model has.
 
 
    .. py:attribute:: cli_name
@@ -45,10 +141,37 @@ Module Contents
 
 
 
-   .. py:attribute:: model_name
+   .. py:attribute:: default_env
+      :value: 'bioimageio'
+
+
+
+   .. py:attribute:: model
+      :value: ''
+
 
 
    .. py:attribute:: voxel_size
+      :value: None
+
+
+
+   .. py:attribute:: input_size
+      :value: None
+
+
+
+   .. py:attribute:: context
+      :value: None
+
+
+
+   .. py:attribute:: slices_per_chunk
+      :value: None
+
+
+
+   .. py:attribute:: weight_format
       :value: None
 
 
@@ -63,43 +186,19 @@ Module Contents
 
 
 
-   .. py:attribute:: voxels_to_process
-      :value: None
+   .. py:method:: process_chunk(idi: cellmap_flow.image_data_interface.ImageDataInterface, output_roi)
 
+      ``output_roi`` predicted: ``(channels, z, y, x)``, in ``output_dtype``.
 
-
-   .. py:method:: load_input_information(model)
-
-
-   .. py:method:: load_output_information(model)
-
-
-   .. py:method:: get_axes_and_dims(sample)
-
-
-   .. py:method:: get_spatial_dims(axes, dims)
-
-
-   .. py:method:: get_input_slicer(input_axes)
 
 
    .. py:method:: to_dict()
 
       This config as a model entry, which ``registry.build_model`` rebuilds.
 
+      What the model's description decides unless told otherwise (its
+      voxel size, tile and context) is written only when it was given, so
+      that an exported entry keeps following the model.
 
 
-.. py:function:: concat_along_c(arrs, axes_list, channel_axis_name='c')
-
-   Concatenate arrays along the channel axis, adding channel dim if missing.
-
-
-.. py:function:: reorder_axes(arr: numpy.ndarray, axes: list[str], desired_order: list[str] = ['z', 'y', 'x', 'c']) -> tuple[numpy.ndarray, list[str]]
-
-   Reorder/remove axes to match desired_order, removing size-1 unwanted axes.
-
-
-.. py:function:: process_chunk_bioimage(self, idi: cellmap_flow.image_data_interface.ImageDataInterface, input_roi: funlib.geometry.Roi)
-
-.. py:function:: format_output_bioimage(self, output_sample, output_names=None, output_axes=None)
 

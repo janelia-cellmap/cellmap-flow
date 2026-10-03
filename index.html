@@ -52,6 +52,7 @@
 <li class="toctree-l1"><a class="reference internal" href="yaml_config.html">YAML Configuration</a></li>
 <li class="toctree-l1"><a class="reference internal" href="data_paths.html">Data paths</a></li>
 <li class="toctree-l1"><a class="reference internal" href="huggingface.html">HuggingFace Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="bioimage.html">BioImage Model Zoo</a></li>
 <li class="toctree-l1"><a class="reference internal" href="custom_script.html">Custom Model</a></li>
 <li class="toctree-l1"><a class="reference internal" href="post.html">PostProcessors</a></li>
 <li class="toctree-l1"><a class="reference internal" href="plugins.html">Plugins</a></li>
@@ -109,6 +110,27 @@
 </p>
 <section id="installation">
 <h1>Installation<a class="headerlink" href="#installation" title="Link to this heading"></a></h1>
+<section id="with-pixi-recommended">
+<h2>With pixi (recommended)<a class="headerlink" href="#with-pixi-recommended" title="Link to this heading"></a></h2>
+<p><a class="reference external" href="https://pixi.sh">pixi</a> installs cellmap-flow with everything it needs, and
+the separate environments some model families run in:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>git<span class="w"> </span>clone<span class="w"> </span>https://github.com/janelia-cellmap/cellmap-flow.git
+<span class="nb">cd</span><span class="w"> </span>cellmap-flow
+pixi<span class="w"> </span>install<span class="w">                      </span><span class="c1"># the default environment</span>
+pixi<span class="w"> </span>run<span class="w"> </span>cellmap_flow<span class="w"> </span>view<span class="w"> </span>-d<span class="w"> </span>data_path
+</pre></div>
+</div>
+<p>Model families whose dependencies clash with the default environment run in
+their own pixi environment, chosen by the model’s type (see
+<a class="reference internal" href="#model-types"><span class="xref myst">Model types</span></a>); nobody picks one by hand. Each is installed from
+the lockfile the first time a model needs it, before that model’s job is
+submitted (several minutes, once; the dashboard’s Job Logs shows pixi’s
+output meanwhile), so a new user, Fileglancer’s included, needs nothing
+beforehand. <code class="docutils literal notranslate"><span class="pre">pixi</span> <span class="pre">run</span> <span class="pre">cellmap_flow</span> <span class="pre">envs</span> <span class="pre">install</span> <span class="pre">&lt;name&gt;</span></code> installs one ahead of
+time, and <code class="docutils literal notranslate"><span class="pre">cellmap_flow</span> <span class="pre">envs</span></code> lists them and what is installed.</p>
+</section>
+<section id="with-pip">
+<h2>With pip<a class="headerlink" href="#with-pip" title="Link to this heading"></a></h2>
 <p>To install CellMapFlow, you can use pip:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span>cellmap-flow
 </pre></div>
@@ -125,6 +147,7 @@
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span>cellmap-flow<span class="o">[</span>dacapo,bioimageio<span class="o">]</span>
 </pre></div>
 </div>
+</section>
 <section id="installing-from-github">
 <h2>Installing from GitHub<a class="headerlink" href="#installing-from-github" title="Link to this heading"></a></h2>
 <p>To get an unreleased branch without cloning:</p>
@@ -160,6 +183,8 @@ Commands:
 <span class="w">  </span>blockwise<span class="w">  </span>Run<span class="w"> </span>the<span class="w"> </span>model<span class="w"> </span>a<span class="w"> </span>blockwise<span class="w"> </span>YAML<span class="w"> </span>describes<span class="w"> </span>over<span class="w"> </span>the<span class="w"> </span>whole...
 <span class="w">  </span>dashboard<span class="w">  </span>Serve<span class="w"> </span>the<span class="w"> </span>dashboard<span class="w"> </span>alone,<span class="w"> </span><span class="k">for</span><span class="w"> </span>a<span class="w"> </span>viewer<span class="w"> </span>already<span class="w"> </span>running.
 <span class="w">  </span>doctor<span class="w">     </span>Check<span class="w"> </span>the<span class="w"> </span>environment:<span class="w"> </span>what<span class="w"> </span>is<span class="w"> </span>installed,<span class="w"> </span>what<span class="w"> </span>is<span class="w"> </span>missing,...
+<span class="w">  </span>add<span class="w">        </span>Resolve<span class="w"> </span>a<span class="w"> </span>model<span class="w"> </span>reference<span class="w"> </span>into<span class="w"> </span>a<span class="w"> </span>model<span class="w"> </span>entry,<span class="w"> </span>and<span class="w"> </span>optionally<span class="w"> </span>run<span class="w"> </span>it.
+<span class="w">  </span>envs<span class="w">       </span>The<span class="w"> </span>environments<span class="w"> </span>models<span class="w"> </span>run<span class="w"> </span><span class="k">in</span>,<span class="w"> </span>besides<span class="w"> </span>this<span class="w"> </span>one.
 <span class="w">  </span>finetune<span class="w">   </span>The<span class="w"> </span>finetune<span class="w"> </span>tools.
 <span class="w">  </span>infer<span class="w">      </span>Start<span class="w"> </span>a<span class="w"> </span>model<span class="s1">'s inference server, then open the viewer on...</span>
 <span class="s1">  models     List the model types and the arguments each takes.</span>
@@ -170,29 +195,164 @@ Commands:
 
 $<span class="w"> </span>cellmap_flow<span class="w"> </span>view<span class="w"> </span>-d<span class="w"> </span>data_path<span class="w">                       </span><span class="c1"># pick models in the dashboard</span>
 $<span class="w"> </span>cellmap_flow<span class="w"> </span>yaml<span class="w"> </span>config.yaml<span class="w">                        </span><span class="c1"># the models a YAML lists</span>
-$<span class="w"> </span>cellmap_flow<span class="w"> </span>infer<span class="w"> </span>dacapo<span class="w"> </span>-r<span class="w"> </span>my_run<span class="w"> </span>-i<span class="w"> </span>iteration<span class="w"> </span>-d<span class="w"> </span>data_path
+$<span class="w"> </span>cellmap_flow<span class="w"> </span>infer<span class="w"> </span>huggingface<span class="w"> </span>-r<span class="w"> </span>cellmap/fly_organelles_run08_438000<span class="w"> </span>-d<span class="w"> </span>data_path
+$<span class="w"> </span>cellmap_flow<span class="w"> </span>infer<span class="w"> </span>cellpose<span class="w"> </span>-v<span class="w"> </span><span class="m">64</span><span class="w"> </span>-d<span class="w"> </span>data_path<span class="w">                 </span><span class="c1"># Cellpose-SAM</span>
+$<span class="w"> </span>cellmap_flow<span class="w"> </span>infer<span class="w"> </span>bioimage<span class="w"> </span>-m<span class="w"> </span>conscientious-dromedary<span class="w"> </span>-d<span class="w"> </span>data_path
+$<span class="w"> </span>cellmap_flow<span class="w"> </span>infer<span class="w"> </span>fly<span class="w"> </span>-c<span class="w"> </span>/path/to/run/model_checkpoint_20000<span class="w"> </span>-d<span class="w"> </span>data_path
 $<span class="w"> </span>cellmap_flow<span class="w"> </span>infer<span class="w"> </span>script<span class="w"> </span>-s<span class="w"> </span>script_path<span class="w"> </span>-d<span class="w"> </span>data_path
-$<span class="w"> </span>cellmap_flow<span class="w"> </span>infer<span class="w"> </span>bioimage<span class="w"> </span>-m<span class="w"> </span>model_path<span class="w"> </span>-v<span class="w"> </span><span class="m">8</span>,8,8<span class="w"> </span>-d<span class="w"> </span>data_path
 </pre></div>
 </div>
+<p>In the dashboard, the Models tab’s <em>Job Logs</em> shows each model’s server output
+as it runs: <code class="docutils literal notranslate"><span class="pre">starting</span></code> while it waits in its queue, installs its environment or
+loads, then its status, and <code class="docutils literal notranslate"><span class="pre">failed</span> <span class="pre">to</span> <span class="pre">start</span></code> with its traceback when it dies
+before serving.</p>
 <p>A data path is a zarr (v2 or v3), N5 or Neuroglancer precomputed volume, on
 disk or at an <code class="docutils literal notranslate"><span class="pre">s3://</span></code>, <code class="docutils literal notranslate"><span class="pre">gs://</span></code> or <code class="docutils literal notranslate"><span class="pre">https://</span></code> URL; public buckets are read
 anonymously, private ones with your AWS or Google credentials. See
 <a class="reference internal" href="#docs/source/data_paths.rst"><span class="xref myst">data paths</span></a>.</p>
 <p>A model is fed the dataset’s level at its own voxel size. When the dataset has
-no such level, <code class="docutils literal notranslate"><span class="pre">--resample</span></code> (or <code class="docutils literal notranslate"><span class="pre">resample:</span> <span class="pre">true</span></code> in a YAML, or the dashboard’s
-<em>Resample if no scale matches the model</em> box) resamples the nearest one to it; without it the nearest level
-is used as it is, and the dashboard warns that the model sees the wrong scale.</p>
+no such level, the nearest one is resampled to it. <code class="docutils literal notranslate"><span class="pre">--no-resample</span></code> (or
+<code class="docutils literal notranslate"><span class="pre">resample:</span> <span class="pre">false</span></code> in a YAML, or unticking the dashboard’s <em>Resample if no scale
+matches the model</em> box) uses the nearest level as it is instead, and the
+dashboard warns that the model sees the wrong scale.</p>
 </section>
-<section id="using-custom-script">
-<h1>Using custom script:<a class="headerlink" href="#using-custom-script" title="Link to this heading"></a></h1>
-<p>This enables using any model by providing a script e.g. <a class="reference internal" href="#example/model_spec.py"><span class="xref myst">example/model_spec.py</span></a>
-e.g.</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>cellmap_flow<span class="w"> </span>infer<span class="w"> </span>script<span class="w"> </span>-s<span class="w"> </span>/groups/cellmap/cellmap/zouinkhim/cellmap-flow/example/model_spec.py<span class="w"> </span>-d<span class="w"> </span>/nrs/cellmap/data/jrc_mus-cerebellum-1/jrc_mus-cerebellum-1.zarr/recon-1/em/fibsem-uint8/s0<span class="w"> </span>
+<section id="model-types">
+<h1>Model types<a class="headerlink" href="#model-types" title="Link to this heading"></a></h1>
+<p>Each model has a type, which says how it is loaded and which environment its
+server runs in. In a YAML it is the model entry’s <code class="docutils literal notranslate"><span class="pre">type</span></code>; on the command line,
+<code class="docutils literal notranslate"><span class="pre">cellmap_flow</span> <span class="pre">infer</span> <span class="pre">&lt;type&gt;</span></code>; in the dashboard, the Models tab lists the
+CellMap catalog, the <code class="docutils literal notranslate"><span class="pre">cellmap/*</span></code> Hugging Face models and the BioImage Model
+Zoo. <code class="docutils literal notranslate"><span class="pre">cellmap_flow</span> <span class="pre">models</span></code> lists every type and its arguments.</p>
+<p>You rarely need to pick the type yourself: <code class="docutils literal notranslate"><span class="pre">cellmap_flow</span> <span class="pre">add</span> <span class="pre">REF</span></code> works it out
+from what you have, and prints the YAML entry, saying what it still needs. In
+the dashboard, paste the same <code class="docutils literal notranslate"><span class="pre">REF</span></code> into the Models tab’s <em>Add a model</em> box:
+<em>Resolve</em> says what it is and where it runs and asks for anything missing
+(a Cellpose model’s voxel size, say), and <em>Run</em> starts it, ticked among the
+models, without a YAML or a restart. <code class="docutils literal notranslate"><span class="pre">REF</span></code> is a path (a model script, an
+exported folder, a checkpoint, Cellpose weights), a zoo nickname or bioimage.io
+link, a Cellpose model name, a Hugging Face <code class="docutils literal notranslate"><span class="pre">org/repo</span></code>, or
+<code class="docutils literal notranslate"><span class="pre">dacapo:run&#64;iteration</span></code>. A whole config YAML is a run, not a model: run it with
+<code class="docutils literal notranslate"><span class="pre">cellmap_flow</span> <span class="pre">yaml</span></code>.</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>$<span class="w"> </span>cellmap_flow<span class="w"> </span>add<span class="w"> </span>conscientious-dromedary<span class="w">            </span><span class="c1"># a BioImage Model Zoo model</span>
+$<span class="w"> </span>cellmap_flow<span class="w"> </span>add<span class="w"> </span>cpsam_v2<span class="w"> </span>-v<span class="w"> </span><span class="m">64</span><span class="w">                     </span><span class="c1"># Cellpose-SAM</span>
+$<span class="w"> </span>cellmap_flow<span class="w"> </span>add<span class="w"> </span>cellmap/fly_organelles_run08_438000<span class="w"> </span><span class="c1"># a Hugging Face repo</span>
+$<span class="w"> </span>cellmap_flow<span class="w"> </span>add<span class="w"> </span>/path/to/run/model_checkpoint_20000<span class="w"> </span>--run<span class="w"> </span>-d<span class="w"> </span>data_path
 </pre></div>
 </div>
-<section id="script-keywords">
-<h2>Script keywords:<a class="headerlink" href="#script-keywords" title="Link to this heading"></a></h2>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Type</p></th>
+<th class="head"><p>For</p></th>
+<th class="head"><p>Runs in</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">cellmap</span></code></p></td>
+<td><p>A folder cellmap_models exported (<code class="docutils literal notranslate"><span class="pre">metadata.json</span></code> + <code class="docutils literal notranslate"><span class="pre">model.ts</span></code>)</p></td>
+<td><p>this environment</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">huggingface</span></code></p></td>
+<td><p>A Hugging Face repo in that format (the dashboard lists <code class="docutils literal notranslate"><span class="pre">cellmap/*</span></code>; any other model on the Hub needs a script)</p></td>
+<td><p>this environment</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">fly</span></code></p></td>
+<td><p>A fly_organelles training checkpoint, <code class="docutils literal notranslate"><span class="pre">.ts</span></code> or <code class="docutils literal notranslate"><span class="pre">model.pt</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">fly</span></code> (a <code class="docutils literal notranslate"><span class="pre">.ts</span></code>: this environment)</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">cellpose</span></code></p></td>
+<td><p>Cellpose 4: Cellpose-SAM (<code class="docutils literal notranslate"><span class="pre">cpsam_v2</span></code>, <code class="docutils literal notranslate"><span class="pre">cpsam</span></code>) or finetuned weights</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">cellpose4</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">bioimage</span></code></p></td>
+<td><p>Any BioImage Model Zoo model: id, nickname, DOI, URL or <code class="docutils literal notranslate"><span class="pre">rdf.yaml</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">bioimageio</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">dacapo</span></code></p></td>
+<td><p>A DaCapo run and iteration</p></td>
+<td><p>this environment (DaCapo does not install in pixi’s <code class="docutils literal notranslate"><span class="pre">dacapo</span></code> environment yet: give <code class="docutils literal notranslate"><span class="pre">env:</span></code> a conda environment with it)</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">script</span></code></p></td>
+<td><p>Any model, from a Python script that defines it</p></td>
+<td><p>this environment</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">finetune</span></code></p></td>
+<td><p>A LoRA adapter or full finetune on top of another model</p></td>
+<td><p>its base model’s</p></td>
+</tr>
+</tbody>
+</table>
+<p>An entry’s <code class="docutils literal notranslate"><span class="pre">env</span></code> overrides where it runs: a pixi environment’s name, the path
+of a conda environment, or <code class="docutils literal notranslate"><span class="pre">current</span></code> for this one. <code class="docutils literal notranslate"><span class="pre">~/.cellmap_flow/envs.yaml</span></code>
+maps environment names to conda environments, for machines without pixi:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">cellpose4</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/groups/mylab/home/me/miniconda3/envs/cellpose4</span>
+</pre></div>
+</div>
+<p>See <a class="reference internal" href="#docs/source/yaml_config.rst"><span class="xref myst">YAML configuration</span></a> for every type’s
+arguments, and the examples in <a class="reference internal" href="#example/"><span class="xref myst">example/</span></a>.</p>
+<section id="cellpose">
+<h2>Cellpose<a class="headerlink" href="#cellpose" title="Link to this heading"></a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">type:</span> <span class="pre">cellpose</span></code> runs Cellpose 4 on each z slice of a chunk. Cellpose-SAM sees
+cells best about 30 voxels across, so pick the <code class="docutils literal notranslate"><span class="pre">voxel_size</span></code> (nm) where yours
+are about that size:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">models</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">cells</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cellpose</span>
+<span class="w">    </span><span class="nt">voxel_size</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">64</span>
+<span class="w">    </span><span class="nt">pretrained_model</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cpsam_v2</span><span class="w">   </span><span class="c1"># or cpsam, or the path of finetuned weights</span>
+<span class="w">    </span><span class="nt">output</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">probability</span><span class="w">          </span><span class="c1"># or masks</span>
+</pre></div>
+</div>
+<p>Masks are made chunk by chunk: add <code class="docutils literal notranslate"><span class="pre">MortonSegmentationRelabeling</span></code> to the
+postprocessing so that ids differ between chunks. Cellpose-SAM’s weights are
+for non-commercial use. See <a class="reference internal" href="#example/cellpose_sam.yaml"><span class="xref myst">example/cellpose_sam.yaml</span></a>.</p>
+</section>
+<section id="bioimage-model-zoo">
+<h2>BioImage Model Zoo<a class="headerlink" href="#bioimage-model-zoo" title="Link to this heading"></a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">type:</span> <span class="pre">bioimage</span></code> runs a <a class="reference external" href="https://bioimage.io">BioImage Model Zoo</a> model
+through bioimageio.core, with the model’s own pre- and postprocessing. Its
+tile size, halo and output type come from the model’s description. No zoo
+model declares the voxel size it was trained at, so cellmap-flow keeps them for
+the zoo’s EM models, looked up by hand with their sources
+(<a class="reference internal" href="#cellmap_flow/models/bioimage_voxel_sizes.yaml"><span class="xref myst">bioimage_voxel_sizes.yaml</span></a>),
+and runs each at its own unless <code class="docutils literal notranslate"><span class="pre">voxel_size</span></code> says otherwise; any other model
+needs <code class="docutils literal notranslate"><span class="pre">voxel_size</span></code>. A <code class="docutils literal notranslate"><span class="pre">context</span></code> of about 16 voxels hides seams between chunks:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">models</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">mito</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">bioimage</span>
+<span class="w">    </span><span class="nt">model</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">conscientious-dromedary</span><span class="w">   </span><span class="c1"># a 3D mitochondria U-Net, trained at 30x8x8 nm (MitoEM)</span>
+<span class="w">    </span><span class="nt">context</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">0</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">16</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">16</span><span class="p p-Indicator">]</span>
+</pre></div>
+</div>
+<p>In the dashboard, the Models tab’s <em>BioImage Model Zoo</em> list searches the
+whole zoo (EM models by default), refreshed from bioimage.io hourly, and fills
+in a ticked model’s voxel size with the one it was trained at, saying where
+that number comes from. Models that need prompts or several inputs
+(micro-SAM) are not supported. See <a class="reference internal" href="#example/bioimage_em.yaml"><span class="xref myst">example/bioimage_em.yaml</span></a>.</p>
+</section>
+<section id="fly-organelles-checkpoints">
+<h2>fly_organelles checkpoints<a class="headerlink" href="#fly-organelles-checkpoints" title="Link to this heading"></a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">type:</span> <span class="pre">fly</span></code> serves a checkpoint fly_organelles trained. Channel names, voxel
+sizes and tile size are read from the run’s folder (its <code class="docutils literal notranslate"><span class="pre">train.py</span></code>, training
+snapshots or <code class="docutils literal notranslate"><span class="pre">config.yaml</span></code>) when the entry does not give them, so the
+checkpoint alone is often enough:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>cellmap_flow<span class="w"> </span>infer<span class="w"> </span>fly<span class="w"> </span>-c<span class="w"> </span>/path/to/run/model_checkpoint_20000<span class="w"> </span>-d<span class="w"> </span>data_path
+</pre></div>
+</div>
+<p>A folder cellmap_models exported is served with <code class="docutils literal notranslate"><span class="pre">type:</span> <span class="pre">cellmap</span></code> instead.</p>
+</section>
+<section id="dacapo">
+<h2>DaCapo<a class="headerlink" href="#dacapo" title="Link to this heading"></a></h2>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>cellmap_flow<span class="w"> </span>infer<span class="w"> </span>dacapo<span class="w"> </span>-r<span class="w"> </span>20241204_finetune_mito_affs_task_datasplit_v3_u21_kidney_mito_default_cache_8_1<span class="w"> </span>-i<span class="w"> </span><span class="m">700000</span><span class="w"> </span>-d<span class="w"> </span>/nrs/cellmap/data/jrc_ut21-1413-003/jrc_ut21-1413-003.zarr/recon-1/em/fibsem-uint8/s0
+</pre></div>
+</div>
+</section>
+<section id="custom-script">
+<h2>Custom script<a class="headerlink" href="#custom-script" title="Link to this heading"></a></h2>
+<p>This enables using any model by providing a script e.g. <a class="reference internal" href="#example/model_spec.py"><span class="xref myst">example/model_spec.py</span></a>
+e.g.</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>cellmap_flow<span class="w"> </span>infer<span class="w"> </span>script<span class="w"> </span>-s<span class="w"> </span>/groups/cellmap/cellmap/zouinkhim/cellmap-flow/example/model_spec.py<span class="w"> </span>-d<span class="w"> </span>/nrs/cellmap/data/jrc_mus-cerebellum-1/jrc_mus-cerebellum-1.zarr/recon-1/em/fibsem-uint8/s0
+</pre></div>
+</div>
 <p>Define these variables in your script (<code class="docutils literal notranslate"><span class="pre">cellmap_flow</span> <span class="pre">infer</span> <span class="pre">script</span> <span class="pre">-s</span> <span class="pre">path/to/your_script.py</span></code>):</p>
 <ul class="simple">
 <li><p><strong>model</strong>:
@@ -210,23 +370,8 @@ The number of channels in the output of the model.</p></li>
 <li><p><strong>process_chunk</strong> (optional):
 (Optional) A function that takes an ImageDataInterface and an ROI and returns the data to be display. This can be used to run a TensorFlow model or do other custom data processing.</p></li>
 </ul>
-</section>
-</section>
-<section id="using-dacapo-model">
-<h1>Using Dacapo model:<a class="headerlink" href="#using-dacapo-model" title="Link to this heading"></a></h1>
-<p>which enable inference using a Dacapo model by providing the run name and iteration number
-e.g.</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>cellmap_flow<span class="w"> </span>infer<span class="w"> </span>dacapo<span class="w"> </span>-r<span class="w"> </span>20241204_finetune_mito_affs_task_datasplit_v3_u21_kidney_mito_default_cache_8_1<span class="w"> </span>-i<span class="w"> </span><span class="m">700000</span><span class="w"> </span>-d<span class="w"> </span>/nrs/cellmap/data/jrc_ut21-1413-003/jrc_ut21-1413-003.zarr/recon-1/em/fibsem-uint8/s0
-</pre></div>
-</div>
-</section>
-<section id="using-bioimage-io-model">
-<h1>Using bioimage-io model:<a class="headerlink" href="#using-bioimage-io-model" title="Link to this heading"></a></h1>
-<p>still in development</p>
-</section>
-<section id="using-tensorflow-model">
-<h1>Using TensorFlow model:<a class="headerlink" href="#using-tensorflow-model" title="Link to this heading"></a></h1>
 <p>To run TensorFlow models, we suggest installing TensorFlow via conda: <code class="docutils literal notranslate"><span class="pre">conda</span> <span class="pre">install</span> <span class="pre">tensorflow-gpu==2.16.1</span></code></p>
+</section>
 </section>
 <section id="run-multiple-models-at-once">
 <h1>Run multiple models at once:<a class="headerlink" href="#run-multiple-models-at-once" title="Link to this heading"></a></h1>

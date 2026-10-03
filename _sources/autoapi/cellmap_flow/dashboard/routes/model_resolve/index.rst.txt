@@ -1,0 +1,108 @@
+cellmap_flow.dashboard.routes.model_resolve
+===========================================
+
+.. py:module:: cellmap_flow.dashboard.routes.model_resolve
+
+.. autoapi-nested-parse::
+
+   ``POST /api/models/resolve``: a model entry from whatever reference the user
+   pasted; ``POST /api/models/add``: run such an entry.
+
+   The body is ``{"ref": ..., "name": ..., "voxel_size": ...}`` (only ``ref``
+   is required; ``voxel_size`` is one number, one per axis, or "8,8,8"). The
+   answer is ``models.resolve``'s ``Resolved``::
+
+       {"success": true, "type": "fly", "params": {"checkpoint_path": ...},
+        "name": "run07_432000", "env": "fly", "how": "a fly_organelles training checkpoint",
+        "needs": [], "notes": [...]}
+
+   ``type``, ``params`` and ``name`` are the model entry, which the model form
+   submits once the user has given what ``needs`` lists. Nothing is built or
+   launched here. A reference that resolves to nothing, or to a model
+   cellmap-flow cannot serve, is a 400 with ``{"success": false, "error": ...}``.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.routes.model_resolve.logger
+   cellmap_flow.dashboard.routes.model_resolve.model_resolve_bp
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.routes.model_resolve.ResolveModel
+   cellmap_flow.dashboard.routes.model_resolve.AddModel
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.routes.model_resolve.resolve_model
+   cellmap_flow.dashboard.routes.model_resolve.add_model
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:data:: model_resolve_bp
+
+.. py:class:: ResolveModel(/, **data: Any)
+
+
+
+   What the user pasted, and optionally the model's name and voxel size.
+
+
+   .. py:attribute:: ref
+      :type:  Annotated[str, _required('ref', strip=True)]
+      :value: None
+
+
+
+   .. py:attribute:: name
+      :type:  Optional[str]
+      :value: None
+
+
+
+   .. py:attribute:: voxel_size
+      :type:  Any
+      :value: None
+
+
+
+.. py:function:: resolve_model()
+
+.. py:class:: AddModel(/, **data: Any)
+
+
+
+   A model entry to run: ``type``, its parameters and ``name``, as resolve
+   answers them with what ``needs`` asked filled in.
+
+
+   .. py:attribute:: entry
+      :type:  dict
+
+
+.. py:function:: add_model()
+
+   Build the entry and start its server, in its environment.
+
+   The model joins the session's models and jobs like one Submit started, so
+   it stays running while it is ticked on the Models tab (the page adds a
+   ticked box for it) and is stopped when unticked. A 400 names what is
+   wrong with the entry; a 409, a model of that name already running.
+
+

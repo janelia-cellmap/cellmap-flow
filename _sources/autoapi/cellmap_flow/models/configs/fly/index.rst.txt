@@ -5,14 +5,59 @@ cellmap_flow.models.configs.fly
 
 .. autoapi-nested-parse::
 
-   ``FlyModelConfig``: a fly_organelles checkpoint.
+   ``FlyModelConfig``: a network fly_organelles trained, from its checkpoint file.
 
-   The checkpoint holds no geometry, so the constructor takes the voxel sizes
-   and the input and output sizes, as a pair: 178 and 56 voxels a side when
-   neither is given, and an error when only one is. A TorchScript file
-   (``.ts``) or a ``StandardUnet`` state dict gets a sigmoid on top; a whole
-   pickled model (``model.pt``) is used as it is, and only when
-   ``CELLMAP_FLOW_ALLOW_PICKLE`` allows it.
+   ``checkpoint_path`` is one of
+
+   - a training checkpoint (``model_checkpoint_<iteration>``): the state dict
+     fly_organelles' training saves, loaded into its ``StandardUnet``, whose
+     architecture is read from the shapes of the weights (``unet_arguments``);
+   - a TorchScript file (``.ts``);
+   - a whole pickled model (``model.pt``), which is unpickled only when
+     ``CELLMAP_FLOW_ALLOW_PICKLE`` allows it.
+
+   A folder that cellmap_models exported (metadata.json and model.ts) is the
+   ``cellmap`` type's: it is served as exported, at the tile it was exported
+   at, and given here as ``checkpoint_path`` it is refused with a pointer to
+   ``type: cellmap``. The ``model.pt`` in such a folder can still be served
+   here, at another ``input_size``.
+
+   What the constructor is not given, it reads from the files beside the
+   checkpoint (``run_metadata``); an argument given always wins:
+
+   - ``metadata.json``, when the file is in a cellmap_models export folder:
+     channel names, voxel sizes, input and output size;
+   - ``config.yaml``, the run configuration fly_organelles' ``load_config``
+     reads: ``run.labels``, ``run.voxel_size``, ``checkpoint.input_shape`` and
+     ``output_shape``;
+   - ``snapshots/``, the gunpowder snapshots fly_organelles' training writes:
+     the ``raw`` and ``output`` arrays' shapes and voxel sizes, and so the
+     number of channels the network outputs;
+   - ``train.py``, the training script of a run: its top-level ``labels`` and
+     ``voxel_size`` assignments, when they are literals. The script is parsed,
+     never run.
+
+   Labels name the channels only when there is one per channel the snapshots
+   show: an affinity or LSD run's network outputs several per label. The voxel
+   sizes are read only when neither is given, and the sizes only when neither
+   is: an output size belongs to the input size it came with. Then, when
+   something is still missing: one voxel size stands for the other
+   (fly_organelles trains at a single voxel size); no input size is
+   fly_organelles' training tile, 178 voxels a side; no output size is
+   computed from the network when it is built. Channels and a voxel size have
+   no default: without them the constructor raises, naming the files it reads.
+
+   ``sigmoid`` (True by default): the network's output goes through a sigmoid,
+   which is added unless the network ends in one already, as a cellmap_models
+   export's model.pt and model.ts do. fly_organelles trains its networks on
+   logits (its BCE, focal and Dice losses apply the sigmoid themselves), so a
+   training checkpoint gets one. False serves the network's output as it is.
+
+   A training checkpoint or a model.pt needs fly_organelles, so those run in
+   pixi.toml's ``fly`` environment unless the entry gives another ``env``; a
+   TorchScript file runs in any. torch and fly_organelles are imported only
+   when the model is built: the CLIs, ``--help`` and the dashboard's model form
+   import every type.
 
 
 
@@ -22,6 +67,7 @@ Attributes
 .. autoapisummary::
 
    cellmap_flow.models.configs.fly.logger
+   cellmap_flow.models.configs.fly.TRAINING_TILE
 
 
 Classes
@@ -32,17 +78,86 @@ Classes
    cellmap_flow.models.configs.fly.FlyModelConfig
 
 
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.models.configs.fly.checkpoint_format
+   cellmap_flow.models.configs.fly.run_metadata
+   cellmap_flow.models.configs.fly.unet_arguments
+
+
 Module Contents
 ---------------
 
 .. py:data:: logger
 
-.. py:class:: FlyModelConfig(checkpoint_path: str, channels: list[str], input_voxel_size: tuple, output_voxel_size: tuple, name: str = None, input_size=None, output_size=None, scale=None)
+.. py:data:: TRAINING_TILE
+   :value: 178
 
+
+.. py:function:: checkpoint_format(checkpoint_path: str) -> str
+
+   How ``checkpoint_path`` is loaded: TORCHSCRIPT, PICKLE or STATE_DICT.
+
+
+.. py:function:: run_metadata(checkpoint_path: str) -> dict
+
+   What the files beside ``checkpoint_path`` say about its network, as {key: (value, file)}.
+
+   Keys: ``channels``, ``input_voxel_size``, ``output_voxel_size`` and
+   ``sizes``, the input and output size as a pair: an output size belongs
+   to the input size it came with. Each from the first file that has it,
+   of metadata.json, config.yaml, snapshots/ and train.py (see the module
+   docstring). A file that is missing is skipped, and one that cannot be
+   read is skipped with a warning: it should not stop a model whose
+   arguments say it all.
+
+
+.. py:function:: unet_arguments(state_dict) -> dict
+
+   fly_organelles ``StandardUnet``'s constructor arguments, read from its weights' shapes.
+
+   The output channels are the final convolution's; the levels, feature
+   maps and kernel sizes the down path's. The pooling has no weights, so
+   the downsample factors are StandardUnet's default, 2x2x2 at each level:
+   a network pooled otherwise loads, but its output is not the size
+   declared, which the shape check reports.
+
+
+.. py:class:: FlyModelConfig(checkpoint_path: str, channels: list[str] = None, input_voxel_size: tuple = None, output_voxel_size: tuple = None, name: str = None, input_size=None, output_size=None, scale=None, sigmoid: bool = True)
+
+
+
+   A network fly_organelles trained, from a training checkpoint, a .ts or a model.pt.
+
+   :param checkpoint_path: the checkpoint file (see the module docstring).
+   :param channels: the name of each output channel. Default: read beside the
+                    checkpoint.
+   :param input_voxel_size: nm per voxel (one number or one
+                            per axis). Default: read beside the checkpoint; one stands for
+                            the other.
+   :param output_voxel_size: nm per voxel (one number or one
+                             per axis). Default: read beside the checkpoint; one stands for
+                             the other.
+   :param input_size: voxels a side of a tile in and out. Default:
+                      read beside the checkpoint, else 178 in and the output computed
+                      from the network. An output size needs its input size.
+   :param output_size: voxels a side of a tile in and out. Default:
+                       read beside the checkpoint, else 178 in and the output computed
+                       from the network. An output size needs its input size.
+   :param sigmoid: pass the output through a sigmoid, added unless the network
+                   ends in one (default True); False serves the network's output.
 
 
    .. py:attribute:: cli_name
       :value: 'fly'
+
+
+
+   .. py:attribute:: checkpoint_path
+      :value: ''
 
 
 
@@ -51,7 +166,12 @@ Module Contents
 
 
 
-   .. py:attribute:: checkpoint_path
+   .. py:attribute:: scale
+      :value: None
+
+
+
+   .. py:attribute:: sigmoid
 
 
    .. py:attribute:: channels
@@ -61,11 +181,6 @@ Module Contents
 
 
    .. py:attribute:: output_voxel_size
-
-
-   .. py:attribute:: scale
-      :value: None
-
 
 
    .. py:attribute:: input_size
@@ -78,9 +193,19 @@ Module Contents
 
 
 
-   .. py:method:: load_eval_model(num_channels, checkpoint_path)
+   .. py:property:: default_env
 
-      Load evaluation model from checkpoint (TorchScript or PyTorch).
+      ``fly`` for a training checkpoint or an eager model.pt, else none (TorchScript runs anywhere).
+
+      A training checkpoint is loaded into fly_organelles' ``StandardUnet``,
+      and unpickling an eager ``model.pt`` imports fly_organelles' classes:
+      pixi.toml's ``fly`` environment has them, cellmap-flow's own does
+      not. A ``.ts`` file carries its own code and runs wherever torch does.
+
+
+   .. py:method:: load_eval_model()
+
+      The network to serve, in eval mode: the checkpoint's, with a sigmoid if ``sigmoid``.
 
 
 
@@ -90,6 +215,10 @@ Module Contents
    .. py:method:: to_dict()
 
       This config as a model entry, which ``registry.build_model`` rebuilds.
+
+      With what was read beside the checkpoint, so the entry says what is
+      served; the sizes when given or read, not when computed. In the
+      constructor's order, which exported YAMLs keep.
 
 
 

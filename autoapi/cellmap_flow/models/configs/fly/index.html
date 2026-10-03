@@ -53,6 +53,7 @@
 <li class="toctree-l1"><a class="reference internal" href="../../../../../yaml_config.html">YAML Configuration</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../../data_paths.html">Data paths</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../../huggingface.html">HuggingFace Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../bioimage.html">BioImage Model Zoo</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../../custom_script.html">Custom Model</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../../post.html">PostProcessors</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../../../../../plugins.html">Plugins</a></li>
@@ -124,18 +125,63 @@
              
   <section id="module-cellmap_flow.models.configs.fly">
 <span id="cellmap-flow-models-configs-fly"></span><h1>cellmap_flow.models.configs.fly<a class="headerlink" href="#module-cellmap_flow.models.configs.fly" title="Link to this heading"></a></h1>
-<p><code class="docutils literal notranslate"><span class="pre">FlyModelConfig</span></code>: a fly_organelles checkpoint.</p>
-<p>The checkpoint holds no geometry, so the constructor takes the voxel sizes
-and the input and output sizes, as a pair: 178 and 56 voxels a side when
-neither is given, and an error when only one is. A TorchScript file
-(<code class="docutils literal notranslate"><span class="pre">.ts</span></code>) or a <code class="docutils literal notranslate"><span class="pre">StandardUnet</span></code> state dict gets a sigmoid on top; a whole
-pickled model (<code class="docutils literal notranslate"><span class="pre">model.pt</span></code>) is used as it is, and only when
-<code class="docutils literal notranslate"><span class="pre">CELLMAP_FLOW_ALLOW_PICKLE</span></code> allows it.</p>
+<p><code class="docutils literal notranslate"><span class="pre">FlyModelConfig</span></code>: a network fly_organelles trained, from its checkpoint file.</p>
+<p><code class="docutils literal notranslate"><span class="pre">checkpoint_path</span></code> is one of</p>
+<ul class="simple">
+<li><p>a training checkpoint (<code class="docutils literal notranslate"><span class="pre">model_checkpoint_&lt;iteration&gt;</span></code>): the state dict
+fly_organelles’ training saves, loaded into its <code class="docutils literal notranslate"><span class="pre">StandardUnet</span></code>, whose
+architecture is read from the shapes of the weights (<code class="docutils literal notranslate"><span class="pre">unet_arguments</span></code>);</p></li>
+<li><p>a TorchScript file (<code class="docutils literal notranslate"><span class="pre">.ts</span></code>);</p></li>
+<li><p>a whole pickled model (<code class="docutils literal notranslate"><span class="pre">model.pt</span></code>), which is unpickled only when
+<code class="docutils literal notranslate"><span class="pre">CELLMAP_FLOW_ALLOW_PICKLE</span></code> allows it.</p></li>
+</ul>
+<p>A folder that cellmap_models exported (metadata.json and model.ts) is the
+<code class="docutils literal notranslate"><span class="pre">cellmap</span></code> type’s: it is served as exported, at the tile it was exported
+at, and given here as <code class="docutils literal notranslate"><span class="pre">checkpoint_path</span></code> it is refused with a pointer to
+<code class="docutils literal notranslate"><span class="pre">type:</span> <span class="pre">cellmap</span></code>. The <code class="docutils literal notranslate"><span class="pre">model.pt</span></code> in such a folder can still be served
+here, at another <code class="docutils literal notranslate"><span class="pre">input_size</span></code>.</p>
+<p>What the constructor is not given, it reads from the files beside the
+checkpoint (<code class="docutils literal notranslate"><span class="pre">run_metadata</span></code>); an argument given always wins:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">metadata.json</span></code>, when the file is in a cellmap_models export folder:
+channel names, voxel sizes, input and output size;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">config.yaml</span></code>, the run configuration fly_organelles’ <code class="docutils literal notranslate"><span class="pre">load_config</span></code>
+reads: <code class="docutils literal notranslate"><span class="pre">run.labels</span></code>, <code class="docutils literal notranslate"><span class="pre">run.voxel_size</span></code>, <code class="docutils literal notranslate"><span class="pre">checkpoint.input_shape</span></code> and
+<code class="docutils literal notranslate"><span class="pre">output_shape</span></code>;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">snapshots/</span></code>, the gunpowder snapshots fly_organelles’ training writes:
+the <code class="docutils literal notranslate"><span class="pre">raw</span></code> and <code class="docutils literal notranslate"><span class="pre">output</span></code> arrays’ shapes and voxel sizes, and so the
+number of channels the network outputs;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">train.py</span></code>, the training script of a run: its top-level <code class="docutils literal notranslate"><span class="pre">labels</span></code> and
+<code class="docutils literal notranslate"><span class="pre">voxel_size</span></code> assignments, when they are literals. The script is parsed,
+never run.</p></li>
+</ul>
+<p>Labels name the channels only when there is one per channel the snapshots
+show: an affinity or LSD run’s network outputs several per label. The voxel
+sizes are read only when neither is given, and the sizes only when neither
+is: an output size belongs to the input size it came with. Then, when
+something is still missing: one voxel size stands for the other
+(fly_organelles trains at a single voxel size); no input size is
+fly_organelles’ training tile, 178 voxels a side; no output size is
+computed from the network when it is built. Channels and a voxel size have
+no default: without them the constructor raises, naming the files it reads.</p>
+<p><code class="docutils literal notranslate"><span class="pre">sigmoid</span></code> (True by default): the network’s output goes through a sigmoid,
+which is added unless the network ends in one already, as a cellmap_models
+export’s model.pt and model.ts do. fly_organelles trains its networks on
+logits (its BCE, focal and Dice losses apply the sigmoid themselves), so a
+training checkpoint gets one. False serves the network’s output as it is.</p>
+<p>A training checkpoint or a model.pt needs fly_organelles, so those run in
+pixi.toml’s <code class="docutils literal notranslate"><span class="pre">fly</span></code> environment unless the entry gives another <code class="docutils literal notranslate"><span class="pre">env</span></code>; a
+TorchScript file runs in any. torch and fly_organelles are imported only
+when the model is built: the CLIs, <code class="docutils literal notranslate"><span class="pre">--help</span></code> and the dashboard’s model form
+import every type.</p>
 <section id="attributes">
 <h2>Attributes<a class="headerlink" href="#attributes" title="Link to this heading"></a></h2>
 <table class="autosummary longtable docutils align-default">
 <tbody>
 <tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.models.configs.fly.logger" title="cellmap_flow.models.configs.fly.logger"><code class="xref py py-obj docutils literal notranslate"><span class="pre">logger</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.models.configs.fly.TRAINING_TILE" title="cellmap_flow.models.configs.fly.TRAINING_TILE"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TRAINING_TILE</span></code></a></p></td>
 <td><p></p></td>
 </tr>
 </tbody>
@@ -146,7 +192,23 @@ pickled model (<code class="docutils literal notranslate"><span class="pre">mode
 <table class="autosummary longtable docutils align-default">
 <tbody>
 <tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.models.configs.fly.FlyModelConfig" title="cellmap_flow.models.configs.fly.FlyModelConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">FlyModelConfig</span></code></a></p></td>
-<td><p></p></td>
+<td><p>A network fly_organelles trained, from a training checkpoint, a .ts or a model.pt.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="functions">
+<h2>Functions<a class="headerlink" href="#functions" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.models.configs.fly.checkpoint_format" title="cellmap_flow.models.configs.fly.checkpoint_format"><code class="xref py py-obj docutils literal notranslate"><span class="pre">checkpoint_format</span></code></a>(→ str)</p></td>
+<td><p>How <code class="docutils literal notranslate"><span class="pre">checkpoint_path</span></code> is loaded: TORCHSCRIPT, PICKLE or STATE_DICT.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.models.configs.fly.run_metadata" title="cellmap_flow.models.configs.fly.run_metadata"><code class="xref py py-obj docutils literal notranslate"><span class="pre">run_metadata</span></code></a>(→ dict)</p></td>
+<td><p>What the files beside <code class="docutils literal notranslate"><span class="pre">checkpoint_path</span></code> say about its network, as {key: (value, file)}.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.models.configs.fly.unet_arguments" title="cellmap_flow.models.configs.fly.unet_arguments"><code class="xref py py-obj docutils literal notranslate"><span class="pre">unet_arguments</span></code></a>(→ dict)</p></td>
+<td><p>fly_organelles <code class="docutils literal notranslate"><span class="pre">StandardUnet</span></code>'s constructor arguments, read from its weights' shapes.</p></td>
 </tr>
 </tbody>
 </table>
@@ -158,12 +220,76 @@ pickled model (<code class="docutils literal notranslate"><span class="pre">mode
 <span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.configs.fly.</span></span><span class="sig-name descname"><span class="pre">logger</span></span><a class="headerlink" href="#cellmap_flow.models.configs.fly.logger" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.fly.TRAINING_TILE">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.configs.fly.</span></span><span class="sig-name descname"><span class="pre">TRAINING_TILE</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">178</span></span><a class="headerlink" href="#cellmap_flow.models.configs.fly.TRAINING_TILE" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.fly.checkpoint_format">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.configs.fly.</span></span><span class="sig-name descname"><span class="pre">checkpoint_format</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">checkpoint_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#cellmap_flow.models.configs.fly.checkpoint_format" title="Link to this definition"></a></dt>
+<dd><p>How <code class="docutils literal notranslate"><span class="pre">checkpoint_path</span></code> is loaded: TORCHSCRIPT, PICKLE or STATE_DICT.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.fly.run_metadata">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.configs.fly.</span></span><span class="sig-name descname"><span class="pre">run_metadata</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">checkpoint_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span></span></span><a class="headerlink" href="#cellmap_flow.models.configs.fly.run_metadata" title="Link to this definition"></a></dt>
+<dd><p>What the files beside <code class="docutils literal notranslate"><span class="pre">checkpoint_path</span></code> say about its network, as {key: (value, file)}.</p>
+<p>Keys: <code class="docutils literal notranslate"><span class="pre">channels</span></code>, <code class="docutils literal notranslate"><span class="pre">input_voxel_size</span></code>, <code class="docutils literal notranslate"><span class="pre">output_voxel_size</span></code> and
+<code class="docutils literal notranslate"><span class="pre">sizes</span></code>, the input and output size as a pair: an output size belongs
+to the input size it came with. Each from the first file that has it,
+of metadata.json, config.yaml, snapshots/ and train.py (see the module
+docstring). A file that is missing is skipped, and one that cannot be
+read is skipped with a warning: it should not stop a model whose
+arguments say it all.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.fly.unet_arguments">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.configs.fly.</span></span><span class="sig-name descname"><span class="pre">unet_arguments</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">state_dict</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span></span></span><a class="headerlink" href="#cellmap_flow.models.configs.fly.unet_arguments" title="Link to this definition"></a></dt>
+<dd><p>fly_organelles <code class="docutils literal notranslate"><span class="pre">StandardUnet</span></code>’s constructor arguments, read from its weights’ shapes.</p>
+<p>The output channels are the final convolution’s; the levels, feature
+maps and kernel sizes the down path’s. The pooling has no weights, so
+the downsample factors are StandardUnet’s default, 2x2x2 at each level:
+a network pooled otherwise loads, but its output is not the size
+declared, which the shape check reports.</p>
+</dd></dl>
+
 <dl class="py class">
 <dt class="sig sig-object py" id="cellmap_flow.models.configs.fly.FlyModelConfig">
-<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.configs.fly.</span></span><span class="sig-name descname"><span class="pre">FlyModelConfig</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">checkpoint_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">channels</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">input_voxel_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">tuple</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_voxel_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">tuple</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">input_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scale</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.models.configs.fly.FlyModelConfig" title="Link to this definition"></a></dt>
-<dd><dl class="py attribute">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.configs.fly.</span></span><span class="sig-name descname"><span class="pre">FlyModelConfig</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">checkpoint_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">channels</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">input_voxel_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">tuple</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_voxel_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">tuple</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">input_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scale</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sigmoid</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.models.configs.fly.FlyModelConfig" title="Link to this definition"></a></dt>
+<dd><p>A network fly_organelles trained, from a training checkpoint, a .ts or a model.pt.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>checkpoint_path</strong> – the checkpoint file (see the module docstring).</p></li>
+<li><p><strong>channels</strong> – the name of each output channel. Default: read beside the
+checkpoint.</p></li>
+<li><p><strong>input_voxel_size</strong> – nm per voxel (one number or one
+per axis). Default: read beside the checkpoint; one stands for
+the other.</p></li>
+<li><p><strong>output_voxel_size</strong> – nm per voxel (one number or one
+per axis). Default: read beside the checkpoint; one stands for
+the other.</p></li>
+<li><p><strong>input_size</strong> – voxels a side of a tile in and out. Default:
+read beside the checkpoint, else 178 in and the output computed
+from the network. An output size needs its input size.</p></li>
+<li><p><strong>output_size</strong> – voxels a side of a tile in and out. Default:
+read beside the checkpoint, else 178 in and the output computed
+from the network. An output size needs its input size.</p></li>
+<li><p><strong>sigmoid</strong> – pass the output through a sigmoid, added unless the network
+ends in one (default True); False serves the network’s output.</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py attribute">
 <dt class="sig sig-object py" id="cellmap_flow.models.configs.fly.FlyModelConfig.cli_name">
 <span class="sig-name descname"><span class="pre">cli_name</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'fly'</span></span><a class="headerlink" href="#cellmap_flow.models.configs.fly.FlyModelConfig.cli_name" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.fly.FlyModelConfig.checkpoint_path">
+<span class="sig-name descname"><span class="pre">checkpoint_path</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">''</span></span><a class="headerlink" href="#cellmap_flow.models.configs.fly.FlyModelConfig.checkpoint_path" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py attribute">
@@ -172,8 +298,13 @@ pickled model (<code class="docutils literal notranslate"><span class="pre">mode
 <dd></dd></dl>
 
 <dl class="py attribute">
-<dt class="sig sig-object py" id="cellmap_flow.models.configs.fly.FlyModelConfig.checkpoint_path">
-<span class="sig-name descname"><span class="pre">checkpoint_path</span></span><a class="headerlink" href="#cellmap_flow.models.configs.fly.FlyModelConfig.checkpoint_path" title="Link to this definition"></a></dt>
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.fly.FlyModelConfig.scale">
+<span class="sig-name descname"><span class="pre">scale</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.models.configs.fly.FlyModelConfig.scale" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.fly.FlyModelConfig.sigmoid">
+<span class="sig-name descname"><span class="pre">sigmoid</span></span><a class="headerlink" href="#cellmap_flow.models.configs.fly.FlyModelConfig.sigmoid" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py attribute">
@@ -192,11 +323,6 @@ pickled model (<code class="docutils literal notranslate"><span class="pre">mode
 <dd></dd></dl>
 
 <dl class="py attribute">
-<dt class="sig sig-object py" id="cellmap_flow.models.configs.fly.FlyModelConfig.scale">
-<span class="sig-name descname"><span class="pre">scale</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.models.configs.fly.FlyModelConfig.scale" title="Link to this definition"></a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
 <dt class="sig sig-object py" id="cellmap_flow.models.configs.fly.FlyModelConfig.input_size">
 <span class="sig-name descname"><span class="pre">input_size</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.models.configs.fly.FlyModelConfig.input_size" title="Link to this definition"></a></dt>
 <dd></dd></dl>
@@ -206,10 +332,20 @@ pickled model (<code class="docutils literal notranslate"><span class="pre">mode
 <span class="sig-name descname"><span class="pre">output_size</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.models.configs.fly.FlyModelConfig.output_size" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
+<dl class="py property">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.fly.FlyModelConfig.default_env">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">default_env</span></span><a class="headerlink" href="#cellmap_flow.models.configs.fly.FlyModelConfig.default_env" title="Link to this definition"></a></dt>
+<dd><p><code class="docutils literal notranslate"><span class="pre">fly</span></code> for a training checkpoint or an eager model.pt, else none (TorchScript runs anywhere).</p>
+<p>A training checkpoint is loaded into fly_organelles’ <code class="docutils literal notranslate"><span class="pre">StandardUnet</span></code>,
+and unpickling an eager <code class="docutils literal notranslate"><span class="pre">model.pt</span></code> imports fly_organelles’ classes:
+pixi.toml’s <code class="docutils literal notranslate"><span class="pre">fly</span></code> environment has them, cellmap-flow’s own does
+not. A <code class="docutils literal notranslate"><span class="pre">.ts</span></code> file carries its own code and runs wherever torch does.</p>
+</dd></dl>
+
 <dl class="py method">
 <dt class="sig sig-object py" id="cellmap_flow.models.configs.fly.FlyModelConfig.load_eval_model">
-<span class="sig-name descname"><span class="pre">load_eval_model</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">num_channels</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">checkpoint_path</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.models.configs.fly.FlyModelConfig.load_eval_model" title="Link to this definition"></a></dt>
-<dd><p>Load evaluation model from checkpoint (TorchScript or PyTorch).</p>
+<span class="sig-name descname"><span class="pre">load_eval_model</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.models.configs.fly.FlyModelConfig.load_eval_model" title="Link to this definition"></a></dt>
+<dd><p>The network to serve, in eval mode: the checkpoint’s, with a sigmoid if <code class="docutils literal notranslate"><span class="pre">sigmoid</span></code>.</p>
 </dd></dl>
 
 <dl class="py property">
@@ -221,6 +357,9 @@ pickled model (<code class="docutils literal notranslate"><span class="pre">mode
 <dt class="sig sig-object py" id="cellmap_flow.models.configs.fly.FlyModelConfig.to_dict">
 <span class="sig-name descname"><span class="pre">to_dict</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.models.configs.fly.FlyModelConfig.to_dict" title="Link to this definition"></a></dt>
 <dd><p>This config as a model entry, which <code class="docutils literal notranslate"><span class="pre">registry.build_model</span></code> rebuilds.</p>
+<p>With what was read beside the checkpoint, so the entry says what is
+served; the sizes when given or read, not when computed. In the
+constructor’s order, which exported YAMLs keep.</p>
 </dd></dl>
 
 </dd></dl>

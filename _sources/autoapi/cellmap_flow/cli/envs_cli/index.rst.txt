@@ -1,0 +1,63 @@
+cellmap_flow.cli.envs_cli
+=========================
+
+.. py:module:: cellmap_flow.cli.envs_cli
+
+.. autoapi-nested-parse::
+
+   ``cellmap_flow envs``: the environments models run in (``models.envs``).
+
+   
+     envs [list]         each environment: where it is, whether it is
+                         installed and can finetune, which types default to it
+     envs install NAME   install a pixi environment now, not on its first job
+     envs check NAME     import cellmap_flow in it, to prove it works
+
+   Only ``list`` imports the model types (numpy, funlib), to read their
+   defaults; ``--help`` imports none of them.
+
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.cli.envs_cli.envs_group
+   cellmap_flow.cli.envs_cli.list_cmd
+   cellmap_flow.cli.envs_cli.install_cmd
+   cellmap_flow.cli.envs_cli.check_cmd
+
+
+Module Contents
+---------------
+
+.. py:function:: envs_group(ctx)
+
+   The environments models run in, besides this one.
+
+   A model runs in its entry's `env`, else its type's default, else this
+   environment; `env: current` keeps it here. An environment is one of
+   cellmap-flow's pixi.toml, or an alias: a name mapped to a conda env or
+   virtualenv in ~/.cellmap_flow/envs.yaml (CELLMAP_FLOW_ENVS_FILE).
+   Without a subcommand, `list`.
+
+
+.. py:function:: list_cmd()
+
+   List each environment, and the model types that default to it.
+
+
+.. py:function:: install_cmd(name)
+
+   Install the pixi environment NAME, as its first job otherwise would.
+
+   Installed from pixi.lock as it is (--frozen), as `pixi run --frozen`
+   runs it, so the lock in the checkout is never rewritten.
+
+
+.. py:function:: check_cmd(name)
+
+   Import cellmap_flow in the environment NAME (a name or a path).
+
+
