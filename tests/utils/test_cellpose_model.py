@@ -279,9 +279,12 @@ def test_the_example_yaml_is_a_cellpose_model():
     import yaml
 
     with open(os.path.join(ROOT, "example", "cellpose_sam.yaml")) as f:
-        (model,) = registry.build_models(yaml.safe_load(f)["models"])
-    assert isinstance(model, CellposeModelConfig)
-    assert (model.pretrained_model, model.output, model.voxel_size) == ("cpsam", "probability", (64, 64, 64))
+        models = registry.build_models(yaml.safe_load(f)["models"])
+    assert all(isinstance(model, CellposeModelConfig) for model in models)
+    assert [(m.name, m.pretrained_model, m.output, m.voxel_size) for m in models] == [
+        ("cellpose_sam_v2", "cpsam_v2", "flows", (64, 64, 64)),
+        ("cellpose_sam_v2_probability", "cpsam_v2", "probability", (64, 64, 64)),
+    ]
 
 
 def test_a_non_integer_voxel_size_is_kept(fake_cellpose):

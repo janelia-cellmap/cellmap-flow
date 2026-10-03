@@ -1,4 +1,4 @@
-# Cellpose-SAM on jrc_mus-salivary-1:
+# Cellpose-SAM v2 on jrc_mus-salivary-1, two outputs side by side:
 #   cellmap_flow yaml example/cellpose_sam.yaml
 # The cellpose type runs in the cellpose4 pixi environment without an `env`
 # (Cellpose 4 cannot share the default environment's cellpose 3); give one
@@ -10,20 +10,31 @@ charge_group: "cellmap"
 
 queue: "gpu_h100"
 
+# Named as the Models tab's Cellpose panel names them (cellpose_sam_v2 for
+# its flows, cellpose_sam_v2_probability), so its rows show them ticked.
 models:
-  cellpose_sam:
+  # Flows and probability (flow_y, flow_x, cell): the layer colours each
+  # voxel by its flow's direction, dimmed by the probability. Add
+  # CellposeMasksPostprocessor on the Output tab to see masks made from them.
+  cellpose_sam_v2:
     type: "cellpose"
-    # The script this replaces ran cpsam; leave this out for the type's
-    # default, cpsam_v2, or give the path of finetuned Cellpose weights.
-    pretrained_model: "cpsam"
-    # "probability" (0 to 1) or "masks" (instance ids, unique within a chunk).
-    output: "probability"
+    # Left out, the type's default model, cpsam_v2; "cpsam" for Cellpose-SAM,
+    # or the path of finetuned Cellpose weights.
+    # pretrained_model: "cpsam_v2"
+    output: "flows"
     # nm; the server reads s3. Cellpose-SAM sees objects best about 30
     # voxels across, so pick the voxel size at which yours are roughly that.
     voxel_size: 64
+  # The cell probability alone, 0 to 1.
+  cellpose_sam_v2_probability:
+    type: "cellpose"
+    output: "probability"
+    voxel_size: 64
 
-# With output: "masks", make the per-chunk ids unique across chunks and show
-# the layer as a segmentation:
+# The Output tab's chain is every layer's, and CellposeMasksPostprocessor runs
+# only on flows: untick the probability model before adding it. With
+# output: "masks", make the per-chunk ids unique across chunks and show the
+# layer as a segmentation:
 # json_data:
 #   postprocess:
 #     - name: MortonSegmentationRelabeling
