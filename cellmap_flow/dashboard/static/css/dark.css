@@ -598,6 +598,41 @@ textarea.form-control[readonly] {
 }
 
 
+/* ---------- Cellpose list (Models tab) ---------- */
+/* Its rows reuse the zoo's look (zoo-tag, zoo-desc, zoo-voxel-row,
+   zoo-trained, zoo-voxel); what is its own is below. */
+.cellpose-model-item {
+  margin-bottom: 8px;
+}
+
+.cellpose-output {
+  width: 8.5rem;
+}
+
+.cellpose-stitch {
+  width: 5.5rem;
+}
+
+/* "+ output" and the extra rows' remove button: quiet, like zoo-link. */
+.cellpose-row-btn {
+  margin-left: 6px;
+  padding: 0 4px;
+  font-size: 12px;
+  color: var(--text-muted);
+  background: none;
+  border: none;
+}
+
+.cellpose-row-btn:hover {
+  color: var(--accent-hover);
+}
+
+.cellpose-note {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 6px;
+}
+
 /* ---------- Models tab: Add a model ---------- */
 .add-model-result {
   background: var(--bg-surface);

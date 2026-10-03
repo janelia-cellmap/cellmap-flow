@@ -23,8 +23,11 @@ from cellmap_flow.process_chain import process_chain
 @pytest.mark.parametrize("start", [lambda: launch.run_model("/models/mito", "mito", "blob"),
                                    lambda: launch.run_hf_model("cellmap/mito", "mito", "blob"),
                                    lambda: launch.run_bioimage_model(
-                                       bioimage_entry("affable-shark", [8, 8, 8], "mito"), "blob")],
-                         ids=["catalog", "hf", "bioimage"])
+                                       bioimage_entry("affable-shark", [8, 8, 8], "mito"), "blob"),
+                                   lambda: launch.run_cellpose_model(
+                                       {"pretrained_model": "cpsam_v2", "voxel_size": [64, 64, 64],
+                                        "output": "probability", "name": "cellpose_sam_v2"}, "blob")],
+                         ids=["catalog", "hf", "bioimage", "cellpose"])
 def test_a_failed_launch_is_logged_not_raised_and_adds_no_layer(viewer, monkeypatch, caplog, error, start):
     """It runs on a dashboard thread, whose exceptions reach only stderr."""
     def fail(*args, **kwargs):

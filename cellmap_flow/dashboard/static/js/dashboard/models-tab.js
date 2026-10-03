@@ -1,5 +1,5 @@
 // The Models tab (templates/_models_tab.html): the local catalog, Hugging
-// Face and BioImage Model Zoo models to serve, the LSF server config, the GPU
+// Face, BioImage Model Zoo and Cellpose models to serve, the LSF server config, the GPU
 // queue picker, and the inference jobs' own output.
 import { ApiError, getJSON, postJSON } from "../lib/api.js";
 import { pageData } from "../lib/page-data.js";
@@ -319,6 +319,184 @@ export function initModelsTab({ onModelsSubmitted } = {}) {
   ["zooEmOnly", "zoo2d", "zoo3d"].forEach((id) => {
     document.getElementById(id).addEventListener("change", filterZooModels);
   });
+
+  // Cellpose: Cellpose 4's models, one row each (routes/index_page
+  // .cellpose_panel_data). Ticked, a row asks for the voxel size, which
+  // Cellpose cannot know (it sees any scale, and segments well only where
+  // objects are about 30 voxels across), and the output. The models already
+  // running start ticked with their settings, one row per output running;
+  // "+ output" adds a row to run another output of the same model beside.
+  const cellposeData = pageData("cellpose-data");
+  const CELLPOSE_OUTPUTS = [
+    ["probability", "Probability", "The cell probability, 0 to 1: one channel, joins up across chunks."],
+    ["flows", "Flows", "Cellpose's flows towards each cell's centre (flowY, flowX) and its cell probability: three channels."],
+    ["masks", "Masks", "Instance masks, made chunk by chunk: an object crossing a chunk's edge gets an id on each side."],
+  ];
+  const CELLPOSE_VOXEL_TITLE =
+    "Voxel size in nm, z,y,x or one number: the scale Cellpose reads the data at. Required: Cellpose-SAM "
+    + "segments objects about 30 voxels across best, so pick the scale at which yours are about that.";
+  const CELLPOSE_STITCH_TITLE =
+    "Cellpose's stitch_threshold: a mask takes the id of the mask in the slice before that it overlaps "
+    + "by at least this IoU (0 to 1), within a chunk. Blank or 0: each slice's masks stay apart.";
+  let cellposeRowCount = 0;
+
+  // One row for ``model`` ({model, label, description}); ``settings``, when
+  // given, are a running model's ({output, voxel_size, stitch_threshold})
+  // and tick it. ``extra`` rows (from "+ output") can be removed.
+  function cellposeRow(model, settings, extra) {
+    cellposeRowCount += 1;
+    const id = "chk_cellpose_" + cellposeRowCount;
+    const div = document.createElement("div");
+    div.className = "form-check cellpose-model-item";
+    div.dataset.model = model.model;
+
+    const input = document.createElement("input");
+    input.className = "form-check-input cellpose-model-checkbox";
+    input.type = "checkbox";
+    input.id = id;
+    input.value = model.model;
+    input.checked = !!settings || !!extra;
+    const label = document.createElement("label");
+    label.className = "form-check-label";
+    label.htmlFor = id;
+    label.textContent = model.label;
+    label.title = model.model;
+    div.append(input, label, zooTag(model.model, "Cellpose's name for it (pretrained_model)"));
+
+    const another = document.createElement("button");
+    another.type = "button";
+    another.className = "cellpose-row-btn";
+    another.textContent = extra ? "×" : "+ output";
+    another.title = extra
+      ? "Remove this row (Submit then stops what it ran)"
+      : "Another row for this model, to run another output beside this one";
+    another.addEventListener("click", () => {
+      if (extra) {
+        div.remove();
+        return;
+      }
+      // After this model's last row, with the first output none of them has.
+      const rows = [...document.querySelectorAll("#cellposeModelList .cellpose-model-item")]
+        .filter((row) => row.dataset.model === model.model);
+      const used = rows.map((row) => row.querySelector(".cellpose-output").value);
+      const free = CELLPOSE_OUTPUTS.map(([value]) => value).find((value) => !used.includes(value));
+      const voxel = div.querySelector(".cellpose-voxel").value;
+      const row = cellposeRow(model, null, true);
+      row.querySelector(".cellpose-voxel").value = voxel;
+      const select = row.querySelector(".cellpose-output");
+      select.value = free || "probability";
+      select.dispatchEvent(new Event("change"));
+      rows[rows.length - 1].after(row);
+    });
+    div.append(another);
+
+    const desc = document.createElement("div");
+    desc.className = "zoo-desc";
+    desc.textContent = model.description;
+    desc.title = model.description;
+    div.append(desc);
+
+    // Shown only while the row is ticked.
+    const settingsRow = document.createElement("div");
+    settingsRow.className = "zoo-voxel-row d-flex align-items-center gap-2 mt-1 flex-wrap";
+    const voxelLabel = document.createElement("label");
+    voxelLabel.textContent = "Voxel (nm)";
+    voxelLabel.htmlFor = id + "_voxel";
+    const voxel = document.createElement("input");
+    voxel.type = "text";
+    voxel.className = "form-control form-control-sm zoo-voxel cellpose-voxel";
+    voxel.id = id + "_voxel";
+    voxel.placeholder = "required";
+    voxel.title = CELLPOSE_VOXEL_TITLE;
+    const voxelSize = settings && settings.voxel_size;
+    voxel.value = Array.isArray(voxelSize) ? voxelSize.join(",") : (voxelSize || "");
+
+    const outputLabel = document.createElement("label");
+    outputLabel.textContent = "Output";
+    outputLabel.htmlFor = id + "_output";
+    const output = document.createElement("select");
+    output.className = "form-select form-select-sm cellpose-output";
+    output.id = id + "_output";
+    CELLPOSE_OUTPUTS.forEach(([value, text, title]) => {
+      const option = document.createElement("option");
+      option.value = value;
+      option.textContent = text;
+      option.title = title;
+      output.append(option);
+    });
+    output.value = (settings && settings.output) || "probability";
+
+    // Masks only: linking each slice's masks to the slice before's.
+    const stitchLabel = document.createElement("label");
+    stitchLabel.textContent = "Link slices (IoU)";
+    stitchLabel.htmlFor = id + "_stitch";
+    stitchLabel.title = CELLPOSE_STITCH_TITLE;
+    const stitch = document.createElement("input");
+    stitch.type = "number";
+    stitch.min = "0";
+    stitch.max = "1";
+    stitch.step = "0.05";
+    stitch.className = "form-control form-control-sm cellpose-stitch";
+    stitch.id = id + "_stitch";
+    stitch.placeholder = "off";
+    stitch.title = CELLPOSE_STITCH_TITLE;
+    if (settings && settings.stitch_threshold) stitch.value = settings.stitch_threshold;
+    settingsRow.append(voxelLabel, voxel, outputLabel, output, stitchLabel, stitch);
+
+    const hint = document.createElement("div");
+    hint.className = "zoo-trained";
+    hint.textContent = "Objects about 30 voxels across work best: enter the voxel size at which yours are "
+      + "about that. Runs in the cellpose4 environment.";
+
+    const showTicked = () => {
+      [settingsRow, hint].forEach((el) => { el.style.display = input.checked ? "" : "none"; });
+      const masks = output.value === "masks";
+      stitchLabel.style.display = masks ? "" : "none";
+      stitch.style.display = masks ? "" : "none";
+      output.title = (CELLPOSE_OUTPUTS.find(([value]) => value === output.value) || [])[2] || "";
+    };
+    showTicked();
+    input.addEventListener("change", showTicked);
+    output.addEventListener("change", showTicked);
+    div.append(settingsRow, hint);
+    return div;
+  }
+
+  function renderCellposeModels() {
+    const list = document.getElementById("cellposeModelList");
+    const running = cellposeData.running || [];
+    (cellposeData.models || []).forEach((model) => {
+      const mine = running.filter((r) => r.model === model.model);
+      if (!mine.length) list.append(cellposeRow(model, null, false));
+      // The first running output on the model's own row, any others on
+      // extra rows below it.
+      mine.forEach((settings, i) => list.append(cellposeRow(model, settings, i > 0)));
+    });
+    document.getElementById("cellposeRunningCount").textContent =
+      running.length ? running.length + " running" : "";
+  }
+
+  renderCellposeModels();
+
+  // The ticked Cellpose rows as POST /api/models takes them. A blank voxel
+  // size is sent as null, and Submit refuses it with a message naming the
+  // model, as it does a zoo model's.
+  function selectedCellposeModels() {
+    const selected = [];
+    document.querySelectorAll("#cellposeModelList .cellpose-model-item").forEach((row) => {
+      if (!row.querySelector(".cellpose-model-checkbox").checked) return;
+      const output = row.querySelector(".cellpose-output").value;
+      const entry = {
+        model: row.dataset.model,
+        voxel_size: row.querySelector(".cellpose-voxel").value.trim() || null,
+        output,
+      };
+      const stitch = row.querySelector(".cellpose-stitch").value.trim();
+      if (output === "masks" && stitch !== "") entry.stitch_threshold = stitch;
+      selected.push(entry);
+    });
+    return selected;
+  }
 
   // Inference job output.
   //
@@ -678,17 +856,22 @@ export function initModelsTab({ onModelsSubmitted } = {}) {
       selectedZoo.push({ id: box.value, voxel_size: voxel || null });
     });
 
-    console.log("Selected models:", selected, "HF models:", selectedHf, "zoo models:", selectedZoo);
+    const selectedCellpose = selectedCellposeModels();
+
+    console.log("Selected models:", selected, "HF models:", selectedHf, "zoo models:", selectedZoo,
+                "Cellpose models:", selectedCellpose);
     postJSON("/api/models", {
       selected_models: selected,
       selected_hf_models: selectedHf,
       selected_bioimage_models: selectedZoo,
+      selected_cellpose_models: selectedCellpose,
       resample: resampleCheckbox.checked,
     })
       .then((data) => {
         console.log("Server response:", data);
         const started = [...(data.models || []), ...(data.hf_models || []),
-                         ...(data.bioimage_models || []).map((m) => m.id)];
+                         ...(data.bioimage_models || []).map((m) => m.id),
+                         ...(data.cellpose_models || []).map((m) => m.model + " (" + m.output + ")")];
         logArea.value += started.length
           ? `Submitted ${started.join(", ")}: starting (see Job Logs)\n`
           : "Submitted: no model selected; any running ones are stopped\n";

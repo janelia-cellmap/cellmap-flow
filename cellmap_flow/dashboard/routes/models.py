@@ -117,26 +117,29 @@ def refresh_bioimage_models_route():
 def submit_models():
     """Run the models the Models tab has ticked (a SubmitModels), and stop
     the others: services.launch.update_run_models. A zoo model that needs a
-    voxel size and was given none is a 400, and nothing changes."""
+    voxel size and was given none, or a Cellpose model without one, is a
+    400, and nothing changes."""
     body, error = parse(SubmitModels, request.get_json(silent=True))
     if error:
         return error
     selected_models, selected_hf_models = body.selected_models, body.selected_hf_models
     selected_bioimage = [s.model_dump() for s in body.selected_bioimage_models]
+    selected_cellpose = [s.model_dump() for s in body.selected_cellpose_models]
     if body.resample is not None:
         get_session().resample = body.resample
     try:
-        update_run_models(selected_models, selected_hf_models, selected_bioimage)
+        update_run_models(selected_models, selected_hf_models, selected_bioimage, selected_cellpose)
     except ValueError as e:
         return jsonify({"success": False, "error": str(e)}), 400
     logger.info(f"Selected models: {selected_models}, HF models: {selected_hf_models}, "
-                f"bioimage models: {selected_bioimage}")
+                f"bioimage models: {selected_bioimage}, cellpose models: {selected_cellpose}")
     return jsonify(
         {
             "message": "Data received successfully",
             "models": selected_models,
             "hf_models": selected_hf_models,
             "bioimage_models": selected_bioimage,
+            "cellpose_models": selected_cellpose,
         }
     )
 

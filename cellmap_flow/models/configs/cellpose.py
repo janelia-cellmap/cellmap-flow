@@ -6,15 +6,23 @@ that objects at the chunk's edge are seen whole. What the layer shows is
 ``output``:
 
 - ``"probability"``: Cellpose's cell probability, from 0 to 1 (float32), the
-  sigmoid of its logit. It is computed per voxel, so it joins up across
-  chunks, and the mask dynamics are skipped, which makes it the faster of
-  the two.
+  sigmoid of its logit; one channel. It is computed per voxel, so it joins
+  up across chunks, and the mask dynamics are skipped, which makes it (and
+  ``"flows"``) faster than masks.
+- ``"flows"``: what Cellpose's network predicts, three float32 channels:
+  flowY and flowX (the flows towards each object's centre, about -1 to 1
+  inside objects; Cellpose's ``dP``) and the cell probability as above.
+  Per voxel too, so it joins up across chunks; for segmenting a whole
+  volume elsewhere from Cellpose's own outputs, or for seeing what a
+  finetune changed.
 - ``"masks"``: Cellpose's instance masks (uint64), ids unique within a
   chunk. Masks are made per chunk: an object that crosses a chunk's edge is
-  cut there, with another id on each side, and objects are not joined from
-  slice to slice. The ``MortonSegmentationRelabeling`` postprocessor makes
-  the ids unique across chunks and shows the layer as a segmentation; it is
-  not applied here (see ``_masks``).
+  cut there, with another id on each side. Objects are joined from slice to
+  slice only with ``stitch_threshold`` (Cellpose's own: a mask takes the id
+  of the one in the slice before that it overlaps by at least that IoU),
+  and only within a chunk. The ``MortonSegmentationRelabeling``
+  postprocessor makes the ids unique across chunks and shows the layer as a
+  segmentation; it is not applied here (see ``_masks``).
 
 Cellpose 4 cannot share cellmap-flow's default environment, whose cellpose 3
 pins an older numpy, so this type runs in the ``cellpose4`` pixi
@@ -51,7 +59,10 @@ logger = logging.getLogger(__name__)
 # DINO models also need the dinov3 package, which the cellpose4 environment
 # does not install (see _load_model).
 PRETRAINED_MODELS = ("cpsam_v2", "cpsam", "cpdino", "cpdino-vitb")
-OUTPUTS = ("probability", "masks")
+OUTPUTS = ("probability", "flows", "masks")
+# The channels each output serves: Cellpose's dP (flowY, flowX) and its cell
+# probability, as the sigmoid of the logit it predicts.
+OUTPUT_CHANNELS = {"probability": ["cell"], "flows": ["flow_y", "flow_x", "cell"], "masks": ["cell"]}
 
 # Cellpose cuts each slice into square tiles, bsize pixels a side,
 # overlapping by tile_overlap (its default, kept). Cellpose-SAM's ViT-L
@@ -63,6 +74,13 @@ DINO_TILE_SIZE = 384
 TILE_OVERLAP = 0.1
 # Cellpose's own "diameter" scale: objects about 30 px across.
 CELLPOSE_DIAMETER = 30.0
+# Tiles per GPU pass, by default. Timed on Cellpose-SAM's network in bfloat16
+# with 256 px tiles (ms per tile at batch 1 / 8 / 16 / 72 / 128): an L4 takes
+# 47 / 49 / 54 / ~50 / 50, an H100 16 / 7.0 / 6.6 / ~6.3 / 6.25. Peak memory
+# was 1.5 GB at 8, 2.4 GB at 16, ~9 GB at 72 and 15 GB at 128. So a whole
+# chunk's tiles in one pass (72 for the default chunk), the old default,
+# bought nothing over 16 and cost about 6.5 GB more.
+DEFAULT_BATCH_SIZE = 16
 
 
 def tile_size(backbone: str) -> int:
@@ -170,8 +188,9 @@ def _serving(model):
       Under autocast the matrix products are bfloat16 again, LoRA's
       included, while the weights stay float32.
       Its attention scores stay float32 under autocast, though, so the batch
-      of tiles is halved as well: a chunk's 72 tiles at once peaked at 19 GB
-      after training, against 9 GB before.
+      of tiles is halved as well: a chunk's 72 tiles at once (the default
+      then, and still a batch_size one can give) peaked at 19 GB after
+      training, against 9 GB before.
     - Cellpose's eval switches the network to eval mode and leaves it there,
       so in the trainer's live server training went on without its
       stochastic depth until the next epoch's ``train()``.
@@ -207,17 +226,23 @@ class CellposeModelConfig(ModelConfig):
             ``diameter``.
         pretrained_model: "cpsam_v2" (default), "cpsam", "cpdino",
             "cpdino-vitb", or the path of finetuned Cellpose weights.
-        output: "probability" (float32, 0 to 1) or "masks" (uint64, ids
-            unique within a chunk).
+        output: "probability" (float32, 0 to 1, one channel), "flows"
+            (float32: flowY, flowX and the cell probability) or "masks"
+            (uint64, ids unique within a chunk).
         slices_per_chunk: z slices in a chunk.
         slice_size: voxels a side, in y and x, of each chunk's slices.
         context: voxels read on each side in y and x beyond those, and cut off.
-        batch_size: tiles per GPU pass; None puts the whole chunk's in one.
+        batch_size: tiles per GPU pass (``DEFAULT_BATCH_SIZE``; None, as a
+            blank form field sends it, is that too).
         diameter: object diameter in input voxels; None keeps the model's
             own scale (about 30). Cellpose resizes each slice by
             30 / diameter.
         flow_threshold, cellprob_threshold: Cellpose's mask thresholds (masks
             only).
+        stitch_threshold: Cellpose's own slice linking (masks only): a mask
+            takes the id of the mask in the slice before that it overlaps by
+            at least this IoU, within a chunk. 0, the default, leaves each
+            slice's masks apart.
     """
 
     cli_name = "cellpose"
@@ -238,10 +263,11 @@ class CellposeModelConfig(ModelConfig):
         slices_per_chunk: int = 8,
         slice_size: int = 512,
         context: int = 32,
-        batch_size: int = None,
+        batch_size: int = DEFAULT_BATCH_SIZE,
         diameter: float = None,
         flow_threshold: float = 0.4,
         cellprob_threshold: float = 0.0,
+        stitch_threshold: float = 0.0,
         name=None,
         scale=None,
     ):
@@ -262,10 +288,22 @@ class CellposeModelConfig(ModelConfig):
                 "slices_per_chunk and slice_size must be at least 1 and context at least 0; got "
                 f"{self.slices_per_chunk}, {self.slice_size} and {self.context}"
             )
-        self.batch_size = None if batch_size is None else int(batch_size)
+        # None is the default, not "the whole chunk" as it once was: the
+        # model form sends a blank field as None, and a whole chunk's tiles
+        # cost memory for no speed (DEFAULT_BATCH_SIZE).
+        self.batch_size = DEFAULT_BATCH_SIZE if batch_size is None else int(batch_size)
+        if self.batch_size < 1:
+            raise ValueError(f"batch_size must be at least 1; got {self.batch_size}")
         self.diameter = None if diameter is None else float(diameter)
         self.flow_threshold = float(flow_threshold)
         self.cellprob_threshold = float(cellprob_threshold)
+        self.stitch_threshold = float(stitch_threshold)
+        if not 0.0 <= self.stitch_threshold <= 1.0:
+            raise ValueError(f"stitch_threshold is an IoU, from 0 to 1; got {self.stitch_threshold}")
+        if self.stitch_threshold and output != "masks":
+            # It links masks; with no masks it would only slow the chunk down
+            # (Cellpose computes them to link them) and change nothing shown.
+            raise ValueError(f"stitch_threshold links masks: it needs output masks, not {output!r}")
         self.name = name
         self.scale = scale
 
@@ -320,34 +358,38 @@ class CellposeModelConfig(ModelConfig):
         config.read_shape = _numbers(np.array((slices, read, read)) * voxel_size)
         config.write_shape = _numbers(np.array((slices, size, size)) * voxel_size)
         config.context = _numbers((np.asarray(config.read_shape) - np.asarray(config.write_shape)) / 2)
-        config.output_channels = 1
-        config.channels = ["cell"]
+        config.channels = list(OUTPUT_CHANNELS[self.output])
+        config.output_channels = len(config.channels)
         config.block_shape = np.array((slices, size, size, config.output_channels))
         config.output_dtype = np.uint64 if self.output == "masks" else np.float32
 
         # Cellpose cuts each slice into tiles; given the chunk as one batch it
-        # runs the tiles of as many slices as fit in batch_size per GPU pass,
-        # so this many is the whole chunk in one. Lower it if a GPU runs out
-        # of memory. bsize is passed too, so Cellpose tiles as counted here.
+        # runs batch_size of them, from any of its slices, per GPU pass.
+        # bsize is passed too, so Cellpose tiles as counted here.
         bsize = tile_size(getattr(model, "backbone", "sam_vitl"))
         tiles = tiles_per_slice(read, bsize, _rescale(self.diameter))
         config.eval_kwargs = {
-            "batch_size": self.batch_size or slices * tiles,
+            "batch_size": self.batch_size,
             "bsize": bsize,
             "diameter": self.diameter,
             "flow_threshold": self.flow_threshold,
             "cellprob_threshold": self.cellprob_threshold,
             "compute_masks": self.output == "masks",
         }
+        if self.stitch_threshold:
+            # Cellpose stitches only a stack it takes for 3D, which needs
+            # its z axis named (and refuses one otherwise). It still segments
+            # each slice in 2D, but normalizes the chunk's slices together.
+            config.eval_kwargs.update(stitch_threshold=self.stitch_threshold, z_axis=0)
         logger.info(
             f"Cellpose {self.pretrained_model} ({getattr(model, 'backbone', '?')}): {tiles} tiles "
-            f"of {bsize} px a slice, batch_size {config.eval_kwargs['batch_size']}"
+            f"of {bsize} px a slice, {slices * tiles} a chunk, batch_size {self.batch_size}"
         )
         config.process_chunk = self.process_chunk
         return config
 
     def process_chunk(self, idi, output_roi):
-        """``output_roi`` segmented: ``(1, z, y, x)``, probability or masks."""
+        """``output_roi`` segmented: ``(channels, z, y, x)``, the ``output``'s channels."""
         return self._segment(self.config, idi, output_roi)
 
     def _segment(self, config, idi, output_roi):
@@ -372,12 +414,22 @@ class CellposeModelConfig(ModelConfig):
             slice(self.context, self.context + self.slice_size),
             slice(self.context, self.context + self.slice_size),
         )
-        if self.output == "probability":
+        if self.output in ("probability", "flows"):
             # flows[2] is the cell probability as a logit, (z, y, x); Cellpose
             # squeezes a single slice to (y, x).
             logits = np.reshape(flows[2], data.shape)[inner].astype(np.float32)
-            return (1.0 / (1.0 + np.exp(-logits)))[np.newaxis]
-        return self._masks(np.reshape(masks, data.shape)[inner])[np.newaxis]
+            probability = (1.0 / (1.0 + np.exp(-logits)))[np.newaxis]
+            if self.output == "probability":
+                return probability
+            # flows[1] is dP, flowY and flowX, (2, z, y, x), squeezed alike.
+            dp = np.reshape(flows[1], (2, *data.shape))[(slice(None), *inner)].astype(np.float32)
+            return np.concatenate([dp, probability])
+        masks = np.reshape(masks, data.shape)[inner]
+        if config.eval_kwargs.get("stitch_threshold"):
+            # Stitched, an id is one object through the chunk's slices
+            # already; numbering each slice apart would split them again.
+            return masks.astype(np.uint64)[np.newaxis]
+        return self._masks(masks)[np.newaxis]
 
     # ---- finetuning -------------------------------------------------------
 
@@ -501,10 +553,11 @@ class CellposeModelConfig(ModelConfig):
             "slice_size": self.slice_size,
             "context": self.context,
         }
-        if self.batch_size is not None:
-            result["batch_size"] = self.batch_size
+        result["batch_size"] = self.batch_size
         if self.diameter is not None:
             result["diameter"] = self.diameter
         result["flow_threshold"] = self.flow_threshold
         result["cellprob_threshold"] = self.cellprob_threshold
+        if self.stitch_threshold:
+            result["stitch_threshold"] = self.stitch_threshold
         return self._with_name_scale(result)

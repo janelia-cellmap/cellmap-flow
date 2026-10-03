@@ -3,12 +3,13 @@
 - ``update_run_models()``: stop and forget the models no longer picked,
   start the ones newly picked, each in its own thread. A finetune job's
   server is the Finetune tab's to stop, never this one's.
-- ``run_model()`` / ``run_hf_model()`` / ``run_bioimage_model()``: start
-  one catalog, Hugging Face or BioImage Model Zoo model's inference server
-  (``start_hosts``, which records the job) and add its layer, the one Submit
-  would give it. Each is served from its type's ``default_env``, when the
-  type sets one (``serving.launch.server_argv_for``): a zoo model from
-  pixi's ``bioimageio`` environment.
+- ``run_model()`` / ``run_hf_model()`` / ``run_bioimage_model()`` /
+  ``run_cellpose_model()``: start one catalog, Hugging Face, BioImage Model
+  Zoo or Cellpose model's inference server (``start_hosts``, which records
+  the job) and add its layer, the one Submit would give it. Each is served
+  from its type's ``default_env``, when the type sets one
+  (``serving.launch.server_argv_for``): a zoo model from pixi's
+  ``bioimageio`` environment, a Cellpose one from ``cellpose4``.
 """
 
 from cellmap_flow.dashboard.state import get_session
@@ -17,7 +18,7 @@ from cellmap_flow.jobs.launch import start_hosts
 from cellmap_flow.jobs.spec import JobStartError
 from cellmap_flow.viewer.raw import PREDICTION_COLORS
 from cellmap_flow.models import bioimage_catalog
-from cellmap_flow.models.models_config import BioModelConfig, HuggingFaceModelConfig
+from cellmap_flow.models.models_config import BioModelConfig, CellposeModelConfig, HuggingFaceModelConfig
 from cellmap_flow.pipeline_spec import PipelineSpec
 from cellmap_flow.viewer.layers import prediction_layer
 import threading
@@ -174,6 +175,93 @@ def _bioimage_params(selections):
     return params
 
 
+# The Cellpose models the Models tab lists: (name, what it is). Not the DINO
+# ones (cpdino, cpdino-vitb): they need facebookresearch's dinov3 package,
+# which pixi's cellpose4 environment does not have, so their servers would
+# fail on startup. They can still be added by name or in a YAML, where an
+# env can give them one that has it.
+CELLPOSE_MODELS = {
+    "cpsam_v2": ("Cellpose-SAM v2", "the default: Cellpose-SAM retrained, the best of Cellpose 4's models"),
+    "cpsam": ("Cellpose-SAM", "the first Cellpose-SAM (Cellpose 4.0's)"),
+}
+
+
+def cellpose_job_name(model: str, output: str) -> str:
+    """A Cellpose model's job, layer and config name: "cpsam_v2" serving its
+    probability is cellpose_sam_v2, its flows cellpose_sam_v2_flows and its
+    masks cellpose_sam_v2_masks.
+
+    The output is in the name, so one model's outputs can run side by side
+    (the probability to look at, the masks to proofread), each its own job
+    and layer; the default output keeps the plain name. The voxel size and
+    the slice linking are not: changing them restarts that job instead
+    (``update_run_models``), rather than leaving the old one running beside.
+    """
+    base = "cellpose_" + re.sub(r"^cp", "", model)
+    if output != "probability":
+        base += "_" + output
+    return re.sub(r"\W+", "_", base).strip("_")
+
+
+@_reported
+def run_cellpose_model(params, st_data):
+    """Run a Cellpose model: ``params`` are its CellposeModelConfig
+    arguments, name included (``_cellpose_params``)."""
+    session = get_session()
+    command = server_command_for("cellpose", params, session.dataset_path, session.resample)
+    logger.info(f"To be submitted cellpose command : {command}")
+    job = _start(command, params["name"])
+    if job is not None:
+        _show(job, st_data)
+
+
+def _cellpose_params(selections):
+    """CellposeModelConfig arguments for each ticked Cellpose model
+    ({"model", "voxel_size", "output", "stitch_threshold"}).
+
+    Built, and checked by building the config, before anything is stopped
+    or started, so a blank voxel size or a bad setting refuses the whole
+    Submit (ValueError) rather than half of it. There is no voxel size to
+    fall back on, as there is for some zoo models: Cellpose sees any scale,
+    and segments well only at the one where objects are about 30 voxels
+    across, which only the user knows. ``stitch_threshold`` is read for
+    masks only (the tab sends it with masks only), and 0 is left out.
+    """
+    params, names = [], set()
+    for selection in selections:
+        model, output = selection["model"], selection.get("output") or "probability"
+        label = CELLPOSE_MODELS[model][0] if model in CELLPOSE_MODELS else model
+        if model not in CELLPOSE_MODELS:
+            raise ValueError(f"{model} is not one of the Models tab's Cellpose models ({', '.join(CELLPOSE_MODELS)})")
+        if not selection.get("voxel_size"):
+            raise ValueError(
+                f"{label} ({model}) needs a voxel size: enter one (nm) in its row, the scale at which "
+                "the objects are about 30 voxels across"
+            )
+        entry = {"pretrained_model": model, "voxel_size": selection["voxel_size"], "output": output,
+                 "name": cellpose_job_name(model, output)}
+        if output == "masks" and selection.get("stitch_threshold"):
+            entry["stitch_threshold"] = selection["stitch_threshold"]
+        if entry["name"] in names:
+            raise ValueError(f"{label} ({model}) is ticked twice with output {output}: untick one")
+        names.add(entry["name"])
+        try:
+            CellposeModelConfig(**entry)
+        except ValueError as e:
+            raise ValueError(f"{label} ({model}): {e}") from e
+        params.append(entry)
+    return params
+
+
+def _settings_changed(params) -> bool:
+    """Whether the running Cellpose model named ``params["name"]`` was started
+    with other settings (a voxel size, a slice linking) than ``params``."""
+    for mc in get_session().models_config:
+        if isinstance(mc, CellposeModelConfig) and mc.name == params["name"]:
+            return mc.to_dict() != CellposeModelConfig(**params).to_dict()
+    return False
+
+
 # The names whose launch thread has not returned yet: from Submit until the
 # job is in the session's jobs, which can be minutes (bsub, the queue, the
 # model loading). They count as running, so a second Submit in that time
@@ -218,24 +306,33 @@ def kill_n_remove_from_neuroglancer(jobs, s):
         job.kill()
 
 
-def update_run_models(names: List[str], hf_repos: List[str] = None, bioimage_models: List[dict] = None):
-    """Run ``names`` (catalog models), ``hf_repos`` and ``bioimage_models``
-    ({"id", "voxel_size"} each) and stop every other model. A ValueError,
-    before anything changes, when a zoo model needs a voxel size."""
+def update_run_models(names: List[str], hf_repos: List[str] = None, bioimage_models: List[dict] = None,
+                      cellpose_models: List[dict] = None):
+    """Run ``names`` (catalog models), ``hf_repos``, ``bioimage_models``
+    ({"id", "voxel_size"} each) and ``cellpose_models`` ({"model",
+    "voxel_size", "output", "stitch_threshold"} each), and stop every other
+    model. A ValueError, before anything changes, when a zoo model needs a
+    voxel size or a Cellpose model's settings are missing or wrong."""
     session = get_session()
     if hf_repos is None:
         hf_repos = []
     bioimage_params = _bioimage_params(bioimage_models or [])
+    cellpose_params = _cellpose_params(cellpose_models or [])
 
     all_names = (names + [_sanitize_job_name(repo.split("/")[-1]) for repo in hf_repos]
                  + [p["name"] for p in bioimage_params])
+    # A running Cellpose model whose voxel size or slice linking was changed
+    # is stopped and started again with them: its name does not say them, so
+    # it would otherwise be kept as it was, and the change silently ignored.
+    restarted = {p["name"] for p in cellpose_params if _settings_changed(p)}
+    all_names += [p["name"] for p in cellpose_params if p["name"] not in restarted]
     # Not a finetune job's server (finetune_layers marks it): it is the
     # training job itself, and its name, new with each iteration, has no
     # box on a Models tab rendered before it, so every Submit bkilled it.
     to_be_killed = [
         j for j in session.jobs if j.model_name not in all_names and not getattr(j, "owned_by_finetune", False)
     ]
-    names_running = running_names()
+    names_running = running_names() - {j.model_name for j in to_be_killed}
 
     threads = []
     st_data = PipelineSpec.from_steps(session.input_norms, session.postprocess).to_url_blob()
@@ -278,5 +375,15 @@ def update_run_models(names: List[str], hf_repos: List[str] = None, bioimage_mod
                     if not (isinstance(mc, BioModelConfig) and mc.name == params["name"])
                 ] + [BioModelConfig(**params)]
                 threads.append(_launch(params["name"], run_bioimage_model, params, st_data))
+
+        # Launch Cellpose models, keeping their config as a zoo model's is.
+        for params in cellpose_params:
+            if params["name"] not in names_running:
+                logger.info(f"To be submitted cellpose model : {params}")
+                session.models_config = [
+                    mc for mc in session.models_config
+                    if not (isinstance(mc, CellposeModelConfig) and mc.name == params["name"])
+                ] + [CellposeModelConfig(**params)]
+                threads.append(_launch(params["name"], run_cellpose_model, params, st_data))
     # for thread in threads:
     #     thread.join()

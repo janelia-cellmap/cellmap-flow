@@ -59,7 +59,7 @@ class TinyCPSAM(nn.Module):
 class FakeCellposeModel:
     """cellpose.models.CellposeModel: its network (the same weights each time,
     as pretrained weights are), backbone, and an eval that records its
-    arguments and gives a probability logit of 1 everywhere."""
+    arguments and gives a probability logit of 1 everywhere, and flows of 0."""
 
     built = []
 
@@ -73,7 +73,8 @@ class FakeCellposeModel:
     def eval(self, x, channel_axis=None, **kwargs):
         self.calls.append((x.shape, kwargs))
         z, y, xs, _ = x.shape
-        return np.zeros((z, y, xs), np.uint16).squeeze(), [None, None, np.ones((z, y, xs), np.float32).squeeze()], None
+        flows = [None, np.zeros((2, z, y, xs), np.float32).squeeze(), np.ones((z, y, xs), np.float32).squeeze()]
+        return np.zeros((z, y, xs), np.uint16).squeeze(), flows, None
 
 
 @pytest.fixture
@@ -201,6 +202,22 @@ def test_a_full_finetune_is_served_from_a_fresh_base(fake_cellpose, tmp_path):
     assert served is FakeCellposeModel.built[-1] and served is not trained.config.model
     assert torch.equal(served.net.out.bias, trained.config.model.net.out.bias)
     assert config.process_chunk(_idi((2, 288, 288)), Roi((0, 128, 128), (16, TILE * 8, TILE * 8))).shape == (1, 2, 256, 256)
+
+
+@pytest.mark.parametrize("output, channels, dtype", [("flows", ["flow_y", "flow_x", "cell"], np.float32),
+                                                     ("masks", ["cell"], np.uint64)])
+def test_a_finetuned_model_serves_its_bases_output(fake_cellpose, tmp_path, output, channels, dtype):
+    """Training is on the flows whatever the base serves; what is served
+    after is what the base served, channels and all."""
+    from cellmap_flow.models.configs.finetune import FinetuneModelConfig
+
+    trained = _cellpose(output=output)
+    torch.save(trained.trainable_model().state_dict(), tmp_path / "weights.pt")
+    config = FinetuneModelConfig(weights_path=str(tmp_path / "weights.pt"), base_model=trained.to_dict()).config
+    assert (config.channels, config.output_channels, config.output_dtype) == (channels, len(channels), dtype)
+    assert list(config.block_shape) == [2, TILE, TILE, len(channels)]
+    out = config.process_chunk(_idi((2, 288, 288)), Roi((0, 128, 128), (16, TILE * 8, TILE * 8)))
+    assert out.shape == (len(channels), 2, TILE, TILE) and out.dtype == dtype
 
 
 def test_a_lora_adapter_loaded_on_a_fresh_base_is_in_the_network_eval_runs(fake_cellpose, tmp_path):

@@ -162,15 +162,31 @@ class BioimageSelection(BaseModel):
     voxel_size: Annotated[Optional[list], BeforeValidator(_voxel_size)] = None
 
 
+class CellposeSelection(BaseModel):
+    """A Cellpose model ticked on the Models tab's Cellpose panel: its name
+    (cpsam_v2, cpsam), the voxel size typed beside it, its output, and for
+    masks how much two slices' masks must overlap to be linked (IoU; blank or
+    0: not linked). A blank voxel size is kept as None here, and refused by
+    services.launch with a message naming the model."""
+
+    model: Annotated[str, _required("model", strip=True)] = Field(None, validate_default=True)
+    voxel_size: Annotated[Optional[list], BeforeValidator(_voxel_size)] = None
+    output: str = "probability"
+    stitch_threshold: Annotated[Optional[float], BeforeValidator(
+        lambda v: None if v is None or (isinstance(v, str) and not v.strip())
+        else _number(v, float, "stitch_threshold"))] = None
+
+
 class SubmitModels(BaseModel):
-    """The Models tab's Submit: the catalog models, Hugging Face repos and
-    BioImage Model Zoo models to run. Every other running model is stopped
-    (services.launch). ``resample``, when given, becomes the session's
-    (``Session.resample``) before the models are started."""
+    """The Models tab's Submit: the catalog models, Hugging Face repos,
+    BioImage Model Zoo and Cellpose models to run. Every other running model
+    is stopped (services.launch). ``resample``, when given, becomes the
+    session's (``Session.resample``) before the models are started."""
 
     selected_models: list[str] = []
     selected_hf_models: list[str] = []
     selected_bioimage_models: list[BioimageSelection] = []
+    selected_cellpose_models: list[CellposeSelection] = []
     resample: Optional[bool] = None
 
 
