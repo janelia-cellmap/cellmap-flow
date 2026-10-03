@@ -286,19 +286,26 @@ def _set_chain_and_redraw(spec, dashboard_url, *, built=None, builder=None) -> l
 
 
 def _problems_with_models(postprocess):
-    """Why a step of ``postprocess`` cannot run on a model being served, one line each.
+    """Why a step of ``postprocess`` cannot run on a model being served (running,
+    or starting), one line each.
 
     The chain is every prediction layer's, and a step that fails on a
     model's output fails on every chunk inside that model's server, where
     the page showed only an empty layer (CellposeMasksPostprocessor on a
     Cellpose model serving its probability).
     """
+    from cellmap_flow.dashboard.services.launch import running_names
+
+    # Only those served: a model stopped on the Models tab keeps its config.
+    served = running_names()
     problems = []
     for step in postprocess:
         check = getattr(step, "problem_with", None)
         if check is None:
             continue
         for model_config in get_session().models_config or []:
+            if getattr(model_config, "name", None) not in served:
+                continue
             problem = check(model_config)
             if problem:
                 problems.append(problem)

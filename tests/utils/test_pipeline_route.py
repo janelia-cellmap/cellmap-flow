@@ -186,9 +186,13 @@ def test_a_step_a_served_model_cannot_take_is_refused_saying_which_and_why(call)
     failed on every chunk inside the server: the page showed an empty layer."""
     from cellmap_flow.models.models_config import CellposeModelConfig
 
+    masks = {"input_norm": [], "postprocess": [{"name": "CellposeMasksPostprocessor"}]}
     get_session().models_config = [CellposeModelConfig(voxel_size=8, output="probability", name="cellpose_sam_v2")]
-    status, answer = call("PUT", "/api/pipeline", {"input_norm": [], "postprocess": [{"name": "CellposeMasksPostprocessor"}]})
+    get_session().jobs = [SimpleNamespace(model_name="cellpose_sam_v2", host=None)]
+    status, answer = call("PUT", "/api/pipeline", masks)
     assert status == 400 and "cellpose_sam_v2 serves Cellpose's probability" in answer["error"]
     assert "Output: Flows + probability" in answer["error"] and _drawn() == PipelineSpec.from_json_data(SHOWN)
-    get_session().models_config = [CellposeModelConfig(voxel_size=8, output="flows", name="cellpose_sam_v2_flows")]
-    assert call("PUT", "/api/pipeline", {"input_norm": [], "postprocess": [{"name": "CellposeMasksPostprocessor"}]})[0] == 200
+    get_session().models_config.append(CellposeModelConfig(voxel_size=8, output="flows", name="cellpose_sam_v2_flows"))
+    # The probability model stopped (unticked on the Models tab): its config stays, but it is not served.
+    get_session().jobs = [SimpleNamespace(model_name="cellpose_sam_v2_flows", host=None)]
+    assert call("PUT", "/api/pipeline", masks)[0] == 200
