@@ -41,6 +41,10 @@ dependencies = [
     "requests",
     "scipy",
     "click",
+    # Serves the predictions (serving/chunkmirage_server.py), with
+    # CELLMAP_FLOW_ENGINE=chunkmirage. Not on PyPI yet: a release of
+    # cellmap-flow needs one, as PyPI refuses a dependency given by URL.
+    "chunkmirage @ git+https://github.com/yuriyzubov/chunkmirage@d70680f5e8344ebde3ec513663d0f8b2a243990d",
     ]
 
 # extras
@@ -120,3 +124,9 @@ cellmap_flow_blockwise = "cellmap_flow.cli.aliases:blockwise"
 cellmap_flow_blockwise_multiple = "cellmap_flow.cli.aliases:blockwise_multiple"
 cellmap_flow_app = "cellmap_flow.cli.aliases:app"
 cellmap_flow_server = "cellmap_flow.cli.server_cli:main"
+
+# A served model and its postprocessing steps, as chunkmirage ops
+# (serving/chunkmirage_ops.py).
+[project.entry-points."chunkmirage.ops"]
+"cellmap_flow.inference" = "cellmap_flow.serving.chunkmirage_ops:InferenceOp"
+"cellmap_flow.postprocess" = "cellmap_flow.serving.chunkmirage_ops:PostprocessOp"
