@@ -472,6 +472,12 @@ class CellposeMasksPostprocessor(PostProcessor):
     def is_segmentation(self):
         return True
 
+    @property
+    def num_channels(self):
+        # Three channels in, one out: without it the server went on declaring
+        # the flows' three, and the viewer read each chunk as three channels.
+        return 1
+
 
 class ChannelSelection(PostProcessor):
     def __init__(self, channels: str = "0"):

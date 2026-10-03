@@ -140,3 +140,14 @@ def test_cellpose_masks_say_which_models_cannot_take_them():
     assert step.problem_with(SimpleNamespace(name="ft", base_model_config=flows)) is None
     assert "Output: Flows" in step.problem_with(CellposeModelConfig(voxel_size=8, name="cp"))
     assert "not a Cellpose model" in step.problem_with(ScriptModelConfig(script_path="/s.py", name="mito"))
+
+
+def test_cellpose_masks_make_one_channel_of_three_so_the_server_declares_one():
+    """The server went on declaring the flows' three channels, and the viewer
+    read each one-channel chunk of masks as three."""
+    from cellmap_flow.pipeline_spec import chain_is_segmentation, chain_num_channels, chain_output_dtype
+    from cellmap_flow.post.postprocessors import CellposeMasksPostprocessor, MortonSegmentationRelabeling
+
+    chain = [CellposeMasksPostprocessor(), MortonSegmentationRelabeling()]
+    assert chain_num_channels(chain, 3) == 1 and chain_is_segmentation(chain)
+    assert chain_output_dtype(chain[:1], np.float32) == np.uint32
