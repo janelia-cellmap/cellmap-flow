@@ -108,6 +108,13 @@ MinIO server (conda-forge only) and a Neuroglancer fork with voxel-annotation
 support — so `pip install cellmap-flow[finetune]` on its own is not enough.
 See [docs/finetuning.md](docs/finetuning.md) for the full setup.
 
+Any model whose network is plain PyTorch can be finetuned from the dashboard,
+with LoRA or in full: cellmap and Hugging Face exports, fly checkpoints,
+DaCapo runs, scripts, BioImage Model Zoo models with PyTorch weights, and
+Cellpose (on its flows, from sparsely painted instances). A compiled
+(TorchScript) zoo model is finetuned in full only, and ONNX or TensorFlow ones
+not at all; the Finetune tab offers only what the selected model allows.
+
 ## Usage
 
 `cellmap_flow` has a subcommand for each job; `cellmap_flow <command> --help`

@@ -103,6 +103,7 @@ When you start drawing, Neuroglancer will ask if you want to write to the file â
 - **Paint Value 1** = **background** (this voxel is not the object of interest)
 - **Paint Value 2** = **foreground** (this voxel is the object of interest)
 - For **affinities models** with multiple object IDs, use higher paint values (3, 4, ...) for distinct object instances. The finetuning pipeline will automatically convert these instance IDs into affinity targets using the offsets defined in the model script.
+- For **Cellpose models**, paint each cell (or mitochondrion, nucleus...) with its own value (2, 3, 4, ...), whole within the XY slice you paint it in, and background with 1. The pipeline turns them into the flows Cellpose predicts (see [Cellpose models](#cellpose-models)).
 - **Paint Value 0** = **unannotated / ignored** â€” these voxels are excluded from the loss during training.
 
 You can change the paint value in the Draw tab by editing the **Paint Value** field, or click **Random** next to **New Random Value** to pick a new instance ID.
@@ -120,7 +121,7 @@ Switch to the **Training** tab in the Finetune section.
 | Parameter | Description |
 |---|---|
 | **Checkpoint Path** | (Optional, Advanced) Override the base model checkpoint to finetune from. Leave empty to auto-detect from the model configuration or script. |
-| **LoRA Rank** | Controls the number of trainable parameters. The current UI exposes `4`, `8`, `16`, and `64`. Higher rank = more capacity and more memory use. |
+| **LoRA Rank** | Controls the number of trainable parameters. The UI exposes `4`, `8`, `16`, `64` and `0`. Higher rank = more capacity and more memory use; `0` is a full finetune (every parameter, no adapter). Only the ranks the selected model can take are offered (see [Which models can be finetuned](#which-models-can-be-finetuned)). |
 | **Number of Epochs** | How many passes over the training data. The UI currently defaults to `20`. |
 | **Batch Size** | Number of samples per training step. The UI currently exposes `1`, `2`, `4`, `8`, `16`, and `32`. Higher = faster but uses more GPU memory. |
 | **Learning Rate** | Step size for optimization. The UI currently exposes values from `1e-7` through `1e-1`, with `1e-4` as the standard default. |
@@ -132,6 +133,28 @@ Switch to the **Training** tab in the Finetune section.
 | **Balance fg/bg classes** | Weights foreground and background equally in the loss regardless of how much of each you've annotated. Prevents the model from overpredicting whichever class dominates the scribbles. |
 | **GPU Queue** | Which GPU queue to submit the training job to (e.g. H100, H200). |
 | **Auto-load model after training** | When checked, the finetuned model will automatically start an inference server and be added to the Neuroglancer viewer once training completes. |
+
+### Which models can be finetuned
+
+What a model can be finetuned with follows from its network, not its name, and the LoRA Rank list offers only that:
+
+| The model's network is... | LoRA and full | Full only (rank 0) | Not finetunable |
+|---|---|---|---|
+| Plain PyTorch: cellmap and Hugging Face exports, fly checkpoints, DaCapo runs, scripts, BioImage Model Zoo models with PyTorch weights, Cellpose | yes | | |
+| Compiled (TorchScript): zoo models whose only weights are TorchScript | | yes: LoRA attaches adapters beside a network's layers, which a compiled network does not allow | |
+| ONNX or TensorFlow: zoo models with only those weights | | | yes: they cannot be trained |
+
+A **BioImage Model Zoo** model is trained as it serves: its own normalization, slice by slice for a 2D model, its halo cut off and its sigmoid applied, so the finetuned model reads the data exactly as the original did. The loss is picked from its outputs as for any other model. Descriptions it cannot follow (label outputs, binarize, StarDist) are refused with the reason. The ilastik *Enhancer* models expect a pixel classifier's probabilities, not raw EM: they can be finetuned, but on raw EM their starting point means little.
+
+### Cellpose models
+
+A Cellpose model (Cellpose-SAM) predicts, for every pixel, a flow pointing to its cell's centre and a cell probability, so it trains on those: the dashboard picks the **flow** loss for it. Each painted instance's flows are computed the way Cellpose computes them, slice by slice; unpainted voxels are left out of the loss, and so are the flows of instances cut by the training patch's edge (their centre is unknown). Cellpose's own training (`train_seg`) has no such mask: on sparse painting it would learn "no cell" wherever nothing was painted, which is why finetuning goes through cellmap-flow's trainer.
+
+- Training sees XY slices only, as Cellpose segments them: paint each instance whole in the slice you paint it in.
+- It trains on 256 x 256 tiles, the only size Cellpose-SAM's network takes, one slice at a time.
+- LoRA (the default) or a full finetune. At batch size 1 both fit an L4 (24 GB): LoRA trains in 5.6 GB at 0.25 s a step, a full finetune in 8 GB at 0.36 s, and the live server's chunks peak at 9 and 13 GB with training alongside. An H100 runs either at 0.06 s a step; larger batches want one.
+- The finetuned model is served as Cellpose is, with its masks or probabilities.
+- Cellpose's models are trained on data licensed CC-BY-NC (non-commercial), and so are their finetunes.
 
 ### Distance models on scribbles
 

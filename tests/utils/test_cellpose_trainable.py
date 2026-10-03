@@ -236,3 +236,21 @@ def test_a_finetuned_model_whose_slices_are_one_tile_passes_its_shape_check(fake
     torch.save(trained.trainable_model().state_dict(), tmp_path / "weights.pt")
     finetuned = FinetuneModelConfig(weights_path=str(tmp_path / "weights.pt"), base_model=trained.to_dict())
     assert finetuned.config.model is FakeCellposeModel.built[-1]
+
+
+def test_serving_puts_the_networks_training_mode_back():
+    """Cellpose's eval leaves its network in eval mode: in the trainer's live
+    server, training went on without stochastic depth until the next epoch."""
+    from types import SimpleNamespace
+
+    from cellmap_flow.models.configs.cellpose import _serving
+
+    net = torch.nn.Linear(1, 1)
+    with _serving(SimpleNamespace(net=net)) as override:
+        net.eval()  # as Cellpose's _forward does
+        assert override({"batch_size": 72}) in ({}, {"batch_size": 36})  # halved on a GPU
+    assert net.training
+    net.eval()
+    with _serving(SimpleNamespace(net=net)):
+        pass
+    assert not net.training

@@ -34,6 +34,7 @@ Licence: the Cellpose-SAM weights were trained on data that includes
 datasets licensed CC-BY-NC, so they are for non-commercial use.
 """
 
+import contextlib
 import logging
 import math
 import os
@@ -155,6 +156,45 @@ def _network_blocks():
 
     _BLOCKS = types.SimpleNamespace(CellposeNetwork=CellposeNetwork)
     return _BLOCKS
+
+
+@contextlib.contextmanager
+def _serving(model):
+    """While ``model`` (a CellposeModel) segments: in bfloat16, and with its
+    network's train/eval mode put back afterwards.
+
+    - Cellpose serves in bfloat16. When ``trainable_model`` has put the
+      network in float32 for training, the batch of a whole chunk's tiles
+      took twice the memory, and in the trainer's live server, beside a full
+      finetune's weights, gradients and optimizer state, an L4 ran out.
+      Under autocast the matrix products are bfloat16 again, LoRA's
+      included, while the weights stay float32.
+      Its attention scores stay float32 under autocast, though, so the batch
+      of tiles is halved as well: a chunk's 72 tiles at once peaked at 19 GB
+      after training, against 9 GB before.
+    - Cellpose's eval switches the network to eval mode and leaves it there,
+      so in the trainer's live server training went on without its
+      stochastic depth until the next epoch's ``train()``.
+
+    Yields a function of the eval kwargs giving those to change.
+    """
+    import torch
+
+    net = getattr(model, "net", None)
+    training = getattr(net, "training", False)
+    autocast = torch.cuda.is_available() and getattr(net, "dtype", None) == torch.float32
+
+    def override(eval_kwargs):
+        if not autocast:
+            return {}
+        return {"batch_size": max(1, int(eval_kwargs.get("batch_size", 8)) // 2)}
+
+    try:
+        with torch.autocast("cuda", dtype=torch.bfloat16) if autocast else contextlib.nullcontext():
+            yield override
+    finally:
+        if net is not None and training:
+            net.train(True)
 
 
 class CellposeModelConfig(ModelConfig):
@@ -324,7 +364,9 @@ class CellposeModelConfig(ModelConfig):
         # together. A list of slices would be run image by image, a pass or
         # more per slice; z_axis is refused without do_3D, and a 3D array is
         # taken for one 2D image with channels.
-        masks, flows, _ = config.model.eval(data[..., np.newaxis], channel_axis=3, **config.eval_kwargs)
+        with _serving(config.model) as eval_kwargs_override:
+            masks, flows, _ = config.model.eval(data[..., np.newaxis], channel_axis=3,
+                                                **{**config.eval_kwargs, **eval_kwargs_override(config.eval_kwargs)})
         inner = (
             slice(None),
             slice(self.context, self.context + self.slice_size),
