@@ -51,7 +51,9 @@ class _Hub:
 
 
 class _Bio:
-    cli_name, name = "bioimage", "bio"
+    """A type with no ModelConfig that says it can be finetuned."""
+
+    cli_name, name = "untrainable-test", "bio"
 
 
 GEOMETRY = SimpleNamespace(input_voxel_size=[8] * 3, output_voxel_size=[4] * 3, channels=["nuc"])

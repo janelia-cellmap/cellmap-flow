@@ -119,6 +119,7 @@ class FinetuneModelConfig(ModelConfig):
         self.input_voxel_size = _voxel_sizes(input_voxel_size)
         self.output_voxel_size = _voxel_sizes(output_voxel_size)
         self._base_model_config = None
+        self._trained_module = None  # set when config is built
 
     @property
     def env(self):
@@ -165,6 +166,14 @@ class FinetuneModelConfig(ModelConfig):
         """Its base's: continuing a finetune trains the same network."""
         return self.base_model_config.finetune_modes()
 
+    def trainable_model(self):
+        """The module it serves (its base's trainable module with the adapter
+        or weights on), to train on from where the finetune left off; not
+        ``config.model``, which a type serving through its own process_chunk
+        (cellpose) keeps as its own model object."""
+        _ = self.config
+        return self._trained_module
+
     def _get_config(self):
         # Imported here rather than at module scope: importing torch costs
         # ~7s, and the CLI builds its command list from this module, so
@@ -206,6 +215,7 @@ class FinetuneModelConfig(ModelConfig):
             model = load_lora_adapter(base_model, self.lora_adapter_path, is_trainable=False)
         model.to(device)
         model.eval()
+        self._trained_module = model
 
         # Replace the model in the config, keep everything else: the base's
         # geometry, at the voxel sizes the finetune was trained at.

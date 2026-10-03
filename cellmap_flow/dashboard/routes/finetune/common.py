@@ -183,11 +183,35 @@ def detect_sparse_annotations(corrections_path):
     return False
 
 
+def declared_output_type(model_config):
+    """The training target a model type declares (``finetune_output_type``), or None.
+
+    Cellpose predicts flows, so its type says "flows". A finetuned model
+    trains as its base does, so its ``base_model_config`` is asked in turn
+    (building that config builds no network).
+    """
+    while model_config is not None:
+        declared = getattr(type(model_config), "finetune_output_type", None)
+        if declared:
+            return declared
+        try:
+            model_config = getattr(model_config, "base_model_config", None)
+        except Exception as e:  # an entry whose base cannot be built declares nothing
+            logger.debug(f"Could not read the base model's training target: {e}")
+            return None
+    return None
+
+
 def autodetect_output_type(model_config, output_type, offsets):
     from cellmap_flow.finetune.target_transforms import read_offsets_from_script
 
     resolved_output_type = output_type
     resolved_offsets = offsets
+
+    if resolved_output_type is None:
+        resolved_output_type = declared_output_type(model_config)
+        if resolved_output_type is not None:
+            logger.info(f"Output type {resolved_output_type!r}, as the model type declares")
 
     if resolved_output_type is None:
         if hasattr(model_config, "script_path"):
@@ -308,10 +332,25 @@ def training_settings(*, output_type, loss_type, label_smoothing, distillation_l
     - a distance target with sparse annotations: the interval loss, on the
       bounds the paint sets on each voxel's distance, with distillation of
       at least 0.5 (see below);
-    - a distance target otherwise: bce, without label smoothing.
+    - a distance target otherwise: bce, without label smoothing;
+    - a flow target (Cellpose): the flow loss, the only one it goes with,
+      without label smoothing, sparse or not (it masks per channel itself).
     A sparse session also masks its unannotated voxels out of the loss.
     """
     note = None
+    if output_type == "flows":
+        if loss_type != "flow" or label_smoothing:
+            logger.info(
+                f"output_type=flows: using the flow loss without label smoothing "
+                f"(requested loss_type={loss_type}, label_smoothing={label_smoothing})"
+            )
+        return TrainingSettings(
+            output_type=output_type,
+            loss_type="flow",
+            label_smoothing=0.0,
+            distillation_lambda=distillation_lambda,
+            mask_unannotated=bool(sparse),
+        )
     if sparse and loss_type == "mse":
         loss_type = "margin"
         distillation_lambda = 0.5

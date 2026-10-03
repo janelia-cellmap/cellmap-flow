@@ -20,6 +20,12 @@ Cellpose 4 cannot share cellmap-flow's default environment, whose cellpose 3
 pins an older numpy, so this type runs in the ``cellpose4`` pixi
 environment unless its entry names another (``default_env``).
 
+It can be finetuned, with LoRA or in full, on painted instances
+(``trainable_model``): the network learns Cellpose's own outputs, the flows
+towards each instance's centre and the cell probability, from flow targets
+(``finetune.instance_flows``), and is served afterwards as before, through
+Cellpose's eval, which runs the network training changed in place.
+
 ``cellpose`` is imported only when the model is built, as every type imports
 its framework: the CLIs, ``--help`` and the dashboard's model form import
 every type, and none of them has (or needs) Cellpose 4.
@@ -106,6 +112,51 @@ def _check_cellpose_4():
         )
 
 
+_BLOCKS = None
+
+
+def _network_blocks():
+    """The torch module classes below, defined on first use: this module is
+    imported by every CLI and the dashboard, which do not import torch."""
+    global _BLOCKS
+    if _BLOCKS is not None:
+        return _BLOCKS
+    import types
+
+    from torch import nn
+
+    class CellposeNetwork(nn.Module):
+        """A Cellpose 4 network on (N, 1, tile, tile) images: (N, 3, tile, tile),
+        flowY, flowX and the cell probability logit.
+
+        One channel, as Cellpose's eval gives a grayscale image (its network
+        reads only the first ``x.shape[1]`` channels of its patch embedding),
+        and without the style vector Cellpose returns beside the output.
+        ``fixed`` refuses any other size, as Cellpose-SAM's position
+        embeddings fit one tile only, with a message rather than a shape
+        error from deep inside the ViT.
+        """
+
+        def __init__(self, net, tile: int, fixed: bool = True):
+            super().__init__()
+            self.net = net
+            self.tile = int(tile)
+            self.fixed = bool(fixed)
+
+        def forward(self, x):
+            if self.fixed and tuple(x.shape[-2:]) != (self.tile, self.tile):
+                raise RuntimeError(
+                    f"Cellpose-SAM's network takes {self.tile} x {self.tile} tiles, not "
+                    f"{tuple(x.shape[-2:])}: Cellpose serves larger slices by tiling them "
+                    "in its eval, which serving uses; the trainer reads tiles "
+                    "(CellposeModelConfig.training_patch_voxels)"
+                )
+            return self.net(x)[0]
+
+    _BLOCKS = types.SimpleNamespace(CellposeNetwork=CellposeNetwork)
+    return _BLOCKS
+
+
 class CellposeModelConfig(ModelConfig):
     """Cellpose 4 run on each z slice of a chunk.
 
@@ -133,6 +184,11 @@ class CellposeModelConfig(ModelConfig):
     # Cellpose 4 cannot share cellmap-flow's default environment (see the
     # module docstring); an entry's explicit env still wins.
     default_env = "cellpose4"
+    finetunable = True
+    # What a finetune trains it on: Cellpose predicts flows and a cell
+    # probability, so the painted instances become flow targets (the
+    # dashboard reads this to pick the target; finetune.cli's --output-type).
+    finetune_output_type = "flows"
 
     def __init__(
         self,
@@ -252,8 +308,17 @@ class CellposeModelConfig(ModelConfig):
 
     def process_chunk(self, idi, output_roi):
         """``output_roi`` segmented: ``(1, z, y, x)``, probability or masks."""
-        config = self.config
-        data = idi.to_ndarray_ts(output_roi.grow(config.context, config.context))
+        return self._segment(self.config, idi, output_roi)
+
+    def _segment(self, config, idi, output_roi):
+        """``output_roi`` segmented by ``config``'s Cellpose model and geometry.
+
+        ``config`` is this model's own, or a finetuned model's with the same
+        voxel counts (``serve_trained``), whose context is measured from its
+        own shapes, at the voxel size the finetune was trained at.
+        """
+        context = _numbers((np.asarray(config.read_shape) - np.asarray(config.write_shape)) / 2)
+        data = idi.to_ndarray_ts(output_roi.grow(context, context))
         # A batch of 2D images, (z, y, x, channel): Cellpose still normalizes
         # and segments each slice on its own, but batches their tiles
         # together. A list of slices would be run image by image, a pass or
@@ -271,6 +336,96 @@ class CellposeModelConfig(ModelConfig):
             logits = np.reshape(flows[2], data.shape)[inner].astype(np.float32)
             return (1.0 / (1.0 + np.exp(-logits)))[np.newaxis]
         return self._masks(np.reshape(masks, data.shape)[inner])[np.newaxis]
+
+    # ---- finetuning -------------------------------------------------------
+
+    def finetune_modes(self):
+        """("lora", "full"), without building the network: every Cellpose 4
+        network is a ViT whose Linear and Conv layers take adapters."""
+        return ("lora", "full")
+
+    def training_patch_voxels(self):
+        """The patch the trainer reads, (input, output) in voxels: one slice of one tile.
+
+        Not the serving geometry. Cellpose-SAM's ViT adds a fixed 32 x 32
+        grid of position embeddings to its 8-pixel tokens, so it takes
+        256 x 256 images and nothing else; Cellpose serves a slice by
+        cutting it into such tiles, and trains on random tiles of that size
+        too. The trainer does the same: it reads tiles, and supervises the
+        whole of each, as Cellpose does (an instance cut by its edge is left
+        out of the flow loss, ``instance_flows``). One slice: the network is
+        2D and sees each slice alone, so more slices would cost a network
+        pass each and add nothing, and a one-slice patch centred on a
+        painted voxel always lands on paint.
+        """
+        tile = tile_size(getattr(self.config.model, "backbone", "sam_vitl"))
+        patch = (1, tile, tile)
+        return patch, patch
+
+    def trainable_model(self):
+        """Cellpose's network as the trainer trains it: (B, 1, Z, Y, X) -> (B, 3, Z, Y, X).
+
+        Each slice normalized as Cellpose's eval does (1st to 99th
+        percentile), then through the network, which gives flowY, flowX and
+        the cell probability logit (``instance_flows``' channels). The
+        network is the one ``config.model`` segments with, so what
+        is trained is what is served; it is put in float32 (Cellpose loads
+        it in bfloat16), which serving then uses too. Its patch embedding is
+        kept out of LoRA (``lora_exclude_patterns``): Cellpose's forward
+        reads that layer's weight tensor directly, so an adapter on it would
+        never be used.
+        """
+        import torch
+
+        from cellmap_flow.finetune.trainable import ScaleRange, SliceWise
+
+        cellpose = self.config.model
+        net = cellpose.net
+        if getattr(net, "dtype", torch.float32) != torch.float32:
+            net.dtype = torch.float32  # Cellpose's setter: converts it, and what eval feeds it
+        backbone = getattr(cellpose, "backbone", "sam_vitl")
+        module = torch.nn.Sequential(
+            ScaleRange(1, 99, dims=(1, 3, 4)),  # each slice of (B, 1, Z, Y, X)
+            SliceWise(_network_blocks().CellposeNetwork(net, tile_size(backbone), backbone == "sam_vitl")),
+        )
+        module.lora_exclude_patterns = ["patch_embed"]
+        return module
+
+    def serve_trained(self, config, module):
+        """Serve ``module`` (the trained ``trainable_model()``) through Cellpose's eval.
+
+        Training changed the network in place, LoRA adapters and all, and
+        Cellpose's eval runs that network, so the chunks are segmented as
+        before. ``config`` is this model's own config (the trainer's live
+        server) or a finetuned model's new one with this geometry, which
+        gets what segmenting needs.
+
+        ``config.model`` stays Cellpose's model object, as it is for the
+        base model, so the inferencer neither moves nor forwards it. Were it
+        the module, the warmup and the shape check would forward it, and a
+        3-channel tile network fails the 1-channel serving geometry: as a
+        hard error whenever the read slice happens to be one tile. The
+        module is kept as ``config.trained_module``.
+        """
+        own = self.config
+        cellpose = own.model
+        if not any(part is cellpose.net for part in module.modules()):
+            raise ValueError(
+                "The trained module does not hold this model's Cellpose network: it was not "
+                "built by this config's trainable_model(), so serving through Cellpose's eval "
+                "would not serve it."
+            )
+        config.model = cellpose
+        config.trained_module = module
+        if config is own:
+            return
+        config.eval_kwargs = dict(own.eval_kwargs)
+        config.output_dtype = own.output_dtype
+
+        def process_chunk(idi, output_roi):
+            return self._segment(config, idi, output_roi)
+
+        config.process_chunk = process_chunk
 
     @staticmethod
     def _masks(masks):

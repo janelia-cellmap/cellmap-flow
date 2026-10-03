@@ -376,9 +376,11 @@ def wrap_model_with_lora(
     # the new LoRA starts from the model you were actually looking at, and the
     # distillation teacher (adapters disabled) is that same model rather than
     # the untuned original.
-    # Read before the model is merged or wrapped, which may hand back another object.
-    excluded = list(getattr(model, "lora_exclude_patterns", None) or [])
+    # Read before the model is merged or wrapped, which may hand back another
+    # object, and after: a PeftModel's attribute lookup need not reach it.
+    excluded = getattr(model, "lora_exclude_patterns", None)
     model = _merge_existing_adapters(model)
+    excluded = list(excluded or getattr(model, "lora_exclude_patterns", None) or [])
 
     # Wrap Sequential models to make them compatible with PEFT
     if isinstance(model, nn.Sequential):

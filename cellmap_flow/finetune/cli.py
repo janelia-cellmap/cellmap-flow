@@ -30,6 +30,11 @@ from cellmap_flow.finetune.json_files import write_json_atomically
 
 logger = logging.getLogger(__name__)
 
+# What --loss-type and --output-type take, here once: the flags and what a
+# restart may set them to are the same lists.
+LOSS_TYPES = ("dice", "bce", "combined", "mse", "margin", "interval", "flow")
+OUTPUT_TYPES = ("binary", "binary_broadcast", "affinities", "distance", "flows")
+
 
 def build_arg_parser():
     parser = argparse.ArgumentParser(
@@ -232,11 +237,14 @@ def build_arg_parser():
         "--loss-type",
         type=str,
         default="combined",
-        choices=["dice", "bce", "combined", "mse", "margin", "interval"],
+        choices=LOSS_TYPES,
         help="Loss function (default: combined). 'interval' is for a distance model "
              "(--output-type distance) on scribbles: each painted voxel is held between "
              "the bounds the paint implies on its distance to the boundary, exact where "
-             "the paint is dense, and the field's slope is limited (--slope-weight)."
+             "the paint is dense, and the field's slope is limited (--slope-weight). "
+             "'flow' is for a flow model such as Cellpose (--output-type flows): MSE of the "
+             "flows, halved, plus BCE of the foreground, each over the voxels it can be "
+             "known at."
     )
     parser.add_argument(
         "--label-smoothing",
@@ -334,7 +342,7 @@ def build_arg_parser():
         "--output-type",
         type=str,
         default="binary",
-        choices=["binary", "binary_broadcast", "affinities", "distance"],
+        choices=OUTPUT_TYPES,
         help="How to generate training targets from annotations. "
              "'binary': single-channel fg/bg (use with --select-channel for multi-channel models). "
              "'binary_broadcast': broadcast binary target to all output channels. "
@@ -342,6 +350,8 @@ def build_arg_parser():
              "'distance': soft signed-distance target (tanh(d/sigma)+1)/2 for models trained "
              "the fly_organelles way, e.g. the cellmap *_distance_* repos; requires --loss-type "
              "bce, or interval for scribbles. "
+             "'flows': per-slice flows towards each painted instance's centre and a foreground "
+             "channel, for a flow model such as Cellpose; requires --loss-type flow. "
              "(default: binary)"
     )
     parser.add_argument(
@@ -407,6 +417,15 @@ def build_target_transform(args, model_config, output_voxel_size_nm=None):
             "--loss-type interval bounds a distance model's output; it needs "
             "--output-type distance."
         )
+    # The flow target and the flow loss only make sense together: the target
+    # is flows and a foreground channel, which no other loss reads right, and
+    # the loss needs its per-channel masks.
+    if (getattr(args, "loss_type", None) == "flow") != (output_type == "flows"):
+        raise ValueError(
+            "--output-type flows and --loss-type flow go together: the flow target is "
+            "flows towards each instance's centre and a foreground channel, which only "
+            "the flow loss compares with."
+        )
 
     # --select-channel slices the prediction to one channel, so the target
     # must have one too. Distance and binary_broadcast built theirs with every
@@ -418,11 +437,11 @@ def build_target_transform(args, model_config, output_voxel_size_nm=None):
                 f"--select-channel {select_channel} is out of range for a model with "
                 f"{num_channels} output channel(s)."
             )
-        if output_type == "affinities":
+        if output_type in ("affinities", "flows"):
             raise ValueError(
-                "--select-channel cannot be combined with --output-type affinities: the "
-                "affinity target has one channel per offset. Drop --select-channel, or "
-                "train that channel with --output-type binary."
+                f"--select-channel cannot be combined with --output-type {output_type}: the "
+                "target has a channel of its own for each of the model's. Drop "
+                "--select-channel, or train that channel with --output-type binary."
             )
         num_channels = 1
 
@@ -520,6 +539,21 @@ def build_target_transform(args, model_config, output_voxel_size_nm=None):
             f"broadcast to {num_channels} channel(s))"
         )
         return DistanceTargetTransform(args.distance_sigma, num_channels=num_channels)
+
+    elif output_type == "flows":
+        from cellmap_flow.finetune.instance_flows import FlowTargetTransform
+
+        if args.label_smoothing > 0:
+            logger.warning(
+                "Label smoothing means nothing to flows; "
+                f"ignoring --label-smoothing {args.label_smoothing}."
+            )
+            args.label_smoothing = 0.0
+        logger.info(
+            "Using flow targets: per-slice flows towards each painted instance's centre "
+            "and a foreground channel (instances cut by the patch edge leave the flow loss)"
+        )
+        return FlowTargetTransform()
 
     else:
         raise ValueError(f"Unknown output type: {output_type}")
@@ -678,7 +712,7 @@ _RESTART_ARG_CONVERTERS = {
     "num_epochs": ("num_epochs", _at_least(1)),
     "batch_size": ("batch_size", _at_least(1)),
     "learning_rate": ("learning_rate", _positive),
-    "loss_type": ("loss_type", _one_of("dice", "bce", "combined", "mse", "margin", "interval")),
+    "loss_type": ("loss_type", _one_of(*LOSS_TYPES)),
     "label_smoothing": ("label_smoothing", float),
     "distillation_lambda": ("distillation_lambda", float),
     "distillation_all_voxels": ("distillation_all_voxels", _as_bool),
@@ -690,9 +724,7 @@ _RESTART_ARG_CONVERTERS = {
     "num_workers": ("num_workers", _at_least(0)),
     "no_augment": ("no_augment", _as_bool),
     "no_mixed_precision": ("no_mixed_precision", _as_bool),
-    "output_type": (
-        "output_type", _one_of("binary", "binary_broadcast", "affinities", "distance")
-    ),
+    "output_type": ("output_type", _one_of(*OUTPUT_TYPES)),
     "select_channel": ("select_channel", int),
     "offsets": ("offsets", _as_offsets),
 }

@@ -54,6 +54,11 @@ class VirtualPatchDataset(Dataset):
             comprise one epoch. ``None`` (the default) means "auto:
             substitute the number of annotated chunks" -- every annotated
             chunk gets ~one patch per epoch on average.
+        patches_per_chunk: how many patches the auto epoch length counts
+            per annotated chunk (default 1). A patch much smaller than the
+            chunks (a model trained on tiles, see
+            ``loader.dataset_from_manifest``'s ``patch_voxels``) takes more
+            to cover them.
         jitter_voxels: half-range of the random offset applied to the patch
             center, in **annotation voxels**. Defaults to
             ``output_size_voxels // 4``.
@@ -86,6 +91,7 @@ class VirtualPatchDataset(Dataset):
         input_voxel_size_nm: Tuple[float, float, float],
         output_voxel_size_nm: Tuple[float, float, float],
         patches_per_epoch: Optional[int] = None,
+        patches_per_chunk: int = 1,
         jitter_voxels: Optional[Tuple[int, int, int]] = None,
         seed: int = 0,
         input_norm_config: Optional[dict] = None,
@@ -134,7 +140,7 @@ class VirtualPatchDataset(Dataset):
         self.patches_per_epoch: int = (
             int(patches_per_epoch)
             if patches_per_epoch is not None
-            else max(1, self.sampler.annotated_chunks)
+            else max(1, self.sampler.annotated_chunks * max(1, int(patches_per_chunk)))
         )
         # Cached per-worker RNG, None until the first __getitem__ (in the
         # worker, after spawn). Without the cache every __getitem__ would

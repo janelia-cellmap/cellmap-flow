@@ -31,6 +31,7 @@ from cellmap_flow.finetune import markers, run_outputs
 from cellmap_flow.finetune.adaptation import strategy_for
 from cellmap_flow.finetune.cli import apply_restart_params, build_target_transform, update_run_metadata
 from cellmap_flow.finetune.data import create_dataloader
+from cellmap_flow.finetune.data.loader import training_patch_voxels
 from cellmap_flow.finetune.lora_trainer import LoRAFinetuner
 from cellmap_flow.io.paths import is_remote
 from cellmap_flow.models.models_config import ModelConfig
@@ -433,6 +434,8 @@ class TrainingSession:
             batch_size=args.batch_size,
             augment=not args.no_augment,
             num_workers=args.num_workers,
+            # A network that trains on its own patch (a fixed tile) gets it.
+            patch_voxels=training_patch_voxels(self.model_config),
         )
         logger.info(f"DataLoader created: {len(dataloader.dataset)} corrections")
         self._record_input_norm()

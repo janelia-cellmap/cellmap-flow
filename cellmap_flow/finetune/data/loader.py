@@ -9,7 +9,8 @@ fallback's included, keeps its workers from one epoch to the next.
 from __future__ import annotations
 
 import logging
-from typing import Optional
+import math
+from typing import Optional, Sequence, Tuple
 
 import torch
 
@@ -23,10 +24,31 @@ from cellmap_flow.finetune.session.manifest import (
 logger = logging.getLogger(__name__)
 
 
+PatchVoxels = Tuple[Sequence[int], Sequence[int]]
+
+
+def training_patch_voxels(model_config) -> Optional[PatchVoxels]:
+    """The (input, output) patch in voxels ``model_config`` trains on, or
+    None for the session's (the model's read and write shapes).
+
+    A model type whose network takes a fixed tile says so with a
+    ``training_patch_voxels()`` method (Cellpose-SAM: one 256 x 256 slice).
+    A finetuned model trains as its base does, so a ``base_model_config`` is
+    asked in turn.
+    """
+    while model_config is not None:
+        own = getattr(model_config, "training_patch_voxels", None)
+        if callable(own):
+            return own()
+        model_config = getattr(model_config, "base_model_config", None)
+    return None
+
+
 def dataset_from_manifest(
     manifest: dict,
     corrections_dir: Optional[str] = None,
     augment: Optional[bool] = None,
+    patch_voxels: Optional[PatchVoxels] = None,
 ) -> VirtualPatchDataset:
     """Instantiate a :class:`VirtualPatchDataset` from a manifest dict.
 
@@ -36,21 +58,41 @@ def dataset_from_manifest(
 
     ``corrections_dir`` is where the session's good regions are looked up;
     omit it and the dataset simply trains without rehearsal anchors.
+
+    ``patch_voxels``, ``(input, output)`` in voxels, replaces the manifest's
+    patch sizes, which are the model's serving geometry: for a model whose
+    network trains on another (``training_patch_voxels``). The voxel sizes
+    stay the manifest's. An epoch then counts as many more patches per
+    annotated chunk as the patch is smaller, so that it still covers what
+    was annotated.
     """
     kind = manifest.get("kind")
     if kind != "volume_zarr_v1":
         raise ValueError(
             f"Unsupported manifest kind: {kind!r}. Expected 'volume_zarr_v1'."
         )
+    input_size = tuple(int(v) for v in manifest["input_size_voxels"])
+    output_size = tuple(int(v) for v in manifest["output_size_voxels"])
+    patches_per_chunk = 1
+    if patch_voxels is not None:
+        served_output = output_size
+        input_size, output_size = (tuple(int(v) for v in size) for size in patch_voxels)
+        patches_per_chunk = max(1, math.ceil(math.prod(served_output) / math.prod(output_size)))
+        logger.info(
+            f"Training on patches of {input_size} in, {output_size} out (voxels), the model's "
+            f"own training patch, not the serving geometry {tuple(manifest['input_size_voxels'])} "
+            f"in, {served_output} out; {patches_per_chunk} patch(es) per annotated chunk"
+        )
     return VirtualPatchDataset(
         volume_zarr_path=manifest["volume_zarr_path"],
         raw_dataset_path=manifest["raw_dataset_path"],
-        input_size_voxels=tuple(manifest["input_size_voxels"]),
-        output_size_voxels=tuple(manifest["output_size_voxels"]),
+        input_size_voxels=input_size,
+        output_size_voxels=output_size,
         input_voxel_size_nm=tuple(manifest["input_voxel_size_nm"]),
         output_voxel_size_nm=tuple(manifest["output_voxel_size_nm"]),
         # None defaults to "cover all populated chunks" inside the dataset.
         patches_per_epoch=manifest.get("patches_per_epoch"),
+        patches_per_chunk=patches_per_chunk,
         jitter_voxels=tuple(manifest["jitter_voxels"]) if manifest.get("jitter_voxels") else None,
         seed=manifest.get("seed", 0),
         input_norm_config=manifest.get("input_norm") or None,
@@ -72,6 +114,7 @@ def create_dataloader(
     batch_size: int = 2,
     augment: bool = True,
     num_workers: int = 4,
+    patch_voxels: Optional[PatchVoxels] = None,
 ) -> torch.utils.data.DataLoader:
     """Build the training DataLoader for a corrections directory.
 
@@ -90,6 +133,9 @@ def create_dataloader(
             manifest's stored preference.
         num_workers: DataLoader workers. Spawned, not forked -- tensorstore
             handles do not survive fork.
+        patch_voxels: ``(input, output)`` patch in voxels instead of the
+            manifest's, for a model that trains on its own
+            (``training_patch_voxels``).
     """
     manifest = read_manifest(corrections_zarr_path)
     if manifest is None:
@@ -100,7 +146,9 @@ def create_dataloader(
             "or re-import the crops, so the manifest gets written."
         )
 
-    dataset = dataset_from_manifest(manifest, corrections_zarr_path, augment=augment)
+    dataset = dataset_from_manifest(
+        manifest, corrections_zarr_path, augment=augment, patch_voxels=patch_voxels
+    )
 
     if dataset.augment:
         logger.info(
