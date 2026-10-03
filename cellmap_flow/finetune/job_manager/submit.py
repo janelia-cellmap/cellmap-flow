@@ -35,13 +35,19 @@ from cellmap_flow.jobs.local import run as run_locally
 logger = logging.getLogger(__name__)
 
 
-# The --model-type values finetune_cli accepts, and the ones among them that
-# it takes as --model-entry (the model's to_dict()): cellmap and finetune
-# have no dedicated flags, and fly's flags (its checkpoint and voxel sizes)
+# The model types finetune_cli takes by flags of their own; every other one
+# goes as --model-entry (the model's to_dict()). fly has flags, but they
 # leave out its input and output sizes and its sigmoid, which the trainer
-# then took to be 178 and 56 whatever the model's were.
-TRAINABLE_MODEL_TYPES = frozenset({"fly", "dacapo", "huggingface", "script", "cellmap", "finetune"})
-MODEL_ENTRY_TYPES = frozenset({"cellmap", "finetune", "fly"})
+# then took to be 178 and 56 whatever the model's were, so it goes as an
+# entry too.
+FLAG_MODEL_TYPES = frozenset({"dacapo", "huggingface", "script"})
+
+
+def trainable_model_types() -> list:
+    """The model types the trainer can train: those that say so (``ModelConfig.finetunable``)."""
+    from cellmap_flow.models.registry import model_types
+
+    return sorted(name for name, cls in model_types().items() if getattr(cls, "finetunable", False))
 
 
 def resolve_model_type(model_config) -> str:
@@ -53,10 +59,10 @@ def resolve_model_type(model_config) -> str:
     model_type = getattr(type(model_config), "cli_name", "fly")
     if model_type == "fly" and "dacapo" in model_config.name.lower():
         return "dacapo"
-    if model_type not in TRAINABLE_MODEL_TYPES:
+    if model_type not in trainable_model_types():
         raise ValueError(
             f"Models of type {model_type!r} cannot be finetuned; the trainer "
-            f"supports {sorted(TRAINABLE_MODEL_TYPES)}."
+            f"supports {trainable_model_types()}."
         )
     # Here, before the job manager makes the run's directory, so a refusal
     # leaves nothing behind.
@@ -66,7 +72,7 @@ def resolve_model_type(model_config) -> str:
 
 def model_entry(model_config, model_type: str, checkpoint_path: Optional[Path]) -> Optional[dict]:
     """The model as the trainer takes it with --model-entry, or None for a type
-    that goes by its own flags (MODEL_ENTRY_TYPES).
+    that goes by its own flags (FLAG_MODEL_TYPES).
 
     The entry is the model's to_dict(), so the trainer builds the model the
     dashboard serves; ``checkpoint_path`` (find_checkpoint's) replaces the
@@ -77,7 +83,7 @@ def model_entry(model_config, model_type: str, checkpoint_path: Optional[Path]) 
     ``default_env`` needs no entry: the trainer builds the same type, and
     a finetuned model runs where its base type does.
     """
-    if model_type not in MODEL_ENTRY_TYPES and not getattr(model_config, "env", None):
+    if model_type in FLAG_MODEL_TYPES and not getattr(model_config, "env", None):
         return None
     entry = model_config.to_dict()
     if checkpoint_path and "checkpoint_path" in entry:

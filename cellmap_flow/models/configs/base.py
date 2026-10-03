@@ -260,6 +260,35 @@ class ModelConfig:
     # property that decides per model. Never written by to_dict(), which
     # says only what the entry said; read through effective_env.
     default_env = None
+    # Whether the finetune trainer can train this type's models: it trains
+    # the module ``trainable_model()`` gives, and serves the result through
+    # ``serve_trained``. A type sets it once those two do the right thing for
+    # it; the trainer refuses the others before submitting a job.
+    finetunable = False
+
+    def trainable_model(self):
+        """The torch module the finetune trainer trains, or None for
+        ``config.model`` as it is (``finetune.model_loading.load_trainable_model``).
+
+        The trainer feeds it a float tensor (B, 1, Z, Y, X), normalized as
+        the dashboard's input normalization does, at the input voxel size and
+        read shape, and wants (B, C, Z', Y', X') at the write shape back. A
+        type whose ``config.model`` is not such a module (a bioimage.io
+        prediction pipeline, a Cellpose model object) returns one that is,
+        sharing its parameters, so that what is trained is what is served.
+        """
+        return None
+
+    def serve_trained(self, config, module):
+        """Make ``config`` serve ``module``, the trained ``trainable_model()``.
+
+        ``config`` is this model's own Config (the trainer's live server) or
+        a new one with its geometry (a finetuned model's,
+        ``FinetuneModelConfig``). By default the module is the model, run by
+        the inferencer's own forward; a type that predicts through its own
+        ``process_chunk`` sets that up here instead.
+        """
+        config.model = module
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)

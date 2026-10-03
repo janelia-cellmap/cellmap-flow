@@ -63,6 +63,8 @@ class FinetuneModelConfig(ModelConfig):
 
     cli_name = "finetune"
 
+    finetunable = True
+
     def __init__(
         self,
         lora_adapter_path: str = None,
@@ -204,7 +206,6 @@ class FinetuneModelConfig(ModelConfig):
         # Replace the model in the config, keep everything else: the base's
         # geometry, at the voxel sizes the finetune was trained at.
         config = Config()
-        config.model = model
         for key, value in trained_at_geometry(base_cfg, self.input_voxel_size, self.output_voxel_size).items():
             setattr(config, key, value)
         config.output_channels = base_cfg.output_channels
@@ -214,6 +215,9 @@ class FinetuneModelConfig(ModelConfig):
         for attr in ("channels", "axes_names", "chunk_output_axes", "output_dtype"):
             if hasattr(base_cfg, attr):
                 setattr(config, attr, getattr(base_cfg, attr))
+        # Served as the base type serves a trained module: by default as the
+        # model, run by the inferencer's forward.
+        self.base_model_config.serve_trained(config, model)
 
         return config
 

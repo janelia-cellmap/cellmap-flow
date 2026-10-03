@@ -109,6 +109,8 @@ class ScriptModelConfig(ModelConfig):
 
     cli_name = "script"
 
+    finetunable = True
+
     def __init__(self, script_path, name=None, scale=None):
         super().__init__()
         self.script_path = script_path

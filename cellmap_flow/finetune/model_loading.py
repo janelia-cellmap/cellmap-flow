@@ -84,8 +84,14 @@ def load_trainable_model(model_config) -> torch.nn.Module:
       finetuned weights loaded. Wrapping it in a new adapter folds the old
       one in first (lora_wrapper._merge_existing_adapters), so training
       continues from the finetuned model rather than from its base.
+    - A type whose ``trainable_model()`` gives one (bioimage, cellpose):
+      that module.
     - Anything else: ``model_config.config.model`` as it is.
     """
+    own = model_config.trainable_model() if hasattr(model_config, "trainable_model") else None
+    if own is not None:
+        logger.info(f"Trainable model from {type(model_config).__name__}: {type(own).__name__}")
+        return own
     base_model = model_config.config.model
     logger.info(f"Model loaded: {type(base_model).__name__}")
 

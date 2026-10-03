@@ -143,8 +143,8 @@ def _start_inference_server_background(
     trained_model.eval()
     logger.info(f"Model set to eval mode on {device}")
 
-    # Replace the model in the config with our finetuned version
-    model_config.config.model = trained_model
+    # Serve our finetuned version, as the model's type serves it
+    model_config.serve_trained(model_config.config, trained_model)
 
     # Start server
     from cellmap_flow.server import CellMapFlowServer, get_free_port

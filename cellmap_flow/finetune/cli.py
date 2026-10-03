@@ -16,6 +16,7 @@ import logging
 import math
 from pathlib import Path
 
+from cellmap_flow.finetune.job_manager.submit import trainable_model_types
 from cellmap_flow.finetune.model_loading import decode_model_entry, model_config_from_entry
 from cellmap_flow.finetune.target_transforms import read_offsets_from_script
 from cellmap_flow.jobs.site import current_site
@@ -40,10 +41,10 @@ def build_arg_parser():
         "--model-type",
         type=str,
         default="fly",
-        choices=["fly", "dacapo", "huggingface", "script", "cellmap", "finetune"],
-        help="Model type (fly, dacapo, huggingface, script, cellmap, or finetune). "
-             "cellmap takes --model-folder; finetune (continue from a finetuned "
-             "model) takes --model-entry."
+        choices=trainable_model_types(),
+        help="Model type: one of the types that can be finetuned. dacapo, "
+             "huggingface and script take their own flags; the others take "
+             "--model-entry (the model's entry, as JSON)."
     )
     parser.add_argument(
         "--model-entry",
@@ -527,9 +528,9 @@ def build_target_transform(args, model_config, output_voxel_size_nm=None):
 def model_config_from_args(args) -> ModelConfig:
     """The ModelConfig the command line describes."""
     if args.model_entry:
-        # The model's own to_dict(), as the job manager passes it for the
-        # types whose flags cannot say all of it (cellmap, finetune, fly;
-        # job_manager.submit.MODEL_ENTRY_TYPES).
+        # The model's own to_dict(), as the job manager passes it for every
+        # type without flags of its own (all but job_manager.submit's
+        # FLAG_MODEL_TYPES).
         entry = decode_model_entry(args.model_entry)
         logger.info(f"Using model entry of type {entry.get('type')!r}")
         return model_config_from_entry(entry, name=args.model_name)

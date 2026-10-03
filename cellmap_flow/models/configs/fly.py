@@ -330,6 +330,8 @@ class FlyModelConfig(ModelConfig):
 
     cli_name = "fly"
 
+    finetunable = True
+
     def __init__(
         self,
         checkpoint_path: str,
