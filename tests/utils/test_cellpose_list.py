@@ -163,6 +163,24 @@ def test_a_running_model_given_another_voxel_size_is_restarted_with_it(submit):
     assert config.voxel_size == (32, 32, 32)
 
 
+def test_a_model_of_the_same_name_ticked_in_the_list_does_not_keep_other_settings_running(submit, dashboard):
+    """A YAML's "cellpose_sam" serves probability; the panel's cpsam with flows
+    has the same name. Both ticked, the YAML's tick kept the probability job
+    running and the flows were never served."""
+    get_session().models_config.append(CellposeModelConfig(
+        pretrained_model="cpsam", output="probability", voxel_size=64, name="cellpose_sam"))
+    job = _Job("cellpose_sam")
+    get_session().jobs = [job]
+
+    response = dashboard.post("/api/models", json={
+        "selected_models": ["cellpose_sam"],
+        "selected_cellpose_models": [{"model": "cpsam", "voxel_size": "64", "output": "flows"}],
+    })
+
+    assert response.status_code == 200 and job.killed and len(submit.commands) == 1
+    assert _served_entry(submit.commands[0])[1]["output"] == "flows"
+
+
 def test_the_page_lists_the_models_and_ticks_the_running_ones_with_their_settings(submit, dashboard):
     submit({"model": "cpsam_v2", "voxel_size": "16,8,8", "output": "masks", "stitch_threshold": 0.3},
            {"model": "cpsam_v2", "voxel_size": "64"}, {"model": "cpsam", "voxel_size": "32"})
