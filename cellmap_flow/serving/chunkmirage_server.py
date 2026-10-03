@@ -103,24 +103,6 @@ def _whole(values, what):
     return tuple(int(v) for v in out)
 
 
-def _on_startup(app, callback):
-    """``app``, calling ``callback()`` once its startup has completed: the
-    socket it is served on is listening by then."""
-
-    async def wrapped(scope, receive, send):
-        if scope["type"] != "lifespan":
-            return await app(scope, receive, send)
-
-        async def send_and_announce(message):
-            await send(message)
-            if message["type"] == "lifespan.startup.complete":
-                callback()
-
-        return await app(scope, receive, send_and_announce)
-
-    return wrapped
-
-
 class ChunkmirageServer:
     """One model's predictions over ``dataset_name``, served by chunkmirage.
 
@@ -179,15 +161,11 @@ class ChunkmirageServer:
         )
         serve_model(self.served)
 
-        cache = LRUCache(_env_count(PREDICTION_CACHE_BYTES_ENV, PREDICTION_CACHE_BYTES_DEFAULT))
         self.registry = DatasetRegistry(
-            cache=cache,
+            cache=LRUCache(_env_count(PREDICTION_CACHE_BYTES_ENV, PREDICTION_CACHE_BYTES_DEFAULT)),
             source_cache_bytes=_env_count(RAW_CACHE_BYTES_ENV, RAW_CACHE_BYTES_DEFAULT),
             resolver=self.pipeline_for,
         )
-        # Given again: DatasetRegistry takes ``cache or LRUCache()``, and an
-        # empty LRUCache is falsy, so it put its default size in its place.
-        self.registry.cache = cache
         self.source = self._open_source()
         self._warned_no_chain = False
         # The datasets API stays shut (a random token nobody is told): a
@@ -369,31 +347,24 @@ class ChunkmirageServer:
         the server is taking requests. ``debug`` is accepted for
         CellMapFlowServer's callers and ignored.
         """
-        import uvicorn
+        import chunkmirage
 
         from cellmap_flow.jobs.ready import write_ready_file
 
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        sock.bind(("0.0.0.0", int(port or 0)))
-        sock.listen(2048)
-        self.port = sock.getsockname()[1]
-        tls = bool(certfile and keyfile)
-        self.address = f"{'https' if tls else 'http'}://{get_public_ip()}:{self.port}"
+        tls = (certfile, keyfile) if certfile and keyfile else None
 
-        def announce():
+        def announce(server):
+            self._server, self.port = server, server.port
+            self.address = f"{'https' if tls else 'http'}://{get_public_ip()}:{server.port}"
             output = f"{IP_PATTERN[0]}{self.address}{IP_PATTERN[1]}"
             logger.error(output)
             print(output, flush=True)
             write_ready_file(self.address)
 
-        ssl = {"ssl_certfile": certfile, "ssl_keyfile": keyfile} if tls else {}
-        config = uvicorn.Config(_on_startup(self.app, announce), log_level="info", **ssl)
-        self._uvicorn = uvicorn.Server(config)
-        self._uvicorn.run(sockets=[sock])
+        chunkmirage.serve(self.app, "0.0.0.0", int(port or 0), on_ready=announce, ssl=tls, block=True)
 
     def stop(self):
         """Ask a running ``run`` to return."""
-        server = getattr(self, "_uvicorn", None)
+        server = getattr(self, "_server", None)
         if server is not None:
-            server.should_exit = True
+            server.stop()

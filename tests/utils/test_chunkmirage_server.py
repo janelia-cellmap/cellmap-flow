@@ -59,13 +59,7 @@ def _servers(path, script):
 CHAINS = [(case, chain) for case, (_, _, chains, _) in CASES.items() for chain in ["plain", *chains]]
 
 
-@pytest.mark.parametrize("case, chain", [
-    pytest.param(case, chain, id=f"{case}-{chain}", marks=pytest.mark.xfail(
-        strict=True, reason="chunkmirage hands a step that changes the channel count only the channels "
-        "at the output's indices (asked of chunkmirage: channel axes read whole)",
-    ) if chain == "one_channel" else ())
-    for case, chain in CHAINS
-])
+@pytest.mark.parametrize("case, chain", [pytest.param(case, chain, id=f"{case}-{chain}") for case, chain in CHAINS])
 def test_each_model_and_chain_gives_the_voxels_the_flask_server_gave(tmp_path, case, chain):
     script, raw, chains, key = CASES[case]
     flask, old, mirage, new = _servers(raw(tmp_path), write_script(tmp_path, script))

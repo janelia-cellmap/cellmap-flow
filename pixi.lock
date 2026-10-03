@@ -239,7 +239,7 @@ environments:
       - conda: https://conda.anaconda.org/nvidia/noarch/cuda-version-13.1-h2ff5cdb_4.conda
       - conda: https://conda.anaconda.org/nvidia/noarch/libnvptxcompiler-dev_linux-64-13.1.115-0.conda
       - pypi: ./
-      - pypi: git+https://github.com/yuriyzubov/chunkmirage?rev=d70680f5e8344ebde3ec513663d0f8b2a243990d#d70680f5e8344ebde3ec513663d0f8b2a243990d
+      - pypi: git+https://github.com/yuriyzubov/chunkmirage?rev=a65fc3297da4d47afc8daea721aff3619348955c#a65fc3297da4d47afc8daea721aff3619348955c
       - pypi: https://files.pythonhosted.org/packages/04/13/95a45eb410019772002d8f53d81396dad4120f7df39ca9962f86f5d7cd01/websockets-17.2-cp313-cp313-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/04/4b/29cac41a4d98d144bf5f6d33995617b185d14b22401f75ca86f384e87ff1/h11-0.16.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/06/cf/1731c0dd182ee35f80a39e63afb3d03056ea0dd561b7498932b10b2e34d9/filelock-4.0.7-py3-none-any.whl
@@ -609,7 +609,7 @@ environments:
       - conda: https://conda.anaconda.org/nvidia/noarch/cuda-version-13.1-h2ff5cdb_4.conda
       - conda: https://conda.anaconda.org/nvidia/noarch/libnvptxcompiler-dev_linux-64-13.1.115-0.conda
       - pypi: ./
-      - pypi: git+https://github.com/yuriyzubov/chunkmirage?rev=d70680f5e8344ebde3ec513663d0f8b2a243990d#d70680f5e8344ebde3ec513663d0f8b2a243990d
+      - pypi: git+https://github.com/yuriyzubov/chunkmirage?rev=a65fc3297da4d47afc8daea721aff3619348955c#a65fc3297da4d47afc8daea721aff3619348955c
       - pypi: https://files.pythonhosted.org/packages/01/4f/83454fafd628e1e7e1726d74e44fb2332be5969d04c6182ca1fecb6c580e/filelock-4.0.9-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/03/38/311ac322f46ecd789f1342bb7adb0a14b940cf54b5db0e92d4f449aa6cf8/google_auth-2.59.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/04/13/95a45eb410019772002d8f53d81396dad4120f7df39ca9962f86f5d7cd01/websockets-17.2-cp313-cp313-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl
@@ -964,7 +964,7 @@ environments:
       - conda: https://conda.anaconda.org/nvidia/noarch/cuda-version-13.1-h2ff5cdb_4.conda
       - conda: https://conda.anaconda.org/nvidia/noarch/libnvptxcompiler-dev_linux-64-13.1.115-0.conda
       - pypi: ./
-      - pypi: git+https://github.com/yuriyzubov/chunkmirage?rev=d70680f5e8344ebde3ec513663d0f8b2a243990d#d70680f5e8344ebde3ec513663d0f8b2a243990d
+      - pypi: git+https://github.com/yuriyzubov/chunkmirage?rev=a65fc3297da4d47afc8daea721aff3619348955c#a65fc3297da4d47afc8daea721aff3619348955c
       - pypi: https://files.pythonhosted.org/packages/02/be/5d2d47b1fb58943194fb59dcf222f7c4e35122ec0ffe8c36e18b5d728f0b/tblib-3.2.2-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/04/13/95a45eb410019772002d8f53d81396dad4120f7df39ca9962f86f5d7cd01/websockets-17.2-cp313-cp313-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/04/4b/29cac41a4d98d144bf5f6d33995617b185d14b22401f75ca86f384e87ff1/h11-0.16.0-py3-none-any.whl
@@ -1376,7 +1376,7 @@ environments:
       - conda: https://conda.anaconda.org/nvidia/noarch/cuda-version-13.1-h2ff5cdb_4.conda
       - conda: https://conda.anaconda.org/nvidia/noarch/libnvptxcompiler-dev_linux-64-13.1.115-0.conda
       - pypi: ./
-      - pypi: git+https://github.com/yuriyzubov/chunkmirage?rev=d70680f5e8344ebde3ec513663d0f8b2a243990d#d70680f5e8344ebde3ec513663d0f8b2a243990d
+      - pypi: git+https://github.com/yuriyzubov/chunkmirage?rev=a65fc3297da4d47afc8daea721aff3619348955c#a65fc3297da4d47afc8daea721aff3619348955c
       - pypi: https://files.pythonhosted.org/packages/03/c0/a6d8be9c43e4456fb9597fdf8b5e0ce1f0a5df41503acce6d869536e4e23/websockets-17.2-cp312-cp312-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/04/4b/29cac41a4d98d144bf5f6d33995617b185d14b22401f75ca86f384e87ff1/h11-0.16.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/08/87/6852c1de3390d88512fc1f399b1c18c27ddabc1bc602fc78a62ff3d3e07a/cellpose-3.1.1.1-py3-none-any.whl
@@ -1784,7 +1784,7 @@ environments:
       - conda: https://conda.anaconda.org/nvidia/noarch/cuda-version-13.1-h2ff5cdb_4.conda
       - conda: https://conda.anaconda.org/nvidia/noarch/libnvptxcompiler-dev_linux-64-13.1.115-0.conda
       - pypi: ./
-      - pypi: git+https://github.com/yuriyzubov/chunkmirage?rev=d70680f5e8344ebde3ec513663d0f8b2a243990d#d70680f5e8344ebde3ec513663d0f8b2a243990d
+      - pypi: git+https://github.com/yuriyzubov/chunkmirage?rev=a65fc3297da4d47afc8daea721aff3619348955c#a65fc3297da4d47afc8daea721aff3619348955c
       - pypi: https://files.pythonhosted.org/packages/03/c0/a6d8be9c43e4456fb9597fdf8b5e0ce1f0a5df41503acce6d869536e4e23/websockets-17.2-cp312-cp312-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/04/4b/29cac41a4d98d144bf5f6d33995617b185d14b22401f75ca86f384e87ff1/h11-0.16.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/05/4e/0703722c46447fa03c9425386b3ef3e90254a7c1eb5da654c3c33b210317/pdbpp-0.12.1-py3-none-any.whl
@@ -2134,7 +2134,7 @@ environments:
       - conda: https://conda.anaconda.org/nvidia/noarch/cuda-version-13.1-h2ff5cdb_4.conda
       - conda: https://conda.anaconda.org/nvidia/noarch/libnvptxcompiler-dev_linux-64-13.1.115-0.conda
       - pypi: ./
-      - pypi: git+https://github.com/yuriyzubov/chunkmirage?rev=d70680f5e8344ebde3ec513663d0f8b2a243990d#d70680f5e8344ebde3ec513663d0f8b2a243990d
+      - pypi: git+https://github.com/yuriyzubov/chunkmirage?rev=a65fc3297da4d47afc8daea721aff3619348955c#a65fc3297da4d47afc8daea721aff3619348955c
       - pypi: https://files.pythonhosted.org/packages/01/f9/575c8d760eae1fc99651b7cc5efd96ad5379ca4d6b53750b0fb4fe983f34/imagesize-2.0.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/02/10/5da547df7a391dcde17f59520a231527b8571e6f46fc8efb02ccb370ab12/docutils-0.22.4-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/04/13/95a45eb410019772002d8f53d81396dad4120f7df39ca9962f86f5d7cd01/websockets-17.2-cp313-cp313-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl
@@ -2509,7 +2509,7 @@ environments:
       - pypi: git+https://github.com/mzouink/fly-organelles?rev=ab89c10#ab89c10470ab819e0ec232d75f0fb117ad3ba9c2
       - pypi: git+https://github.com/neptunes5thmoon/lsd-lite.git?rev=055892b81851fb78b4664144188c40f2d1f4ef05#055892b81851fb78b4664144188c40f2d1f4ef05
       - pypi: git+https://github.com/saalfeldlab/corditea.git#cb1f64a66615cd5d93b54f671ce7938fbc4624ae
-      - pypi: git+https://github.com/yuriyzubov/chunkmirage?rev=d70680f5e8344ebde3ec513663d0f8b2a243990d#d70680f5e8344ebde3ec513663d0f8b2a243990d
+      - pypi: git+https://github.com/yuriyzubov/chunkmirage?rev=a65fc3297da4d47afc8daea721aff3619348955c#a65fc3297da4d47afc8daea721aff3619348955c
       - pypi: https://files.pythonhosted.org/packages/01/4f/83454fafd628e1e7e1726d74e44fb2332be5969d04c6182ca1fecb6c580e/filelock-4.0.9-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/02/be/5d2d47b1fb58943194fb59dcf222f7c4e35122ec0ffe8c36e18b5d728f0b/tblib-3.2.2-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/03/38/311ac322f46ecd789f1342bb7adb0a14b940cf54b5db0e92d4f449aa6cf8/google_auth-2.59.1-py3-none-any.whl
@@ -2924,7 +2924,7 @@ environments:
       - conda: https://conda.anaconda.org/nvidia/noarch/cuda-version-13.1-h2ff5cdb_4.conda
       - conda: https://conda.anaconda.org/nvidia/noarch/libnvptxcompiler-dev_linux-64-13.1.115-0.conda
       - pypi: ./
-      - pypi: git+https://github.com/yuriyzubov/chunkmirage?rev=d70680f5e8344ebde3ec513663d0f8b2a243990d#d70680f5e8344ebde3ec513663d0f8b2a243990d
+      - pypi: git+https://github.com/yuriyzubov/chunkmirage?rev=a65fc3297da4d47afc8daea721aff3619348955c#a65fc3297da4d47afc8daea721aff3619348955c
       - pypi: https://files.pythonhosted.org/packages/03/c0/a6d8be9c43e4456fb9597fdf8b5e0ce1f0a5df41503acce6d869536e4e23/websockets-17.2-cp312-cp312-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/04/4b/29cac41a4d98d144bf5f6d33995617b185d14b22401f75ca86f384e87ff1/h11-0.16.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/08/87/6852c1de3390d88512fc1f399b1c18c27ddabc1bc602fc78a62ff3d3e07a/cellpose-3.1.1.1-py3-none-any.whl
@@ -7726,7 +7726,7 @@ packages:
   - requests
   - scipy
   - click
-  - chunkmirage @ git+https://github.com/yuriyzubov/chunkmirage@d70680f5e8344ebde3ec513663d0f8b2a243990d
+  - chunkmirage @ git+https://github.com/yuriyzubov/chunkmirage@a65fc3297da4d47afc8daea721aff3619348955c
   - dacapo-ml ; extra == 'dacapo'
   - cellpose==3.1.1.1 ; extra == 'cellpose'
   - bioimageio-core[onnx,pytorch]==0.11.0 ; extra == 'bioimageio'
@@ -7808,7 +7808,7 @@ packages:
   - scipy
   - lsd-jax @ git+ssh://git@github.com/neptunes5thmoon/LSD_JAX.git@packaging ; extra == 'jax'
   requires_python: '>=3.7'
-- pypi: git+https://github.com/yuriyzubov/chunkmirage?rev=d70680f5e8344ebde3ec513663d0f8b2a243990d#d70680f5e8344ebde3ec513663d0f8b2a243990d
+- pypi: git+https://github.com/yuriyzubov/chunkmirage?rev=a65fc3297da4d47afc8daea721aff3619348955c#a65fc3297da4d47afc8daea721aff3619348955c
   name: chunkmirage
   version: 0.1.0
   requires_dist:
