@@ -207,6 +207,35 @@ def test_a_large_box_is_labelled_only_once_confirmed(dashboard, served, monkeypa
     assert labels[:].all()
 
 
+@pytest.mark.parametrize("box_voxels, box", [
+    pytest.param([2, 4, 6], (slice(7, 9), slice(6, 10), slice(5, 11)), id="z-y-x"),
+    pytest.param(4, (slice(6, 10),) * 3, id="one-number"),
+    pytest.param([32, 32, 32], (slice(0, 16),) * 3, id="larger-than-a-patch-clipped-to-the-volume"),
+])
+def test_the_box_can_be_any_size_in_annotation_voxels(dashboard, served, box_voxels, box):
+    """Cellpose's 8 x 512 x 512 patch held 282 objects to check: a smaller box is less to fix."""
+    labels = served()
+    body = dashboard.post(BACKGROUND, json={"box_voxels": box_voxels, "confirm": True}).get_json()
+    expected = np.zeros((16,) * 3, "u1")
+    expected[box] = 1
+    np.testing.assert_array_equal(labels[:], expected)
+    assert body["offset_voxels"] == [s.start for s in box]
+
+
+@pytest.mark.parametrize("box_voxels", [[0, 4, 4], [4, 4], "big", [8, None, 8]])
+def test_a_box_that_is_not_a_size_is_refused_and_writes_nothing(dashboard, served, box_voxels):
+    labels = served()
+    answer = dashboard.post(SPLIT, json={"box_voxels": box_voxels})
+    assert answer.status_code == 400 and "z, y, x" in answer.get_json()["error"]
+    assert not labels[:].any()
+
+
+def test_the_picker_is_told_the_default_box(dashboard, served, monkeypatch):
+    served()
+    monkeypatch.setattr(view_labels, "_prediction_sources", lambda: [])
+    assert dashboard.get("/api/finetune/view-labels/sources").get_json()["box_voxels"] == [8, 8, 8]
+
+
 def _wall(labels, through_every_slice):
     """One object, id 2, across the view, with a background wall at y = 8 in every slice or all but one."""
     labels[BOX] = 2
@@ -292,7 +321,7 @@ def test_the_picker_lists_a_lone_model_before_any_volume_exists(dashboard, monke
     get_session().annotation_volumes.clear()
     assert dashboard.get("/api/finetune/view-labels/sources").get_json() == {
         "success": True, "models": ["mito_aff"], "default": "mito_aff", "methods": {"mito_aff": ["components"]},
-        "can_undo": False}
+        "can_undo": False, "box_voxels": None}
 
 
 def test_a_label_change_re_reads_only_the_paint_layer_under_a_new_url(dashboard, served, viewer):

@@ -1,7 +1,8 @@
 """Labelling the box on screen in one click: from the model's prediction, or all background.
 
 Two buttons beside "Mark This View as Good", over the same box (one model
-output patch centred where the viewer looks, ``good_regions.view_box_nm``):
+output patch centred where the viewer looks, ``good_regions.view_box_nm``,
+or ``box_voxels`` annotation voxels when the request gives them):
 
 - POST ``/api/finetune/view-labels/seed``: the model's prediction there,
   segmented into objects, each written with an id of its own (2 and up),
@@ -110,7 +111,10 @@ def _target_box(data):
     if not state.get("ip") or not state.get("port"):
         raise _Refused("MinIO is not serving the annotation volume. Create or resume one first.")
     try:
-        centre_nm, size_nm = view_box_nm(data.get("size_nm"))
+        size_nm = data.get("size_nm")
+        if data.get("box_voxels") is not None:
+            size_nm = _box_nm(data["box_voxels"], volume)
+        centre_nm, size_nm = view_box_nm(size_nm)
     except ValueError as e:
         raise _Refused(str(e), 400)
     shape = zarr.open_array(f"{volume['zarr_path']}/annotation/s0", mode="r").shape
@@ -118,6 +122,24 @@ def _target_box(data):
     if box is None:
         raise _Refused("The view is outside the annotation volume.", 400)
     return volume_id, volume, box[0], box[1]
+
+
+def _box_nm(box_voxels, volume):
+    """The size in nm of a box of ``box_voxels`` annotation voxels (z, y, x,
+    or one number for every axis).
+
+    Any size: the box only says which of the served prediction to copy, and
+    the model reads its own input around it whatever its size. A box
+    smaller than a patch is less to check and fix by hand, and the voxels
+    left unpainted around it are left out of training."""
+    refusal = f"The box is z, y, x voxels, or one number, each at least 1; got {box_voxels}"
+    try:
+        voxels = np.asarray(box_voxels, dtype=float).reshape(-1)
+    except (TypeError, ValueError):
+        raise ValueError(refusal) from None
+    if voxels.size not in (1, 3) or not np.all(np.isfinite(voxels)) or np.any(voxels < 1):
+        raise ValueError(refusal)
+    return (np.repeat(voxels, 3 // voxels.size) * np.asarray(volume["output_voxel_size"], dtype=float)).tolist()
 
 
 def _confirmation_needed(data, lo, hi):
@@ -341,7 +363,9 @@ def seed_sources():
     """The models a seed can read, for the page's picker: ``models`` (every
     running server, oldest first), ``default``, the one a seed reads when
     none is chosen (None when that is a choice for the user), and
-    ``methods``, {model: the seed methods that fit its output, best first}."""
+    ``methods``, {model: the seed methods that fit its output, best first};
+    and ``box_voxels``, the volume's output patch (z, y, x), the box a label
+    action covers when it gives no other."""
     volume_id, volume = session_store().session_volume()
     base_model = (volume or {}).get("model_name")
     sources = _prediction_sources()
@@ -351,7 +375,7 @@ def seed_sources():
     can_undo = bool(volume_id and get_session().label_undo.get(volume_id))
     return jsonify({
         "success": True, "models": [name for name, _ in sources], "default": default,
-        "methods": methods, "can_undo": can_undo,
+        "methods": methods, "can_undo": can_undo, "box_voxels": (volume or {}).get("output_size"),
     })
 
 

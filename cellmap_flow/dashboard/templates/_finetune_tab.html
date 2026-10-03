@@ -106,7 +106,7 @@
         </button>
       </div>
       <details class="patch-tools-settings" id="seedSettings">
-        <summary>Seed and split settings</summary>
+        <summary>Seed, split and box settings</summary>
         <div class="d-flex align-items-center gap-2 mt-2">
           <label class="mb-0 text-nowrap" for="seedMethod">Method</label>
           <select class="form-select form-select-sm" id="seedMethod"
@@ -114,6 +114,9 @@
         </div>
         <small class="text-muted d-block mt-1" id="seedMethodHint"></small>
         <div class="patch-tools-fields">
+          <label for="seedBox">Box (voxels)</label>
+          <input type="text" class="form-control form-control-sm" id="seedBox" placeholder="one patch" inputmode="numeric"
+                 title="The box Seed from Prediction, All Background and Split Objects cover, centred where you look: z, y, x annotation voxels, or one number for all three. Any size: the model still reads its whole input around it. Smaller is less to check and fix (Cellpose's patch can hold hundreds of objects), and the unpainted voxels around it are left out of training. Blank: one model output patch, the size shown.">
           <label for="seedThreshold">Threshold</label>
           <input type="number" class="form-control form-control-sm" id="seedThreshold" min="0" max="1" step="0.05"
                  placeholder="model's"

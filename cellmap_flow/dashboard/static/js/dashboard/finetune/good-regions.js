@@ -98,10 +98,10 @@ export function initGoodRegions({ log }) {
   // answer that changed labels. A box too large to label without asking is
   // answered needs_confirmation, and sent again confirmed; the button stays
   // busy until that answer too.
-  // The seed settings (method, threshold, smallest object, connectivity,
-  // per slice), kept in this browser, and shown when one is set so a seed
-  // never silently uses an old one. Connectivity and per slice are Split
-  // Objects' too.
+  // The seed settings (box, method, threshold, smallest object,
+  // connectivity, per slice), kept in this browser, and shown when one is
+  // set so a seed never silently uses an old one. Connectivity and per
+  // slice are Split Objects' too; the box is every label action's.
   const seedSettings = document.getElementById("seedSettings");
   const seedMethod = document.getElementById("seedMethod");
   const seedMethodHint = document.getElementById("seedMethodHint");
@@ -109,6 +109,7 @@ export function initGoodRegions({ log }) {
   const seedMinSize = document.getElementById("seedMinSize");
   const seedConnectivity = document.getElementById("seedConnectivity");
   const seedPerSlice = document.getElementById("seedPerSlice");
+  const seedBox = document.getElementById("seedBox");
   const SETTINGS_KEY = "cellmap_flow.seed_settings";
   // The seed methods (view_labels.SEED_METHODS): their name in the picker,
   // a line on what they do, and which settings they read.
@@ -145,11 +146,20 @@ export function initGoodRegions({ log }) {
     if (saved.min_size !== undefined) seedMinSize.value = saved.min_size;
     if (saved.connectivity) seedConnectivity.value = saved.connectivity;
     seedPerSlice.checked = Boolean(saved.per_slice);
+    if (saved.box) seedBox.value = saved.box;
     chosenMethod = saved.method || "";
   } catch (e) { /* no storage: defaults */ }
-  // The connected-components settings, shared by a seed and Split Objects.
+  // The box, in annotation voxels: "z, y, x" or one number. Blank: the
+  // server's default, one output patch. Anything else is sent as typed, for
+  // the server to refuse with a reason.
+  function boxBody() {
+    const text = seedBox.value.trim();
+    if (!text) return {};
+    return { box_voxels: text.split(/[\s,x×]+/).filter(Boolean).map(Number) };
+  }
+  // The box and the connected-components settings, shared by a seed and Split Objects.
   function componentsBody() {
-    const body = {};
+    const body = boxBody();
     if (seedConnectivity.value !== "1") body.connectivity = Number(seedConnectivity.value);
     if (seedPerSlice.checked) body.per_slice = true;
     return body;
@@ -170,7 +180,7 @@ export function initGoodRegions({ log }) {
     try {
       localStorage.setItem(SETTINGS_KEY, JSON.stringify({
         threshold: seedThreshold.value, min_size: seedMinSize.value, method: chosenMethod,
-        connectivity: seedConnectivity.value, per_slice: seedPerSlice.checked,
+        connectivity: seedConnectivity.value, per_slice: seedPerSlice.checked, box: seedBox.value.trim(),
       }));
     } catch (e) { /* no storage */ }
   }
@@ -187,6 +197,7 @@ export function initGoodRegions({ log }) {
   seedMinSize.addEventListener("change", rememberSeedSettings);
   seedConnectivity.addEventListener("change", rememberSeedSettings);
   seedPerSlice.addEventListener("change", rememberSeedSettings);
+  seedBox.addEventListener("change", rememberSeedSettings);
   seedMethod.addEventListener("change", () => {
     chosenMethod = seedMethod.value;
     rememberSeedSettings();
@@ -233,6 +244,7 @@ export function initGoodRegions({ log }) {
         if (d && d.can_undo !== undefined) undoViewLabelsBtn.disabled = !d.can_undo;
         const names = (d && d.models) || [];
         methodsByModel = (d && d.methods) || {};
+        seedBox.placeholder = d && d.box_voxels ? `${d.box_voxels.join(", ")} (one patch)` : "one patch";
         if (!names.length) {
           showOnly("no model running");
           return showMethods();
@@ -300,7 +312,8 @@ export function initGoodRegions({ log }) {
     labelView(seedViewBtn, "/api/finetune/view-labels/seed", "seed the view", describeFill, false, seedRequest()));
   const backgroundViewBtn = document.getElementById("backgroundViewBtn");
   backgroundViewBtn.addEventListener("click", () =>
-    labelView(backgroundViewBtn, "/api/finetune/view-labels/background", "label the view background", describeFill));
+    labelView(backgroundViewBtn, "/api/finetune/view-labels/background", "label the view background", describeFill,
+              false, boxBody()));
   undoViewLabelsBtn.addEventListener("click", () =>
     labelView(undoViewLabelsBtn, "/api/finetune/view-labels/undo", "undo", (d) =>
       d.reload_viewer ? `Undid the last label action: ${d.restored} voxels restored`

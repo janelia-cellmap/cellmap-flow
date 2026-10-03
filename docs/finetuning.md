@@ -112,14 +112,14 @@ Annotate as many chunks as you like across the dataset. Only chunks with non-zer
 
 ### Label the patch on screen in one click
 
-The **Patch on screen** panel acts on one model output patch centred where the viewer looks. Every button fills or changes only that patch, keeps what you painted, and re-reads the paint layer afterwards.
+The **Patch on screen** panel acts on a box centred where the viewer looks: one model output patch, unless *Box (voxels)* under *Seed, split and box settings* says otherwise. Every button fills or changes only that patch, keeps what you painted, and re-reads the paint layer afterwards.
 
 - **Seed from Prediction** copies the prediction of the model picked in *Prediction from* (default: the volume model's latest finetune, else that model) into the unpainted voxels: an id per object (2 and up), background 1. Then fix it with the brush; that is much quicker than painting objects from nothing. An object you already painted part of keeps your id.
 - **All Background** labels every unpainted voxel 1, for a region of false positives.
 - **Split Objects** gives each connected object an id of its own. To split a merge, paint a background wall through it in every slice it spans (in one slice with *Per z slice*). A stroke joining two objects merges them.
 - **Undo** takes back the last of these (up to 10), except voxels painted since.
 
-How a seed makes objects of the prediction is its **Method**, under *Seed and split settings*. Only the methods that fit the chosen model's output are listed, picked from what the model outputs, not from its name. The best fit comes first, and a method you pick is kept whenever the model offers it:
+How a seed makes objects of the prediction is its **Method**, under *Seed, split and box settings*. Only the methods that fit the chosen model's output are listed, picked from what the model outputs, not from its name. The best fit comes first, and a method you pick is kept whenever the model offers it:
 
 | Method | Offered for | What it does |
 |---|---|---|
@@ -130,6 +130,7 @@ How a seed makes objects of the prediction is its **Method**, under *Seed and sp
 
 The other settings:
 
+- **Box (voxels)** is the box every button covers: z, y, x annotation voxels, or one number for all three. Blank means one model output patch, whose size the field shows. Any size works, in z too, because the model still reads its whole input around the box; the box only picks which of its prediction to copy. A smaller box is less to check and fix (Cellpose's 8 × 512 × 512 patch can hold hundreds of objects), and the unpainted voxels around it are left out of training. *Mark as Good* still marks one whole patch.
 - **Threshold** is a probability whatever the model's activation: 0.5 is the model's own boundary (0.5 on [0, 1] output, 0 on tanh or unbounded output such as logits or signed distances). Higher keeps only confident voxels. The mutex watershed uses it as its bias. Model's instances ignores it.
 - **Min object** turns objects of fewer voxels into background.
 - **Connectivity** (used by Seed and by Split Objects) sets which neighbours touch. *faces* (6 neighbours, the default) means a one-voxel background wall cuts an object. *+ edges* (18) and *all* (26) join voxels that touch along an edge or at a corner.
