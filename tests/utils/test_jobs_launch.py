@@ -234,3 +234,51 @@ def test_the_entry_points_install_the_cleanup_before_starting_jobs(entry_point, 
     order = []
     entry_point(monkeypatch, tmp_path, order)
     assert order == ["install", "run"]
+
+
+# --- installing a server's environment before submitting it -----------------------
+
+
+def test_a_missing_pixi_env_is_installed_before_the_job_is_submitted(monkeypatch, tmp_path):
+    """Installed in the job, it outlasted the job's startup timeout, and a
+    new user's first model was killed while pixi installed torch."""
+    from cellmap_flow.models import envs
+
+    installed, during = set(), []
+    monkeypatch.setattr(envs, "is_installed", lambda env: env in installed)
+    monkeypatch.setattr(launch, "SERVER_LOG_DIR", tmp_path)
+
+    def fake_pixi(argv, stdout, stderr):
+        stdout.write("Installing torch...\n")
+        stdout.flush()
+        during.extend((j.model_name, j.peek()) for j in launch.starting_jobs())
+        installed.add(argv[argv.index("-e") + 1])
+        return subprocess.CompletedProcess(argv, 0)
+
+    monkeypatch.setattr(launch.subprocess, "run", fake_pixi)
+    command = "/opt/pixi run --frozen --manifest-path /c/pixi.toml -e cellpose4 cellmap_flow serve --model {} -d /d"
+    launch._install_env_first(command, "cells")
+    ((name, log),) = during
+    assert name == "cells" and "Installing the pixi environment 'cellpose4'" in log and "Installing torch" in log
+    assert launch.starting_jobs() == [] and launch.failed_starts() == []
+    # Installed now, and a command outside pixi has nothing to install.
+    monkeypatch.setattr(launch.subprocess, "run", lambda *a, **k: pytest.fail("installed again"))
+    launch._install_env_first(command, "cells")
+    launch._install_env_first("cellmap_flow serve --model {} -d /d", "cells")
+
+
+def test_a_failed_install_refuses_the_job_and_stays_in_the_job_logs(monkeypatch, tmp_path):
+    from cellmap_flow.models import envs
+
+    monkeypatch.setattr(envs, "is_installed", lambda env: False)
+    monkeypatch.setattr(launch, "SERVER_LOG_DIR", tmp_path)
+
+    def failing_pixi(argv, stdout, stderr):
+        stdout.write("No space left on device\n")
+        return subprocess.CompletedProcess(argv, 1)
+
+    monkeypatch.setattr(launch.subprocess, "run", failing_pixi)
+    with pytest.raises(JobStartError, match="No space left on device"):
+        launch._install_env_first("/opt/pixi run --frozen -e fly cellmap_flow serve", "mito")
+    ((failed),) = launch.failed_starts()
+    assert failed.model_name == "mito" and "No space left on device" in failed.peek()

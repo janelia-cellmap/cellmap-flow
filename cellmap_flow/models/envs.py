@@ -16,7 +16,9 @@ and its finetuning job, run instead::
 
 - the name of an environment in cellmap-flow's ``pixi.toml``. The program
   runs as ``pixi run --frozen --manifest-path <pixi.toml> -e <name> ...``,
-  which installs the environment from the lockfile on first use. The
+  which installs the environment from the lockfile on first use (a
+  server's launcher installs it before submitting the job:
+  ``jobs.launch._install_env_first``). The
   manifest is the one in the checkout cellmap-flow is installed from, or
   ``CELLMAP_FLOW_PIXI_MANIFEST``; pixi is ``PIXI_EXE`` (which ``pixi run``
   sets), else the ``pixi`` on PATH.
@@ -269,9 +271,9 @@ def _usable_default(env: str, model_name: str) -> Optional[str]:
     without pixi (a conda-only cluster account), the model runs here, as
     it did before its type had a default, and the warning says how to
     provide one (an alias). A pixi environment that is declared but not
-    installed is used anyway, since ``pixi run --frozen`` installs it: the
-    warning is that the first job then takes minutes, and how to install
-    it first. A path or an alias is the user's own, so one that cannot be
+    installed is used anyway, as it is installed on first use: the warning
+    is that the first start then takes minutes, and how to install it
+    first. A path or an alias is the user's own, so one that cannot be
     used is an error, as an explicit ``env`` is.
     """
     if is_path(env) or env in aliases():
@@ -286,8 +288,8 @@ def _usable_default(env: str, model_name: str) -> Optional[str]:
     else:
         if not is_installed(env):
             _warn_once(env, (
-                f"Model '{model_name}' runs in env {env!r}, which is not installed: its first job "
-                f"installs it (several minutes). To install it now: cellmap_flow envs install {env}"
+                f"Model '{model_name}' runs in env {env!r}, which is not installed: it is installed "
+                f"before its first job (several minutes). To install it now: cellmap_flow envs install {env}"
             ))
         return env
     _warn_once(env, (
@@ -336,6 +338,21 @@ def type_default(cls) -> Optional[str]:
     them, without building one; None when it has none or decides per model."""
     declared = declared_default(cls)
     return None if decides_per_model(declared) else declared
+
+
+def install_argv(env: str) -> List[str]:
+    """``pixi install`` of ``env`` from pixi.lock as it is (``--frozen``), as
+    ``pixi run --frozen`` would install it, so the lock is never rewritten."""
+    return [pixi_program(), "install", "--frozen", "--manifest-path", str(pixi_manifest()), "-e", env]
+
+
+def pixi_env_of(argv: List[str]) -> Optional[str]:
+    """The pixi environment ``argv`` runs in when it is ``server_argv``'s
+    ``pixi run ... -e <env> ...``, else None."""
+    if len(argv) > 2 and argv[1] == "run" and "-e" in argv:
+        index = argv.index("-e")
+        return argv[index + 1] if index + 1 < len(argv) else None
+    return None
 
 
 def _pixi_run(env: str) -> List[str]:

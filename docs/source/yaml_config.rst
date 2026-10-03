@@ -591,8 +591,10 @@ A default this machine cannot provide does not stop the model: with no
 ``pixi.toml``, no environment of that name in it, or no pixi at all (a
 conda-only account), the model runs in this environment, as before its type
 had a default, with a warning that says how to give it one. A default that
-is in ``pixi.toml`` but not installed yet is used: its first job installs it
-(several minutes), and a warning says so. An ``env`` the entry names
+is in ``pixi.toml`` but not installed yet is used: it is installed before the
+model's first job is submitted (several minutes, once; Job Logs shows pixi's
+output meanwhile), not in the job, whose time to start a server would run
+out first. An ``env`` the entry names
 itself is an error when it cannot be used.
 
 Aliases
