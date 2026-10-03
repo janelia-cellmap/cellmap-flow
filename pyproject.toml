@@ -132,3 +132,4 @@ cellmap_flow_server = "cellmap_flow.cli.server_cli:main"
 [project.entry-points."chunkmirage.ops"]
 "cellmap_flow.inference" = "cellmap_flow.serving.chunkmirage_ops:InferenceOp"
 "cellmap_flow.postprocess" = "cellmap_flow.serving.chunkmirage_ops:PostprocessOp"
+"cellmap_flow.postprocess_on_device" = "cellmap_flow.serving.chunkmirage_ops:DevicePostprocessOp"

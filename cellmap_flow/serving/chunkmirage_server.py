@@ -45,7 +45,7 @@ from cellmap_flow.io.ome import CHANNEL_AXIS_NAMES
 from cellmap_flow.jobs.spec import IP_PATTERN
 from cellmap_flow.pipeline_spec import PipelineSpec
 from cellmap_flow.process_chain import process_chain
-from cellmap_flow.serving.chunkmirage_ops import InferenceOp, ServedModel, layer_ops, serve_model
+from cellmap_flow.serving.chunkmirage_ops import DevicePostprocessOp, InferenceOp, ServedModel, layer_ops, serve_model
 from cellmap_flow.serving.protocol import ARGS_KEY, split_dataset_url
 from cellmap_flow.serving.restart_token import TOKEN_HEADER, tokens_match
 
@@ -128,7 +128,7 @@ class ChunkmirageServer:
         # Device slots are the InferenceOp's (chunkmirage's queue): it reads a
         # chunk's input before it takes one, as the default predict did.
         self.inferencer = Inferencer(model_config, device_slots=None, half_precision=_env_flag(HALF_PRECISION_ENV))
-        InferenceOp.slots = DeviceSlots.from_env().n
+        InferenceOp.slots = DevicePostprocessOp.slots = DeviceSlots.from_env().n
         self.geometry = model_config.geometry
 
         # The level the model reads, as the Flask server chose and placed it.

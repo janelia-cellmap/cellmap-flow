@@ -316,6 +316,16 @@ class PostprocessOp(Op):
         threading.Thread(target=_post_equivalences, args=(url, payload), daemon=True).start()
 
 
+class DevicePostprocessOp(PostprocessOp):
+    """A postprocessing step that runs on the GPU (its ``uses_device``), at
+    most ``slots`` chunks at once (set by the server, as the model's), the
+    nearest first: several at once slow each other down, and the first chunks
+    of a view come no sooner than the rest."""
+
+    name: ClassVar[str] = "cellmap_flow.postprocess_on_device"
+    slots: ClassVar[Optional[int]] = 1
+
+
 def layer_ops(model, input_norm, postprocess, dashboard_url=None, dataset=""):
     """The ops of a layer's pipeline: the model on ``input_norm``, then one op
     per step of ``postprocess``, then, if the chain leaves another dtype than
@@ -324,7 +334,11 @@ def layer_ops(model, input_norm, postprocess, dashboard_url=None, dataset=""):
 
     served = served_model(model)
     ops = [InferenceOp(model=model, input_norm=input_norm)]
-    ops += [PostprocessOp(model=model, step=step).for_dashboard(dashboard_url, dataset) for step in postprocess]
+    for step in postprocess:
+        op = PostprocessOp(model=model, step=step)
+        if getattr(op._step, "uses_device", False):
+            op = DevicePostprocessOp(model=model, step=step)
+        ops.append(op.for_dashboard(dashboard_url, dataset))
     steps = [op._step for op in ops[1:]]
     served_dtype = np.dtype(chain_output_dtype(steps, served.output_dtype))
     if np.dtype(chain_output_dtype(steps, served.stage_dtype)) != served_dtype:

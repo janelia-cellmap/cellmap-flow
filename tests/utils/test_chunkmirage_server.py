@@ -281,3 +281,15 @@ def test_the_engine_is_chosen_by_the_environment(tmp_path, monkeypatch):
     monkeypatch.setenv("CELLMAP_FLOW_ENGINE", "fastest")
     with pytest.raises(ValueError, match="CELLMAP_FLOW_ENGINE"):
         engine_name()
+
+
+def test_a_step_on_the_gpu_runs_one_chunk_at_a_time_and_the_rest_in_parallel(tmp_path):
+    """Cellpose's masks follow the flows on the GPU: six at once each took 4 s
+    instead of 0.8, and the chunks nearest the cursor came no sooner."""
+    from cellmap_flow.serving.chunkmirage_ops import DevicePostprocessOp, PostprocessOp, layer_ops
+
+    mirage = ChunkmirageServer(write_raw(tmp_path, np.full((8,) * 3, 10, np.uint8)),
+                               ScriptModelConfig(script_path=write_script(tmp_path, IDENTITY_MODEL)))
+    ops = layer_ops(mirage.served.name, [], [{"name": "CellposeMasksPostprocessor"}, {"name": "ThresholdPostprocessor"}])
+    assert [type(op) for op in ops[1:3]] == [DevicePostprocessOp, PostprocessOp]
+    assert DevicePostprocessOp.slots == 1 and PostprocessOp.slots is None
