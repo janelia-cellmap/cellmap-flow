@@ -1,4 +1,4 @@
-# Cellpose-SAM v2 on jrc_mus-salivary-1, two outputs side by side:
+# Cellpose-SAM v2's flows on jrc_mus-salivary-1:
 #   cellmap_flow yaml example/cellpose_sam.yaml
 # The cellpose type runs in the cellpose4 pixi environment without an `env`
 # (Cellpose 4 cannot share the default environment's cellpose 3); give one
@@ -10,8 +10,8 @@ charge_group: "cellmap"
 
 queue: "gpu_h100"
 
-# Named as the Models tab's Cellpose panel names them (cellpose_sam_v2 for
-# its flows, cellpose_sam_v2_probability), so its rows show them ticked.
+# Named as the Models tab's Cellpose panel names it, so its row shows it
+# ticked; tick another output there (Probability, Masks) to run it beside.
 models:
   # Flows and probability (flow_y, flow_x, cell): the layer colours each
   # voxel by its flow's direction, dimmed by the probability. Add
@@ -25,16 +25,9 @@ models:
     # nm; the server reads s3. Cellpose-SAM sees objects best about 30
     # voxels across, so pick the voxel size at which yours are roughly that.
     voxel_size: 64
-  # The cell probability alone, 0 to 1.
-  cellpose_sam_v2_probability:
-    type: "cellpose"
-    output: "probability"
-    voxel_size: 64
 
-# The Output tab's chain is every layer's, and CellposeMasksPostprocessor runs
-# only on flows: untick the probability model before adding it. With
-# output: "masks", make the per-chunk ids unique across chunks and show the
-# layer as a segmentation:
+# With output: "masks", make the per-chunk ids unique across chunks and show
+# the layer as a segmentation:
 # json_data:
 #   postprocess:
 #     - name: MortonSegmentationRelabeling

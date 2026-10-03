@@ -283,7 +283,6 @@ def test_the_example_yaml_is_a_cellpose_model():
     assert all(isinstance(model, CellposeModelConfig) for model in models)
     assert [(m.name, m.pretrained_model, m.output, m.voxel_size) for m in models] == [
         ("cellpose_sam_v2", "cpsam_v2", "flows", (64, 64, 64)),
-        ("cellpose_sam_v2_probability", "cpsam_v2", "probability", (64, 64, 64)),
     ]
 
 
