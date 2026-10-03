@@ -57,7 +57,7 @@ from cellmap_flow.post import segment
 from cellmap_flow.serving.client import fetch_model_info
 from cellmap_flow.serving.probe import SIGNED_UNIT, UNIT, classify_output_range
 from cellmap_flow.serving.protocol import ARGS_KEY
-from cellmap_flow.viewer.layers import prediction_voxel_override
+from cellmap_flow.viewer.layers import prediction_url, prediction_voxel_override
 
 logger = logging.getLogger(__name__)
 
@@ -304,17 +304,20 @@ def methods_for(output_type, serves_integers):
     return methods + ["components"]
 
 
-def _served_base(host, model_name, postprocess=()):
+def _served_base(host, model_name, postprocess=(), engine=None):
     """The URL of the model's served array, with the dashboard's input
-    normalization and ``postprocess`` (none by default)."""
+    normalization and ``postprocess`` (none by default). ``engine``: the
+    server's model_info "engine" (see viewer.layers.prediction_url)."""
     blob = PipelineSpec.from_steps(get_session().input_norms, postprocess).to_url_blob()
-    return f"{host.rstrip('/')}/{model_name}{ARGS_KEY}{blob}{ARGS_KEY}"
+    url = prediction_url(host.rstrip("/"), model_name, blob, engine)
+    return url[len("zarr://"):]
 
 
 def _serves_integers(host, model_name):
     """Whether the model's raw output is integer labels, from the served array's dtype; None when unknown."""
     try:
-        meta = _get(f"{_served_base(host, model_name)}/s0/.zarray", METADATA_TIMEOUT_SECONDS).json()
+        engine = fetch_model_info(host).get("engine")
+        meta = _get(f"{_served_base(host, model_name, engine=engine)}/s0/.zarray", METADATA_TIMEOUT_SECONDS).json()
         return np.dtype(meta["dtype"]).kind in "iu"
     except Exception as e:
         logger.debug(f"Could not read {model_name}'s served dtype: {e}")
@@ -402,13 +405,20 @@ def read_prediction(host, model_name, volume, lo, hi, info, postprocess=()):
     or, when the server serves integer labels, as served (an id past 2^24
     is not exact in float32); and the box, shrunk to what the server covers.
     """
-    base = _served_base(host, model_name, postprocess)
+    base = _served_base(host, model_name, postprocess, info.get("engine"))
     multiscale = _get(f"{base}/.zattrs").json()["multiscales"][0]
-    if [axis["name"] for axis in multiscale["axes"][:3]] != ["z", "y", "x"]:
-        raise RuntimeError(f"{model_name}'s server serves axes {multiscale['axes']}, not z, y, x first")
+    # Channels last from the Flask server, first from chunkmirage's.
+    names = [axis["name"] for axis in multiscale["axes"]]
+    if not all(axis in names for axis in "zyx"):
+        raise RuntimeError(f"{model_name}'s server serves axes {multiscale['axes']}, not z, y and x")
+    spatial = [names.index(axis) for axis in "zyx"]
+    channel = next((i for i in range(len(names)) if i not in spatial), None)
     transforms = {t["type"]: t for t in multiscale["datasets"][0]["coordinateTransformations"]}
-    declared = np.asarray(transforms["scale"]["scale"][:3], dtype=float)
-    corner_nm = np.asarray(ome_corner(transforms["translation"]["translation"][:3], declared))
+    scale = transforms["scale"]["scale"]
+    # A translation of 0 may be left out.
+    translation = transforms.get("translation", {}).get("translation", [0.0] * len(names))
+    declared = np.asarray([scale[i] for i in spatial], dtype=float)
+    corner_nm = np.asarray(ome_corner([translation[i] for i in spatial], declared))
     drawn = np.asarray(
         prediction_voxel_override(host, get_session().dataset_path, info) or declared, dtype=float
     )
@@ -416,6 +426,7 @@ def read_prediction(host, model_name, volume, lo, hi, info, postprocess=()):
     # layer at another voxel size.
     served_corner_nm = corner_nm / declared * drawn
     meta = _get(f"{base}/s0/.zarray").json()
+    shape = [meta["shape"][i] for i in spatial]
 
     voxel_size = np.asarray(volume["output_voxel_size"], dtype=float)
     volume_corner = volume_corner_nm(volume.get("dataset_offset_nm"), voxel_size)
@@ -423,30 +434,36 @@ def read_prediction(host, model_name, volume, lo, hi, info, postprocess=()):
     for axis in range(3):
         centres = volume_corner[axis] + (np.arange(lo[axis], hi[axis]) + 0.5) * voxel_size[axis]
         index = np.floor((centres - served_corner_nm[axis]) / drawn[axis]).astype(int)
-        inside = np.flatnonzero((index >= 0) & (index < meta["shape"][axis]))
+        inside = np.flatnonzero((index >= 0) & (index < shape[axis]))
         if not inside.size:
             raise _Refused("The view is outside what the model's server predicts.", 400)
         new_lo[axis], new_hi[axis] = lo[axis] + inside[0], lo[axis] + inside[-1] + 1
         indices.append(index[inside])
 
     # Fetched together, then read through zarr as the array they belong to.
-    chunk = np.asarray(meta["chunks"][:3])
+    # Every channel is in one chunk, index 0.
+    chunk = np.asarray([meta["chunks"][i] for i in spatial])
     first = np.array([i[0] for i in indices]) // chunk
     last = np.array([i[-1] for i in indices]) // chunk
-    channel_key = ".0" if len(meta["shape"]) == 4 else ""
-    keys = [
-        ".".join(str(int(v)) for v in first + np.asarray(offset)) + channel_key
-        for offset in np.ndindex(*(last - first + 1))
-    ]
+    separator = meta.get("dimension_separator", ".")
+    keys = []
+    for offset in np.ndindex(*(last - first + 1)):
+        key = [0] * len(names)
+        for axis, value in zip(spatial, first + np.asarray(offset)):
+            key[axis] = int(value)
+        keys.append(separator.join(map(str, key)))
     with ThreadPoolExecutor(max_workers=min(len(keys), 8)) as pool:
         contents = list(pool.map(lambda key: _get(f"{base}/s0/{key}").content, keys))
     store = {".zarray": json.dumps(meta).encode(), **dict(zip(keys, contents))}
     served = zarr.open_array(store=store, mode="r")
-    region = served[tuple(slice(i[0], i[-1] + 1) for i in indices)]
-    prediction = region[np.ix_(*(i - i[0] for i in indices))]
+    window = [slice(None)] * len(names)
+    for axis, index in zip(spatial, indices):
+        window[axis] = slice(index[0], index[-1] + 1)
+    region = served[tuple(window)]
+    region = region[None] if channel is None else np.moveaxis(region, channel, 0)
+    prediction = region[(slice(None),) + np.ix_(*(i - i[0] for i in indices))]
     if prediction.dtype.kind not in "iu":
         prediction = prediction.astype(np.float32)
-    prediction = np.moveaxis(prediction, -1, 0) if channel_key else prediction[None]
     return prediction, new_lo, new_hi
 
 
