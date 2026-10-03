@@ -283,6 +283,26 @@ def _set_chain_and_redraw(spec, dashboard_url, *, built=None, builder=None) -> l
     return drawn
 
 
+def _problems_with_models(postprocess):
+    """Why a step of ``postprocess`` cannot run on a model being served, one line each.
+
+    The chain is every prediction layer's, and a step that fails on a
+    model's output fails on every chunk inside that model's server, where
+    the page showed only an empty layer (CellposeMasksPostprocessor on a
+    Cellpose model serving its probability).
+    """
+    problems = []
+    for step in postprocess:
+        check = getattr(step, "problem_with", None)
+        if check is None:
+            continue
+        for model_config in get_session().models_config or []:
+            problem = check(model_config)
+            if problem:
+                problems.append(problem)
+    return problems
+
+
 @pipeline_bp.route("/api/pipeline", methods=["PUT"])
 def put_pipeline():
     """Set the chain, and redraw the viewer through it.
@@ -303,6 +323,9 @@ def put_pipeline():
         built = spec.build()
     except (TypeError, ValueError) as e:
         return jsonify({"success": False, "error": str(e)}), 400
+    problems = _problems_with_models(built[1])
+    if problems:
+        return jsonify({"success": False, "error": "; ".join(problems)}), 400
     builder = body.builder.model_dump() if body.builder is not None else None
     layers = _set_chain_and_redraw(spec, request.host_url, built=built, builder=builder)
     return jsonify({"success": True, "pipeline": spec.to_json_data(), "digest": spec.digest(), "layers": layers})

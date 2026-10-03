@@ -124,3 +124,19 @@ def test_cellpose_masks_follow_the_flows_to_their_objects_and_link_them_across_s
     assert apart.shape == (1, 3, 96, 96) and apart.dtype == np.uint32
     assert [len(np.unique(apart[0, z])) - 1 for z in range(3)] == [2, 2, 2]
     assert len(np.unique(apart)) - 1 == 6 and len(np.unique(linked)) - 1 == 2
+
+
+def test_cellpose_masks_say_which_models_cannot_take_them():
+    """Run on a Cellpose server serving its probability, it failed on every chunk
+    inside the server, and the page showed an empty layer."""
+    from types import SimpleNamespace
+
+    from cellmap_flow.models.models_config import CellposeModelConfig, ScriptModelConfig
+    from cellmap_flow.post.postprocessors import CellposeMasksPostprocessor
+
+    step = CellposeMasksPostprocessor()
+    flows = CellposeModelConfig(voxel_size=8, output="flows", name="cp_flows")
+    assert step.problem_with(flows) is None
+    assert step.problem_with(SimpleNamespace(name="ft", base_model_config=flows)) is None
+    assert "Output: Flows" in step.problem_with(CellposeModelConfig(voxel_size=8, name="cp"))
+    assert "not a Cellpose model" in step.problem_with(ScriptModelConfig(script_path="/s.py", name="mito"))

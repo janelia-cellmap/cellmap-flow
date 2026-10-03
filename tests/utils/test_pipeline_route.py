@@ -179,3 +179,16 @@ def test_the_old_routes_say_they_are_deprecated(call, dashboard, caplog, url, bo
     assert [record.levelname for record in caplog.records if url in record.getMessage()] == ["WARNING"]
     put = dashboard.put("/api/pipeline", data=json.dumps(SUBMITTED), content_type="application/json")
     assert "Deprecation" not in put.headers
+
+
+def test_a_step_a_served_model_cannot_take_is_refused_saying_which_and_why(call):
+    """CellposeMasksPostprocessor on a Cellpose server serving its probability
+    failed on every chunk inside the server: the page showed an empty layer."""
+    from cellmap_flow.models.models_config import CellposeModelConfig
+
+    get_session().models_config = [CellposeModelConfig(voxel_size=8, name="cellpose_sam_v2")]
+    status, answer = call("PUT", "/api/pipeline", {"input_norm": [], "postprocess": [{"name": "CellposeMasksPostprocessor"}]})
+    assert status == 400 and "cellpose_sam_v2 serves Cellpose's probability" in answer["error"]
+    assert "Output: Flows" in answer["error"] and _drawn() == PipelineSpec.from_json_data(SHOWN)
+    get_session().models_config = [CellposeModelConfig(voxel_size=8, output="flows", name="cellpose_sam_v2_flows")]
+    assert call("PUT", "/api/pipeline", {"input_norm": [], "postprocess": [{"name": "CellposeMasksPostprocessor"}]})[0] == 200

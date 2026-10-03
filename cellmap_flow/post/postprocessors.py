@@ -30,6 +30,15 @@ class PostProcessor(SerializableInterface):
     def is_segmentation(self):
         return None
 
+    def problem_with(self, model_config):
+        """Why this step cannot run on ``model_config``'s output, or None when it can.
+
+        Checked by the dashboard before it applies a chain: a step that
+        fails on every chunk does so inside the model's server, where the
+        page shows only an empty layer.
+        """
+        return None
+
 
 class SigmoidPostprocessor(PostProcessor):
     """Apply sigmoid activation to convert logits to probabilities."""
@@ -406,6 +415,17 @@ class CellposeMasksPostprocessor(PostProcessor):
         self.min_size = int(min_size)
         self.stitch_threshold = float(stitch_threshold)
         self.niter = int(niter)
+
+    def problem_with(self, model_config):
+        """None for a Cellpose model (or a finetune of one) served with ``output: flows``."""
+        base = getattr(model_config, "base_model_config", None) or model_config
+        name = getattr(model_config, "name", "the model")
+        if getattr(type(base), "cli_name", None) != "cellpose":
+            return f"{name} is not a Cellpose model: CellposeMasksPostprocessor needs Cellpose's flows"
+        if getattr(base, "output", None) != "flows":
+            return (f"{name} serves Cellpose's {getattr(base, 'output', '?')}, not its flows: run it with "
+                    "Output: Flows for CellposeMasksPostprocessor (or Output: Masks for masks without it)")
+        return None
 
     def _process(self, data):
         try:

@@ -329,7 +329,7 @@ export function initModelsTab({ onModelsSubmitted } = {}) {
   const cellposeData = pageData("cellpose-data");
   const CELLPOSE_OUTPUTS = [
     ["probability", "Probability", "The cell probability, 0 to 1: one channel, joins up across chunks."],
-    ["flows", "Flows", "Cellpose's flows towards each cell's centre (flowY, flowX) and its cell probability: three channels."],
+    ["flows", "Flows", "Cellpose's flows towards each cell's centre (flowY, flowX) and its cell probability: three channels. Pick this for the CellposeMasksPostprocessor, whose thresholds can then be changed live."],
     ["masks", "Masks", "Instance masks, made chunk by chunk: an object crossing a chunk's edge gets an id on each side."],
   ];
   const CELLPOSE_VOXEL_TITLE =
