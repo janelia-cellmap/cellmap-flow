@@ -1,0 +1,97 @@
+"""The segmentation postprocessors, now running on ``post.segment``.
+
+Moving their logic there must not change what a served layer shows: by
+default each gives what it gave before, checked against the code it ran
+then. The new options reach the dashboard's forms through the constructor's
+signature, as every step's do.
+"""
+
+import numpy as np
+import pytest
+
+from cellmap_flow.post.postprocessors import (
+    AffinityPostprocessor,
+    LabelPostprocessor,
+    get_postprocessors,
+    get_postprocessors_list,
+)
+
+OFFSETS = [[1, 0, 0], [0, 1, 0], [0, 0, 1], [3, 0, 0], [0, 3, 0], [0, 0, 3], [9, 0, 0], [0, 9, 0], [0, 0, 9]]
+
+
+def _random_mask(seed=0, shape=(2, 12, 12, 12)):
+    return (np.random.default_rng(seed).random(shape) > 0.6).astype(np.uint8)
+
+
+def test_label_postprocessor_by_default_labels_as_scipy_did():
+    from scipy.ndimage import label
+
+    data = _random_mask()
+    out = LabelPostprocessor()(data, chunk_corner=(0, 0, 0), chunk_num_voxels=data[0].size)
+    expected = data.astype(np.uint32)
+    expected[0] = label(data[0])[0]
+    assert out.dtype == np.uint32
+    np.testing.assert_array_equal(out, expected)
+
+
+def test_label_postprocessor_options_drop_specks_and_label_by_slice():
+    data = np.zeros((1, 3, 6, 6), np.uint8)
+    data[0, :, 1:4, 1:4] = 1  # a column through the three slices
+    data[0, 0, 5, 5] = 1  # a speck
+    kwargs = dict(chunk_corner=(0, 0, 0), chunk_num_voxels=data[0].size)
+    assert LabelPostprocessor()(data, **kwargs).max() == 2
+    assert LabelPostprocessor(min_size=2)(data, **kwargs).max() == 1
+    assert LabelPostprocessor(per_slice=True, min_size=2)(data, **kwargs).max() == 3
+    # Corner neighbours touch only when every neighbour does.
+    corner = np.zeros((1, 2, 2, 2), np.uint8)
+    corner[0, 0, 0, 0] = corner[0, 1, 1, 1] = 1
+    assert LabelPostprocessor(connectivity=3)(corner, **kwargs).max() == 1
+
+
+def test_the_dashboards_strings_become_the_label_options_types():
+    post = LabelPostprocessor(channel="0", connectivity="2", min_size="5", per_slice="False")
+    assert post.to_dict() == {"name": "LabelPostprocessor", "channel": 0, "connectivity": 2, "min_size": 5,
+                              "per_slice": False}
+    (rebuilt,) = get_postprocessors([LabelPostprocessor(per_slice="true").to_dict()])
+    assert rebuilt.per_slice is True
+    with pytest.raises(ValueError):
+        LabelPostprocessor(connectivity="4")
+
+
+def test_the_forms_list_the_new_label_options():
+    (label_entry,) = [p for p in get_postprocessors_list() if p["name"] == "LabelPostprocessor"]
+    assert label_entry["params"] == {"channel": 0, "connectivity": 1, "min_size": 0, "per_slice": False}
+
+
+def _old_affinity_postprocessor(data, bias, neighborhood, chunk_num_voxels, chunk_corner):
+    """AffinityPostprocessor._process as it was before post.segment, use_exact on."""
+    import fastremap
+    import mwatershed as mws
+    import pymorton
+    from scipy import ndimage
+
+    data = data / 255.0 if np.issubdtype(data.dtype, np.integer) else data.astype(np.float64)
+    segmentation = mws.agglom(data.astype(np.float64) - bias, neighborhood[: data.shape[0]])
+    average_affs = np.mean(data, axis=0)
+    fragment_ids = fastremap.unique(segmentation[segmentation > 0])
+    kept = [f for f, m in zip(fragment_ids, ndimage.mean(average_affs, segmentation, fragment_ids)) if m >= bias]
+    fastremap.mask_except(segmentation, kept, in_place=True)
+    fastremap.renumber(segmentation, in_place=True)
+    segmentation[segmentation > 0] += np.uint64(chunk_num_voxels * pymorton.interleave(*chunk_corner))
+    return np.expand_dims(segmentation.astype(np.uint64), axis=0)
+
+
+@pytest.mark.parametrize("bias, channels, as_uint8", [
+    pytest.param(0.0, 9, False, id="the-defaults"),
+    pytest.param(0.5, 3, False, id="probabilities"),
+    pytest.param(0.5, 9, True, id="uint8-from-the-default-postprocessor"),
+])
+def test_affinity_postprocessor_segments_as_it_did(bias, channels, as_uint8):
+    affs = np.random.default_rng(1).random((channels, 10, 10, 10))
+    affs[..., 5] *= 0.2  # a weak wall
+    data = (affs * 255).astype(np.uint8) if as_uint8 else affs.astype(np.float32)
+    kwargs = dict(chunk_num_voxels=1000, chunk_corner=(1, 0, 2))
+    out = AffinityPostprocessor(bias=bias)(data, **kwargs)
+    expected = _old_affinity_postprocessor(data, bias, OFFSETS, **kwargs)
+    assert out.dtype == np.uint64
+    np.testing.assert_array_equal(out, expected)

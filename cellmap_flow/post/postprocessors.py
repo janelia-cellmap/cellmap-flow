@@ -1,7 +1,9 @@
 # The segmentation libraries (and neuroglancer, scipy.ndimage) are imported
 # inside the steps that use them: importing this module is how every chain
 # is read, including in processes that never run a segmentation step, and
-# together they took seconds to load.
+# together they took seconds to load. The instance segmenters themselves
+# live in post.segment, shared with the Finetune tab's seeding, which
+# imports them the same way.
 import ast
 import inspect
 import logging
@@ -11,6 +13,7 @@ import numpy as np
 
 from cellmap_flow.norm.input_normalize import SerializableInterface, deserialize_list
 from cellmap_flow.norm.safe_expression import compile_expression
+from cellmap_flow.post import segment
 
 logger = logging.getLogger(__name__)
 
@@ -123,16 +126,27 @@ class FillHolesPostprocessor(PostProcessor):
 
 
 class LabelPostprocessor(PostProcessor):
-    def __init__(self, channel: int = 0):
+    """An id per connected object of one channel's nonzero voxels (``segment.connected_components``).
+
+    ``connectivity``: 1 faces (the default), 2 faces and edges, 3 all
+    neighbours. ``min_size``: objects of fewer voxels become background.
+    ``per_slice``: each z slice labelled on its own, in 2D. The other
+    channels pass through, as uint32.
+    """
+
+    def __init__(self, channel: int = 0, connectivity: int = 1, min_size: int = 0, per_slice: bool = False):
         self.channel = int(channel)
+        self.connectivity = segment.as_connectivity(connectivity)
+        self.min_size = int(min_size)
+        self.per_slice = segment.as_bool(per_slice)
 
     def _process(self, data, chunk_corner, chunk_num_voxels):
-        from scipy.ndimage import label
-
         # Into a new uint32 array: writing the labels back into the model's
         # own (often uint8) array wrapped every id above 255, and the declared
         # uint8 dtype wrapped them again on the way out.
-        labels, _ = label(data[self.channel])
+        labels = segment.connected_components(
+            data[self.channel], self.connectivity, self.min_size, self.per_slice
+        )
         out = data.astype(np.uint32)
         out[self.channel] = labels
         return out
@@ -180,6 +194,14 @@ class MortonSegmentationRelabeling(PostProcessor):
 
 
 class AffinityPostprocessor(PostProcessor):
+    """Objects from affinities by mutex watershed (``segment.mutex_watershed``).
+
+    ``bias``: the affinity above which neighbours join, and below which a
+    fragment's mean makes it background. ``neighborhood``: the offset each
+    channel compares, as the model was trained with. Ids are offset by the
+    chunk's Morton index, so they are unique across chunks.
+    """
+
     def __init__(
         self,
         bias: float = 0.0,
@@ -202,10 +224,7 @@ class AffinityPostprocessor(PostProcessor):
         self.num_previous_segments = 0
 
     def _process(self, data, chunk_num_voxels, chunk_corner):
-        import fastremap
-        import mwatershed as mws
         import pymorton
-        from scipy import ndimage
 
         # Integer input is the 0-255 that DefaultPostprocessor produces (the
         # usual chain), so scale it back to [0, 1] exactly as before. Float
@@ -214,33 +233,10 @@ class AffinityPostprocessor(PostProcessor):
         # near zero and the watershed merged everything.
         if np.issubdtype(data.dtype, np.integer) or data.dtype == np.bool_:
             data = data / 255.0
-        else:
-            data = data.astype(np.float64)
-        n_channels = data.shape[0]
-        # Local, not self.neighborhood: truncating the attribute made every
-        # later call use the first chunk's channel count.
-        neighborhood = self.neighborhood[:n_channels]
-
-        segmentation = mws.agglom(
-            data.astype(np.float64) - self.bias,
-            neighborhood,
-        )
-
-        # filter fragments
-        average_affs = np.mean(data, axis=0)
-
-        filtered_fragments = []
-
-        fragment_ids = fastremap.unique(segmentation[segmentation > 0])
-
-        for fragment, mean in zip(
-            fragment_ids, ndimage.mean(average_affs, segmentation, fragment_ids)
-        ):
-            if mean >= self.bias:
-                filtered_fragments.append(fragment)
-
-        fastremap.mask_except(segmentation, filtered_fragments, in_place=True)
-        fastremap.renumber(segmentation, in_place=True)
+        # Cut to the channels inside the call, not on self.neighborhood:
+        # truncating the attribute made every later call use the first
+        # chunk's channel count.
+        segmentation = segment.mutex_watershed(data, self.neighborhood, self.bias)
         unique_increment = chunk_num_voxels * pymorton.interleave(*chunk_corner)
         if not self.use_exact:
             unique_increment = np.random.randint(0, 256) * 256

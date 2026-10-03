@@ -110,6 +110,33 @@ You can change the paint value in the Draw tab by editing the **Paint Value** fi
 
 Annotate as many chunks as you like across the dataset. Only chunks with non-zero annotations will be used for training.
 
+### Label the patch on screen in one click
+
+The **Patch on screen** panel acts on one model output patch centred where the viewer looks. Every button fills or changes only that patch, keeps what you painted, and re-reads the paint layer afterwards.
+
+- **Seed from Prediction** copies the prediction of the model picked in *Prediction from* (default: the volume model's latest finetune, else that model) into the unpainted voxels: an id per object (2 and up), background 1. Then fix it with the brush; that is much quicker than painting objects from nothing. An object you already painted part of keeps your id.
+- **All Background** labels every unpainted voxel 1, for a region of false positives.
+- **Split Objects** gives each connected object an id of its own. To split a merge, paint a background wall through it in every slice it spans (in one slice with *Per z slice*). A stroke joining two objects merges them.
+- **Undo** takes back the last of these (up to 10), except voxels painted since.
+
+How a seed makes objects of the prediction is its **Method**, under *Seed and split settings*. Only the methods that fit the chosen model's output are listed, picked from what the model outputs, not from its name. The best fit comes first, and a method you pick is kept whenever the model offers it:
+
+| Method | Offered for | What it does |
+|---|---|---|
+| **Model's instances** | a server that serves integer labels (Cellpose with `output: masks`) | The model's own ids, one object each, numbered afresh. An id repeated in another server chunk is another object, since Cellpose numbers each chunk from 1. |
+| **Mutex watershed** | affinity models (offsets in the script, or `_aff` channels) | Reads the offset channels. Neighbours join where the affinity is over the threshold and stay apart where it is under, so touching objects split. A fragment whose mean affinity is under the threshold is background. |
+| **Distance watershed** | distance models (`distance` in the name) | Foreground is over the threshold. Objects grow from the distance's peaks (h-maxima 0.05 deep), so touching objects split where the distance dips between them. |
+| **Threshold + components** | every model | Foreground is over the threshold, and each connected object gets an id. Touching objects stay one. This is the default when a request names no method. |
+
+The other settings:
+
+- **Threshold** is a probability whatever the model's activation: 0.5 is the model's own boundary (0.5 on [0, 1] output, 0 on tanh or unbounded output such as logits or signed distances). Higher keeps only confident voxels. The mutex watershed uses it as its bias. Model's instances ignores it.
+- **Min object** turns objects of fewer voxels into background.
+- **Connectivity** (used by Seed and by Split Objects) sets which neighbours touch. *faces* (6 neighbours, the default) means a one-voxel background wall cuts an object. *+ edges* (18) and *all* (26) join voxels that touch along an edge or at a corner.
+- **Per z slice** (used by threshold + components and by Split Objects) labels each z slice on its own in 2D, which suits objects annotated or segmented slice by slice.
+
+On a uint16/uint32 volume for an instance target (affinities, Cellpose's flows), new ids count up past the patch's largest. Otherwise they reuse ids the patch does not hold, so a uint8 volume never runs out. The settings are kept in the browser. A patch over 128³ voxels is asked about first. Routes: `POST /api/finetune/view-labels/{seed,background,split,undo}` and `GET /api/finetune/view-labels/sources`, which lists the models and the methods each offers. The segmenters are in `cellmap_flow.post.segment`, which `LabelPostprocessor` (with the same `connectivity`, `min_size` and `per_slice` options) and `AffinityPostprocessor` also use.
+
 ## 5. Training
 
 Switch to the **Training** tab in the Finetune section.

@@ -105,6 +105,12 @@ def _fresh_process_state(monkeypatch):
     monkeypatch.setattr(launch, "_starting", set())
     monkeypatch.setattr(launch, "_failed", {})
     monkeypatch.setattr(state, "_session", state.Session())
+    # What the seed picker learnt of each server, when a test has loaded it:
+    # a server one test could not reach is not asked again for a minute.
+    view_labels = sys.modules.get("cellmap_flow.dashboard.routes.finetune.view_labels")
+    if view_labels is not None:
+        monkeypatch.setattr(view_labels, "_methods_seen", {})
+        monkeypatch.setattr(view_labels, "_unanswered", {})
 
 
 @pytest.fixture(autouse=True)

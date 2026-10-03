@@ -8,7 +8,9 @@ is a decision about that voxel; a seed is a guess. "Split objects" relabels
 the box's foreground by connected component (``relabel_objects``), so a
 background wall painted through a merged object gives it two ids again.
 
-Objects are 6-connected (face neighbours, scipy's default): a one-voxel wall
+The objects a seed writes come from ``post.segment``, the segmenter that
+fits the model (``seed_labels`` takes its labels). Split Objects is
+6-connected by default (face neighbours, scipy's default): a one-voxel wall
 the brush paints cuts an object under it, where under 26-connectivity the
 voxels across a diagonal wall would still touch.
 
@@ -75,49 +77,43 @@ def _fresh_ids(existing, count, count_up):
     return ids
 
 
-def seed_labels(foreground, existing, count_up=False, min_size=0):
-    """Labels for a box from a foreground mask: an id per object inside, 1 outside.
+def seed_labels(objects, existing, count_up=False):
+    """Labels for a box from a segmentation: an id per object inside, 1 outside.
 
-    ``existing`` is what the box holds now. Each connected component of
-    ``foreground`` gets an id of its own (``_fresh_ids``; ``count_up`` for
-    an affinity target), so neighbouring objects are told apart, and a
-    merge the model made shows as one colour to split; but a component the
-    user has already painted part of takes the id painted there most, or
-    the unpainted rest of an object would be taught as a different object
-    from its painted part. A binary or distance target reads every id as
-    foreground, so the ids cost it nothing. Components of fewer than
-    ``min_size`` voxels are background: specks the threshold let through.
+    ``objects`` is a ``post.segment`` segmenter's output over the box (0
+    background, objects 1..n), ``existing`` what the box holds now. Each
+    object gets an id of its own (``_fresh_ids``; ``count_up`` for an
+    instance target), so neighbouring objects are told apart, and a merge
+    the model made shows as one colour to split; but an object the user has
+    already painted part of takes the id painted there most, or the
+    unpainted rest of it would be taught as a different object from its
+    painted part. A binary or distance target reads every id as foreground,
+    so the ids cost it nothing.
     """
+    objects = np.asarray(objects).astype(np.int64, copy=False)
+    foreground = objects > 0
     labels = np.where(foreground, 2, 1).astype(existing.dtype)
     if not foreground.any():
         return labels
-    from scipy.ndimage import label
-
-    components, n = label(foreground)
-    if min_size > 1:
-        small = np.flatnonzero(np.bincount(components.ravel(), minlength=n + 1) < min_size)
-        speck = np.isin(components, small[small > 0])
-        foreground = foreground & ~speck
-        labels[speck] = 1
-        components[speck] = 0
-        if not foreground.any():
-            return labels
+    n = int(objects.max())
     ids = np.zeros(n + 1, dtype=np.int64)
-    painted = (existing >= 2) & (components > 0)
+    painted = (existing >= 2) & foreground
     if painted.any():
         pairs, counts = np.unique(
-            np.stack([components[painted], existing[painted].astype(np.int64)]), axis=1, return_counts=True
+            np.stack([objects[painted], existing[painted].astype(np.int64)]), axis=1, return_counts=True
         )
         # Most-painted last, so its id is the one that stays.
         order = np.argsort(counts, kind="stable")
         ids[pairs[0, order]] = pairs[1, order]
-    fresh = np.flatnonzero(ids[1:] == 0) + 1
+    present = np.zeros(n + 1, dtype=bool)
+    present[np.unique(objects[foreground])] = True
+    fresh = np.flatnonzero(present & (ids == 0))
     ids[fresh] = _fresh_ids(existing, fresh.size, count_up)
-    labels[foreground] = ids[components[foreground]].astype(existing.dtype)
+    labels[foreground] = ids[objects[foreground]].astype(existing.dtype)
     return labels
 
 
-def relabel_objects(existing, count_up=False):
+def relabel_objects(existing, count_up=False, connectivity=1, per_slice=False):
     """The box's foreground (labels 2 and up) relabelled by connected component.
 
     Each component takes the id most of its voxels hold, so a stroke that
@@ -130,16 +126,20 @@ def relabel_objects(existing, count_up=False):
 
     A cut has to go through every slice the object spans: the brush paints
     one slice, and an object cut in one slice is still one object above and
-    below it. ``split`` is 0 then, which the page says.
+    below it. ``split`` is 0 then, which the page says. With ``per_slice``
+    each z slice's pieces are components on their own, so a wall in one
+    slice splits that slice, and every slice of an object gets its own id.
+    ``connectivity``: as for ``post.segment.connected_components``.
     """
-    from scipy.ndimage import label
+    from cellmap_flow.post.segment import connected_components
 
     labels = existing.copy()
     foreground = existing >= 2
     counts = {"objects": 0, "split": 0, "merged": 0}
     if not foreground.any():
         return labels, counts
-    components, n = label(foreground)
+    components = connected_components(foreground, connectivity, per_slice=per_slice).astype(np.int64)
+    n = int(components.max())
     comp, old = components[foreground], existing[foreground].astype(np.int64)
     pairs, pair_counts = np.unique(np.stack([comp, old]), axis=1, return_counts=True)
     order = np.argsort(pair_counts, kind="stable")
