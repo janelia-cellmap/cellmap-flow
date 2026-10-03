@@ -181,6 +181,17 @@ def test_a_model_of_the_same_name_ticked_in_the_list_does_not_keep_other_setting
     assert _served_entry(submit.commands[0])[1]["output"] == "flows"
 
 
+def test_a_model_on_the_panel_is_not_ticked_in_the_model_list_too(submit, dashboard):
+    """Listed twice, unticking it on the panel left its tick in the list, which kept it running."""
+    submit({"model": "cpsam_v2", "voxel_size": "64"}, {"model": "cpsam_v2", "voxel_size": "64", "output": "probability"})
+    get_session().models_config.append(CellposeModelConfig(pretrained_model="/my/weights", voxel_size=64, name="mine"))
+    get_session().jobs = [_Job("cellpose_sam_v2"), _Job("cellpose_sam_v2_probability"), _Job("mine")]
+    html = dashboard.get("/").get_data(as_text=True)
+    listed = re.findall(r'class="form-check-input model-checkbox"[^>]*value="([^"]+)"', html, re.S)
+    assert "mine" in listed  # its own weights: no row on the panel
+    assert "cellpose_sam_v2" not in listed and "cellpose_sam_v2_probability" not in listed
+
+
 def test_the_page_lists_the_models_and_ticks_the_running_ones_with_their_settings(submit, dashboard):
     submit({"model": "cpsam_v2", "voxel_size": "16,8,8", "output": "masks", "stitch_threshold": 0.3},
            {"model": "cpsam_v2", "voxel_size": "64"}, {"model": "cpsam", "voxel_size": "32"})

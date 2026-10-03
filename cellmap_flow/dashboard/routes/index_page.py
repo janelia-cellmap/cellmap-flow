@@ -110,6 +110,20 @@ def cellpose_panel_data(models_config, running_job_names):
     }
 
 
+def cellpose_panel_names(models_config):
+    """The names of the Cellpose models the Cellpose panel lists as its own
+    rows: one of its models, named as a row of it names its job, so that the
+    panel's Submit names it alike."""
+    from cellmap_flow.dashboard.services.launch import CELLPOSE_MODELS, cellpose_job_name
+    from cellmap_flow.models.models_config import CellposeModelConfig
+
+    return {
+        mc.name for mc in models_config
+        if isinstance(mc, CellposeModelConfig) and mc.pretrained_model in CELLPOSE_MODELS
+        and mc.name == cellpose_job_name(mc.pretrained_model, mc.output)
+    }
+
+
 @index_bp.route("/")
 def index():
     # Render the main page with tabs
@@ -120,8 +134,11 @@ def index():
     # Models tab only. Written into the session's catalog it outlived the request,
     # and everything else that walks the catalog (update_run_models, the
     # pipeline builder's palette) found entries with no path.
+    # Not a Cellpose model the Cellpose panel shows ticked: listed twice, its
+    # tick here kept it running after it was unticked there.
     model_catalog = dict(session.model_catalog)
-    model_catalog["User"] = {j.model_name: "" for j in session.jobs}
+    on_panel = cellpose_panel_names(session.models_config)
+    model_catalog["User"] = {j.model_name: "" for j in session.jobs if j.model_name not in on_panel}
     logger.debug(f"Model catalog: {model_catalog}")
     logger.debug(f"Input norm rows: {input_norm_items}")
     logger.debug(f"Postprocess rows: {postprocess_items}")
