@@ -17,7 +17,7 @@ has one level, s0, with any channel axis first.
 stay where they were; model_info says ``"engine": "chunkmirage"``, which is how
 a dashboard tells this server's URLs from the Flask server's.
 
-``CELLMAP_FLOW_PREDICTION_CACHE_BYTES`` (default 2 GiB; 0 for none) bounds the
+``CELLMAP_FLOW_PREDICTION_CACHE_BYTES`` (default 16 GiB; 0 for none) bounds the
 memory kept for computed chunks, the model's output and the raw data read for
 it; ``CELLMAP_FLOW_RAW_CACHE_BYTES`` (default 1 GiB) tensorstore's decoded raw
 chunks.
@@ -54,7 +54,11 @@ logger = logging.getLogger(__name__)
 ENGINE = "chunkmirage"
 
 PREDICTION_CACHE_BYTES_ENV = "CELLMAP_FLOW_PREDICTION_CACHE_BYTES"
-PREDICTION_CACHE_BYTES_DEFAULT = 2 << 30
+# A Cellpose flows chunk (3 x 8 x 512 x 512 float32) is 25 MB, and a view of
+# it asked for 80 chunks: 2 GiB dropped the first ones, under the cursor, and
+# ran the model on them again. A server's job has 15 GB of memory a slot or
+# more, and 4 slots.
+PREDICTION_CACHE_BYTES_DEFAULT = 16 << 30
 RAW_CACHE_BYTES_ENV = "CELLMAP_FLOW_RAW_CACHE_BYTES"
 RAW_CACHE_BYTES_DEFAULT = 1 << 30
 HALF_PRECISION_ENV = "CELLMAP_FLOW_HALF_PRECISION"

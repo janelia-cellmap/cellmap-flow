@@ -441,7 +441,7 @@ place, with any channel axis first.
    ``ImageDataInterface.to_ndarray_ts`` does; a chunk the data ends in is
    computed whole and cropped.
 #. The model's output is cached (``CELLMAP_FLOW_PREDICTION_CACHE_BYTES``,
-   2 GiB by default, 0 for none): panning back, or changing only the
+   16 GiB by default, 0 for none): panning back, or changing only the
    postprocessing, does not run the model again. Its cache key includes the
    model's weights version, which the finetune loop bumps after each
    iteration (``ChunkmirageServer.weights_changed``).

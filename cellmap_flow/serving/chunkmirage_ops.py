@@ -255,6 +255,7 @@ class PostprocessOp(Op):
     step: dict
 
     _step: Any = PrivateAttr(None)
+    _chunks: int = PrivateAttr(0)
     _dashboard_url: Optional[str] = PrivateAttr(None)
     _dataset: str = PrivateAttr("")
     _sent_at: float = PrivateAttr(0.0)
@@ -286,8 +287,14 @@ class PostprocessOp(Op):
     def apply_at(self, block, box):
         block_shape = np.asarray(self.served.block)
         corner = tuple(int(v) for v in np.asarray(box.start[-3:]) // block_shape)
+        began = time.perf_counter()
         with timing.stage("postprocess"):
             result = self._step(block, chunk_corner=corner, chunk_num_voxels=int(np.prod(block_shape)))
+        self._chunks += 1
+        logger.log(
+            logging.INFO if self._chunks <= 20 else logging.DEBUG,
+            f"Chunk {'.'.join(map(str, corner))}: {self.step.get('name')} {time.perf_counter() - began:.2f} s",
+        )
         self._send_equivalences()
         return np.asarray(result)
 
