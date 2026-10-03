@@ -108,6 +108,13 @@ MinIO server (conda-forge only) and a Neuroglancer fork with voxel-annotation
 support — so `pip install cellmap-flow[finetune]` on its own is not enough.
 See [docs/finetuning.md](docs/finetuning.md) for the full setup.
 
+Any model whose network is plain PyTorch can be finetuned from the dashboard,
+with LoRA or in full: cellmap and Hugging Face exports, fly checkpoints,
+DaCapo runs, scripts, BioImage Model Zoo models with PyTorch weights, and
+Cellpose (on its flows, from sparsely painted instances). A compiled
+(TorchScript) zoo model is finetuned in full only, and ONNX or TensorFlow ones
+not at all; the Finetune tab offers only what the selected model allows.
+
 ## Usage
 
 `cellmap_flow` has a subcommand for each job; `cellmap_flow <command> --help`
@@ -161,8 +168,8 @@ dashboard warns that the model sees the wrong scale.
 Each model has a type, which says how it is loaded and which environment its
 server runs in. In a YAML it is the model entry's `type`; on the command line,
 `cellmap_flow infer <type>`; in the dashboard, the Models tab lists the
-CellMap catalog, the `cellmap/*` Hugging Face models and the BioImage Model
-Zoo. `cellmap_flow models` lists every type and its arguments.
+CellMap catalog, the `cellmap/*` Hugging Face models, the BioImage Model
+Zoo and Cellpose-SAM. `cellmap_flow models` lists every type and its arguments.
 
 You rarely need to pick the type yourself: `cellmap_flow add REF` works it out
 from what you have, and prints the YAML entry, saying what it still needs. In
@@ -216,12 +223,28 @@ models:
     type: cellpose
     voxel_size: 64
     pretrained_model: cpsam_v2   # or cpsam, or the path of finetuned weights
-    output: probability          # or masks
+    output: flows                # the default: all three channels; or probability, or masks
 ```
 
+| `output` | Channels | dtype | |
+|---|---|---|---|
+| `flows` (default) | `flow_y`, `flow_x`, `cell` | float32 | "Flows + probability" on the Models tab, not masks: Cellpose's flows towards each object's centre (its `dP`, about -5 to 5), then the cell probability; the layer colours each voxel by its flow's direction, dimmed by `cell` (untick the shader's `flows` box for `cell` alone), and `CellposeMasksPostprocessor` makes masks of them |
+| `probability` | `cell` | float32 | The cell probability alone, 0 to 1 (the sigmoid of Cellpose's logit) |
+| `masks` | `cell` | uint64 | Instance ids, unique within a chunk |
+
 Masks are made chunk by chunk: add `MortonSegmentationRelabeling` to the
-postprocessing so that ids differ between chunks. Cellpose-SAM's weights are
-for non-commercial use. See [example/cellpose_sam.yaml](example/cellpose_sam.yaml).
+postprocessing so that ids differ between chunks. Each slice's masks are
+separate unless `stitch_threshold` (0 to 1, masks only) links them: a mask
+takes the id of the one in the slice before that it overlaps by at least that
+IoU, within a chunk. Cellpose-SAM's weights are for non-commercial use. See
+[example/cellpose_sam.yaml](example/cellpose_sam.yaml).
+
+In the dashboard, the Models tab's *Cellpose* panel lists `cpsam_v2` and
+`cpsam` (the DINO models need a package the `cellpose4` environment lacks).
+Tick one, give its voxel size (required) and output, and *Submit Models*: it
+runs as `cellpose_sam_v2` for the default *Flows + probability*
+(`cellpose_sam_v2_probability`, `cellpose_sam_v2_masks` for the other outputs,
+so *+ output* can run two side by side).
 
 ### BioImage Model Zoo
 

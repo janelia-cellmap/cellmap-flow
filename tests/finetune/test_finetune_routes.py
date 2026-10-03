@@ -676,7 +676,7 @@ ANSWERS = [
     # annotation volumes and the user's settings
     pytest.param("get", "/api/finetune/models", None, "a saved pipeline", 200,
                  {"models": [{"name": "m", "write_shape": [64] * 3, "output_voxel_size": [16] * 3,
-                              "output_channels": 2}], "selected_model": "m"}, id="models"),
+                              "output_channels": 2, "finetune_modes": None}], "selected_model": "m"}, id="models"),
     pytest.param("post", "/api/finetune/create-volume", {"model_name": "m"}, "no models", 400,
                  _refused("No models loaded"), id="create a volume without models"),
     pytest.param("post", "/api/finetune/create-volume", {"model_name": "x"}, None, 404,

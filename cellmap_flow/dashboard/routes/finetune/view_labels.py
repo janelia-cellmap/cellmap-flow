@@ -1,13 +1,16 @@
 """Labelling the box on screen in one click: from the model's prediction, or all background.
 
 Two buttons beside "Mark This View as Good", over the same box (one model
-output patch centred where the viewer looks, ``good_regions.view_box_nm``):
+output patch centred where the viewer looks, ``good_regions.view_box_nm``,
+or ``box_voxels`` annotation voxels when the request gives them):
 
 - POST ``/api/finetune/view-labels/seed``: the model's prediction there,
-  thresholded at its decision boundary, written as foreground 2 (an id per
-  object, 2 and up, for an affinity model on an instance volume) and
-  background 1. The user then cleans it up with the brush; it is far
-  quicker than painting a whole object from nothing.
+  segmented into objects, each written with an id of its own (2 and up),
+  and background 1. The user then cleans it up with the brush; it is far
+  quicker than painting a whole object from nothing. How it is segmented
+  is the request's ``method``, one of the ``post.segment`` segmenters that
+  fits what the model outputs (``SEED_METHODS``); ``seed_sources`` says
+  which fit each running model.
 - POST ``/api/finetune/view-labels/background``: every unannotated voxel 1,
   for a region the model fills with false positives.
 
@@ -22,9 +25,11 @@ A box over LARGE_BOX_VOXELS voxels is only labelled when the request says
 ``needs_confirmation``, for the page to ask first.
 """
 
+import functools
 import json
 from collections import deque
 import logging
+import time
 from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
@@ -36,6 +41,7 @@ from scipy.special import expit
 from cellmap_flow.dashboard.finetune_utils import sync_annotation_volume_from_minio
 from cellmap_flow.dashboard.routes.finetune.blueprint import finetune_bp
 from cellmap_flow.dashboard.routes.finetune.common import (
+    INSTANCE_TARGETS,
     autodetect_output_type,
     find_model_config,
     session_store,
@@ -47,6 +53,7 @@ from cellmap_flow.finetune.session import fill
 from cellmap_flow.finetune.session.volume import volume_corner_nm
 from cellmap_flow.io.ome import ome_corner
 from cellmap_flow.pipeline_spec import PipelineSpec
+from cellmap_flow.post import segment
 from cellmap_flow.serving.client import fetch_model_info
 from cellmap_flow.serving.probe import SIGNED_UNIT, UNIT, classify_output_range
 from cellmap_flow.serving.protocol import ARGS_KEY
@@ -61,6 +68,26 @@ LARGE_BOX_VOXELS = 128**3
 
 # A chunk can be the first the server computes, which waits on its warm-up.
 PREDICTION_TIMEOUT_SECONDS = 120
+# Metadata only, asked while the page polls the picker: a server that does
+# not answer by then is left out of the methods until it does.
+METADATA_TIMEOUT_SECONDS = 5
+
+# How a seed makes objects of the prediction (``post.segment``), each fitting
+# a kind of output; ``seed_methods`` says which a model offers.
+SEED_METHODS = (
+    # Threshold, then an id per connected object: any output with a
+    # foreground threshold. The default.
+    "components",
+    # Affinity models: their offset channels, joined above the threshold.
+    "mutex_watershed",
+    # Distance models: touching objects cut apart where the distance dips.
+    "distance_watershed",
+    # A server that serves integer instance labels (Cellpose's masks).
+    "instances",
+)
+
+# Training targets made of instances, where ids must differ between nearby
+# objects (finetune.cli's output types).
 
 
 class _Refused(Exception):
@@ -84,7 +111,10 @@ def _target_box(data):
     if not state.get("ip") or not state.get("port"):
         raise _Refused("MinIO is not serving the annotation volume. Create or resume one first.")
     try:
-        centre_nm, size_nm = view_box_nm(data.get("size_nm"))
+        size_nm = data.get("size_nm")
+        if data.get("box_voxels") is not None:
+            size_nm = _box_nm(data["box_voxels"], volume)
+        centre_nm, size_nm = view_box_nm(size_nm)
     except ValueError as e:
         raise _Refused(str(e), 400)
     shape = zarr.open_array(f"{volume['zarr_path']}/annotation/s0", mode="r").shape
@@ -92,6 +122,24 @@ def _target_box(data):
     if box is None:
         raise _Refused("The view is outside the annotation volume.", 400)
     return volume_id, volume, box[0], box[1]
+
+
+def _box_nm(box_voxels, volume):
+    """The size in nm of a box of ``box_voxels`` annotation voxels (z, y, x,
+    or one number for every axis).
+
+    Any size: the box only says which of the served prediction to copy, and
+    the model reads its own input around it whatever its size. A box
+    smaller than a patch is less to check and fix by hand, and the voxels
+    left unpainted around it are left out of training."""
+    refusal = f"The box is z, y, x voxels, or one number, each at least 1; got {box_voxels}"
+    try:
+        voxels = np.asarray(box_voxels, dtype=float).reshape(-1)
+    except (TypeError, ValueError):
+        raise ValueError(refusal) from None
+    if voxels.size not in (1, 3) or not np.all(np.isfinite(voxels)) or np.any(voxels < 1):
+        raise ValueError(refusal)
+    return (np.repeat(voxels, 3 // voxels.size) * np.asarray(volume["output_voxel_size"], dtype=float)).tolist()
 
 
 def _confirmation_needed(data, lo, hi):
@@ -202,41 +250,159 @@ def _prediction_server(base_model, chosen=None):
     return sources[0] if len(sources) == 1 else (None, None)
 
 
+def _serves_cellpose_flows(model_name):
+    """Whether ``model_name`` is a Cellpose model served with ``output: flows``
+    (channels flow_y, flow_x, cell): its instances are Cellpose's masks,
+    which its server makes on asking (CellposeMasksPostprocessor)."""
+    model_config = find_model_config(model_name)
+    return getattr(type(model_config), "cli_name", None) == "cellpose" and getattr(model_config, "output", None) == "flows"
+
+
+# Cellpose's flows output: the cell probability is its third channel.
+CELLPOSE_CELL_CHANNEL = 2
+
+
+def _model_read_as(model_name, base_model):
+    """The model whose config says what ``model_name`` outputs: a finetune's is its base's."""
+    if base_model and model_name.startswith(f"{base_model}_finetuned"):
+        return base_model
+    return model_name
+
+
+def model_output(model_name):
+    """``(output_type, offsets)``: what the model is trained on, as submit decides it.
+
+    ``autodetect_output_type``: "affinities" (with the offsets, a JSON
+    list) when the model's script or channel names say so, "distance" for
+    a distance model, a type's declared target ("flows" for Cellpose), else
+    "binary". A model with no config here, or affinities without offsets,
+    is "binary": a threshold is all a seed can do with it.
+    """
+    model_config = find_model_config(model_name)
+    if model_config is None:
+        return "binary", None
+    try:
+        return autodetect_output_type(model_config, None, None)
+    except ValueError as e:
+        logger.info(f"Seeding from {model_name} as a binary model: {e}")
+        return "binary", None
+
+
+def methods_for(output_type, serves_integers):
+    """The seed methods that fit a model's output, the best fit first.
+
+    ``components`` fits every output (an instance label is foreground where
+    it is not 0), so it is always offered, last unless nothing else fits.
+    """
+    methods = []
+    if serves_integers:
+        methods.append("instances")
+    if output_type == "affinities":
+        methods.append("mutex_watershed")
+    if output_type == "distance":
+        methods.append("distance_watershed")
+    return methods + ["components"]
+
+
+def _served_base(host, model_name, postprocess=()):
+    """The URL of the model's served array, with the dashboard's input
+    normalization and ``postprocess`` (none by default)."""
+    blob = PipelineSpec.from_steps(get_session().input_norms, postprocess).to_url_blob()
+    return f"{host.rstrip('/')}/{model_name}{ARGS_KEY}{blob}{ARGS_KEY}"
+
+
+def _serves_integers(host, model_name):
+    """Whether the model's raw output is integer labels, from the served array's dtype; None when unknown."""
+    try:
+        meta = _get(f"{_served_base(host, model_name)}/s0/.zarray", METADATA_TIMEOUT_SECONDS).json()
+        return np.dtype(meta["dtype"]).kind in "iu"
+    except Exception as e:
+        logger.debug(f"Could not read {model_name}'s served dtype: {e}")
+        return None
+
+
+# {(model name, host, base model): (job, methods)}, so the page's polling
+# asks each server once. A restarted job is a new object, and is asked again.
+_methods_seen = {}
+# {(model name, host, base model): when it last failed to answer}: one that
+# did not is asked again only after this long, rather than on every poll of
+# the page, each of which waited METADATA_TIMEOUT_SECONDS on it.
+_unanswered = {}
+UNANSWERED_RETRY_SECONDS = 60
+
+
+def seed_methods(model_name, host, base_model=None):
+    """The methods a seed from ``model_name``'s server can use (``methods_for``)."""
+    job = next(
+        (j for j in get_session().jobs if getattr(j, "model_name", None) == model_name
+         and getattr(j, "host", None) == host),
+        None,
+    )
+    key = (model_name, host, base_model)
+    seen = _methods_seen.get(key)
+    if seen is not None and job is not None and seen[0] is job:
+        return seen[1]
+    failed_at = _unanswered.get(key)
+    if failed_at is not None and time.monotonic() - failed_at < UNANSWERED_RETRY_SECONDS:
+        integers = None
+    else:
+        integers = _serves_integers(host, model_name)
+        if integers is None:
+            _unanswered[key] = time.monotonic()
+        else:
+            _unanswered.pop(key, None)
+    read_as = _model_read_as(model_name, base_model)
+    methods = methods_for(model_output(read_as)[0], bool(integers) or _serves_cellpose_flows(read_as))
+    if integers is not None and job is not None:
+        _methods_seen[key] = (job, methods)
+    return methods
+
+
 @finetune_bp.route("/api/finetune/view-labels/sources", methods=["GET"])
 def seed_sources():
     """The models a seed can read, for the page's picker: ``models`` (every
-    running server, oldest first) and ``default``, the one a seed reads when
-    none is chosen (None when that is a choice for the user)."""
+    running server, oldest first), ``default``, the one a seed reads when
+    none is chosen (None when that is a choice for the user), and
+    ``methods``, {model: the seed methods that fit its output, best first};
+    and ``box_voxels``, the volume's output patch (z, y, x), the box a label
+    action covers when it gives no other."""
     volume_id, volume = session_store().session_volume()
-    names = [name for name, _ in _prediction_sources()]
-    default = _prediction_server((volume or {}).get("model_name"))[0]
+    base_model = (volume or {}).get("model_name")
+    sources = _prediction_sources()
+    default = _prediction_server(base_model)[0]
+    methods = {name: seed_methods(name, host, base_model) for name, host in sources}
     # The page polls this, so it also says whether Undo has anything to take back.
     can_undo = bool(volume_id and get_session().label_undo.get(volume_id))
-    return jsonify({"success": True, "models": names, "default": default, "can_undo": can_undo})
+    return jsonify({
+        "success": True, "models": [name for name, _ in sources], "default": default,
+        "methods": methods, "can_undo": can_undo, "box_voxels": (volume or {}).get("output_size"),
+    })
 
 
-def _get(url):
-    response = requests.get(url, timeout=PREDICTION_TIMEOUT_SECONDS)
+def _get(url, timeout=PREDICTION_TIMEOUT_SECONDS):
+    response = requests.get(url, timeout=timeout)
     if response.status_code != 200:
         raise RuntimeError(f"{url.split(ARGS_KEY)[0]}... answered HTTP {response.status_code}")
     return response
 
 
-def read_prediction(host, model_name, volume, lo, hi, info):
+def read_prediction(host, model_name, volume, lo, hi, info, postprocess=()):
     """The model's raw output over annotation voxels ``[lo, hi)``.
 
     Read from its server as a layer is, with the dashboard's input
     normalization and no postprocessing: the trainer's target is set on the
-    raw output, and that is where its decision boundary is. Each annotation
+    raw output, and that is where its decision boundary is. (``postprocess``
+    asks for one anyway: Cellpose's masks of a flows server's output, for a
+    seed of its instances.) Each annotation
     voxel takes the served voxel its centre lies in, placed where
     neuroglancer draws the layer (``prediction_voxel_override``), so the
     seed lies under the prediction the user sees.
 
-    Returns ``(prediction, lo, hi)``: a (channels, z, y, x) float32 array,
-    and the box, shrunk to what the server covers.
+    Returns ``(prediction, lo, hi)``: a (channels, z, y, x) array, float32
+    or, when the server serves integer labels, as served (an id past 2^24
+    is not exact in float32); and the box, shrunk to what the server covers.
     """
-    blob = PipelineSpec.from_steps(get_session().input_norms, ()).to_url_blob()
-    base = f"{host.rstrip('/')}/{model_name}{ARGS_KEY}{blob}{ARGS_KEY}"
+    base = _served_base(host, model_name, postprocess)
     multiscale = _get(f"{base}/.zattrs").json()["multiscales"][0]
     if [axis["name"] for axis in multiscale["axes"][:3]] != ["z", "y", "x"]:
         raise RuntimeError(f"{model_name}'s server serves axes {multiscale['axes']}, not z, y, x first")
@@ -277,56 +443,99 @@ def read_prediction(host, model_name, volume, lo, hi, info):
     store = {".zarray": json.dumps(meta).encode(), **dict(zip(keys, contents))}
     served = zarr.open_array(store=store, mode="r")
     region = served[tuple(slice(i[0], i[-1] + 1) for i in indices)]
-    prediction = region[np.ix_(*(i - i[0] for i in indices))].astype(np.float32)
+    prediction = region[np.ix_(*(i - i[0] for i in indices))]
+    if prediction.dtype.kind not in "iu":
+        prediction = prediction.astype(np.float32)
     prediction = np.moveaxis(prediction, -1, 0) if channel_key else prediction[None]
     return prediction, new_lo, new_hi
 
 
-def foreground_mask(prediction, output_class=None, channels=None, threshold=0.5):
-    """Where the model says foreground: its probability over ``threshold``.
+def probability(prediction, output_class=None, channels=None):
+    """The prediction as a probability, (channels, z, y, x), 0.5 at the model's decision boundary.
 
-    The decision boundary depends on the output's activation: 0.5 on [0, 1]
-    output (a sigmoid already applied; the cellmap distance models end in
-    one, and 0.5 is their object boundary), 0 on tanh's [-1, 1], and 0 on
-    unbounded output, logits or a signed distance alike. Each is turned into
-    a probability first, so ``channels`` -- the affinity channels, say --
-    can be averaged. ``output_class`` is the server's (serving.probe), or
-    read off the values when it has none. ``threshold`` is in probability
-    whatever the activation: 0.5 is the model's own boundary.
+    The boundary depends on the output's activation: 0.5 on [0, 1] output
+    (a sigmoid already applied; the cellmap distance models end in one, and
+    0.5 is their object boundary), 0 on tanh's [-1, 1], and 0 on unbounded
+    output, logits or a signed distance alike. Each is turned into a
+    probability, so ``channels`` -- the affinity channels, say -- can be
+    averaged and one threshold means the same for every model.
+    ``output_class`` is the server's (serving.probe), or read off the
+    values when it has none.
     """
     if channels is not None:
         prediction = prediction[channels]
         if not prediction.shape[0]:
             raise ValueError(f"The model has no channel {channels.start}")
+    prediction = prediction.astype(np.float32, copy=False)
     output_class = output_class or classify_output_range(float(prediction.min()), float(prediction.max()))
     if output_class == UNIT:
-        probability = prediction
-    elif output_class == SIGNED_UNIT:
-        probability = (prediction + 1) / 2
-    else:
-        probability = expit(prediction)
-    return probability.mean(axis=0) > threshold
+        return prediction
+    if output_class == SIGNED_UNIT:
+        return (prediction + 1) / 2
+    return expit(prediction)
+
+
+def foreground_mask(prediction, output_class=None, channels=None, threshold=0.5):
+    """Where the model says foreground: its ``probability``, averaged over ``channels``, over ``threshold``.
+
+    ``threshold`` is in probability whatever the activation: 0.5 is the
+    model's own boundary.
+    """
+    return probability(prediction, output_class, channels).mean(axis=0) > threshold
 
 
 def _seed_plan(base_model, select_channel):
-    """``(channels, affinities)``: the channels a seed reads, and whether the model predicts affinities.
+    """``(channels, output_type, offsets)``: the channels a seed reads, and what the model outputs.
 
     As the trainer targets them: the selected channel; else an affinity
     model's offset channels (the rest, LSDs say, are masked out of its
     loss); else every channel, which a binary target is broadcast over.
+    ``output_type`` and ``offsets`` are ``model_output``'s.
     """
+    output_type, offsets = model_output(base_model)
     if select_channel is not None:
         channel = int(select_channel)
         if channel < 0:
             raise ValueError(f"select_channel must be 0 or more, got {channel}")
-        return slice(channel, channel + 1), False
-    model_config = find_model_config(base_model)
-    output_type, offsets = (
-        autodetect_output_type(model_config, None, None) if model_config else ("binary", None)
-    )
+        return slice(channel, channel + 1), output_type, offsets
     if output_type == "affinities":
-        return slice(0, len(json.loads(offsets))), True
-    return None, False
+        return slice(0, len(json.loads(offsets))), output_type, offsets
+    if _serves_cellpose_flows(base_model):
+        # Thresholding reads the probability, not the flows beside it.
+        return slice(CELLPOSE_CELL_CHANNEL, CELLPOSE_CELL_CHANNEL + 1), output_type, offsets
+    return None, output_type, offsets
+
+
+def segment_prediction(method, prediction, output_class, channels, offsets, threshold=0.5, min_size=0,
+                       connectivity=1, per_slice=False):
+    """The objects ``method`` makes of the prediction: 0 background, 1..n (``post.segment``).
+
+    ``threshold`` is a probability (``probability``) for every method that
+    thresholds: the foreground boundary for components and the distance
+    watershed, and the mutex watershed's bias, the affinity above which
+    two voxels join. ``connectivity`` and ``per_slice`` are the connected
+    components'; the watersheds take ``connectivity`` too. ``instances``
+    splits an id's disconnected parts: a server numbers each chunk's
+    objects on its own (Cellpose's from 1), and the box can span chunks.
+    """
+    if method == "components":
+        mask = foreground_mask(prediction, output_class, channels, threshold)
+        return segment.connected_components(mask, connectivity, min_size, per_slice)
+    if method == "mutex_watershed":
+        offsets = json.loads(offsets)
+        affinities = probability(prediction, output_class, slice(0, len(offsets)))
+        return segment.mutex_watershed(affinities, offsets, bias=threshold, min_size=min_size)
+    if method == "distance_watershed":
+        distance = probability(prediction, output_class, channels).mean(axis=0)
+        return segment.distance_watershed(distance, threshold, connectivity=connectivity, min_size=min_size)
+    if method == "instances":
+        channel = channels.start if channels is not None else 0
+        if prediction.dtype.kind not in "iu":
+            raise ValueError(f"The model serves {prediction.dtype}, not instance labels")
+        return segment.relabel_instances(
+            prediction[channel], split_disconnected=True, connectivity=connectivity, min_size=min_size
+        )
+    raise ValueError(f"method must be one of {', '.join(SEED_METHODS)}, got {method!r}")
 
 
 @finetune_bp.route("/api/finetune/view-labels/seed", methods=["POST"])
@@ -336,9 +545,12 @@ def seed_view_from_prediction():
     JSON body, all optional: ``size_nm`` (as for mark-view), ``confirm``
     (label a large box), ``select_channel`` (the channel the session
     trains, when it trains one), ``model`` (a name from ``seed_sources``;
-    the latest finetune, else the base, when absent), ``threshold`` (probability, 0 to 1; the
-    model's own boundary, 0.5, when absent) and ``min_size`` (objects of
-    fewer voxels are background).
+    the latest finetune, else the base, when absent), ``method`` (one of
+    the model's ``seed_sources`` methods; "components" when absent),
+    ``threshold`` (probability, 0 to 1; the model's own boundary, 0.5, when
+    absent: see ``segment_prediction``), ``min_size`` (objects of fewer
+    voxels are background), ``connectivity`` (1 faces, the default; 2 and
+    edges; 3 all neighbours) and ``per_slice`` (components per z slice).
     """
     data = request.get_json(silent=True) or {}
     try:
@@ -348,6 +560,11 @@ def seed_view_from_prediction():
         min_size = int(data.get("min_size") or 0)
         if min_size < 0:
             raise _Refused(f"min_size cannot be negative, got {min_size}", 400)
+        method = data.get("method") or "components"
+        if method not in SEED_METHODS:
+            raise _Refused(f"method must be one of {', '.join(SEED_METHODS)}, got {method!r}", 400)
+        connectivity = segment.as_connectivity(data.get("connectivity", 1))
+        per_slice = segment.as_bool(data.get("per_slice", False))
         volume_id, volume, lo, hi = _target_box(data)
         refused = _confirmation_needed(data, lo, hi)
         if refused:
@@ -359,23 +576,39 @@ def seed_view_from_prediction():
         if host is None:
             raise _Refused(f"No running server for {base_model}. Start it from the Models tab, or pick a model.")
         # The model read decides the channels: a finetune's are its base's.
-        plan_for = base_model if model_name.startswith(f"{base_model}_finetuned") else model_name
-        channels, affinities = _seed_plan(plan_for, data.get("select_channel"))
-        info = fetch_model_info(host)
-        prediction, lo, hi = read_prediction(host, model_name, volume, lo, hi, info)
-        foreground = foreground_mask(
-            prediction, info.get("output_class"), channels, 0.5 if threshold is None else float(threshold)
+        channels, output_type, offsets = _seed_plan(
+            _model_read_as(model_name, base_model), data.get("select_channel")
         )
+        offered = seed_methods(model_name, host, base_model)
+        if method not in offered:
+            raise _Refused(f"{model_name} cannot seed by {method}; it offers {', '.join(offered)}", 400)
+        info = fetch_model_info(host)
+        read_as = _model_read_as(model_name, base_model)
+        cellpose_masks = method == "instances" and _serves_cellpose_flows(read_as)
+        if cellpose_masks:
+            # Its server makes Cellpose's masks of its flows on asking.
+            from cellmap_flow.post.postprocessors import CellposeMasksPostprocessor
+
+            channels = None
+        prediction, lo, hi = read_prediction(
+            host, model_name, volume, lo, hi, info,
+            postprocess=(CellposeMasksPostprocessor(),) if cellpose_masks else (),
+        )
+        objects = segment_prediction(
+            method, prediction, info.get("output_class"), channels, offsets,
+            0.5 if threshold is None else float(threshold), min_size, connectivity, per_slice,
+        )
+        # An instance target needs ids apart from its neighbours'; a selected
+        # channel trains as a binary target.
+        instance_target = output_type in INSTANCE_TARGETS and data.get("select_channel") is None
 
         def labels_for(existing):
-            # Ids counting up need room: an affinity target on a uint16/uint32
-            # instance volume gets them; a uint8 volume reuses free ids.
-            return fill.seed_labels(
-                foreground, existing, count_up=affinities and existing.dtype.itemsize > 1, min_size=min_size
-            )
+            # Ids counting up need room: an instance target on a uint16/uint32
+            # volume gets them; a uint8 volume reuses free ids.
+            return fill.seed_labels(objects, existing, count_up=instance_target and existing.dtype.itemsize > 1)
 
         answer = _fill(volume_id, volume, lo, hi, labels_for)
-        return jsonify({**answer, "model": model_name, "threshold": threshold})
+        return jsonify({**answer, "model": model_name, "threshold": threshold, "method": method})
     except _Refused as e:
         return _error(str(e), e.status)
     except FileNotFoundError as e:
@@ -419,16 +652,24 @@ def split_view_objects():
     For a merge the model made: paint a background wall through the object,
     in every slice it spans, and click; the two sides get ids of their own
     (``fill.relabel_objects``). A stroke joining two objects merges them.
-    JSON body, all optional: ``size_nm`` and ``confirm``, as for seed.
+    JSON body, all optional: ``size_nm`` and ``confirm``, as for seed;
+    ``connectivity`` and ``per_slice``, as for a seed's components (with
+    ``per_slice``, a wall in one slice is enough, and each slice of an
+    object gets an id of its own).
     """
     data = request.get_json(silent=True) or {}
     try:
+        relabel = functools.partial(
+            fill.relabel_objects,
+            connectivity=segment.as_connectivity(data.get("connectivity", 1)),
+            per_slice=segment.as_bool(data.get("per_slice", False)),
+        )
         volume_id, volume, lo, hi = _target_box(data)
         refused = _confirmation_needed(data, lo, hi)
         if refused:
             return refused
         n_changed, counts = fill.rewrite_foreground(
-            get_session().minio_state, volume_id, lo, hi, fill.relabel_objects, volume.get("zarr_path"),
+            get_session().minio_state, volume_id, lo, hi, relabel, volume.get("zarr_path"),
             undo=_undo_stack(volume_id),
         )
         layer_refreshed = False

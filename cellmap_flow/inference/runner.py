@@ -373,6 +373,12 @@ class ModelRunner:
         from cellmap_flow.serving.probe import classify_output_range
 
         try:
+            # The range of the channel the layer shows, when the model
+            # names one: Cellpose's flows run -5 to 5 beside its 0 to 1
+            # probability, and the probability shown over -5 to 5 was a wash.
+            channel = getattr(self.model_config, "display_channel", None)
+            if channel is not None and out.ndim == 5 and channel < out.shape[1]:  # (batch, channel, z, y, x)
+                out = out[:, channel]
             lo, hi = float(out.min()), float(out.max())
             if not (np.isfinite(lo) and np.isfinite(hi)):
                 logger.info("Output probe saw non-finite values; skipping")

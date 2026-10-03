@@ -63,6 +63,8 @@ class FinetuneModelConfig(ModelConfig):
 
     cli_name = "finetune"
 
+    finetunable = True
+
     def __init__(
         self,
         lora_adapter_path: str = None,
@@ -117,6 +119,7 @@ class FinetuneModelConfig(ModelConfig):
         self.input_voxel_size = _voxel_sizes(input_voxel_size)
         self.output_voxel_size = _voxel_sizes(output_voxel_size)
         self._base_model_config = None
+        self._trained_module = None  # set when config is built
 
     @property
     def env(self):
@@ -159,6 +162,23 @@ class FinetuneModelConfig(ModelConfig):
             self._base_model_config = build_model(self.base_model_dict, base_name)
         return self._base_model_config
 
+    @property
+    def display_channel(self):
+        """Its base's: a finetune serves the same channels."""
+        return getattr(self.base_model_config, "display_channel", None)
+
+    def finetune_modes(self):
+        """Its base's: continuing a finetune trains the same network."""
+        return self.base_model_config.finetune_modes()
+
+    def trainable_model(self):
+        """The module it serves (its base's trainable module with the adapter
+        or weights on), to train on from where the finetune left off; not
+        ``config.model``, which a type serving through its own process_chunk
+        (cellpose) keeps as its own model object."""
+        _ = self.config
+        return self._trained_module
+
     def _get_config(self):
         # Imported here rather than at module scope: importing torch costs
         # ~7s, and the CLI builds its command list from this module, so
@@ -200,11 +220,11 @@ class FinetuneModelConfig(ModelConfig):
             model = load_lora_adapter(base_model, self.lora_adapter_path, is_trainable=False)
         model.to(device)
         model.eval()
+        self._trained_module = model
 
         # Replace the model in the config, keep everything else: the base's
         # geometry, at the voxel sizes the finetune was trained at.
         config = Config()
-        config.model = model
         for key, value in trained_at_geometry(base_cfg, self.input_voxel_size, self.output_voxel_size).items():
             setattr(config, key, value)
         config.output_channels = base_cfg.output_channels
@@ -214,6 +234,9 @@ class FinetuneModelConfig(ModelConfig):
         for attr in ("channels", "axes_names", "chunk_output_axes", "output_dtype"):
             if hasattr(base_cfg, attr):
                 setattr(config, attr, getattr(base_cfg, attr))
+        # Served as the base type serves a trained module: by default as the
+        # model, run by the inferencer's forward.
+        self.base_model_config.serve_trained(config, model)
 
         return config
 

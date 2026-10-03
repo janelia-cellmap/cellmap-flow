@@ -5,20 +5,34 @@ read with ``context`` voxels of margin in y and x that are cut off again, so
 that objects at the chunk's edge are seen whole. What the layer shows is
 ``output``:
 
-- ``"probability"``: Cellpose's cell probability, from 0 to 1 (float32), the
-  sigmoid of its logit. It is computed per voxel, so it joins up across
-  chunks, and the mask dynamics are skipped, which makes it the faster of
-  the two.
+- ``"flows"`` (the default): all of what Cellpose's network predicts, three
+  float32 channels named flow_y, flow_x and cell: the flows towards each
+  object's centre (Cellpose's ``dP``, about -5 to 5) and the cell
+  probability, 0 to 1, the sigmoid of its logit. The layer colours each
+  voxel by its flow's direction, dimmed by the cell probability
+  (``display_channel``; viewer.layers.flow_channels); the
+  CellposeMasksPostprocessor makes masks of them on the server, with
+  thresholds changeable from the dashboard; a seed reads the probability.
+  Computed per voxel, so it joins up across chunks.
+- ``"probability"``: the cell probability alone, one channel.
 - ``"masks"``: Cellpose's instance masks (uint64), ids unique within a
   chunk. Masks are made per chunk: an object that crosses a chunk's edge is
-  cut there, with another id on each side, and objects are not joined from
-  slice to slice. The ``MortonSegmentationRelabeling`` postprocessor makes
-  the ids unique across chunks and shows the layer as a segmentation; it is
-  not applied here (see ``_masks``).
+  cut there, with another id on each side. Objects are joined from slice to
+  slice only with ``stitch_threshold`` (Cellpose's own: a mask takes the id
+  of the one in the slice before that it overlaps by at least that IoU),
+  and only within a chunk. The ``MortonSegmentationRelabeling``
+  postprocessor makes the ids unique across chunks and shows the layer as a
+  segmentation; it is not applied here (see ``_masks``).
 
 Cellpose 4 cannot share cellmap-flow's default environment, whose cellpose 3
 pins an older numpy, so this type runs in the ``cellpose4`` pixi
 environment unless its entry names another (``default_env``).
+
+It can be finetuned, with LoRA or in full, on painted instances
+(``trainable_model``): the network learns Cellpose's own outputs, the flows
+towards each instance's centre and the cell probability, from flow targets
+(``finetune.instance_flows``), and is served afterwards as before, through
+Cellpose's eval, which runs the network training changed in place.
 
 ``cellpose`` is imported only when the model is built, as every type imports
 its framework: the CLIs, ``--help`` and the dashboard's model form import
@@ -28,6 +42,7 @@ Licence: the Cellpose-SAM weights were trained on data that includes
 datasets licensed CC-BY-NC, so they are for non-commercial use.
 """
 
+import contextlib
 import logging
 import math
 import os
@@ -44,7 +59,10 @@ logger = logging.getLogger(__name__)
 # DINO models also need the dinov3 package, which the cellpose4 environment
 # does not install (see _load_model).
 PRETRAINED_MODELS = ("cpsam_v2", "cpsam", "cpdino", "cpdino-vitb")
-OUTPUTS = ("probability", "masks")
+OUTPUTS = ("probability", "flows", "masks")
+# The channels each output serves: Cellpose's dP (flowY, flowX) and its cell
+# probability, as the sigmoid of the logit it predicts.
+OUTPUT_CHANNELS = {"probability": ["cell"], "flows": ["flow_y", "flow_x", "cell"], "masks": ["cell"]}
 
 # Cellpose cuts each slice into square tiles, bsize pixels a side,
 # overlapping by tile_overlap (its default, kept). Cellpose-SAM's ViT-L
@@ -56,6 +74,13 @@ DINO_TILE_SIZE = 384
 TILE_OVERLAP = 0.1
 # Cellpose's own "diameter" scale: objects about 30 px across.
 CELLPOSE_DIAMETER = 30.0
+# Tiles per GPU pass, by default. Timed on Cellpose-SAM's network in bfloat16
+# with 256 px tiles (ms per tile at batch 1 / 8 / 16 / 72 / 128): an L4 takes
+# 47 / 49 / 54 / ~50 / 50, an H100 16 / 7.0 / 6.6 / ~6.3 / 6.25. Peak memory
+# was 1.5 GB at 8, 2.4 GB at 16, ~9 GB at 72 and 15 GB at 128. So a whole
+# chunk's tiles in one pass (72 for the default chunk), the old default,
+# bought nothing over 16 and cost about 6.5 GB more.
+DEFAULT_BATCH_SIZE = 16
 
 
 def tile_size(backbone: str) -> int:
@@ -106,6 +131,91 @@ def _check_cellpose_4():
         )
 
 
+_BLOCKS = None
+
+
+def _network_blocks():
+    """The torch module classes below, defined on first use: this module is
+    imported by every CLI and the dashboard, which do not import torch."""
+    global _BLOCKS
+    if _BLOCKS is not None:
+        return _BLOCKS
+    import types
+
+    from torch import nn
+
+    class CellposeNetwork(nn.Module):
+        """A Cellpose 4 network on (N, 1, tile, tile) images: (N, 3, tile, tile),
+        flowY, flowX and the cell probability logit.
+
+        One channel, as Cellpose's eval gives a grayscale image (its network
+        reads only the first ``x.shape[1]`` channels of its patch embedding),
+        and without the style vector Cellpose returns beside the output.
+        ``fixed`` refuses any other size, as Cellpose-SAM's position
+        embeddings fit one tile only, with a message rather than a shape
+        error from deep inside the ViT.
+        """
+
+        def __init__(self, net, tile: int, fixed: bool = True):
+            super().__init__()
+            self.net = net
+            self.tile = int(tile)
+            self.fixed = bool(fixed)
+
+        def forward(self, x):
+            if self.fixed and tuple(x.shape[-2:]) != (self.tile, self.tile):
+                raise RuntimeError(
+                    f"Cellpose-SAM's network takes {self.tile} x {self.tile} tiles, not "
+                    f"{tuple(x.shape[-2:])}: Cellpose serves larger slices by tiling them "
+                    "in its eval, which serving uses; the trainer reads tiles "
+                    "(CellposeModelConfig.training_patch_voxels)"
+                )
+            return self.net(x)[0]
+
+    _BLOCKS = types.SimpleNamespace(CellposeNetwork=CellposeNetwork)
+    return _BLOCKS
+
+
+@contextlib.contextmanager
+def _serving(model):
+    """While ``model`` (a CellposeModel) segments: in bfloat16, and with its
+    network's train/eval mode put back afterwards.
+
+    - Cellpose serves in bfloat16. When ``trainable_model`` has put the
+      network in float32 for training, the batch of a whole chunk's tiles
+      took twice the memory, and in the trainer's live server, beside a full
+      finetune's weights, gradients and optimizer state, an L4 ran out.
+      Under autocast the matrix products are bfloat16 again, LoRA's
+      included, while the weights stay float32.
+      Its attention scores stay float32 under autocast, though, so the batch
+      of tiles is halved as well: a chunk's 72 tiles at once (the default
+      then, and still a batch_size one can give) peaked at 19 GB after
+      training, against 9 GB before.
+    - Cellpose's eval switches the network to eval mode and leaves it there,
+      so in the trainer's live server training went on without its
+      stochastic depth until the next epoch's ``train()``.
+
+    Yields a function of the eval kwargs giving those to change.
+    """
+    import torch
+
+    net = getattr(model, "net", None)
+    training = getattr(net, "training", False)
+    autocast = torch.cuda.is_available() and getattr(net, "dtype", None) == torch.float32
+
+    def override(eval_kwargs):
+        if not autocast:
+            return {}
+        return {"batch_size": max(1, int(eval_kwargs.get("batch_size", 8)) // 2)}
+
+    try:
+        with torch.autocast("cuda", dtype=torch.bfloat16) if autocast else contextlib.nullcontext():
+            yield override
+    finally:
+        if net is not None and training:
+            net.train(True)
+
+
 class CellposeModelConfig(ModelConfig):
     """Cellpose 4 run on each z slice of a chunk.
 
@@ -116,36 +226,56 @@ class CellposeModelConfig(ModelConfig):
             ``diameter``.
         pretrained_model: "cpsam_v2" (default), "cpsam", "cpdino",
             "cpdino-vitb", or the path of finetuned Cellpose weights.
-        output: "probability" (float32, 0 to 1) or "masks" (uint64, ids
-            unique within a chunk).
+        output: "flows" (the default; float32: flow_y, flow_x and the cell
+            probability), "probability" (float32, 0 to 1, one channel) or
+            "masks" (uint64, ids unique within a chunk).
         slices_per_chunk: z slices in a chunk.
         slice_size: voxels a side, in y and x, of each chunk's slices.
         context: voxels read on each side in y and x beyond those, and cut off.
-        batch_size: tiles per GPU pass; None puts the whole chunk's in one.
+        batch_size: tiles per GPU pass (``DEFAULT_BATCH_SIZE``; None, as a
+            blank form field sends it, is that too).
         diameter: object diameter in input voxels; None keeps the model's
             own scale (about 30). Cellpose resizes each slice by
             30 / diameter.
         flow_threshold, cellprob_threshold: Cellpose's mask thresholds (masks
             only).
+        stitch_threshold: Cellpose's own slice linking (masks only): a mask
+            takes the id of the mask in the slice before that it overlaps by
+            at least this IoU, within a chunk. 0, the default, leaves each
+            slice's masks apart.
     """
 
     cli_name = "cellpose"
     # Cellpose 4 cannot share cellmap-flow's default environment (see the
     # module docstring); an entry's explicit env still wins.
     default_env = "cellpose4"
+    finetunable = True
+    # What a finetune trains it on: Cellpose predicts flows and a cell
+    # probability, so the painted instances become flow targets (the
+    # dashboard reads this to pick the target; finetune.cli's --output-type).
+    finetune_output_type = "flows"
+
+    @property
+    def display_channel(self):
+        """The cell probability's channel when the output has several (flows):
+        the layer's flow colours are dimmed by it, and its range is the
+        layer's."""
+        channels = OUTPUT_CHANNELS[self.output]
+        return channels.index("cell") if len(channels) > 1 else None
 
     def __init__(
         self,
         voxel_size,
         pretrained_model: str = "cpsam_v2",
-        output: str = "probability",
+        output: str = "flows",
         slices_per_chunk: int = 8,
         slice_size: int = 512,
         context: int = 32,
-        batch_size: int = None,
+        batch_size: int = DEFAULT_BATCH_SIZE,
         diameter: float = None,
         flow_threshold: float = 0.4,
         cellprob_threshold: float = 0.0,
+        stitch_threshold: float = 0.0,
         name=None,
         scale=None,
     ):
@@ -166,10 +296,22 @@ class CellposeModelConfig(ModelConfig):
                 "slices_per_chunk and slice_size must be at least 1 and context at least 0; got "
                 f"{self.slices_per_chunk}, {self.slice_size} and {self.context}"
             )
-        self.batch_size = None if batch_size is None else int(batch_size)
+        # None is the default, not "the whole chunk" as it once was: the
+        # model form sends a blank field as None, and a whole chunk's tiles
+        # cost memory for no speed (DEFAULT_BATCH_SIZE).
+        self.batch_size = DEFAULT_BATCH_SIZE if batch_size is None else int(batch_size)
+        if self.batch_size < 1:
+            raise ValueError(f"batch_size must be at least 1; got {self.batch_size}")
         self.diameter = None if diameter is None else float(diameter)
         self.flow_threshold = float(flow_threshold)
         self.cellprob_threshold = float(cellprob_threshold)
+        self.stitch_threshold = float(stitch_threshold)
+        if not 0.0 <= self.stitch_threshold <= 1.0:
+            raise ValueError(f"stitch_threshold is an IoU, from 0 to 1; got {self.stitch_threshold}")
+        if self.stitch_threshold and output != "masks":
+            # It links masks; with no masks it would only slow the chunk down
+            # (Cellpose computes them to link them) and change nothing shown.
+            raise ValueError(f"stitch_threshold links masks: it needs output masks, not {output!r}")
         self.name = name
         self.scale = scale
 
@@ -224,53 +366,168 @@ class CellposeModelConfig(ModelConfig):
         config.read_shape = _numbers(np.array((slices, read, read)) * voxel_size)
         config.write_shape = _numbers(np.array((slices, size, size)) * voxel_size)
         config.context = _numbers((np.asarray(config.read_shape) - np.asarray(config.write_shape)) / 2)
-        config.output_channels = 1
-        config.channels = ["cell"]
+        config.channels = list(OUTPUT_CHANNELS[self.output])
+        config.output_channels = len(config.channels)
         config.block_shape = np.array((slices, size, size, config.output_channels))
         config.output_dtype = np.uint64 if self.output == "masks" else np.float32
 
         # Cellpose cuts each slice into tiles; given the chunk as one batch it
-        # runs the tiles of as many slices as fit in batch_size per GPU pass,
-        # so this many is the whole chunk in one. Lower it if a GPU runs out
-        # of memory. bsize is passed too, so Cellpose tiles as counted here.
+        # runs batch_size of them, from any of its slices, per GPU pass.
+        # bsize is passed too, so Cellpose tiles as counted here.
         bsize = tile_size(getattr(model, "backbone", "sam_vitl"))
         tiles = tiles_per_slice(read, bsize, _rescale(self.diameter))
         config.eval_kwargs = {
-            "batch_size": self.batch_size or slices * tiles,
+            "batch_size": self.batch_size,
             "bsize": bsize,
             "diameter": self.diameter,
             "flow_threshold": self.flow_threshold,
             "cellprob_threshold": self.cellprob_threshold,
             "compute_masks": self.output == "masks",
         }
+        if self.stitch_threshold:
+            # Cellpose stitches only a stack it takes for 3D, which needs
+            # its z axis named (and refuses one otherwise). It still segments
+            # each slice in 2D, but normalizes the chunk's slices together.
+            config.eval_kwargs.update(stitch_threshold=self.stitch_threshold, z_axis=0)
         logger.info(
             f"Cellpose {self.pretrained_model} ({getattr(model, 'backbone', '?')}): {tiles} tiles "
-            f"of {bsize} px a slice, batch_size {config.eval_kwargs['batch_size']}"
+            f"of {bsize} px a slice, {slices * tiles} a chunk, batch_size {self.batch_size}"
         )
         config.process_chunk = self.process_chunk
         return config
 
     def process_chunk(self, idi, output_roi):
-        """``output_roi`` segmented: ``(1, z, y, x)``, probability or masks."""
-        config = self.config
-        data = idi.to_ndarray_ts(output_roi.grow(config.context, config.context))
+        """``output_roi`` segmented: ``(channels, z, y, x)``, the ``output``'s channels."""
+        return self._segment(self.config, idi, output_roi)
+
+    def _segment(self, config, idi, output_roi):
+        """``output_roi`` segmented by ``config``'s Cellpose model and geometry.
+
+        ``config`` is this model's own, or a finetuned model's with the same
+        voxel counts (``serve_trained``), whose context is measured from its
+        own shapes, at the voxel size the finetune was trained at.
+        """
+        context = _numbers((np.asarray(config.read_shape) - np.asarray(config.write_shape)) / 2)
+        data = idi.to_ndarray_ts(output_roi.grow(context, context))
         # A batch of 2D images, (z, y, x, channel): Cellpose still normalizes
         # and segments each slice on its own, but batches their tiles
         # together. A list of slices would be run image by image, a pass or
         # more per slice; z_axis is refused without do_3D, and a 3D array is
         # taken for one 2D image with channels.
-        masks, flows, _ = config.model.eval(data[..., np.newaxis], channel_axis=3, **config.eval_kwargs)
+        with _serving(config.model) as eval_kwargs_override:
+            masks, flows, _ = config.model.eval(data[..., np.newaxis], channel_axis=3,
+                                                **{**config.eval_kwargs, **eval_kwargs_override(config.eval_kwargs)})
         inner = (
             slice(None),
             slice(self.context, self.context + self.slice_size),
             slice(self.context, self.context + self.slice_size),
         )
-        if self.output == "probability":
+        if self.output in ("probability", "flows"):
             # flows[2] is the cell probability as a logit, (z, y, x); Cellpose
             # squeezes a single slice to (y, x).
             logits = np.reshape(flows[2], data.shape)[inner].astype(np.float32)
-            return (1.0 / (1.0 + np.exp(-logits)))[np.newaxis]
-        return self._masks(np.reshape(masks, data.shape)[inner])[np.newaxis]
+            probability = (1.0 / (1.0 + np.exp(-logits)))[np.newaxis]
+            if self.output == "probability":
+                return probability
+            # flows[1] is dP, flowY and flowX, (2, z, y, x), squeezed alike.
+            dp = np.reshape(flows[1], (2, *data.shape))[(slice(None), *inner)].astype(np.float32)
+            return np.concatenate([dp, probability])
+        masks = np.reshape(masks, data.shape)[inner]
+        if config.eval_kwargs.get("stitch_threshold"):
+            # Stitched, an id is one object through the chunk's slices
+            # already; numbering each slice apart would split them again.
+            return masks.astype(np.uint64)[np.newaxis]
+        return self._masks(masks)[np.newaxis]
+
+    # ---- finetuning -------------------------------------------------------
+
+    def finetune_modes(self):
+        """("lora", "full"), without building the network: every Cellpose 4
+        network is a ViT whose Linear and Conv layers take adapters."""
+        return ("lora", "full")
+
+    def training_patch_voxels(self):
+        """The patch the trainer reads, (input, output) in voxels: one slice of one tile.
+
+        Not the serving geometry. Cellpose-SAM's ViT adds a fixed 32 x 32
+        grid of position embeddings to its 8-pixel tokens, so it takes
+        256 x 256 images and nothing else; Cellpose serves a slice by
+        cutting it into such tiles, and trains on random tiles of that size
+        too. The trainer does the same: it reads tiles, and supervises the
+        whole of each, as Cellpose does (an instance cut by its edge is left
+        out of the flow loss, ``instance_flows``). One slice: the network is
+        2D and sees each slice alone, so more slices would cost a network
+        pass each and add nothing, and a one-slice patch centred on a
+        painted voxel always lands on paint.
+        """
+        tile = tile_size(getattr(self.config.model, "backbone", "sam_vitl"))
+        patch = (1, tile, tile)
+        return patch, patch
+
+    def trainable_model(self):
+        """Cellpose's network as the trainer trains it: (B, 1, Z, Y, X) -> (B, 3, Z, Y, X).
+
+        Each slice normalized as Cellpose's eval does (1st to 99th
+        percentile), then through the network, which gives flowY, flowX and
+        the cell probability logit (``instance_flows``' channels). The
+        network is the one ``config.model`` segments with, so what
+        is trained is what is served; it is put in float32 (Cellpose loads
+        it in bfloat16), which serving then uses too. Its patch embedding is
+        kept out of LoRA (``lora_exclude_patterns``): Cellpose's forward
+        reads that layer's weight tensor directly, so an adapter on it would
+        never be used.
+        """
+        import torch
+
+        from cellmap_flow.finetune.trainable import ScaleRange, SliceWise
+
+        cellpose = self.config.model
+        net = cellpose.net
+        if getattr(net, "dtype", torch.float32) != torch.float32:
+            net.dtype = torch.float32  # Cellpose's setter: converts it, and what eval feeds it
+        backbone = getattr(cellpose, "backbone", "sam_vitl")
+        module = torch.nn.Sequential(
+            ScaleRange(1, 99, dims=(1, 3, 4)),  # each slice of (B, 1, Z, Y, X)
+            SliceWise(_network_blocks().CellposeNetwork(net, tile_size(backbone), backbone == "sam_vitl")),
+        )
+        module.lora_exclude_patterns = ["patch_embed"]
+        return module
+
+    def serve_trained(self, config, module):
+        """Serve ``module`` (the trained ``trainable_model()``) through Cellpose's eval.
+
+        Training changed the network in place, LoRA adapters and all, and
+        Cellpose's eval runs that network, so the chunks are segmented as
+        before. ``config`` is this model's own config (the trainer's live
+        server) or a finetuned model's new one with this geometry, which
+        gets what segmenting needs.
+
+        ``config.model`` stays Cellpose's model object, as it is for the
+        base model, so the inferencer neither moves nor forwards it. Were it
+        the module, the warmup and the shape check would forward it, and a
+        3-channel tile network fails the 1-channel serving geometry: as a
+        hard error whenever the read slice happens to be one tile. The
+        module is kept as ``config.trained_module``.
+        """
+        own = self.config
+        cellpose = own.model
+        if not any(part is cellpose.net for part in module.modules()):
+            raise ValueError(
+                "The trained module does not hold this model's Cellpose network: it was not "
+                "built by this config's trainable_model(), so serving through Cellpose's eval "
+                "would not serve it."
+            )
+        config.model = cellpose
+        config.trained_module = module
+        if config is own:
+            return
+        config.eval_kwargs = dict(own.eval_kwargs)
+        config.output_dtype = own.output_dtype
+
+        def process_chunk(idi, output_roi):
+            return self._segment(config, idi, output_roi)
+
+        config.process_chunk = process_chunk
 
     @staticmethod
     def _masks(masks):
@@ -304,10 +561,11 @@ class CellposeModelConfig(ModelConfig):
             "slice_size": self.slice_size,
             "context": self.context,
         }
-        if self.batch_size is not None:
-            result["batch_size"] = self.batch_size
+        result["batch_size"] = self.batch_size
         if self.diameter is not None:
             result["diameter"] = self.diameter
         result["flow_threshold"] = self.flow_threshold
         result["cellprob_threshold"] = self.cellprob_threshold
+        if self.stitch_threshold:
+            result["stitch_threshold"] = self.stitch_threshold
         return self._with_name_scale(result)

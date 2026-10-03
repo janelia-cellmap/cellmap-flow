@@ -19,6 +19,8 @@ class HuggingFaceModelConfig(ModelConfig):
 
     cli_name = "huggingface"
 
+    finetunable = True
+
     # How long a failed metadata.json download is remembered before the next
     # to_dict() tries again. Not zero: the pipeline builder and the model
     # list call to_dict() on every request, and an unreachable Hub costs

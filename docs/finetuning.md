@@ -62,7 +62,7 @@ Under **Annotation Crops**, you will see your model configuration (name, output 
 
 1. Set the **Output Path for Zarr Files** to a directory where annotation data will be saved. This must be accessible to the MinIO server that the dashboard starts.
 2. Click **New Volume**.
-3. This creates a sparse annotation zarr covering the full dataset extent, where each chunk maps to one training sample.
+3. This creates a sparse annotation zarr covering the full dataset extent, where each chunk maps to one training sample. Its labels are uint8 (ids up to 255), or uint16 (up to 65,535) for an instance model (affinities, Cellpose), whose seeds can hold hundreds of objects. A volume made before keeps its type: make a new one if a seed says its objects do not fit.
 4. A MinIO server will start automatically to serve the zarr for editing in Neuroglancer.
 
 ### Resume an existing volume
@@ -103,11 +103,40 @@ When you start drawing, Neuroglancer will ask if you want to write to the file �
 - **Paint Value 1** = **background** (this voxel is not the object of interest)
 - **Paint Value 2** = **foreground** (this voxel is the object of interest)
 - For **affinities models** with multiple object IDs, use higher paint values (3, 4, ...) for distinct object instances. The finetuning pipeline will automatically convert these instance IDs into affinity targets using the offsets defined in the model script.
+- For **Cellpose models**, paint each cell (or mitochondrion, nucleus...) with its own value (2, 3, 4, ...), whole within the XY slice you paint it in, and background with 1. The pipeline turns them into the flows Cellpose predicts (see [Cellpose models](#cellpose-models)).
 - **Paint Value 0** = **unannotated / ignored** — these voxels are excluded from the loss during training.
 
 You can change the paint value in the Draw tab by editing the **Paint Value** field, or click **Random** next to **New Random Value** to pick a new instance ID.
 
 Annotate as many chunks as you like across the dataset. Only chunks with non-zero annotations will be used for training.
+
+### Label the patch on screen in one click
+
+The **Patch on screen** panel acts on a box centred where the viewer looks: one model output patch, unless *Box (voxels)* under *Seed, split and box settings* says otherwise. Every button fills or changes only that box, keeps what you painted, and re-reads the paint layer afterwards.
+
+- **Seed from Prediction** copies the prediction of the model picked in *Prediction from* (default: the volume model's latest finetune, else that model) into the unpainted voxels: an id per object (2 and up), background 1. Then fix it with the brush; that is much quicker than painting objects from nothing. An object you already painted part of keeps your id.
+- **All Background** labels every unpainted voxel 1, for a region of false positives.
+- **Split Objects** gives each connected object an id of its own. To split a merge, paint a background wall through it in every slice it spans (in one slice with *Per z slice*). A stroke joining two objects merges them.
+- **Undo** takes back the last of these (up to 10), except voxels painted since.
+
+How a seed makes objects of the prediction is its **Method**, under *Seed, split and box settings*. Only the methods that fit the chosen model's output are listed, picked from what the model outputs, not from its name. The best fit comes first, and a method you pick is kept whenever the model offers it:
+
+| Method | Offered for | What it does |
+|---|---|---|
+| **Model's instances** | a server that serves integer labels (Cellpose with `output: masks`) | The model's own ids, one object each, numbered afresh. An id repeated in another server chunk is another object, since Cellpose numbers each chunk from 1. |
+| **Mutex watershed** | affinity models (offsets in the script, or `_aff` channels) | Reads the offset channels. Neighbours join where the affinity is over the threshold and stay apart where it is under, so touching objects split. A fragment whose mean affinity is under the threshold is background. |
+| **Distance watershed** | distance models (`distance` in the name) | Foreground is over the threshold. Objects grow from the distance's peaks (h-maxima 0.05 deep), so touching objects split where the distance dips between them. |
+| **Threshold + components** | every model | Foreground is over the threshold, and each connected object gets an id. Touching objects stay one. This is the default when a request names no method. |
+
+The other settings:
+
+- **Box (voxels)** is the box every button covers: z, y, x annotation voxels, or one number for all three. Blank means one model output patch, whose size the field shows. Any size works, in z too, because the model still reads its whole input around the box; the box only picks which of its prediction to copy. A smaller box is less to check and fix (Cellpose's 8 × 512 × 512 patch can hold hundreds of objects), and the unpainted voxels around it are left out of training. *Mark as Good* still marks one whole patch.
+- **Threshold** is a probability whatever the model's activation: 0.5 is the model's own boundary (0.5 on [0, 1] output, 0 on tanh or unbounded output such as logits or signed distances). Higher keeps only confident voxels. The mutex watershed uses it as its bias. Model's instances ignores it.
+- **Min object** turns objects of fewer voxels into background.
+- **Connectivity** (used by Seed and by Split Objects) sets which neighbours touch. *faces* (6 neighbours, the default) means a one-voxel background wall cuts an object. *+ edges* (18) and *all* (26) join voxels that touch along an edge or at a corner.
+- **Per z slice** (used by threshold + components and by Split Objects) labels each z slice on its own in 2D, which suits objects annotated or segmented slice by slice.
+
+On a uint16/uint32 volume for an instance target (affinities, Cellpose's flows), new ids count up past the patch's largest. Otherwise they reuse ids the patch does not hold, so a uint8 volume never runs out. The settings are kept in the browser. A patch over 128³ voxels is asked about first. Routes: `POST /api/finetune/view-labels/{seed,background,split,undo}` and `GET /api/finetune/view-labels/sources`, which lists the models and the methods each offers. The segmenters are in `cellmap_flow.post.segment`, which `LabelPostprocessor` (with the same `connectivity`, `min_size` and `per_slice` options) and `AffinityPostprocessor` also use.
 
 ## 5. Training
 
@@ -120,7 +149,7 @@ Switch to the **Training** tab in the Finetune section.
 | Parameter | Description |
 |---|---|
 | **Checkpoint Path** | (Optional, Advanced) Override the base model checkpoint to finetune from. Leave empty to auto-detect from the model configuration or script. |
-| **LoRA Rank** | Controls the number of trainable parameters. The current UI exposes `4`, `8`, `16`, and `64`. Higher rank = more capacity and more memory use. |
+| **LoRA Rank** | Controls the number of trainable parameters. The UI exposes `4`, `8`, `16`, `64` and `0`. Higher rank = more capacity and more memory use; `0` is a full finetune (every parameter, no adapter). Only the ranks the selected model can take are offered (see [Which models can be finetuned](#which-models-can-be-finetuned)). |
 | **Number of Epochs** | How many passes over the training data. The UI currently defaults to `20`. |
 | **Batch Size** | Number of samples per training step. The UI currently exposes `1`, `2`, `4`, `8`, `16`, and `32`. Higher = faster but uses more GPU memory. |
 | **Learning Rate** | Step size for optimization. The UI currently exposes values from `1e-7` through `1e-1`, with `1e-4` as the standard default. |
@@ -132,6 +161,28 @@ Switch to the **Training** tab in the Finetune section.
 | **Balance fg/bg classes** | Weights foreground and background equally in the loss regardless of how much of each you've annotated. Prevents the model from overpredicting whichever class dominates the scribbles. |
 | **GPU Queue** | Which GPU queue to submit the training job to (e.g. H100, H200). |
 | **Auto-load model after training** | When checked, the finetuned model will automatically start an inference server and be added to the Neuroglancer viewer once training completes. |
+
+### Which models can be finetuned
+
+What a model can be finetuned with follows from its network, not its name, and the LoRA Rank list offers only that:
+
+| The model's network is... | LoRA and full | Full only (rank 0) | Not finetunable |
+|---|---|---|---|
+| Plain PyTorch: cellmap and Hugging Face exports, fly checkpoints, DaCapo runs, scripts, BioImage Model Zoo models with PyTorch weights, Cellpose | yes | | |
+| Compiled (TorchScript): zoo models whose only weights are TorchScript | | yes: LoRA attaches adapters beside a network's layers, which a compiled network does not allow | |
+| ONNX or TensorFlow: zoo models with only those weights | | | yes: they cannot be trained |
+
+A **BioImage Model Zoo** model is trained as it serves: its own normalization, slice by slice for a 2D model, its halo cut off and its sigmoid applied, so the finetuned model reads the data exactly as the original did. The loss is picked from its outputs as for any other model. Descriptions it cannot follow (label outputs, binarize, StarDist) are refused with the reason. The ilastik *Enhancer* models expect a pixel classifier's probabilities, not raw EM: they can be finetuned, but on raw EM their starting point means little.
+
+### Cellpose models
+
+A Cellpose model (Cellpose-SAM) predicts, for every pixel, a flow pointing to its cell's centre and a cell probability, so it trains on those: the dashboard picks the **flow** loss for it. Each painted instance's flows are computed the way Cellpose computes them, slice by slice; unpainted voxels are left out of the loss, and so are the flows of instances cut by the training patch's edge (their centre is unknown). Cellpose's own training (`train_seg`) has no such mask: on sparse painting it would learn "no cell" wherever nothing was painted, which is why finetuning goes through cellmap-flow's trainer.
+
+- Training sees XY slices only, as Cellpose segments them: paint each instance whole in the slice you paint it in.
+- It trains on 256 x 256 tiles, the only size Cellpose-SAM's network takes, one slice at a time.
+- LoRA (the default) or a full finetune. At batch size 1 both fit an L4 (24 GB): LoRA trains in 5.6 GB at 0.25 s a step, a full finetune in 8 GB at 0.36 s, and the live server's chunks peak at 9 and 13 GB with training alongside. An H100 runs either at 0.06 s a step; larger batches want one.
+- The finetuned model is served as Cellpose is, with its masks or probabilities.
+- Cellpose's models are trained on data licensed CC-BY-NC (non-commercial), and so are their finetunes.
 
 ### Distance models on scribbles
 

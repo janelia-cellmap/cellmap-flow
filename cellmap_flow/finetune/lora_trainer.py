@@ -32,6 +32,7 @@ from cellmap_flow.finetune.losses import (
     masked_mean,
     soft_target_entropy,
 )
+from cellmap_flow.finetune.instance_flows import FlowLoss, FlowTargetTransform
 from cellmap_flow.finetune.target_transforms import IntervalTargetTransform
 
 logger = logging.getLogger(__name__)
@@ -66,15 +67,17 @@ class LoRAFinetuner:
         num_epochs: Number of training epochs (default: 10)
         gradient_accumulation_steps: Steps to accumulate gradients (default: 1)
         use_mixed_precision: Enable mixed precision on CUDA (default: True; off on the CPU)
-        loss_type: Loss function: "dice", "bce", "combined" (Dice + BCE), "mse", "margin"
-                   or "interval" (a distance model on scribbles; needs an IntervalTargetTransform)
+        loss_type: Loss function: "dice", "bce", "combined" (Dice + BCE), "mse", "margin",
+                   "interval" (a distance model on scribbles; needs an IntervalTargetTransform)
+                   or "flow" (a flow model such as Cellpose; needs a FlowTargetTransform)
         device: Training device ("cuda" or "cpu", auto-detected if None)
         select_channel: Optional channel index to select from multi-channel output (default: None)
         mask_unannotated: If True (default), only compute loss on annotated regions (target > 0).
                          Targets are shifted down by 1 (e.g., 1->0, 2->1) after masking.
                          This allows partial annotations where 0=unannotated, 1=background, 2=foreground, etc.
                          Ignored if target_transform is provided.
-        label_smoothing: s moves the targets to s/2 and 1 - s/2 (default: 0; forced to 0 for margin)
+        label_smoothing: s moves the targets to s/2 and 1 - s/2 (default: 0; forced to 0 for
+                         margin, interval and flow)
         distillation_lambda: Weight of the distillation term. None means 1.0 when the
                          dataset has good regions and 0 otherwise; an explicit 0 is honoured.
         distillation_all_voxels: Distil on every voxel, not only the unlabeled ones
@@ -196,6 +199,7 @@ class LoRAFinetuner:
         self._use_bce = False
         self._use_mse = False
         self._use_interval = False
+        self._use_flow = False
         self._step_interval_terms = None  # (bounds, slope) terms of the last step
         self._model_has_sigmoid = False   # set by _apply_probability_output_mode
         self._step_bce_metrics = None     # (entropy floor, mean |p - t|) of the last step
@@ -224,11 +228,22 @@ class LoRAFinetuner:
                 slope_weight=slope_weight, balance_classes=balance_classes,
             )
             self._use_interval = True
+        elif loss_type == "flow":
+            # Flows towards each instance's centre and a foreground logit,
+            # with a mask per channel: only FlowTargetTransform makes those.
+            if not isinstance(target_transform, FlowTargetTransform):
+                raise ValueError("loss_type 'flow' needs a FlowTargetTransform's flow targets")
+            self.criterion = FlowLoss()
+            self._use_flow = True
+            if balance_classes:
+                logger.warning("Class balancing does not apply to the flow loss; ignoring it")
+                self.balance_classes = False
         else:
             raise ValueError(f"Unknown loss_type: {loss_type}")
 
-        # Label smoothing is redundant with margin loss, and means nothing to bounds
-        if loss_type in ("margin", "interval") and self.label_smoothing > 0:
+        # Label smoothing is redundant with margin loss, and means nothing to
+        # bounds or to flows (whose channels are not probabilities)
+        if loss_type in ("margin", "interval", "flow") and self.label_smoothing > 0:
             logger.warning(f"Label smoothing is redundant with {loss_type} loss, setting to 0")
             self.label_smoothing = 0.0
 
@@ -419,8 +434,10 @@ class LoRAFinetuner:
         it does something. Never lets a display problem stop training.
         """
         try:
-            p = as_probabilities(pred[0, 0].detach().float(), self._model_has_sigmoid).cpu()
-            t = target[0, 0].detach().float().cpu()
+            # A flow model's first two channels are flows; its foreground is the third.
+            channel = 2 if self._use_flow else 0
+            p = as_probabilities(pred[0, channel].detach().float(), self._model_has_sigmoid).cpu()
+            t = target[0, channel].detach().float().cpu()
             r = raw[0, 0].detach().float().cpu()
             # Valid-padding models emit a smaller volume than they read.
             c = [(rs - ps) // 2 for rs, ps in zip(r.shape, p.shape)]
@@ -429,7 +446,7 @@ class LoRAFinetuner:
             r2 = r[z]
             r2 = (r2 - r2.min()) / (r2.max() - r2.min() + 1e-8)
             m2 = (
-                mask[0, 0, z].detach().float().cpu().clamp(0, 1)
+                mask[0, min(channel, mask.shape[1] - 1), z].detach().float().cpu().clamp(0, 1)
                 if mask is not None else torch.zeros_like(r2)
             )
             # One strip per epoch, raw | target | prediction | mask, separated
@@ -578,6 +595,10 @@ class LoRAFinetuner:
         if self._single_class_checked:
             return
         self._single_class_checked = True
+        if self._use_flow:
+            # Flow targets are not 0/1 classes: an instance patch with no
+            # background painted still teaches each object's flows.
+            return
         try:
             with torch.no_grad():
                 if mask is None:
@@ -653,6 +674,10 @@ class LoRAFinetuner:
         # even with extreme inputs, the model has sigmoid baked in.
         # In that case, switch BCEWithLogitsLoss to BCELoss to avoid double-sigmoid,
         # and tell DiceLoss/MarginLoss to skip their sigmoid.
+        if self._use_flow:
+            # A flow model's output is flows and a logit, never probabilities;
+            # its flows can happen to fall within [0, 1] on the probe.
+            return
         cached_model_has_sigmoid = self._get_cached_model_has_sigmoid()
         if cached_model_has_sigmoid is not None:
             model_has_sigmoid = cached_model_has_sigmoid
@@ -1162,6 +1187,8 @@ class LoRAFinetuner:
                     slope_term = self.criterion.slope_term(logits)
                     supervised_loss = bounds_term + self.criterion.slope_weight * slope_term
                     self._step_interval_terms = (bounds_term.item(), slope_term.item())
+                elif self._use_flow:
+                    supervised_loss = self.criterion(pred, target, mask)
                 elif (self._use_bce or self._use_mse) and mask is not None:
                     # For per-element losses (BCE, MSE), manually apply mask
                     per_element_loss = self.criterion(loss_pred, target)

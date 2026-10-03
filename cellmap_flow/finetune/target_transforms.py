@@ -13,6 +13,10 @@ And produces:
 
 except IntervalTargetTransform, whose "target" is a lower and an upper bound
 on a distance model's output, for losses.IntervalLoss.
+
+A flow model's target (Cellpose's: flows towards each instance's centre and
+a foreground channel, with a mask per channel) is made by
+``instance_flows.FlowTargetTransform``, beside the loss it goes with.
 """
 
 import logging

@@ -89,7 +89,7 @@
       </div>
       <div class="patch-tools-grid">
         <button type="button" class="btn btn-outline-secondary btn-sm" id="seedViewBtn"
-                title="Fills the unpainted voxels of the patch from the chosen model's prediction, thresholded at its decision boundary unless the settings say otherwise: an id per object, background 1. Your strokes are kept. Then fix it with the brush. The viewer reloads to show it.">
+                title="Fills the unpainted voxels of the patch from the chosen model's prediction, segmented by the settings' method (thresholded at the model's decision boundary unless they say otherwise): an id per object, background 1. Your strokes are kept. Then fix it with the brush. The viewer reloads to show it.">
           Seed from Prediction
         </button>
         <button type="button" class="btn btn-outline-secondary btn-sm" id="backgroundViewBtn"
@@ -101,13 +101,22 @@
           Undo
         </button>
         <button type="button" class="btn btn-outline-secondary btn-sm" id="splitObjectsBtn"
-                title="Gives each connected object in the patch an id of its own. To split a merged object, paint a background wall through it in every slice it spans, then click: the two sides get their own ids. A stroke joining two objects merges them into one id. The viewer reloads to show it.">
+                title="Gives each connected object in the patch an id of its own, by the settings' connectivity. To split a merged object, paint a background wall through it in every slice it spans (in one slice, with Per z slice), then click: the two sides get their own ids. A stroke joining two objects merges them into one id. The viewer reloads to show it.">
           Split Objects
         </button>
       </div>
       <details class="patch-tools-settings" id="seedSettings">
-        <summary>Seed settings</summary>
+        <summary>Seed, split and box settings</summary>
+        <div class="d-flex align-items-center gap-2 mt-2">
+          <label class="mb-0 text-nowrap" for="seedMethod">Method</label>
+          <select class="form-select form-select-sm" id="seedMethod"
+                  title="How Seed from Prediction makes objects of the prediction. The methods that fit the chosen model come first; the others are greyed out, saying what they need."></select>
+        </div>
+        <small class="text-muted d-block mt-1" id="seedMethodHint"></small>
         <div class="patch-tools-fields">
+          <label for="seedBox">Box (voxels)</label>
+          <input type="text" class="form-control form-control-sm" id="seedBox" placeholder="one patch" inputmode="numeric"
+                 title="The box Seed from Prediction, All Background and Split Objects cover, centred where you look: z, y, x annotation voxels, or one number for all three. Any size: the model still reads its whole input around it. Smaller is less to check and fix (Cellpose's patch can hold hundreds of objects), and the unpainted voxels around it are left out of training. Blank: one model output patch, the size shown.">
           <label for="seedThreshold">Threshold</label>
           <input type="number" class="form-control form-control-sm" id="seedThreshold" min="0" max="1" step="0.05"
                  placeholder="model's"
@@ -115,6 +124,16 @@
           <label for="seedMinSize">Min object (voxels)</label>
           <input type="number" class="form-control form-control-sm" id="seedMinSize" min="0" step="1" value="0"
                  title="Objects of fewer voxels than this become background: specks the threshold lets through.">
+          <label for="seedConnectivity">Connectivity</label>
+          <select class="form-select form-select-sm" id="seedConnectivity"
+                  title="Which neighbouring voxels touch, for Seed's objects and for Split Objects. Faces (6 neighbours, the default): a one-voxel background wall cuts an object. Edges (18) and all (26) join voxels that touch only along an edge or at a corner, so a diagonal wall no longer cuts.">
+            <option value="1">faces</option>
+            <option value="2">+ edges</option>
+            <option value="3">all</option>
+          </select>
+          <label for="seedPerSlice">Per z slice</label>
+          <input type="checkbox" class="form-check-input" id="seedPerSlice"
+                 title="Objects are found in each z slice on its own, in 2D: every slice of an object gets its own id. For objects annotated or segmented slice by slice (Cellpose). For Split Objects, a wall painted in one slice then splits that slice.">
         </div>
       </details>
     </div>
@@ -284,7 +303,7 @@
             <option value="64" selected>64 (Very high capacity) - Recommended</option>
             <option value="0">0 (Full finetune: every parameter, no adapter)</option>
           </select>
-          <small class="text-muted">Higher = more capacity. 0 = full finetune.</small>
+          <small class="text-muted" id="loraRankNote">Higher = more capacity. 0 = full finetune.</small>
         </div>
       </div>
       <div class="col-md-6">

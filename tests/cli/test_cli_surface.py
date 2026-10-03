@@ -151,18 +151,20 @@ def _cellpose_options(*pretrained_model_opts):
         ('voxel_size', ('-v', '--voxel-size'), (), 'text', True, None, False, 'Parameter: voxel_size'),
         ('pretrained_model', pretrained_model_opts, (), 'text', False, 'cpsam_v2', False,
          'Parameter: pretrained_model (default: cpsam_v2)'),
-        ('output', ('-o', '--output'), (), 'text', False, 'probability', False,
-         'Parameter: output (default: probability)'),
+        ('output', ('-o', '--output'), (), 'text', False, 'flows', False,
+         'Parameter: output (default: flows)'),
         ('slices_per_chunk', ('-s', '--slices-per-chunk'), (), 'integer', False, 8, False,
          'Parameter: slices_per_chunk (default: 8)'),
         ('slice_size', ('--slice-size',), (), 'integer', False, 512, False, 'Parameter: slice_size (default: 512)'),
         ('context', ('-c', '--context'), (), 'integer', False, 32, False, 'Parameter: context (default: 32)'),
-        ('batch_size', ('-b', '--batch-size'), (), 'integer', False, None, False, 'Parameter: batch_size (optional)'),
+        ('batch_size', ('-b', '--batch-size'), (), 'integer', False, 16, False, 'Parameter: batch_size (default: 16)'),
         ('diameter', ('--diameter',), (), 'float', False, None, False, 'Parameter: diameter (optional)'),
         ('flow_threshold', ('-f', '--flow-threshold'), (), 'float', False, 0.4, False,
          'Parameter: flow_threshold (default: 0.4)'),
         ('cellprob_threshold', ('--cellprob-threshold',), (), 'float', False, 0.0, False,
          'Parameter: cellprob_threshold (default: 0.0)'),
+        ('stitch_threshold', ('--stitch-threshold',), (), 'float', False, 0.0, False,
+         'Parameter: stitch_threshold (default: 0.0)'),
         NAME, LONG_SCALE,
     ]
 
@@ -380,6 +382,7 @@ def _hidden(command, path=""):
     ids=["cellmap_flow", "cellmap_flow_server"],
 )
 def test_commands_and_options_are_unchanged(command, expected, hidden):
+    gc.collect()  # a model class another test defined must not be listed
     surface = _surface(command)
     assert list(surface) == list(expected), "the commands, in --help's order"
     assert surface == expected
@@ -403,7 +406,7 @@ _LISTED = [
     ("cellmap", "CellMapModelConfig", "folder_path, name, scale", "folder_path"),
     ("cellpose", "CellposeModelConfig",
      "voxel_size, pretrained_model, output, slices_per_chunk, slice_size, context, batch_size, diameter, "
-     "flow_threshold, cellprob_threshold, name, scale", "voxel_size"),
+     "flow_threshold, cellprob_threshold, stitch_threshold, name, scale", "voxel_size"),
     ("dacapo", "DaCapoModelConfig", "run_name, iteration, name, scale", "run_name, iteration"),
     ("finetune", "FinetuneModelConfig",
      "lora_adapter_path, base_model, name, scale, weights_path, input_voxel_size, output_voxel_size", ""),
@@ -656,14 +659,15 @@ MODEL_CONFIG_TYPES = {
         "CellposeModelConfig", "Cellpose Model",
         _param_info("voxel_size", "string", True, "textarea"),
         _param_info("pretrained_model", "str", False, "text", "cpsam_v2"),
-        _param_info("output", "str", False, "text", "probability"),
+        _param_info("output", "str", False, "text", "flows"),
         _param_info("slices_per_chunk", "int", False, "text", 8),
         _param_info("slice_size", "int", False, "text", 512),
         _param_info("context", "int", False, "text", 32),
-        _param_info("batch_size", "int", False, "text", None),
+        _param_info("batch_size", "int", False, "text", 16),
         _param_info("diameter", "float", False, "text", None),
         _param_info("flow_threshold", "float", False, "text", 0.4),
         _param_info("cellprob_threshold", "float", False, "text", 0.0),
+        _param_info("stitch_threshold", "float", False, "text", 0.0),
         _NAME, _SCALE,
     ),
     "DaCapoModelConfig": _type_info(

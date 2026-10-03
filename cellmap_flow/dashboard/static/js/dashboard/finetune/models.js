@@ -29,6 +29,33 @@ function displayModelInfo(model) {
       </small>
     `;
   document.getElementById("modelInfo").style.display = "block";
+  applyFinetuneModes(model.finetune_modes);
+}
+
+// Offer only the LoRA ranks the model can take: a compiled (TorchScript)
+// network trains in full only, and some models not at all. null (the
+// dashboard could not ask) offers them all; the trainer refuses what the
+// model cannot do anyway.
+function applyFinetuneModes(modes) {
+  const rank = document.getElementById("loraRank");
+  const note = document.getElementById("loraRankNote");
+  const lora = !modes || modes.includes("lora");
+  const full = !modes || modes.includes("full");
+  Array.from(rank.options).forEach((option) => {
+    option.disabled = option.value === "0" ? !full : !lora;
+  });
+  if (rank.selectedOptions[0] && rank.selectedOptions[0].disabled) {
+    const first = Array.from(rank.options).find((option) => !option.disabled);
+    if (first) rank.value = first.value;
+  }
+  rank.disabled = !lora && !full;
+  if (!lora && !full) {
+    note.textContent = "This model cannot be finetuned (its weights are in a format that cannot be trained).";
+  } else if (!lora) {
+    note.textContent = "Full finetune only: this model's network is compiled (TorchScript), so LoRA adapters cannot be attached.";
+  } else {
+    note.textContent = "Higher = more capacity. 0 = full finetune.";
+  }
 }
 
 // log: the Annotation Crops panel's log. savedModelName: the pick saved with

@@ -3,7 +3,8 @@
 // the rehearsal setting's hint says how much that will weigh. Beside them,
 // three buttons act on the same patch at once (routes/finetune/view_labels.py):
 // label it from the model's prediction or all background, or relabel its
-// objects by connected component.
+// objects by connected component. How a seed makes objects of the prediction
+// (its method) is picked among those that fit the chosen model's output.
 import { setBusy } from "../../lib/dom.js";
 import { getAnswer, postAnswer } from "./requests.js";
 
@@ -97,19 +98,74 @@ export function initGoodRegions({ log }) {
   // answer that changed labels. A box too large to label without asking is
   // answered needs_confirmation, and sent again confirmed; the button stays
   // busy until that answer too.
-  // The seed settings (threshold, smallest object), kept in this browser,
-  // and shown when one is set so a seed never silently uses an old one.
+  // The seed settings (box, method, threshold, smallest object,
+  // connectivity, per slice), kept in this browser, and shown when one is
+  // set so a seed never silently uses an old one. Connectivity and per
+  // slice are Split Objects' too; the box is every label action's.
   const seedSettings = document.getElementById("seedSettings");
+  const seedMethod = document.getElementById("seedMethod");
+  const seedMethodHint = document.getElementById("seedMethodHint");
   const seedThreshold = document.getElementById("seedThreshold");
   const seedMinSize = document.getElementById("seedMinSize");
+  const seedConnectivity = document.getElementById("seedConnectivity");
+  const seedPerSlice = document.getElementById("seedPerSlice");
+  const seedBox = document.getElementById("seedBox");
   const SETTINGS_KEY = "cellmap_flow.seed_settings";
+  // The seed methods (view_labels.SEED_METHODS): their name in the picker,
+  // a line on what they do, and which settings they read.
+  const METHODS = {
+    instances: {
+      label: "Model's instances",
+      hint: "The ids the model serves (Cellpose's masks), one object each; touching objects stay apart.",
+      needs: "a model serving instance ids, e.g. Cellpose with Output: Masks",
+      uses: ["min_size", "connectivity"],
+    },
+    mutex_watershed: {
+      label: "Mutex watershed",
+      hint: "Affinities: neighbours join where the model's affinity is over the threshold, so touching objects split.",
+      needs: "an affinity model",
+      uses: ["threshold", "min_size"],
+    },
+    distance_watershed: {
+      label: "Distance watershed",
+      hint: "Distance: objects grow from the distance's peaks, so touching objects split where it dips between them.",
+      needs: "a distance model",
+      uses: ["threshold", "min_size", "connectivity"],
+    },
+    components: {
+      label: "Threshold + components",
+      hint: "Over the threshold is foreground, each connected object an id; touching objects stay one.",
+      uses: ["threshold", "min_size", "connectivity", "per_slice"],
+    },
+  };
+  // The method last picked by hand, used whenever the chosen model offers it.
+  let chosenMethod = "";
   try {
     const saved = JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}");
     if (saved.threshold !== undefined && saved.threshold !== "") seedThreshold.value = saved.threshold;
     if (saved.min_size !== undefined) seedMinSize.value = saved.min_size;
+    if (saved.connectivity) seedConnectivity.value = saved.connectivity;
+    seedPerSlice.checked = Boolean(saved.per_slice);
+    if (saved.box) seedBox.value = saved.box;
+    chosenMethod = saved.method || "";
   } catch (e) { /* no storage: defaults */ }
+  // The box, in annotation voxels: "z, y, x" or one number. Blank: the
+  // server's default, one output patch. Anything else is sent as typed, for
+  // the server to refuse with a reason.
+  function boxBody() {
+    const text = seedBox.value.trim();
+    if (!text) return {};
+    return { box_voxels: text.split(/[\s,x×]+/).filter(Boolean).map(Number) };
+  }
+  // The box and the connected-components settings, shared by a seed and Split Objects.
+  function componentsBody() {
+    const body = boxBody();
+    if (seedConnectivity.value !== "1") body.connectivity = Number(seedConnectivity.value);
+    if (seedPerSlice.checked) body.per_slice = true;
+    return body;
+  }
   function seedBody() {
-    const body = {};
+    const body = componentsBody();
     if (seedThreshold.value !== "") body.threshold = Number(seedThreshold.value);
     if (Number(seedMinSize.value) > 0) body.min_size = Number(seedMinSize.value);
     return body;
@@ -117,17 +173,60 @@ export function initGoodRegions({ log }) {
   function seedRequest() {
     const body = seedBody();
     if (seedModel.value) body.model = seedModel.value;
+    if (seedMethod.value) body.method = seedMethod.value;
     return body;
   }
   function rememberSeedSettings() {
     try {
-      localStorage.setItem(SETTINGS_KEY, JSON.stringify({ threshold: seedThreshold.value, min_size: seedMinSize.value }));
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify({
+        threshold: seedThreshold.value, min_size: seedMinSize.value, method: chosenMethod,
+        connectivity: seedConnectivity.value, per_slice: seedPerSlice.checked, box: seedBox.value.trim(),
+      }));
     } catch (e) { /* no storage */ }
+  }
+  // The method's line, and the settings it does not read greyed out (Split
+  // Objects reads connectivity and per slice whatever the method).
+  function showMethod() {
+    const method = METHODS[seedMethod.value];
+    seedMethodHint.textContent = method ? method.hint : "";
+    const uses = method ? method.uses : [];
+    seedThreshold.disabled = !uses.includes("threshold");
+    seedMinSize.disabled = !uses.includes("min_size");
   }
   seedThreshold.addEventListener("change", rememberSeedSettings);
   seedMinSize.addEventListener("change", rememberSeedSettings);
+  seedConnectivity.addEventListener("change", rememberSeedSettings);
+  seedPerSlice.addEventListener("change", rememberSeedSettings);
+  seedBox.addEventListener("change", rememberSeedSettings);
+  seedMethod.addEventListener("change", () => {
+    chosenMethod = seedMethod.value;
+    rememberSeedSettings();
+    showMethod();
+  });
   // Open whenever a setting is set, so a seed never silently uses an old one.
   seedSettings.open = Object.keys(seedBody()).length > 0;
+
+  // The methods the chosen model offers (the sources' answer), best fit
+  // first: the one picked by hand when it is among them, else the first.
+  let methodsByModel = {};
+  // Every method is listed, the chosen model's in its best-fit order and the
+  // rest after them greyed out with what they need: hiding them left no way
+  // to tell that the others exist, or what would make them available.
+  function showMethods() {
+    const offered = methodsByModel[seedModel.value] || ["components"];
+    const order = offered.concat(Object.keys(METHODS).filter((m) => !offered.includes(m)));
+    const options = order.map((m) => {
+      const method = METHODS[m] || { label: m };
+      const fits = offered.includes(m);
+      const option = new Option(fits ? method.label : `${method.label} (needs ${method.needs || "another model"})`, m);
+      option.disabled = !fits;
+      return option;
+    });
+    const key = (opts) => opts.map((o) => `${o.value}|${o.disabled}`).join(",");
+    if (key(Array.from(seedMethod.options)) !== key(options)) seedMethod.replaceChildren(...options);
+    seedMethod.value = offered.includes(chosenMethod) ? chosenMethod : offered[0];
+    showMethod();
+  }
 
   // The models a seed can read: every running server, newest first, the
   // default (the volume model's latest finetune, else that model) marked.
@@ -144,7 +243,12 @@ export function initGoodRegions({ log }) {
       .then((d) => {
         if (d && d.can_undo !== undefined) undoViewLabelsBtn.disabled = !d.can_undo;
         const names = (d && d.models) || [];
-        if (!names.length) return showOnly("no model running");
+        methodsByModel = (d && d.methods) || {};
+        seedBox.placeholder = d && d.box_voxels ? `${d.box_voxels.join(", ")} (one patch)` : "one patch";
+        if (!names.length) {
+          showOnly("no model running");
+          return showMethods();
+        }
         const chosen = seedModel.value;
         const options = names.slice().reverse().map((name) =>
           new Option(name === d.default ? `${name} (default)` : name, name));
@@ -153,10 +257,12 @@ export function initGoodRegions({ log }) {
         if (now !== options.map((o) => `${o.value}|${o.text}`).join(",")) seedModel.replaceChildren(...options);
         seedModel.disabled = false;
         seedModel.value = names.includes(chosen) ? chosen : (d.default || names[names.length - 1]);
+        showMethods();
       })
       .catch(() => showOnly("could not list models"));
   }
   seedModel.addEventListener("mousedown", refreshSeedSources);
+  seedModel.addEventListener("change", showMethods);
   refreshSeedSources();
   setInterval(refreshSeedSources, 5000);
 
@@ -186,12 +292,14 @@ export function initGoodRegions({ log }) {
   function describeFill(d) {
     if (!d.reload_viewer) return "Nothing to label: every voxel of the view is labelled already.";
     const from = d.model ? ` from ${d.model}` : "";
+    const by = d.method && METHODS[d.method] ? ` by ${METHODS[d.method].label.toLowerCase()}` : "";
     const how = d.threshold !== undefined && d.threshold !== null ? ` at threshold ${d.threshold}` : "";
-    return `Labelled the view${from}${how}: ${d.filled_foreground} foreground and ${d.filled_background} background voxels`;
+    return `Labelled the view${from}${by}${how}: ${d.filled_foreground} foreground and ${d.filled_background} background voxels`;
   }
 
   function describeSplit(d) {
     const objects = `${d.objects} object${d.objects === 1 ? "" : "s"}`;
+    if (!d.reload_viewer && seedPerSlice.checked) return `Nothing to relabel: ${objects}, each already one id.`;
     if (!d.reload_viewer) {
       return `Nothing to relabel: ${objects}, each already one id. A cut has to go through ` +
              "every slice the object spans: paint the wall in the slices above and below too.";
@@ -204,14 +312,16 @@ export function initGoodRegions({ log }) {
     labelView(seedViewBtn, "/api/finetune/view-labels/seed", "seed the view", describeFill, false, seedRequest()));
   const backgroundViewBtn = document.getElementById("backgroundViewBtn");
   backgroundViewBtn.addEventListener("click", () =>
-    labelView(backgroundViewBtn, "/api/finetune/view-labels/background", "label the view background", describeFill));
+    labelView(backgroundViewBtn, "/api/finetune/view-labels/background", "label the view background", describeFill,
+              false, boxBody()));
   undoViewLabelsBtn.addEventListener("click", () =>
     labelView(undoViewLabelsBtn, "/api/finetune/view-labels/undo", "undo", (d) =>
       d.reload_viewer ? `Undid the last label action: ${d.restored} voxels restored`
                       : "Undid the last label action: every voxel it changed has been painted since"));
   const splitObjectsBtn = document.getElementById("splitObjectsBtn");
   splitObjectsBtn.addEventListener("click", () =>
-    labelView(splitObjectsBtn, "/api/finetune/view-labels/split", "split the view's objects", describeSplit));
+    labelView(splitObjectsBtn, "/api/finetune/view-labels/split", "split the view's objects", describeSplit,
+              false, componentsBody()));
 
   rehearsalFraction.addEventListener("change", updateRehearsalHint);
 

@@ -8,7 +8,8 @@ they all place and shade it the same way:
 - ``prediction_url()`` and ``prediction_source()``: the layer's URL, a zarr
   served by the model's inference server with the chain in it, and its
   source, that URL with the override as its transform.
-- ``prediction_shader_for()``: a shader over the range the chain produces.
+- ``prediction_shader_for()``: a shader over the range the chain produces;
+  for a flow model's channels, one that shows them all at once.
 - ``prediction_layer()``: the layer itself, a segmentation when the chain
   ends in labels and an image otherwise.
 - ``raw_layer()``: the raw data, with the user's shader put back.
@@ -24,9 +25,9 @@ import re
 import neuroglancer
 
 from cellmap_flow.io.multiscale import closest_raw_scale
-from cellmap_flow.pipeline_spec import chain_is_segmentation
+from cellmap_flow.pipeline_spec import chain_is_segmentation, chain_num_channels
 from cellmap_flow.serving.probe import output_display_range
-from cellmap_flow.viewer.raw import PREDICTION_COLORS, get_raw_layer, prediction_shader
+from cellmap_flow.viewer.raw import PREDICTION_COLORS, flow_shader, get_raw_layer, prediction_shader
 from cellmap_flow.serving.client import fetch_model_info
 from cellmap_flow.serving.protocol import ARGS_KEY
 
@@ -82,7 +83,7 @@ def prediction_url(host, model, url_blob):
     return f"zarr://{host}/{model}{ARGS_KEY}{url_blob}{ARGS_KEY}"
 
 
-def prediction_source(host, model, url_blob, override_scales=None, has_channel=True):
+def prediction_source(host, model, url_blob, override_scales=None, has_channel=True, channels_shaded=False):
     """The source of ``model``'s layer: its zarr on ``host``, with ``url_blob``
     (PipelineSpec.to_url_blob) in the URL.
 
@@ -91,14 +92,43 @@ def prediction_source(host, model, url_blob, override_scales=None, has_channel=T
     Neuroglancer wants the same rank on both sides of a transform, so a
     served array with a channel axis (the last, ``has_channel``) keeps it as a
     unit-less ``c^``.
+
+    Neuroglancer reads a served channel axis as ``c'``, a slider that shows
+    one channel at a time. ``channels_shaded`` renames it ``c^``, a channel
+    axis, which the shader reads every channel of. A transform renames the
+    source dimensions it names and passes the rest through.
     """
     url = prediction_url(host, model, url_blob)
-    if override_scales is None:
+    if override_scales is None and not channels_shaded:
         return url
-    dimensions = {axis: [size * 1e-9, "m"] for axis, size in zip("zyx", override_scales)}
+    dimensions = {}
+    if override_scales is not None:
+        dimensions = {axis: [size * 1e-9, "m"] for axis, size in zip("zyx", override_scales)}
+    if channels_shaded:
+        return {"url": url, "transform": {"outputDimensions": {**dimensions, "c^": [1, ""]},
+                                          "inputDimensions": {**dimensions, "c'": [1, ""]}}}
     if has_channel:
         dimensions["c^"] = [1, ""]
     return {"url": url, "transform": {"outputDimensions": dimensions, "inputDimensions": dict(dimensions)}}
+
+
+FLOW_CHANNELS = ("flow_y", "flow_x")
+
+
+def flow_channels(info, postprocess):
+    """The indices of a flow model's ``flow_y`` and ``flow_x`` channels, as its
+    server names them, while the chain keeps its channels; None otherwise.
+
+    A model that predicts flows towards each object's centre (Cellpose) has
+    channels that mean different things: one at a time, the y flow alone
+    says little. prediction_layer shows them together instead.
+    """
+    channels = info.get("channels")
+    if not channels or not info.get("has_channel", True) or not all(c in channels for c in FLOW_CHANNELS):
+        return None
+    if chain_num_channels(postprocess, len(channels)) != len(channels):
+        return None
+    return tuple(channels.index(c) for c in FLOW_CHANNELS)
 
 
 def prediction_shader_for(model, host, postprocess, previous_shader=None, color=None, info=None):
@@ -110,6 +140,11 @@ def prediction_shader_for(model, host, postprocess, previous_shader=None, color=
     ``previous_shader`` if it has one, so a recomputed range does not also
     change the colours the user navigates by; else ``color``; else the first
     prediction colour.
+
+    For a flow model's channels (flow_channels), the shader colours each
+    voxel by its flow's direction, dimmed by the channel the server names to
+    display (``display_channel``, Cellpose's cell probability) over the
+    range; unticking ``flows`` shows that channel alone.
     """
     match = _COLOR_RE.search(previous_shader or "")
     color = match.group(1) if match else (color or PREDICTION_COLORS[0])
@@ -120,6 +155,9 @@ def prediction_shader_for(model, host, postprocess, previous_shader=None, color=
     except Exception as e:
         logger.debug(f"Could not compute a display range for {model}: {e}")
         value_range = None
+    flows = flow_channels(info or {}, postprocess)
+    if flows is not None:
+        return flow_shader(color, value_range, *flows, info.get("display_channel"))
     return prediction_shader(color, value_range)
 
 
@@ -134,15 +172,35 @@ def prediction_layer(model, host, url_blob, *, dataset_path, postprocess, shader
     """
     info = fetch_model_info(host) if info is None else info
     override = prediction_voxel_override(host, dataset_path, info, fallback_output_voxel_size)
+    flows = flow_channels(info, postprocess)
     # A server too old to say is taken to have one, as it always was.
-    source = prediction_source(host, model, url_blob, override, has_channel=info.get("has_channel", True))
+    source = prediction_source(host, model, url_blob, override, has_channel=info.get("has_channel", True),
+                               channels_shaded=flows is not None)
     if chain_is_segmentation(postprocess):
         return neuroglancer.SegmentationLayer(source=source)
     shader = shader or prediction_shader_for(model, host, postprocess, previous_shader, color, info=info)
     layer = {"source": source, "shader": shader}
     if shader_controls:
         layer["shaderControls"] = shader_controls
+    channel = display_channel(info, postprocess)
+    if channel is not None and flows is None:
+        # Neuroglancer's channel axis is a local dimension, its position the
+        # channel shown; at the channel's centre, as neuroglancer places them.
+        layer["local_position"] = [channel + 0.5]
     return neuroglancer.ImageLayer(**layer)
+
+
+def display_channel(info, postprocess):
+    """The channel a model's layer opens on: the one its server names
+    (``display_channel``, Cellpose's cell probability rather than flow_y),
+    while the chain keeps the model's channels; None otherwise (the first)."""
+    channel = info.get("display_channel")
+    channels = info.get("output_channels")
+    if channel is None or not channels or not info.get("has_channel", True):
+        return None
+    if chain_num_channels(postprocess, channels) != channels:
+        return None
+    return int(channel)
 
 
 def raw_layer(dataset_path, *, wrap_raw=True, shader=None, shader_controls=None):

@@ -35,18 +35,27 @@ more than one channel (RGB), or an output that is not a map over the input's
 space, such as micro-SAM's, whose masks have an object axis of data-dependent
 size and need prompts.
 
+It can be finetuned (``trainable_model``) when it has torch weights (a
+state dict, which takes LoRA too, or TorchScript): the network is rebuilt
+from them, with the input's normalization and the output's sigmoid around
+it, and once trained serves through the inferencer's forward instead of
+the pipeline.
+
 ``bioimageio`` is imported only when the model is built: the CLIs and the
 dashboard's model form import every type. The server runs in pixi.toml's
 ``bioimageio`` environment unless the entry names another ``env``.
 """
 
+import functools
 import logging
 import math
-from typing import TYPE_CHECKING
+import os
+from types import SimpleNamespace
+from typing import TYPE_CHECKING, Optional
 
 import numpy as np
 
-from cellmap_flow.models.configs.base import Config, ModelConfig, _voxel_size
+from cellmap_flow.models.configs.base import Config, ModelConfig, _get_device, _voxel_size
 from cellmap_flow.models.geometry import _numbers
 
 if TYPE_CHECKING:
@@ -63,6 +72,13 @@ WEIGHT_FORMATS = (
     "keras_hdf5",
     "keras_v3",
 )
+# The weights a finetune can train, best first, and what it can train them
+# with: a state dict rebuilds the network's Python modules, which LoRA
+# attaches its adapters to; TorchScript is compiled, so it trains in full
+# only. ONNX, TensorFlow and Keras weights are not torch modules at all.
+TRAINABLE_WEIGHT_FORMATS = {"pytorch_state_dict": ("lora", "full"), "torchscript": ("full",)}
+# bioimage_catalog's short names for them, as its cached entries list them.
+_CATALOG_WEIGHT_FORMATS = {"pytorch": "pytorch_state_dict", "torchscript": "torchscript"}
 # The tile edge, in voxels, asked of a parameterized axis when no
 # input_size is given: a 2D model's tile is one slice, so it can be larger.
 DEFAULT_INPUT_SIZE = {2: 256, 3: 128}
@@ -206,6 +222,8 @@ def _arrange(array, dims, order):
 
     An axis of ``order`` that ``dims`` lacks is added with size 1; one of
     ``dims`` that ``order`` lacks must be of size 1, and is dropped.
+    ``array`` is a numpy array (served chunks) or a torch tensor (the
+    trainable module's), which permutes its axes under another name.
     """
     dims = [str(d) for d in dims]
     order = [str(d) for d in order]
@@ -217,9 +235,170 @@ def _arrange(array, dims, order):
             del dims[i]
     for axis in order:
         if axis not in dims:
-            array = array[..., np.newaxis]
+            array = array[..., None]
             dims.append(axis)
-    return array.transpose([dims.index(a) for a in order])
+    permutation = [dims.index(a) for a in order]
+    return array.transpose(permutation) if isinstance(array, np.ndarray) else array.permute(*permutation)
+
+
+# --- finetuning ------------------------------------------------------------------
+
+def _training_weights(formats, asked=None) -> Optional[str]:
+    """Which of ``formats`` (the model's weight formats) a finetune trains, or None when none can be.
+
+    ``asked`` (weight_format) when it is a torch format the model has; else
+    its state dict, else its TorchScript. A model served from its ONNX or
+    TensorFlow weights is trained from its torch ones: the trained module
+    is what is served afterwards.
+    """
+    formats = set(formats)
+    if asked in TRAINABLE_WEIGHT_FORMATS and asked in formats:
+        return asked
+    return next((f for f in TRAINABLE_WEIGHT_FORMATS if f in formats), None)
+
+
+def _local_rdf(source: str) -> Optional[dict]:
+    """The RDF of a model given as a local rdf.yaml or packaged .zip, read as plain YAML; else None."""
+    if not os.path.isfile(source):
+        return None
+    import yaml
+
+    if source.endswith(".zip"):
+        import zipfile
+
+        with zipfile.ZipFile(source) as package:
+            name = next((n for n in package.namelist() if n in ("rdf.yaml", "bioimageio.yaml")), None)
+            return yaml.safe_load(package.read(name)) if name else None
+    if source.endswith((".yaml", ".yml")):
+        with open(source) as f:
+            return yaml.safe_load(f)
+    return None
+
+
+def _processing_block(op, dim_of, default_dims, where, tensor_id, refuse):
+    """The trainable.py block for one of a tensor's processing ``op``\\ s, or None for one that changes nothing.
+
+    ``dim_of`` maps the tensor's axis ids to the dimensions of the tensor
+    the block is given, None for an axis that is not there (a batch of one
+    call); ``default_dims`` are those its statistics are taken over when
+    ``op`` names no axes. ``where`` is "input" or "output": an output's
+    statistics, labels or instances are not trained through, an input's
+    normalization is reproduced. ``tensor_id`` is the tensor's own id;
+    ``refuse(name, reason)`` makes the error.
+    """
+    from torch import nn
+
+    from cellmap_flow.finetune import trainable as blocks
+
+    name = str(getattr(op, "id", None) or getattr(op, "implemented_id", "?"))
+    kwargs = getattr(op, "kwargs", None)
+
+    def stat_dims():
+        axes = getattr(kwargs, "axes", None)
+        if axes is None:
+            return default_dims
+        unknown = [str(a) for a in axes if str(a) not in dim_of]
+        if unknown:
+            raise refuse(name, f"takes statistics over axes {unknown} cellmap-flow does not know")
+        dims = tuple(sorted({dim_of[str(a)] for a in axes if dim_of[str(a)] is not None}))
+        if not dims:
+            raise refuse(name, f"takes statistics over {list(axes)} only, a single value each")
+        return dims
+
+    def along():
+        """The dimension per-axis values (gain, mean) lie along: dim 1 for one value."""
+        axis = getattr(kwargs, "axis", None)
+        if axis is None:
+            return 1
+        if dim_of.get(str(axis)) is None:
+            raise refuse(name, f"has values along axis {axis}, which cellmap-flow cannot map")
+        return dim_of[str(axis)]
+
+    if name == "ensure_dtype":
+        if np.dtype(str(kwargs.dtype)).kind == "f":
+            return None  # the trainer's tensors are float32 already
+        if where == "output":
+            raise refuse(name, f"casts it to {kwargs.dtype} (labels): no gradient reaches the network through it")
+        raise refuse(name, f"casts it to {kwargs.dtype}, which the finetune's normalized float input is not")
+    if name == "sigmoid":
+        return nn.Sigmoid()
+    if name == "softmax":
+        return nn.Softmax(dim=along())
+    if name == "scale_linear":
+        return blocks.ScaleLinear(kwargs.gain, kwargs.offset, channel_dim=along())
+    if name == "fixed_zero_mean_unit_variance":
+        return blocks.FixedZeroMeanUnitVariance(kwargs.mean, kwargs.std, channel_dim=along())
+    if name == "clip":
+        if getattr(kwargs, "min_percentile", None) is not None or getattr(kwargs, "max_percentile", None) is not None:
+            raise refuse(name, "clips at percentiles, which cellmap-flow does not train through")
+        return blocks.Clip(kwargs.min, kwargs.max)
+    if name == "binarize":
+        raise refuse(name, "thresholds it: no gradient reaches the network through it")
+    if name in ("stardist_postprocessing", "cellpose_flow_dynamics", "custom"):
+        raise refuse(name, "makes instances outside the network: no gradient reaches the network through it")
+    if where == "output" and name in ("zero_mean_unit_variance", "scale_range", "scale_mean_variance"):
+        raise refuse(name, "normalizes it by its own statistics, which cellmap-flow does not train through")
+    if name == "zero_mean_unit_variance":
+        return blocks.ZeroMeanUnitVariance(stat_dims(), eps=kwargs.eps)
+    if name == "scale_range":
+        reference = getattr(kwargs, "reference_tensor", None)
+        if reference is not None and str(reference) != str(tensor_id):
+            raise refuse(name, f"takes its percentiles from tensor {kwargs.reference_tensor}")
+        return blocks.ScaleRange(kwargs.min_percentile, kwargs.max_percentile, stat_dims(), eps=kwargs.eps)
+    raise refuse(name, "is not an operation cellmap-flow can train through")
+
+
+@functools.lru_cache(maxsize=None)
+def _trainable_blocks():
+    """The torch modules only the bioimage type's trainable model needs.
+
+    Defined on first use: this module must not import torch, since the CLIs
+    and the dashboard's model form import every model type.
+    """
+    import torch
+    from torch import nn
+
+    class InModelAxes(nn.Module):
+        """``net`` given (N, 1, *space) in its RDF's input axes; each of its outputs back as (N, C, *space).
+
+        Called the way serving calls it: the N images in one call when the
+        RDF's batch axis takes any size, else one call each (a batch fixed
+        at 1, or none).
+        """
+
+        def __init__(self, net, dims, input_axes, outputs, one_call):
+            super().__init__()
+            self.net = net
+            self.dims, self.input_axes = list(dims), list(input_axes)
+            # Each output's axes, and the (batch, channel, *space) they are put in.
+            self.outputs = [(list(axes), list(order)) for axes, order in outputs]
+            self.one_call = one_call
+
+        def forward(self, x):
+            if self.one_call or x.shape[0] == 1:
+                return self._call(x)
+            parts = [self._call(x[i:i + 1]) for i in range(x.shape[0])]
+            return tuple(torch.cat(outputs, dim=0) for outputs in zip(*parts))
+
+        def _call(self, x):
+            out = self.net(_arrange(x, self.dims, self.input_axes))
+            out = tuple(out) if isinstance(out, (tuple, list)) else (out,)
+            if len(out) < len(self.outputs):
+                raise ValueError(f"The network gave {len(out)} outputs; its description has {len(self.outputs)}")
+            return tuple(_arrange(o, axes, order) for o, (axes, order) in zip(out, self.outputs))
+
+    class Heads(nn.Module):
+        """Each output through its own head (postprocessing, then its crop), their channels one
+        after another: the channels process_chunk serves, in its order."""
+
+        def __init__(self, heads):
+            super().__init__()
+            self.heads = nn.ModuleList(heads)
+
+        def forward(self, outputs):
+            return torch.cat([head(o) for head, o in zip(self.heads, outputs)], dim=1)
+
+    return SimpleNamespace(InModelAxes=InModelAxes, Heads=Heads)
 
 
 class BioModelConfig(ModelConfig):
@@ -256,6 +435,9 @@ class BioModelConfig(ModelConfig):
     # bioimageio.core and its backends are not in cellmap-flow's own
     # environment; pixi.toml's `bioimageio` environment has them.
     default_env = "bioimageio"
+    # trainable_model() rebuilds the network from its torch weights, with
+    # the RDF's normalization and output activation around it.
+    finetunable = True
 
     def __init__(
         self,
@@ -502,6 +684,162 @@ class BioModelConfig(ModelConfig):
             array = array[(slice(None), *(slice(c, n - c) for c, n in zip(cut, array.shape[1:])))]
             parts.append(array)
         return np.concatenate(parts, axis=0)
+
+    # --- finetuning ----------------------------------------------------------------
+
+    def trainable_model(self):
+        """The model as one torch module, for the finetune trainer: (B, 1, Z, Y, X) of the read
+        shape in, (B, channels, Z', Y', X') of the write shape out, as process_chunk serves it.
+
+        Built from the model's description, the way bioimageio.core runs it:
+        the input's preprocessing (its normalization), the network from its
+        torch weights (a 2D one on each z slice, the slices in one call when
+        its batch axis takes any size), each output's postprocessing (a
+        sigmoid) and the same crop, the outputs' channels one after another.
+        Statistics are taken per patch, over the axes the RDF names, so a
+        patch is normalized as a chunk is; an RDF that names none asks
+        bioimageio.core for statistics of all it has seen, which a patch
+        cannot reproduce, and gets the patch's own.
+
+        Refuses, with a ValueError saying why, a model whose weights are not
+        torch (ONNX, TensorFlow, Keras: no torch module to train), or whose
+        output goes through something no gradient passes (labels, a
+        threshold, Stardist or Cellpose instances). On the device the server
+        uses, in float32 and in eval mode.
+        """
+        from bioimageio.core import load_model_description
+        from torch import nn
+
+        from cellmap_flow.finetune.trainable import Crop, SliceWise
+
+        # Read again rather than kept from _get_config: a description held
+        # by this config would be printed whole with it, and reading one
+        # without its IO checks is quick.
+        description = load_model_description(self.model, format_version="latest", perform_io_checks=False)
+        config = Config()
+        self._describe(config, description)
+        if np.dtype(config.output_dtype).kind != "f":
+            raise ValueError(f"{self.model} cannot be finetuned: its outputs are {np.dtype(config.output_dtype)} "
+                             "(labels or classes), through which no gradient reaches the network")
+        formats = [f for f in WEIGHT_FORMATS if getattr(description.weights, f, None) is not None]
+        weights = _training_weights(formats, self.weight_format)
+        if weights is None:
+            raise ValueError(
+                f"{self.model} cannot be finetuned: it has {', '.join(formats)} weights only, and finetuning "
+                f"trains a torch module, built from {' or '.join(TRAINABLE_WEIGHT_FORMATS)} weights"
+            )
+
+        tensor = next(t for t in description.inputs if not getattr(t, "optional", False))
+        batch = next((a for a in tensor.axes if a.type == "batch"), None)
+        channel = _channel_axis(tensor)
+        space = config.space_axes
+        # Where each of the input's axes is in the trainer's (B, 1, Z, Y, X).
+        # A 2D model's batch is the chunk's z slices when they go in one call
+        # (its statistics may take them together); otherwise, like a 3D
+        # model's, it holds one image, and statistics are each patch's.
+        dim_of = {str(channel.id) if channel is not None else "channel": 1}
+        dim_of.update({axis: 5 - len(space) + i for i, axis in enumerate(space)})
+        if batch is not None:
+            dim_of[str(batch.id)] = 2 if config.batch_axis is not None else None
+        default_dims = (1, 3, 4) if config.ndim == 2 and config.batch_axis is None else (1, 2, 3, 4)
+
+        def refusal(where, tensor_id):
+            return lambda name, reason: ValueError(
+                f"{self.model} cannot be finetuned: its {where} {tensor_id}'s {name} {reason}")
+
+        pre = [_processing_block(op, dim_of, default_dims, "input", tensor.id, refusal("input", tensor.id))
+               for op in getattr(tensor, "preprocessing", None) or []]
+        pre = [block for block in pre if block is not None]
+
+        outputs, heads = [], []
+        for out in description.outputs:
+            out_batch = next((a for a in out.axes if a.type == "batch"), None)
+            out_channel = _channel_axis(out)
+            # Each output's postprocessing gets it as (N, C, *space).
+            out_dim_of = {str(out_channel.id) if out_channel is not None else "channel": 1}
+            out_dim_of.update({axis: 2 + i for i, axis in enumerate(space)})
+            post = [_processing_block(op, out_dim_of, (1, *range(2, 2 + len(space))), "output", out.id,
+                                      refusal("output", out.id))
+                    for op in getattr(out, "postprocessing", None) or []]
+            heads.append(nn.Sequential(*[b for b in post if b is not None], Crop(config.crop[str(out.id)])))
+            order = [str(out_batch.id) if out_batch is not None else "__batch__",
+                     str(out_channel.id) if out_channel is not None else "__channel__", *space]
+            outputs.append(([str(a.id) for a in out.axes], order))
+
+        # Loaded once nothing else refuses: it may download the weights.
+        device = _get_device()
+        net = self._network(description, weights, device)
+        blocks = _trainable_blocks()
+        dims = [str(batch.id) if batch is not None else "__batch__",
+                str(channel.id) if channel is not None else "__channel__", *space]
+        one_call = batch is not None and batch.size is None
+        network = nn.Sequential(blocks.InModelAxes(net, dims, config.input_axes, outputs, one_call),
+                                blocks.Heads(heads))
+        model = nn.Sequential(*pre, SliceWise(network) if config.ndim == 2 else network)
+        logger.info(f"{self.model}: trainable model from its {weights} weights, {config.ndim}D, its normalization "
+                    f"{[type(block).__name__ for block in pre]}")
+        return model.to(device).float().eval()
+
+    def _network(self, description, weights: str, device):
+        """The network of ``weights`` ("pytorch_state_dict" or "torchscript"), on ``device``,
+        loaded as bioimageio.core's backends load it."""
+        spec = getattr(description.weights, weights)
+        if weights == "pytorch_state_dict":
+            from bioimageio.core.backends.pytorch_backend import load_torch_model
+
+            return load_torch_model(spec, load_state=True, devices=[device])
+        import torch
+
+        return torch.jit.load(spec.get_reader(), map_location=device)
+
+    def serve_trained(self, config, module):
+        """Serve ``module`` (the trained ``trainable_model()``) through the inferencer's own forward.
+
+        process_chunk runs the pipeline's weights, as loaded from the zoo, so
+        it is switched off: the module does all process_chunk did (the
+        normalization, each slice of a 2D model, the sigmoid, the crop),
+        given (1, 1, Z, Y, X) of the read shape, and gives float32.
+        """
+        config.model = module
+        config.process_chunk = None
+
+    def finetune_modes(self):
+        """How the dashboard can finetune this model: ("lora", "full"), ("full",) or ().
+
+        From its weight formats only, without bioimageio or torch: the
+        catalog's cached entry, else a local rdf.yaml or .zip read as YAML,
+        else (where bioimageio.core is) its description. Torch weights
+        decide, as ``trainable_model`` picks them: a state dict takes LoRA
+        and a full finetune, TorchScript a full one only, and a model
+        without either, or whose weights cannot be told, none.
+        """
+        formats = self._weight_formats()
+        return TRAINABLE_WEIGHT_FORMATS.get(_training_weights(formats or (), self.weight_format), ())
+
+    def _weight_formats(self):
+        """The model's weight formats (bioimage.io's names), or None when they cannot be told."""
+        from cellmap_flow.models.bioimage_catalog import find_bioimage_model
+
+        entry = find_bioimage_model(self.model)
+        if entry is not None and entry.get("weight_formats"):
+            return [_CATALOG_WEIGHT_FORMATS.get(f, f) for f in entry["weight_formats"]]
+        try:
+            rdf = _local_rdf(self.model)
+        except Exception as e:
+            logger.info(f"Could not read {self.model}'s description: {e}")
+            rdf = None
+        if rdf is not None:
+            return list(rdf.get("weights") or {})
+        try:
+            from bioimageio.core import load_model_description
+        except ImportError:
+            return None
+        try:
+            description = load_model_description(self.model, format_version="latest", perform_io_checks=False)
+        except Exception as e:
+            logger.info(f"Could not read {self.model}'s description: {e}")
+            return None
+        return [f for f in WEIGHT_FORMATS if getattr(description.weights, f, None) is not None]
 
     def to_dict(self):
         """This config as a model entry, which ``registry.build_model`` rebuilds.

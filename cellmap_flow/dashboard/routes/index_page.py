@@ -86,6 +86,30 @@ def chain_items(available, configured):
     return items
 
 
+def cellpose_panel_data(models_config, running_job_names):
+    """What the Models tab's Cellpose panel is built from (models-tab.js):
+    each model it lists, and the settings of those running, which start
+    ticked.
+
+    ``{"models": [{"model", "label", "description"}], "running": [{"model",
+    "output", "voxel_size", "stitch_threshold"}]}``; a model running with
+    two outputs is two entries, so two rows.
+    """
+    from cellmap_flow.dashboard.services.launch import CELLPOSE_MODELS
+    from cellmap_flow.models.models_config import CellposeModelConfig
+
+    running = []
+    for mc in models_config:
+        if isinstance(mc, CellposeModelConfig) and mc.name in running_job_names:
+            running.append({"model": mc.pretrained_model, "output": mc.output,
+                            "voxel_size": list(mc.voxel_size), "stitch_threshold": mc.stitch_threshold})
+    return {
+        "models": [{"model": model, "label": label, "description": description}
+                   for model, (label, description) in CELLPOSE_MODELS.items()],
+        "running": running,
+    }
+
+
 @index_bp.route("/")
 def index():
     # Render the main page with tabs
@@ -117,6 +141,7 @@ def index():
         for mc in session.models_config
         if isinstance(mc, BioModelConfig) and mc.name in running_job_names
     ]
+    cellpose_panel = cellpose_panel_data(session.models_config, running_job_names)
 
     return render_template(
         "index.html",
@@ -127,6 +152,7 @@ def index():
         default_models=[j.model_name for j in session.jobs],
         default_hf_repos=default_hf_repos,
         default_bioimage_models=default_bioimage_models,
+        cellpose_panel=cellpose_panel,
         resample=session.resample,
         server_config_cached=session.server_config_cached,
     )

@@ -32,6 +32,7 @@ from cellmap_flow.finetune.adaptation import FullStrategy, LoraStrategy
 from cellmap_flow.finetune.cli import model_config_from_args, parse_args
 from cellmap_flow.finetune.model_loading import load_trainable_model
 from cellmap_flow.finetune.session_loop import TrainingSession
+from cellmap_flow.finetune.trainable import LORA, finetune_modes
 from cellmap_flow.logging_setup import configure_logging
 
 logger = logging.getLogger(__name__)
@@ -78,6 +79,15 @@ def main():
     # FullStrategy). From here on the model does (strategy_for). A finetuned
     # model given as the base still carries its adapter; either way it is
     # folded into the weights first.
+    modes = finetune_modes(base_model)
+    if not modes:
+        raise SystemExit(f"{type(base_model).__name__} has no parameters to train: this model cannot be finetuned")
+    if args.lora_r > 0 and LORA not in modes:
+        raise SystemExit(
+            f"This model ({type(base_model).__name__}) can only be fully finetuned, not with LoRA: its "
+            "network is compiled (TorchScript), so adapters cannot be attached to its layers. "
+            "Set the LoRA rank to 0 (full finetune)."
+        )
     if args.lora_r <= 0:
         strategy = FullStrategy()
     else:

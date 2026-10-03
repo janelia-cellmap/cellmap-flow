@@ -399,6 +399,8 @@ class CellMapFlowServer:
                 np.asarray(self.geometry.input_voxel_size, dtype=float),
             )
             info["input_relabelled_from"] = list(idi.actual_voxel_size) if relabelled else None
+            # The channel its layer shows, of several that mean different things.
+            info["display_channel"] = getattr(inferencer.model_config, "display_channel", None)
 
             output_class = getattr(inferencer, "output_class", None)
             if output_class is None:

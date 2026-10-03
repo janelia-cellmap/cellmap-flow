@@ -14,6 +14,8 @@ class CellMapModelConfig(ModelConfig):
 
     cli_name = "cellmap"
 
+    finetunable = True
+
     def __init__(self, folder_path, name=None, scale=None):
         super().__init__()
         from cellmap_models.model_export.cellmap_model import CellmapModel

@@ -318,6 +318,11 @@ def wrap_model_with_lora(
         lora_min_channels: When auto-detecting, skip layers narrower than this
                 on either side; see detect_adaptable_layers. Ignored when
                 target_modules is given explicitly. Default 0 (adapt all).
+                A model with a ``lora_exclude_patterns`` attribute (name
+                substrings, as detect_adaptable_layers' exclude_patterns)
+                has those layers left out of auto-detection too, besides the
+                norm layers: a ``trainable_model()`` sets it for layers its
+                network uses in a way an adapter would not reach.
         modules_to_save: Additional modules to make trainable (e.g., final layer)
         task_type: PEFT task type. Options:
                    - "FEATURE_EXTRACTION" (default, for general models)
@@ -371,7 +376,11 @@ def wrap_model_with_lora(
     # the new LoRA starts from the model you were actually looking at, and the
     # distillation teacher (adapters disabled) is that same model rather than
     # the untuned original.
+    # Read before the model is merged or wrapped, which may hand back another
+    # object, and after: a PeftModel's attribute lookup need not reach it.
+    excluded = getattr(model, "lora_exclude_patterns", None)
     model = _merge_existing_adapters(model)
+    excluded = list(excluded or getattr(model, "lora_exclude_patterns", None) or [])
 
     # Wrap Sequential models to make them compatible with PEFT
     if isinstance(model, nn.Sequential):
@@ -384,7 +393,11 @@ def wrap_model_with_lora(
 
     # Auto-detect target modules if not specified
     if target_modules is None:
-        target_modules = detect_adaptable_layers(model, min_channels=lora_min_channels)
+        target_modules = detect_adaptable_layers(
+            model,
+            exclude_patterns=["bn", "norm", *excluded] if excluded else None,
+            min_channels=lora_min_channels,
+        )
         if len(target_modules) == 0:
             raise ValueError(
                 "No adaptable layers found in model. "

@@ -153,6 +153,44 @@
       </div>
     </div>
 
+    <!-- Cellpose Section: Cellpose 4's models, served in pixi's cellpose4
+         environment. Its rows are built by models-tab.js from the data
+         below (routes/index_page.cellpose_panel_data): the models listed,
+         and the settings of those running, which start ticked. -->
+    <h5>Cellpose</h5>
+    <script type="application/json" id="cellpose-data">{{ cellpose_panel | tojson }}</script>
+    <div class="accordion" id="cellposeModelAccordion">
+      <div class="accordion-item">
+        <h2 class="accordion-header" id="heading_cellpose">
+          <button
+            class="accordion-button collapsed"
+            type="button"
+            data-bs-toggle="collapse"
+            data-bs-target="#collapse_cellpose"
+            aria-expanded="false"
+            aria-controls="collapse_cellpose"
+          >
+            Cellpose 4
+            <span id="cellposeRunningCount" class="zoo-count ms-2"></span>
+          </button>
+        </h2>
+        <div
+          id="collapse_cellpose"
+          class="accordion-collapse collapse"
+          aria-labelledby="heading_cellpose"
+        >
+          <div class="accordion-body" id="cellposeModelsContainer">
+            <div class="cellpose-model-list" id="cellposeModelList"></div>
+            <div class="cellpose-note">
+              Each z slice is segmented in 2D. The DINO models (cpdino, cpdino-vitb) are
+              not listed: they need the dinov3 package, which the cellpose4 environment
+              does not have. Cellpose-SAM's weights are for non-commercial use.
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Server Config Section -->
     <h5>Server Config</h5>
     <div class="accordion" id="serverConfigAccordion">

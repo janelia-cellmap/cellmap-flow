@@ -14,6 +14,7 @@ from cellmap_flow.dashboard.finetune_utils import ensure_minio_serving
 from cellmap_flow.dashboard.requests import CreateVolume, parse
 from cellmap_flow.dashboard.routes.finetune.blueprint import finetune_bp
 from cellmap_flow.dashboard.routes.finetune.common import (
+    annotation_dtype_for,
     current_chain,
     ensure_corrections_storage,
     find_model_config,
@@ -36,7 +37,7 @@ from cellmap_flow.serving.client import (
 logger = logging.getLogger(__name__)
 
 
-def serve_new_volume(geometry, corrections_dir, dataset_path, model_name):
+def serve_new_volume(geometry, corrections_dir, dataset_path, model_name, annotation_dtype="uint8"):
     """Write a new volume with ``geometry`` into ``corrections_dir`` and serve it.
 
     The volume records the dashboard's current normalization and
@@ -55,6 +56,7 @@ def serve_new_volume(geometry, corrections_dir, dataset_path, model_name):
         model_name=model_name,
         input_norm=input_norm,
         postprocess=postprocess,
+        annotation_dtype=annotation_dtype,
     )
     minio_url = ensure_minio_serving(zarr_path, volume_id, output_base_dir=corrections_dir)
     return volume_id, zarr_path, rewrite_minio_url_for_proxy(minio_url)
@@ -135,6 +137,19 @@ def _geometry_from_local_load(name, model_config):
         return None
 
 
+def _finetune_modes(model_config):
+    """What the model can be finetuned with ("lora", "full"), for the tab's
+    LoRA rank options; None when there is no config to ask (a model a job
+    serves without one), which leaves every option offered."""
+    if model_config is None or not hasattr(model_config, "finetune_modes"):
+        return None
+    try:
+        return list(model_config.finetune_modes())
+    except Exception as e:
+        logger.warning(f"Could not tell how {getattr(model_config, 'name', 'a model')} can be finetuned: {e}")
+        return None
+
+
 @finetune_bp.route("/api/finetune/models", methods=["GET"])
 def get_finetune_models():
     try:
@@ -170,7 +185,8 @@ def get_finetune_models():
                 logger.warning(f"No configuration available for model: {name}")
                 continue
             seen.add(name)
-            models.append({"name": name, **geometry})
+            models.append({"name": name, **geometry,
+                           "finetune_modes": _finetune_modes(configs_by_name.get(name))})
 
         selected = models[0]["name"] if len(models) == 1 else None
         return jsonify({"models": models, "selected_model": selected})
@@ -208,7 +224,7 @@ def create_annotation_volume():
         geometry = plan_volume(dataset_path, config, resample=session.resample)
         _, corrections_dir = ensure_corrections_storage(output_path)
         volume_id, zarr_path, minio_url = serve_new_volume(
-            geometry, corrections_dir, dataset_path, model_name
+            geometry, corrections_dir, dataset_path, model_name, annotation_dtype_for(model_config)
         )
         session_store().register_volume(
             volume_id,

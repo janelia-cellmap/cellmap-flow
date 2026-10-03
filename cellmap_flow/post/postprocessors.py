@@ -1,7 +1,9 @@
 # The segmentation libraries (and neuroglancer, scipy.ndimage) are imported
 # inside the steps that use them: importing this module is how every chain
 # is read, including in processes that never run a segmentation step, and
-# together they took seconds to load.
+# together they took seconds to load. The instance segmenters themselves
+# live in post.segment, shared with the Finetune tab's seeding, which
+# imports them the same way.
 import ast
 import inspect
 import logging
@@ -11,6 +13,7 @@ import numpy as np
 
 from cellmap_flow.norm.input_normalize import SerializableInterface, deserialize_list
 from cellmap_flow.norm.safe_expression import compile_expression
+from cellmap_flow.post import segment
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +28,15 @@ class PostProcessor(SerializableInterface):
 
     @property
     def is_segmentation(self):
+        return None
+
+    def problem_with(self, model_config):
+        """Why this step cannot run on ``model_config``'s output, or None when it can.
+
+        Checked by the dashboard before it applies a chain: a step that
+        fails on every chunk does so inside the model's server, where the
+        page shows only an empty layer.
+        """
         return None
 
 
@@ -123,16 +135,27 @@ class FillHolesPostprocessor(PostProcessor):
 
 
 class LabelPostprocessor(PostProcessor):
-    def __init__(self, channel: int = 0):
+    """An id per connected object of one channel's nonzero voxels (``segment.connected_components``).
+
+    ``connectivity``: 1 faces (the default), 2 faces and edges, 3 all
+    neighbours. ``min_size``: objects of fewer voxels become background.
+    ``per_slice``: each z slice labelled on its own, in 2D. The other
+    channels pass through, as uint32.
+    """
+
+    def __init__(self, channel: int = 0, connectivity: int = 1, min_size: int = 0, per_slice: bool = False):
         self.channel = int(channel)
+        self.connectivity = segment.as_connectivity(connectivity)
+        self.min_size = int(min_size)
+        self.per_slice = segment.as_bool(per_slice)
 
     def _process(self, data, chunk_corner, chunk_num_voxels):
-        from scipy.ndimage import label
-
         # Into a new uint32 array: writing the labels back into the model's
         # own (often uint8) array wrapped every id above 255, and the declared
         # uint8 dtype wrapped them again on the way out.
-        labels, _ = label(data[self.channel])
+        labels = segment.connected_components(
+            data[self.channel], self.connectivity, self.min_size, self.per_slice
+        )
         out = data.astype(np.uint32)
         out[self.channel] = labels
         return out
@@ -180,6 +203,14 @@ class MortonSegmentationRelabeling(PostProcessor):
 
 
 class AffinityPostprocessor(PostProcessor):
+    """Objects from affinities by mutex watershed (``segment.mutex_watershed``).
+
+    ``bias``: the affinity above which neighbours join, and below which a
+    fragment's mean makes it background. ``neighborhood``: the offset each
+    channel compares, as the model was trained with. Ids are offset by the
+    chunk's Morton index, so they are unique across chunks.
+    """
+
     def __init__(
         self,
         bias: float = 0.0,
@@ -202,10 +233,7 @@ class AffinityPostprocessor(PostProcessor):
         self.num_previous_segments = 0
 
     def _process(self, data, chunk_num_voxels, chunk_corner):
-        import fastremap
-        import mwatershed as mws
         import pymorton
-        from scipy import ndimage
 
         # Integer input is the 0-255 that DefaultPostprocessor produces (the
         # usual chain), so scale it back to [0, 1] exactly as before. Float
@@ -214,33 +242,10 @@ class AffinityPostprocessor(PostProcessor):
         # near zero and the watershed merged everything.
         if np.issubdtype(data.dtype, np.integer) or data.dtype == np.bool_:
             data = data / 255.0
-        else:
-            data = data.astype(np.float64)
-        n_channels = data.shape[0]
-        # Local, not self.neighborhood: truncating the attribute made every
-        # later call use the first chunk's channel count.
-        neighborhood = self.neighborhood[:n_channels]
-
-        segmentation = mws.agglom(
-            data.astype(np.float64) - self.bias,
-            neighborhood,
-        )
-
-        # filter fragments
-        average_affs = np.mean(data, axis=0)
-
-        filtered_fragments = []
-
-        fragment_ids = fastremap.unique(segmentation[segmentation > 0])
-
-        for fragment, mean in zip(
-            fragment_ids, ndimage.mean(average_affs, segmentation, fragment_ids)
-        ):
-            if mean >= self.bias:
-                filtered_fragments.append(fragment)
-
-        fastremap.mask_except(segmentation, filtered_fragments, in_place=True)
-        fastremap.renumber(segmentation, in_place=True)
+        # Cut to the channels inside the call, not on self.neighborhood:
+        # truncating the attribute made every later call use the first
+        # chunk's channel count.
+        segmentation = segment.mutex_watershed(data, self.neighborhood, self.bias)
         unique_increment = chunk_num_voxels * pymorton.interleave(*chunk_corner)
         if not self.use_exact:
             unique_increment = np.random.randint(0, 256) * 256
@@ -373,6 +378,105 @@ class SimpleBlockwiseMerger(PostProcessor):
     @property
     def is_segmentation(self):
         return True
+
+
+class CellposeMasksPostprocessor(PostProcessor):
+    """Cellpose's masks, made from a Cellpose model's flows output.
+
+    Cellpose turns its three output channels into objects by following each
+    pixel's flow to where the flows converge. Run here, on a server with
+    ``output: flows`` (channels flow_y, flow_x and cell, the probability),
+    its thresholds can be changed from the dashboard and the layer redrawn,
+    where ``output: masks`` fixes them when the server starts. Put it first
+    in the chain, on the flows as served. It needs Cellpose, which a
+    Cellpose model's server has.
+
+    Each slice is segmented on its own, as Cellpose segments a 2D image;
+    ``stitch_threshold`` above 0 joins a slice's object to the next slice's
+    one it overlaps by that IoU (Cellpose's stitch3D), else each slice's
+    ids follow the previous slice's. Ids are unique within the chunk:
+    follow with MortonSegmentationRelabeling for ids unique across chunks.
+
+    Args:
+        flow_threshold: how far an object's flows may be from those its
+            shape implies before it is dropped (Cellpose's; 0 keeps all).
+        cellprob_threshold: the cell probability, as a logit, over which a
+            pixel is followed (Cellpose's; 0 is a probability of 0.5).
+        min_size: objects of fewer pixels are removed (per slice; in 3D
+            after stitching).
+        stitch_threshold: IoU joining objects across slices; 0 is off.
+        niter: flow-following steps (Cellpose's default, 200).
+    """
+
+    def __init__(self, flow_threshold: float = 0.4, cellprob_threshold: float = 0.0, min_size: int = 15,
+                 stitch_threshold: float = 0.0, niter: int = 200):
+        self.flow_threshold = float(flow_threshold)
+        self.cellprob_threshold = float(cellprob_threshold)
+        self.min_size = int(min_size)
+        self.stitch_threshold = float(stitch_threshold)
+        self.niter = int(niter)
+
+    def problem_with(self, model_config):
+        """None for a Cellpose model (or a finetune of one) served with ``output: flows``."""
+        base = getattr(model_config, "base_model_config", None) or model_config
+        name = getattr(model_config, "name", "the model")
+        if getattr(type(base), "cli_name", None) != "cellpose":
+            return f"{name} is not a Cellpose model: CellposeMasksPostprocessor needs Cellpose's flows"
+        if getattr(base, "output", None) != "flows":
+            return (f"{name} serves Cellpose's {getattr(base, 'output', '?')}, not its flows: run it with "
+                    "Output: Flows + probability (output: flows) for CellposeMasksPostprocessor, or Output: Masks for masks without it")
+        return None
+
+    def _process(self, data):
+        try:
+            import torch
+            from cellpose import dynamics, utils
+        except ImportError as e:
+            raise RuntimeError(
+                "CellposeMasksPostprocessor needs Cellpose, which this server's environment does not have: "
+                "use it on a Cellpose model's server (output: flows)"
+            ) from e
+        if data.ndim != 4 or data.shape[0] != 3:
+            raise ValueError(
+                "CellposeMasksPostprocessor needs a Cellpose flows output, 3 channels (flow_y, flow_x, cell), "
+                f"first in the chain; got shape {data.shape}"
+            )
+        flows = np.asarray(data[:2], dtype=np.float32)
+        probability = np.clip(np.asarray(data[2], dtype=np.float64), 1e-7, 1 - 1e-7)
+        cellprob = np.log(probability / (1 - probability)).astype(np.float32)
+        device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+        stitch = self.stitch_threshold > 0 and data.shape[1] > 1
+        masks = np.zeros(data.shape[1:], dtype=np.uint32)
+        offset = 0
+        for z in range(data.shape[1]):
+            slice_masks = dynamics.resize_and_compute_masks(
+                flows[:, z], cellprob[z], niter=self.niter, cellprob_threshold=self.cellprob_threshold,
+                flow_threshold=self.flow_threshold, min_size=-1 if stitch else self.min_size,
+                max_size_fraction=0.4, device=device,
+            ).astype(np.uint32)
+            if not stitch:
+                slice_masks[slice_masks > 0] += offset
+                offset = max(offset, int(slice_masks.max()))
+            masks[z] = slice_masks
+        if stitch:
+            masks = utils.stitch3D(masks, stitch_threshold=self.stitch_threshold).astype(np.uint32)
+            if self.min_size > 0:
+                masks = utils.fill_holes_and_remove_small_masks(masks, min_size=self.min_size).astype(np.uint32)
+        return masks[np.newaxis]
+
+    @property
+    def dtype(self):
+        return np.uint32
+
+    @property
+    def is_segmentation(self):
+        return True
+
+    @property
+    def num_channels(self):
+        # Three channels in, one out: without it the server went on declaring
+        # the flows' three, and the viewer read each chunk as three channels.
+        return 1
 
 
 class ChannelSelection(PostProcessor):
