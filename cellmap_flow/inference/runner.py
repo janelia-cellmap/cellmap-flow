@@ -373,7 +373,7 @@ class ModelRunner:
         from cellmap_flow.serving.probe import classify_output_range
 
         try:
-            # The range of the channel the layer opens on, when the model
+            # The range of the channel the layer shows, when the model
             # names one: Cellpose's flows run -5 to 5 beside its 0 to 1
             # probability, and the probability shown over -5 to 5 was a wash.
             channel = getattr(self.model_config, "display_channel", None)

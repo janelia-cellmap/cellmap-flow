@@ -576,12 +576,15 @@ What each output serves:
    * - ``flows`` (the default)
      - ``flow_y``, ``flow_x``, ``cell``
      - float32
-     - All the network predicts: the flows towards each object's centre,
+     - "Flows + probability" on the Models tab, and not masks: all the
+       network predicts, the flows towards each object's centre,
        in y and in x (Cellpose's ``dP``, about -5 to 5), then the cell
-       probability, 0 to 1 (the sigmoid of its logit). The layer opens on
-       ``cell`` (the model's ``display_channel``), the flows on its channel
-       slider; ``CellposeMasksPostprocessor`` makes masks of them on the
-       server, with thresholds that can be changed from the dashboard.
+       probability, 0 to 1 (the sigmoid of its logit). The layer shows
+       them together: each voxel coloured by its flow's direction, dimmed
+       by ``cell`` (the model's ``display_channel``); untick the shader's
+       ``flows`` box to see ``cell`` alone. ``CellposeMasksPostprocessor``
+       makes masks of them on the server, with thresholds that can be
+       changed from the dashboard.
    * - ``probability``
      - ``cell``
      - float32

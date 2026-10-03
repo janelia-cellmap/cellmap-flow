@@ -228,7 +228,7 @@ models:
 
 | `output` | Channels | dtype | |
 |---|---|---|---|
-| `flows` (default) | `flow_y`, `flow_x`, `cell` | float32 | Cellpose's flows towards each object's centre (its `dP`, about -5 to 5), then the cell probability; the layer opens on `cell`, and `CellposeMasksPostprocessor` makes masks of them |
+| `flows` (default) | `flow_y`, `flow_x`, `cell` | float32 | "Flows + probability" on the Models tab, not masks: Cellpose's flows towards each object's centre (its `dP`, about -5 to 5), then the cell probability; the layer colours each voxel by its flow's direction, dimmed by `cell` (untick the shader's `flows` box for `cell` alone), and `CellposeMasksPostprocessor` makes masks of them |
 | `probability` | `cell` | float32 | The cell probability alone, 0 to 1 (the sigmoid of Cellpose's logit) |
 | `masks` | `cell` | uint64 | Instance ids, unique within a chunk |
 

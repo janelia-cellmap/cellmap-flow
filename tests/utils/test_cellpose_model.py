@@ -14,7 +14,7 @@ from click.testing import CliRunner
 from funlib.geometry import Coordinate, Roi
 
 from cellmap_flow.models import registry
-from cellmap_flow.models.configs.cellpose import DEFAULT_BATCH_SIZE, tiles_per_slice
+from cellmap_flow.models.configs.cellpose import DEFAULT_BATCH_SIZE, OUTPUT_CHANNELS, tiles_per_slice
 from cellmap_flow.models.models_config import CellposeModelConfig
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -293,16 +293,30 @@ def test_a_non_integer_voxel_size_is_kept(fake_cellpose):
         (5.24, 4, 4), (10.48, 256, 256), (10.48, 320, 320))
 
 
-def test_all_channels_are_served_by_default_and_the_layer_opens_on_the_cell_probability():
-    """flow_y, channel 0, looks like noise; the probability is what to look at."""
+def test_all_channels_are_served_by_default_and_the_layer_shows_them_together():
+    """One at a time, on a slider, flow_y looked like noise and the three
+    channels like three unrelated images. The layer shows the flows' direction
+    as colour, dimmed by the cell probability."""
     from cellmap_flow.post.postprocessors import CellposeMasksPostprocessor
-    from cellmap_flow.viewer.layers import display_channel
+    from cellmap_flow.viewer.layers import display_channel, flow_channels, prediction_layer
 
     model = CellposeModelConfig(voxel_size=8)
     assert model.output == "flows" and model.display_channel == 2
     assert CellposeModelConfig(voxel_size=8, output="probability").display_channel is None
-    info = {"display_channel": 2, "output_channels": 3, "has_channel": True}
-    assert display_channel(info, []) == 2
+    info = {"display_channel": 2, "output_channels": 3, "has_channel": True, "channels": OUTPUT_CHANNELS["flows"],
+            "output_class": "unit"}
+    assert display_channel(info, []) == 2 and flow_channels(info, []) == (0, 1)
     # Masks made of the flows are one channel: nothing to choose.
-    assert display_channel(info, [CellposeMasksPostprocessor()]) is None
+    masks = [CellposeMasksPostprocessor()]
+    assert display_channel(info, masks) is None and flow_channels(info, masks) is None
     assert display_channel({**info, "display_channel": None}, []) is None
+    assert flow_channels({**info, "channels": ["cell"], "output_channels": 1}, []) is None
+
+    layer = prediction_layer("cellpose_sam_v2", "http://gpu1:8000", "blob", dataset_path=None, postprocess=[],
+                             color="red", info=info).to_json()
+    # The served c' slider renamed c^, a channel axis the shader reads all of.
+    (source,) = layer["source"]
+    assert source["transform"] == {"outputDimensions": {"c^": [1, ""]}, "inputDimensions": {"c'": [1, ""]}}
+    shader = layer["shader"]
+    assert "getDataValue(0)" in shader and "getDataValue(1)" in shader and "channel=2" in shader
+    assert 'color(default="red")' in shader and "localPosition" not in layer

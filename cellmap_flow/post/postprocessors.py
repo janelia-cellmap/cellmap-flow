@@ -424,7 +424,7 @@ class CellposeMasksPostprocessor(PostProcessor):
             return f"{name} is not a Cellpose model: CellposeMasksPostprocessor needs Cellpose's flows"
         if getattr(base, "output", None) != "flows":
             return (f"{name} serves Cellpose's {getattr(base, 'output', '?')}, not its flows: run it with "
-                    "Output: All channels (output: flows) for CellposeMasksPostprocessor, or Output: Masks for masks without it")
+                    "Output: Flows + probability (output: flows) for CellposeMasksPostprocessor, or Output: Masks for masks without it")
         return None
 
     def _process(self, data):

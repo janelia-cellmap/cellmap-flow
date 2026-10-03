@@ -66,6 +66,42 @@ def prediction_shader(color, value_range=None):
     )
 
 
+# Shader for a flow model's channels (a channel axis, c^): each voxel's hue is
+# its flow's direction and its brightness the flow's length over
+# ``flow_length`` (Cellpose's flows are about 5 long inside a cell), times
+# the display channel (``cell``) over the range. Unticking ``flows`` shows
+# the display channel alone.
+FLOW_SHADER = """#uicontrol bool flows checkbox(default=true);
+#uicontrol float flow_length slider(min=0.5, max=10, default=5);
+{cell_control}#uicontrol vec3 color color(default="{color}");
+void main(){{
+  float shown = {cell};
+  if (!flows) {{ emitRGB(color * shown); return; }}
+  vec2 flow = vec2(toNormalized(getDataValue({flow_x})), toNormalized(getDataValue({flow_y})));
+  float len = length(flow);
+  vec2 dir = flow / max(len, 1e-6);
+  // cos(angle + 0, -120, 120 degrees), from the direction without atan.
+  vec3 hue = 0.5 + 0.5 * (dir.x * vec3(1.0, -0.5, -0.5) - dir.y * vec3(0.0, -0.866, 0.866));
+  emitRGB(hue * clamp(len / flow_length, 0.0, 1.0) * shown);
+}}"""
+
+
+def flow_shader(color, value_range, flow_y, flow_x, display_channel=None):
+    """FLOW_SHADER over channels ``flow_y`` and ``flow_x``, dimmed by channel
+    ``display_channel`` over ``value_range`` (as prediction_shader's), or
+    not dimmed without one."""
+    if display_channel is None:
+        cell_control, cell = "", "1.0"
+    else:
+        lo, hi = (0.0, 1.0) if value_range is None else (float(v) for v in value_range)
+        pad = (hi - lo) * 0.5 or 1.0
+        cell_control = (f"#uicontrol invlerp normalized(range=[{lo:.6g}, {hi:.6g}], "
+                        f"window=[{lo - pad:.6g}, {hi + pad:.6g}], channel={int(display_channel)});\n")
+        cell = "normalized()"
+    return FLOW_SHADER.format(cell_control=cell_control, cell=cell, color=color, flow_y=int(flow_y),
+                              flow_x=int(flow_x))
+
+
 def _dtype_default_range(image):
     """Fallback display range when percentiles can't be computed.
 

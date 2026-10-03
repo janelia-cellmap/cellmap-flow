@@ -162,6 +162,11 @@ class FinetuneModelConfig(ModelConfig):
             self._base_model_config = build_model(self.base_model_dict, base_name)
         return self._base_model_config
 
+    @property
+    def display_channel(self):
+        """Its base's: a finetune serves the same channels."""
+        return getattr(self.base_model_config, "display_channel", None)
+
     def finetune_modes(self):
         """Its base's: continuing a finetune trains the same network."""
         return self.base_model_config.finetune_modes()

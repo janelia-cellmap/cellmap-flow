@@ -8,8 +8,9 @@ that objects at the chunk's edge are seen whole. What the layer shows is
 - ``"flows"`` (the default): all of what Cellpose's network predicts, three
   float32 channels named flow_y, flow_x and cell: the flows towards each
   object's centre (Cellpose's ``dP``, about -5 to 5) and the cell
-  probability, 0 to 1, the sigmoid of its logit. The layer opens on the
-  cell probability (``display_channel``), the flows a channel away; the
+  probability, 0 to 1, the sigmoid of its logit. The layer colours each
+  voxel by its flow's direction, dimmed by the cell probability
+  (``display_channel``; viewer.layers.flow_channels); the
   CellposeMasksPostprocessor makes masks of them on the server, with
   thresholds changeable from the dashboard; a seed reads the probability.
   Computed per voxel, so it joins up across chunks.
@@ -257,7 +258,8 @@ class CellposeModelConfig(ModelConfig):
     @property
     def display_channel(self):
         """The cell probability's channel when the output has several (flows):
-        the layer opens on it rather than on flow_y."""
+        the layer's flow colours are dimmed by it, and its range is the
+        layer's."""
         channels = OUTPUT_CHANNELS[self.output]
         return channels.index("cell") if len(channels) > 1 else None
 

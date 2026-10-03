@@ -328,7 +328,7 @@ export function initModelsTab({ onModelsSubmitted } = {}) {
   // "+ output" adds a row to run another output of the same model beside.
   const cellposeData = pageData("cellpose-data");
   const CELLPOSE_OUTPUTS = [
-    ["flows", "All channels", "Cellpose's three channels: flow_y and flow_x (the flows towards each cell's centre) and cell (its probability, which the layer opens on; the flows are on its channel slider). The CellposeMasksPostprocessor makes masks of them, with thresholds you can change live."],
+    ["flows", "Flows + probability", "Three channels: flow_y and flow_x (the flows towards each cell's centre) and cell (the cell probability, 0 to 1). Not masks: for those, add the CellposeMasksPostprocessor (it makes masks of these on the server, with thresholds you can change live) or choose Masks. The layer shows the three together: each cell coloured by its flows' direction, dimmed by the probability (untick the shader's flows box for the probability alone)."],
     ["probability", "Probability only", "The cell probability, 0 to 1: one channel."],
     ["masks", "Masks", "Instance masks, made chunk by chunk: an object crossing a chunk's edge gets an id on each side."],
   ];
