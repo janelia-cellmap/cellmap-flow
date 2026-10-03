@@ -242,8 +242,9 @@ IoU, within a chunk. Cellpose-SAM's weights are for non-commercial use. See
 In the dashboard, the Models tab's *Cellpose* panel lists `cpsam_v2` and
 `cpsam` (the DINO models need a package the `cellpose4` environment lacks).
 Tick one, give its voxel size (required) and output, and *Submit Models*: it
-runs as `cellpose_sam_v2` (`cellpose_sam_v2_flows`, `cellpose_sam_v2_masks`
-for the other outputs, so *+ output* can run two side by side).
+runs as `cellpose_sam_v2` for the default *Flows + probability*
+(`cellpose_sam_v2_probability`, `cellpose_sam_v2_masks` for the other outputs,
+so *+ output* can run two side by side).
 
 ### BioImage Model Zoo
 

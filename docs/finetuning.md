@@ -62,7 +62,7 @@ Under **Annotation Crops**, you will see your model configuration (name, output 
 
 1. Set the **Output Path for Zarr Files** to a directory where annotation data will be saved. This must be accessible to the MinIO server that the dashboard starts.
 2. Click **New Volume**.
-3. This creates a sparse annotation zarr covering the full dataset extent, where each chunk maps to one training sample.
+3. This creates a sparse annotation zarr covering the full dataset extent, where each chunk maps to one training sample. Its labels are uint8 (ids up to 255), or uint16 (up to 65,535) for an instance model (affinities, Cellpose), whose seeds can hold hundreds of objects. A volume made before keeps its type: make a new one if a seed says its objects do not fit.
 4. A MinIO server will start automatically to serve the zarr for editing in Neuroglancer.
 
 ### Resume an existing volume
@@ -112,7 +112,7 @@ Annotate as many chunks as you like across the dataset. Only chunks with non-zer
 
 ### Label the patch on screen in one click
 
-The **Patch on screen** panel acts on a box centred where the viewer looks: one model output patch, unless *Box (voxels)* under *Seed, split and box settings* says otherwise. Every button fills or changes only that patch, keeps what you painted, and re-reads the paint layer afterwards.
+The **Patch on screen** panel acts on a box centred where the viewer looks: one model output patch, unless *Box (voxels)* under *Seed, split and box settings* says otherwise. Every button fills or changes only that box, keeps what you painted, and re-reads the paint layer afterwards.
 
 - **Seed from Prediction** copies the prediction of the model picked in *Prediction from* (default: the volume model's latest finetune, else that model) into the unpainted voxels: an id per object (2 and up), background 1. Then fix it with the brush; that is much quicker than painting objects from nothing. An object you already painted part of keeps your id.
 - **All Background** labels every unpainted voxel 1, for a region of false positives.
