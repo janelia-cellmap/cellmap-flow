@@ -107,3 +107,12 @@ def test_the_finetune_tab_is_told_what_each_model_can_be_finetuned_with():
     # Nothing to ask, or no answer: every option stays offered.
     assert _finetune_modes(None) is None and _finetune_modes(SimpleNamespace(name="job")) is None
     assert _finetune_modes(SimpleNamespace(name="m", finetune_modes=unreadable)) is None
+
+
+def test_a_percentile_over_more_values_than_torch_quantile_takes_is_the_same(monkeypatch):
+    from cellmap_flow.finetune import trainable
+
+    x = torch.rand(1, 1, 4, 64, 64)
+    expected = ScaleRange(1, 99)(x)
+    monkeypatch.setattr(trainable, "_QUANTILE_MAX", 100)  # as if the patch were huge
+    assert torch.allclose(ScaleRange(1, 99)(x), expected, atol=1e-6)

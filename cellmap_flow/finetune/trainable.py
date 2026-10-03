@@ -118,6 +118,28 @@ class FixedZeroMeanUnitVariance(nn.Module):
         return (x - self._shaped(self.mean, x)) / (self._shaped(self.std, x) + self.eps)
 
 
+# torch.quantile refuses more values than this along its dim.
+_QUANTILE_MAX = 2 ** 24
+
+
+def _quantile(flat: torch.Tensor, q: float) -> torch.Tensor:
+    """The ``q`` quantile of ``flat``'s last dim, interpolated as torch.quantile's.
+
+    torch.quantile refuses more than 2**24 values, which a large 3D patch
+    has; past that the two order statistics either side are found with
+    kthvalue, which has no such limit, and interpolated the same way.
+    """
+    n = flat.shape[-1]
+    if n <= _QUANTILE_MAX:
+        return torch.quantile(flat, q, dim=-1)
+    position = q * (n - 1)
+    below = int(position)
+    above = min(below + 1, n - 1)
+    low = flat.kthvalue(below + 1, dim=-1).values
+    high = flat.kthvalue(above + 1, dim=-1).values
+    return low + (high - low) * (position - below)
+
+
 class ScaleRange(nn.Module):
     """(x - lo) / (hi - lo + eps), lo and hi the ``min_percentile`` and
     ``max_percentile`` (0-100) over ``dims`` of each sample: bioimage.io's
@@ -134,8 +156,7 @@ class ScaleRange(nn.Module):
         kept = [d for d in range(x.ndim) if d not in dims]
         # Quantiles over the flattened statistic dims, one per kept index.
         flat = x.permute(*kept, *dims).reshape(*[x.shape[d] for d in kept], -1).float()
-        lo = torch.quantile(flat, self.lo, dim=-1)
-        hi = torch.quantile(flat, self.hi, dim=-1)
+        lo, hi = _quantile(flat, self.lo), _quantile(flat, self.hi)
         shape = [x.shape[d] if d in kept else 1 for d in range(x.ndim)]
         lo, hi = lo.reshape(shape), hi.reshape(shape)
         return (x - lo) / (hi - lo + self.eps)

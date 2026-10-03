@@ -298,3 +298,49 @@ def test_nothing_but_building_the_model_imports_bioimageio(monkeypatch):
     assert result.exit_code == 0 and "--weight-format" in result.output
     with pytest.raises((ModelEnvError, ImportError)):
         model.config
+
+
+# --- what it can be finetuned with ------------------------------------------------
+
+@pytest.mark.parametrize("formats, weight_format, modes", [
+    (["onnx", "pytorch"], None, ("lora", "full")),
+    (["onnx", "torchscript"], None, ("full",)),  # compiled: no layers to attach adapters to
+    (["onnx", "tensorflow"], None, ()),
+    (["pytorch", "torchscript"], "torchscript", ("full",)),  # the TorchScript it was asked to run
+    (["onnx", "pytorch"], "onnx", ("lora", "full")),  # served from ONNX, trained from the state dict
+])
+def test_finetune_modes_follow_the_catalogs_weight_formats(monkeypatch, formats, weight_format, modes):
+    from cellmap_flow.models import bioimage_catalog
+
+    monkeypatch.setattr(bioimage_catalog, "find_bioimage_model",
+                        lambda key: {"key": key, "weight_formats": formats})
+    assert BioModelConfig(model="m", weight_format=weight_format).finetune_modes() == modes
+
+
+def test_finetune_modes_read_a_model_the_catalog_does_not_list(monkeypatch, tmp_path, fake_bioimageio):
+    from cellmap_flow.models import bioimage_catalog
+
+    monkeypatch.setattr(bioimage_catalog, "find_bioimage_model", lambda key: None)
+    rdf = tmp_path / "rdf.yaml"
+    rdf.write_text("weights:\n  torchscript: {source: weights.pt}\n  onnx: {source: weights.onnx}\n")
+    assert BioModelConfig(model=str(rdf)).finetune_modes() == ("full",)
+    # Else its description, through bioimageio.core.
+    fake_bioimageio["zoo id"] = SimpleNamespace(weights=SimpleNamespace(pytorch_state_dict=object()))
+    assert BioModelConfig(model="zoo id").finetune_modes() == ("lora", "full")
+    # One whose description cannot be read is offered nothing.
+    assert BioModelConfig(model="nowhere").finetune_modes() == ()
+
+
+def test_finetune_modes_import_neither_torch_nor_bioimageio(tmp_path):
+    import subprocess
+
+    rdf = tmp_path / "rdf.yaml"
+    rdf.write_text("weights:\n  pytorch_state_dict: {source: weights.pt}\n")
+    script = (
+        "import sys\n"
+        "from cellmap_flow.models.models_config import BioModelConfig\n"
+        f"print(BioModelConfig(model={str(rdf)!r}).finetune_modes())\n"
+        "print(sorted(m for m in ('torch', 'bioimageio') if m in sys.modules))\n"
+    )
+    result = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True, check=True)
+    assert result.stdout.split("\n")[:2] == ["('lora', 'full')", "[]"]
