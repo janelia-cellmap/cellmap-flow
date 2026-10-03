@@ -15,14 +15,17 @@ import requests
 from starlette.testclient import TestClient
 
 from cellmap_flow.models.models_config import ScriptModelConfig
+from cellmap_flow.pipeline_spec import PipelineSpec
 from cellmap_flow.post.postprocessors import (
     LabelPostprocessor,
     MortonSegmentationRelabeling,
     ThresholdPostprocessor,
 )
 from cellmap_flow.server import CellMapFlowServer
-from cellmap_flow.serving.chunkmirage_server import ChunkmirageServer
+from cellmap_flow.serving.chunkmirage_ops import InferenceOp
+from cellmap_flow.serving.chunkmirage_server import INFERENCE_PREFETCH, ChunkmirageServer
 from cellmap_flow.serving.engine import check_server, engine_name, make_server
+from cellmap_flow.serving.protocol import ARGS_KEY
 from cellmap_flow.serving.restart_token import TOKEN_HEADER
 from tests.utils.serving_helpers import IDENTITY_MODEL, decode_chunk, get_json, layer, write_raw, write_script
 from tests.utils.test_served_metadata_snapshot import CASES
@@ -198,6 +201,34 @@ def test_the_models_output_is_kept_for_revisits_and_postprocessing_changes(tmp_p
     _chunk(client, layer(posts=[ThresholdPostprocessor(threshold=5)]), (0, 0, 0))  # Output tab changed
 
     assert _forwards(mirage) - start == 1
+
+
+def test_a_chain_sent_again_with_its_values_as_text_reuses_the_models_output(tmp_path):
+    """The dashboard's forms send "0.0" where the YAML gave 0.0: submitting a
+    postprocessing step on the Output tab ran the model again on every chunk."""
+    mirage = ChunkmirageServer(write_raw(tmp_path, np.full((8,) * 3, 10, np.uint8)),
+                               ScriptModelConfig(script_path=write_script(tmp_path, COUNTING_MODEL)))
+    client = TestClient(mirage.app)
+    name = lambda norm, posts=(): f"m{ARGS_KEY}{PipelineSpec([norm], list(posts)).to_url_blob()}{ARGS_KEY}"  # noqa: E731
+    start = _forwards(mirage)
+
+    _chunk(client, name({"name": "MinMaxNormalizer", "min_value": 0.0, "max_value": 255.0, "invert": False}), (0, 0, 0))
+    _chunk(client, name({"name": "MinMaxNormalizer", "min_value": "0.0", "max_value": "255.0", "invert": "False"},
+                        [{"name": "ThresholdPostprocessor", "threshold": "0.5"}]), (0, 0, 0))
+
+    assert _forwards(mirage) - start == 1
+
+
+def test_the_next_chunks_are_normalized_while_the_device_runs_a_forward(tmp_path, monkeypatch):
+    """The device's slots hold the forward only; chunkmirage's queue admits a
+    few chunks more, whose normalization took turns with the forward when the
+    queue's slots were the device's."""
+    monkeypatch.setenv("CELLMAP_FLOW_GPU_SLOTS", "2")
+    mirage = ChunkmirageServer(write_raw(tmp_path, np.full((8,) * 3, 10, np.uint8)),
+                               ScriptModelConfig(script_path=write_script(tmp_path, IDENTITY_MODEL)))
+
+    assert mirage.inferencer.device_slots.n == 2
+    assert InferenceOp.slots == 2 + INFERENCE_PREFETCH
 
 
 def test_no_prediction_cache_runs_the_model_for_every_request(tmp_path, monkeypatch):

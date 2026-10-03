@@ -62,6 +62,9 @@ PREDICTION_CACHE_BYTES_DEFAULT = 16 << 30
 RAW_CACHE_BYTES_ENV = "CELLMAP_FLOW_RAW_CACHE_BYTES"
 RAW_CACHE_BYTES_DEFAULT = 1 << 30
 HALF_PRECISION_ENV = "CELLMAP_FLOW_HALF_PRECISION"
+# Chunks read and normalized while the device runs another's forward: a
+# 178^3 input took 0.03-0.3 s to normalize next to a 0.15 s forward on an A100.
+INFERENCE_PREFETCH = 2
 
 # Where a layer's format starts in its URL, after the name.
 FORMAT = "zarr"
@@ -125,10 +128,18 @@ class ChunkmirageServer:
         self.restart_token = restart_token
         self.resample = resample
 
-        # Device slots are the InferenceOp's (chunkmirage's queue): it reads a
-        # chunk's input before it takes one, as the default predict did.
-        self.inferencer = Inferencer(model_config, device_slots=None, half_precision=_env_flag(HALF_PRECISION_ENV))
-        InferenceOp.slots = DevicePostprocessOp.slots = DeviceSlots.from_env().n
+        # The runner's slots hold the device for the forward only, as on the
+        # Flask server. chunkmirage's queue (its order, and dropping chunks
+        # nobody waits for) admits INFERENCE_PREFETCH chunks more, so their
+        # input normalization, which the InferenceOp does, overlaps the
+        # forward: with the queue's slots the device's, normalizing and the
+        # forward took turns, and the GPU sat idle half the time.
+        device_slots = DeviceSlots.from_env()
+        self.inferencer = Inferencer(
+            model_config, device_slots=device_slots, half_precision=_env_flag(HALF_PRECISION_ENV)
+        )
+        InferenceOp.slots = device_slots.n + INFERENCE_PREFETCH
+        DevicePostprocessOp.slots = device_slots.n
         self.geometry = model_config.geometry
 
         # The level the model reads, as the Flask server chose and placed it.
@@ -237,6 +248,11 @@ class ChunkmirageServer:
                 logger.warning(
                     f"{name}: the layer's chain has NO input normalizers. The model will see raw voxel values."
                 )
+        # Each value as its step's constructor parsed it: the dashboard's forms
+        # send "0.0" where a YAML gave 0.0, and the ops' fields key the cache,
+        # so submitting a postprocessing step ran the model again on every
+        # chunk instead of reusing its output.
+        spec = PipelineSpec.from_steps(*spec.build())
         return [dict(s) for s in spec.input_norm], [dict(s) for s in spec.postprocess], extras
 
     def pipeline_for(self, name):
