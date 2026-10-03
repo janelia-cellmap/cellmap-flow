@@ -95,7 +95,8 @@ def _wait_for_port_ready(host: str, port: int, timeout_s: float = 30.0, interval
 
 
 def _start_inference_server_background(
-    args, model_config: ModelConfig, trained_model, restart_controller: Optional[RestartController] = None
+    args, model_config: ModelConfig, trained_model, restart_controller: Optional[RestartController] = None,
+    on_server=None,
 ):
     """
     Start inference server in a background daemon thread.
@@ -111,6 +112,7 @@ def _start_inference_server_background(
         restart_controller: Where the server's restart endpoint hands
             restart requests, with the job's restart token required; None
             for a server that takes none
+        on_server: Called with the server once it is built
 
     Returns:
         (thread, port) tuple
@@ -148,7 +150,8 @@ def _start_inference_server_background(
     model_config.serve_trained(model_config.config, trained_model)
 
     # Start server
-    from cellmap_flow.server import CellMapFlowServer, get_free_port
+    from cellmap_flow.server import get_free_port
+    from cellmap_flow.serving.engine import make_server
 
     setup_t0 = time.perf_counter()
     logger.info(f"Creating server for dataset: {model_config.name}_finetuned")
@@ -160,13 +163,15 @@ def _start_inference_server_background(
     from cellmap_flow.finetune.session.manifest import read_manifest
 
     resample = bool((read_manifest(args.corrections) or {}).get("resample", False))
-    server = CellMapFlowServer(
+    server = make_server(
         args.serve_data_path,
         model_config,
         restart_callback=restart_callback,
         restart_token=restart_token,
         resample=resample,
     )
+    if on_server is not None:
+        on_server(server)
 
     # Get port
     port = args.serve_port if args.serve_port != 0 else get_free_port()
@@ -285,6 +290,7 @@ class TrainingSession:
         # restarts it is sent.
         self.restart_controller = RestartController()
         self.server_started = False
+        self.inference_server = None
         self.iteration = 0
         # A full finetune's distillation teacher: a frozen copy of the
         # starting weights, made by the first trainer that needs one and
@@ -572,11 +578,17 @@ class TrainingSession:
         """
         if self.server_started:
             self.model.eval()
+            # A server that caches predictions computes the new iteration's
+            # layer anew rather than serve what the old weights made.
+            weights_changed = getattr(self.inference_server, "weights_changed", None)
+            if weights_changed is not None:
+                weights_changed()
             logger.info("Model updated and set to eval mode. Server continuing with new weights.")
             return True
         try:
             _start_inference_server_background(
-                self.args, self.model_config, self.model, restart_controller=self.restart_controller
+                self.args, self.model_config, self.model, restart_controller=self.restart_controller,
+                on_server=lambda server: setattr(self, "inference_server", server),
             )
         except Exception as e:
             logger.error(f"Failed to start inference server: {e}", exc_info=True)
