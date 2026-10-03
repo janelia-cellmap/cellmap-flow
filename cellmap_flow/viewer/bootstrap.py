@@ -16,6 +16,17 @@ from cellmap_flow.viewer.layers import raw_layer
 
 logger = logging.getLogger(__name__)
 
+# Neuroglancer's GPU memory limit for the chunks it keeps, twice its default
+# of 1 GB: a few Cellpose chunks (8 x 512 x 512, three float32 channels) fill
+# 1 GB, and panning back then fetched them again. Changeable in the viewer's
+# settings panel.
+GPU_MEMORY_LIMIT = 2_000_000_000
+
+
+def apply_viewer_defaults(state):
+    """Give a new viewer's ``state`` cellmap-flow's settings (GPU_MEMORY_LIMIT)."""
+    state.gpu_memory_limit = GPU_MEMORY_LIMIT
+
 
 def raw_dimensions(dataset_path):
     """The viewer's dimensions for ``dataset_path``: the axes and voxel size
@@ -63,6 +74,7 @@ def new_viewer(dataset_path, *, scales=None, raw=None, raw_name="data", layers=N
     neuroglancer.set_server_bind_address("0.0.0.0")
     viewer = neuroglancer.Viewer()
     with viewer.txn() as s:
+        apply_viewer_defaults(s)
         if dimensions is not None:
             s.dimensions = dimensions
         s.layers[raw_name] = raw_layer(dataset_path) if raw is None else raw

@@ -29,3 +29,10 @@ def test_a_viewer_takes_its_dimensions_from_the_finest_raw_level(monkeypatch, om
 
 def test_an_unreadable_dataset_leaves_the_viewers_dimensions_to_neuroglancer(tmp_path):
     assert bootstrap.raw_dimensions(str(tmp_path / "missing.zarr")) is None
+
+
+def test_a_viewer_keeps_2_gb_of_chunks_on_the_gpu(monkeypatch, raw_zarr):
+    """Neuroglancer's default 1 GB held a few Cellpose chunks, so panning back fetched them again."""
+    monkeypatch.setattr(neuroglancer, "Viewer", ViewerBase)
+    viewer = bootstrap.new_viewer(raw_zarr(np.zeros((16, 16, 16), np.uint8)))
+    assert viewer.state.gpu_memory_limit == 2_000_000_000
