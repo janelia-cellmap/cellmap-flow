@@ -548,7 +548,15 @@ export function initModelsTab({ onModelsSubmitted } = {}) {
   const addRunBtn = document.getElementById("addModelRunBtn");
   let resolved = null;
 
-  function field(label, key, value, title) {
+  // How a needed value is asked for: its label and an example.
+  const NEEDED = {
+    voxel_size: ["Voxel (nm)", "8, or 40,4,4"],
+    input_voxel_size: ["Input voxel (nm)", "8, or 40,4,4"],
+    channels: ["Channels", "mito, er"],
+    base_model: ["Base model", '{"type": ...}'],
+  };
+
+  function field(label, key, value, title, placeholder) {
     const id = "addModel_" + key;
     const lab = document.createElement("label");
     lab.htmlFor = id;
@@ -559,6 +567,7 @@ export function initModelsTab({ onModelsSubmitted } = {}) {
     input.dataset.key = key;
     input.value = value || "";
     if (title) input.title = title;
+    if (placeholder) input.placeholder = placeholder;
     addFields.append(lab, input);
   }
 
@@ -583,8 +592,11 @@ export function initModelsTab({ onModelsSubmitted } = {}) {
     document.getElementById("addModelSummary").textContent = `${d.type}: ${d.how} (${env})`;
     document.getElementById("addModelNotes").textContent = (d.notes || []).join(" ");
     field("Name", "name", d.name, "The model's name: its layer and job are called so.");
-    (d.needs || []).forEach((key) => field(key.replace(/_/g, " "), key, "",
-      "Not known from the reference: give it here (numbers as 8 or 16,8,8)."));
+    (d.needs || []).forEach((key) => {
+      const [label, example] = NEEDED[key]
+        || [key.charAt(0).toUpperCase() + key.slice(1).replace(/_/g, " "), ""];
+      field(label, key, "", "Not known from the reference: give it here (numbers as 8 or 40,4,4).", example);
+    });
   }
 
   function addedBox(name) {

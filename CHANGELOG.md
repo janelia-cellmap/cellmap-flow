@@ -5,7 +5,7 @@ All notable changes to cellmap-flow. The format follows [Keep a Changelog](https
 ## Unreleased
 
 ### Added
-- **Add a model in the Models tab.** Paste a reference (a Hugging Face repo, a zoo model, a Cellpose model, an exported folder, a checkpoint, a script) and *Resolve* says what it is, where it runs and what it still needs; *Add & run* starts it (`POST /api/models/add`) and gives it a ticked box, so Submit keeps it running until it is unticked.
+- **Add a model in the Models tab.** Paste a reference (a Hugging Face repo, a zoo model, a Cellpose model, an exported folder, a checkpoint, a script) and *Resolve* says what it is, where it runs and what it still needs; *Run* starts it (`POST /api/models/add`) and gives it a ticked box, so Submit keeps it running until it is unticked.
 - **Undo for the one-click label actions.** An *Undo* button beside Seed from Prediction, All Background and Split Objects takes back the last of them (up to 10 per volume): the patch goes back to what it held, except voxels painted since, which are kept.
 - **Resampling from the dashboard.** The Models tab has a *Resample if no scale matches the model* box: the servers it submits are started with `--resample`. The matching scale is still picked automatically when there is one; the box decides what happens when there is none.
   - `cellmap_flow yaml` with `resample: true` and the new `cellmap_flow view --resample` start the box ticked, so models added later in the dashboard resample too; before, only the YAML's own models did.
