@@ -135,6 +135,19 @@ def _geometry_from_local_load(name, model_config):
         return None
 
 
+def _finetune_modes(model_config):
+    """What the model can be finetuned with ("lora", "full"), for the tab's
+    LoRA rank options; None when there is no config to ask (a model a job
+    serves without one), which leaves every option offered."""
+    if model_config is None or not hasattr(model_config, "finetune_modes"):
+        return None
+    try:
+        return list(model_config.finetune_modes())
+    except Exception as e:
+        logger.warning(f"Could not tell how {getattr(model_config, 'name', 'a model')} can be finetuned: {e}")
+        return None
+
+
 @finetune_bp.route("/api/finetune/models", methods=["GET"])
 def get_finetune_models():
     try:
@@ -170,7 +183,8 @@ def get_finetune_models():
                 logger.warning(f"No configuration available for model: {name}")
                 continue
             seen.add(name)
-            models.append({"name": name, **geometry})
+            models.append({"name": name, **geometry,
+                           "finetune_modes": _finetune_modes(configs_by_name.get(name))})
 
         selected = models[0]["name"] if len(models) == 1 else None
         return jsonify({"models": models, "selected_model": selected})

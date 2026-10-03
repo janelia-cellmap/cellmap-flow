@@ -161,6 +161,10 @@ class FinetuneModelConfig(ModelConfig):
             self._base_model_config = build_model(self.base_model_dict, base_name)
         return self._base_model_config
 
+    def finetune_modes(self):
+        """Its base's: continuing a finetune trains the same network."""
+        return self.base_model_config.finetune_modes()
+
     def _get_config(self):
         # Imported here rather than at module scope: importing torch costs
         # ~7s, and the CLI builds its command list from this module, so

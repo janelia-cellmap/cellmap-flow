@@ -266,6 +266,14 @@ class ModelConfig:
     # it; the trainer refuses the others before submitting a job.
     finetunable = False
 
+    def finetune_modes(self):
+        """What this model can be finetuned with: ("lora", "full"), ("full",)
+        or (). For the dashboard, so it must not build the network: a type
+        whose networks differ (a compiled one takes no LoRA adapter) reads
+        it from what describes the model. The trainer checks the module it
+        gets the same way (``finetune.trainable.finetune_modes``)."""
+        return ("lora", "full") if type(self).finetunable else ()
+
     def trainable_model(self):
         """The torch module the finetune trainer trains, or None for
         ``config.model`` as it is (``finetune.model_loading.load_trainable_model``).
