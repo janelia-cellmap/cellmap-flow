@@ -228,6 +228,18 @@ def _prediction_server(base_model, chosen=None):
     return sources[0] if len(sources) == 1 else (None, None)
 
 
+def _serves_cellpose_flows(model_name):
+    """Whether ``model_name`` is a Cellpose model served with ``output: flows``
+    (channels flow_y, flow_x, cell): its instances are Cellpose's masks,
+    which its server makes on asking (CellposeMasksPostprocessor)."""
+    model_config = find_model_config(model_name)
+    return getattr(type(model_config), "cli_name", None) == "cellpose" and getattr(model_config, "output", None) == "flows"
+
+
+# Cellpose's flows output: the cell probability is its third channel.
+CELLPOSE_CELL_CHANNEL = 2
+
+
 def _model_read_as(model_name, base_model):
     """The model whose config says what ``model_name`` outputs: a finetune's is its base's."""
     if base_model and model_name.startswith(f"{base_model}_finetuned"):
@@ -270,9 +282,10 @@ def methods_for(output_type, serves_integers):
     return methods + ["components"]
 
 
-def _served_base(host, model_name):
-    """The URL of the model's served array, with the dashboard's input normalization and no postprocessing."""
-    blob = PipelineSpec.from_steps(get_session().input_norms, ()).to_url_blob()
+def _served_base(host, model_name, postprocess=()):
+    """The URL of the model's served array, with the dashboard's input
+    normalization and ``postprocess`` (none by default)."""
+    blob = PipelineSpec.from_steps(get_session().input_norms, postprocess).to_url_blob()
     return f"{host.rstrip('/')}/{model_name}{ARGS_KEY}{blob}{ARGS_KEY}"
 
 
@@ -316,7 +329,8 @@ def seed_methods(model_name, host, base_model=None):
             _unanswered[key] = time.monotonic()
         else:
             _unanswered.pop(key, None)
-    methods = methods_for(model_output(_model_read_as(model_name, base_model))[0], bool(integers))
+    read_as = _model_read_as(model_name, base_model)
+    methods = methods_for(model_output(read_as)[0], bool(integers) or _serves_cellpose_flows(read_as))
     if integers is not None and job is not None:
         _methods_seen[key] = (job, methods)
     return methods
@@ -348,12 +362,14 @@ def _get(url, timeout=PREDICTION_TIMEOUT_SECONDS):
     return response
 
 
-def read_prediction(host, model_name, volume, lo, hi, info):
+def read_prediction(host, model_name, volume, lo, hi, info, postprocess=()):
     """The model's raw output over annotation voxels ``[lo, hi)``.
 
     Read from its server as a layer is, with the dashboard's input
     normalization and no postprocessing: the trainer's target is set on the
-    raw output, and that is where its decision boundary is. Each annotation
+    raw output, and that is where its decision boundary is. (``postprocess``
+    asks for one anyway: Cellpose's masks of a flows server's output, for a
+    seed of its instances.) Each annotation
     voxel takes the served voxel its centre lies in, placed where
     neuroglancer draws the layer (``prediction_voxel_override``), so the
     seed lies under the prediction the user sees.
@@ -362,7 +378,7 @@ def read_prediction(host, model_name, volume, lo, hi, info):
     or, when the server serves integer labels, as served (an id past 2^24
     is not exact in float32); and the box, shrunk to what the server covers.
     """
-    base = _served_base(host, model_name)
+    base = _served_base(host, model_name, postprocess)
     multiscale = _get(f"{base}/.zattrs").json()["multiscales"][0]
     if [axis["name"] for axis in multiscale["axes"][:3]] != ["z", "y", "x"]:
         raise RuntimeError(f"{model_name}'s server serves axes {multiscale['axes']}, not z, y, x first")
@@ -460,6 +476,9 @@ def _seed_plan(base_model, select_channel):
         return slice(channel, channel + 1), output_type, offsets
     if output_type == "affinities":
         return slice(0, len(json.loads(offsets))), output_type, offsets
+    if _serves_cellpose_flows(base_model):
+        # Thresholding reads the probability, not the flows beside it.
+        return slice(CELLPOSE_CELL_CHANNEL, CELLPOSE_CELL_CHANNEL + 1), output_type, offsets
     return None, output_type, offsets
 
 
@@ -540,7 +559,17 @@ def seed_view_from_prediction():
         if method not in offered:
             raise _Refused(f"{model_name} cannot seed by {method}; it offers {', '.join(offered)}", 400)
         info = fetch_model_info(host)
-        prediction, lo, hi = read_prediction(host, model_name, volume, lo, hi, info)
+        read_as = _model_read_as(model_name, base_model)
+        cellpose_masks = method == "instances" and _serves_cellpose_flows(read_as)
+        if cellpose_masks:
+            # Its server makes Cellpose's masks of its flows on asking.
+            from cellmap_flow.post.postprocessors import CellposeMasksPostprocessor
+
+            channels = None
+        prediction, lo, hi = read_prediction(
+            host, model_name, volume, lo, hi, info,
+            postprocess=(CellposeMasksPostprocessor(),) if cellpose_masks else (),
+        )
         objects = segment_prediction(
             method, prediction, info.get("output_class"), channels, offsets,
             0.5 if threshold is None else float(threshold), min_size, connectivity, per_slice,

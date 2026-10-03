@@ -276,7 +276,7 @@ def test_a_seed_reads_the_model_chosen_else_the_latest_finetune(dashboard, serve
         ["model", "model_finetuned_1", "model_finetuned_2", "other"], "model_finetuned_2")
     read = []
     monkeypatch.setattr(view_labels, "read_prediction",
-                        lambda host, name, *a: read.append(name) or (np.zeros((1, 8, 8, 8), "f4"), a[1], a[2]))
+                        lambda host, name, *a, **kw: read.append(name) or (np.zeros((1, 8, 8, 8), "f4"), a[1], a[2]))
     dashboard.post(SEED, json={})
     dashboard.post(SEED, json={"model": "model"})
     dashboard.post(SEED, json={"model": "other"})
@@ -539,3 +539,23 @@ def test_a_server_that_does_not_answer_is_not_asked_again_on_every_poll(monkeypa
     monkeypatch.setattr(view_labels.time, "monotonic", lambda: 1e12)  # a minute and more later
     view_labels.seed_methods("m", "http://gone:1")
     assert asked == ["m", "m"]
+
+
+class _CellposeConfig:
+    cli_name = "cellpose"
+
+    def __init__(self, output):
+        self.output = output
+
+
+@pytest.mark.parametrize("output, instances", [("flows", True), ("probability", False)])
+def test_a_cellpose_flows_server_seeds_its_instances_from_the_masks_it_makes(monkeypatch, output, instances):
+    """Its server makes Cellpose's masks of its flows on asking, so a seed of
+    instances needs no second server serving masks."""
+    monkeypatch.setattr(view_labels, "find_model_config", lambda name: _CellposeConfig(output))
+    monkeypatch.setattr(view_labels, "autodetect_output_type", lambda config, output_type, offsets: ("flows", None))
+    monkeypatch.setattr(view_labels, "_serves_integers", lambda host, name: False)
+    assert ("instances" in view_labels.seed_methods("cp", "http://gpu:1")) is instances
+    channels = view_labels._seed_plan("cp", None)[0]
+    # Thresholding a flows server reads its probability, not the flows beside it.
+    assert channels == (slice(2, 3) if instances else None)

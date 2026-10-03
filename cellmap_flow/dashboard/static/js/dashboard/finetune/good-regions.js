@@ -116,16 +116,19 @@ export function initGoodRegions({ log }) {
     instances: {
       label: "Model's instances",
       hint: "The ids the model serves (Cellpose's masks), one object each; touching objects stay apart.",
+      needs: "a model serving instance ids, e.g. Cellpose with Output: Masks",
       uses: ["min_size", "connectivity"],
     },
     mutex_watershed: {
       label: "Mutex watershed",
       hint: "Affinities: neighbours join where the model's affinity is over the threshold, so touching objects split.",
+      needs: "an affinity model",
       uses: ["threshold", "min_size"],
     },
     distance_watershed: {
       label: "Distance watershed",
       hint: "Distance: objects grow from the distance's peaks, so touching objects split where it dips between them.",
+      needs: "a distance model",
       uses: ["threshold", "min_size", "connectivity"],
     },
     components: {
@@ -195,12 +198,21 @@ export function initGoodRegions({ log }) {
   // The methods the chosen model offers (the sources' answer), best fit
   // first: the one picked by hand when it is among them, else the first.
   let methodsByModel = {};
+  // Every method is listed, the chosen model's in its best-fit order and the
+  // rest after them greyed out with what they need: hiding them left no way
+  // to tell that the others exist, or what would make them available.
   function showMethods() {
     const offered = methodsByModel[seedModel.value] || ["components"];
-    const now = Array.from(seedMethod.options).map((o) => o.value).join(",");
-    if (now !== offered.join(",")) {
-      seedMethod.replaceChildren(...offered.map((m) => new Option((METHODS[m] || { label: m }).label, m)));
-    }
+    const order = offered.concat(Object.keys(METHODS).filter((m) => !offered.includes(m)));
+    const options = order.map((m) => {
+      const method = METHODS[m] || { label: m };
+      const fits = offered.includes(m);
+      const option = new Option(fits ? method.label : `${method.label} (needs ${method.needs || "another model"})`, m);
+      option.disabled = !fits;
+      return option;
+    });
+    const key = (opts) => opts.map((o) => `${o.value}|${o.disabled}`).join(",");
+    if (key(Array.from(seedMethod.options)) !== key(options)) seedMethod.replaceChildren(...options);
     seedMethod.value = offered.includes(chosenMethod) ? chosenMethod : offered[0];
     showMethod();
   }

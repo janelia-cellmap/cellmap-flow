@@ -371,6 +371,88 @@ class SimpleBlockwiseMerger(PostProcessor):
         return True
 
 
+class CellposeMasksPostprocessor(PostProcessor):
+    """Cellpose's masks, made from a Cellpose model's flows output.
+
+    Cellpose turns its three output channels into objects by following each
+    pixel's flow to where the flows converge. Run here, on a server with
+    ``output: flows`` (channels flow_y, flow_x and cell, the probability),
+    its thresholds can be changed from the dashboard and the layer redrawn,
+    where ``output: masks`` fixes them when the server starts. Put it first
+    in the chain, on the flows as served. It needs Cellpose, which a
+    Cellpose model's server has.
+
+    Each slice is segmented on its own, as Cellpose segments a 2D image;
+    ``stitch_threshold`` above 0 joins a slice's object to the next slice's
+    one it overlaps by that IoU (Cellpose's stitch3D), else each slice's
+    ids follow the previous slice's. Ids are unique within the chunk:
+    follow with MortonSegmentationRelabeling for ids unique across chunks.
+
+    Args:
+        flow_threshold: how far an object's flows may be from those its
+            shape implies before it is dropped (Cellpose's; 0 keeps all).
+        cellprob_threshold: the cell probability, as a logit, over which a
+            pixel is followed (Cellpose's; 0 is a probability of 0.5).
+        min_size: objects of fewer pixels are removed (per slice; in 3D
+            after stitching).
+        stitch_threshold: IoU joining objects across slices; 0 is off.
+        niter: flow-following steps (Cellpose's default, 200).
+    """
+
+    def __init__(self, flow_threshold: float = 0.4, cellprob_threshold: float = 0.0, min_size: int = 15,
+                 stitch_threshold: float = 0.0, niter: int = 200):
+        self.flow_threshold = float(flow_threshold)
+        self.cellprob_threshold = float(cellprob_threshold)
+        self.min_size = int(min_size)
+        self.stitch_threshold = float(stitch_threshold)
+        self.niter = int(niter)
+
+    def _process(self, data):
+        try:
+            import torch
+            from cellpose import dynamics, utils
+        except ImportError as e:
+            raise RuntimeError(
+                "CellposeMasksPostprocessor needs Cellpose, which this server's environment does not have: "
+                "use it on a Cellpose model's server (output: flows)"
+            ) from e
+        if data.ndim != 4 or data.shape[0] != 3:
+            raise ValueError(
+                "CellposeMasksPostprocessor needs a Cellpose flows output, 3 channels (flow_y, flow_x, cell), "
+                f"first in the chain; got shape {data.shape}"
+            )
+        flows = np.asarray(data[:2], dtype=np.float32)
+        probability = np.clip(np.asarray(data[2], dtype=np.float64), 1e-7, 1 - 1e-7)
+        cellprob = np.log(probability / (1 - probability)).astype(np.float32)
+        device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+        stitch = self.stitch_threshold > 0 and data.shape[1] > 1
+        masks = np.zeros(data.shape[1:], dtype=np.uint32)
+        offset = 0
+        for z in range(data.shape[1]):
+            slice_masks = dynamics.resize_and_compute_masks(
+                flows[:, z], cellprob[z], niter=self.niter, cellprob_threshold=self.cellprob_threshold,
+                flow_threshold=self.flow_threshold, min_size=-1 if stitch else self.min_size,
+                max_size_fraction=0.4, device=device,
+            ).astype(np.uint32)
+            if not stitch:
+                slice_masks[slice_masks > 0] += offset
+                offset = max(offset, int(slice_masks.max()))
+            masks[z] = slice_masks
+        if stitch:
+            masks = utils.stitch3D(masks, stitch_threshold=self.stitch_threshold).astype(np.uint32)
+            if self.min_size > 0:
+                masks = utils.fill_holes_and_remove_small_masks(masks, min_size=self.min_size).astype(np.uint32)
+        return masks[np.newaxis]
+
+    @property
+    def dtype(self):
+        return np.uint32
+
+    @property
+    def is_segmentation(self):
+        return True
+
+
 class ChannelSelection(PostProcessor):
     def __init__(self, channels: str = "0"):
         # "0,2" from the dashboard form; YAML may also give 2 or [0, 2].

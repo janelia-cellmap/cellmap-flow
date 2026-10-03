@@ -95,3 +95,32 @@ def test_affinity_postprocessor_segments_as_it_did(bias, channels, as_uint8):
     expected = _old_affinity_postprocessor(data, bias, OFFSETS, **kwargs)
     assert out.dtype == np.uint64
     np.testing.assert_array_equal(out, expected)
+
+
+def test_cellpose_masks_need_a_flows_output_and_cellpose():
+    """On a server without Cellpose, or on another output, it says what it needs."""
+    from cellmap_flow.post.postprocessors import CellposeMasksPostprocessor
+
+    with pytest.raises((RuntimeError, ValueError), match="Cellpose"):
+        CellposeMasksPostprocessor()._process(np.zeros((1, 2, 8, 8), np.float32))
+
+
+def test_cellpose_masks_follow_the_flows_to_their_objects_and_link_them_across_slices():
+    pytest.importorskip("cellpose.dynamics")
+    from cellpose import dynamics
+
+    from cellmap_flow.post.postprocessors import CellposeMasksPostprocessor
+
+    yy, xx = np.mgrid[:96, :96]
+    labels = np.zeros((96, 96), np.int32)
+    labels[(yy - 30) ** 2 + (xx - 30) ** 2 < 15 ** 2] = 1
+    labels[(yy - 62) ** 2 + (xx - 62) ** 2 < 15 ** 2] = 2
+    flows = getattr(dynamics, "masks_to_flows", None) or dynamics.masks_to_flows_gpu
+    flow = np.asarray(flows(labels), np.float32) * 5
+    probability = np.where(labels > 0, 0.95, 0.05).astype(np.float32)
+    data = np.stack([np.stack([flow[0]] * 3), np.stack([flow[1]] * 3), np.stack([probability] * 3)])
+    apart = CellposeMasksPostprocessor()._process(data)
+    linked = CellposeMasksPostprocessor(stitch_threshold=0.3)._process(data)
+    assert apart.shape == (1, 3, 96, 96) and apart.dtype == np.uint32
+    assert [len(np.unique(apart[0, z])) - 1 for z in range(3)] == [2, 2, 2]
+    assert len(np.unique(apart)) - 1 == 6 and len(np.unique(linked)) - 1 == 2
