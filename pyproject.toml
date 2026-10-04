@@ -42,11 +42,11 @@ dependencies = [
     "scipy",
     "click",
     # Serves the predictions (serving/chunkmirage_server.py), with
-    # CELLMAP_FLOW_ENGINE=chunkmirage: the commit of its PR #17 (channel
-    # ops, chunkmirage.serve, the cache size given), until that merges. Not on
-    # PyPI yet: a release of cellmap-flow needs one, as PyPI refuses a
-    # dependency given by URL.
-    "chunkmirage @ git+https://github.com/yuriyzubov/chunkmirage@a65fc3297da4d47afc8daea721aff3619348955c",
+    # CELLMAP_FLOW_ENGINE=chunkmirage: its main since PR #17 merged (channel
+    # ops, chunkmirage.serve, the cache size given, queued chunks in the
+    # order they were asked for). Not on PyPI yet: a release of cellmap-flow
+    # needs one, as PyPI refuses a dependency given by URL.
+    "chunkmirage @ git+https://github.com/yuriyzubov/chunkmirage@7331a3fcd0b32a281b74c79766f6d52450a8f2a8",
     ]
 
 # extras
