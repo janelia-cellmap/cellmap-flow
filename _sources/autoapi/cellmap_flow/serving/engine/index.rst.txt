@@ -1,0 +1,75 @@
+cellmap_flow.serving.engine
+===========================
+
+.. py:module:: cellmap_flow.serving.engine
+
+.. autoapi-nested-parse::
+
+   Which inference server a process runs: chunkmirage's or the Flask one.
+
+   ``CELLMAP_FLOW_ENGINE`` is ``chunkmirage`` (the default) or ``flask``. Every
+   place that starts a server (``cellmap_flow serve``, ``infer --server-check``
+   and the finetune loop) builds it with ``make_server``, and both take the
+   same arguments.
+
+   A model can run in an environment of its own (its ``env``: a pixi
+   environment, an alias or a path), which may not have chunkmirage. Unless
+   chunkmirage was asked for, such a server is the Flask one, with a warning;
+   the dashboard draws either server's layers.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.serving.engine.logger
+   cellmap_flow.serving.engine.ENGINE_ENV
+   cellmap_flow.serving.engine.ENGINES
+   cellmap_flow.serving.engine.DEFAULT_ENGINE
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.serving.engine.engine_name
+   cellmap_flow.serving.engine.make_server
+   cellmap_flow.serving.engine.check_server
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:data:: ENGINE_ENV
+   :value: 'CELLMAP_FLOW_ENGINE'
+
+
+.. py:data:: ENGINES
+   :value: ('flask', 'chunkmirage')
+
+
+.. py:data:: DEFAULT_ENGINE
+   :value: 'chunkmirage'
+
+
+.. py:function:: engine_name(name=None) -> str
+
+   ``name``, else ``CELLMAP_FLOW_ENGINE``, else the default; refused if unknown.
+
+
+.. py:function:: make_server(dataset_name, model_config, *, engine=None, **kwargs)
+
+   The server for ``model_config`` over ``dataset_name``; ``kwargs`` are
+   CellMapFlowServer's (restart_callback, restart_token, resample).
+
+
+.. py:function:: check_server(server)
+
+   Compute one chunk the way a request would: ``infer --server-check``.
+
+

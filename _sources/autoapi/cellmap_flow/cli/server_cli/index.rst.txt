@@ -50,8 +50,9 @@ Module Contents
 
 .. py:function:: run_server(model_config, data_path, debug=False, port=0, certfile=None, keyfile=None, resample=True)
 
-   Run the CellMapFlow server with the given configuration; ``resample``
-   as CellMapFlowServer takes it.
+   Run the inference server with the given configuration; ``resample``
+   as CellMapFlowServer takes it, the engine ``CELLMAP_FLOW_ENGINE``'s
+   (serving.engine).
 
 
 .. py:function:: serve_entry(model_json, data_path, debug=False, port=0, certfile=None, keyfile=None, resample=True)

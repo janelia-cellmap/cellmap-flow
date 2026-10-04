@@ -222,6 +222,38 @@ no such level, the nearest one is resampled to it. <code class="docutils literal
 matches the model</em> box) uses the nearest level as it is instead, and the
 dashboard warns that the model sees the wrong scale.</p>
 </section>
+<section id="inference-engine">
+<h1>Inference engine<a class="headerlink" href="#inference-engine" title="Link to this heading"></a></h1>
+<p>Models are served through <a class="reference external" href="https://github.com/yuriyzubov/chunkmirage">chunkmirage</a>,
+which keeps each model’s output in memory. Panning back to chunks you have
+seen, or changing only the postprocessing, reuses that output instead of
+running the model again. The chunks nearest your view go to the GPU first,
+and chunks you have panned away from are dropped.</p>
+<p><strong>Using the previous Flask server instead.</strong> It is still included for now.
+Set this before starting the viewer or the YAML runner; it carries over to
+every model and finetune job they start:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">export</span><span class="w"> </span><span class="nv">CELLMAP_FLOW_ENGINE</span><span class="o">=</span>flask<span class="w">      </span><span class="c1"># chunkmirage is the default</span>
+</pre></div>
+</div>
+<p><strong>Compatibility:</strong></p>
+<ul class="simple">
+<li><p>A model whose environment does not have chunkmirage (one you point it at
+with <code class="docutils literal notranslate"><span class="pre">env:</span></code>) is served by the Flask server, with a warning in its log.
+Setting <code class="docutils literal notranslate"><span class="pre">CELLMAP_FLOW_ENGINE=chunkmirage</span></code> makes that an error instead.</p></li>
+<li><p>This dashboard shows layers from either kind of server, including servers
+started by an older cellmap-flow. A dashboard from an older cellmap-flow
+cannot show a chunkmirage server’s layers: run both from the same version,
+or set <code class="docutils literal notranslate"><span class="pre">CELLMAP_FLOW_ENGINE=flask</span></code> for servers an older dashboard uses.</p></li>
+<li><p>The layer URLs differ: a chunkmirage layer is
+<code class="docutils literal notranslate"><span class="pre">zarr://&lt;server&gt;/&lt;model&gt;&lt;settings&gt;/zarr</span></code>, with any channel axis first and
+chunk keys separated by <code class="docutils literal notranslate"><span class="pre">/</span></code>. A Flask layer has no <code class="docutils literal notranslate"><span class="pre">/zarr</span></code>, and puts the
+channel axis last. Only code that reads a server’s zarr directly sees the
+difference. The <code class="docutils literal notranslate"><span class="pre">/__control__/...</span></code> routes are the same on both.</p></li>
+<li><p>Memory: a chunkmirage server keeps up to 16 GiB of predictions.
+<code class="docutils literal notranslate"><span class="pre">CELLMAP_FLOW_PREDICTION_CACHE_BYTES</span></code> changes that (<code class="docutils literal notranslate"><span class="pre">0</span></code> for none), and
+<code class="docutils literal notranslate"><span class="pre">CELLMAP_FLOW_RAW_CACHE_BYTES</span></code> (1 GiB) bounds the raw data kept.</p></li>
+</ul>
+</section>
 <section id="model-types">
 <h1>Model types<a class="headerlink" href="#model-types" title="Link to this heading"></a></h1>
 <p>Each model has a type, which says how it is loaded and which environment its

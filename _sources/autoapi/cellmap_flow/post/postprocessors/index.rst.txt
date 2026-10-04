@@ -315,6 +315,11 @@ Module Contents
    :param niter: flow-following steps (Cellpose's default, 200).
 
 
+   .. py:attribute:: uses_device
+      :value: True
+
+
+
    .. py:attribute:: flow_threshold
 
 

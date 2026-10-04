@@ -71,6 +71,7 @@
 </li>
 <li class="toctree-l2"><a class="reference internal" href="#request-flows">Request flows</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="#a-chunk-served-to-neuroglancer">A chunk served to Neuroglancer</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#the-same-chunk-from-the-chunkmirage-engine">The same chunk from the chunkmirage engine</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#submit-or-put-api-pipeline-and-the-layers">Submit, or <code class="docutils literal notranslate"><span class="pre">PUT</span> <span class="pre">/api/pipeline</span></code>, and the layers</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#launching-a-model-server">Launching a model server</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#a-blockwise-run">A blockwise run</a></li>
@@ -634,6 +635,44 @@ to the dtype the chain declares (<code class="docutils literal notranslate"><spa
 encoded. A postprocessor that merges segments across chunks posts its
 equivalences to <code class="docutils literal notranslate"><span class="pre">&lt;dashboard_url&gt;/update/equivalences</span></code>, at most every
 5 s.</p></li>
+</ol>
+</section>
+<section id="the-same-chunk-from-the-chunkmirage-engine">
+<h3>The same chunk from the chunkmirage engine<a class="headerlink" href="#the-same-chunk-from-the-chunkmirage-engine" title="Link to this heading"></a></h3>
+<p>By default (<code class="docutils literal notranslate"><span class="pre">CELLMAP_FLOW_ENGINE=chunkmirage</span></code>; <code class="docutils literal notranslate"><span class="pre">flask</span></code> for the server
+above, which is also used where chunkmirage cannot be imported;
+<code class="docutils literal notranslate"><span class="pre">serving.engine.make_server</span></code>) the server is
+<code class="docutils literal notranslate"><span class="pre">serving.chunkmirage_server.ChunkmirageServer</span></code>, built on
+<a class="reference external" href="https://github.com/yuriyzubov/chunkmirage">chunkmirage</a>, which reads,
+caches, schedules and serves; cellmap-flow keeps the model, its chains and
+the routes the dashboard reads. The result is the same voxels in the same
+place, with any channel axis first.</p>
+<ol class="arabic simple">
+<li><p>The layer’s source is <code class="docutils literal notranslate"><span class="pre">zarr://&lt;server&gt;/&lt;model&gt;&lt;ARGS_KEY&gt;&lt;blob&gt;&lt;ARGS_KEY&gt;/zarr</span></code>:
+the same name, then chunkmirage’s format. The dashboard learns which
+engine a server runs from <code class="docutils literal notranslate"><span class="pre">&quot;engine&quot;:</span> <span class="pre">&quot;chunkmirage&quot;</span></code> in its model_info
+(<code class="docutils literal notranslate"><span class="pre">viewer.layers.prediction_url</span></code>); a server that does not say is the
+Flask one, so a dashboard still draws an older finetune job’s layer.</p></li>
+<li><p>chunkmirage resolves an unknown name on its first request
+(<code class="docutils literal notranslate"><span class="pre">ChunkmirageServer.pipeline_for</span></code>) into a pipeline of
+<code class="docutils literal notranslate"><span class="pre">serving.chunkmirage_ops.layer_ops</span></code>: the raw data (the level and grid
+the <code class="docutils literal notranslate"><span class="pre">ImageDataInterface</span></code> chose, as a chunkmirage source); an
+<code class="docutils literal notranslate"><span class="pre">InferenceOp</span></code>, the model on the layer’s normalizers; one
+<code class="docutils literal notranslate"><span class="pre">PostprocessOp</span></code> per postprocessing step; and chunkmirage’s <code class="docutils literal notranslate"><span class="pre">cast</span></code> if
+the chain leaves another dtype than the one served.</p></li>
+<li><p>chunkmirage reads each chunk’s input with the model’s halo (zeros past
+the data) and queues it for the device, finest level first, dropping
+chunks nobody waits for any more (<code class="docutils literal notranslate"><span class="pre">InferenceOp.slots</span></code>, from
+<code class="docutils literal notranslate"><span class="pre">CELLMAP_FLOW_GPU_SLOTS</span></code>). <code class="docutils literal notranslate"><span class="pre">InferenceOp</span></code> hands the model a
+<code class="docutils literal notranslate"><span class="pre">BlockInput</span></code> for its <code class="docutils literal notranslate"><span class="pre">to_ndarray_ts</span></code>, which applies the normalizers
+to what lies inside the data and pads after, as
+<code class="docutils literal notranslate"><span class="pre">ImageDataInterface.to_ndarray_ts</span></code> does; a chunk the data ends in is
+computed whole and cropped.</p></li>
+<li><p>The model’s output is cached (<code class="docutils literal notranslate"><span class="pre">CELLMAP_FLOW_PREDICTION_CACHE_BYTES</span></code>,
+16 GiB by default, 0 for none): panning back, or changing only the
+postprocessing, does not run the model again. Its cache key includes the
+model’s weights version, which the finetune loop bumps after each
+iteration (<code class="docutils literal notranslate"><span class="pre">ChunkmirageServer.weights_changed</span></code>).</p></li>
 </ol>
 </section>
 <section id="submit-or-put-api-pipeline-and-the-layers">

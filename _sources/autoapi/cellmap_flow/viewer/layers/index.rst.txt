@@ -33,6 +33,8 @@ Attributes
 .. autoapisummary::
 
    cellmap_flow.viewer.layers.logger
+   cellmap_flow.viewer.layers.CHUNKMIRAGE
+   cellmap_flow.viewer.layers.CHUNKMIRAGE_FORMAT
    cellmap_flow.viewer.layers.FLOW_CHANNELS
 
 
@@ -77,16 +79,25 @@ Module Contents
    ``fallback_output_voxel_size`` (for a server too old to say).
 
 
-.. py:function:: prediction_url(host, model, url_blob)
+.. py:data:: CHUNKMIRAGE
+   :value: 'chunkmirage'
+
+
+.. py:data:: CHUNKMIRAGE_FORMAT
+   :value: 'zarr'
+
+
+.. py:function:: prediction_url(host, model, url_blob, engine=None)
 
    The URL of ``model``'s zarr on ``host``, with ``url_blob``
    (PipelineSpec.to_url_blob) in it: what the layer's source points at.
+   ``engine``: the server's model_info "engine".
 
 
-.. py:function:: prediction_source(host, model, url_blob, override_scales=None, has_channel=True, channels_shaded=False)
+.. py:function:: prediction_source(host, model, url_blob, override_scales=None, has_channel=True, channels_shaded=False, engine=None)
 
    The source of ``model``'s layer: its zarr on ``host``, with ``url_blob``
-   (PipelineSpec.to_url_blob) in the URL.
+   (PipelineSpec.to_url_blob) in the URL; ``engine`` as prediction_url takes it.
 
    With ``override_scales`` (z, y, x nm, as prediction_voxel_override gives
    them) it is a dict whose transform declares the array at those scales.

@@ -151,10 +151,13 @@
 <tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.index_page.cellpose_panel_data" title="cellmap_flow.dashboard.routes.index_page.cellpose_panel_data"><code class="xref py py-obj docutils literal notranslate"><span class="pre">cellpose_panel_data</span></code></a>(models_config, running_job_names)</p></td>
 <td><p>What the Models tab's Cellpose panel is built from (models-tab.js):</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.index_page.index" title="cellmap_flow.dashboard.routes.index_page.index"><code class="xref py py-obj docutils literal notranslate"><span class="pre">index</span></code></a>()</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.index_page.cellpose_panel_names" title="cellmap_flow.dashboard.routes.index_page.cellpose_panel_names"><code class="xref py py-obj docutils literal notranslate"><span class="pre">cellpose_panel_names</span></code></a>(models_config)</p></td>
+<td><p>The names of the Cellpose models the Cellpose panel lists as its own</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.index_page.index" title="cellmap_flow.dashboard.routes.index_page.index"><code class="xref py py-obj docutils literal notranslate"><span class="pre">index</span></code></a>()</p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.index_page.set_data" title="cellmap_flow.dashboard.routes.index_page.set_data"><code class="xref py py-obj docutils literal notranslate"><span class="pre">set_data</span></code></a>()</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.index_page.set_data" title="cellmap_flow.dashboard.routes.index_page.set_data"><code class="xref py py-obj docutils literal notranslate"><span class="pre">set_data</span></code></a>()</p></td>
 <td><p>Set up neuroglancer viewer with a dataset path.</p></td>
 </tr>
 </tbody>
@@ -206,6 +209,14 @@ ticked.</p>
 <p><code class="docutils literal notranslate"><span class="pre">{&quot;models&quot;:</span> <span class="pre">[{&quot;model&quot;,</span> <span class="pre">&quot;label&quot;,</span> <span class="pre">&quot;description&quot;}],</span> <span class="pre">&quot;running&quot;:</span> <span class="pre">[{&quot;model&quot;,</span>
 <span class="pre">&quot;output&quot;,</span> <span class="pre">&quot;voxel_size&quot;,</span> <span class="pre">&quot;stitch_threshold&quot;}]}</span></code>; a model running with
 two outputs is two entries, so two rows.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.index_page.cellpose_panel_names">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.index_page.</span></span><span class="sig-name descname"><span class="pre">cellpose_panel_names</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">models_config</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.routes.index_page.cellpose_panel_names" title="Link to this definition"></a></dt>
+<dd><p>The names of the Cellpose models the Cellpose panel lists as its own
+rows: one of its models, named as a row of it names its job, so that the
+panel’s Submit names it alike.</p>
 </dd></dl>
 
 <dl class="py function">

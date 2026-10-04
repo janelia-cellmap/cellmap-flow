@@ -1,0 +1,365 @@
+cellmap_flow.serving.chunkmirage_ops
+====================================
+
+.. py:module:: cellmap_flow.serving.chunkmirage_ops
+
+.. autoapi-nested-parse::
+
+   A served model and its chains as chunkmirage ops.
+
+   chunkmirage (``chunkmirage.ops.Op``) reads the raw data around each chunk,
+   runs the ops on it, caches what the cached ones make and serves the result.
+   A layer's pipeline is ``layer_ops``:
+
+   - ``InferenceOp``: the model, on its input voxel size, with the layer's input
+     normalization. Its output is cached, so a layer revisiting a region, or
+     another layer with the same normalization, does not run the model again.
+   - ``PostprocessOp``, one per step of the layer's postprocessing chain: the
+     same ``PostProcessor`` steps the dashboard's Output tab builds, run as they
+     always were. Changing them leaves the model's cached output valid.
+
+   The model itself, loaded and warmed up once per process, is a ``ServedModel``
+   registered by name (``serve_model``): ops are frozen pydantic models that
+   chunkmirage rebuilds whenever a pipeline is built, so they only name it.
+
+   Importing this module is cheap (no torch), since chunkmirage loads the ops
+   through the ``chunkmirage.ops`` entry point in any process that serves.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.serving.chunkmirage_ops.logger
+   cellmap_flow.serving.chunkmirage_ops.EQUIVALENCES_TIMEOUT_SECONDS
+   cellmap_flow.serving.chunkmirage_ops.EQUIVALENCES_EVERY_SECONDS
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.serving.chunkmirage_ops.ServedModel
+   cellmap_flow.serving.chunkmirage_ops.BlockInput
+   cellmap_flow.serving.chunkmirage_ops.InferenceOp
+   cellmap_flow.serving.chunkmirage_ops.PostprocessOp
+   cellmap_flow.serving.chunkmirage_ops.DevicePostprocessOp
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.serving.chunkmirage_ops.serve_model
+   cellmap_flow.serving.chunkmirage_ops.served_model
+   cellmap_flow.serving.chunkmirage_ops.layer_ops
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:data:: EQUIVALENCES_TIMEOUT_SECONDS
+   :value: 10
+
+
+.. py:data:: EQUIVALENCES_EVERY_SECONDS
+   :value: 5
+
+
+.. py:class:: ServedModel
+
+   A model a process serves, and the grid its chunks lie on.
+
+   ``runner``: the warmed-up Inferencer (with no device slots: the
+   InferenceOp's ``slots`` bound the device). ``grid``: the raw data's voxels
+   as the model reads them, in nm (``ImageDataInterface._grid``: for a level
+   read as if it were at the model's voxel size, its corner rescaled too).
+   ``level_shape``: that level's voxels (its resampled ones when resampled).
+   ``origin``: output voxel 0's lower corner in nm, where the chunk grid
+   starts. ``block``: output voxels per chunk, spatial. ``halo``: input voxels
+   the model reads beyond each side of what it writes. ``ratio``: input
+   voxels per output voxel.
+
+
+   .. py:attribute:: name
+      :type:  str
+
+
+   .. py:attribute:: runner
+      :type:  Any
+
+
+   .. py:attribute:: grid
+      :type:  cellmap_flow.io.geometry.Grid
+
+
+   .. py:attribute:: level_shape
+      :type:  tuple
+
+
+   .. py:attribute:: origin
+      :type:  numpy.ndarray
+
+
+   .. py:attribute:: block
+      :type:  tuple
+
+
+   .. py:attribute:: input_voxel_size
+      :type:  tuple
+
+
+   .. py:attribute:: output_voxel_size
+      :type:  tuple
+
+
+   .. py:attribute:: halo
+      :type:  tuple
+
+
+   .. py:attribute:: ratio
+      :type:  tuple
+
+
+   .. py:attribute:: output_channels
+      :type:  int
+
+
+   .. py:attribute:: has_channel
+      :type:  bool
+
+
+   .. py:attribute:: output_dtype
+      :type:  Any
+
+
+   .. py:attribute:: stage_dtype
+      :type:  numpy.dtype
+
+
+   .. py:attribute:: weights_version
+      :type:  int
+      :value: 0
+
+
+
+   .. py:method:: weights_changed()
+
+      Say the model's weights changed in place (a finetune iteration): pipelines
+      built from now on get new cache keys, so nothing computed before is served.
+
+
+
+.. py:function:: serve_model(served: ServedModel)
+
+.. py:function:: served_model(name: str) -> ServedModel
+
+.. py:class:: BlockInput(block, block_start, grid: cellmap_flow.io.geometry.Grid, level_shape, input_norms)
+
+   What a model reads its input from: the block chunkmirage read for a chunk.
+
+   It stands in for the ImageDataInterface a ModelRunner reads with. Every
+   config's own ``process_chunk`` or ``predict``, like the default forward,
+   only calls ``to_ndarray_ts(roi)`` with the chunk grown by its context.
+
+
+   .. py:attribute:: block
+
+
+   .. py:attribute:: block_start
+
+
+   .. py:attribute:: grid
+
+
+   .. py:attribute:: level_shape
+
+
+   .. py:attribute:: input_norms
+
+
+   .. py:method:: to_ndarray_ts(roi)
+
+      ``roi`` (nm) through the input chain, padded with 0 past the data,
+      after the chain, as ``ImageDataInterface.to_ndarray_ts`` reads it.
+
+
+
+.. py:class:: InferenceOp(/, **data: Any)
+
+
+
+   A served model's raw output, ``(channels, z, y, x)``, from the layer's
+   input normalization of the raw data.
+
+   One level only (``input_voxel_size``): the model's. Cached, as running the
+   model is the expensive part; ``slots`` (set by the server from
+   ``CELLMAP_FLOW_GPU_SLOTS``) bounds how many chunks use the device at once.
+
+
+   .. py:attribute:: name
+      :type:  ClassVar[str]
+      :value: 'cellmap_flow.inference'
+
+
+
+   .. py:attribute:: cache
+      :type:  ClassVar[bool]
+      :value: True
+
+
+
+   .. py:attribute:: slots
+      :type:  ClassVar[Optional[int]]
+      :value: 1
+
+
+
+   .. py:attribute:: model
+      :type:  str
+
+
+   .. py:attribute:: input_norm
+      :type:  list
+      :value: []
+
+
+
+   .. py:method:: model_post_init(__context)
+
+      Override this method to perform additional initialization after `__init__` and `model_construct`.
+      This is useful if you want to do some validation that requires the entire model to be initialized.
+
+
+
+   .. py:property:: served
+      :type: ServedModel
+
+
+
+   .. py:property:: halo
+
+
+   .. py:method:: input_voxel_size()
+
+      The voxel size this op must read, along the data's last axes and in the source's
+      units: a model trained at one resolution. The pipeline then runs it on one level (the
+      source's at that size, else one resampled to it), caches what it makes, and makes the
+      coarser levels by downsampling that. ``None`` (the default): it runs on every level.
+
+
+
+   .. py:method:: cache_token()
+
+      What this op's output depends on outside its parameters, as a string that changes
+      when that does: a weights file's modification time, a model version. ``None`` (the
+      default): nothing. It is part of ``digest``, so a pipeline built after it changes has
+      new stage keys and new links, and viewers refetch; ``DatasetRegistry.refresh``
+      rebuilds a served dataset to read it again.
+
+
+
+   .. py:method:: output_info(info: chunkmirage.core.ArrayInfo) -> chunkmirage.core.ArrayInfo
+
+
+   .. py:method:: apply_at(block, box)
+
+      Like ``apply`` but told where ``block`` sits (``box`` = its halo-padded extent in
+      voxels of this scale level). Override when the result must depend on position, e.g. to
+      make per-chunk labels globally unique. Default delegates to ``apply``.
+
+
+
+.. py:class:: PostprocessOp(/, **data: Any)
+
+
+
+   One step of the layer's postprocessing chain on the model's output.
+
+   ``step`` is the step as the Output tab sends it (``{"name": ...,
+   **params}``); the op runs that ``PostProcessor``, built once per layer so
+   it keeps its state (the blockwise merger's equivalences, sent to the
+   dashboard at ``_dashboard_url``). A chain is one of these per step, which
+   chunkmirage runs back to back on a chunk. ``chunk_corner`` is the chunk's
+   index on the served grid, as Morton and the affinity segmenter key their
+   ids on.
+
+
+   .. py:attribute:: name
+      :type:  ClassVar[str]
+      :value: 'cellmap_flow.postprocess'
+
+
+
+   .. py:attribute:: model
+      :type:  str
+
+
+   .. py:attribute:: step
+      :type:  dict
+
+
+   .. py:method:: model_post_init(__context)
+
+      Override this method to perform additional initialization after `__init__` and `model_construct`.
+      This is useful if you want to do some validation that requires the entire model to be initialized.
+
+
+
+   .. py:method:: for_dashboard(dashboard_url, dataset)
+
+      Send merged ids to ``dashboard_url`` as those of layer ``dataset``.
+
+
+
+   .. py:property:: served
+      :type: ServedModel
+
+
+
+   .. py:method:: output_info(info: chunkmirage.core.ArrayInfo) -> chunkmirage.core.ArrayInfo
+
+
+   .. py:method:: apply_at(block, box)
+
+      Like ``apply`` but told where ``block`` sits (``box`` = its halo-padded extent in
+      voxels of this scale level). Override when the result must depend on position, e.g. to
+      make per-chunk labels globally unique. Default delegates to ``apply``.
+
+
+
+.. py:class:: DevicePostprocessOp(/, **data: Any)
+
+
+
+   A postprocessing step that runs on the GPU (its ``uses_device``), at
+   most ``slots`` chunks at once (set by the server, as the model's), the
+   nearest first: several at once slow each other down, and the first chunks
+   of a view come no sooner than the rest.
+
+
+   .. py:attribute:: name
+      :type:  ClassVar[str]
+      :value: 'cellmap_flow.postprocess_on_device'
+
+
+
+   .. py:attribute:: slots
+      :type:  ClassVar[Optional[int]]
+      :value: 1
+
+
+
+.. py:function:: layer_ops(model, input_norm, postprocess, dashboard_url=None, dataset='')
+
+   The ops of a layer's pipeline: the model on ``input_norm``, then one op
+   per step of ``postprocess``, then, if the chain leaves another dtype than
+   the one served, chunkmirage's ``cast`` to it (as ``astype``).
+
+

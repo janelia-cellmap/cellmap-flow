@@ -136,6 +136,9 @@ own. It never starts the dashboard.</p>
 <tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.viewer.bootstrap.logger" title="cellmap_flow.viewer.bootstrap.logger"><code class="xref py py-obj docutils literal notranslate"><span class="pre">logger</span></code></a></p></td>
 <td><p></p></td>
 </tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.viewer.bootstrap.GPU_MEMORY_LIMIT" title="cellmap_flow.viewer.bootstrap.GPU_MEMORY_LIMIT"><code class="xref py py-obj docutils literal notranslate"><span class="pre">GPU_MEMORY_LIMIT</span></code></a></p></td>
+<td><p></p></td>
+</tr>
 </tbody>
 </table>
 </section>
@@ -143,10 +146,13 @@ own. It never starts the dashboard.</p>
 <h2>Functions<a class="headerlink" href="#functions" title="Link to this heading"></a></h2>
 <table class="autosummary longtable docutils align-default">
 <tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.viewer.bootstrap.raw_dimensions" title="cellmap_flow.viewer.bootstrap.raw_dimensions"><code class="xref py py-obj docutils literal notranslate"><span class="pre">raw_dimensions</span></code></a>(dataset_path)</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.viewer.bootstrap.apply_viewer_defaults" title="cellmap_flow.viewer.bootstrap.apply_viewer_defaults"><code class="xref py py-obj docutils literal notranslate"><span class="pre">apply_viewer_defaults</span></code></a>(state)</p></td>
+<td><p>Give a new viewer's <code class="docutils literal notranslate"><span class="pre">state</span></code> cellmap-flow's settings (GPU_MEMORY_LIMIT).</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.viewer.bootstrap.raw_dimensions" title="cellmap_flow.viewer.bootstrap.raw_dimensions"><code class="xref py py-obj docutils literal notranslate"><span class="pre">raw_dimensions</span></code></a>(dataset_path)</p></td>
 <td><p>The viewer's dimensions for <code class="docutils literal notranslate"><span class="pre">dataset_path</span></code>: the axes and voxel size</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.viewer.bootstrap.new_viewer" title="cellmap_flow.viewer.bootstrap.new_viewer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">new_viewer</span></code></a>(dataset_path, *[, scales, raw, raw_name, ...])</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.viewer.bootstrap.new_viewer" title="cellmap_flow.viewer.bootstrap.new_viewer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">new_viewer</span></code></a>(dataset_path, *[, scales, raw, raw_name, ...])</p></td>
 <td><p>A viewer showing the raw data at <code class="docutils literal notranslate"><span class="pre">dataset_path</span></code>, then <code class="docutils literal notranslate"><span class="pre">layers</span></code>.</p></td>
 </tr>
 </tbody>
@@ -158,6 +164,17 @@ own. It never starts the dashboard.</p>
 <dt class="sig sig-object py" id="cellmap_flow.viewer.bootstrap.logger">
 <span class="sig-prename descclassname"><span class="pre">cellmap_flow.viewer.bootstrap.</span></span><span class="sig-name descname"><span class="pre">logger</span></span><a class="headerlink" href="#cellmap_flow.viewer.bootstrap.logger" title="Link to this definition"></a></dt>
 <dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.viewer.bootstrap.GPU_MEMORY_LIMIT">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.viewer.bootstrap.</span></span><span class="sig-name descname"><span class="pre">GPU_MEMORY_LIMIT</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">2000000000</span></span><a class="headerlink" href="#cellmap_flow.viewer.bootstrap.GPU_MEMORY_LIMIT" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.viewer.bootstrap.apply_viewer_defaults">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.viewer.bootstrap.</span></span><span class="sig-name descname"><span class="pre">apply_viewer_defaults</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">state</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.viewer.bootstrap.apply_viewer_defaults" title="Link to this definition"></a></dt>
+<dd><p>Give a new viewer’s <code class="docutils literal notranslate"><span class="pre">state</span></code> cellmap-flow’s settings (GPU_MEMORY_LIMIT).</p>
+</dd></dl>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="cellmap_flow.viewer.bootstrap.raw_dimensions">

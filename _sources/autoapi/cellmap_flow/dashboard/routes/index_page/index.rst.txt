@@ -21,6 +21,7 @@ Functions
    cellmap_flow.dashboard.routes.index_page.viewer_url_for
    cellmap_flow.dashboard.routes.index_page.chain_items
    cellmap_flow.dashboard.routes.index_page.cellpose_panel_data
+   cellmap_flow.dashboard.routes.index_page.cellpose_panel_names
    cellmap_flow.dashboard.routes.index_page.index
    cellmap_flow.dashboard.routes.index_page.set_data
 
@@ -67,6 +68,13 @@ Module Contents
    ``{"models": [{"model", "label", "description"}], "running": [{"model",
    "output", "voxel_size", "stitch_threshold"}]}``; a model running with
    two outputs is two entries, so two rows.
+
+
+.. py:function:: cellpose_panel_names(models_config)
+
+   The names of the Cellpose models the Cellpose panel lists as its own
+   rows: one of its models, named as a row of it names its job, so that the
+   panel's Submit names it alike.
 
 
 .. py:function:: index()

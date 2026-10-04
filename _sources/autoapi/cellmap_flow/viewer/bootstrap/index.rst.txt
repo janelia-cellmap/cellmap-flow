@@ -20,6 +20,7 @@ Attributes
 .. autoapisummary::
 
    cellmap_flow.viewer.bootstrap.logger
+   cellmap_flow.viewer.bootstrap.GPU_MEMORY_LIMIT
 
 
 Functions
@@ -27,6 +28,7 @@ Functions
 
 .. autoapisummary::
 
+   cellmap_flow.viewer.bootstrap.apply_viewer_defaults
    cellmap_flow.viewer.bootstrap.raw_dimensions
    cellmap_flow.viewer.bootstrap.new_viewer
 
@@ -35,6 +37,15 @@ Module Contents
 ---------------
 
 .. py:data:: logger
+
+.. py:data:: GPU_MEMORY_LIMIT
+   :value: 2000000000
+
+
+.. py:function:: apply_viewer_defaults(state)
+
+   Give a new viewer's ``state`` cellmap-flow's settings (GPU_MEMORY_LIMIT).
+
 
 .. py:function:: raw_dimensions(dataset_path)
 

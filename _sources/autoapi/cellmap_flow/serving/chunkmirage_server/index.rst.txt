@@ -1,0 +1,208 @@
+cellmap_flow.serving.chunkmirage_server
+=======================================
+
+.. py:module:: cellmap_flow.serving.chunkmirage_server
+
+.. autoapi-nested-parse::
+
+   An inference server built on chunkmirage.
+
+   ``ChunkmirageServer`` serves one model's predictions as zarr v2, as the Flask
+   ``CellMapFlowServer`` does, and takes the same arguments. chunkmirage does the
+   serving: reading the raw data around each chunk, caching the model's output,
+   queueing chunks for the device (finest level first, dropping those nobody
+   waits for any more) and the zarr format. cellmap-flow keeps the model, its
+   chains (``serving.chunkmirage_ops``) and the routes the dashboard reads.
+
+   A layer is ``zarr://<server>/<model><ARGS_KEY><blob><ARGS_KEY>/zarr``: the same
+   name as before, with chunkmirage's format after it. The name is resolved into
+   a pipeline on its first request (``pipeline_for``), and the blob's chain is
+   the layer's own, so layers sharing a server never share a chain. The array
+   has one level, s0, with any channel axis first.
+
+   ``/__control__/model_info`` (and ``/output_probe``) and ``/__control__/restart``
+   stay where they were; model_info says ``"engine": "chunkmirage"``, which is how
+   a dashboard tells this server's URLs from the Flask server's.
+
+   ``CELLMAP_FLOW_PREDICTION_CACHE_BYTES`` (default 16 GiB; 0 for none) bounds the
+   memory kept for computed chunks, the model's output and the raw data read for
+   it; ``CELLMAP_FLOW_RAW_CACHE_BYTES`` (default 1 GiB) tensorstore's decoded raw
+   chunks.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.serving.chunkmirage_server.logger
+   cellmap_flow.serving.chunkmirage_server.ENGINE
+   cellmap_flow.serving.chunkmirage_server.PREDICTION_CACHE_BYTES_ENV
+   cellmap_flow.serving.chunkmirage_server.PREDICTION_CACHE_BYTES_DEFAULT
+   cellmap_flow.serving.chunkmirage_server.RAW_CACHE_BYTES_ENV
+   cellmap_flow.serving.chunkmirage_server.RAW_CACHE_BYTES_DEFAULT
+   cellmap_flow.serving.chunkmirage_server.HALF_PRECISION_ENV
+   cellmap_flow.serving.chunkmirage_server.INFERENCE_PREFETCH
+   cellmap_flow.serving.chunkmirage_server.FORMAT
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.serving.chunkmirage_server.ChunkmirageServer
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.serving.chunkmirage_server.get_public_ip
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:data:: ENGINE
+   :value: 'chunkmirage'
+
+
+.. py:data:: PREDICTION_CACHE_BYTES_ENV
+   :value: 'CELLMAP_FLOW_PREDICTION_CACHE_BYTES'
+
+
+.. py:data:: PREDICTION_CACHE_BYTES_DEFAULT
+   :value: 17179869184
+
+
+.. py:data:: RAW_CACHE_BYTES_ENV
+   :value: 'CELLMAP_FLOW_RAW_CACHE_BYTES'
+
+
+.. py:data:: RAW_CACHE_BYTES_DEFAULT
+   :value: 1073741824
+
+
+.. py:data:: HALF_PRECISION_ENV
+   :value: 'CELLMAP_FLOW_HALF_PRECISION'
+
+
+.. py:data:: INFERENCE_PREFETCH
+   :value: 2
+
+
+.. py:data:: FORMAT
+   :value: 'zarr'
+
+
+.. py:function:: get_public_ip()
+
+   This machine's address on its network (10.x.x.x, say): the interface a
+   connection out would use. Nothing is sent; 127.0.0.1 if there is none.
+
+
+.. py:class:: ChunkmirageServer(dataset_name, model_config, restart_callback=None, restart_token=None, resample=False)
+
+   One model's predictions over ``dataset_name``, served by chunkmirage.
+
+   The arguments are ``CellMapFlowServer``'s: ``resample`` reads a level
+   resampled to the model's input voxel size when the data has none at it,
+   instead of reading the nearest as if it were; ``restart_callback`` (with
+   ``restart_token``) enables POST /__control__/restart.
+   ``CELLMAP_FLOW_GPU_SLOTS`` (default 1) is how many chunks use the device
+   at once.
+
+
+   .. py:attribute:: restart_callback
+      :value: None
+
+
+
+   .. py:attribute:: restart_token
+      :value: None
+
+
+
+   .. py:attribute:: resample
+      :value: False
+
+
+
+   .. py:attribute:: inferencer
+
+
+   .. py:attribute:: geometry
+
+
+   .. py:attribute:: idi_raw
+
+
+   .. py:attribute:: axes
+
+
+   .. py:attribute:: has_channel
+
+
+   .. py:attribute:: served
+
+
+   .. py:attribute:: registry
+
+
+   .. py:attribute:: source
+
+
+   .. py:attribute:: app
+
+
+   .. py:method:: pipeline_for(name)
+
+      The pipeline for layer ``name``: the raw data, the model on the
+      layer's normalization, then the layer's postprocessing. Only this
+      server's model and data; the name only chooses the chains.
+
+
+
+   .. py:method:: weights_changed()
+
+      The model's weights changed in place: layers resolved from now on
+      are computed anew (the finetune loop's new iteration, under a new name).
+
+
+
+   .. py:method:: model_info() -> dict
+
+      The served model's geometry and output activation (see
+      CellMapFlowServer's model_info), and the engine serving it.
+
+
+
+   .. py:method:: read_chunk(index=(0, 0, 0), name='check')
+
+      Chunk ``index`` of layer ``name`` (no chain: the process's), computed
+      here without HTTP: what ``cellmap_flow infer --server-check`` runs.
+
+
+
+   .. py:method:: run(debug=False, port=None, certfile=None, keyfile=None)
+
+      Serve until stopped, on ``port`` (any free one for None or 0).
+
+      The address is announced, as the IP_PATTERN marker and in the ready
+      file a launcher asked for (jobs/ready.py), once the port is bound and
+      the server is taking requests. ``debug`` is accepted for
+      CellMapFlowServer's callers and ignored.
+
+
+
+   .. py:method:: stop()
+
+      Ask a running ``run`` to return.
+
+
+

@@ -26,7 +26,10 @@ Submodules
 .. toctree::
    :maxdepth: 1
 
+   /autoapi/cellmap_flow/serving/chunkmirage_ops/index
+   /autoapi/cellmap_flow/serving/chunkmirage_server/index
    /autoapi/cellmap_flow/serving/client/index
+   /autoapi/cellmap_flow/serving/engine/index
    /autoapi/cellmap_flow/serving/launch/index
    /autoapi/cellmap_flow/serving/probe/index
    /autoapi/cellmap_flow/serving/protocol/index

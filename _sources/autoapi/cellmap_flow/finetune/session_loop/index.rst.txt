@@ -89,6 +89,11 @@ Module Contents
 
 
 
+   .. py:attribute:: inference_server
+      :value: None
+
+
+
    .. py:attribute:: iteration
       :value: 0
 
