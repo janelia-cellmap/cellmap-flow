@@ -33,6 +33,8 @@ import numpy as np
 from chunkmirage.cache import LRUCache
 from chunkmirage.pipeline import Pipeline, select_axes
 from chunkmirage.server import DatasetRegistry, create_app
+from chunkmirage.sources.base import MultiscaleSource
+from chunkmirage.sources.tensorstore_source import TensorStoreSource
 from funlib.geometry.coordinate import Coordinate
 from starlette.concurrency import run_in_threadpool
 from starlette.responses import JSONResponse
@@ -41,6 +43,7 @@ from starlette.routing import Route
 from cellmap_flow.image_data_interface import ImageDataInterface, selected_channel
 from cellmap_flow.inference.runner import DeviceSlots
 from cellmap_flow.inferencer import Inferencer
+from cellmap_flow.io import paths
 from cellmap_flow.io.ome import CHANNEL_AXIS_NAMES
 from cellmap_flow.jobs.spec import IP_PATTERN
 from cellmap_flow.pipeline_spec import PipelineSpec
@@ -210,15 +213,30 @@ class ChunkmirageServer:
             # Relabelled, the grid's corner is the real one rescaled.
             corner = np.asarray(grid.translation, dtype=float) / np.asarray(grid.voxel_size, dtype=float) * actual
         centre = corner + actual / 2
-        lead = len(idi.axes_names) - len(self.axes)
+
+        def placed(lead):
+            return dict(
+                voxel_size=[1.0] * lead + [float(v) for v in actual],
+                translation=[0.0] * lead + [float(v) for v in centre],
+                units=[""] * lead + ["nanometer"] * len(self.axes),
+                axes=["c"] * lead + list(self.axes),
+            )
+
+        if paths.is_precomputed(idi.path):
+            # cellmap-flow names a precomputed volume's scales ``…/s<N>``,
+            # which is no path in the volume: chunkmirage opens the volume at
+            # that scale's index. The volume always has a channel axis, one
+            # channel or more, which pipeline_for selects from.
+            volume, scale_index = paths.precomputed_volume(idi.path)
+            level = TensorStoreSource.from_path(
+                volume, cache_bytes=self.registry.source_cache_bytes, scale_index=scale_index, **placed(1)
+            )
+            return MultiscaleSource([level], name=idi.path)
         return open_source(
             idi.path,
             cache_bytes=self.registry.source_cache_bytes,
             cache=self.registry.cache,
-            voxel_size=[1.0] * lead + [float(v) for v in actual],
-            translation=[0.0] * lead + [float(v) for v in centre],
-            units=[""] * lead + ["nanometer"] * len(self.axes),
-            axes=["c"] * lead + list(self.axes),
+            **placed(len(idi.axes_names) - len(self.axes)),
         )
 
     def _chain(self, name):

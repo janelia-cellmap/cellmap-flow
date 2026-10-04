@@ -98,6 +98,21 @@ def test_the_array_lies_where_the_flask_server_put_it(tmp_path, case):
     assert placed(new.get(f"/{name}/zarr/.zattrs").json()) == expected
 
 
+def test_a_scale_of_a_precomputed_volume_gives_the_voxels_the_flask_server_gave(tmp_path, write_array):
+    """The hemibrain on gs:// failed to start: cellmap-flow names a precomputed
+    volume's scales ``…/s<N>``, which is no path in the volume."""
+    data = np.arange(16**3, dtype=np.uint8).reshape((16,) * 3)
+    # 4 nm voxels: the model's 8 nm are scale 1.
+    path = write_array("precomputed", data, {"resolution": [4, 4, 4], "voxel_offset": [2, 4, 6]}, scales=2)
+    flask, old, mirage, new = _servers(path, write_script(tmp_path, IDENTITY_MODEL))
+    name = layer()
+
+    for index in [(0, 0, 0), (1, 1, 1)]:
+        expected = _flask_chunk(flask, old, name, ".".join(map(str, index)) + ".0")
+        np.testing.assert_array_equal(_chunk(new, name, index), expected)
+    assert mirage.model_info()["input_resampled_from"] is None
+
+
 def test_model_info_says_what_the_flask_server_said_and_which_engine(tmp_path):
     script, raw, _, _ = CASES["8nm_to_16nm"]
     flask, old, mirage, new = _servers(raw(tmp_path), write_script(tmp_path, script))
