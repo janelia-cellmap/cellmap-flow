@@ -107,6 +107,22 @@ def test_the_server_command_takes_the_model_the_launchers_pass():
         assert (pixi, run) == ("pixi", "run") and {"--model", "-d"} <= {o for p in command.params for o in p.opts}
 
 
+def test_the_deployed_environment_has_the_neuroglancer_fork_that_paints():
+    """PyPI's neuroglancer has no Draw tab: main's pixi.toml lost the fork
+    when it was made deployable, and annotation layers could not be painted."""
+    manifest = tomllib.loads((ROOT / "pixi.toml").read_text())
+    default = manifest["environments"]["default"]["features"]
+    pins = [
+        manifest["feature"][f].get("pypi-dependencies", {}).get("neuroglancer")
+        for f in default
+        if f in manifest.get("feature", {})
+    ]
+    forks = [p for p in pins if isinstance(p, dict) and "briossant/neuroglancer" in p.get("git", "")]
+    assert len(forks) == 1 and forks[0].get("rev"), pins
+    locked = (ROOT / "pixi.lock").read_text()
+    assert f"briossant/neuroglancer.git?rev={forks[0]['rev']}" in locked
+
+
 def test_the_viewer_bills_models_to_the_launching_jobs_project(monkeypatch, tmp_path):
     import neuroglancer
     from click.testing import CliRunner
