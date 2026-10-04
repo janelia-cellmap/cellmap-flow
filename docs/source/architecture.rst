@@ -410,6 +410,44 @@ A chunk served to Neuroglancer
    equivalences to ``<dashboard_url>/update/equivalences``, at most every
    5 s.
 
+The same chunk from the chunkmirage engine
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+By default (``CELLMAP_FLOW_ENGINE=chunkmirage``; ``flask`` for the server
+above, which is also used where chunkmirage cannot be imported;
+``serving.engine.make_server``) the server is
+``serving.chunkmirage_server.ChunkmirageServer``, built on
+`chunkmirage <https://github.com/yuriyzubov/chunkmirage>`_, which reads,
+caches, schedules and serves; cellmap-flow keeps the model, its chains and
+the routes the dashboard reads. The result is the same voxels in the same
+place, with any channel axis first.
+
+#. The layer's source is ``zarr://<server>/<model><ARGS_KEY><blob><ARGS_KEY>/zarr``:
+   the same name, then chunkmirage's format. The dashboard learns which
+   engine a server runs from ``"engine": "chunkmirage"`` in its model_info
+   (``viewer.layers.prediction_url``); a server that does not say is the
+   Flask one, so a dashboard still draws an older finetune job's layer.
+#. chunkmirage resolves an unknown name on its first request
+   (``ChunkmirageServer.pipeline_for``) into a pipeline of
+   ``serving.chunkmirage_ops.layer_ops``: the raw data (the level and grid
+   the ``ImageDataInterface`` chose, as a chunkmirage source); an
+   ``InferenceOp``, the model on the layer's normalizers; one
+   ``PostprocessOp`` per postprocessing step; and chunkmirage's ``cast`` if
+   the chain leaves another dtype than the one served.
+#. chunkmirage reads each chunk's input with the model's halo (zeros past
+   the data) and queues it for the device, finest level first, dropping
+   chunks nobody waits for any more (``InferenceOp.slots``, from
+   ``CELLMAP_FLOW_GPU_SLOTS``). ``InferenceOp`` hands the model a
+   ``BlockInput`` for its ``to_ndarray_ts``, which applies the normalizers
+   to what lies inside the data and pads after, as
+   ``ImageDataInterface.to_ndarray_ts`` does; a chunk the data ends in is
+   computed whole and cropped.
+#. The model's output is cached (``CELLMAP_FLOW_PREDICTION_CACHE_BYTES``,
+   16 GiB by default, 0 for none): panning back, or changing only the
+   postprocessing, does not run the model again. Its cache key includes the
+   model's weights version, which the finetune loop bumps after each
+   iteration (``ChunkmirageServer.weights_changed``).
+
 Submit, or ``PUT /api/pipeline``, and the layers
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

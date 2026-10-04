@@ -140,10 +140,9 @@ def create_dynamic_command(cli_name: str, config_class: Type[ModelConfig]):
 
         # Run server check or full inference
         if server_check:
-            from cellmap_flow.server import CellMapFlowServer
+            from cellmap_flow.serving.engine import check_server, make_server
 
-            server = CellMapFlowServer(final_data_path, model_config, resample=resample)
-            server._chunk_impl(None, None, 2, 2, 2)
+            check_server(make_server(final_data_path, model_config, resample=resample))
             click.echo("Server check passed")
         else:
             command = server_command(model_config, final_data_path, resample=resample)

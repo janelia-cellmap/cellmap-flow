@@ -52,6 +52,7 @@ def main(dataset, project, resample):
     from cellmap_flow.dashboard.state import get_session
     from cellmap_flow.jobs.launch import install_cleanup_handlers
     from cellmap_flow.jobs.settings import launcher_settings
+    from cellmap_flow.viewer.bootstrap import apply_viewer_defaults
     from cellmap_flow.viewer.raw import get_raw_layer
 
     # Models picked in the dashboard are jobs too; kill them on the way out.
@@ -82,6 +83,7 @@ def main(dataset, project, resample):
 
     # Add dataset layer to viewer
     with viewer.txn() as s:
+        apply_viewer_defaults(s)
         # Set coordinate space
         s.dimensions = neuroglancer.CoordinateSpace(
             names=["z", "y", "x"],

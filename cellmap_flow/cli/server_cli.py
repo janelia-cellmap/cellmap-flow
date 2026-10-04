@@ -32,11 +32,12 @@ logger = logging.getLogger(__name__)
 def run_server(
     model_config, data_path, debug=False, port=0, certfile=None, keyfile=None, resample=True
 ):
-    """Run the CellMapFlow server with the given configuration; ``resample``
-    as CellMapFlowServer takes it."""
-    from cellmap_flow.server import CellMapFlowServer
+    """Run the inference server with the given configuration; ``resample``
+    as CellMapFlowServer takes it, the engine ``CELLMAP_FLOW_ENGINE``'s
+    (serving.engine)."""
+    from cellmap_flow.serving.engine import make_server
 
-    server = CellMapFlowServer(data_path, model_config, resample=resample)
+    server = make_server(data_path, model_config, resample=resample)
     server.run(
         debug=debug,
         port=port,

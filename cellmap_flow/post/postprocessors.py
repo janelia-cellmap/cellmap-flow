@@ -408,6 +408,11 @@ class CellposeMasksPostprocessor(PostProcessor):
         niter: flow-following steps (Cellpose's default, 200).
     """
 
+    # It follows the flows on the GPU: a server runs one chunk's at a time
+    # (chunkmirage_ops.DevicePostprocessOp). Six at once each took 4 s
+    # instead of 0.8, and the nearest chunks came no sooner than the rest.
+    uses_device = True
+
     def __init__(self, flow_threshold: float = 0.4, cellprob_threshold: float = 0.0, min_size: int = 15,
                  stitch_threshold: float = 0.0, niter: int = 200):
         self.flow_threshold = float(flow_threshold)

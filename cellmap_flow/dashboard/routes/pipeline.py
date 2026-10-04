@@ -24,7 +24,7 @@ from cellmap_flow.pipeline_spec import PipelineSpec
 from cellmap_flow.post.postprocessors import get_postprocessors_list
 from cellmap_flow.viewer.raw import PREDICTION_COLORS
 from cellmap_flow.serving.client import fetch_model_info
-from cellmap_flow.viewer.layers import prediction_layer, prediction_url, raw_layer
+from cellmap_flow.viewer.layers import CHUNKMIRAGE, prediction_layer, prediction_url, raw_layer
 
 logger = logging.getLogger(__name__)
 
@@ -162,7 +162,9 @@ def _shows(viewer, jobs, url_blob) -> bool:
             continue
         if job.model_name not in layers:
             return False
-        if layers[job.model_name].source[0].url != prediction_url(job.host, job.model_name, url_blob):
+        # Either engine's URL for this chain: the layer was drawn from the server's own.
+        urls = {prediction_url(job.host, job.model_name, url_blob, engine) for engine in (None, CHUNKMIRAGE)}
+        if layers[job.model_name].source[0].url not in urls:
             return False
     return True
 
@@ -284,19 +286,26 @@ def _set_chain_and_redraw(spec, dashboard_url, *, built=None, builder=None) -> l
 
 
 def _problems_with_models(postprocess):
-    """Why a step of ``postprocess`` cannot run on a model being served, one line each.
+    """Why a step of ``postprocess`` cannot run on a model being served (running,
+    or starting), one line each.
 
     The chain is every prediction layer's, and a step that fails on a
     model's output fails on every chunk inside that model's server, where
     the page showed only an empty layer (CellposeMasksPostprocessor on a
     Cellpose model serving its probability).
     """
+    from cellmap_flow.dashboard.services.launch import running_names
+
+    # Only those served: a model stopped on the Models tab keeps its config.
+    served = running_names()
     problems = []
     for step in postprocess:
         check = getattr(step, "problem_with", None)
         if check is None:
             continue
         for model_config in get_session().models_config or []:
+            if getattr(model_config, "name", None) not in served:
+                continue
             problem = check(model_config)
             if problem:
                 problems.append(problem)

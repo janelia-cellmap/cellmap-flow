@@ -78,19 +78,34 @@ def served(tmp_path, monkeypatch, viewer):
     return make
 
 
-@pytest.fixture
-def server(monkeypatch):
-    """A running server for "model" that predicts ``server.prediction`` (z, y, x, c) over the volume."""
+@pytest.fixture(params=["flask", "chunkmirage"])
+def server(monkeypatch, request):
+    """A running server for "model" that predicts ``server.prediction`` (z, y, x, c) over the volume,
+    served as the Flask server serves it (channels last) or as chunkmirage's (channels first, "/" keys)."""
     fake = SimpleNamespace(prediction=None, output_class=UNIT)
+    chunkmirage = request.param == "chunkmirage"
 
     def get(url, timeout):
         path = url.split(ARGS_KEY)[2]
+        if chunkmirage:
+            assert path.startswith("/zarr/"), url
+            path = path[len("/zarr"):]
         data = fake.prediction
-        if path == "/.zattrs":
+        if chunkmirage:
+            data = np.moveaxis(data, -1, 0)
+        if path == "/.zattrs" and chunkmirage:
+            body = json.dumps({"multiscales": [{"version": "0.4", "axes": [
+                {"name": "c", "type": "channel"}, *({"name": a, "type": "space", "unit": "nanometer"} for a in "zyx")],
+                "datasets": [{"path": "s0", "coordinateTransformations": [
+                    {"type": "scale", "scale": [1.0, 16.0, 16.0, 16.0]},
+                    {"type": "translation", "translation": [0.0, 8.0, 8.0, 8.0]}]}]}]}).encode()
+        elif path == "/.zattrs":
             body = json.dumps(virtual_zarr.zattrs("zyx", [16] * 3, [0] * 3, True, "model")).encode()
         else:
-            served = zarr.open_array(zarr.MemoryStore(), mode="w", shape=data.shape, chunks=(4, 4, 4, data.shape[3]),
-                                     dtype=data.dtype, compressor=None)
+            chunks = (data.shape[0], 4, 4, 4) if chunkmirage else (4, 4, 4, data.shape[3])
+            served = zarr.open_array(zarr.MemoryStore(), mode="w", shape=data.shape, chunks=chunks,
+                                     dtype=data.dtype, compressor=None,
+                                     dimension_separator="/" if chunkmirage else ".")
             served[:] = data
             body = served.store[path[len("/s0/"):]]
         return SimpleNamespace(status_code=200, content=body, json=lambda: json.loads(body))
@@ -99,6 +114,7 @@ def server(monkeypatch):
     monkeypatch.setattr(view_labels, "fetch_model_info", lambda host: {
         "available": True, "output_class": fake.output_class,
         "output_voxel_size": [16] * 3, "effective_output_voxel_size": [16] * 3,
+        **({"engine": "chunkmirage"} if chunkmirage else {}),
     })
     get_session().jobs = [SimpleNamespace(model_name="model", host="http://gpu:8000")]
     return fake

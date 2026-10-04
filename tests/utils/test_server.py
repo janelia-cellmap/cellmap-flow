@@ -175,6 +175,7 @@ def test_cellmap_flow_serve_resample_serves_the_model_its_own_voxel_size(ome_pyr
 
     path = ome_pyramid((((16, 4, 4), 0),))  # 16^3 voxels from (-8, -2, -2) nm, each its z index + 1
     served = []
+    monkeypatch.setenv("CELLMAP_FLOW_ENGINE", "flask")  # chunkmirage's: test_chunkmirage_server
     monkeypatch.setattr(CellMapFlowServer, "run", lambda self, **kwargs: served.append(self))
     entry = json.dumps({"type": "script", "script_path": model_script()})
     result = CliRunner().invoke(cli, ["serve", "--model", entry, "-d", path, *flag.split()])
@@ -195,6 +196,32 @@ def test_cellmap_flow_serve_resample_serves_the_model_its_own_voxel_size(ome_pyr
         corner = server.origin + 32 * np.array([int(i) for i in index.split(".")[:3]])
         expected = reader.to_ndarray_ts(Roi(tuple(corner), (32, 32, 32)))
         assert np.array_equal(_chunk_at(client, server, index), expected[..., None]), index
+
+
+@pytest.mark.parametrize("flag", RESAMPLE_OR_RELABEL)
+def test_cellmap_flow_serve_runs_chunkmirage_by_default_with_the_resample_flag(ome_pyramid, model_script, monkeypatch, flag):
+    """The same command line, with no engine set: a chunkmirage server, which
+    reads the input as the flag says (its voxels: test_chunkmirage_server)."""
+    import json
+
+    from click.testing import CliRunner
+
+    from cellmap_flow.cli.main import cli
+    from cellmap_flow.serving.chunkmirage_server import ChunkmirageServer
+
+    path = ome_pyramid((((16, 4, 4), 0),))
+    served = []
+    monkeypatch.delenv("CELLMAP_FLOW_ENGINE", raising=False)
+    monkeypatch.setattr(ChunkmirageServer, "run", lambda self, **kwargs: served.append(self))
+    entry = json.dumps({"type": "script", "script_path": model_script()})
+    result = CliRunner().invoke(cli, ["serve", "--model", entry, "-d", path, *flag.split()])
+    assert result.exit_code == 0, result.output + repr(result.exception)
+
+    (server,) = served
+    info = server.model_info()
+    _, _, effective, resampled_from, relabelled_from = RESAMPLE_OR_RELABEL[flag]
+    assert (info["engine"], info["effective_output_voxel_size"], info["input_resampled_from"],
+            info["input_relabelled_from"]) == ("chunkmirage", effective, resampled_from, relabelled_from)
 
 
 def _chunk_at(client, server, index):

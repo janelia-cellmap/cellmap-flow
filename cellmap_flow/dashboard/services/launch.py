@@ -319,12 +319,16 @@ def update_run_models(names: List[str], hf_repos: List[str] = None, bioimage_mod
     bioimage_params = _bioimage_params(bioimage_models or [])
     cellpose_params = _cellpose_params(cellpose_models or [])
 
+    # A running Cellpose model whose voxel size, output or slice linking was
+    # changed is stopped and started again with them: its name does not say
+    # them, so it would otherwise be kept as it was, and the change silently
+    # ignored. Also when the same name is ticked in the model list too (a
+    # YAML's "cellpose_sam" serving probability, and the Cellpose panel's
+    # cpsam with flows): the panel's settings are the ones asked for.
+    restarted = {p["name"] for p in cellpose_params if _settings_changed(p)}
+    names = [name for name in names if name not in restarted]
     all_names = (names + [_sanitize_job_name(repo.split("/")[-1]) for repo in hf_repos]
                  + [p["name"] for p in bioimage_params])
-    # A running Cellpose model whose voxel size or slice linking was changed
-    # is stopped and started again with them: its name does not say them, so
-    # it would otherwise be kept as it was, and the change silently ignored.
-    restarted = {p["name"] for p in cellpose_params if _settings_changed(p)}
     all_names += [p["name"] for p in cellpose_params if p["name"] not in restarted]
     # Not a finetune job's server (finetune_layers marks it): it is the
     # training job itself, and its name, new with each iteration, has no
