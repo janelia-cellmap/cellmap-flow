@@ -4,7 +4,7 @@
 # cluster with `pixi run cellmap_flow serve` (CELLMAP_FLOW_SERVER_COMMAND
 # below). Python dependencies come from pyproject.toml through the editable
 # install; this file adds what PyPI cannot provide: CUDA, and the MinIO
-# server and client that annotation painting needs.
+# server and client and the neuroglancer fork that annotation painting needs.
 [workspace]
 name = "cellmap-flow"
 version = "0.2.3"
@@ -46,6 +46,17 @@ cellmap-flow = { path = ".", editable = true, extras = ["finetune", "postprocess
 # MinIO no longer publishes prebuilt binaries; conda-forge builds them.
 minio-server = "*"
 minio-client = "*"
+
+[feature.finetune.pypi-dependencies]
+# The neuroglancer fork with the voxel-annotation tools: the Draw tab, its
+# brush and flood fill (pre-bound to A and F), and the S3 writes that save
+# the painting to MinIO. Upstream neuroglancer, which PyPI has, has none of
+# them, and without this the dashboard's annotation layers cannot be painted.
+# Here, not in pyproject: a direct reference there would make the PyPI
+# release unuploadable. Pinned to a commit, the one the conda installs
+# (docs/finetuning.md) have been painting with, so a push to the branch does
+# not change what deploys.
+neuroglancer = { git = "https://github.com/briossant/neuroglancer.git", rev = "fae54db8c667176a602a34f0d9d1028956009836" }
 
 [feature.cellpose.dependencies]
 numpy = "<2.1"
