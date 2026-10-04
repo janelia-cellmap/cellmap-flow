@@ -41,8 +41,8 @@ dependencies = [
     "requests",
     "scipy",
     "click",
-    # Serves the predictions (serving/chunkmirage_server.py), with
-    # CELLMAP_FLOW_ENGINE=chunkmirage: its main since PR #17 merged (channel
+    # Serves the predictions (serving/chunkmirage_server.py), unless
+    # CELLMAP_FLOW_ENGINE=flask: its main since PR #17 merged (channel
     # ops, chunkmirage.serve, the cache size given, queued chunks in the
     # order they were asked for). Not on PyPI yet: a release of cellmap-flow
     # needs one, as PyPI refuses a dependency given by URL.

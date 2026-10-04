@@ -163,6 +163,40 @@ no such level, the nearest one is resampled to it. `--no-resample` (or
 matches the model* box) uses the nearest level as it is instead, and the
 dashboard warns that the model sees the wrong scale.
 
+## Inference engine
+
+Models are served through [chunkmirage](https://github.com/yuriyzubov/chunkmirage),
+which keeps each model's output in memory. Panning back to chunks you have
+seen, or changing only the postprocessing, reuses that output instead of
+running the model again. The chunks nearest your view go to the GPU first,
+and chunks you have panned away from are dropped.
+
+**Using the previous Flask server instead.** It is still included for now.
+Set this before starting the viewer or the YAML runner; it carries over to
+every model and finetune job they start:
+
+```bash
+export CELLMAP_FLOW_ENGINE=flask      # chunkmirage is the default
+```
+
+**Compatibility:**
+
+- A model whose environment does not have chunkmirage (one you point it at
+  with `env:`) is served by the Flask server, with a warning in its log.
+  Setting `CELLMAP_FLOW_ENGINE=chunkmirage` makes that an error instead.
+- This dashboard shows layers from either kind of server, including servers
+  started by an older cellmap-flow. A dashboard from an older cellmap-flow
+  cannot show a chunkmirage server's layers: run both from the same version,
+  or set `CELLMAP_FLOW_ENGINE=flask` for servers an older dashboard uses.
+- The layer URLs differ: a chunkmirage layer is
+  `zarr://<server>/<model><settings>/zarr`, with any channel axis first and
+  chunk keys separated by `/`. A Flask layer has no `/zarr`, and puts the
+  channel axis last. Only code that reads a server's zarr directly sees the
+  difference. The `/__control__/...` routes are the same on both.
+- Memory: a chunkmirage server keeps up to 16 GiB of predictions.
+  `CELLMAP_FLOW_PREDICTION_CACHE_BYTES` changes that (`0` for none), and
+  `CELLMAP_FLOW_RAW_CACHE_BYTES` (1 GiB) bounds the raw data kept.
+
 ## Model types
 
 Each model has a type, which says how it is loaded and which environment its

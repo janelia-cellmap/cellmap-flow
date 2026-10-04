@@ -413,8 +413,10 @@ A chunk served to Neuroglancer
 The same chunk from the chunkmirage engine
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-With ``CELLMAP_FLOW_ENGINE=chunkmirage`` (``serving.engine.make_server``) the
-server is ``serving.chunkmirage_server.ChunkmirageServer``, built on
+By default (``CELLMAP_FLOW_ENGINE=chunkmirage``; ``flask`` for the server
+above, which is also used where chunkmirage cannot be imported;
+``serving.engine.make_server``) the server is
+``serving.chunkmirage_server.ChunkmirageServer``, built on
 `chunkmirage <https://github.com/yuriyzubov/chunkmirage>`_, which reads,
 caches, schedules and serves; cellmap-flow keeps the model, its chains and
 the routes the dashboard reads. The result is the same voxels in the same

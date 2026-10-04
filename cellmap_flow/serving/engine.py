@@ -1,16 +1,24 @@
-"""Which inference server a process runs: the Flask one or chunkmirage's.
+"""Which inference server a process runs: chunkmirage's or the Flask one.
 
-``CELLMAP_FLOW_ENGINE`` is ``flask`` (the default) or ``chunkmirage``. Every
+``CELLMAP_FLOW_ENGINE`` is ``chunkmirage`` (the default) or ``flask``. Every
 place that starts a server (``cellmap_flow serve``, ``infer --server-check``
 and the finetune loop) builds it with ``make_server``, and both take the
 same arguments.
+
+A model can run in an environment of its own (its ``env``: a pixi
+environment, an alias or a path), which may not have chunkmirage. Unless
+chunkmirage was asked for, such a server is the Flask one, with a warning;
+the dashboard draws either server's layers.
 """
 
+import logging
 import os
+
+logger = logging.getLogger(__name__)
 
 ENGINE_ENV = "CELLMAP_FLOW_ENGINE"
 ENGINES = ("flask", "chunkmirage")
-DEFAULT_ENGINE = "flask"
+DEFAULT_ENGINE = "chunkmirage"
 
 
 def engine_name(name=None) -> str:
@@ -25,9 +33,14 @@ def make_server(dataset_name, model_config, *, engine=None, **kwargs):
     """The server for ``model_config`` over ``dataset_name``; ``kwargs`` are
     CellMapFlowServer's (restart_callback, restart_token, resample)."""
     if engine_name(engine) == "chunkmirage":
-        from cellmap_flow.serving.chunkmirage_server import ChunkmirageServer
-
-        return ChunkmirageServer(dataset_name, model_config, **kwargs)
+        try:
+            from cellmap_flow.serving.chunkmirage_server import ChunkmirageServer
+        except ImportError as e:
+            if engine or os.environ.get(ENGINE_ENV):
+                raise
+            logger.warning(f"Serving with the Flask server: chunkmirage cannot be imported here ({e})")
+        else:
+            return ChunkmirageServer(dataset_name, model_config, **kwargs)
     from cellmap_flow.server import CellMapFlowServer
 
     return CellMapFlowServer(dataset_name, model_config, **kwargs)

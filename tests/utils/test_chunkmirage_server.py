@@ -319,14 +319,43 @@ def test_the_address_is_announced_once_the_server_takes_requests(tmp_path, monke
 
 def test_the_engine_is_chosen_by_the_environment(tmp_path, monkeypatch):
     path, script = write_raw(tmp_path, np.full((8,) * 3, 10, np.uint8)), write_script(tmp_path, IDENTITY_MODEL)
-    assert engine_name() == "flask"
-    monkeypatch.setenv("CELLMAP_FLOW_ENGINE", "chunkmirage")
+    monkeypatch.delenv("CELLMAP_FLOW_ENGINE", raising=False)
+    assert engine_name() == "chunkmirage"
     server = make_server(path, ScriptModelConfig(script_path=script))
     assert isinstance(server, ChunkmirageServer)
     assert check_server(server).shape == (1, 4, 4, 4)  # what `infer --server-check` computes
+    monkeypatch.setenv("CELLMAP_FLOW_ENGINE", "flask")
+    assert isinstance(make_server(path, ScriptModelConfig(script_path=script)), CellMapFlowServer)
     monkeypatch.setenv("CELLMAP_FLOW_ENGINE", "fastest")
     with pytest.raises(ValueError, match="CELLMAP_FLOW_ENGINE"):
         engine_name()
+
+
+@pytest.fixture
+def no_chunkmirage(monkeypatch):
+    """An environment without chunkmirage, as a model's own ``env`` may be."""
+    import sys
+
+    monkeypatch.setitem(sys.modules, "cellmap_flow.serving.chunkmirage_server", None)
+
+
+def test_where_chunkmirage_is_missing_the_flask_server_serves(tmp_path, monkeypatch, no_chunkmirage, caplog):
+    path, script = write_raw(tmp_path, np.full((8,) * 3, 10, np.uint8)), write_script(tmp_path, IDENTITY_MODEL)
+    monkeypatch.delenv("CELLMAP_FLOW_ENGINE", raising=False)
+
+    with caplog.at_level("WARNING", logger="cellmap_flow.serving.engine"):
+        server = make_server(path, ScriptModelConfig(script_path=script))
+
+    assert isinstance(server, CellMapFlowServer)
+    assert "chunkmirage cannot be imported" in caplog.text
+
+
+def test_where_chunkmirage_is_missing_asking_for_it_is_an_error(tmp_path, monkeypatch, no_chunkmirage):
+    path, script = write_raw(tmp_path, np.full((8,) * 3, 10, np.uint8)), write_script(tmp_path, IDENTITY_MODEL)
+    monkeypatch.setenv("CELLMAP_FLOW_ENGINE", "chunkmirage")
+
+    with pytest.raises(ImportError):
+        make_server(path, ScriptModelConfig(script_path=script))
 
 
 def test_a_step_on_the_gpu_runs_one_chunk_at_a_time_and_the_rest_in_parallel(tmp_path):
