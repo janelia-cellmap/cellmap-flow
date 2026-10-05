@@ -15,6 +15,7 @@ never from the config file, and it is read at call time, not kept in session
 state.
 """
 
+import json
 import logging
 import os
 import re
@@ -22,7 +23,7 @@ import stat
 import threading
 import urllib.parse
 
-from cellmap_flow.ai_annotate.errors import AIAnnotateError
+from cellmap_flow.ai_annotate.errors import INSTALL_HINT, AIAnnotateError
 
 REDACTED = "[REDACTED]"
 
@@ -161,33 +162,86 @@ def resolve_api_key(options):
 
 
 def _read_key_file(path):
-    """The stripped contents of a key file, after checking who can read it.
+    """The stripped contents of an API key file; see ``_read_private_file``."""
+    return _read_private_file(path, "API key file")
 
-    The checks run on the opened file (``fstat``), not the path, so the file
-    cannot be swapped between the check and the read. ``O_NONBLOCK`` keeps a
-    FIFO named by mistake from hanging the open; it is refused just after.
+
+def _read_private_file(path, what):
+    """The stripped contents of a key or credentials file, after checking who can read it.
+
+    It must be a regular file owned by the current user with no group or
+    world permission bits (``chmod 600``). The checks run on the opened file
+    (``fstat``), not the path, so the file cannot be swapped between the
+    check and the read. ``O_NONBLOCK`` keeps a FIFO named by mistake from
+    hanging the open; it is refused just after. ``what`` names the file in
+    the messages.
     """
     try:
         fd = os.open(path, os.O_RDONLY | getattr(os, "O_NONBLOCK", 0))
     except OSError:
-        raise AIAnnotateError("config", f"Could not open the API key file {path}.") from None
+        raise AIAnnotateError("config", f"Could not open the {what} {path}.") from None
     try:
         info = os.fstat(fd)
         if not stat.S_ISREG(info.st_mode):
-            raise AIAnnotateError("config", f"The API key file {path} is not a regular file.")
+            raise AIAnnotateError("config", f"The {what} {path} is not a regular file.")
         if info.st_uid != os.getuid():
-            raise AIAnnotateError("config", f"The API key file {path} must be owned by you.")
+            raise AIAnnotateError("config", f"The {what} {path} must be owned by you.")
         if info.st_mode & 0o077:
             raise AIAnnotateError(
                 "config",
-                f"The API key file {path} can be read or written by other users: run `chmod 600 {path}`.",
+                f"The {what} {path} can be read or written by other users: run `chmod 600 {path}`.",
             )
         if info.st_size > _MAX_KEY_FILE_BYTES:
-            raise AIAnnotateError("config", f"The API key file {path} is too large to be a key.")
+            raise AIAnnotateError("config", f"The {what} {path} is too large.")
         with os.fdopen(fd, "r", closefd=False) as handle:
             value = handle.read().strip()
     finally:
         os.close(fd)
     if not value:
-        raise AIAnnotateError("config", f"The API key file {path} is empty.")
+        raise AIAnnotateError("config", f"The {what} {path} is empty.")
     return value
+
+
+# The fields of a Google credentials file that are secrets: blanked from the
+# log should any of them ever reach it (in an SDK error, say).
+_GOOGLE_SECRET_FIELDS = ("refresh_token", "client_secret", "private_key", "private_key_id", "access_token")
+
+CLOUD_PLATFORM_SCOPE = "https://www.googleapis.com/auth/cloud-platform"
+
+
+def load_google_credentials(path):
+    """Google credentials from a credentials file the config names (``credentials_file``).
+
+    The file is what ``gcloud auth application-default login`` writes (a
+    refresh token) or a service account's key. Naming it in the config, and
+    keeping it on storage every cluster node mounts, means the dashboard
+    signs in the same way wherever it runs, with nothing to export first.
+    The file is held to the API key rule (``_read_private_file``): owned by
+    you, readable by you alone. Its secret fields are registered for
+    redaction, and the credentials go straight to the Google SDK; nothing
+    from the file is kept, logged or sent to the browser.
+    """
+    try:
+        import google.auth
+    except ImportError:
+        raise AIAnnotateError("unavailable", INSTALL_HINT) from None
+    text = _read_private_file(os.path.expanduser(str(path)), "Google credentials file")
+    try:
+        info = json.loads(text)
+    except ValueError:
+        raise AIAnnotateError("config", f"The Google credentials file {path} is not JSON.") from None
+    if not isinstance(info, dict):
+        raise AIAnnotateError("config", f"The Google credentials file {path} is not a credentials file.")
+    for field in _GOOGLE_SECRET_FIELDS:
+        if isinstance(info.get(field), str):
+            register_secret(info[field])
+    try:
+        credentials, _ = google.auth.load_credentials_from_dict(info, scopes=[CLOUD_PLATFORM_SCOPE])
+    except Exception:
+        # The library's message may quote the file; ours names only its path.
+        raise AIAnnotateError(
+            "config",
+            f"The Google credentials file {path} could not be used; make it again with "
+            "`gcloud auth application-default login`.",
+        ) from None
+    return credentials

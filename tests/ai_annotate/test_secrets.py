@@ -2,6 +2,7 @@
 can read are refused."""
 
 import io
+import json
 import logging
 import os
 
@@ -177,3 +178,45 @@ def test_missing_empty_and_non_regular_key_files_are_rejected(tmp_path):
 def test_env_and_file_together_are_ambiguous(tmp_path):
     with pytest.raises(AIAnnotateError, match="not both"):
         secrets.resolve_api_key({"api_key_env": "X", "api_key_file": str(tmp_path / "k")})
+
+
+# What `gcloud auth application-default login` writes: a user's refresh token.
+_ADC = {
+    "type": "authorized_user",
+    "client_id": "1234.apps.googleusercontent.com",
+    "client_secret": "client-secret-value-1234",
+    "refresh_token": "1//refresh-token-value-abcdefgh",
+}
+
+
+def _credentials_file(tmp_path, content=None, mode=0o600):
+    path = tmp_path / "application_default_credentials.json"
+    path.write_text(json.dumps(_ADC) if content is None else content)
+    path.chmod(mode)
+    return path
+
+
+def test_a_private_google_credentials_file_is_loaded_and_its_secrets_registered(tmp_path):
+    pytest.importorskip("google.auth")
+    credentials = secrets.load_google_credentials(str(_credentials_file(tmp_path)))
+
+    assert credentials.refresh_token == _ADC["refresh_token"]
+    text = f"refresh {_ADC['refresh_token']} secret {_ADC['client_secret']} id {_ADC['client_id']}"
+    assert secrets.redact(text) == f"refresh [REDACTED] secret [REDACTED] id {_ADC['client_id']}"
+
+
+@pytest.mark.parametrize("mode", [0o640, 0o604, 0o660])
+def test_a_google_credentials_file_others_can_read_is_rejected(tmp_path, mode):
+    pytest.importorskip("google.auth")
+    with pytest.raises(AIAnnotateError) as caught:
+        secrets.load_google_credentials(str(_credentials_file(tmp_path, mode=mode)))
+    assert caught.value.category == "config" and "chmod 600" in caught.value.user_message
+    assert secrets.redact(_ADC["refresh_token"]) == _ADC["refresh_token"]  # never read, never registered
+
+
+@pytest.mark.parametrize("content", ["not json", "[1, 2]", json.dumps({"type": "nonsense"})])
+def test_a_file_that_is_not_google_credentials_is_rejected_without_quoting_it(tmp_path, content):
+    pytest.importorskip("google.auth")
+    with pytest.raises(AIAnnotateError) as caught:
+        secrets.load_google_credentials(str(_credentials_file(tmp_path, content=content)))
+    assert caught.value.category == "config" and "nonsense" not in caught.value.user_message

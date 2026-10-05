@@ -308,3 +308,18 @@ def test_the_requests_we_build_are_valid_for_the_real_sdk(monkeypatch):
     VertexGeminiBackend("proj", "global", 45)._make_client()
     assert built["vertexai"] is True and built["project"] == "proj" and built["location"] == "global"
     assert built["http_options"].timeout == 45_000
+    assert built["credentials"] is None  # the SDK finds Application Default Credentials itself
+
+
+def test_a_configured_credentials_file_is_handed_to_the_client(monkeypatch, tmp_path):
+    genai = pytest.importorskip("google.genai")
+    path = tmp_path / "adc.json"
+    path.write_text('{"type": "authorized_user", "client_id": "c", "client_secret": "s-secret-value", '
+                    '"refresh_token": "r-refresh-token-value"}')
+    path.chmod(0o600)
+    built = {}
+    monkeypatch.setattr(genai, "Client", lambda **kwargs: built.update(kwargs) or FakeClient())
+
+    VertexGeminiBackend("proj", "global", 45, credentials_file=str(path))._make_client()
+
+    assert built["credentials"].refresh_token == "r-refresh-token-value"

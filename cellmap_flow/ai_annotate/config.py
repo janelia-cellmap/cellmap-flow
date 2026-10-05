@@ -47,7 +47,7 @@ _TOP_LEVEL_KEYS = {
 # unknown option is an error rather than ignored: a misspelt ``locaton`` would
 # otherwise silently send data to the default location.
 PROVIDER_OPTIONS = {
-    "vertex_gemini": {"project", "location", "timeout_s"},
+    "vertex_gemini": {"project", "location", "timeout_s", "credentials_file"},
     "fake": set(),
 }
 
@@ -306,6 +306,15 @@ def _check_options(where, provider_type, options):
     timeout_s = options.setdefault("timeout_s", DEFAULT_TIMEOUT_S)
     if isinstance(timeout_s, bool) or not isinstance(timeout_s, (int, float)) or not 1 <= timeout_s <= 600:
         raise _bad(f"{where}.timeout_s must be a number of seconds from 1 to 600")
+    # The path of a credentials file, not the credentials: the file itself is
+    # read, and its permissions checked, only when a call is made
+    # (secrets.load_google_credentials). Left out, the SDK finds Application
+    # Default Credentials by itself.
+    credentials_file = options.get("credentials_file")
+    if credentials_file is not None and (
+        not isinstance(credentials_file, str) or not credentials_file.strip() or len(credentials_file) > 4096
+    ):
+        raise _bad(f"{where}.credentials_file must be the path of a Google credentials file")
 
 
 def disabled_reason():

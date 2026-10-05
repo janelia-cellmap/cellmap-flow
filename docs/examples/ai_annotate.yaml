@@ -45,6 +45,11 @@ providers:
     models: [gemini-3-pro-image]
     # Seconds to wait for one answer before giving up.
     timeout_s: 120
+    # Optional: a credentials file to sign in with, instead of the one gcloud
+    # saved in your home directory. Use it when the dashboard runs on cluster
+    # nodes: keep a copy on group storage, owned by you and chmod 600 (the
+    # dashboard refuses it otherwise). Only the path goes here.
+    # credentials_file: /groups/<lab>/<you>/.gcloud_adc/application_default_credentials.json
 
   # Runs on the dashboard's machine and sends nothing anywhere: paints the
   # darker pixels in a disc around the chosen point. For trying the panel

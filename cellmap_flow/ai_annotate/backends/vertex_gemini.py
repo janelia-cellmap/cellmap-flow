@@ -9,8 +9,9 @@ image whatever its size, so more pixels buy nothing, and the resolution the
 prompt states must be the one sent.
 
 Authentication is Application Default Credentials (``gcloud auth
-application-default login``, or a service account on a cloud host), so this
-backend reads no key and the dashboard holds none. The google-genai SDK is
+application-default login``, or a service account on a cloud host), found
+by the SDK, or the credentials file the config names (``credentials_file``,
+read by ``secrets.load_google_credentials``), so this backend holds no key. The google-genai SDK is
 imported only when the first call is made, so the dashboard runs without it
 when the feature is off.
 
@@ -54,13 +55,16 @@ class VertexGeminiBackend:
     """Recolor-and-threshold segmentation through Vertex AI.
 
     ``project`` may be None, in which case the SDK takes it from
-    ``GOOGLE_CLOUD_PROJECT`` or the credentials. ``sleep`` is how retries
+    ``GOOGLE_CLOUD_PROJECT`` or the credentials. ``credentials_file`` may be
+    None, in which case the SDK finds Application Default Credentials
+    itself. ``sleep`` is how retries
     wait and ``client_factory`` (no arguments, returns an object with
     ``.models.generate_content``) replaces the SDK client; both are for tests.
     """
 
-    def __init__(self, project, location, timeout_s, sleep=time.sleep, client_factory=None):
+    def __init__(self, project, location, timeout_s, sleep=time.sleep, client_factory=None, credentials_file=None):
         self.project = project
+        self.credentials_file = credentials_file
         self.location = location
         self.timeout_s = timeout_s
         self._sleep = sleep
@@ -73,12 +77,18 @@ class VertexGeminiBackend:
             from google import genai
         except ImportError:
             raise AIAnnotateError("unavailable", INSTALL_HINT) from None
+        credentials = None
+        if self.credentials_file:
+            from cellmap_flow.ai_annotate.secrets import load_google_credentials
+
+            credentials = load_google_credentials(self.credentials_file)
         # Retries are left to the SDK's default (none) and done here, where
         # only 429/503 are retried and the waits are bounded.
         return genai.Client(
             vertexai=True,
             project=self.project,
             location=self.location,
+            credentials=credentials,
             http_options=genai.types.HttpOptions(timeout=int(self.timeout_s * 1000)),
         )
 

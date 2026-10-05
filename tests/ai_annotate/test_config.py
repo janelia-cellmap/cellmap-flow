@@ -207,3 +207,23 @@ def test_a_url_with_dot_segments_is_refused_even_under_an_allowed_prefix(write_c
 def test_an_empty_prefix_list_allows_any_dataset(write_config):
     write_config(_enabled())
     config.load_config().check_dataset("/anything/at/all")
+
+
+def test_a_credentials_file_path_is_accepted_but_never_shown_to_the_browser(write_config):
+    write_config({**_enabled(), "providers": {"vertex": {
+        "type": "vertex_gemini", "models": ["gemini-3-pro-image"],
+        "credentials_file": "/groups/lab/.gcloud_adc/application_default_credentials.json",
+    }}})
+    loaded = config.load_config()
+    assert loaded.provider("vertex").options["credentials_file"].endswith("application_default_credentials.json")
+    assert "gcloud_adc" not in json.dumps(loaded.public())
+
+
+@pytest.mark.parametrize("value", ["", "   ", 7, ["a"]])
+def test_a_credentials_file_that_is_not_a_path_is_refused(write_config, value):
+    write_config({**_enabled(), "providers": {"vertex": {
+        "type": "vertex_gemini", "models": ["gemini-3-pro-image"], "credentials_file": value,
+    }}})
+    with pytest.raises(AIAnnotateError) as caught:
+        config.load_config()
+    assert "credentials_file" in caught.value.user_message

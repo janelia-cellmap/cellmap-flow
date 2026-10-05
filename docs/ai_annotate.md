@@ -37,6 +37,41 @@ The plane is the one the viewer's single panel is showing. cellmap-flow's viewer
 
 Neuroglancer keeps one layout for the whole viewer, so in the 4-panel layout the server cannot tell which panel the mouse is over: switch to a single-panel layout to choose the plane. The panel's status line names the plane that was sent (XY, XZ or YZ), so check it before accepting.
 
+## Quick start
+
+Everything below is explained in the sections that follow. With Gemini on Vertex AI, on the Janelia cluster:
+
+1. **Sign in to Google once** and keep a copy of the login on group storage, so it works on any node (details in [Vertex AI setup](#vertex-ai-setup)):
+
+   ```bash
+   gcloud auth application-default login
+   mkdir -p /groups/<lab>/<you>/.gcloud_adc
+   cp ~/.config/gcloud/application_default_credentials.json /groups/<lab>/<you>/.gcloud_adc/
+   chmod 600 /groups/<lab>/<you>/.gcloud_adc/application_default_credentials.json
+   ```
+
+2. **Write the config once**, `~/.cellmap_flow/ai_annotate.yaml`:
+
+   ```yaml
+   enabled: true
+   providers:
+     vertex:
+       type: vertex_gemini
+       project: <your Google Cloud project>
+       location: global
+       credentials_file: /groups/<lab>/<you>/.gcloud_adc/application_default_credentials.json
+       models: [gemini-3-pro-image]
+     fake:                      # optional: runs locally, sends nothing
+       type: fake
+       models: [fake-threshold]
+   ```
+
+3. **Start the dashboard as usual** from the pixi environment, e.g. `pixi run cellmap_flow yaml <your.yaml>`. The first `pixi run` installs everything, `google-genai` included. Nothing needs exporting first.
+
+4. **In the Finetune tab**, create or resume an annotation volume, open **AI-assisted annotation**, pick the provider, model and structure, and tick the box agreeing to where the planes are sent.
+
+5. **Annotate**: switch the viewer to a single-panel layout (**yz** shows the XY plane, see [Choosing the plane](#choosing-the-plane)), hover over the structure and press **Shift+G**. Review the result, then **Accept** or **Reject**.
+
 ## Turning it on
 
 The feature reads a config file on the machine the dashboard runs on. With no file, the panel says the feature is off and points here.
@@ -71,6 +106,7 @@ Each provider has:
 | `project` | `$GOOGLE_CLOUD_PROJECT` | Vertex only: the Google Cloud project that is billed. |
 | `location` | — | Vertex only: use `global` (see below). |
 | `timeout_s` | `120` | How long to wait for one answer before giving up. |
+| `credentials_file` | gcloud's file in your home directory | Vertex only: the path of the Google login to use, e.g. a copy on group storage for cluster nodes (see [Vertex AI setup](#vertex-ai-setup)). Only the path goes here; the file must be yours and `chmod 600`. |
 
 The file must not contain any API key or password: a key written in it (`api_key:`) is refused as a config error. See [API keys](#api-keys).
 
@@ -100,6 +136,23 @@ Vertex AI is Google Cloud's service for its Gemini models. You need a Google Clo
    ```
 
    This opens a browser to sign in with your Google account, and saves a credential file at `~/.config/gcloud/application_default_credentials.json`. The dashboard uses that file; there is no API key to copy anywhere. Treat it like a password: it lets anyone who can read it use your Google Cloud account, so keep your home directory private.
+   **On the cluster**, the dashboard may run on a node where your home directory is not where gcloud saved that file. Copy it to group storage that every node mounts, readable only by you, and name it in the config instead:
+
+   ```bash
+   mkdir -p /groups/<lab>/<you>/.gcloud_adc
+   cp ~/.config/gcloud/application_default_credentials.json /groups/<lab>/<you>/.gcloud_adc/
+   chmod 600 /groups/<lab>/<you>/.gcloud_adc/application_default_credentials.json
+   ```
+
+   ```yaml
+   providers:
+     vertex:
+       type: vertex_gemini
+       credentials_file: /groups/<lab>/<you>/.gcloud_adc/application_default_credentials.json
+       # ...
+   ```
+
+   The config holds only the path. The dashboard refuses the file unless you own it and only you can read it, hands the credentials straight to Google's library, and never logs them or sends them to the browser. When the login expires, run `gcloud auth application-default login` again and copy the new file over the old one.
 3. **Choose the project**: put it in the config as `project:`, or set the environment variable `GOOGLE_CLOUD_PROJECT` before starting the dashboard. If gcloud warns about a quota project, set it to the same one:
 
    ```bash
@@ -152,7 +205,7 @@ Nothing else is sent: not the rest of the dataset, not its path or name, not you
 
 ## API keys
 
-Vertex AI uses the login from `gcloud auth application-default login` and needs no API key. Other providers may be added later that do (an OpenAI-compatible service, for example). For those, the rules are:
+Vertex AI uses the login from `gcloud auth application-default login` and needs no API key. That login file is held to the same rules as a key file below when the config names it (`credentials_file`): owned by you, `chmod 600`, read only when a call is made, and its secret fields blanked from the logs. Leave `credentials_file` out and Google's library finds the login itself; cellmap-flow never reads it then. Other providers may be added later that do (an OpenAI-compatible service, for example). For those, the rules are:
 
 - **Never put a key in the config file.** Config files get copied, shared and committed; a key in one leaks. A provider with `api_key:` in it is refused.
 - Instead, either name an **environment variable** that holds the key:
@@ -173,7 +226,7 @@ Vertex AI uses the login from `gcloud auth application-default login` and needs 
 
   The file must be owned by you and not readable by your group or anyone else, or the config is refused.
 - The dashboard reads the key only when it makes a call, and never writes it to the staging folder, the audit log or anything it sends to the browser.
-- **Keys are removed from the logs.** The dashboard streams its server log to the browser (the log panel), so every key the dashboard has read is replaced with `[REDACTED]` before a log line is written. Error messages shown in the panel are short summaries of what went wrong, never the service's raw reply.
+- **Keys are removed from the logs.** The dashboard streams its server log to the browser (the log panel), so every key and login secret the dashboard has read is replaced with `[REDACTED]` before a log line is written. Error messages shown in the panel are short summaries of what went wrong, never the service's raw reply.
 
 ## Accept: fill or overwrite
 
@@ -218,7 +271,7 @@ Both live in the session's `corrections` folder, `<Output Path>/<session>/correc
 | The panel says the feature is off | No config file, or `enabled: false` | Create `~/.cellmap_flow/ai_annotate.yaml` ([Turning it on](#turning-it-on)), then reload the page. |
 | A config error naming a key | The file is malformed, has `api_key:`, or a key file is readable by others | Fix what the message names. For a key file: `chmod 600 <file>`. |
 | The feature is unavailable, with an install command | `google-genai` is not installed in the dashboard's environment | `pixi install`, or `pip install -e ".[ai-annotate]"`. |
-| Authentication error | Not logged in, or the login expired | Run `gcloud auth application-default login` again, as the user the dashboard runs as. |
+| Authentication error | Not logged in, or the login expired | Run `gcloud auth application-default login` again, as the user the dashboard runs as (and copy the file over your `credentials_file`, if the config names one). |
 | 403, "API has not been used in project ... or it is disabled" | The Vertex AI API is not enabled in the project | `gcloud services enable aiplatform.googleapis.com --project <project>`; wait a minute, then retry. |
 | 403, permission denied | Your Google account has no Vertex AI access in that project | Ask the project's owner for the *Vertex AI User* role. |
 | 404, model not found | `location` is not `global`, or the model id is wrong | Set `location: global`; check the model id. |

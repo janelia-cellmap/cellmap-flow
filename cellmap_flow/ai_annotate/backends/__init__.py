@@ -18,6 +18,7 @@ def get_backend(provider):
             project=provider.options.get("project"),
             location=provider.options.get("location", DEFAULT_VERTEX_LOCATION),
             timeout_s=provider.options.get("timeout_s", DEFAULT_TIMEOUT_S),
+            credentials_file=provider.options.get("credentials_file"),
         )
     if provider.type == "fake":
         from cellmap_flow.ai_annotate.backends.fake import FakeBackend
