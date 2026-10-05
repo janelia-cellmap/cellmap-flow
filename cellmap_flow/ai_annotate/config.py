@@ -325,7 +325,7 @@ def disabled_reason():
     path = config_path()
     if not path.exists():
         return (
-            f"AI-assisted annotation is off: there is no config file at {path}. Create one (or point "
-            f"{CONFIG_ENV} at one) listing the providers and models to allow; see {DOCS}."
+            f"Off: no config file at {path}. Create one there, or set {CONFIG_ENV} to "
+            f"another path; {DOCS} says what goes in it."
         )
-    return f"AI-assisted annotation is off: {path} says enabled: false. Set enabled: true to turn it on; see {DOCS}."
+    return f"Off: {path} says enabled: false. Set enabled: true to turn it on ({DOCS})."

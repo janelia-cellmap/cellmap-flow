@@ -45,4 +45,26 @@ export function initFinetuneTab() {
   initGoodRegions({ log });
   initAiAnnotate({ log });
   initJobMonitor({ picker, form });
+  rememberOpenSections();
+}
+
+// The patch tools' groups (Label it, AI-assisted annotation, Good regions)
+// open and close from their headings; each stays as the user left it across
+// reloads. A browser that keeps nothing gets the page's defaults.
+const OPEN_SECTIONS_KEY = "finetunePatchToolsOpen";
+
+function rememberOpenSections() {
+  let saved = {};
+  try {
+    saved = JSON.parse(localStorage.getItem(OPEN_SECTIONS_KEY) || "{}") || {};
+  } catch (_) {}
+  for (const section of document.querySelectorAll(".patch-tools-section[id]")) {
+    if (typeof saved[section.id] === "boolean") section.open = saved[section.id];
+    section.addEventListener("toggle", () => {
+      saved[section.id] = section.open;
+      try {
+        localStorage.setItem(OPEN_SECTIONS_KEY, JSON.stringify(saved));
+      } catch (_) {}
+    });
+  }
 }

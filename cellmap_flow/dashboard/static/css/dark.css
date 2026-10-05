@@ -534,20 +534,36 @@ textarea.form-control[readonly] {
   margin: 0;
 }
 
-/* AI-assisted annotation: a heading that opens, with the job's state beside it. */
-.ai-annotate > summary {
+/* Each group of the patch tools is a heading that opens and closes. */
+.patch-tools-section > summary {
   cursor: pointer;
   width: fit-content;
+  color: var(--text-muted);
 }
 
-.ai-annotate > summary .patch-tools-label {
+.patch-tools-section > summary:hover,
+.patch-tools-section > summary:hover .patch-tools-label {
+  color: var(--text-primary);
+}
+
+.patch-tools-section > summary .patch-tools-label {
   display: inline;
 }
 
+.patch-tools-section[open] > summary {
+  margin-bottom: 6px;
+}
+
+/* AI-assisted annotation's heading also shows the job's state. */
 .ai-annotate-summary-status {
   margin-left: 6px;
   font-size: 0.8rem;
   color: var(--text-muted);
+}
+
+/* Why it is off names a file path, which must wrap inside the panel. */
+#aiAnnotateDisabled {
+  overflow-wrap: anywhere;
 }
 
 /* The selects take the panel's width, not the seed settings' narrow column. */
