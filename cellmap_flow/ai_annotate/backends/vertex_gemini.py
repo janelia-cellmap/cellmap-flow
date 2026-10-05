@@ -170,6 +170,16 @@ class VertexGeminiBackend:
             # could not be refreshed. Its TransportError is the network.
             if "TransportError" in names:
                 return AIAnnotateError("unavailable", "Could not reach Google Cloud to get credentials.")
+            if "RefreshError" in names:
+                # Found, but Google would not renew them: a user login past
+                # the organisation's re-sign-in period, or one revoked.
+                where = (" and copy ~/.config/gcloud/application_default_credentials.json over the "
+                         "config's credentials_file" if self.credentials_file else "")
+                return AIAnnotateError(
+                    "auth",
+                    "Google asks you to sign in again: the saved login has expired. Run "
+                    f"`gcloud auth application-default login`{where}, then try again.",
+                )
             return AIAnnotateError(
                 "auth",
                 "No usable Google Cloud credentials on the dashboard's host: run "

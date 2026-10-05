@@ -107,6 +107,20 @@ def check_and_count(limit, *, path=None, today=None):
     return used + 1
 
 
+def refund(*, path=None, today=None):
+    """Take back one call counted today: one refused before it reached the model.
+
+    A call that fails signing in, or that the config rejects, costs nothing,
+    so it should not use up the day's limit. Never goes below zero.
+    """
+    path = Path(path) if path is not None else usage_path()
+    today = today or date.today()
+    with _locked(path):
+        used = _read(path, today)
+        if used > 0:
+            _write(path, today, used - 1)
+
+
 def calls_today(*, path=None, today=None):
     """Calls counted so far today."""
     path = Path(path) if path is not None else usage_path()

@@ -244,6 +244,21 @@ def test_credentials_errors_from_google_auth_are_auth():
     assert caught.value.category == "auth" and "gcloud auth application-default login" in caught.value.user_message
 
 
+@pytest.mark.parametrize("credentials_file", [None, "/groups/lab/adc.json"])
+def test_an_expired_login_says_to_sign_in_again(credentials_file):
+    # What google.auth raises when Google wants the user to sign in again
+    # ("Reauthentication is needed"), or the refresh token was revoked.
+    error_type = type("RefreshError", (Exception,), {"__module__": "google.auth.exceptions"})
+    backend = VertexGeminiBackend("p", "global", 30, credentials_file=credentials_file,
+                                  client_factory=lambda: (_ for _ in ()).throw(error_type("Reauthentication is needed")))
+    with pytest.raises(AIAnnotateError) as caught:
+        backend.segment(_request(), "m")
+    message = caught.value.user_message
+    assert caught.value.category == "auth" and "sign in again" in message and "expired" in message
+    assert "gcloud auth application-default login" in message
+    assert ("credentials_file" in message) == bool(credentials_file)
+
+
 def test_no_image_is_a_bad_response_quoting_at_most_200_chars_of_plain_text():
     reply = "I can't do that. <script>alert(1)</script>\x00\x1b" + "x" * 500
     client = FakeClient(_response(_part(text=reply), finish_reason=SimpleNamespace(name="IMAGE_SAFETY")))

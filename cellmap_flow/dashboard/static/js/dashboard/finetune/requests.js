@@ -53,3 +53,19 @@ export function watchProgress(progressUrl, show) {
   }, { intervalMs: 1000, pauseWhenHidden: true });
   return { loadId, stop: poller.stop };
 }
+
+// A refusal that needs an annotation volume first (the answer says
+// needs_volume): says why, and offers to start one with the New Volume
+// button, brought into view. Cancel leaves it to the user, e.g. to resume an
+// existing volume instead.
+export function offerNewVolume(message) {
+  const create = confirm(
+    `${message}\n\nCreate a new annotation volume now? (Cancel to resume an existing one instead.)`
+  );
+  if (!create) return false;
+  const button = document.getElementById("createVolumeBtn");
+  if (!button) return false;
+  button.scrollIntoView({ block: "center" });
+  button.click();
+  return true;
+}

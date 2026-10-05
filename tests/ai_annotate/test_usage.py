@@ -79,3 +79,14 @@ def test_concurrent_calls_are_each_counted_once(tmp_path):
 def test_a_limit_of_zero_allows_no_calls(tmp_path):
     with pytest.raises(AIAnnotateError):
         usage.check_and_count(0, path=tmp_path / "usage.json", today=DAY)
+
+
+def test_a_refund_takes_back_one_call_and_never_goes_below_zero(tmp_path):
+    path = tmp_path / "usage.json"
+    usage.check_and_count(5, path=path)
+    usage.check_and_count(5, path=path)
+    usage.refund(path=path)
+    assert usage.calls_today(path=path) == 1
+    usage.refund(path=path)
+    usage.refund(path=path)
+    assert usage.calls_today(path=path) == 0

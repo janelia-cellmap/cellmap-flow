@@ -506,3 +506,54 @@ def test_shift_g_replacing_a_failed_resend_removes_its_staged_plane(dashboard, a
     failed = dashboard.get(f"{API}/status").get_json()
     assert failed["status"] == "failed" and failed["annotate_id"] is None
     assert not staging.staging_dir(_corrections(), status["annotate_id"]).exists()
+
+
+
+def test_a_call_that_fails_to_sign_in_is_not_counted(dashboard, ai_config, ai_volume, sync_jobs, monkeypatch):
+    # Nothing reached the model, so nothing was spent: the day's count stays.
+    ai_config()
+
+    def signed_out(request, model):
+        raise AIAnnotateError("auth", "Google asks you to sign in again: the saved login has expired.")
+
+    monkeypatch.setattr(routes, "get_backend", lambda provider: SimpleNamespace(segment=signed_out))
+    _settings(dashboard, acknowledge=True)
+    assert _run(dashboard).status_code == 200
+
+    status = dashboard.get(f"{API}/status").get_json()
+    assert status["status"] == "failed" and "sign in again" in status["error"]
+    assert dashboard.get(f"{API}/config").get_json()["calls_today"] == 0
+
+
+def test_unticking_the_acknowledgement_withdraws_it(dashboard, ai_config, ai_volume, sync_jobs):
+    ai_config()
+    assert _settings(dashboard, acknowledge=True)["acknowledged"] == ["fake"]
+
+    assert _settings(dashboard, acknowledge=False)["acknowledged"] == []
+
+    response = _run(dashboard)
+    assert response.status_code == 409 and response.get_json()["needs_acknowledgement"] is True
+    # Saving other settings (no acknowledge field) leaves it as it is.
+    _settings(dashboard, acknowledge=True)
+    assert _settings(dashboard)["acknowledged"] == ["fake"]
+
+
+def test_a_run_without_an_annotation_volume_offers_to_make_one(dashboard, ai_config):
+    ai_config()
+    _settings(dashboard)
+
+    response = _run(dashboard)
+
+    body = response.get_json()
+    assert response.status_code == 409 and body["needs_volume"] is True
+    assert "Create or resume one" in body["error"]
+
+
+def test_shift_g_without_an_annotation_volume_offers_to_make_one(dashboard, ai_config, viewer, sync_jobs):
+    ai_config()
+    _settings(dashboard)
+
+    _press_shift_g(viewer, [8.5, 7.5, 9.0])
+
+    status = dashboard.get(f"{API}/status").get_json()
+    assert status["status"] == "failed" and status["needs_volume"] is True

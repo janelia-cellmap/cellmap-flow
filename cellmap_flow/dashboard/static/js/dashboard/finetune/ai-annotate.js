@@ -13,7 +13,7 @@
 // PNGs.
 import { setBusy } from "../../lib/dom.js";
 import { poll } from "../../lib/poll.js";
-import { getAnswer, postAnswer } from "./requests.js";
+import { getAnswer, offerNewVolume, postAnswer } from "./requests.js";
 
 const BASE = "/api/finetune/ai-annotate";
 // The label picker's entry for a structure that is not in the catalog.
@@ -86,10 +86,12 @@ export function initAiAnnotate({ log }) {
     errorLine.hidden = !text;
   }
 
+  // The limit is the server's own cap (daily_call_limit in its AI-annotate
+  // config), not the provider's quota; the text says so.
   function showUsage(callsToday) {
     if (callsToday === undefined || callsToday === null) return;
     usage.textContent = dailyLimit
-      ? `${callsToday} of ${dailyLimit} model calls used today`
+      ? `${callsToday} of ${dailyLimit} calls used today (the daily_call_limit in ai_annotate.yaml)`
       : `${callsToday} model calls today`;
   }
 
@@ -128,9 +130,9 @@ export function initAiAnnotate({ log }) {
     destination.textContent = provider ? provider.destination || provider.id : "";
     const done = acknowledged.includes(providerSelect.value);
     ackBox.checked = done;
-    ackBox.disabled = done;
+    ackBox.disabled = false;
     ackHint.textContent = done
-      ? "Acknowledged for this dataset."
+      ? "Acknowledged for this dataset. Untick to be asked again before the next run."
       : "Tick to agree before the first run; asked once per provider and dataset.";
   }
 
@@ -145,16 +147,20 @@ export function initAiAnnotate({ log }) {
     body.prompt = promptEdited() ? promptBox.value : null;
     // The destination shown is sent with the acknowledgement: the server
     // refuses it if the config has since moved the provider elsewhere.
-    if (acknowledge) {
+    if (acknowledge === true) {
       body.acknowledge = true;
       body.destination = destination.textContent;
+    } else if (acknowledge === false) {
+      body.acknowledge = false;
     }
     return body;
   }
 
   // Saves the settings now; the answer's acknowledgements replace ours.
   // Resolves to the answer, or null when it could not be saved (and says why).
-  function saveSettings(acknowledge = false) {
+  // acknowledge: true agrees to the shown destination, false withdraws that,
+  // left out keeps it as it is.
+  function saveSettings(acknowledge) {
     clearTimeout(saveTimer);
     saveTimer = null;
     if (labelSelect.value === OTHER && !labelName.value.trim()) {
@@ -208,11 +214,16 @@ export function initAiAnnotate({ log }) {
     saveSoon();
   });
   ackBox.addEventListener("change", () => {
-    if (!ackBox.checked) return;
+    const agree = ackBox.checked;
     ackBox.disabled = true;
-    saveSettings(true).then((d) => {
-      if (d) log.add(`AI annotation: agreed to send this dataset's planes to ${destination.textContent}`);
-      else showAcknowledgement();
+    saveSettings(agree).then((d) => {
+      if (d) {
+        log.add(agree
+          ? `AI annotation: agreed to send this dataset's planes to ${destination.textContent}`
+          : "AI annotation: no longer agreed to send this dataset's planes; the next run asks again");
+      }
+      // The server's list decides what the box shows, saved or not.
+      showAcknowledgement();
       log.showEnd();
     });
   });
@@ -299,6 +310,9 @@ export function initAiAnnotate({ log }) {
       review.hidden = false;
     } else if (d.status === "failed") {
       statusLine.textContent = `Failed: ${d.error || "no reason given"}`;
+      // Shift+G with no annotation volume: offer one, once, as it happens
+      // (not again for an old refusal found when the page loads).
+      if (d.needs_volume && was.status !== null && was.status !== "failed") offerNewVolume(`Could not start AI annotation: ${d.error}`);
       summaryStatus.textContent = "failed";
       review.hidden = true;
       if (isNew && was.status === "running") {
@@ -357,6 +371,7 @@ export function initAiAnnotate({ log }) {
         showError(d.error);
         log.add(`Could not start AI annotation: ${d.error}`);
         log.showEnd();
+        if (d.needs_volume) offerNewVolume(`Could not start AI annotation: ${d.error}`);
         return;
       }
       started(d, "AI annotation started at the view centre");

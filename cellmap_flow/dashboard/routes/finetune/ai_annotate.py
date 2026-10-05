@@ -89,6 +89,10 @@ STATUS_KEY = "ai_annotate"
 
 GENERIC_FAILURE = "AI annotation failed; see the server log."
 
+# Failures that happen before the model sees the request (signing in, the
+# config): the call costs nothing, so it is not counted against the day's limit.
+NOT_SENT = ("auth", "config")
+
 # The stages of a job, in order, as the page and the status bar name them.
 STAGE_LABELS = {
     "fetching_crop": "Reading the EM plane...",
@@ -278,8 +282,10 @@ def _start_from_key(coordinates, viewer_state):
         point_nm = _zyx_nm(coordinates, viewer_state.dimensions)
         _begin_run(point_nm, geometry.depth_axis_for_view(viewer_state))
     except Exception as e:
+        needs_volume = False
         if isinstance(e, _Refused):
             message = str(e)
+            needs_volume = bool(e.extra.get("needs_volume"))
         elif isinstance(e, AIAnnotateError):
             message = e.user_message
         else:
@@ -293,7 +299,7 @@ def _start_from_key(coordinates, viewer_state):
             job = ai["job"]
             replaced = job if job is not None and job["status"] == "failed" else None
             if job is None or replaced is not None:
-                ai["job"] = {**_idle_job(), "status": "failed", "error": message}
+                ai["job"] = {**_idle_job(), "status": "failed", "error": message, "needs_volume": needs_volume}
         if replaced is not None and replaced.get("corrections_dir"):
             # A resend that failed leaves the staged plane; nothing can
             # accept or reject it once it is replaced.
@@ -310,6 +316,8 @@ def _idle_job():
         "annotate_id": None, "status": "idle", "stage": None, "error": None, "prompt": None,
         "provider": None, "model": None, "label_name": None, "depth_axis": None,
         "point_nm": None, "write_box": None, "mask_fraction": None, "preview": None,
+        # A Shift+G refused for want of an annotation volume, for the page to offer one.
+        "needs_volume": False,
     }
 
 
@@ -343,7 +351,7 @@ def _begin_run(point_nm, depth_axis):
         raise _Refused("Choose a provider, model and target for AI annotation first.", 400)
     volume_id, volume = session_store().session_volume()
     if volume is None:
-        raise _Refused("No annotation volume to annotate. Create or resume one first.")
+        raise _Refused("No annotation volume to annotate. Create or resume one first.", needs_volume=True)
     dataset = _dataset(volume)
     _check_egress(ai, config, dataset, settings["provider"], settings["model"])
     _ensure_binding(ai)
@@ -419,8 +427,13 @@ def _ask_and_stage(ai, job, viewer, config, segment_request):
     """Ask the model about ``segment_request``, and stage what it answers as the job's preview."""
     _stage(ai, job, viewer, "sending")
     usage.check_and_count(config.daily_call_limit)
-    backend = get_backend(config.provider(job["provider"]))
-    result = backend.segment(segment_request, job["model"])
+    try:
+        backend = get_backend(config.provider(job["provider"]))
+        result = backend.segment(segment_request, job["model"])
+    except AIAnnotateError as e:
+        if e.category in NOT_SENT:
+            usage.refund()
+        raise
     _stage(ai, job, viewer, "extracting_mask")
     plan = job["plan"]
     mask_write = pipeline.mask_to_write_shape(result.mask, plan)
@@ -558,6 +571,10 @@ def ai_annotate_settings():
         ai = _state()
         _, volume = session_store().session_volume()
         dataset = _dataset(volume)
+        if body.acknowledge is False and dataset:
+            # Unticked: the next run asks again before anything is sent.
+            if ai["acknowledged"].get(dataset, {}).pop(body.provider, None) is not None:
+                logger.info(f"AI annotate: sending images of {dataset} to {body.provider} no longer agreed to")
         if body.acknowledge:
             if not dataset:
                 raise _Refused("Open a dataset before acknowledging where its images are sent.")
@@ -713,7 +730,8 @@ def ai_annotate_accept():
     try:
         state = get_session().minio_state
         if not state.get("ip") or not state.get("port"):
-            raise _Refused("MinIO is not serving the annotation volume. Create or resume one first.")
+            raise _Refused("MinIO is not serving the annotation volume. Create or resume one first.",
+                           needs_volume=True)
         with ai["lock"]:
             job = _job_for(ai, body.annotate_id, "ready")
             # Marked while it is written, so a second click, a Run or a

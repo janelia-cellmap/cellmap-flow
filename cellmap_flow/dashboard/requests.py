@@ -393,7 +393,9 @@ class AIAnnotateSettings(BaseModel):
     label_key: _Label = None
     label_name: _Label = None
     prompt: Optional[str] = Field(None, max_length=PROMPT_MAX_CHARS)
-    acknowledge: bool = False
+    # True agrees to send to the provider's destination, False withdraws that,
+    # left out leaves it as it is.
+    acknowledge: Optional[bool] = None
     destination: Optional[str] = Field(None, max_length=1000)
 
 

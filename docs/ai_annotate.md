@@ -8,7 +8,7 @@ The feature is **off until you turn it on** with a config file (see [Turning it 
 
 With an annotation volume open in the Finetune tab (see [Create or Resume an Annotation Volume](finetuning.md#2-create-or-resume-an-annotation-volume)):
 
-1. In the **AI annotate** panel, pick the structure to label (mitochondria, ER, nucleus, ...) and the model. The first time for a dataset, tick the box that acknowledges where the data goes.
+1. In the **AI annotate** panel, pick the structure to label (mitochondria, ER, nucleus, ...) and the model. The first time for a dataset, tick the box that acknowledges where the data goes. Untick it at any time to withdraw that: the next run asks again.
 2. Hover over the structure in the viewer and press **Shift+G**, or click **Annotate at view centre** to use the centre of the view instead.
 3. The dashboard reads one plane of raw EM around that point, in the plane you are looking at, and sends it to the model with a prompt asking it to paint the structure in a colour. It turns the colours the model painted into a mask. This takes from a few seconds to a minute or two.
 4. The panel shows three images side by side: the **input** plane, the **model's output**, and the mask as an **overlay** on the input.
@@ -254,7 +254,7 @@ Vertex AI is billed to the Google Cloud project in the config. On `gemini-3-pro-
 
 ## Limits
 
-- **Daily calls.** `daily_call_limit` (200 by default) caps how many calls you can make per day, counting every Shift+G, button click and Resend. The count is per user and per calendar day (local time), and survives dashboard restarts: it is kept in `~/.cellmap_flow/ai_annotate_usage.json`. Over the limit, the panel says so and refuses further calls until the next day. The panel shows how many you have used today.
+- **Daily calls.** `daily_call_limit` (200 by default) caps how many calls you can make per day, counting every Shift+G, button click and Resend. It is your own cap against runaway cost, not a limit Google sets: raise or lower it in the config file. A call that fails before it reaches the model (signing in, a config error) costs nothing and is not counted. The count is per user and per calendar day (local time), and survives dashboard restarts: it is kept in `~/.cellmap_flow/ai_annotate_usage.json`. Over the limit, the panel says so and refuses further calls until the next day. The panel shows how many you have used today.
 - **Timeouts and retries.** Each call waits up to `timeout_s` (120 s by default). When the service is busy or over quota for a moment, the dashboard tries again up to 3 times, waiting a little longer each time, before reporting the error.
 
 ## The audit log and the staging folder
@@ -271,7 +271,8 @@ Both live in the session's `corrections` folder, `<Output Path>/<session>/correc
 | The panel says the feature is off | No config file, or `enabled: false` | Create `~/.cellmap_flow/ai_annotate.yaml` ([Turning it on](#turning-it-on)), then reload the page. |
 | A config error naming a key | The file is malformed, has `api_key:`, or a key file is readable by others | Fix what the message names. For a key file: `chmod 600 <file>`. |
 | The feature is unavailable, with an install command | `google-genai` is not installed in the dashboard's environment | `pixi install`, or `pip install -e ".[ai-annotate]"`. |
-| Authentication error | Not logged in, or the login expired | Run `gcloud auth application-default login` again, as the user the dashboard runs as (and copy the file over your `credentials_file`, if the config names one). |
+| "Google asks you to sign in again: the saved login has expired" | Your organisation makes Google logins sign in again every so often, and the saved one is past that | Run `gcloud auth application-default login` again, as the user the dashboard runs as, and copy `~/.config/gcloud/application_default_credentials.json` over your `credentials_file`, if the config names one. No restart needed. |
+| "No usable Google Cloud credentials" | No login was found at all | Run `gcloud auth application-default login`, or name the file in `credentials_file`. |
 | 403, "API has not been used in project ... or it is disabled" | The Vertex AI API is not enabled in the project | `gcloud services enable aiplatform.googleapis.com --project <project>`; wait a minute, then retry. |
 | 403, permission denied | Your Google account has no Vertex AI access in that project | Ask the project's owner for the *Vertex AI User* role. |
 | 404, model not found | `location` is not `global`, or the model id is wrong | Set `location: global`; check the model id. |
