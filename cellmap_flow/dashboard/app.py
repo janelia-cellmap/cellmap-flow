@@ -5,6 +5,7 @@ import logging
 from flask import Flask
 
 from cellmap_flow.logging_setup import LOG_DATEFMT, LOG_FORMAT, configure_logging
+from cellmap_flow.ai_annotate.secrets import install_log_redaction
 from cellmap_flow.dashboard.routes.logging_routes import LogHandler, logging_bp
 from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.dashboard.routes.index_page import index_bp
@@ -45,6 +46,9 @@ if not any(isinstance(h, LogHandler) for h in package_logger.handlers):
     log_handler = LogHandler()
     log_handler.setFormatter(logging.Formatter(LOG_FORMAT, datefmt=LOG_DATEFMT))
     package_logger.addHandler(log_handler)
+# The panel streams these records to the browser: replace any registered
+# secret (an AI-annotate provider's key) before a handler formats them.
+install_log_redaction(package_logger)
 package_logger.setLevel(logging.INFO)
 
 # Register all blueprints
