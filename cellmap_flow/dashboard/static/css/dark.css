@@ -534,6 +534,69 @@ textarea.form-control[readonly] {
   margin: 0;
 }
 
+/* Each group of the patch tools is a heading that opens and closes. */
+.patch-tools-section > summary {
+  cursor: pointer;
+  width: fit-content;
+  color: var(--text-muted);
+}
+
+.patch-tools-section > summary:hover,
+.patch-tools-section > summary:hover .patch-tools-label {
+  color: var(--text-primary);
+}
+
+.patch-tools-section > summary .patch-tools-label {
+  display: inline;
+}
+
+.patch-tools-section[open] > summary {
+  margin-bottom: 6px;
+}
+
+/* AI-assisted annotation's heading also shows the job's state. */
+.ai-annotate-summary-status {
+  margin-left: 6px;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+/* Why it is off names a file path, which must wrap inside the panel. */
+#aiAnnotateDisabled {
+  overflow-wrap: anywhere;
+}
+
+/* The selects take the panel's width, not the seed settings' narrow column. */
+.ai-annotate-fields {
+  grid-template-columns: auto 1fr;
+}
+
+/* Input | model output | overlay, each scaled to a third of the panel. */
+.ai-annotate-previews {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.ai-annotate-previews figure {
+  margin: 0;
+  text-align: center;
+}
+
+.ai-annotate-previews img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  image-rendering: pixelated;
+}
+
+.ai-annotate-previews figcaption {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
 /* ---------- BioImage Model Zoo list (Models tab) ---------- */
 /* Up to 125 rows with the filters off: scroll inside the panel. */
 .zoo-model-list {

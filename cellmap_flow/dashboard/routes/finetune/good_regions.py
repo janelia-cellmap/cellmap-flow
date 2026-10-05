@@ -153,6 +153,7 @@ def mark_current_view_good():
                     "session, so the mark was discarded. Create or resume an "
                     "annotation volume first."
                 ),
+                "needs_volume": True,
             }), 409
 
         refresh_good_regions_layer(regions)

@@ -4,7 +4,9 @@ The Finetune tab's "Seed" and "All background" buttons label the box on
 screen in one click: from the model's own prediction, for the user to clean
 up with the brush, or all background (1), for a region of false positives.
 Either way only unannotated voxels (0) are filled. A stroke the user painted
-is a decision about that voxel; a seed is a guess. "Split objects" relabels
+is a decision about that voxel; a seed is a guess. ``paint_box`` is the
+write under both, and can also write over painted voxels, for an AI
+annotation the user has reviewed and chosen to keep over what is there. "Split objects" relabels
 the box's foreground by connected component (``relabel_objects``), so a
 background wall painted through a merged object gives it two ids again.
 
@@ -201,6 +203,41 @@ def _upload_chunks_only_on_disk(s3, root, arr, lo, hi, local_zarr_path):
             s3.put(str(local), remote)
 
 
+def paint_box(state, volume_id, lo, hi, labels_for, local_zarr_path=None, undo=None, overwrite=False):
+    """Write ``labels_for(existing)`` into the box ``[lo, hi)``.
+
+    ``labels_for`` gets the box as MinIO holds it and returns labels of the
+    same shape (0 for "leave as it is"). Without ``overwrite`` only
+    unannotated voxels (0) are written, as for a seed: what the user painted
+    stays. With it every voxel the labels cover is written, painted or not,
+    for a result the user has looked at and prefers to what is there.
+    Returns ``(n_foreground, n_background, n_overwritten)``: how many voxels
+    were written with foreground and with background, and how many of those
+    held a label before. Nothing is written when nothing would change.
+    ``undo``, a list, gets ``(lo, hi, before, after)`` appended when
+    something was written (``restore_box``).
+    """
+    s3, root, arr = open_served_labels(state, volume_id)
+    if local_zarr_path:
+        _upload_chunks_only_on_disk(s3, root, arr, lo, hi, local_zarr_path)
+    box = tuple(slice(int(a), int(b)) for a, b in zip(lo, hi))
+    existing = arr[box]
+    labels = np.asarray(labels_for(existing), dtype=arr.dtype)
+    if overwrite:
+        write = (labels > 0) & (labels != existing)
+    else:
+        write = (existing == 0) & (labels > 0)
+    n_overwritten = int(np.count_nonzero(write & (existing != 0)))
+    if write.any():
+        before = existing.copy()
+        existing[write] = labels[write]
+        arr[box] = existing
+        if undo is not None:
+            undo.append((np.asarray(lo), np.asarray(hi), before, existing.copy()))
+    n_foreground = int(np.count_nonzero(write & (labels >= 2)))
+    return n_foreground, int(np.count_nonzero(write)) - n_foreground, n_overwritten
+
+
 def fill_unpainted(state, volume_id, lo, hi, labels_for, local_zarr_path=None, undo=None):
     """Write ``labels_for(existing)`` into the box ``[lo, hi)`` where the volume holds 0.
 
@@ -210,21 +247,10 @@ def fill_unpainted(state, volume_id, lo, hi, labels_for, local_zarr_path=None, u
     written when nothing would change. ``undo``, a list, gets ``(lo, hi,
     before, after)`` appended when something was written (``restore_box``).
     """
-    s3, root, arr = open_served_labels(state, volume_id)
-    if local_zarr_path:
-        _upload_chunks_only_on_disk(s3, root, arr, lo, hi, local_zarr_path)
-    box = tuple(slice(int(a), int(b)) for a, b in zip(lo, hi))
-    existing = arr[box]
-    labels = np.asarray(labels_for(existing), dtype=arr.dtype)
-    fill = (existing == 0) & (labels > 0)
-    if fill.any():
-        before = existing.copy()
-        existing[fill] = labels[fill]
-        arr[box] = existing
-        if undo is not None:
-            undo.append((np.asarray(lo), np.asarray(hi), before, existing.copy()))
-    n_foreground = int(np.count_nonzero(fill & (labels >= 2)))
-    return n_foreground, int(np.count_nonzero(fill)) - n_foreground
+    n_foreground, n_background, _ = paint_box(
+        state, volume_id, lo, hi, labels_for, local_zarr_path=local_zarr_path, undo=undo
+    )
+    return n_foreground, n_background
 
 
 def rewrite_foreground(state, volume_id, lo, hi, relabel, local_zarr_path=None, undo=None):

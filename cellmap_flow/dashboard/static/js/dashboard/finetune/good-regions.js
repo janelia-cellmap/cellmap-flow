@@ -6,7 +6,7 @@
 // objects by connected component. How a seed makes objects of the prediction
 // (its method) is picked among those that fit the chosen model's output.
 import { setBusy } from "../../lib/dom.js";
-import { getAnswer, postAnswer } from "./requests.js";
+import { getAnswer, offerNewVolume, postAnswer } from "./requests.js";
 
 // log: the Annotation Crops panel's log.
 export function initGoodRegions({ log }) {
@@ -60,7 +60,8 @@ export function initGoodRegions({ log }) {
           // A mark that could not be saved must be loud: it would otherwise
           // look drawn, and be gone.
           log.add(`Could not mark region: ${d.error}`);
-          alert(`Could not mark region as good:\n\n${d.error}`);
+          if (d.needs_volume) offerNewVolume(`Could not mark region as good: ${d.error}`);
+          else alert(`Could not mark region as good:\n\n${d.error}`);
         }
         log.showEnd();
       })
@@ -276,7 +277,8 @@ export function initGoodRegions({ log }) {
         if (d.can_undo !== undefined) undoViewLabelsBtn.disabled = !d.can_undo;
         if (!d.success) {
           log.add(`Could not ${what}: ${d.error}`);
-          alert(`Could not ${what}:\n\n${d.error}`);
+          if (d.needs_volume) offerNewVolume(`Could not ${what}: ${d.error}`);
+          else alert(`Could not ${what}:\n\n${d.error}`);
         } else if (d.reload_viewer) {
           log.add(describe(d) + (d.layer_refreshed ? "" : "; reloading the viewer"));
           if (!d.layer_refreshed) reloadViewer();
