@@ -19,6 +19,9 @@ message is pydantic's, after the field's name.
 - ``FinetuneRestart``: POST /api/finetune/job/<job_id>/restart
 - ``CreateVolume``: POST /api/finetune/create-volume
 - ``LoadCrops``: POST /api/finetune/load-crops
+- ``AIAnnotateSettings``, ``AIAnnotateRun``, ``AIAnnotateResend`` and
+  ``AIAnnotateDecision``: POST /api/finetune/ai-annotate/{settings,run,resend},
+  and accept and reject
 - ``BlockwiseValidate``, ``BlockwiseGenerate``, ``BlockwisePrecheck`` and
   ``BlockwiseSubmit``: POST /api/blockwise/{validate,generate,precheck,submit},
   which answer through ``check`` instead (see there)
@@ -28,6 +31,7 @@ from typing import Annotated, Any, Optional
 
 from flask import jsonify
 from pydantic import (
+    AfterValidator,
     BaseModel,
     BeforeValidator,
     ConfigDict,
@@ -353,6 +357,76 @@ class LoadCrops(BaseModel):
         None, validate_default=True)
     output_path: Any = None
     load_id: Any = None
+
+
+# --- The finetune tab's AI annotation ----------------------------------------------
+#
+# The browser picks among what the server's config allows; it never sends an
+# endpoint, a project or a credential, so none of these has a field for one.
+# Unknown fields are ignored.
+
+# An annotation's id, as the server makes it (ai_annotate.staging's
+# ANNOTATE_ID_RE): it is joined into a path, so nothing else is accepted.
+_ANNOTATE_ID = Annotated[str, Field(pattern=r"^[0-9a-f]{32}$")]
+# The longest prompt and target name the routes take.
+PROMPT_MAX_CHARS = 4000
+LABEL_MAX_CHARS = 100
+
+
+def _blank_is_none(value):
+    return None if isinstance(value, str) and not value.strip() else value
+
+
+_Label = Annotated[Optional[Annotated[str, Field(max_length=LABEL_MAX_CHARS)]], BeforeValidator(_blank_is_none)]
+# A provider or model id: required, and as short as a label.
+_Id = Annotated[str, Field(max_length=LABEL_MAX_CHARS)]
+
+
+class AIAnnotateSettings(BaseModel):
+    """The provider and model to use (ids the config lists), the target, as
+    an organelle catalog key and/or a name, the editable prompt (null: the
+    catalog's), and whether the user acknowledges where the provider sends
+    the images, with the ``destination`` text the page showed them."""
+
+    provider: Annotated[_Id, _required("provider", strip=True)] = Field(None, validate_default=True)
+    model: Annotated[_Id, _required("model", strip=True)] = Field(None, validate_default=True)
+    label_key: _Label = None
+    label_name: _Label = None
+    prompt: Optional[str] = Field(None, max_length=PROMPT_MAX_CHARS)
+    acknowledge: bool = False
+    destination: Optional[str] = Field(None, max_length=1000)
+
+
+def _finite(point):
+    if point is not None and not all(abs(v) < float("inf") for v in point):
+        raise ValueError("point_nm must be three finite numbers, z, y, x")
+    return point
+
+
+class AIAnnotateRun(BaseModel):
+    """Where to annotate: ``point_nm`` (z, y, x, world nm) in the plane
+    normal to ``depth_axis`` (0 z: XY, 1 y: XZ, 2 x: YZ). Either may be left
+    out: the view centre, and the viewer layout's plane."""
+
+    point_nm: Annotated[Optional[_Triple], AfterValidator(_finite)] = None
+    depth_axis: Optional[Annotated[int, Field(ge=0, le=2)]] = None
+
+
+class AIAnnotateResend(BaseModel):
+    """The staged annotation to ask the model about again, and the edited
+    prompt (null or blank: the catalog's)."""
+
+    annotate_id: Annotated[_ANNOTATE_ID, _required("annotate_id")] = Field(None, validate_default=True)
+    prompt: Optional[str] = Field(None, max_length=PROMPT_MAX_CHARS)
+
+
+class AIAnnotateDecision(BaseModel):
+    """The staged annotation to accept or reject; on accept, whether its
+    labels replace voxels that already have one (``overwrite``) or only
+    fill unannotated ones."""
+
+    annotate_id: Annotated[_ANNOTATE_ID, _required("annotate_id")] = Field(None, validate_default=True)
+    overwrite: bool = False
 
 
 # --- The pipeline builder's blockwise steps -----------------------------------------

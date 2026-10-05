@@ -14,11 +14,14 @@ dashboard.app registers. Each module has its own:
 - ``good_regions``: marking the current view as a region the model gets right;
 - ``view_labels``: labelling the view from the model's prediction, or all
   background;
+- ``ai_annotate``: a hosted model's first guess at one plane, staged for
+  the user to accept or reject;
 - ``instance_correction``: instance-correction volumes;
 - ``layers``: adding, removing and renaming viewer layers.
 """
 
 from cellmap_flow.dashboard.routes.finetune import (  # noqa: F401  (each adds its routes)
+    ai_annotate,
     annotation_core,
     annotation_sessions,
     good_regions,
