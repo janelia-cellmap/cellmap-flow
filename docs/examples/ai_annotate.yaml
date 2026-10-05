@@ -1,0 +1,59 @@
+# Example config for AI-assisted annotation (docs/ai_annotate.md).
+#
+# Copy it to ~/.cellmap_flow/ai_annotate.yaml, or anywhere else and point the
+# environment variable CELLMAP_FLOW_AI_ANNOTATE_CONFIG at it. Without that
+# file the feature is off.
+#
+# Each call sends one 2D plane of raw EM and the prompt text to the provider
+# below. Read "What data leaves the cluster and where" in the guide first.
+#
+# No API keys or passwords in this file: an `api_key:` entry is refused.
+
+# false turns the feature off without deleting the file.
+enabled: true
+
+# Most model calls per user per calendar day (local time), counted across
+# dashboard restarts in ~/.cellmap_flow/ai_annotate_usage.json.
+daily_call_limit: 200
+
+# The plane's size on a side, in annotation (output) voxels. A plane over
+# 1024 pixels is shrunk before it is sent; more pixels gain nothing.
+crop_size_px: 512
+
+# Only datasets whose path starts with one of these can be sent. Empty means
+# any dataset.
+allowed_dataset_prefixes: []
+#  - /nrs/cellmap/data/jrc_mus-liver
+#  - s3://janelia-cosem-datasets/
+
+# The provider the panel starts on; the first one below if left out.
+default_provider: vertex
+
+providers:
+  # Google Cloud Vertex AI. Credentials come from
+  # `gcloud auth application-default login`; there is no key to put here.
+  vertex:
+    type: vertex_gemini
+    # The Google Cloud project that is billed. Left out, the environment
+    # variable GOOGLE_CLOUD_PROJECT is used.
+    project: my-gcp-project
+    # gemini-3 image models are only served from the global endpoint; a
+    # regional location answers 404. Google may process the request in any
+    # region.
+    location: global
+    # The model ids the panel may offer.
+    models: [gemini-3-pro-image]
+    # Seconds to wait for one answer before giving up.
+    timeout_s: 120
+
+  # Runs on the dashboard's machine and sends nothing anywhere: paints the
+  # darker pixels in a disc around the chosen point. For trying the panel
+  # out without a Google Cloud project.
+  # fake:
+  #   type: fake
+  #   models: [fake-threshold]
+
+  # A provider that needs an API key (none in this release) would name where
+  # to read it, never the key itself:
+  #   api_key_env: MY_PROVIDER_API_KEY              # an environment variable
+  #   api_key_file: ~/.cellmap_flow/my_provider.key # chmod 600, owned by you

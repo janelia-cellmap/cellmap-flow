@@ -85,6 +85,11 @@ finetune = [
     # Install via: pip install git+https://github.com/briossant/neuroglancer@feature/voxel-annotation
 ]
 
+# AI-assisted annotation in the finetune tab (docs/ai_annotate.md): the
+# Vertex AI Gemini client. Imported only when a model is called, so the
+# dashboard runs without it; the feature then says how to install it.
+ai-annotate = ["google-genai>=1.0"]
+
 [build-system]
 requires = ["setuptools", "wheel"]
 build-backend = "setuptools.build_meta"
