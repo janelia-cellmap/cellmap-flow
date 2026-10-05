@@ -534,6 +534,53 @@ textarea.form-control[readonly] {
   margin: 0;
 }
 
+/* AI-assisted annotation: a heading that opens, with the job's state beside it. */
+.ai-annotate > summary {
+  cursor: pointer;
+  width: fit-content;
+}
+
+.ai-annotate > summary .patch-tools-label {
+  display: inline;
+}
+
+.ai-annotate-summary-status {
+  margin-left: 6px;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+/* The selects take the panel's width, not the seed settings' narrow column. */
+.ai-annotate-fields {
+  grid-template-columns: auto 1fr;
+}
+
+/* Input | model output | overlay, each scaled to a third of the panel. */
+.ai-annotate-previews {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.ai-annotate-previews figure {
+  margin: 0;
+  text-align: center;
+}
+
+.ai-annotate-previews img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  image-rendering: pixelated;
+}
+
+.ai-annotate-previews figcaption {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
 /* ---------- BioImage Model Zoo list (Models tab) ---------- */
 /* Up to 125 rows with the filters off: scroll inside the panel. */
 .zoo-model-list {

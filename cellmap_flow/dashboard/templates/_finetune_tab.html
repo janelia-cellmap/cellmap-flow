@@ -97,7 +97,7 @@
           All Background
         </button>
         <button type="button" class="btn btn-outline-secondary btn-sm" id="undoViewLabelsBtn" disabled
-                title="Takes back the last Seed, All Background or Split (up to 10): the patch goes back to what it held before. Voxels you have painted since are kept.">
+                title="Takes back the last Seed, All Background, Split or accepted AI annotation (up to 10): the patch goes back to what it held before. Voxels you have painted since are kept.">
           Undo
         </button>
         <button type="button" class="btn btn-outline-secondary btn-sm" id="splitObjectsBtn"
@@ -134,6 +134,98 @@
           <label for="seedPerSlice">Per z slice</label>
           <input type="checkbox" class="form-check-input" id="seedPerSlice"
                  title="Objects are found in each z slice on its own, in 2D: every slice of an object gets its own id. For objects annotated or segmented slice by slice (Cellpose). For Split Objects, a wall painted in one slice then splits that slice.">
+        </div>
+      </details>
+    </div>
+
+    <!-- AI-assisted annotation: a hosted model labels one plane, reviewed before it is written (ai-annotate.js) -->
+    <div class="patch-tools-group">
+      <details class="ai-annotate" id="aiAnnotatePanel">
+        <summary>
+          <span class="patch-tools-label">AI-assisted annotation</span>
+          <span class="ai-annotate-summary-status" id="aiAnnotateSummaryStatus"></span>
+        </summary>
+
+        <div class="small text-muted mt-2" id="aiAnnotateDisabled" hidden>
+          <span id="aiAnnotateDisabledReason">Checking whether it is enabled...</span>
+          <a href="https://github.com/janelia-cellmap/cellmap-flow/blob/main/docs/ai_annotate.md"
+             target="_blank" rel="noopener noreferrer">How to enable it (docs/ai_annotate.md)</a>
+        </div>
+
+        <div id="aiAnnotateControls" hidden>
+          <div class="patch-tools-fields ai-annotate-fields">
+            <label for="aiAnnotateProvider">Provider</label>
+            <select class="form-select form-select-sm" id="aiAnnotateProvider"
+                    title="Where the plane is sent. Only the providers in the server's AI-annotate configuration are listed."></select>
+            <label for="aiAnnotateModel">Model</label>
+            <select class="form-select form-select-sm" id="aiAnnotateModel"
+                    title="The provider's models that the server's configuration allows."></select>
+            <label for="aiAnnotateLabel">Label</label>
+            <select class="form-select form-select-sm" id="aiAnnotateLabel"
+                    title="The structure the model is asked to paint. Its prompt is filled in below."></select>
+          </div>
+          <input type="text" class="form-control form-control-sm mt-1" id="aiAnnotateLabelName" maxlength="100"
+                 placeholder="Name of the structure, e.g. lipid droplet" hidden>
+
+          <div class="d-flex align-items-baseline justify-content-between mt-2">
+            <label class="text-muted mb-0" for="aiAnnotatePrompt" style="font-size: 0.85rem;">Prompt (optional to edit)</label>
+            <button type="button" class="btn btn-link btn-sm p-0" id="aiAnnotatePromptReset" hidden>Reset to default</button>
+          </div>
+          <textarea class="form-control form-control-sm" id="aiAnnotatePrompt" rows="3" maxlength="4000"
+                    title="Sent to the model with the plane. The default suits most datasets; EM looks different from one dataset to the next, so describing this one can help. Keep the colour it asks for: the mask is read from that colour."></textarea>
+
+          <div class="form-check mt-2">
+            <input class="form-check-input" type="checkbox" id="aiAnnotateAck">
+            <label class="form-check-label small" for="aiAnnotateAck">
+              Send planes of this dataset to: <span id="aiAnnotateDestination"></span>
+            </label>
+          </div>
+          <small class="text-muted d-block" id="aiAnnotateAckHint">Required once per provider and dataset.</small>
+
+          <div class="d-flex align-items-center gap-2 flex-wrap mt-2">
+            <button type="button" class="btn btn-outline-secondary btn-sm" id="aiAnnotateRunBtn"
+                    title="Sends the plane you are looking at (XY, XZ or YZ, from the viewer's layout), centred on the view, to the model. Nothing is written until you accept the result.">
+              Annotate at View Centre
+            </button>
+            <span class="text-muted" style="font-size: 0.85rem;" id="aiAnnotateKeyHint">or hover over the viewer and press Shift+G</span>
+          </div>
+          <small class="text-muted d-block mt-1" id="aiAnnotateUsage"></small>
+          <div class="small text-muted mt-1" id="aiAnnotateStatus" role="status" aria-live="polite"></div>
+          <div class="small text-danger mt-1" id="aiAnnotateError" role="alert" hidden></div>
+
+          <div class="ai-annotate-review mt-2" id="aiAnnotateReview" hidden>
+            <div class="ai-annotate-previews">
+              <figure>
+                <img id="aiAnnotateInputImg" alt="The EM plane sent to the model">
+                <figcaption>Input</figcaption>
+              </figure>
+              <figure>
+                <img id="aiAnnotateModelImg" alt="The model's output: the plane with the structure painted in">
+                <figcaption>Model output</figcaption>
+              </figure>
+              <figure>
+                <img id="aiAnnotateOverlayImg" alt="The mask that would be written, over the input">
+                <figcaption>Overlay</figcaption>
+              </figure>
+            </div>
+            <small class="text-muted d-block" id="aiAnnotateReviewInfo"></small>
+            <label class="text-muted mb-0 mt-2" for="aiAnnotateReviewPrompt" style="font-size: 0.85rem;">Prompt sent</label>
+            <textarea class="form-control form-control-sm" id="aiAnnotateReviewPrompt" rows="3" maxlength="4000"
+                      title="Edit it and click Resend to ask the model again about the same plane."></textarea>
+            <div class="form-check mt-2">
+              <input class="form-check-input" type="checkbox" id="aiAnnotateOverwrite">
+              <label class="form-check-label small" for="aiAnnotateOverwrite">Overwrite existing labels</label>
+            </div>
+            <small class="text-muted d-block">Off: only unlabelled voxels are filled.</small>
+            <div class="patch-tools-grid mt-2">
+              <button type="button" class="btn btn-outline-secondary btn-sm" id="aiAnnotateResendBtn"
+                      title="Asks the model again about the same plane, with the prompt above.">Resend</button>
+              <button type="button" class="btn btn-outline-danger btn-sm" id="aiAnnotateRejectBtn"
+                      title="Discards the result; nothing is written.">Reject</button>
+              <button type="button" class="btn btn-success btn-sm" id="aiAnnotateAcceptBtn"
+                      title="Writes the mask into the annotation volume: an id per object, background 1. Undo takes it back. The viewer reloads to show it.">Accept</button>
+            </div>
+          </div>
         </div>
       </details>
     </div>
