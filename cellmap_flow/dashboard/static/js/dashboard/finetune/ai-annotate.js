@@ -337,8 +337,10 @@ export function initAiAnnotate({ log }) {
 
     if (d.status === "running") {
       const plane = d.plane ? ` (${d.plane} plane)` : "";
-      statusLine.textContent = `Running${plane}: ${d.stage_label || d.stage || "starting"}...`;
-      modalStatus.textContent = `Asking the model again${plane}: ${d.stage_label || d.stage || "starting"}...`;
+      // The server's stage labels end in "..." already.
+      const stage = (d.stage_label || d.stage || "starting").replace(/\.*$/, "") + "...";
+      statusLine.textContent = `Running${plane}: ${stage}`;
+      modalStatus.textContent = `Asking the model again${plane}: ${stage}`;
       summaryStatus.textContent = "running";
       review.hidden = true;
     } else if (d.status === "ready") {

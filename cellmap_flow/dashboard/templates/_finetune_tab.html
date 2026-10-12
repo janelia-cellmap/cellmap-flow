@@ -193,10 +193,13 @@
           <div class="small text-danger mt-1" id="aiAnnotateError" role="alert" hidden></div>
 
           <!-- A result waiting for review: the review itself is the popup below. -->
-          <div class="d-flex align-items-center gap-2 flex-wrap mt-2" id="aiAnnotateReview" hidden>
-            <button type="button" class="btn btn-primary btn-sm" id="aiAnnotateOpenReviewBtn"
-                    title="Opens the result over the page to look at it closely and accept or reject it.">Review Result</button>
-            <small class="text-muted" id="aiAnnotateReviewSummary"></small>
+          <!-- hidden is on the outer div: Bootstrap's d-flex would override it. -->
+          <div class="mt-2" id="aiAnnotateReview" hidden>
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+              <button type="button" class="btn btn-primary btn-sm" id="aiAnnotateOpenReviewBtn"
+                      title="Opens the result over the page to look at it closely and accept or reject it.">Review Result</button>
+              <small class="text-muted" id="aiAnnotateReviewSummary"></small>
+            </div>
           </div>
         </div>
     </details>
