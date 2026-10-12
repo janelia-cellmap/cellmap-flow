@@ -220,14 +220,16 @@ def display_channel(info, postprocess):
     return int(channel)
 
 
-def raw_layer(dataset_path, *, wrap_raw=True, shader=None, shader_controls=None):
+def raw_layer(dataset_path, *, wrap_raw=True, shader=None, shader_controls=None, view=None):
     """The raw data's layer (viewer.raw.get_raw_layer), with the user's
-    ``shader`` and ``shader_controls`` in place of the default contrast.
+    ``shader`` and ``shader_controls`` in place of the default contrast;
+    without them, the contrast is sampled at ``view`` when given.
 
     A layer with no shader reports the string "None", which is not one.
     """
-    layer = get_raw_layer(dataset_path, wrap_raw=wrap_raw)
-    if shader and shader != "None":
+    keep = shader and shader != "None"
+    layer = get_raw_layer(dataset_path, wrap_raw=wrap_raw, view=None if keep else view)
+    if keep:
         layer.shader = shader
     if shader_controls:
         layer.shaderControls = shader_controls

@@ -20,6 +20,7 @@ import logging
 import math
 import os
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
 
 import neuroglancer
 import numpy as np
@@ -209,24 +210,137 @@ def _auto_contrast_range(paths, normalize, lo_pct=1.0, hi_pct=99.0):
     return None
 
 
-def _without_padding(arr, share=0.01):
-    """``arr`` without the voxels at its lowest or highest value, where that
-    one value holds at least ``share`` of them.
+def _without_padding(arr, pile=0.05, among=3, reach=0.02):
+    """``arr`` without its padding: a pile of voxels on one of the
+    ``among`` lowest (or highest) values, holding at least ``pile`` of them,
+    and everything from that end to ``reach`` of the value range past it.
 
-    That is padding: the 0s around a dataset's real extent (29% of
-    jrc_axolotl-heart-1's voxels), or the 255s around an inverted one.
-    Left in, it is the 1st percentile itself. The data's own darkest and
-    brightest voxels are spread over many values and stay. Nothing is left
-    out when that would leave nothing.
+    Padding is the empty space around the data, piled on one value or a
+    few: the 0s around jrc_axolotl-heart-1 (29% of its voxels), or male
+    CNS's JPEG'd background, 80% at 1 and 3% at 0 with a tail of 2s and 3s
+    that ``reach`` takes with it. Left in, it is the 1st percentile itself.
+    The data's own darkest and brightest voxels are spread over many
+    values, none of them a pile, and stay. Nothing is left out when that
+    would leave nothing (a flat level).
     """
     if arr.size == 0:
         return arr
+    # Found on at most a million of them: np.unique sorts.
+    values, counts = np.unique(arr[:: max(arr.size // 1_000_000, 1)], return_counts=True)
+    piled = values[counts >= pile * counts.sum()]
+    span = float(values[-1]) - float(values[0])
     keep = np.ones(arr.shape, bool)
-    for end in (arr.min(), arr.max()):
-        at_end = arr == end
-        if at_end.mean() >= share:
-            keep &= ~at_end
-    return arr[keep] if keep.any() else arr
+    low, high = piled[np.isin(piled, values[:among])], piled[np.isin(piled, values[-among:])]
+    if low.size:
+        keep &= arr > float(low.max()) + reach * span
+    if high.size:
+        keep &= arr < float(high.min()) - reach * span
+    kept = arr[keep]
+    return kept if kept.size else arr
+
+
+# How far a panel reaches from its centre, in screen pixels. The viewer's
+# state does not say how big its panels are; 512 is about half a one-panel
+# layout's width on a laptop. A larger panel shows a little more than is
+# sampled, a 4-panel layout's panels a little less.
+VIEW_HALF_WIDTH_PX = 512
+# How many voxels each way from the centre a plane of _view_contrast_range
+# reads at most.
+MAX_VIEW_REACH = 256
+
+
+@dataclass(frozen=True)
+class View:
+    """Where the viewer looks: ``center`` in nm by axis name, and the size in
+    nm of one screen pixel there."""
+
+    center: dict
+    pixel_nm: float
+
+
+_NM_PER_UNIT = {"m": 1e9, "um": 1e3, "µm": 1e3, "nm": 1.0}
+
+
+def view_of(state):
+    """``state``'s View (a neuroglancer ViewerState), or None when it does
+    not have one yet (no position or zoom: the browser has not reported
+    them), or its units are not lengths.
+
+    The position is in voxels of the viewer's coordinate space, whose
+    scales neuroglancer reports in SI units (8 nm as 8e-9 m). Its
+    ``crossSectionScale`` is how many of the smallest display dimension's
+    voxels one screen pixel spans.
+    """
+    try:
+        dimensions, position, zoom = state.dimensions, state.position, state.cross_section_scale
+        if dimensions is None or position is None or zoom is None:
+            return None
+        names, scales, units = list(dimensions.names), list(dimensions.scales), list(dimensions.units)
+        if len(position) != len(names):
+            return None
+        scales_nm = [float(scale) * _NM_PER_UNIT[unit] for scale, unit in zip(scales, units)]
+        display = list(state.display_dimensions or names[:3])
+        smallest = min(scales_nm[names.index(name)] for name in display)
+        center = {name: float(p) * scale for name, p, scale in zip(names, position, scales_nm)}
+        return View(center=center, pixel_nm=float(zoom) * smallest)
+    except Exception as e:
+        logger.debug(f"Could not read the viewer's view: {e}")
+        return None
+
+
+def _view_contrast_range(paths, normalize, view, lo_pct=1.0, hi_pct=99.0):
+    """The range neuroglancer's own 1-99% button would give at ``view``, or
+    None when the data there cannot be read.
+
+    The button takes percentiles of what is on screen. So this reads the
+    pyramid level neuroglancer shows at the view's zoom (the coarsest no
+    coarser than a screen pixel; the finest when zoomed in past it), or a
+    coarser one when that would be over MAX_VIEW_REACH voxels each way, and
+    from it the three planes through the view's centre, each
+    VIEW_HALF_WIDTH_PX screen pixels each way. Padding is left out as in
+    _auto_contrast_range. ``paths`` is ordered fine -> coarse.
+    """
+    try:
+        images = [ImageDataInterface(path, normalize=normalize) for path in paths]
+        level = 0
+        for index, image in enumerate(images):
+            if min(float(v) for v in image.voxel_size) <= view.pixel_nm * 1.01:
+                level = index
+        # Zoomed in on a large panel that is a million voxels a plane, about
+        # 3 s from /nrs: read coarser levels until a plane is at most
+        # MAX_VIEW_REACH voxels each way. Their percentiles barely differ.
+        while (level + 1 < len(images)
+               and VIEW_HALF_WIDTH_PX * view.pixel_nm / min(float(v) for v in images[level].voxel_size)
+               > MAX_VIEW_REACH):
+            level += 1
+        shown = images[level]
+        names = list(shown.axes_names)[-len(shown.voxel_size):]
+        if any(name not in view.center for name in names):
+            return None
+        voxel_size = np.asarray([float(v) for v in shown.voxel_size])
+        offset = np.asarray([float(v) for v in shown.offset])
+        shape = np.asarray(shown.ts.shape[-len(names):])
+        centre = np.floor((np.asarray([view.center[name] for name in names]) - offset) / voxel_size).astype(int)
+        reach = np.ceil(VIEW_HALF_WIDTH_PX * view.pixel_nm / voxel_size).astype(int)
+        values = []
+        for axis in range(len(names)):
+            if not 0 <= centre[axis] < shape[axis]:
+                continue  # the plane across this axis misses the data
+            index = tuple(
+                slice(centre[i], centre[i] + 1) if i == axis
+                else slice(max(centre[i] - reach[i], 0), min(centre[i] + reach[i] + 1, shape[i]))
+                for i in range(len(names))
+            )
+            values.append(np.asarray(shown.ts[(Ellipsis, *index)]).ravel())
+        arr = np.concatenate(values) if values else np.empty(0)
+        arr = _without_padding(arr[np.isfinite(arr)])
+        if arr.size < 1024:
+            return None  # off the data, or too little of it to go by
+        lo, hi = (float(v) for v in np.percentile(arr, [lo_pct, hi_pct]))
+        return (lo, hi) if hi > lo else None
+    except Exception as e:
+        logger.debug(f"Contrast at the view failed: {e}")
+        return None
 
 
 def _shown_dtype(paths, normalize, image=None):
@@ -242,10 +356,15 @@ def _shown_dtype(paths, normalize, image=None):
         return None
 
 
-def _raw_shader(paths, normalize, image_for_fallback=None):
-    """Build the raw-layer shader, preferring a data-derived contrast range;
-    else the range of ``image_for_fallback``'s dtype, else 0-255."""
-    rng = _auto_contrast_range(paths, normalize) if paths else None
+def _raw_shader(paths, normalize, image_for_fallback=None, view=None):
+    """Build the raw-layer shader, preferring a data-derived contrast range:
+    that at ``view`` when given (_view_contrast_range), else the whole
+    volume's; else the range of ``image_for_fallback``'s dtype, else 0-255."""
+    rng = _view_contrast_range(paths, normalize, view) if paths and view is not None else None
+    if rng is not None:
+        logger.info("Raw contrast taken from the viewer's view")
+    elif paths:
+        rng = _auto_contrast_range(paths, normalize)
     if rng is not None:
         lo, hi = rng
         # Let the slider reach well beyond the auto range so it stays adjustable.
@@ -369,7 +488,7 @@ def neuroglancer_source(dataset_path):
 
 
 def get_raw_layer(
-    dataset_path, normalize=True, wrap_raw=True, segmentation=False, disable_meshes=False
+    dataset_path, normalize=True, wrap_raw=True, segmentation=False, disable_meshes=False, view=None
 ):
     """A neuroglancer layer showing a zarr, n5 or precomputed volume.
 
@@ -378,7 +497,9 @@ def get_raw_layer(
     SegmentationLayer over the same source, placed the same way, for a
     label volume; its ids are served as stored, never through the input
     normalizers. ``disable_meshes`` then turns off its meshes subsource
-    (see _layer).
+    (see _layer). An image's contrast is sampled at ``view`` (a View, see
+    view_of) when given, as neuroglancer's 1-99% button would there; else
+    over the whole volume.
     """
     dataset_path = paths.normalize_path(dataset_path)
     original_dataset_path = dataset_path
@@ -394,7 +515,7 @@ def get_raw_layer(
         levels = [paths.join(dataset_path, sc) for sc in scales] if pyramid is not None else [original_dataset_path]
         return _layer(
             neuroglancer_source(dataset_path),
-            lambda: _raw_shader(levels, normalize=False),
+            lambda: _raw_shader(levels, normalize=False, view=view),
             segmentation,
             disable_meshes,
         )
@@ -427,7 +548,8 @@ def get_raw_layer(
                     url=ScalePyramid(layers), transform=_corner_transform(finest)
                 ),
                 lambda: _raw_shader(
-                    [paths.join(dataset_path, sc) for sc in scales], normalize, image_for_fallback=finest
+                    [paths.join(dataset_path, sc) for sc in scales], normalize, image_for_fallback=finest,
+                    view=view,
                 ),
                 segmentation,
                 disable_meshes,
@@ -442,7 +564,7 @@ def get_raw_layer(
         neuroglancer.LayerDataSource(
             url=_local_volume(image), transform=_corner_transform(image)
         ),
-        lambda: _raw_shader([original_dataset_path], normalize, image_for_fallback=image),
+        lambda: _raw_shader([original_dataset_path], normalize, image_for_fallback=image, view=view),
         segmentation,
         disable_meshes,
     )
