@@ -25,7 +25,7 @@ import re
 import neuroglancer
 
 from cellmap_flow.io.multiscale import closest_raw_scale
-from cellmap_flow.pipeline_spec import chain_is_segmentation, chain_num_channels
+from cellmap_flow.pipeline_spec import chain_is_segmentation, chain_num_channels, chain_output_dtype
 from cellmap_flow.serving.probe import output_display_range
 from cellmap_flow.viewer.raw import PREDICTION_COLORS, flow_shader, get_raw_layer, prediction_shader
 from cellmap_flow.serving.client import fetch_model_info
@@ -165,10 +165,17 @@ def prediction_shader_for(model, host, postprocess, previous_shader=None, color=
     except Exception as e:
         logger.debug(f"Could not compute a display range for {model}: {e}")
         value_range = None
+    # The type the chain serves, when a step declares one (uint8 after a
+    # DefaultPostprocessor), which the shader's bounds must be values of.
+    try:
+        dtype = chain_output_dtype(postprocess or [], None)
+    except Exception as e:
+        logger.debug(f"Could not tell {model}'s output dtype: {e}")
+        dtype = None
     flows = flow_channels(info or {}, postprocess)
     if flows is not None:
-        return flow_shader(color, value_range, *flows, info.get("display_channel"))
-    return prediction_shader(color, value_range)
+        return flow_shader(color, value_range, *flows, info.get("display_channel"), dtype=dtype)
+    return prediction_shader(color, value_range, dtype)
 
 
 def prediction_layer(model, host, url_blob, *, dataset_path, postprocess, shader=None, shader_controls=None,

@@ -31,13 +31,14 @@ logger = logging.getLogger(__name__)
 
 
 # Shader for the raw EM layer. ``range`` is the displayed contrast window;
-# ``window`` is the wider span the UI slider can be dragged over.
-RAW_SHADER = """#uicontrol invlerp normalized(range=[{lo:.6g}, {hi:.6g}], window=[{wlo:.6g}, {whi:.6g}]);
+# ``window`` is the wider span the UI slider can be dragged over. Both are
+# filled in by _invlerp_bounds, which writes them as the data's type allows.
+RAW_SHADER = """#uicontrol invlerp normalized({bounds});
 #uicontrol vec3 color color(default="white");
 void main(){{emitRGB(color * normalized());}}"""
 
 
-PREDICTION_SHADER = """#uicontrol invlerp normalized(range=[{lo:.6g}, {hi:.6g}], window=[{wlo:.6g}, {whi:.6g}]);
+PREDICTION_SHADER = """#uicontrol invlerp normalized({bounds});
 #uicontrol vec3 color color(default="{color}");
 void main(){{emitRGB(color * normalized());}}"""
 
@@ -46,14 +47,38 @@ PREDICTION_COLORS = [
 ]
 
 
-def prediction_shader(color, value_range=None):
+def _invlerp_bounds(lo, hi, wlo, whi, dtype=None):
+    """An invlerp control's ``range=[lo, hi], window=[wlo, whi]``, as
+    neuroglancer accepts them for data of ``dtype``.
+
+    neuroglancer reads the four numbers as values of the layer's data type,
+    and refuses the whole shader when one is not: over uint8 data, a window
+    padded below 0 ("Invalid uint8 value: "-75"") or a fractional
+    percentile. So for an integer dtype the range is widened to whole
+    numbers and everything is clipped to what the dtype holds; a float
+    dtype, or an unknown one, takes them as they are.
+    """
+    dtype = None if dtype is None else np.dtype(getattr(dtype, "numpy_dtype", dtype))
+    if dtype is None or dtype.kind not in "ui":
+        return f"range=[{lo:.6g}, {hi:.6g}], window=[{wlo:.6g}, {whi:.6g}]"
+    info = np.iinfo(dtype)
+
+    def whole(value, rounding):
+        return int(min(max(rounding(value), info.min), info.max))
+
+    lo, hi = whole(lo, math.floor), whole(hi, math.ceil)
+    wlo, whi = min(whole(wlo, math.floor), lo), max(whole(whi, math.ceil), hi)
+    return f"range=[{lo}, {hi}], window=[{wlo}, {whi}]"
+
+
+def prediction_shader(color, value_range=None, dtype=None):
     """Shader for a model output layer, over the range the chain produces.
 
     Falls back to [0, 1] when the range is undetermined. That is a guess, but
     the previous default was ``range=[0.5, 0.5]`` -- lo == hi makes invlerp a
     step function rather than a ramp, so every value above 0.5 rendered as
     solid colour. After a DefaultPostprocessor (0-255) that is the entire
-    prediction.
+    prediction. ``dtype`` is the output's, when known: see _invlerp_bounds.
     """
     if value_range is None:
         lo, hi = 0.0, 1.0
@@ -61,9 +86,7 @@ def prediction_shader(color, value_range=None):
         lo, hi = (float(v) for v in value_range)
     # Leave the slider room to move beyond the computed range.
     pad = (hi - lo) * 0.5 or 1.0
-    return PREDICTION_SHADER.format(
-        lo=lo, hi=hi, wlo=lo - pad, whi=hi + pad, color=color
-    )
+    return PREDICTION_SHADER.format(bounds=_invlerp_bounds(lo, hi, lo - pad, hi + pad, dtype), color=color)
 
 
 # Shader for a flow model's channels (a channel axis, c^): each voxel's hue is
@@ -86,7 +109,7 @@ void main(){{
 }}"""
 
 
-def flow_shader(color, value_range, flow_y, flow_x, display_channel=None):
+def flow_shader(color, value_range, flow_y, flow_x, display_channel=None, dtype=None):
     """FLOW_SHADER over channels ``flow_y`` and ``flow_x``, dimmed by channel
     ``display_channel`` over ``value_range`` (as prediction_shader's), or
     not dimmed without one."""
@@ -95,8 +118,8 @@ def flow_shader(color, value_range, flow_y, flow_x, display_channel=None):
     else:
         lo, hi = (0.0, 1.0) if value_range is None else (float(v) for v in value_range)
         pad = (hi - lo) * 0.5 or 1.0
-        cell_control = (f"#uicontrol invlerp normalized(range=[{lo:.6g}, {hi:.6g}], "
-                        f"window=[{lo - pad:.6g}, {hi + pad:.6g}], channel={int(display_channel)});\n")
+        bounds = _invlerp_bounds(lo, hi, lo - pad, hi + pad, dtype)
+        cell_control = f"#uicontrol invlerp normalized({bounds}, channel={int(display_channel)});\n"
         cell = "normalized()"
     return FLOW_SHADER.format(cell_control=cell_control, cell=cell, color=color, flow_y=int(flow_y),
                               flow_x=int(flow_x))
@@ -135,26 +158,35 @@ def _dtype_default_range(image):
 def _auto_contrast_range(paths, normalize, lo_pct=1.0, hi_pct=99.0):
     """Derive a display range from the data rather than hardcoding one.
 
-    Reads the coarsest pyramid level that is still big enough to be
-    representative -- the bottom of a deep pyramid is only a few voxels, and the
-    top is far too large to read here. Percentiles rather than min/max so a
-    handful of saturated voxels (very common in EM) don't flatten everything
-    else into a narrow band, which is what makes the default 0-255 window look
-    washed out on real data.
+    Reads the finest pyramid level small enough to read here (at most
+    MAX_VOXELS), falling back to coarser ones when it cannot be read or is
+    flat. Coarse levels are averaged so much that the edge of the data
+    blurs into the padding around it: on jrc_axolotl-heart-1 the 1st
+    percentile is 3 at s9 but 16 at s7. Levels under MIN_VOXELS are too few
+    to be representative. Percentiles rather than min/max so a handful of
+    saturated voxels (very common in EM) don't flatten everything else into
+    a narrow band, and with the padding left out (_without_padding), which
+    otherwise pins the low end at 0 as if it were data.
 
     ``paths`` is ordered fine -> coarse. Returns (lo, hi), or None to let the
     caller fall back.
     """
     MIN_VOXELS = 4096
     MAX_VOXELS = 8_000_000
+    readable = []
     for path in reversed(paths):
         try:
             image = ImageDataInterface(path, normalize=normalize)
-            n_voxels = int(np.prod(image.shape))
-            if n_voxels < MIN_VOXELS:
-                continue  # too small to be representative; try a finer level
-            if n_voxels > MAX_VOXELS:
-                break  # finer levels are only bigger -- stop rather than read them
+        except Exception as e:
+            logger.debug(f"Auto-contrast could not open {path}: {e}")
+            continue
+        n_voxels = int(np.prod(image.shape))
+        if n_voxels > MAX_VOXELS:
+            break  # finer levels are only bigger -- stop rather than read them
+        if n_voxels >= MIN_VOXELS:
+            readable.append((path, image))
+    for path, image in reversed(readable):
+        try:
             # Index the store directly, the way neuroglancer's LocalVolume
             # does, so LazyNormalization.__getitem__ runs and the sample is in
             # the same space as what gets displayed. to_ndarray_ts() would
@@ -163,8 +195,8 @@ def _auto_contrast_range(paths, normalize, lo_pct=1.0, hi_pct=99.0):
             # (only the roi branch does), so the percentiles would land in raw
             # uint8 space while the layer shows [-1, 1] -- a 0-168 range over
             # data that never exceeds 1, i.e. an all-black image.
-            arr = np.asarray(image.ts[...])
-            arr = arr[np.isfinite(arr)]
+            arr = np.asarray(image.ts[...]).ravel()
+            arr = _without_padding(arr[np.isfinite(arr)])
             if arr.size == 0:
                 continue
             lo, hi = (float(v) for v in np.percentile(arr, [lo_pct, hi_pct]))
@@ -175,6 +207,39 @@ def _auto_contrast_range(paths, normalize, lo_pct=1.0, hi_pct=99.0):
             logger.debug(f"Auto-contrast failed on {path}: {e}")
             continue
     return None
+
+
+def _without_padding(arr, share=0.01):
+    """``arr`` without the voxels at its lowest or highest value, where that
+    one value holds at least ``share`` of them.
+
+    That is padding: the 0s around a dataset's real extent (29% of
+    jrc_axolotl-heart-1's voxels), or the 255s around an inverted one.
+    Left in, it is the 1st percentile itself. The data's own darkest and
+    brightest voxels are spread over many values and stay. Nothing is left
+    out when that would leave nothing.
+    """
+    if arr.size == 0:
+        return arr
+    keep = np.ones(arr.shape, bool)
+    for end in (arr.min(), arr.max()):
+        at_end = arr == end
+        if at_end.mean() >= share:
+            keep &= ~at_end
+    return arr[keep] if keep.any() else arr
+
+
+def _shown_dtype(paths, normalize, image=None):
+    """The dtype of what the raw layer shows: ``image``'s, read through its
+    input chain, else that of ``paths[0]`` read as ``normalize`` says; None
+    when neither can be opened."""
+    try:
+        if image is None:
+            image = ImageDataInterface(paths[0], normalize=normalize)
+        return image.ts.dtype
+    except Exception as e:
+        logger.debug(f"Could not tell the raw layer's dtype: {e}")
+        return None
 
 
 def _raw_shader(paths, normalize, image_for_fallback=None):
@@ -195,7 +260,8 @@ def _raw_shader(paths, normalize, image_for_fallback=None):
         )
         wlo, whi = lo, hi
         logger.info(f"Raw auto-contrast unavailable; using [{lo:.6g}, {hi:.6g}]")
-    return RAW_SHADER.format(lo=lo, hi=hi, wlo=wlo, whi=whi)
+    dtype = _shown_dtype(paths, normalize, image_for_fallback) if paths or image_for_fallback else None
+    return RAW_SHADER.format(bounds=_invlerp_bounds(lo, hi, wlo, whi, dtype))
 
 
 def _layer(source, shader, segmentation, disable_meshes):
@@ -323,10 +389,12 @@ def get_raw_layer(
     if not wrap_raw:
         # Unwrapped: neuroglancer fetches the file directly, so the input
         # normalizers never run on what it displays. Sample unnormalized
-        # too, or the contrast range lands in the wrong space entirely.
+        # too, or the contrast range lands in the wrong space entirely. A
+        # pyramid is sampled from its levels: its group is no array to read.
+        levels = [paths.join(dataset_path, sc) for sc in scales] if pyramid is not None else [original_dataset_path]
         return _layer(
             neuroglancer_source(dataset_path),
-            lambda: _raw_shader([original_dataset_path], normalize=False),
+            lambda: _raw_shader(levels, normalize=False),
             segmentation,
             disable_meshes,
         )
