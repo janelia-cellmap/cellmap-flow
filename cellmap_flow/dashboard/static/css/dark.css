@@ -587,9 +587,32 @@ textarea.form-control[readonly] {
   display: block;
   width: 100%;
   height: auto;
+  cursor: zoom-in;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   image-rendering: pixelated;
+}
+
+/* The review popup: nearly the page's width, so the planes are big enough to judge. */
+.ai-annotate-review-dialog {
+  max-width: min(96vw, 1800px);
+}
+
+/* A clicked image takes the popup's full width, above the other two. */
+.ai-annotate-previews figure.ai-annotate-zoomed {
+  grid-column: 1 / -1;
+  order: -1;
+}
+
+.ai-annotate-previews figure.ai-annotate-zoomed img {
+  max-height: 78vh;
+  object-fit: contain;
+  cursor: zoom-out;
+}
+
+/* While a resend runs, the old result stays, dimmed. */
+.ai-annotate-previews.ai-annotate-stale img {
+  opacity: 0.4;
 }
 
 .ai-annotate-previews figcaption {

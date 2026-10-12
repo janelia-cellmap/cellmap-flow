@@ -192,38 +192,11 @@
           <div class="small text-muted mt-1" id="aiAnnotateStatus" role="status" aria-live="polite"></div>
           <div class="small text-danger mt-1" id="aiAnnotateError" role="alert" hidden></div>
 
-          <div class="ai-annotate-review mt-2" id="aiAnnotateReview" hidden>
-            <div class="ai-annotate-previews">
-              <figure>
-                <img id="aiAnnotateInputImg" alt="The EM plane sent to the model">
-                <figcaption>Input</figcaption>
-              </figure>
-              <figure>
-                <img id="aiAnnotateModelImg" alt="The model's output: the plane with the structure painted in">
-                <figcaption>Model output</figcaption>
-              </figure>
-              <figure>
-                <img id="aiAnnotateOverlayImg" alt="The mask that would be written, over the input">
-                <figcaption>Overlay</figcaption>
-              </figure>
-            </div>
-            <small class="text-muted d-block" id="aiAnnotateReviewInfo"></small>
-            <label class="text-muted mb-0 mt-2" for="aiAnnotateReviewPrompt" style="font-size: 0.85rem;">Prompt sent</label>
-            <textarea class="form-control form-control-sm" id="aiAnnotateReviewPrompt" rows="3" maxlength="4000"
-                      title="Edit it and click Resend to ask the model again about the same plane."></textarea>
-            <div class="form-check mt-2">
-              <input class="form-check-input" type="checkbox" id="aiAnnotateOverwrite">
-              <label class="form-check-label small" for="aiAnnotateOverwrite">Overwrite existing labels</label>
-            </div>
-            <small class="text-muted d-block">Off: only unlabelled voxels are filled.</small>
-            <div class="patch-tools-grid mt-2">
-              <button type="button" class="btn btn-outline-secondary btn-sm" id="aiAnnotateResendBtn"
-                      title="Asks the model again about the same plane, with the prompt above.">Resend</button>
-              <button type="button" class="btn btn-outline-danger btn-sm" id="aiAnnotateRejectBtn"
-                      title="Discards the result; nothing is written.">Reject</button>
-              <button type="button" class="btn btn-success btn-sm" id="aiAnnotateAcceptBtn"
-                      title="Writes the mask into the annotation volume: an id per object, background 1. Undo takes it back. The viewer reloads to show it.">Accept</button>
-            </div>
+          <!-- A result waiting for review: the review itself is the popup below. -->
+          <div class="d-flex align-items-center gap-2 flex-wrap mt-2" id="aiAnnotateReview" hidden>
+            <button type="button" class="btn btn-primary btn-sm" id="aiAnnotateOpenReviewBtn"
+                    title="Opens the result over the page to look at it closely and accept or reject it.">Review Result</button>
+            <small class="text-muted" id="aiAnnotateReviewSummary"></small>
           </div>
         </div>
     </details>
@@ -248,6 +221,60 @@
       Save Annotations to Disk
     </button>
     <small class="form-text text-muted d-block mt-1">Copies the annotations from MinIO to disk.</small>
+  </div>
+
+  <!-- AI-assisted annotation's review, over the page: the plane sent, the
+       model's answer and the mask over the plane, large enough to judge
+       (ai-annotate.js). Opens by itself when a result is ready. -->
+  <div class="modal fade" id="aiAnnotateReviewModal" tabindex="-1" aria-labelledby="aiAnnotateReviewTitle" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable ai-annotate-review-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="aiAnnotateReviewTitle">AI annotation: review</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"
+                  aria-label="Close; the result waits, and Review Result in the panel opens it again"></button>
+        </div>
+        <div class="modal-body ai-annotate-review">
+          <small class="text-muted d-block mb-2" id="aiAnnotateReviewInfo"></small>
+          <div class="ai-annotate-previews" id="aiAnnotatePreviews"
+               title="Click an image to see it at full width; click it again to go back.">
+            <figure>
+              <img id="aiAnnotateInputImg" alt="The EM plane sent to the model">
+              <figcaption>Input</figcaption>
+            </figure>
+            <figure>
+              <img id="aiAnnotateModelImg" alt="The model's output: the plane with the structure painted in">
+              <figcaption>Model output</figcaption>
+            </figure>
+            <figure>
+              <img id="aiAnnotateOverlayImg" alt="The mask that would be written, over the input">
+              <figcaption>Overlay</figcaption>
+            </figure>
+          </div>
+          <small class="text-muted d-block mt-1">Click an image to see it at full width; click it again to go back.</small>
+          <div class="small mt-2" id="aiAnnotateModalStatus" role="status" aria-live="polite"></div>
+          <div class="small text-danger mt-1" id="aiAnnotateModalError" role="alert" hidden></div>
+          <label class="text-muted mb-0 mt-2" for="aiAnnotateReviewPrompt" style="font-size: 0.85rem;">Prompt sent (edit it and Resend to ask again)</label>
+          <textarea class="form-control form-control-sm" id="aiAnnotateReviewPrompt" rows="3" maxlength="4000"
+                    title="Edit it and click Resend to ask the model again about the same plane."></textarea>
+          <div class="form-check mt-2">
+            <input class="form-check-input" type="checkbox" id="aiAnnotateOverwrite">
+            <label class="form-check-label small" for="aiAnnotateOverwrite">Overwrite existing labels</label>
+          </div>
+          <small class="text-muted d-block">Off: only unlabelled voxels are filled. On: the model's objects replace what is under them.</small>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary me-auto" data-bs-dismiss="modal"
+                  title="Close without deciding; Review Result in the panel opens it again.">Close</button>
+          <button type="button" class="btn btn-outline-secondary" id="aiAnnotateResendBtn"
+                  title="Asks the model again about the same plane, with the prompt above.">Resend</button>
+          <button type="button" class="btn btn-outline-danger" id="aiAnnotateRejectBtn"
+                  title="Discards the result; nothing is written.">Reject</button>
+          <button type="button" class="btn btn-success" id="aiAnnotateAcceptBtn"
+                  title="Writes the mask into the annotation volume: an id per object, background 1. Undo takes it back. The viewer reloads to show it.">Accept</button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- Load Crops from YAML Modal -->

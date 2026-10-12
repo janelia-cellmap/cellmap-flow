@@ -55,7 +55,15 @@ export function initAiAnnotate({ log }) {
   const usage = document.getElementById("aiAnnotateUsage");
   const statusLine = document.getElementById("aiAnnotateStatus");
   const errorLine = document.getElementById("aiAnnotateError");
+  // The sidebar's Review Result button; the review itself is a popup over the page.
   const review = document.getElementById("aiAnnotateReview");
+  const reviewSummary = document.getElementById("aiAnnotateReviewSummary");
+  const openReviewBtn = document.getElementById("aiAnnotateOpenReviewBtn");
+  const reviewModalEl = document.getElementById("aiAnnotateReviewModal");
+  const previewGrid = document.getElementById("aiAnnotatePreviews");
+  const modalStatus = document.getElementById("aiAnnotateModalStatus");
+  const modalError = document.getElementById("aiAnnotateModalError");
+  let reviewModal = null;
   const reviewInfo = document.getElementById("aiAnnotateReviewInfo");
   const reviewPrompt = document.getElementById("aiAnnotateReviewPrompt");
   const overwriteBox = document.getElementById("aiAnnotateOverwrite");
@@ -81,10 +89,43 @@ export function initAiAnnotate({ log }) {
   let pollMs = null;
   let saveTimer = null;
 
+  // Shown in the panel and in the review popup, whichever the user is looking at.
   function showError(text) {
-    errorLine.textContent = text || "";
-    errorLine.hidden = !text;
+    for (const line of [errorLine, modalError]) {
+      line.textContent = text || "";
+      line.hidden = !text;
+    }
   }
+
+  function modal() {
+    if (!reviewModal) reviewModal = new bootstrap.Modal(reviewModalEl);
+    return reviewModal;
+  }
+
+  function modalShown() {
+    return reviewModalEl.classList.contains("show");
+  }
+
+  function openReview() {
+    modal().show();
+  }
+
+  function closeReview() {
+    if (reviewModal) reviewModal.hide();
+    for (const figure of previewGrid.querySelectorAll("figure")) figure.classList.remove("ai-annotate-zoomed");
+  }
+
+  openReviewBtn.addEventListener("click", openReview);
+
+  // Click an image to see it at the popup's full width; click it (or
+  // another) again to go back to three side by side.
+  previewGrid.addEventListener("click", (event) => {
+    const figure = event.target.closest("figure");
+    if (!figure) return;
+    const zoom = !figure.classList.contains("ai-annotate-zoomed");
+    for (const other of previewGrid.querySelectorAll("figure")) other.classList.remove("ai-annotate-zoomed");
+    if (zoom) figure.classList.add("ai-annotate-zoomed");
+  });
 
   // The limit is the server's own cap (daily_call_limit in its AI-annotate
   // config), not the provider's quota; the text says so.
@@ -273,7 +314,9 @@ export function initAiAnnotate({ log }) {
       else img.removeAttribute("src");
     }
     reviewInfo.textContent = describeResult(d);
+    reviewSummary.textContent = describeResult(d);
     reviewPrompt.value = d.prompt || "";
+    previewGrid.classList.remove("ai-annotate-stale");
   }
 
   function showStatus(d) {
@@ -286,22 +329,36 @@ export function initAiAnnotate({ log }) {
     // One job at a time: a result waits to be accepted or rejected first.
     runBtn.disabled = d.status === "running" || d.status === "ready";
 
+    // While a job runs, a popup left open (a resend) keeps the old result,
+    // dimmed, under the stage; it cannot be accepted until the new one is in.
+    const running = d.status === "running";
+    for (const button of [acceptBtn, rejectBtn, resendBtn]) button.disabled = running;
+    previewGrid.classList.toggle("ai-annotate-stale", running);
+
     if (d.status === "running") {
       const plane = d.plane ? ` (${d.plane} plane)` : "";
       statusLine.textContent = `Running${plane}: ${d.stage_label || d.stage || "starting"}...`;
+      modalStatus.textContent = `Asking the model again${plane}: ${d.stage_label || d.stage || "starting"}...`;
       summaryStatus.textContent = "running";
       review.hidden = true;
     } else if (d.status === "ready") {
-      statusLine.textContent = "Ready: review the result below, then accept or reject it.";
+      statusLine.textContent = "Ready: the review opens over the page (Review Result opens it again).";
+      modalStatus.textContent = "";
       summaryStatus.textContent = "ready to review";
       if (isNew) {
         // The polls leave the preview's images out; they are asked for once
         // here, when the result (or a resend's) becomes ready.
         getAnswer(`${BASE}/status?preview=1`)
           .then((p) => {
-            if (p.success && p.status === "ready" && p.annotate_id === d.annotate_id) showPreview(p);
+            if (p.success && p.status === "ready" && p.annotate_id === d.annotate_id) {
+              showPreview(p);
+              openReview();
+            }
           })
-          .catch(() => showPreview(d));
+          .catch(() => {
+            showPreview(d);
+            openReview();
+          });
         // Shift+G starts a job without the panel open: open it to show the result.
         panel.open = true;
         log.add(`AI annotation ready to review: ${describeResult(d)}`);
@@ -315,6 +372,9 @@ export function initAiAnnotate({ log }) {
       if (d.needs_volume && was.status !== null && was.status !== "failed") offerNewVolume(`Could not start AI annotation: ${d.error}`);
       summaryStatus.textContent = "failed";
       review.hidden = true;
+      // A resend that failed: say so in the popup too, where the user is.
+      modalStatus.textContent = modalShown() ? `Failed: ${d.error || "no reason given"}` : "";
+      acceptBtn.disabled = true;
       if (isNew && was.status === "running") {
         log.add(`AI annotation failed: ${d.error || "no reason given"}`);
         log.showEnd();
@@ -323,6 +383,8 @@ export function initAiAnnotate({ log }) {
       statusLine.textContent = "";
       summaryStatus.textContent = "";
       review.hidden = true;
+      // Accepted or rejected (here or in another tab): nothing left to review.
+      closeReview();
     }
 
     // A finished call counts against the day's limit.

@@ -11,7 +11,7 @@ With an annotation volume open in the Finetune tab (see [Create or Resume an Ann
 1. In the **AI annotate** panel, pick the structure to label (mitochondria, ER, nucleus, ...) and the model. The first time for a dataset, tick the box that acknowledges where the data goes. Untick it at any time to withdraw that: the next run asks again.
 2. Hover over the structure in the viewer and press **Shift+G**, or click **Annotate at view centre** to use the centre of the view instead.
 3. The dashboard reads one plane of raw EM around that point, in the plane you are looking at, and sends it to the model with a prompt asking it to paint the structure in a colour. It turns the colours the model painted into a mask. This takes from a few seconds to a minute or two.
-4. The panel shows three images side by side: the **input** plane, the **model's output**, and the mask as an **overlay** on the input.
+4. A review opens over the page with three large images side by side: the **input** plane, the **model's output**, and the mask as an **overlay** on the input. Click an image to see it at full width, and click again to go back. **Close** puts the review away without deciding; **Review Result** in the panel opens it again.
 5. Then:
    - **Accept** writes the mask into the annotation volume (see [Accept: fill or overwrite](#accept-fill-or-overwrite)).
    - **Reject** throws it away. Nothing is written.
@@ -70,7 +70,7 @@ Everything below is explained in the sections that follow. With Gemini on Vertex
 
 4. **In the Finetune tab**, create or resume an annotation volume, open **AI-assisted annotation**, pick the provider, model and structure, and tick the box agreeing to where the planes are sent.
 
-5. **Annotate**: switch the viewer to a single-panel layout (**yz** shows the XY plane, see [Choosing the plane](#choosing-the-plane)), hover over the structure and press **Shift+G**. Review the result, then **Accept** or **Reject**.
+5. **Annotate**: switch the viewer to a single-panel layout (**yz** shows the XY plane, see [Choosing the plane](#choosing-the-plane)), hover over the structure and press **Shift+G**. The review opens over the page when the result is ready: **Accept** or **Reject** it there.
 
 ## Turning it on
 
