@@ -195,6 +195,127 @@ def test_a_pyramid_too_big_to_sample_falls_back_through_the_input_chain(ome_pyra
     assert _contrast(get_raw_layer(ome_pyramid())) == (-1, 1)
 
 
+def _bounds(shader):
+    """An invlerp control's range and window, as written: [lo, hi, wlo, whi]."""
+    return list(re.search(r"range=\[([^,]+), ([^\]]+)\], window=\[([^,]+), ([^\]]+)\]", shader).groups())
+
+
+def test_a_uint8_layers_bounds_are_uint8_values(raw_zarr):
+    """neuroglancer refuses the whole shader when a bound is no value of the
+    data's type: over uint8, a window padded below 0 ("Invalid uint8 value:
+    "-75"") or a fractional percentile. Through a float chain they stay as
+    sampled, padding and all."""
+    data = (np.arange(16**3) % 151).astype(np.uint8).reshape((16,) * 3)
+    process_chain().input_norms = []
+    bounds = _bounds(get_raw_layer(raw_zarr(data)).shader)
+    assert all(b.isdigit() for b in bounds) and int(bounds[2]) == 0 and int(bounds[3]) <= 255, bounds
+    process_chain().input_norms = [MinMaxNormalizer(0, 255)]
+    assert float(_bounds(get_raw_layer(raw_zarr(data, name="again")).shader)[2]) < 0
+
+
+def test_padding_is_left_out_of_the_sampled_contrast(raw_zarr):
+    """The 0s around a dataset's real extent are not its darkest data: left
+    in, they pinned the range's low end at 0."""
+    data = np.zeros((16, 16, 16), np.uint8)
+    data[8:] = (np.arange(8 * 16 * 16) % 100 + 100).reshape(8, 16, 16)
+    process_chain().input_norms = []
+    assert _contrast(get_raw_layer(raw_zarr(data)))[0] >= 100
+
+
+@pytest.mark.parametrize("background", [
+    pytest.param({0: 3000}, id="zeros"),
+    # male CNS's JPEG'd background: most at 1, some at 0, a tail above.
+    pytest.param({1: 8000, 0: 300, 2: 40, 3: 40}, id="jpeg"),
+    pytest.param({255: 3000}, id="inverted"),
+])
+def test_padding_values_are_peeled_off_either_end(background):
+    from cellmap_flow.viewer.raw import _without_padding
+
+    data = np.arange(50, 200).repeat(10)  # 1500 voxels, 10 a value
+    padded = np.concatenate([data] + [np.full(n, v) for v, n in background.items()])
+    np.testing.assert_array_equal(np.sort(_without_padding(padded)), data)
+    np.testing.assert_array_equal(_without_padding(data), data, "data alone loses nothing")
+
+
+def test_the_finest_level_small_enough_is_sampled(ome_pyramid, monkeypatch):
+    """Coarse levels blur the data's edge into its padding, so the finest
+    level within MAX_VOXELS is read, not the coarsest above MIN_VOXELS."""
+    from cellmap_flow.viewer import raw
+
+    path = ome_pyramid(((8, 0), (16, 4), (32, 12)), shape=(64, 64, 64))
+    read = []
+    original = raw.ImageDataInterface
+
+    class Recording(original):
+        def __init__(self, level, **kwargs):
+            read.append(level.rsplit("/", 1)[-1])
+            super().__init__(level, **kwargs)
+
+    monkeypatch.setattr(raw, "ImageDataInterface", Recording)
+    levels = [f"{path}/s{i}" for i in range(3)]
+    assert raw._auto_contrast_range(levels, normalize=False) is not None
+    assert read == ["s2", "s1", "s0"], "opened coarse to fine, s0 being small enough"
+    read.clear()
+    monkeypatch.setattr(raw, "_without_padding", lambda arr: read.append(arr.size) or arr)
+    raw._auto_contrast_range(levels, normalize=False)
+    assert read[-1] == 64**3
+
+
+def test_the_view_is_read_from_the_viewer_state():
+    """neuroglancer reports its scales in metres and its position in voxels
+    of them; a screen pixel spans ``crossSectionScale`` of the smallest."""
+    from cellmap_flow.viewer.raw import View, view_of
+
+    state = neuroglancer.ViewerState()
+    state.dimensions = neuroglancer.CoordinateSpace(names=["z", "y", "x"], units="nm", scales=[16, 8, 8])
+    state.position = [10, 20, 30]
+    assert view_of(state) is None, "no zoom yet: the browser has not reported one"
+    state.cross_section_scale = 4
+    assert view_of(state) == View(center={"z": 160, "y": 160, "x": 240}, pixel_nm=32)
+
+
+def test_the_contrast_is_taken_where_the_viewer_looks(ome_pyramid, monkeypatch):
+    """As neuroglancer's 1-99% button: from what is around the view's
+    centre, not the whole volume. Each voxel holds its z index + 1, so the
+    planes 16 voxels around z index 10 hold 1 to 27, the volume 1 to 64."""
+    from cellmap_flow.viewer import raw
+
+    path = ome_pyramid(((8, 0), (16, 4)), shape=(64, 64, 64))
+    levels = [f"{path}/s0", f"{path}/s1"]
+    monkeypatch.setattr(raw, "VIEW_HALF_WIDTH_PX", 16)
+    # The z index 10 voxel's corner is at 76 nm (OME's translation is its centre).
+    view = raw.View(center={"z": 80, "y": 256, "x": 256}, pixel_nm=8)
+    lo, hi = raw._view_contrast_range(levels, normalize=False, view=view)
+    assert 1 <= lo < hi <= 27
+    assert raw._view_contrast_range(levels, normalize=False, view=raw.View({"z": -1e6, "y": 0, "x": 0}, 8)) is None
+
+
+def test_a_raw_layer_samples_the_view_only_without_a_contrast_to_restore(raw_zarr, monkeypatch):
+    from cellmap_flow.viewer import raw
+    from cellmap_flow.viewer.layers import raw_layer
+
+    asked = []
+    monkeypatch.setattr(raw, "_view_contrast_range", lambda paths, normalize, view: asked.append(view) or (3, 9))
+    view = raw.View(center={"z": 0, "y": 0, "x": 0}, pixel_nm=8)
+    process_chain().input_norms = []
+    assert _contrast(raw_layer(raw_zarr(), view=view)) == (3, 9) and asked == [view]
+    kept = raw_layer(raw_zarr(name="again"), shader=raw.RAW_SHADER.format(bounds="range=[1, 2], window=[0, 3]"),
+                     view=view)
+    assert _contrast(kept) == (1, 2) and asked == [view]
+
+
+def test_a_uint8_prediction_gets_uint8_bounds():
+    """After a DefaultPostprocessor the server sends uint8, so the shader's
+    bounds must be uint8 values too; a float output keeps its padded window."""
+    from cellmap_flow.post.postprocessors import DefaultPostprocessor, SigmoidPostprocessor
+    from cellmap_flow.viewer.layers import prediction_shader_for
+
+    as_uint8 = prediction_shader_for("m", None, [SigmoidPostprocessor(), DefaultPostprocessor()], info={})
+    assert _bounds(as_uint8) == ["127", "255", "63", "255"]
+    as_float = prediction_shader_for("m", None, [SigmoidPostprocessor()], info={})
+    assert _bounds(as_float) == ["0", "1", "-0.5", "1.5"]
+
+
 def test_a_label_volume_is_a_segmentation_layer_in_the_same_place(raw_zarr):
     ids = np.arange(64, dtype=np.uint64).reshape(4, 4, 4)
     path = raw_zarr(ids, offset=(80, 40, 40), name="ids")

@@ -22,7 +22,7 @@ from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.norm.input_normalize import get_input_normalizers
 from cellmap_flow.pipeline_spec import PipelineSpec
 from cellmap_flow.post.postprocessors import get_postprocessors_list
-from cellmap_flow.viewer.raw import PREDICTION_COLORS
+from cellmap_flow.viewer.raw import PREDICTION_COLORS, view_of
 from cellmap_flow.serving.client import fetch_model_info
 from cellmap_flow.viewer.layers import CHUNKMIRAGE, prediction_layer, prediction_url, raw_layer
 
@@ -255,13 +255,18 @@ def _set_chain_and_redraw(spec, dashboard_url, *, built=None, builder=None) -> l
                 )
             session.shader_controls.pop(name, None)
 
+    # Without a contrast of the user's to restore, the raw's is sampled where
+    # the viewer is looking, as neuroglancer's 1-99% button would be.
+    # .state, not .txn(): this only reads.
+    view = view_of(session.viewer.state) if session.shaders.get("data") is None else None
+
     drawn = []
     with session.viewer.txn() as s:
         # The user's raw-layer contrast/shader, instead of the fresh default
         # get_raw_layer() always builds, which otherwise resets it every time
         # the pipeline is (re)submitted.
         session.raw = raw_layer(session.dataset_path, shader=session.shaders.get("data"),
-                                shader_controls=session.shader_controls.get("data"))
+                                shader_controls=session.shader_controls.get("data"), view=view)
         s.layers["data"] = session.raw
         for index, job in enumerate(session.jobs):
             model = job.model_name
