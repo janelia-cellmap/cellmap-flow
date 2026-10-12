@@ -76,7 +76,7 @@ Everything below is explained in the sections that follow. With Gemini on Vertex
 
 The feature reads a config file on the machine the dashboard runs on. With no file, the panel says the feature is off and points here.
 
-The file is `~/.cellmap_flow/ai_annotate.yaml`, or the path in the environment variable `CELLMAP_FLOW_AI_ANNOTATE_CONFIG` if that is set. An example with every option is in [`docs/examples/ai_annotate.yaml`](examples/ai_annotate.yaml). The shortest one that works:
+The file is `~/.cellmap_flow/ai_annotate.yaml` in the home directory of the user the dashboard runs as (on the cluster, your cluster home, e.g. `/groups/<group>/home/<you>`), or the path in the environment variable `CELLMAP_FLOW_AI_ANNOTATE_CONFIG` if that is set. An example with every option is in [`docs/examples/ai_annotate.yaml`](examples/ai_annotate.yaml). The shortest one that works:
 
 ```yaml
 enabled: true
@@ -174,6 +174,37 @@ pip install -e ".[ai-annotate]"
 ```
 
 Without it, the panel says the feature is unavailable and gives this command.
+
+### Why the login expires, and a key that does not
+
+Your personal login from `gcloud auth application-default login` stops working after a while: HHMI's Google Workspace makes everyone using Google Cloud tools sign in again periodically (its "Google Cloud session control"; at most a week, possibly less). The panel then says "Google asks you to sign in again". Run the login again and copy the file over your `credentials_file`; nothing needs restarting.
+
+To stop that, sign in with a **service account key** instead. A service account is a Google Cloud identity for a program rather than a person, and its key does not expire:
+
+1. In the [Google Cloud console](https://console.cloud.google.com/), open your project, then **IAM & Admin → Service Accounts → Create service account**.
+2. Give it the role **Vertex AI User** (and nothing more).
+3. On its **Keys** tab: **Add key → Create new key → JSON**. Your browser downloads a `.json` file.
+4. Put it on group storage, readable only by you, and name it in the config:
+
+   ```bash
+   cp <downloaded file>.json /groups/<lab>/<you>/.gcloud_adc/vertex-sa.json
+   chmod 600 /groups/<lab>/<you>/.gcloud_adc/vertex-sa.json
+   ```
+
+   ```yaml
+       credentials_file: /groups/<lab>/<you>/.gcloud_adc/vertex-sa.json
+   ```
+
+The key is a long-lived secret: anyone who can read the file can spend from the project until the key is deleted. Keep it `chmod 600`, never copy it into a repository or a shared folder, and delete it in the console (**Keys** tab) if it ever leaks. Some organisations do not allow keys to be created; if the console refuses, use the personal login above.
+
+## Running it from Fileglancer
+
+The Fileglancer app runs the same dashboard as a job on the cluster, as you, from the same pixi environment, so the feature works there with no extra install. What it needs is the same as anywhere else, put where a cluster job can find it:
+
+- **The config file goes in your cluster home directory**: `~/.cellmap_flow/ai_annotate.yaml` as the job sees it, which on the Janelia cluster is `/groups/<group>/home/<you>/.cellmap_flow/ai_annotate.yaml`, not your workstation's local home if that differs. If the panel says "no config file at ...", the path it names is where the job looked.
+- **`credentials_file` on group storage**, as in [Vertex AI setup](#vertex-ai-setup), since the job runs on whichever node it lands on. A service account key is the better choice here: a Fileglancer session runs for hours unattended, and a personal login can expire during it.
+- **Each user sets up their own.** The config and the credentials are per user, and a credentials file that others can read is refused, so a lab cannot share one login through a group-readable file. Each person who turns the feature on uses their own login or key, billed to the project it belongs to.
+- **The job must reach Google**: the cluster node calls `aiplatform.googleapis.com` and `oauth2.googleapis.com` over HTTPS. If calls fail with "Could not reach Vertex AI", the node has no route out; ask Scientific Computing.
 
 ## What data leaves the cluster and where
 
