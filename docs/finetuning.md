@@ -138,6 +138,10 @@ The other settings:
 
 On a uint16/uint32 volume for an instance target (affinities, Cellpose's flows), new ids count up past the patch's largest. Otherwise they reuse ids the patch does not hold, so a uint8 volume never runs out. The settings are kept in the browser. A patch over 128³ voxels is asked about first. Routes: `POST /api/finetune/view-labels/{seed,background,split,undo}` and `GET /api/finetune/view-labels/sources`, which lists the models and the methods each offers. The segmenters are in `cellmap_flow.post.segment`, which `LabelPostprocessor` (with the same `connectivity`, `min_size` and `per_slice` options) and `AffinityPostprocessor` also use.
 
+### Ask an AI model to paint a plane
+
+The **AI annotate** panel sends one 2D plane around the point under the mouse (**Shift+G**) to a hosted image model, which paints the structure you pick; you review it, then accept it into the volume or reject it, and **Undo** takes it back. It is off until you turn it on, and the plane leaves the cluster: see [AI-assisted annotation](ai_annotate.md) for setup and what is sent where.
+
 ## 5. Training
 
 Switch to the **Training** tab in the Finetune section.

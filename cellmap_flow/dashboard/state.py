@@ -32,8 +32,9 @@ rather than being stored beside the real one:
   ``builder_model_configs``.
 - Blockwise's ``tmp_dir`` and ``blockwise_tasks_dir``, and ``tasks_dir()``.
 - The finetune tab's MinIO and volumes: ``minio_state``, ``label_undo``,
-  ``annotation_volumes``, ``output_sessions``; its training jobs'
-  ``finetune_job_manager``; the Review tab's ``review``.
+  ``annotation_volumes``, ``output_sessions``; its AI annotation's
+  ``ai_annotate``; its training jobs' ``finetune_job_manager``; the Review
+  tab's ``review``.
 - The log panel's ``log_buffer`` and ``log_clients``; the box tool's
   ``bbx_generator_state``.
 
@@ -42,6 +43,7 @@ module global: tests/conftest.py installs a fresh Session for every test.
 """
 
 import os
+import threading
 from collections import deque
 from importlib.resources import files
 
@@ -64,7 +66,8 @@ class Session:
     __slots__ = ("dataset_path", "resample", "viewer", "raw", "neuroglancer_url", "shaders", "shader_controls", "extra_layers",
                  "models_config", "model_catalog", "_builder_state", "builder_model_configs", "tmp_dir",
                  "blockwise_tasks_dir", "minio_state", "annotation_volumes", "output_sessions", "review",
-                 "_finetune_job_manager", "label_undo", "log_buffer", "log_clients", "bbx_generator_state")
+                 "_finetune_job_manager", "label_undo", "ai_annotate", "log_buffer", "log_clients",
+                 "bbx_generator_state")
 
     def __init__(self):
         # The data and the viewer
@@ -133,6 +136,21 @@ class Session:
         # label action (seed, background, split) replaced, newest last, for
         # the Finetune tab's Undo (routes/finetune/view_labels.py).
         self.label_undo = {}
+        # The Finetune tab's AI annotation (routes/finetune/ai_annotate.py):
+        # the provider, model, target and prompt the user chose (None until
+        # they do); {dataset path: {provider id: the destination the user
+        # acknowledged its images go to}}; the one job, running or staged
+        # for review (None when there is none); the lock its worker thread
+        # and the routes change the job under; and the viewer Shift+G is
+        # bound in. Never a key or other secret: those are read when a call
+        # is made.
+        self.ai_annotate = {
+            "settings": None,
+            "acknowledged": {},
+            "job": None,
+            "lock": threading.Lock(),
+            "binding_registered_for": None,
+        }
         self._finetune_job_manager = None
 
         # The log panel and the box tool

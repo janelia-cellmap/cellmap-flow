@@ -624,3 +624,11 @@ def test_a_model_whose_target_cannot_be_told_gets_uint8_labels(monkeypatch):
 
     monkeypatch.setattr(common, "autodetect_output_type", unknown)
     assert common.annotation_dtype_for(object()) == "uint8"
+
+
+
+def test_labelling_without_an_annotation_volume_offers_to_make_one(dashboard):
+    response = dashboard.post("/api/finetune/view-labels/background", json={})
+
+    body = response.get_json()
+    assert response.status_code == 409 and body["needs_volume"] is True

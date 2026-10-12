@@ -91,11 +91,12 @@ SEED_METHODS = (
 
 
 class _Refused(Exception):
-    """A request these routes will not act on: ``status`` and a message."""
+    """A request these routes will not act on: ``status``, a message and extra answer fields."""
 
-    def __init__(self, message, status=409):
+    def __init__(self, message, status=409, **extra):
         super().__init__(message)
         self.status = status
+        self.extra = extra
 
 
 def _error(message, status, **extra):
@@ -106,10 +107,11 @@ def _target_box(data):
     """``(volume_id, volume, lo, hi)``: the session's volume and the box's voxels in it."""
     volume_id, volume = session_store().session_volume()
     if volume is None:
-        raise _Refused("No annotation volume to label. Create or resume one first.")
+        raise _Refused("No annotation volume to label. Create or resume one first.", needs_volume=True)
     state = get_session().minio_state
     if not state.get("ip") or not state.get("port"):
-        raise _Refused("MinIO is not serving the annotation volume. Create or resume one first.")
+        raise _Refused("MinIO is not serving the annotation volume. Create or resume one first.",
+                       needs_volume=True)
     try:
         size_nm = data.get("size_nm")
         if data.get("box_voxels") is not None:
@@ -627,7 +629,7 @@ def seed_view_from_prediction():
         answer = _fill(volume_id, volume, lo, hi, labels_for)
         return jsonify({**answer, "model": model_name, "threshold": threshold, "method": method})
     except _Refused as e:
-        return _error(str(e), e.status)
+        return _error(str(e), e.status, **e.extra)
     except FileNotFoundError as e:
         return _error(str(e), 409)
     except ValueError as e:
@@ -654,7 +656,7 @@ def label_view_background():
             return refused
         return jsonify(_fill(volume_id, volume, lo, hi, np.ones_like))
     except _Refused as e:
-        return _error(str(e), e.status)
+        return _error(str(e), e.status, **e.extra)
     except FileNotFoundError as e:
         return _error(str(e), 409)
     except Exception as e:
@@ -707,7 +709,7 @@ def split_view_objects():
             **counts,
         })
     except _Refused as e:
-        return _error(str(e), e.status)
+        return _error(str(e), e.status, **e.extra)
     except FileNotFoundError as e:
         return _error(str(e), 409)
     except ValueError as e:
@@ -745,7 +747,7 @@ def undo_view_labels():
             "can_undo": bool(stack),
         })
     except _Refused as e:
-        return _error(str(e), e.status)
+        return _error(str(e), e.status, **e.extra)
     except FileNotFoundError as e:
         return _error(str(e), 409)
     except Exception as e:

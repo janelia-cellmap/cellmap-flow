@@ -38,9 +38,11 @@ zarr = "==2.18.4"
 numcodecs = "==0.15.0"
 
 [pypi-dependencies]
-# finetune: peft and tensorboard; postprocess: edt. The MinIO binaries the
-# finetune extra also needs are conda packages, in the finetune feature.
-cellmap-flow = { path = ".", editable = true, extras = ["finetune", "postprocess"] }
+# finetune: peft and tensorboard; postprocess: edt; ai-annotate: google-genai,
+# the Vertex AI client for AI-assisted annotation (docs/ai_annotate.md). The
+# MinIO binaries the finetune extra also needs are conda packages, in the
+# finetune feature.
+cellmap-flow = { path = ".", editable = true, extras = ["finetune", "postprocess", "ai-annotate"] }
 
 [feature.finetune.dependencies]
 # MinIO no longer publishes prebuilt binaries; conda-forge builds them.

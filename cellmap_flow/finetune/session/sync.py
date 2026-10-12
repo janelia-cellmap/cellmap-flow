@@ -375,7 +375,7 @@ def periodic_sync_once(*, state, volumes) -> None:
         # and rebuild every layer -- taking the draw tool out of the user's
         # hand and dropping whatever strokes were still buffered behind the
         # brush's commit debounce. The annotated-regions boxes are refreshed
-        # on demand instead, from the "Show Annotated Regions" button.
+        # on demand instead, from the "Redraw Annotated Regions" button.
         sync_all(force=False, state=state, volumes=volumes)
         if _sync_failures["count"]:
             logger.info(f"Periodic annotation sync recovered after {_sync_failures['count']} failure(s)")

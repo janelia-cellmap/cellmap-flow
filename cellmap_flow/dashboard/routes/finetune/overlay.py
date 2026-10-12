@@ -213,7 +213,7 @@ def refresh_annotated_regions_layer(corrections_path=None):
 
     Only ever called for something the user just did: creating a volume,
     importing crops, resuming a session, clicking "Save Annotations to
-    Disk" or "Show Annotated Regions". Nothing calls this on a timer: see
+    Disk" or "Redraw Annotated Regions". Nothing calls this on a timer: see
     the note on _last_annotated_regions for why a push the user did not ask
     for is destructive.
     """

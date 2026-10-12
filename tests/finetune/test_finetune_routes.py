@@ -743,7 +743,7 @@ ANSWERS = [
     pytest.param("get", "/api/finetune/good-regions", None, None, 200, {"success": True, "regions": [], "count": 0},
                  id="good regions"),
     pytest.param("post", "/api/finetune/good-regions/mark-view", {}, "the viewer has a position", 409,
-                 _refused(NO_GOOD_REGIONS_SESSION), id="mark a good region without a session"),
+                 {**_refused(NO_GOOD_REGIONS_SESSION), "needs_volume": True}, id="mark a good region without a session"),
     pytest.param("post", "/api/finetune/good-regions/mark-view", {}, None, 400, _refused("Viewer has no position"),
                  id="mark a good region where the viewer has no position"),
     pytest.param("post", "/api/finetune/good-regions/mark-view", None, "no viewer", 400,
