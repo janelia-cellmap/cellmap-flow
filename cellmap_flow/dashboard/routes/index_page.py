@@ -7,6 +7,7 @@ from cellmap_flow.norm.input_normalize import get_input_normalizers
 from cellmap_flow.post.postprocessors import get_postprocessors_list
 from cellmap_flow.dashboard.requests import SetData, parse
 from cellmap_flow.dashboard.state import get_session
+from cellmap_flow.jobs.lsf import available as bsub_available
 from cellmap_flow.viewer.bootstrap import new_viewer
 
 logger = logging.getLogger(__name__)
@@ -159,6 +160,7 @@ def index():
         if isinstance(mc, BioModelConfig) and mc.name in running_job_names
     ]
     cellpose_panel = cellpose_panel_data(session.models_config, running_job_names)
+    on_cluster = bsub_available()
 
     return render_template(
         "index.html",
@@ -171,7 +173,12 @@ def index():
         default_bioimage_models=default_bioimage_models,
         cellpose_panel=cellpose_panel,
         resample=session.resample,
-        server_config_cached=session.server_config_cached,
+        # The first-run dialog asks for LSF settings (queue, charge group,
+        # workers), which nothing reads where there is no bsub: a laptop
+        # runs every server on itself (jobs.launch). It cannot be closed
+        # without saving, so it is not shown there at all.
+        ask_server_config=not session.server_config_cached and on_cluster,
+        on_cluster=on_cluster,
     )
 
 

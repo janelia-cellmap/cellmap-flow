@@ -267,3 +267,17 @@ def test_each_model_node_carries_its_config(dashboard, applied):
     assert palette == {"catalog/er": {"name": "catalog/er", "category": "catalog", "model_name": "er",
                                       "path": "/models/er"},
                        "mito": {"name": "mito", "type": "script", "script_path": "/mito.py"}}
+
+
+@pytest.mark.parametrize("bsub", [True, False], ids=["cluster", "laptop"])
+def test_the_lsf_settings_are_asked_for_only_where_jobs_go_to_lsf(dashboard, monkeypatch, bsub):
+    """On a Mac (no bsub) every server runs on the machine itself, so the
+    first-run dialog, which cannot be closed without saving queue and charge
+    group, only stood in the way; the GPU queue picker chose nothing."""
+    from cellmap_flow.dashboard.routes import index_page
+
+    monkeypatch.setattr(index_page, "bsub_available", lambda: bsub)
+    html = dashboard.get("/").get_data(as_text=True)
+    assert ('id="serverConfigModal"' in html) is bsub
+    assert ('id="gpuQueueSelect"' in html) is bsub
+    assert ("No cluster here" in html) is not bsub
