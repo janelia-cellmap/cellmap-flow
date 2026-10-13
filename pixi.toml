@@ -5,12 +5,21 @@
 # below). Python dependencies come from pyproject.toml through the editable
 # install; this file adds what PyPI cannot provide: CUDA, and the MinIO
 # server and client and the neuroglancer fork that annotation painting needs.
+#
+# Linux is what deploys (Fileglancer, the cluster); Apple-silicon Macs
+# (osx-arm64) can install it too, to run the viewer and dashboard and serve
+# models on the Mac itself (no bsub there: servers run locally, on the CPU;
+# inference uses CUDA or the CPU, not Apple's GPU). CUDA is Linux-only.
 [workspace]
 name = "cellmap-flow"
 version = "0.2.3"
 description = "Realtime prediction using neuroglancer"
 channels = ["nvidia", "conda-forge", "pytorch"]
-platforms = ["linux-64"]
+platforms = ["linux-64", "osx-arm64"]
+# pixi.lock is lockfile version 7, which pixi reads from 0.68.0 on. An older
+# pixi (Homebrew's lagged at 0.61) did not stop there: it tried to re-solve
+# the lockfile and crashed. With this it says to update instead.
+requires-pixi = ">=0.68.0"
 
 [activation.env]
 # The neuroglancer fork's C++ extension declares `uint64_t` while including
@@ -26,7 +35,6 @@ CELLMAP_FLOW_SERVER_COMMAND = "pixi run cellmap_flow serve"
 [dependencies]
 python = ">=3.11,<4.0"
 pip = "*"
-cuda-toolkit = ">=12.0"
 numpy = "*"
 pyyaml = "*"
 scikit-image = "*"
@@ -36,6 +44,9 @@ pydantic = "*"
 s3fs = "*"
 zarr = "==2.18.4"
 numcodecs = "==0.15.0"
+
+[target.linux-64.dependencies]
+cuda-toolkit = ">=12.0"
 
 [pypi-dependencies]
 # finetune: peft and tensorboard; postprocess: edt; ai-annotate: google-genai,
