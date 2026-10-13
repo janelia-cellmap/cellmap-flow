@@ -182,7 +182,7 @@ A **BioImage Model Zoo** model is trained as it serves: its own normalization, s
 
 A Cellpose model (Cellpose-SAM) predicts, for every pixel, a flow pointing to its cell's centre and a cell probability, so it trains on those: the dashboard picks the **flow** loss for it. Each painted instance's flows are computed the way Cellpose computes them, slice by slice; unpainted voxels are left out of the loss, and so are the flows of instances cut by the training patch's edge (their centre is unknown). Cellpose's own training (`train_seg`) has no such mask: on sparse painting it would learn "no cell" wherever nothing was painted, which is why finetuning goes through cellmap-flow's trainer.
 
-- Training sees XY slices only, as Cellpose segments them: paint each instance whole in the slice you paint it in.
+- Training sees XY slices only, as Cellpose segments them: paint each instance whole in the slice you paint it in. A model served in 3D (`do_3d`) runs the same 2D network on its ZY and ZX planes too, so finetuning it on XY slices trains what it serves; it is not trained on the other two orientations.
 - It trains on 256 x 256 tiles, the only size Cellpose-SAM's network takes, one slice at a time.
 - LoRA (the default) or a full finetune. At batch size 1 both fit an L4 (24 GB): LoRA trains in 5.6 GB at 0.25 s a step, a full finetune in 8 GB at 0.36 s, and the live server's chunks peak at 9 and 13 GB with training alongside. An H100 runs either at 0.06 s a step; larger batches want one.
 - The finetuned model is served as Cellpose is, with its masks or probabilities.

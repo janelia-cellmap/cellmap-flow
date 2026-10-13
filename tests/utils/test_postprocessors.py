@@ -126,6 +126,28 @@ def test_cellpose_masks_follow_the_flows_to_their_objects_and_link_them_across_s
     assert len(np.unique(apart)) - 1 == 6 and len(np.unique(linked)) - 1 == 2
 
 
+def test_cellpose_masks_follow_3d_flows_to_3d_objects():
+    """A 3D model's four channels (flow_z, flow_y, flow_x, cell) are followed
+    in 3D, as Cellpose's do_3D does: each object one id through z."""
+    pytest.importorskip("cellpose.dynamics")
+    from cellpose import dynamics
+
+    from cellmap_flow.post.postprocessors import CellposeMasksPostprocessor
+
+    zz, yy, xx = np.mgrid[:40, :40, :40]
+    labels = np.zeros((40, 40, 40), np.int32)
+    labels[(zz - 20) ** 2 + (yy - 12) ** 2 + (xx - 12) ** 2 < 8 ** 2] = 1
+    labels[(zz - 20) ** 2 + (yy - 28) ** 2 + (xx - 28) ** 2 < 8 ** 2] = 2
+    flows = getattr(dynamics, "masks_to_flows", None) or dynamics.masks_to_flows_gpu
+    flow = np.asarray(flows(labels), np.float32) * 5
+    probability = np.where(labels > 0, 0.95, 0.05).astype(np.float32)
+    masks = CellposeMasksPostprocessor()._process(np.concatenate([flow, probability[np.newaxis]]))
+    assert masks.shape == (1, 40, 40, 40) and masks.dtype == np.uint32
+    assert len(np.unique(masks)) - 1 == 2
+    # One id each through the slices it spans.
+    assert len(np.unique(masks[0, 14:27, 12, 12])) == 1 and masks[0, 20, 12, 12] > 0
+
+
 def test_cellpose_masks_say_which_models_cannot_take_them():
     """Run on a Cellpose server serving its probability, it failed on every chunk
     inside the server, and the page showed an empty layer."""

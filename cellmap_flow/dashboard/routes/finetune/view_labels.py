@@ -260,10 +260,6 @@ def _serves_cellpose_flows(model_name):
     return getattr(type(model_config), "cli_name", None) == "cellpose" and getattr(model_config, "output", None) == "flows"
 
 
-# Cellpose's flows output: the cell probability is its third channel.
-CELLPOSE_CELL_CHANNEL = 2
-
-
 def _model_read_as(model_name, base_model):
     """The model whose config says what ``model_name`` outputs: a finetune's is its base's."""
     if base_model and model_name.startswith(f"{base_model}_finetuned"):
@@ -520,8 +516,11 @@ def _seed_plan(base_model, select_channel):
     if output_type == "affinities":
         return slice(0, len(json.loads(offsets))), output_type, offsets
     if _serves_cellpose_flows(base_model):
-        # Thresholding reads the probability, not the flows beside it.
-        return slice(CELLPOSE_CELL_CHANNEL, CELLPOSE_CELL_CHANNEL + 1), output_type, offsets
+        # Thresholding reads the probability, not the flows beside it: after
+        # flow_y and flow_x (and flow_z first in 3D), as the config says.
+        channel = getattr(find_model_config(base_model), "display_channel", None)
+        channel = 2 if channel is None else channel
+        return slice(channel, channel + 1), output_type, offsets
     return None, output_type, offsets
 
 

@@ -391,19 +391,23 @@ class CellposeMasksPostprocessor(PostProcessor):
     in the chain, on the flows as served. It needs Cellpose, which a
     Cellpose model's server has.
 
-    Each slice is segmented on its own, as Cellpose segments a 2D image;
-    ``stitch_threshold`` above 0 joins a slice's object to the next slice's
-    one it overlaps by that IoU (Cellpose's stitch3D), else each slice's
-    ids follow the previous slice's. Ids are unique within the chunk:
-    follow with MortonSegmentationRelabeling for ids unique across chunks.
+    From a 2D model's flows each slice is segmented on its own, as Cellpose
+    segments a 2D image; ``stitch_threshold`` above 0 joins a slice's object
+    to the next slice's one it overlaps by that IoU (Cellpose's stitch3D),
+    else each slice's ids follow the previous slice's. From a 3D model's
+    (``do_3d``: flow_z, flow_y, flow_x and cell) the chunk is segmented in
+    3D, following the 3D flows, as Cellpose's do_3D does; ``flow_threshold``
+    and ``stitch_threshold`` mean nothing there. Ids are unique within the
+    chunk: follow with MortonSegmentationRelabeling for ids unique across
+    chunks.
 
     Args:
         flow_threshold: how far an object's flows may be from those its
             shape implies before it is dropped (Cellpose's; 0 keeps all).
         cellprob_threshold: the cell probability, as a logit, over which a
             pixel is followed (Cellpose's; 0 is a probability of 0.5).
-        min_size: objects of fewer pixels are removed (per slice; in 3D
-            after stitching).
+        min_size: objects of fewer voxels are removed (per slice; after
+            stitching when stitched; in 3D, per 3D object).
         stitch_threshold: IoU joining objects across slices; 0 is off.
         niter: flow-following steps (Cellpose's default, 200).
     """
@@ -441,15 +445,22 @@ class CellposeMasksPostprocessor(PostProcessor):
                 "CellposeMasksPostprocessor needs Cellpose, which this server's environment does not have: "
                 "use it on a Cellpose model's server (output: flows)"
             ) from e
-        if data.ndim != 4 or data.shape[0] != 3:
+        if data.ndim != 4 or data.shape[0] not in (3, 4):
             raise ValueError(
-                "CellposeMasksPostprocessor needs a Cellpose flows output, 3 channels (flow_y, flow_x, cell), "
-                f"first in the chain; got shape {data.shape}"
+                "CellposeMasksPostprocessor needs a Cellpose flows output, 3 channels (flow_y, flow_x, cell) "
+                f"or in 3D 4 (flow_z, flow_y, flow_x, cell), first in the chain; got shape {data.shape}"
             )
-        flows = np.asarray(data[:2], dtype=np.float32)
-        probability = np.clip(np.asarray(data[2], dtype=np.float64), 1e-7, 1 - 1e-7)
+        flows = np.asarray(data[:-1], dtype=np.float32)
+        probability = np.clip(np.asarray(data[-1], dtype=np.float64), 1e-7, 1 - 1e-7)
         cellprob = np.log(probability / (1 - probability)).astype(np.float32)
         device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+        if data.shape[0] == 4:
+            masks = dynamics.resize_and_compute_masks(
+                flows, cellprob, niter=self.niter, cellprob_threshold=self.cellprob_threshold,
+                flow_threshold=self.flow_threshold, do_3D=True, min_size=self.min_size,
+                max_size_fraction=0.4, device=device,
+            )
+            return np.asarray(masks, dtype=np.uint32).reshape(data.shape[1:])[np.newaxis]
         stitch = self.stitch_threshold > 0 and data.shape[1] > 1
         masks = np.zeros(data.shape[1:], dtype=np.uint32)
         offset = 0

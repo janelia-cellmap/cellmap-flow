@@ -83,6 +83,20 @@ def _panel(dashboard):
 ])
 def test_a_job_is_named_by_its_model_and_any_output_but_the_default(model, output, name):
     assert launch.cellpose_job_name(model, output) == name
+    # In 3D it is another job and layer, so 2D and 3D can run side by side.
+    assert launch.cellpose_job_name(model, output, do_3d=True) == name + "_3d"
+
+
+def test_a_3d_row_runs_its_own_job_in_3d_and_is_ticked_again_as_3d(submit, dashboard):
+    """Link slices means nothing in 3D, so it is left out rather than refused."""
+    submit({"model": "cpsam_v2", "voxel_size": "8", "output": "masks", "do_3d": True, "stitch_threshold": 0.3},
+           {"model": "cpsam_v2", "voxel_size": "8", "output": "masks"})
+    (_, entry3d), (_, entry2d) = (_served_entry(c) for c in submit.commands)
+    assert entry3d["do_3d"] is True and "stitch_threshold" not in entry3d and "do_3d" not in entry2d
+    assert (entry3d["name"], entry2d["name"]) == ("cellpose_sam_v2_masks_3d", "cellpose_sam_v2_masks")
+    get_session().jobs = [_Job("cellpose_sam_v2_masks_3d"), _Job("cellpose_sam_v2_masks")]
+    running = _panel(dashboard)["running"]
+    assert [(r["output"], r["do_3d"]) for r in running] == [("masks", True), ("masks", False)]
 
 
 @pytest.mark.parametrize("typed, sizes", [("64", [64, 64, 64]), ("16, 8,8", [16, 8, 8]), ("", None), (None, None)])
@@ -199,6 +213,6 @@ def test_the_page_lists_the_models_and_ticks_the_running_ones_with_their_setting
     panel = _panel(dashboard)
     assert [m["model"] for m in panel["models"]] == ["cpsam_v2", "cpsam"]
     assert panel["running"] == [
-        {"model": "cpsam_v2", "output": "masks", "voxel_size": [16, 8, 8], "stitch_threshold": 0.3},
-        {"model": "cpsam_v2", "output": "flows", "voxel_size": [64, 64, 64], "stitch_threshold": 0.0},
+        {"model": "cpsam_v2", "output": "masks", "do_3d": False, "voxel_size": [16, 8, 8], "stitch_threshold": 0.3},
+        {"model": "cpsam_v2", "output": "flows", "do_3d": False, "voxel_size": [64, 64, 64], "stitch_threshold": 0.0},
     ]

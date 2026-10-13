@@ -338,11 +338,16 @@ export function initModelsTab({ onModelsSubmitted } = {}) {
   const CELLPOSE_STITCH_TITLE =
     "Cellpose's stitch_threshold: a mask takes the id of the mask in the slice before that it overlaps "
     + "by at least this IoU (0 to 1), within a chunk. Blank or 0: each slice's masks stay apart.";
+  const CELLPOSE_3D_TITLE =
+    "Segment in 3D (Cellpose's do_3D): the network runs on every YX, ZY and ZX plane of a chunk and the "
+    + "flows are followed in 3D, so an object keeps one id through z. Flows get a flow_z channel. About 3x "
+    + "slower than slice by slice; runs beside a 2D row of the same model as its own layer (_3d).";
   let cellposeRowCount = 0;
 
   // One row for ``model`` ({model, label, description}); ``settings``, when
-  // given, are a running model's ({output, voxel_size, stitch_threshold})
-  // and tick it. ``extra`` rows (from "+ output") can be removed.
+  // given, are a running model's ({output, do_3d, voxel_size,
+  // stitch_threshold}) and tick it. ``extra`` rows (from "+ output") can be
+  // removed.
   function cellposeRow(model, settings, extra) {
     cellposeRowCount += 1;
     const id = "chk_cellpose_" + cellposeRowCount;
@@ -383,6 +388,7 @@ export function initModelsTab({ onModelsSubmitted } = {}) {
       const voxel = div.querySelector(".cellpose-voxel").value;
       const row = cellposeRow(model, null, true);
       row.querySelector(".cellpose-voxel").value = voxel;
+      row.querySelector(".cellpose-3d").checked = div.querySelector(".cellpose-3d").checked;
       const select = row.querySelector(".cellpose-output");
       select.value = free || "flows";
       select.dispatchEvent(new Event("change"));
@@ -426,7 +432,18 @@ export function initModelsTab({ onModelsSubmitted } = {}) {
     });
     output.value = (settings && settings.output) || "flows";
 
-    // Masks only: linking each slice's masks to the slice before's.
+    const threeD = document.createElement("input");
+    threeD.type = "checkbox";
+    threeD.className = "form-check-input cellpose-3d";
+    threeD.id = id + "_3d";
+    threeD.title = CELLPOSE_3D_TITLE;
+    threeD.checked = !!(settings && settings.do_3d);
+    const threeDLabel = document.createElement("label");
+    threeDLabel.textContent = "3D";
+    threeDLabel.htmlFor = threeD.id;
+    threeDLabel.title = CELLPOSE_3D_TITLE;
+
+    // 2D masks only: linking each slice's masks to the slice before's.
     const stitchLabel = document.createElement("label");
     stitchLabel.textContent = "Link slices (IoU)";
     stitchLabel.htmlFor = id + "_stitch";
@@ -441,7 +458,7 @@ export function initModelsTab({ onModelsSubmitted } = {}) {
     stitch.placeholder = "off";
     stitch.title = CELLPOSE_STITCH_TITLE;
     if (settings && settings.stitch_threshold) stitch.value = settings.stitch_threshold;
-    settingsRow.append(voxelLabel, voxel, outputLabel, output, stitchLabel, stitch);
+    settingsRow.append(voxelLabel, voxel, outputLabel, output, threeD, threeDLabel, stitchLabel, stitch);
 
     const hint = document.createElement("div");
     hint.className = "zoo-trained";
@@ -450,14 +467,16 @@ export function initModelsTab({ onModelsSubmitted } = {}) {
 
     const showTicked = () => {
       [settingsRow, hint].forEach((el) => { el.style.display = input.checked ? "" : "none"; });
-      const masks = output.value === "masks";
-      stitchLabel.style.display = masks ? "" : "none";
-      stitch.style.display = masks ? "" : "none";
+      // 3D masks are 3D objects already: nothing to link.
+      const linkable = output.value === "masks" && !threeD.checked;
+      stitchLabel.style.display = linkable ? "" : "none";
+      stitch.style.display = linkable ? "" : "none";
       output.title = (CELLPOSE_OUTPUTS.find(([value]) => value === output.value) || [])[2] || "";
     };
     showTicked();
     input.addEventListener("change", showTicked);
     output.addEventListener("change", showTicked);
+    threeD.addEventListener("change", showTicked);
     div.append(settingsRow, hint);
     return div;
   }
@@ -486,13 +505,15 @@ export function initModelsTab({ onModelsSubmitted } = {}) {
     document.querySelectorAll("#cellposeModelList .cellpose-model-item").forEach((row) => {
       if (!row.querySelector(".cellpose-model-checkbox").checked) return;
       const output = row.querySelector(".cellpose-output").value;
+      const do3d = row.querySelector(".cellpose-3d").checked;
       const entry = {
         model: row.dataset.model,
         voxel_size: row.querySelector(".cellpose-voxel").value.trim() || null,
         output,
+        do_3d: do3d,
       };
       const stitch = row.querySelector(".cellpose-stitch").value.trim();
-      if (output === "masks" && stitch !== "") entry.stitch_threshold = stitch;
+      if (output === "masks" && !do3d && stitch !== "") entry.stitch_threshold = stitch;
       selected.push(entry);
     });
     return selected;

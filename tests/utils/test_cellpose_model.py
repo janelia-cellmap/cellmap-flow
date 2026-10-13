@@ -1,6 +1,6 @@
 """The cellpose model type, against a stand-in ``cellpose``: its geometry, how
 it batches Cellpose's tiles, its three outputs, linking masks across slices,
-and that nothing but building
+segmenting in 3D, and that nothing but building
 the model imports cellpose. The real Cellpose 4 is not in the test
 environments (it has an environment of its own, cellpose4)."""
 
@@ -14,7 +14,7 @@ from click.testing import CliRunner
 from funlib.geometry import Coordinate, Roi
 
 from cellmap_flow.models import registry
-from cellmap_flow.models.configs.cellpose import DEFAULT_BATCH_SIZE, OUTPUT_CHANNELS, tiles_per_slice
+from cellmap_flow.models.configs.cellpose import DEFAULT_BATCH_SIZE, OUTPUT_CHANNELS, tiles_per_slice, tiles_per_volume
 from cellmap_flow.models.models_config import CellposeModelConfig
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -38,10 +38,12 @@ class FakeCellposeModel:
         self.calls.append((x.shape, channel_axis, kwargs))
         z, y, xs, _ = x.shape
         # The logit is the voxel's x index, so a crop shows where it came from;
-        # the flows are its z (flowY) and y (flowX) index, likewise.
+        # the flows are its z (flowY) and y (flowX) index, likewise, and in 3D
+        # its z, y and x index (flowZ, flowY, flowX).
         logits = np.broadcast_to(np.arange(xs, dtype=np.float32) - xs / 2, (z, y, xs)).copy()
-        dp = np.stack([np.broadcast_to(np.arange(z, dtype=np.float32)[:, None, None], (z, y, xs)),
-                       np.broadcast_to(np.arange(y, dtype=np.float32)[None, :, None], (z, y, xs))])
+        index = [np.broadcast_to(np.arange(n, dtype=np.float32).reshape(shape), (z, y, xs))
+                 for n, shape in ((z, (-1, 1, 1)), (y, (1, -1, 1)), (xs, (1, 1, -1)))]
+        dp = np.stack(index if kwargs.get("do_3D") else index[:2])
         # Two objects in every slice, numbered 1 and 2 from each slice; linked
         # (stitch_threshold), Cellpose gives them one id through the stack.
         masks = np.zeros((z, y, xs), dtype=np.uint16)
@@ -59,8 +61,15 @@ def fake_cellpose(monkeypatch):
     models.get_user_models = lambda: []
     models.CellposeModel = FakeCellposeModel
     package.models = models
+    # A Cellpose 4: when an earlier test imported the environment's real
+    # Cellpose 3, its cellpose.version stayed loaded, and the version check
+    # refused the stand-in.
+    version = types.ModuleType("cellpose.version")
+    version.version = "4.0.0"
+    package.version = version
     monkeypatch.setitem(sys.modules, "cellpose", package)
     monkeypatch.setitem(sys.modules, "cellpose.models", models)
+    monkeypatch.setitem(sys.modules, "cellpose.version", version)
     FakeCellposeModel.built = []
     return models
 
@@ -202,6 +211,79 @@ def test_linked_slices_are_cellposes_stitching_and_keep_its_ids(fake_cellpose):
     # Stitched ids already run through the chunk: not numbered slice by slice.
     assert [sorted(np.unique(s).tolist()) for s in out[0]] == [[1, 2], [1, 2], [1, 2]]
     assert out.dtype == np.uint64
+
+
+@pytest.mark.parametrize("output, channels", [
+    ("probability", ["cell"]),
+    ("flows", ["flow_z", "flow_y", "flow_x", "cell"]),
+    ("masks", ["cell"]),
+])
+def test_in_3d_a_chunk_is_a_cube_with_context_on_every_side(fake_cellpose, output, channels):
+    """Cellpose's do_3D runs its network on every plane of the chunk in all
+    three orientations: 192 + 2 * 24 = 240 voxels a side is one 256 px tile a
+    plane, 720 tiles for 192^3 voxels."""
+    model = CellposeModelConfig(voxel_size=8, output=output, do_3d=True)
+    config = model.config
+    assert config.write_shape == Coordinate(192 * 8, 192 * 8, 192 * 8)
+    assert config.read_shape == Coordinate(240 * 8, 240 * 8, 240 * 8)
+    assert config.channels == channels and config.block_shape.tolist() == [192, 192, 192, len(channels)]
+    assert model.display_channel == (3 if output == "flows" else None)
+    kwargs = config.eval_kwargs
+    assert (kwargs["do_3D"], kwargs["z_axis"]) == (True, 0) and "anisotropy" not in kwargs
+    assert tiles_per_volume((240, 240, 240), 256) == 720
+
+
+def test_in_3d_an_anisotropic_chunk_is_a_cube_in_nm(fake_cellpose):
+    """Cellpose stretches z by the anisotropy before cutting planes, so z gets
+    as many nm as y and x: half the voxels at twice the size."""
+    model = CellposeModelConfig(voxel_size="16,8,8", do_3d=True, slice_size=100, context=10)
+    assert model.chunk_voxels() == ((50, 100, 100), (5, 10, 10))
+    assert model.config.read_shape == Coordinate(60 * 16, 120 * 8, 120 * 8)
+    assert model.config.eval_kwargs["anisotropy"] == 2.0
+
+
+def test_in_3d_the_chunk_is_one_image_cut_to_its_inside_on_every_axis(fake_cellpose):
+    model = CellposeModelConfig(voxel_size=8, output="flows", do_3d=True, slice_size=20, context=5)
+    idi = ArrayIDI(np.zeros((60, 60, 60), dtype=np.uint8), (8, 8, 8))
+    roi = Roi((80, 80, 160), (20 * 8, 20 * 8, 20 * 8))
+
+    out = model.config.process_chunk(idi, roi)
+
+    assert idi.reads == [roi.grow(Coordinate(40, 40, 40), Coordinate(40, 40, 40))]
+    ((shape, channel_axis, kwargs),) = model.config.model.calls
+    assert shape == (30, 30, 30, 1) and channel_axis == 3 and kwargs["do_3D"] and kwargs["z_axis"] == 0
+    assert out.shape == (4, 20, 20, 20) and out.dtype == np.float32
+    # flowZ, flowY and flowX are the fake's z, y and x index, cut to the inner 20.
+    np.testing.assert_array_equal(out[0, :, 0, 0], np.arange(5, 25))
+    np.testing.assert_array_equal(out[1, 0, :, 0], np.arange(5, 25))
+    np.testing.assert_array_equal(out[2, 0, 0, :], np.arange(5, 25))
+
+
+def test_in_3d_masks_keep_cellposes_ids_through_z(fake_cellpose):
+    model = CellposeModelConfig(voxel_size=8, output="masks", do_3d=True, slice_size=20, context=5)
+    out = model.config.process_chunk(ArrayIDI(np.zeros((30, 30, 30)), (8, 8, 8)), Roi((40, 40, 40), (160, 160, 160)))
+    assert out.shape == (1, 20, 20, 20) and out.dtype == np.uint64
+    assert {tuple(np.unique(s).tolist()) for s in out[0]} == {(1, 2)}
+
+
+@pytest.mark.parametrize("kwargs, message", [
+    ({"do_3d": True, "output": "masks", "stitch_threshold": 0.3}, "3D objects already"),
+    ({"flow3d_smooth": 1.0}, "needs do_3d"),
+    ({"do_3d": True, "flow3d_smooth": -1}, "0 or more"),
+])
+def test_2d_only_and_3d_only_settings_are_refused_in_the_other(kwargs, message):
+    with pytest.raises(ValueError, match=message):
+        CellposeModelConfig(voxel_size=8, **kwargs)
+
+
+def test_in_3d_the_flows_can_be_smoothed_and_the_entry_round_trips(fake_cellpose):
+    model = CellposeModelConfig(voxel_size=8, do_3d="true", flow3d_smooth=1.5, name="cp3d")
+    assert model.do_3d is True and model.config.eval_kwargs["flow3D_smooth"] == 1.5
+    entry = model.to_dict()
+    assert (entry["do_3d"], entry["slice_size"], entry["context"], entry["flow3d_smooth"]) == (True, 192, 24, 1.5)
+    assert registry.build_model(entry, "cp3d").to_dict() == entry
+    assert registry.build_model(model.launch_entry, "cp3d").to_dict() == entry
+    assert "do_3d" not in CellposeModelConfig(voxel_size=8).to_dict()
 
 
 def test_nothing_but_building_the_model_imports_cellpose(monkeypatch):

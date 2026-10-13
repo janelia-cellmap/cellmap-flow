@@ -186,20 +186,24 @@ CELLPOSE_MODELS = {
 }
 
 
-def cellpose_job_name(model: str, output: str) -> str:
+def cellpose_job_name(model: str, output: str, do_3d: bool = False) -> str:
     """A Cellpose model's job, layer and config name: "cpsam_v2" serving all
     its channels (flows, the default) is cellpose_sam_v2, its probability
-    alone cellpose_sam_v2_probability and its masks cellpose_sam_v2_masks.
+    alone cellpose_sam_v2_probability and its masks cellpose_sam_v2_masks;
+    in 3D each ends in _3d.
 
-    The output is in the name, so one model's outputs can run side by side
-    (the probability to look at, the masks to proofread), each its own job
-    and layer; the default output keeps the plain name. The voxel size and
-    the slice linking are not: changing them restarts that job instead
-    (``update_run_models``), rather than leaving the old one running beside.
+    The output and 3D are in the name, so one model's outputs can run side
+    by side (the probability to look at, the masks to proofread; 2D beside
+    3D to compare), each its own job and layer; the default output keeps
+    the plain name. The voxel size and the slice linking are not: changing
+    them restarts that job instead (``update_run_models``), rather than
+    leaving the old one running beside.
     """
     base = "cellpose_" + re.sub(r"^cp", "", model)
     if output != "flows":
         base += "_" + output
+    if do_3d:
+        base += "_3d"
     return re.sub(r"\W+", "_", base).strip("_")
 
 
@@ -217,7 +221,7 @@ def run_cellpose_model(params, st_data):
 
 def _cellpose_params(selections):
     """CellposeModelConfig arguments for each ticked Cellpose model
-    ({"model", "voxel_size", "output", "stitch_threshold"}).
+    ({"model", "voxel_size", "output", "do_3d", "stitch_threshold"}).
 
     Built, and checked by building the config, before anything is stopped
     or started, so a blank voxel size or a bad setting refuses the whole
@@ -225,11 +229,12 @@ def _cellpose_params(selections):
     fall back on, as there is for some zoo models: Cellpose sees any scale,
     and segments well only at the one where objects are about 30 voxels
     across, which only the user knows. ``stitch_threshold`` is read for
-    masks only (the tab sends it with masks only), and 0 is left out.
+    2D masks only (the tab sends it with those only), and 0 is left out.
     """
     params, names = [], set()
     for selection in selections:
         model, output = selection["model"], selection.get("output") or "flows"
+        do_3d = bool(selection.get("do_3d"))
         label = CELLPOSE_MODELS[model][0] if model in CELLPOSE_MODELS else model
         if model not in CELLPOSE_MODELS:
             raise ValueError(f"{model} is not one of the Models tab's Cellpose models ({', '.join(CELLPOSE_MODELS)})")
@@ -239,11 +244,14 @@ def _cellpose_params(selections):
                 "the objects are about 30 voxels across"
             )
         entry = {"pretrained_model": model, "voxel_size": selection["voxel_size"], "output": output,
-                 "name": cellpose_job_name(model, output)}
-        if output == "masks" and selection.get("stitch_threshold"):
+                 "name": cellpose_job_name(model, output, do_3d)}
+        if do_3d:
+            entry["do_3d"] = True
+        elif output == "masks" and selection.get("stitch_threshold"):
             entry["stitch_threshold"] = selection["stitch_threshold"]
         if entry["name"] in names:
-            raise ValueError(f"{label} ({model}) is ticked twice with output {output}: untick one")
+            raise ValueError(f"{label} ({model}) is ticked twice with output {output}"
+                             f"{' in 3D' if do_3d else ''}: untick one")
         names.add(entry["name"])
         try:
             CellposeModelConfig(**entry)
@@ -310,7 +318,7 @@ def update_run_models(names: List[str], hf_repos: List[str] = None, bioimage_mod
                       cellpose_models: List[dict] = None):
     """Run ``names`` (catalog models), ``hf_repos``, ``bioimage_models``
     ({"id", "voxel_size"} each) and ``cellpose_models`` ({"model",
-    "voxel_size", "output", "stitch_threshold"} each), and stop every other
+    "voxel_size", "output", "do_3d", "stitch_threshold"} each), and stop every other
     model. A ValueError, before anything changes, when a zoo model needs a
     voxel size or a Cellpose model's settings are missing or wrong."""
     session = get_session()

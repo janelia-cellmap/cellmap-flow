@@ -168,14 +168,16 @@ class BioimageSelection(BaseModel):
 
 class CellposeSelection(BaseModel):
     """A Cellpose model ticked on the Models tab's Cellpose panel: its name
-    (cpsam_v2, cpsam), the voxel size typed beside it, its output, and for
-    masks how much two slices' masks must overlap to be linked (IoU; blank or
-    0: not linked). A blank voxel size is kept as None here, and refused by
-    services.launch with a message naming the model."""
+    (cpsam_v2, cpsam), the voxel size typed beside it, its output, whether
+    it segments in 3D, and for 2D masks how much two slices' masks must
+    overlap to be linked (IoU; blank or 0: not linked). A blank voxel size
+    is kept as None here, and refused by services.launch with a message
+    naming the model."""
 
     model: Annotated[str, _required("model", strip=True)] = Field(None, validate_default=True)
     voxel_size: Annotated[Optional[list], BeforeValidator(_voxel_size)] = None
     output: str = "flows"
+    do_3d: bool = False
     stitch_threshold: Annotated[Optional[float], BeforeValidator(
         lambda v: None if v is None or (isinstance(v, str) and not v.strip())
         else _number(v, float, "stitch_threshold"))] = None

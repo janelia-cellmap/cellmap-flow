@@ -247,7 +247,8 @@ arguments, and the examples in [example/](example/).
 
 ### Cellpose
 
-`type: cellpose` runs Cellpose 4 on each z slice of a chunk. Cellpose-SAM sees
+`type: cellpose` runs Cellpose 4 on each z slice of a chunk, or in 3D with
+`do_3d: true` (below). Cellpose-SAM sees
 cells best about 30 voxels across, so pick the `voxel_size` (nm) where yours
 are about that size:
 
@@ -273,12 +274,39 @@ takes the id of the one in the slice before that it overlaps by at least that
 IoU, within a chunk. Cellpose-SAM's weights are for non-commercial use. See
 [example/cellpose_sam.yaml](example/cellpose_sam.yaml).
 
+**In 3D** (`do_3d: true`, Cellpose's `do_3D`), each chunk is segmented as one
+3D image:
+- Cellpose runs its 2D network on every YX, ZY and ZX plane of the chunk and
+  sums the three into 3D flows.
+- Masks follow those flows in 3D, so an object keeps one id through z, with
+  no slice linking needed.
+- `flows` gains a `flow_z` channel first: `flow_z`, `flow_y`, `flow_x`,
+  `cell`. The cell logit is the sum of the three orientations', as in
+  Cellpose.
+- A chunk is a cube with context on every side. The defaults are 192 voxels
+  with 24 of context, so each plane is one 256 px tile.
+- With anisotropic voxels, z gets as many nm as y and x, and Cellpose is
+  given the `anisotropy`.
+- It costs about 3× what slice by slice does for the same voxels: about 5 s
+  for a 192³ chunk on an H100.
+- `flow3d_smooth` (a sigma in voxels) smooths the 3D flows first, if objects
+  break up along z. `stitch_threshold` is 2D only.
+
+```yaml
+    type: cellpose
+    voxel_size: 16
+    do_3d: true
+    output: masks
+```
+
 In the dashboard, the Models tab's *Cellpose* panel lists `cpsam_v2` and
 `cpsam` (the DINO models need a package the `cellpose4` environment lacks).
 Tick one, give its voxel size (required) and output, and *Submit Models*: it
 runs as `cellpose_sam_v2` for the default *Flows + probability*
 (`cellpose_sam_v2_probability`, `cellpose_sam_v2_masks` for the other outputs,
-so *+ output* can run two side by side).
+so *+ output* can run two side by side). Its *3D* box runs it in 3D, as its
+own job and layer ending in `_3d`, so a 2D and a 3D row can be compared side
+by side.
 
 ### BioImage Model Zoo
 
