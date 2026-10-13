@@ -8,8 +8,8 @@
 #
 # Linux is what deploys (Fileglancer, the cluster); Apple-silicon Macs
 # (osx-arm64) can install it too, to run the viewer and dashboard and serve
-# models on the Mac itself (no bsub there: servers run locally, on the CPU;
-# inference uses CUDA or the CPU, not Apple's GPU). CUDA is Linux-only.
+# models on the Mac itself (no bsub there: servers run locally; Cellpose
+# picks Apple's GPU itself, other models run on the CPU). CUDA is Linux-only.
 [workspace]
 name = "cellmap-flow"
 version = "0.2.3"

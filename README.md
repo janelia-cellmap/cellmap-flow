@@ -52,7 +52,7 @@ pixi run cellmap_flow view -d data_path
 
 It installs on Linux (x86-64) and on Apple-silicon Macs. On a Mac:
 - **Compiler:** install Apple's command-line tools first (`xcode-select --install`). The neuroglancer fork used for painting annotations is compiled during `pixi install`.
-- **Model servers:** a Mac has no cluster to submit jobs to, so the dashboard runs each model's server on the Mac itself, on the CPU. Inference uses CUDA or the CPU, not Apple's GPU, so expect it to be slow.
+- **Model servers:** a Mac has no cluster to submit jobs to, so the dashboard runs each model's server on the Mac itself. Cellpose models use Apple's GPU (Cellpose picks it itself); every other model runs on the CPU, since cellmap-flow's own inference uses CUDA or the CPU, so expect those to be slow.
 - **CUDA:** it is Linux-only.
 
 Model families whose dependencies clash with the default environment run in
