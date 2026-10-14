@@ -264,6 +264,11 @@ class ModelConfig:
     # opens on it, or, beside flow_y and flow_x channels, dims their colours
     # by it (viewer.layers).
     display_channel = None
+    # Whether the model normalizes its raw input itself (Cellpose each slice
+    # to its 1st-99th percentile, a zoo model by its description's
+    # preprocessing). The dashboard then suggests no input normalization for
+    # it: it suggested [-1, 1], as for any model that declares nothing.
+    normalizes_input = False
     # Whether the finetune trainer can train this type's models: it trains
     # the module ``trainable_model()`` gives, and serves the result through
     # ``serve_trained``. A type sets it once those two do the right thing for

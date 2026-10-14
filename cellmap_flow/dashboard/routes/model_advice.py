@@ -164,12 +164,22 @@ def model_advice():
             )
 
         # Input side is a declared convention, not something we can observe.
-        entry["input_norm_suggestion"] = suggest_input_norm(
-            framework=meta.get("framework"),
-            raw_dtype=raw_dtype,
-            source=meta.get("repo") or meta.get("folder_path"),
-            data_range=raw_range,
-        )
+        if getattr(by_name.get(name), "normalizes_input", False):
+            # No suggestion, so the page shows none: [-1, 1] was suggested
+            # for a Cellpose model, which normalizes each slice itself.
+            entry["input_norm_suggestion"] = {
+                "input_norm": None,
+                "order": [],
+                "reason": "The model normalizes its input itself",
+                "confidence": "high",
+            }
+        else:
+            entry["input_norm_suggestion"] = suggest_input_norm(
+                framework=meta.get("framework"),
+                raw_dtype=raw_dtype,
+                source=meta.get("repo") or meta.get("folder_path"),
+                data_range=raw_range,
+            )
         # A "low" confidence suggestion is just the dtype default, made without
         # knowing the training framework -- reporting a mismatch against it
         # would flag a correct hand-tuned config as wrong. Say "unknown"
