@@ -38,10 +38,13 @@ console.log("[compute] WebGPU available:", typeof navigator !== "undefined" && !
 
 // Limit concurrent inferences. Neuroglancer may request many chunks at once
 // (its "Concurrent chunk requests"), but each is a full volumetric forward pass;
-// running them all at once exhausts GPU/CPU memory. Gate to a small number.
-const MAX_CONCURRENT = 2;
+// running them all at once exhausts GPU/CPU memory. It must also be 1: an
+// onnxruntime-web InferenceSession is not re-entrant, and two overlapping
+// session.run() calls on the WebGPU EP never resolve (0 blocks done, page hangs).
+const MAX_CONCURRENT = 1;
 let inflight = 0;
 let announcedFirst = false;
+let blocksDone = 0;
 const waiters = [];
 function acquire() {
   if (inflight < MAX_CONCURRENT) {
@@ -170,7 +173,7 @@ async function handleChunk(meta, cz, cy, cx) {
     announcedFirst = true;
     self.postMessage({
       type: "status",
-      text: "first inference — compiling WebGPU kernels (can take 10–60 s)…",
+      text: "first inference — compiling GPU kernels (first block can take a few seconds)…",
     });
   }
   await acquire();
@@ -184,6 +187,10 @@ async function handleChunk(meta, cz, cy, cx) {
     release();
   }
   const ms = performance.now() - t0;
+  blocksDone++;
+  if (blocksDone === 1 || blocksDone % 10 === 0) {
+    self.postMessage({ type: "status", text: `running · ${blocksDone} block(s) done · last ${Math.round(ms)} ms` });
+  }
   const outDims = Array.from(out.dims);
 
   let nd;
