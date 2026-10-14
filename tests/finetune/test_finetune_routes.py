@@ -543,6 +543,7 @@ JOB = {"job_id": "j", "lsf_job_id": None, "model_name": "m", "output_dir": "<tmp
        "status": "RUNNING", "created_at": "<time>", "log_file": "<tmp>/runs/r/training_log.txt",
        "finetuned_model_name": None, "model_yaml_path": None, "current_epoch": 0, "total_epochs": 10,
        "inference_server_url": None, "inference_server_ready": False, "corrections_path": None, "loss": None,
+       "loss_epoch": None,
        "progress_percent": 0.0}
 
 
