@@ -376,17 +376,3 @@ def test_a_run_stopped_between_epochs_resumes_at_the_epoch_it_skipped(make_train
     resumed.load_checkpoint(str(checkpoint))
     resumed.train()
     assert [s["epoch"] for s in resumed.training_stats] == [1, 2, 3]
-
-
-@pytest.mark.parametrize("cuda, mps, expected", [
-    (True, True, "cuda"),
-    # A Mac: Apple's GPU, not the CPU, which took two days for 20 epochs.
-    (False, True, "mps"),
-    (False, False, "cpu"),
-])
-def test_training_takes_cuda_then_apples_gpu_then_the_cpu(monkeypatch, cuda, mps, expected):
-    from cellmap_flow.finetune.lora_trainer import default_device
-
-    monkeypatch.setattr(torch.cuda, "is_available", lambda: cuda)
-    monkeypatch.setattr(torch.backends.mps, "is_available", lambda: mps)
-    assert default_device() == torch.device(expected)

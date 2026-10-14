@@ -433,8 +433,9 @@ class CellposeMasksPostprocessor(PostProcessor):
         return None
 
     def _process(self, data):
+        from cellmap_flow.utils.device import best_device
+
         try:
-            import torch
             from cellpose import dynamics, utils
         except ImportError as e:
             raise RuntimeError(
@@ -449,7 +450,7 @@ class CellposeMasksPostprocessor(PostProcessor):
         flows = np.asarray(data[:2], dtype=np.float32)
         probability = np.clip(np.asarray(data[2], dtype=np.float64), 1e-7, 1 - 1e-7)
         cellprob = np.log(probability / (1 - probability)).astype(np.float32)
-        device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+        device = best_device()
         stitch = self.stitch_threshold > 0 and data.shape[1] > 1
         masks = np.zeros(data.shape[1:], dtype=np.uint32)
         offset = 0

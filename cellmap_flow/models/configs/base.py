@@ -39,13 +39,10 @@ logger = logging.getLogger(__name__)
 
 
 def _get_device():
-    """Get the appropriate device (CUDA if available, else CPU)."""
-    # Imported here rather than at module scope: importing torch costs
-    # ~7s, and the CLI builds its command list from this module, so
-    # `cellmap_flow --help` paid that before printing anything.
-    import torch
+    """The device models are loaded onto: CUDA, else Apple's GPU, else the CPU (``best_device``)."""
+    from cellmap_flow.utils.device import best_device
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = best_device()
     logger.info(f"Using device: {device}")
     return device
 

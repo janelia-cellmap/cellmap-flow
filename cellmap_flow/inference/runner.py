@@ -153,6 +153,10 @@ def predict(read_roi, write_roi, config, **kwargs):
     with timing.stage("read"):  # and normalize, which the idi does as it reads
         raw_input = idi.to_ndarray_ts(read_roi)
     raw_input = np.expand_dims(raw_input, (0, 1))
+    if raw_input.dtype == np.float64:
+        # Apple's GPU (MPS) holds no float64, and moving such a tensor there
+        # fails; the forward below takes float32 (or half) anyway.
+        raw_input = raw_input.astype(np.float32)
 
     # Only the transfer, the forward and the copy back take a device slot;
     # the read and the normalization above overlap another chunk's forward.
@@ -201,10 +205,10 @@ class ModelRunner:
 
         self.device_slots = device_slots
 
-        if torch.cuda.is_available():
-            self.device = torch.device("cuda")
-        else:
-            self.device = torch.device("cpu")
+        from cellmap_flow.utils.device import best_device
+
+        self.device = best_device()
+        if self.device.type == "cpu":
             logger.warning("No GPU available, using CPU")
         # torch.backends.cudnn.allow_tf32 = True  # May help performance with newer cuDNN
         # torch.backends.cudnn.enabled = True
