@@ -6,11 +6,20 @@
 // plus { provider, ms } for chunk results (used by the page's stats HUD).
 // Load the pipeline with this worker's cache-busting query (?v=…) so a normal
 // reload picks up new worker code (no SW unregister / hard-reload needed).
-const { handleCf } = await import("./compute.js" + self.location.search);
+// Not awaited at top level: messages that arrive before onmessage is assigned are
+// dropped, and a page opened from a shared link sends its first chunk requests
+// while compute.js (and ORT from the CDN) is still loading.
+const computeReady = import("./compute.js" + self.location.search);
 
 // Report device info once so the page can show which GPU/CPU is in use.
 (async () => {
-  self.postMessage({ type: "status", text: "compute worker loaded" });
+  try {
+    await computeReady;
+    self.postMessage({ type: "status", text: "compute worker loaded" });
+  } catch (err) {
+    self.postMessage({ type: "status", text: "ERROR: compute pipeline failed to load: " + String((err && err.message) || err) });
+    return;
+  }
   const isolated = self.crossOriginIsolated === true;
   const info = {
     cores: navigator.hardwareConcurrency || null,
@@ -32,6 +41,7 @@ const { handleCf } = await import("./compute.js" + self.location.search);
 self.onmessage = async (e) => {
   const { id, segment, tail } = e.data;
   try {
+    const { handleCf } = await computeReady;
     const r = await handleCf(segment, tail);
     const transfer = r.body instanceof ArrayBuffer ? [r.body] : [];
     self.postMessage(
