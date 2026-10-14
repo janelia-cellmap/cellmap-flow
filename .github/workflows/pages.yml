@@ -1,0 +1,75 @@
+name: Deploy serverless web to gh-pages-serveless
+
+# Builds Neuroglancer (so it is served same-origin — the service worker can only
+# intercept chunk requests from clients it controls) and publishes web/ to the
+# `gh-pages-serveless` branch. Configure GitHub Pages with Source = "Deploy from
+# a branch", Branch = gh-pages-serveless, folder = / (root).
+on:
+  push:
+    branches: [serverless]
+    paths: ["web/**", ".github/workflows/pages.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write # request a Pages rebuild via the API after pushing the branch
+
+concurrency:
+  group: gh-pages-serveless
+  cancel-in-progress: true
+
+env:
+  NEUROGLANCER_REF: v2.41.2 # pinned upstream build
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Build Neuroglancer
+        run: |
+          git clone --depth 1 --branch "${NEUROGLANCER_REF}" \
+            https://github.com/google/neuroglancer.git /tmp/neuroglancer
+          cd /tmp/neuroglancer
+          npm ci
+          npm run build
+          # Locate the built client (find index.html rather than assume dist/client).
+          out_index=$(find dist -name index.html | head -1)
+          if [ -z "$out_index" ]; then echo "neuroglancer build output not found" >&2; exit 1; fi
+          mkdir -p "${GITHUB_WORKSPACE}/web/vendor/neuroglancer"
+          cp -r "$(dirname "$out_index")"/. "${GITHUB_WORKSPACE}/web/vendor/neuroglancer/"
+          # Served from a subdirectory: make root-anchored asset paths relative
+          # (no-op if already relative; the negative class skips // protocol-relative URLs).
+          sed -i -E 's#(src|href)="/([^/])#\1="./\2#g' \
+            "${GITHUB_WORKSPACE}/web/vendor/neuroglancer/index.html"
+
+      - name: Publish web/ to gh-pages-serveless
+        run: |
+          touch web/.nojekyll   # serve files verbatim (don't run Jekyll)
+          cd web
+          git init -q -b gh-pages-serveless
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -q -m "Deploy web/ + neuroglancer from ${GITHUB_SHA}"
+          git push -f "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
+            gh-pages-serveless:gh-pages-serveless
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Request a GitHub Pages build
+        # Pushes made with GITHUB_TOKEN do not trigger the pages-build-deployment
+        # workflow, so the branch-based Pages site never rebuilds on its own.
+        # Explicitly request a build (requires Pages already set to this branch).
+        run: |
+          curl -sf -X POST \
+            -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/pages/builds"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>CellMap Flow — Serverless</title>
+    <style>
+      :root { color-scheme: dark; }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0; font: 14px/1.5 ui-monospace, "SF Mono", Menlo, monospace;
+        background: #0d1117; color: #c9d1d9; display: flex; height: 100vh;
+      }
+      aside {
+        width: 380px; flex: none; padding: 18px; overflow-y: auto;
+        border-right: 1px solid #21262d; background: #0d1117;
+      }
+      main { flex: 1; display: flex; flex-direction: column; }
+      iframe { flex: 1; border: 0; width: 100%; background: #000; }
+      h1 { font-size: 16px; margin: 0 0 4px; color: #58a6ff; }
+      h2 { font-size: 13px; margin: 20px 0 8px; color: #8b949e; text-transform: uppercase; letter-spacing: .05em; }
+      label { display: block; margin: 8px 0 2px; color: #8b949e; font-size: 12px; }
+      input, textarea, select {
+        width: 100%; padding: 6px 8px; background: #161b22; color: #c9d1d9;
+        border: 1px solid #30363d; border-radius: 6px; font: inherit;
+      }
+      .row { display: flex; gap: 8px; }
+      .row > * { flex: 1; }
+      button {
+        margin-top: 12px; padding: 8px 12px; background: #238636; color: #fff;
+        border: 0; border-radius: 6px; cursor: pointer; font: inherit; width: 100%;
+      }
+      button.secondary { background: #21262d; color: #c9d1d9; }
+      #log {
+        margin-top: 14px; padding: 8px; background: #161b22; border: 1px solid #21262d;
+        border-radius: 6px; font-size: 11px; max-height: 180px; overflow-y: auto; white-space: pre-wrap;
+      }
+      .hint { font-size: 11px; color: #6e7681; margin-top: 2px; }
+      code { color: #79c0ff; }
+      #stats {
+        margin-top: 12px; padding: 8px 10px; background: #161b22; border: 1px solid #21262d;
+        border-radius: 6px; display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; font-size: 11px;
+      }
+      #stats span { color: #6e7681; }
+      #stats b { color: #c9d1d9; font-weight: 600; text-align: right; word-break: break-all; }
+    </style>
+  </head>
+  <body>
+    <aside>
+      <h1>CellMap Flow — Serverless</h1>
+      <div class="hint">Browser-side ONNX inference. Chunks are computed by a service worker; no backend.</div>
+
+      <h2>Model</h2>
+      <label>Name</label>
+      <input id="name" value="mito_test" />
+      <label>ONNX model</label>
+      <select id="onnxType">
+        <option value="url">remote URL</option>
+        <option value="file">local file</option>
+      </select>
+      <input id="onnxUrl" placeholder="https://.../model.onnx" />
+      <input id="onnxFile" type="file" accept=".onnx" style="display:none" />
+      <label>Compute backend</label>
+      <select id="backend">
+        <option value="auto">auto (WebGPU, fall back to CPU)</option>
+        <option value="webgpu">WebGPU only (GPU)</option>
+        <option value="wasm">WASM only (CPU)</option>
+      </select>
+      <label>Max concurrent inferences</label>
+      <input id="maxConcurrent" type="number" min="1" step="1" value="1" />
+      <div class="hint">Forward passes run at the same time. Keep 1 for WebGPU: overlapping runs on one session can hang. Use 2+ only for WASM / experiments.</div>
+
+      <div class="row">
+        <div><label>Input size (z,y,x vox)</label><input id="inputSize" value="178,178,178" /></div>
+        <div><label>Output size (z,y,x vox)</label><input id="outputSize" value="56,56,56" /></div>
+      </div>
+      <div class="row">
+        <div><label>Input voxel (z,y,x nm)</label><input id="inputVox" value="16,16,16" /></div>
+        <div><label>Output voxel (z,y,x nm)</label><input id="outputVox" value="16,16,16" /></div>
+      </div>
+      <div class="row">
+        <div><label>Channels</label><input id="channels" value="1" /></div>
+        <div><label>Has channel axis</label>
+          <select id="hasChannel"><option value="true">true</option><option value="false">false</option></select>
+        </div>
+      </div>
+
+      <h2>Input data</h2>
+      <div class="row">
+        <div><label>Source</label>
+          <select id="sourceType"><option value="remote">remote (http/s3/gs)</option><option value="local">local directory</option></select>
+        </div>
+      </div>
+      <div id="remoteWrap">
+        <label>Zarr URL (CORS-enabled)</label>
+        <input id="sourceUrl" placeholder="https://host/dataset.zarr/.../fibsem-uint8" />
+        <div class="hint">Point at the multiscale <b>group</b> (parent of s0/s1/…); the scale matching the input voxel size is chosen automatically. A direct array URL also works.</div>
+      </div>
+      <div id="localWrap" style="display:none">
+        <button class="secondary" id="pickDir" type="button">Pick local Zarr directory…</button>
+        <div class="hint" id="dirStatus">No directory selected. (Chromium only.)</div>
+        <label>Array sub-path within picked dir (optional)</label>
+        <input id="localPath" placeholder="e.g. s0" />
+      </div>
+
+      <h2>Normalizers / postprocessors</h2>
+      <label>input_norm (JSON list)</label>
+      <textarea id="norms" rows="3">[{"name":"MinMaxNormalizer","min_value":0,"max_value":255},{"name":"LambdaNormalizer","expression":"2*x-1"}]</textarea>
+      <label>postprocess (JSON list)</label>
+      <textarea id="post" rows="3">[]</textarea>
+      <div class="hint">v1 supports MinMax/Lambda/ZScore norms and Default/Threshold/ChannelSelection/Lambda post.</div>
+
+      <button id="launch">Register &amp; open in Neuroglancer</button>
+
+      <h2>Compute</h2>
+      <div id="stats">
+        <span>Status</span><b id="stStatus">starting…</b>
+        <span>Backend</span><b id="stBackend">—</b>
+        <span>Device</span><b id="stDevice">—</b>
+        <span>CPU threads</span><b id="stThreads">—</b>
+        <span>Blocks done</span><b id="stBlocks">0</b>
+        <span>In-flight</span><b id="stInflight">0</b>
+        <span>Last / avg</span><b id="stMs">—</b>
+        <span>Throughput</span><b id="stRate">—</b>
+      </div>
+      <button class="secondary" id="resetGpu" type="button">Reset WebGPU (free GPU memory &amp; model sessions)</button>
+      <div class="hint">Restarts the compute worker: drops the cached ONNX sessions and the WebGPU device (also recovers a stuck run). Chunks reload on the next view change. Chrome's on-disk shader cache can't be cleared from a page.</div>
+      <div id="log"></div>
+    </aside>
+    <main>
+      <iframe id="ng" title="Neuroglancer"></iframe>
+    </main>
+
+    <script type="module">
+      import { putModel, putHandle, putBlob } from "./local-store.js";
+
+      const $ = (id) => document.getElementById(id);
+      const log = (m) => { const el = $("log"); el.textContent += m + "\n"; el.scrollTop = el.scrollHeight; };
+      const ARGS_KEY = "__CFLOW_ARGS__";
+      const nums = (s) => s.split(",").map((x) => Number(x.trim()));
+
+      // Base path under which sw.js is scoped (directory of this page).
+      const BASE = location.pathname.replace(/[^/]*$/, "").replace(/\/$/, "");
+      const NG_BASE = `${BASE}/vendor/neuroglancer/`; // bundled, same-origin (see README)
+
+      // ---- compute worker (runs zarr read + ONNX; SW can't, no dynamic import)
+      // Cache-bust the worker (and its module graph) so a normal reload picks up
+      // new code — GitHub Pages caches JS for 10 min otherwise.
+      const CACHE_BUST = `?v=${Date.now()}`;
+      const computePending = new Map();
+      let computeSeq = 0;
+      let compute = null;
+
+      // ---- live compute stats (HUD) ---------------------------------------
+      const stats = { blocks: 0, ms: [], times: [] };
+      const fmt = (id, v) => { $(id).textContent = v; };
+      function recordStat(d) {
+        if (d.provider) {
+          fmt("stBackend", d.provider === "webgpu" ? "WebGPU (GPU)" : "WASM (CPU)");
+          $("stBackend").style.color = d.provider === "webgpu" ? "#3fb950" : "#d29922";
+        }
+        if (typeof d.ms === "number") {
+          stats.blocks++;
+          stats.ms.push(d.ms);
+          if (stats.ms.length > 30) stats.ms.shift();
+          stats.times.push(performance.now());
+          if (stats.times.length > 200) stats.times.shift();
+        }
+      }
+      function updateHud() {
+        fmt("stBlocks", stats.blocks);
+        fmt("stInflight", computePending.size);
+        if (stats.ms.length) {
+          const last = stats.ms[stats.ms.length - 1];
+          const avg = stats.ms.reduce((a, b) => a + b, 0) / stats.ms.length;
+          fmt("stMs", `${last.toFixed(0)} / ${avg.toFixed(0)} ms`);
+          const recent = stats.times.filter((t) => t >= performance.now() - 3000);
+          fmt("stRate", `${(recent.length / 3).toFixed(1)} blk/s`);
+        }
+      }
+      setInterval(updateHud, 400);
+
+      const onComputeMessage = (e) => {
+        const d = e.data;
+        if (d.type === "device") {
+          fmt("stDevice", d.info.gpu || `CPU ×${d.info.cores || "?"}`);
+          fmt("stThreads", d.info.isolated ? `${d.info.threads} (isolated)` : "1 (not isolated)");
+          return;
+        }
+        if (d.type === "status") {
+          fmt("stStatus", d.text);
+          if (d.provider) {
+            fmt("stBackend", d.provider === "webgpu" ? "WebGPU (GPU)" : "WASM (CPU)");
+            $("stBackend").style.color = d.provider === "webgpu" ? "#3fb950" : "#d29922";
+          }
+          log(`[compute] ${d.text}`);
+          return;
+        }
+        recordStat(d);
+        const cb = computePending.get(d.id);
+        if (cb) { computePending.delete(d.id); cb(d); }
+        updateHud();
+      };
+      const onComputeError = (e) => {
+        fmt("stStatus", `worker load error: ${e.message || e}`);
+        log(`[worker] ${e.message || e}`);
+      };
+      function startCompute() {
+        compute = new Worker(`${BASE}/compute-worker.js${CACHE_BUST}`, { type: "module" });
+        compute.onmessage = onComputeMessage;
+        compute.onerror = onComputeError;
+      }
+      startCompute();
+
+      // Reset: terminating the worker destroys its ORT sessions and WebGPU device,
+      // freeing GPU memory (and unblocking a hung run). Pending chunks fail with 503;
+      // Neuroglancer re-requests them when the view changes.
+      $("resetGpu").onclick = () => {
+        compute.terminate();
+        for (const cb of computePending.values()) {
+          cb({ ok: false, status: 503, error: "compute worker reset" });
+        }
+        computePending.clear();
+        stats.blocks = 0; stats.ms = []; stats.times = [];
+        ["stBackend", "stMs", "stRate"].forEach((id) => fmt(id, "—"));
+        startCompute();
+        updateHud();
+        log("[compute] reset: sessions and WebGPU device released, worker restarted");
+      };
+
+      // ---- service worker -------------------------------------------------
+      if ("serviceWorker" in navigator) {
+        navigator.serviceWorker
+          .register(`${BASE}/sw.js`, { type: "module", updateViaCache: "none" })
+          .then((r) => { r.update(); log(`[sw] registered (scope ${r.scope})`); })
+          .catch((e) => log(`[sw] registration failed: ${e}`));
+
+        // Bridge: SW asks us to compute a /cf/ response; forward to the worker.
+        navigator.serviceWorker.addEventListener("message", (e) => {
+          if (e.data?.type !== "computeCf") return;
+          const port = e.ports[0];
+          const id = ++computeSeq;
+          computePending.set(id, (data) => {
+            const body = data.body;
+            const transfer = body instanceof ArrayBuffer ? [body] : [];
+            port.postMessage(
+              { ok: data.ok, status: data.status, contentType: data.contentType, body, error: data.error },
+              transfer
+            );
+          });
+          compute.postMessage({ id, segment: e.data.segment, tail: e.data.tail });
+        });
+      } else {
+        log("[sw] service workers unavailable in this browser");
+      }
+
+      // ---- source picker --------------------------------------------------
+      let pickedHandle = null;
+      $("sourceType").onchange = (e) => {
+        const local = e.target.value === "local";
+        $("localWrap").style.display = local ? "" : "none";
+        $("remoteWrap").style.display = local ? "none" : "";
+      };
+      $("onnxType").onchange = (e) => {
+        const file = e.target.value === "file";
+        $("onnxFile").style.display = file ? "" : "none";
+        $("onnxUrl").style.display = file ? "none" : "";
+      };
+      $("pickDir").onclick = async () => {
+        try {
+          pickedHandle = await window.showDirectoryPicker();
+          const perm = await pickedHandle.requestPermission({ mode: "read" });
+          $("dirStatus").textContent =
+            perm === "granted" ? `Selected: ${pickedHandle.name} (read granted)` : `Permission: ${perm}`;
+        } catch (e) {
+          log(`[picker] ${e}`);
+        }
+      };
+
+      // ---- args encoding (urlsafe base64, mirrors web_utils.encode_to_str) -
+      // The full model meta is embedded in the layer source so a shared URL is
+      // self-contained (remote ONNX + remote data travel; local files can't).
+      const encodeMeta = (meta) =>
+        btoa(JSON.stringify(meta)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+
+      const isSegmentation = (post) =>
+        post.some((p) => ["ThresholdPostprocessor", "LabelPostprocessor", "MortonSegmentationRelabeling"].includes(p.name));
+
+      // ---- launch ---------------------------------------------------------
+      $("launch").onclick = async () => {
+        try {
+          const name = $("name").value.trim();
+          const input_norm = JSON.parse($("norms").value || "[]");
+          const postprocess = JSON.parse($("post").value || "[]");
+          const sourceType = $("sourceType").value;
+
+          let source;
+          let rawSource; // for the raw display layer
+          if (sourceType === "local") {
+            if (!pickedHandle) return log("[err] pick a local directory first");
+            const handleKey = `src:${name}`;
+            await putHandle(handleKey, pickedHandle);
+            const path = $("localPath").value.trim();
+            source = { type: "local", handleKey, path };
+            // SW serves the raw dir under /local/<handleKey>/<path>
+            rawSource = `zarr://${location.origin}${BASE}/local/${handleKey}/${path}`;
+          } else {
+            const url = $("sourceUrl").value.trim();
+            source = { type: "remote", url };
+            rawSource = `zarr://${url}`;
+          }
+
+          // ONNX model: remote URL or a local file stashed in IndexedDB for the SW.
+          let onnxUrl = "";
+          let onnxKey = "";
+          if ($("onnxType").value === "file") {
+            const f = $("onnxFile").files[0];
+            if (!f) return log("[err] choose a local .onnx file first");
+            const bytes = new Uint8Array(await f.arrayBuffer());
+            onnxKey = `onnx:${name}`;
+            await putBlob(onnxKey, bytes);
+            log(`[model] stored local ONNX (${(bytes.length / 1e6).toFixed(1)} MB)`);
+          } else {
+            onnxUrl = $("onnxUrl").value.trim();
+          }
+
+          const meta = {
+            onnxUrl,
+            onnxKey,
+            input_size: nums($("inputSize").value),
+            output_size: nums($("outputSize").value),
+            input_voxel_size: nums($("inputVox").value),
+            output_voxel_size: nums($("outputVox").value),
+            output_channels: Number($("channels").value),
+            has_channel: $("hasChannel").value === "true",
+            backend: $("backend").value,
+            max_concurrent: Math.max(1, Math.floor(Number($("maxConcurrent").value)) || 1),
+            source,
+            input_norm,
+            postprocess,
+          };
+          await putModel(name, meta);
+          log(`[model] registered "${name}"`);
+
+          // Build Neuroglancer state — full meta embedded so the URL is shareable.
+          const segment = `${encodeURIComponent(name)}${ARGS_KEY}${encodeMeta(meta)}${ARGS_KEY}`;
+          const modelSource = `zarr://${location.origin}${BASE}/cf/${segment}`;
+
+          const state = {
+            layers: [
+              { type: "image", name: "raw", source: rawSource },
+              {
+                type: isSegmentation(postprocess) ? "segmentation" : "image",
+                name,
+                source: modelSource,
+                ...(isSegmentation(postprocess)
+                  ? {}
+                  : {
+                      shader:
+                        "#uicontrol invlerp normalized(range=[0,1], window=[0,1]);\n" +
+                        '#uicontrol vec3 color color(default="green");\n' +
+                        "void main(){emitRGB(color*normalized());}",
+                    }),
+              },
+            ],
+            // Single cross-section by default: each block is a full ONNX forward
+            // pass, and "4panel" (3 sections + 3D volume) multiplies the blocks
+            // requested ~4x. Switch layouts in the NG UI if you want more views.
+            layout: "xy",
+            // Each chunk is a full ONNX forward pass; don't let NG request 100 at
+            // once (the worker also caps concurrency). Keeps memory in check.
+            concurrentDownloads: 8,
+          };
+          openViewer("#!" + encodeURIComponent(JSON.stringify(state)));
+          log("[ng] viewer state loaded");
+        } catch (e) {
+          log(`[err] ${e}`);
+        }
+      };
+
+      // ---- shareable URL: keep the top-level URL == Neuroglancer state -----
+      // Load Neuroglancer (in the iframe) at the given hash and reflect it onto
+      // the parent URL so the address bar is the full, shareable state.
+      function openViewer(hash) {
+        $("ng").src = `${NG_BASE}${hash}`;
+        history.replaceState(null, "", location.pathname + location.search + hash);
+      }
+
+      // As the user navigates/edits in Neuroglancer, it rewrites its own hash;
+      // mirror that up to the parent URL (same-origin iframe, so we can read it).
+      let syncTimer = 0;
+      $("ng").addEventListener("load", () => {
+        try {
+          const win = $("ng").contentWindow;
+          const mirror = () => {
+            const h = win.location.hash;
+            if (h && h !== location.hash) {
+              history.replaceState(null, "", location.pathname + location.search + h);
+            }
+          };
+          win.addEventListener("hashchange", mirror);
+          // Neuroglancer also mutates the hash without firing hashchange; poll too.
+          clearInterval(syncTimer);
+          syncTimer = setInterval(mirror, 1000);
+        } catch (e) {
+          log(`[sync] ${e}`);
+        }
+      });
+
+      // ---- shared link -> form fields --------------------------------------
+      // The model layer's source embeds the full meta (".../cf/<name>__CFLOW_ARGS__<b64>__CFLOW_ARGS__");
+      // decode it so the dashboard shows the settings the link actually runs with.
+      function metaFromHash(hash) {
+        let text = hash.slice(2);
+        try { text = decodeURIComponent(text); } catch (_) {}
+        const m = text.match(/\/cf\/([^/"\s]+?)__CFLOW_ARGS__([A-Za-z0-9_-]+)__CFLOW_ARGS__/);
+        if (!m) return null;
+        let b64 = m[2].replace(/-/g, "+").replace(/_/g, "/");
+        while (b64.length % 4) b64 += "=";
+        let name = m[1];
+        try { name = decodeURIComponent(name); } catch (_) {}
+        return { name, meta: JSON.parse(atob(b64)) };
+      }
+      function fillForm({ name, meta }) {
+        const set = (id, v) => { if (v !== undefined && v !== null) $(id).value = v; };
+        const csv = (a) => (Array.isArray(a) ? a.join(",") : undefined);
+        set("name", name);
+        if (meta.onnxUrl) {
+          set("onnxType", "url");
+          set("onnxUrl", meta.onnxUrl);
+        } else if (meta.onnxKey) {
+          set("onnxType", "file"); // local file bytes stay in this browser's IndexedDB
+        }
+        $("onnxType").onchange({ target: $("onnxType") });
+        set("backend", meta.backend);
+        set("maxConcurrent", meta.max_concurrent);
+        set("inputSize", csv(meta.input_size));
+        set("outputSize", csv(meta.output_size));
+        set("inputVox", csv(meta.input_voxel_size));
+        set("outputVox", csv(meta.output_voxel_size));
+        set("channels", meta.output_channels);
+        if (typeof meta.has_channel === "boolean") set("hasChannel", String(meta.has_channel));
+        if (meta.source) {
+          set("sourceType", meta.source.type);
+          if (meta.source.type === "remote") set("sourceUrl", meta.source.url);
+          else set("localPath", meta.source.path);
+          $("sourceType").onchange({ target: $("sourceType") });
+        }
+        if (meta.input_norm) set("norms", JSON.stringify(meta.input_norm));
+        if (meta.postprocess) set("post", JSON.stringify(meta.postprocess));
+      }
+
+      // Boot from a shared link: if the page opened with a state hash, load it.
+      if (location.hash.startsWith("#!")) {
+        try {
+          const parsed = metaFromHash(location.hash);
+          if (parsed) {
+            fillForm(parsed);
+            log(`[model] form filled from URL ("${parsed.name}")`);
+          }
+        } catch (e) {
+          log(`[model] could not read settings from URL: ${e}`);
+        }
+        openViewer(location.hash);
+        log("[ng] restored state from URL");
+      }
+    </script>
+  </body>
+</html>
