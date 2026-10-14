@@ -269,7 +269,7 @@
       </div>
       {% else %}
       <div class="text-muted small mb-1" style="max-width: 20rem">
-        No cluster here (no <code>bsub</code>): models run on this machine, on its GPU if PyTorch has CUDA (Cellpose also uses Apple's), otherwise its CPU.
+        No cluster here (no <code>bsub</code>): models run on this machine, on its GPU (CUDA, or Apple's on a Mac) or else its CPU.
       </div>
       {% endif %}
       <div class="form-check mb-1"
