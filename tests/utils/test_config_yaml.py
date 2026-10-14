@@ -15,7 +15,7 @@ import pytest
 import zarr
 
 from cellmap_flow.config.yaml import ConfigError, load_config, resolve_data_path
-from cellmap_flow.jobs import settings
+from cellmap_flow.jobs import lsf, settings
 
 
 @pytest.mark.parametrize("yaml_text, message", [
@@ -27,12 +27,24 @@ from cellmap_flow.jobs import settings
     pytest.param('data_path: /d.zarr\ncharge_group: g\nresample: "false"\n', "true or false", id="resample-not-a-bool"),
 ])
 def test_a_bad_yaml_file_is_a_config_error(tmp_path, monkeypatch, yaml_text, message):
+    monkeypatch.setattr(lsf, "available", lambda: True)  # on the cluster, where a charge group is needed
     monkeypatch.setattr(settings, "load_server_config_cache", lambda: None)
     monkeypatch.setitem(settings.SERVER_CONFIG_DEFAULTS, "charge_group", "")
     (tmp_path / "c.yaml").write_text(yaml_text)
     with pytest.raises(ConfigError, match=message) as raised:
         load_config(str(tmp_path / "c.yaml"))
     assert not isinstance(raised.value, SystemExit)  # the dashboard's handlers answer it
+
+
+@pytest.mark.parametrize("cluster_settings", ["", "charge_group: ''\n"])
+def test_where_there_is_no_cluster_no_charge_group_is_needed(tmp_path, monkeypatch, cluster_settings):
+    """A Mac has no bsub: its servers run on it, and an exported YAML,
+    which leaves out the charge group there (or gave it as ''), loads."""
+    monkeypatch.setattr(lsf, "available", lambda: False)
+    monkeypatch.setattr(settings, "load_server_config_cache", lambda: None)
+    (tmp_path / "c.yaml").write_text("data_path: /d.zarr\n" + cluster_settings)
+    config = load_config(str(tmp_path / "c.yaml"))
+    assert config["charge_group"] == "" and config["queue"]
 
 
 def test_a_yaml_file_is_named_by_its_path_only(tmp_path):

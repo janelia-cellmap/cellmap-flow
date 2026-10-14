@@ -6,6 +6,7 @@ from flask import Blueprint, request, jsonify, Response
 from cellmap_flow.dashboard.requests import CreateModelConfig, ServerConfigUpdate, SubmitModels, parse
 from cellmap_flow.dashboard.services.launch import update_run_models
 from cellmap_flow.dashboard.state import get_session
+from cellmap_flow.jobs import lsf
 
 logger = logging.getLogger(__name__)
 
@@ -224,6 +225,7 @@ def export_config():
             walltime=session.walltime,
             json_data=session.pipeline_spec.to_json_data(),
             resample=session.resample,
+            cluster=lsf.available(),
         )
     except Exception as e:
         logger.error(f"Error exporting config: {str(e)}")

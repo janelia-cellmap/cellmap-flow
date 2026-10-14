@@ -176,7 +176,7 @@ def main(ctx, config_path: str, list_types: bool, validate_only: bool):
 
     \b
     data_path: /path/to/data
-    charge_group: my_group
+    charge_group: my_group # on the cluster; not needed without bsub
     queue: gpu_h100        # optional, defaults to gpu_h100
     walltime: "08:00"      # optional; LSF run limit, "HH:MM" or minutes.
                            # Without it the queue's own default applies,
