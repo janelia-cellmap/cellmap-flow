@@ -66,6 +66,9 @@
         <option value="webgpu">WebGPU only (GPU)</option>
         <option value="wasm">WASM only (CPU)</option>
       </select>
+      <label>Max concurrent inferences</label>
+      <input id="maxConcurrent" type="number" min="1" step="1" value="1" />
+      <div class="hint">Forward passes run at the same time. Keep 1 for WebGPU: overlapping runs on one session can hang. Use 2+ only for WASM / experiments.</div>
 
       <div class="row">
         <div><label>Input size (z,y,x vox)</label><input id="inputSize" value="178,178,178" /></div>
@@ -120,6 +123,8 @@
         <span>Last / avg</span><b id="stMs">—</b>
         <span>Throughput</span><b id="stRate">—</b>
       </div>
+      <button class="secondary" id="resetGpu" type="button">Reset WebGPU (free GPU memory &amp; model sessions)</button>
+      <div class="hint">Restarts the compute worker: drops the cached ONNX sessions and the WebGPU device (also recovers a stuck run). Chunks reload on the next view change. Chrome's on-disk shader cache can't be cleared from a page.</div>
       <div id="log"></div>
     </aside>
     <main>
@@ -142,9 +147,9 @@
       // Cache-bust the worker (and its module graph) so a normal reload picks up
       // new code — GitHub Pages caches JS for 10 min otherwise.
       const CACHE_BUST = `?v=${Date.now()}`;
-      const compute = new Worker(`${BASE}/compute-worker.js${CACHE_BUST}`, { type: "module" });
       const computePending = new Map();
       let computeSeq = 0;
+      let compute = null;
 
       // ---- live compute stats (HUD) ---------------------------------------
       const stats = { blocks: 0, ms: [], times: [] };
@@ -175,7 +180,7 @@
       }
       setInterval(updateHud, 400);
 
-      compute.onmessage = (e) => {
+      const onComputeMessage = (e) => {
         const d = e.data;
         if (d.type === "device") {
           fmt("stDevice", d.info.gpu || `CPU ×${d.info.cores || "?"}`);
@@ -196,9 +201,31 @@
         if (cb) { computePending.delete(d.id); cb(d); }
         updateHud();
       };
-      compute.onerror = (e) => {
+      const onComputeError = (e) => {
         fmt("stStatus", `worker load error: ${e.message || e}`);
         log(`[worker] ${e.message || e}`);
+      };
+      function startCompute() {
+        compute = new Worker(`${BASE}/compute-worker.js${CACHE_BUST}`, { type: "module" });
+        compute.onmessage = onComputeMessage;
+        compute.onerror = onComputeError;
+      }
+      startCompute();
+
+      // Reset: terminating the worker destroys its ORT sessions and WebGPU device,
+      // freeing GPU memory (and unblocking a hung run). Pending chunks fail with 503;
+      // Neuroglancer re-requests them when the view changes.
+      $("resetGpu").onclick = () => {
+        compute.terminate();
+        for (const cb of computePending.values()) {
+          cb({ ok: false, status: 503, error: "compute worker reset" });
+        }
+        computePending.clear();
+        stats.blocks = 0; stats.ms = []; stats.times = [];
+        ["stBackend", "stMs", "stRate"].forEach((id) => fmt(id, "—"));
+        startCompute();
+        updateHud();
+        log("[compute] reset: sessions and WebGPU device released, worker restarted");
       };
 
       // ---- service worker -------------------------------------------------
@@ -307,6 +334,7 @@
             output_channels: Number($("channels").value),
             has_channel: $("hasChannel").value === "true",
             backend: $("backend").value,
+            max_concurrent: Math.max(1, Math.floor(Number($("maxConcurrent").value)) || 1),
             source,
             input_norm,
             postprocess,
@@ -379,8 +407,60 @@
         }
       });
 
+      // ---- shared link -> form fields --------------------------------------
+      // The model layer's source embeds the full meta (".../cf/<name>__CFLOW_ARGS__<b64>__CFLOW_ARGS__");
+      // decode it so the dashboard shows the settings the link actually runs with.
+      function metaFromHash(hash) {
+        let text = hash.slice(2);
+        try { text = decodeURIComponent(text); } catch (_) {}
+        const m = text.match(/\/cf\/([^/"\s]+?)__CFLOW_ARGS__([A-Za-z0-9_-]+)__CFLOW_ARGS__/);
+        if (!m) return null;
+        let b64 = m[2].replace(/-/g, "+").replace(/_/g, "/");
+        while (b64.length % 4) b64 += "=";
+        let name = m[1];
+        try { name = decodeURIComponent(name); } catch (_) {}
+        return { name, meta: JSON.parse(atob(b64)) };
+      }
+      function fillForm({ name, meta }) {
+        const set = (id, v) => { if (v !== undefined && v !== null) $(id).value = v; };
+        const csv = (a) => (Array.isArray(a) ? a.join(",") : undefined);
+        set("name", name);
+        if (meta.onnxUrl) {
+          set("onnxType", "url");
+          set("onnxUrl", meta.onnxUrl);
+        } else if (meta.onnxKey) {
+          set("onnxType", "file"); // local file bytes stay in this browser's IndexedDB
+        }
+        $("onnxType").onchange({ target: $("onnxType") });
+        set("backend", meta.backend);
+        set("maxConcurrent", meta.max_concurrent);
+        set("inputSize", csv(meta.input_size));
+        set("outputSize", csv(meta.output_size));
+        set("inputVox", csv(meta.input_voxel_size));
+        set("outputVox", csv(meta.output_voxel_size));
+        set("channels", meta.output_channels);
+        if (typeof meta.has_channel === "boolean") set("hasChannel", String(meta.has_channel));
+        if (meta.source) {
+          set("sourceType", meta.source.type);
+          if (meta.source.type === "remote") set("sourceUrl", meta.source.url);
+          else set("localPath", meta.source.path);
+          $("sourceType").onchange({ target: $("sourceType") });
+        }
+        if (meta.input_norm) set("norms", JSON.stringify(meta.input_norm));
+        if (meta.postprocess) set("post", JSON.stringify(meta.postprocess));
+      }
+
       // Boot from a shared link: if the page opened with a state hash, load it.
       if (location.hash.startsWith("#!")) {
+        try {
+          const parsed = metaFromHash(location.hash);
+          if (parsed) {
+            fillForm(parsed);
+            log(`[model] form filled from URL ("${parsed.name}")`);
+          }
+        } catch (e) {
+          log(`[model] could not read settings from URL: ${e}`);
+        }
         openViewer(location.hash);
         log("[ng] restored state from URL");
       }

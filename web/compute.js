@@ -38,16 +38,25 @@ console.log("[compute] WebGPU available:", typeof navigator !== "undefined" && !
 
 // Limit concurrent inferences. Neuroglancer may request many chunks at once
 // (its "Concurrent chunk requests"), but each is a full volumetric forward pass;
-// running them all at once exhausts GPU/CPU memory. It must also be 1: an
-// onnxruntime-web InferenceSession is not re-entrant, and two overlapping
+// running them all at once exhausts GPU/CPU memory. Configurable per model
+// (meta.max_concurrent, the page's "Max concurrent inferences" field); default 1:
+// an onnxruntime-web InferenceSession is not re-entrant, and two overlapping
 // session.run() calls on the WebGPU EP never resolve (0 blocks done, page hangs).
-const MAX_CONCURRENT = 1;
+const DEFAULT_MAX_CONCURRENT = 1;
+let maxConcurrent = DEFAULT_MAX_CONCURRENT;
 let inflight = 0;
 let announcedFirst = false;
 let blocksDone = 0;
 const waiters = [];
+function setMaxConcurrent(n) {
+  maxConcurrent = Number.isInteger(n) && n >= 1 ? n : DEFAULT_MAX_CONCURRENT;
+  while (inflight < maxConcurrent && waiters.length) {
+    inflight++;
+    waiters.shift()();
+  }
+}
 function acquire() {
-  if (inflight < MAX_CONCURRENT) {
+  if (inflight < maxConcurrent) {
     inflight++;
     return Promise.resolve();
   }
@@ -55,10 +64,9 @@ function acquire() {
 }
 function release() {
   inflight--;
-  const next = waiters.shift();
-  if (next) {
+  if (inflight < maxConcurrent && waiters.length) {
     inflight++;
-    next();
+    waiters.shift()();
   }
 }
 
@@ -168,7 +176,8 @@ async function handleChunk(meta, cz, cy, cx) {
   const { session, provider } = await getSession(meta);
   const dims = [1, 1, ...meta.input_size];
 
-  // Bound concurrent forward passes (see MAX_CONCURRENT above).
+  // Bound concurrent forward passes (see DEFAULT_MAX_CONCURRENT above).
+  setMaxConcurrent(Number(meta.max_concurrent));
   if (!announcedFirst) {
     announcedFirst = true;
     self.postMessage({
