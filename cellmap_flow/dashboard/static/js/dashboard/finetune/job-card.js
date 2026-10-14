@@ -151,9 +151,14 @@ export function createJobCard(lossPlot) {
       return false;
     }
     renderEpochProgress(job.current_epoch, job.total_epochs);
-    progressText.textContent =
-      `Epoch ${job.current_epoch}/${job.total_epochs}` +
-      (job.loss ? ` - Loss: ${job.loss.toFixed(4)}` : "");
+    // The loss is the last finished epoch's, one behind while the next runs.
+    let loss = "";
+    if (job.loss && job.loss_epoch === job.current_epoch) {
+      loss = ` - Loss: ${job.loss.toFixed(4)}`;
+    } else if (job.loss && job.loss_epoch) {
+      loss = ` - epoch ${job.loss_epoch}'s loss: ${job.loss.toFixed(4)}`;
+    }
+    progressText.textContent = `Epoch ${job.current_epoch}/${job.total_epochs}${loss}`;
     return true;
   }
 
@@ -233,8 +238,9 @@ export function createJobCard(lossPlot) {
         isServingReady = false;
       }
 
-      if (showReportedEpoch(data) && Number.isFinite(data.loss)) {
-        lossPlot.add(data.current_epoch, data.loss);
+      // At the epoch it is the loss of, not the one now running.
+      if (showReportedEpoch(data) && Number.isFinite(data.loss) && data.loss_epoch) {
+        lossPlot.add(data.loss_epoch, data.loss);
       }
 
       // Restart: only while the job can take one (restartable).

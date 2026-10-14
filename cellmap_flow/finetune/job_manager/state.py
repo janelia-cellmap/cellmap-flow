@@ -61,6 +61,10 @@ class FinetuneJob:
     current_epoch: int = 0
     total_epochs: int = 10
     latest_loss: Optional[float] = None
+    # The epoch latest_loss is the loss of: the last one finished, one behind
+    # current_epoch while the next runs. The status gave the two as a pair,
+    # and the plot put epoch 1's loss at epoch 2 too.
+    latest_loss_epoch: Optional[int] = None
     inference_server_url: Optional[str] = None
     inference_server_ready: bool = False
     # The corrections directory the job trains on. The restart route reads it
@@ -97,6 +101,7 @@ class FinetuneJob:
             "current_epoch": self.current_epoch,
             "total_epochs": self.total_epochs,
             "latest_loss": self.latest_loss,
+            "latest_loss_epoch": self.latest_loss_epoch,
             "inference_server_url": self.inference_server_url,
             "inference_server_ready": self.inference_server_ready,
             "corrections_path": str(self.corrections_path) if self.corrections_path else None,
@@ -180,5 +185,6 @@ def start_iteration(job: FinetuneJob) -> None:
     not ready again until it completes. The server's URL is kept."""
     job.current_epoch = 0
     job.latest_loss = None
+    job.latest_loss_epoch = None
     job.status = JobStatus.RUNNING
     job.inference_server_ready = False

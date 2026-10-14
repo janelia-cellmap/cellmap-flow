@@ -157,6 +157,7 @@ def _parse_training_progress(finetune_job: FinetuneJob, log_content: str):
         finetune_job.total_epochs = int(total)
         try:
             finetune_job.latest_loss = float(loss)
+            finetune_job.latest_loss_epoch = int(cur)
         except ValueError:
             pass
 

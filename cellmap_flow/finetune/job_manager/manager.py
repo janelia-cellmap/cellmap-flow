@@ -364,6 +364,9 @@ class FinetuneJobManager:
         finetune_job = self.jobs[job_id]
         result = finetune_job.to_dict()
         result["loss"] = result.pop("latest_loss", None)
+        # Which epoch that loss is of: one behind current_epoch while an
+        # epoch runs.
+        result["loss_epoch"] = result.pop("latest_loss_epoch", None)
         result["progress_percent"] = (
             finetune_job.current_epoch / finetune_job.total_epochs * 100
         ) if finetune_job.total_epochs > 0 else 0
