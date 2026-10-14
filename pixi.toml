@@ -48,6 +48,14 @@ numcodecs = "==0.15.0"
 [target.linux-64.dependencies]
 cuda-toolkit = ">=12.0"
 
+[target.osx-arm64.dependencies]
+# OpenBLAS's pthreads build, as on Linux. conda-forge's Mac default is its
+# OpenMP build, which loads llvm-openmp's libomp with numpy; PyTorch's PyPI
+# wheel loads its own libomp, and with two in one process training aborted
+# at once ("OMP: Error #15: Initializing libomp.dylib, but found
+# libomp.dylib already initialized").
+libopenblas = { version = "*", build = "pthreads*" }
+
 [pypi-dependencies]
 # finetune: peft and tensorboard; postprocess: edt; ai-annotate: google-genai,
 # the Vertex AI client for AI-assisted annotation (docs/ai_annotate.md). The
