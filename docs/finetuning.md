@@ -103,7 +103,7 @@ When you start drawing, Neuroglancer will ask if you want to write to the file �
 - **Paint Value 1** = **background** (this voxel is not the object of interest)
 - **Paint Value 2** = **foreground** (this voxel is the object of interest)
 - For **affinities models** with multiple object IDs, use higher paint values (3, 4, ...) for distinct object instances. The finetuning pipeline will automatically convert these instance IDs into affinity targets using the offsets defined in the model script.
-- For **Cellpose models**, paint each cell (or mitochondrion, nucleus...) with its own value (2, 3, 4, ...), whole within the XY slice you paint it in, and background with 1. The pipeline turns them into the flows Cellpose predicts (see [Cellpose models](#cellpose-models)).
+- For **Cellpose models**, paint each cell (or mitochondrion, nucleus...) with its own value (2, 3, 4, ...), whole within the slice you paint it in, and background with 1. The pipeline turns them into the flows Cellpose predicts (see [Cellpose models](#cellpose-models)).
 - **Paint Value 0** = **unannotated / ignored** — these voxels are excluded from the loss during training.
 
 You can change the paint value in the Draw tab by editing the **Paint Value** field, or click **Random** next to **New Random Value** to pick a new instance ID.
@@ -182,7 +182,8 @@ A **BioImage Model Zoo** model is trained as it serves: its own normalization, s
 
 A Cellpose model (Cellpose-SAM) predicts, for every pixel, a flow pointing to its cell's centre and a cell probability, so it trains on those: the dashboard picks the **flow** loss for it. Each painted instance's flows are computed the way Cellpose computes them, slice by slice; unpainted voxels are left out of the loss, and so are the flows of instances cut by the training patch's edge (their centre is unknown). Cellpose's own training (`train_seg`) has no such mask: on sparse painting it would learn "no cell" wherever nothing was painted, which is why finetuning goes through cellmap-flow's trainer.
 
-- Training sees XY slices only, as Cellpose segments them: paint each instance whole in the slice you paint it in. A model served in 3D (`do_3d`) runs the same 2D network on its ZY and ZX planes too, so finetuning it on XY slices trains what it serves; it is not trained on the other two orientations.
+- Training sees one slice at a time, as Cellpose segments them: paint each instance whole in the slice you paint it in. Where the data's voxels are cubes (8 × 8 × 8 nm FIB-SEM, say), that slice can be x–y, z–y or z–x, whichever panel shows the cells best: each training slice is cut in the plane its paint was drawn in, read off the paint itself (one voxel thick across x is a z–y slice), and turned to face the network. A model served in 3D (`do_3d`) runs its network on all three planes, so paint in the side views trains it there too.
+- Where they are not cubes (z coarser than x and y, as in most serial-section data), training slices are x–y only, as a side view is stretched and blurred across z. Paint in x–y slices there: the training log warns when paint lies in a side plane, since an x–y slice sees it as a line one voxel wide, from which Cellpose learns flows along one axis only and segments strips.
 - It trains on 256 x 256 tiles, the only size Cellpose-SAM's network takes, one slice at a time.
 - LoRA (the default) or a full finetune. At batch size 1 both fit an L4 (24 GB): LoRA trains in 5.6 GB at 0.25 s a step, a full finetune in 8 GB at 0.36 s, and the live server's chunks peak at 9 and 13 GB with training alongside. An H100 runs either at 0.06 s a step; larger batches want one.
 - The finetuned model is served as Cellpose is, with its masks or probabilities.

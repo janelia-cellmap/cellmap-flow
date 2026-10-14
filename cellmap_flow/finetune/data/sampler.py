@@ -23,6 +23,12 @@ A third pool, the good regions, is drawn from directly (see PatchSampler).
 The index reads only **populated** chunks, the ``z.y.x`` files under
 ``annotation/s0/``: an empty volume costs nothing, a painted region its
 annotated voxels.
+
+A one-slice patch (a 2D network's) can be cut in the plane its paint was
+drawn in rather than always across z (``slice_planes``): paint drawn in a
+z–y slice is one voxel thick in x, and an x–y slice through it holds only a
+line, a voxel wide, which teaches a 2D network next to nothing (Cellpose
+learned flows along y alone from it, and segmented strips).
 """
 
 from __future__ import annotations
@@ -35,11 +41,52 @@ from typing import List, Optional, Tuple
 import numpy as np
 import zarr
 
+from cellmap_flow.finetune.data.reader import across
 from cellmap_flow.finetune.session.manifest import voxels_inside_any_bbox
 from cellmap_flow.finetune.session.volume import volume_corner_nm
 from cellmap_flow.io.geometry import list_populated_chunks
 
 logger = logging.getLogger(__name__)
+
+# What each axis a slice is cut across makes of it, by axis (z, y, x).
+PLANE_NAMES = ("x–y", "z–x", "z–y")
+
+
+def paint_depth_axes(voxels: np.ndarray) -> np.ndarray:
+    """The axis each painted voxel's paint is thinnest across, as int8: 0 (z,
+    an x–y slice) unless y or x is clearly thinner.
+
+    ``voxels`` (N, 3) are the painted voxels, each once. A voxel's paint is
+    measured by the run of painted voxels through it along each axis: paint
+    drawn in a z–y slice has runs of 1 along x and long ones along z and y.
+    y or x is taken when its run is at most half z's, so a blob painted in
+    3D, or a lone voxel, stays an x–y slice as every patch was before, and a
+    line along z, which lies in both side planes, goes to y.
+    """
+    voxels = np.asarray(voxels, dtype=np.int64)
+    n = voxels.shape[0]
+    depth = np.zeros(n, dtype=np.int8)
+    if n == 0:
+        return depth
+    runs = np.empty((3, n), dtype=np.int32)
+    for axis in range(3):
+        a, b = (other for other in range(3) if other != axis)
+        # Sorted into lines along `axis`, in order along it; a run ends where
+        # the line changes or a voxel is skipped.
+        order = np.lexsort((voxels[:, axis], voxels[:, b], voxels[:, a]))
+        line = voxels[order]
+        starts = np.ones(n, dtype=bool)
+        starts[1:] = (
+            (line[1:, a] != line[:-1, a])
+            | (line[1:, b] != line[:-1, b])
+            | (line[1:, axis] != line[:-1, axis] + 1)
+        )
+        run = np.cumsum(starts) - 1
+        runs[axis, order] = np.bincount(run)[run]
+    side = 1 + np.argmin(runs[1:], axis=0)
+    thinner = 2 * runs[side, np.arange(n)] <= runs[0]
+    depth[thinner] = side[thinner]
+    return depth
 
 # The pools' dtype. They are the bulk of the dataset, and every loader worker
 # holds its own copy: a 40M-voxel crop is 480 MB of int32 per worker, 960 MB
@@ -103,6 +150,20 @@ class PatchSampler:
             default epoch length.
         corner_nm, shape_voxels: where annotation voxel 0's lower corner is
             (see volume_corner_nm), and the volume's shape in voxels.
+        paint_planes: how many painted voxels (of ``sparse``) lie in an x–y,
+            a z–x and a z–y slice (``paint_depth_axes``), or None when
+            ``slice_planes`` is None.
+        sparse_depth: the axis each row of ``sparse`` is cut across, when
+            ``slice_planes`` is "any" and some paint is in a side plane;
+            else None, and every patch is cut across z.
+
+    ``slice_planes`` is for a one-slice patch: None, a 3D patch, which
+    takes paint drawn in any plane as it is; "xy", one slice that is always
+    an x–y one, whose paint is only counted (``paint_planes``) so that paint
+    in the side planes can be warned about; "any", one slice in whichever
+    plane the paint around its centre lies in. ``jitter_voxels`` is then in
+    the patch's own order (``reader.slice_axes``), its first entry across
+    the slice.
     """
 
     def __init__(
@@ -114,7 +175,10 @@ class PatchSampler:
         good_regions: Optional[list] = None,
         rehearsal_fraction: Optional[float] = None,
         anchor_fraction: Optional[float] = None,
+        slice_planes: Optional[str] = None,
     ):
+        if slice_planes not in (None, "xy", "any"):
+            raise ValueError(f"slice_planes must be None, 'xy' or 'any', got {slice_planes!r}")
         self.volume_zarr_path = volume_zarr_path
         self.output_voxel_size = np.array(output_voxel_size_nm, dtype=float)
         self.jitter = np.array(jitter_voxels, dtype=int)
@@ -126,6 +190,7 @@ class PatchSampler:
             float(rehearsal_fraction) if rehearsal_fraction is not None else None
         )
         self._index_pools()
+        self._index_planes(slice_planes)
         self._index_rehearsal()
         # Painted sessions only, by default: imported crops are dense, and a
         # run on them is unchanged unless asked.
@@ -138,13 +203,16 @@ class PatchSampler:
     # The draw
     # ------------------------------------------------------------------
 
-    def draw(self, rng: np.random.Generator) -> Tuple[np.ndarray, bool]:
-        """A patch centre in annotation voxels, and whether it is a rehearsal patch.
+    def draw(self, rng: np.random.Generator) -> Tuple[np.ndarray, bool, int]:
+        """A patch centre in annotation voxels, whether it is a rehearsal
+        patch, and the axis the patch is cut across (0, z, unless
+        ``slice_planes`` is "any").
 
         The centre is not whole voxels yet (see PatchReader.snap). What is
         drawn from ``rng``, in order: rehearsal or not (only when there is a
         usable good region); then which region, or else a random anchor or
-        not (only when anchors are on), and where; or else which pool (only when
+        not (only when anchors are on), where, and its plane (only when
+        some paint is in a side plane); or else which pool (only when
         both can be chosen); in the painted pool, whether to centre on
         foreground (only when some is painted), then which chunk, or which
         foreground voxel; which voxel, and the jitter.
@@ -155,21 +223,30 @@ class PatchSampler:
         ):
             # One region is one patch, centred exactly: no jitter, or the
             # loss would spill outside the area that was actually judged.
+            # Across z: a region is a model output, a few slices deep where
+            # it is a 2D model's, and a side slice would run far past it.
             centres = self.rehearsal_centres
-            return centres[rng.integers(0, centres.shape[0])].copy(), True
+            return centres[rng.integers(0, centres.shape[0])].copy(), True, 0
 
         if self.effective_anchor_fraction > 0.0 and rng.random() < self.effective_anchor_fraction:
             # Anywhere in the volume, whole voxels, no jitter needed.
-            return rng.integers(0, self.shape_voxels).astype(np.float64), True
+            centre = rng.integers(0, self.shape_voxels).astype(np.float64)
+            # In the planes the paint is in, in the same proportions: the
+            # model is held to its teacher in each orientation it trains in.
+            depth = 0
+            if self.sparse_depth is not None:
+                depth = int(self.sparse_depth[rng.integers(0, self.sparse_depth.shape[0])])
+            return centre, True, depth
 
         use_dense = self.effective_dense_ratio >= 1.0 or (
             self.effective_dense_ratio > 0.0 and rng.random() < self.effective_dense_ratio
         )
         foreground = self.sparse_foreground_rows
+        row = None  # of the painted pool
         if use_dense:
             anchor = self.dense[rng.integers(0, self.dense.shape[0])]
         elif foreground.size and rng.random() < FOREGROUND_SHARE:
-            anchor = self.sparse[foreground[rng.integers(0, foreground.size)]]
+            row = foreground[rng.integers(0, foreground.size)]
         else:
             # A chunk first, then a voxel in it: each place that was painted
             # gets about the same share of patches, however many voxels its
@@ -178,10 +255,17 @@ class PatchSampler:
             # and a session's few foreground fixes were rarely seen.
             starts = self.sparse_chunk_starts
             chunk = rng.integers(0, starts.shape[0] - 1)
-            anchor = self.sparse[rng.integers(starts[chunk], starts[chunk + 1])]
+            row = rng.integers(starts[chunk], starts[chunk + 1])
+        depth = 0
+        if row is not None:
+            anchor = self.sparse[row]
+            if self.sparse_depth is not None:
+                depth = int(self.sparse_depth[row])
         anchor = anchor.astype(np.float64)
-        jitter = rng.integers(low=-self.jitter, high=self.jitter + 1, size=3).astype(np.float64)
-        return anchor + jitter, False
+        # Never off the slice: the jitter across it is the patch's first entry.
+        jitter_range = across(self.jitter, depth)
+        jitter = rng.integers(low=-jitter_range, high=jitter_range + 1, size=3).astype(np.float64)
+        return anchor + jitter, False, depth
 
     # ------------------------------------------------------------------
     # The dense and sparse pools
@@ -328,6 +412,27 @@ class PatchSampler:
                 self.effective_dense_ratio = 1.0
             else:
                 self.effective_dense_ratio = ratio
+
+    # ------------------------------------------------------------------
+    # The planes the paint lies in
+    # ------------------------------------------------------------------
+
+    def _index_planes(self, slice_planes: Optional[str]) -> None:
+        """Find the plane each painted voxel lies in, for a one-slice patch.
+
+        The painted pool only: an imported crop is labelled through and
+        through, and stays in x–y slices, as before. So do the random anchors
+        of a session painted in x–y alone: ``sparse_depth`` is None then, and
+        the draws are the ones they were.
+        """
+        self.paint_planes = None
+        self.sparse_depth = None
+        if slice_planes is None:
+            return
+        depth = paint_depth_axes(self.sparse)
+        self.paint_planes = np.bincount(depth, minlength=3)
+        if slice_planes == "any" and depth.any():
+            self.sparse_depth = depth
 
     # ------------------------------------------------------------------
     # The rehearsal pool

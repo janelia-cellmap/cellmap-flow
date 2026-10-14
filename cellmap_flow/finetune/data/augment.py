@@ -94,7 +94,9 @@ class Augmentation:
 
         Rotation is skipped unless Y and X are equal in both patches, since
         the model's input shape is fixed and a non-square rot90 would change
-        it. Z is never rotated into -- EM is routinely anisotropic there.
+        it. Z is never rotated into -- EM is routinely anisotropic there. (A
+        one-slice patch cut across y or x has z in its plane, turned to its
+        Y or X; it is only cut so where the voxels are cubes, see dataset.py.)
         """
         flips = [False, False, False]
         for axis in (0, 1, 2):

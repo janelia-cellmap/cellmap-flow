@@ -10,6 +10,11 @@ A patch is a centre drawn from the pools (sampler.py: dense crops, sparse
 scribbles, rehearsal regions), the annotation and raw read around it
 (reader.py), and, when asked for, augmentation (augment.py).
 
+A one-slice patch, a 2D network's, is cut in the plane its paint was drawn
+in, x–y, z–y or z–x, where the voxels are cubes (``slice_planes``): there a
+side slice looks as an x–y one does. Elsewhere it is always an x–y slice,
+and paint drawn in a side plane, of which it sees a line, is warned about.
+
 Contract with the trainer:
 
 - ``len(self)`` is ``patches_per_epoch``, the epoch length; it has no fixed
@@ -32,9 +37,36 @@ from torch.utils.data import Dataset
 
 from cellmap_flow.finetune.data.augment import Augmentation
 from cellmap_flow.finetune.data.reader import PatchReader
-from cellmap_flow.finetune.data.sampler import PatchSampler
+from cellmap_flow.finetune.data.sampler import PLANE_NAMES, PatchSampler
 
 logger = logging.getLogger(__name__)
+
+
+def _cubes(voxel_size) -> bool:
+    """Whether voxels of ``voxel_size`` (nm) are as long along every axis."""
+    voxel_size = np.asarray(voxel_size, dtype=float)
+    return bool(np.allclose(voxel_size, voxel_size[0], rtol=1e-3))
+
+
+def stored_voxel_size(raw_dataset_path: str, voxel_size, resample: bool) -> Optional[tuple]:
+    """The voxel size (nm) of the raw level patches are read from at
+    ``voxel_size``, as stored, before any resampling to it; None when its
+    metadata cannot be read here.
+
+    The level is the one PatchReader's ImageDataInterface opens. Resampled
+    to cubes, voxels stored three times as deep are still blurred across z,
+    so a side slice through them is not an x–y slice.
+    """
+    from cellmap_flow.io import multiscale, paths
+    from cellmap_flow.io.metadata import read_array_meta
+
+    try:
+        path = paths.normalize_path(raw_dataset_path)
+        level_path, _ = multiscale.select_dataset(path, voxel_size, mode="resample" if resample else "floor")
+        return tuple(float(v) for v in read_array_meta(level_path).spatial().voxel_size)
+    except Exception as e:
+        logger.debug(f"Could not read the voxel size of {raw_dataset_path}: {e}")
+        return None
 
 
 class VirtualPatchDataset(Dataset):
@@ -60,8 +92,9 @@ class VirtualPatchDataset(Dataset):
             ``loader.dataset_from_manifest``'s ``patch_voxels``) takes more
             to cover them.
         jitter_voxels: half-range of the random offset applied to the patch
-            center, in **annotation voxels**. Defaults to
-            ``output_size_voxels // 4``.
+            center, in **annotation voxels**, in the patch's order (for a
+            slice cut across y or x, its first entry is across the slice).
+            Defaults to ``output_size_voxels // 4``.
         seed: RNG seed; per-worker offset added so multi-worker dataloaders
             sample distinct streams.
         input_norm_config: the session's input normalization, applied to
@@ -109,6 +142,19 @@ class VirtualPatchDataset(Dataset):
         output_size = np.array(output_size_voxels, dtype=int)
         jitter = np.array(jitter_voxels, dtype=int) if jitter_voxels is not None else output_size // 4
 
+        # A 2D network's patch, one slice: cut in any plane where every voxel
+        # it is read from is a cube, else always in x–y (sampler.py).
+        one_slice = int(input_size_voxels[0]) == 1 and int(output_size_voxels[0]) == 1
+        self.not_cubes = {}
+        self.slice_planes = None
+        if one_slice:
+            voxel_sizes = {
+                "the raw as stored": stored_voxel_size(raw_dataset_path, input_voxel_size_nm, resample),
+                "the model's input": tuple(input_voxel_size_nm),
+                "the model's output": tuple(output_voxel_size_nm),
+            }
+            self.not_cubes = {name: v for name, v in voxel_sizes.items() if v is not None and not _cubes(v)}
+            self.slice_planes = "xy" if self.not_cubes else "any"
         self.sampler = PatchSampler(
             volume_zarr_path,
             output_voxel_size_nm,
@@ -117,6 +163,7 @@ class VirtualPatchDataset(Dataset):
             good_regions=good_regions,
             rehearsal_fraction=rehearsal_fraction,
             anchor_fraction=anchor_fraction,
+            slice_planes=self.slice_planes,
         )
         self.reader = PatchReader(
             volume_zarr_path,
@@ -161,7 +208,35 @@ class VirtualPatchDataset(Dataset):
             f"({'auto' if sampler.dense_to_sparse_ratio is None else 'explicit'}), "
             f"jitter={sampler.jitter.tolist()}"
         )
+        self._log_planes()
         sampler.log_rehearsal_status()
+
+    def _log_planes(self) -> None:
+        """Say which planes a one-slice patch is cut in, or warn that paint in
+        a side plane is seen as a line."""
+        counts = self.sampler.paint_planes
+        if counts is None or not counts.sum():
+            return
+        shares = ", ".join(f"{100 * c / counts.sum():.0f}% {name}" for name, c in zip(PLANE_NAMES, counts))
+        if self.slice_planes == "any":
+            logger.info(
+                f"VirtualPatchDataset: one-slice patches are cut in the plane their paint lies in "
+                f"({shares} of the painted voxels), and random anchors in the same proportions; "
+                "imported crops and good regions in x–y"
+            )
+            return
+        side = int(counts[1:].sum())
+        if side:
+            name, voxel_size = next(iter(self.not_cubes.items()))
+            logger.warning(
+                f"VirtualPatchDataset: {side} of {int(counts.sum())} painted voxels ({shares}) lie in "
+                "a z–x or z–y slice, one voxel thick across y or x. The network trains on x–y "
+                "slices, which see that paint as a line a voxel wide and learn next to nothing "
+                "from it (Cellpose learns flows along one axis, and segments strips). Side "
+                "slices are trained on only where the voxels are cubes, and "
+                f"{name} has voxels of {' x '.join(f'{v:g}' for v in voxel_size)} nm. "
+                "Paint in x–y slices."
+            )
 
     def __len__(self) -> int:
         return self.patches_per_epoch
@@ -178,11 +253,12 @@ class VirtualPatchDataset(Dataset):
 
     def __getitem__(self, _idx: int):
         rng = self._worker_rng()
-        centre, is_rehearsal = self.sampler.draw(rng)
-        centre = self.reader.snap(centre)
+        centre, is_rehearsal, depth_axis = self.sampler.draw(rng)
+        centre = self.reader.snap(centre, depth_axis)
 
-        ann_patch = self.reader.annotation(centre)
-        raw_patch = self.reader.raw(centre)
+        # Turned so that the slice is first, whichever axis it is across.
+        ann_patch = self.reader.annotation(centre, depth_axis)
+        raw_patch = self.reader.raw(centre, depth_axis)
         if self.augment:
             raw_patch = self.augmentation.intensity(raw_patch, rng)
         raw_patch = self.reader.normalize(raw_patch)

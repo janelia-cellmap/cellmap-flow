@@ -13,6 +13,7 @@ import zarr
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, TensorDataset
 
 from cellmap_flow.finetune.session.volume import create_volume_zarr, plan_volume
+from cellmap_flow.finetune.data.sampler import paint_depth_axes
 from cellmap_flow.finetune.data import (
     VirtualPatchDataset,
     dataset_from_manifest,
@@ -293,7 +294,7 @@ def test_a_painted_session_holds_random_points_of_the_volume_to_the_teacher(anno
     assert abs(len(anchored) / 400 - share) < 0.06, len(anchored)
     if share:
         rng = np.random.default_rng(0)
-        centres = {tuple(c) for c, anchor in (dataset.sampler.draw(rng) for _ in range(400)) if anchor}
+        centres = {tuple(c) for c, anchor, _ in (dataset.sampler.draw(rng) for _ in range(400)) if anchor}
         assert len(centres) > 50, "drawn anywhere, not from a few fixed places"
 
 
@@ -309,6 +310,87 @@ def test_a_good_region_patch_is_whole_voxels_paired_with_its_raw(tmp_path, janel
     assert float(anchor.sum()) == anchor.numel()
     # [63, 95) nm is annotation voxel 4.19 on (corner -4): the patch starts at voxel 4, raw 8.
     assert raw[0, :, 0, 0].tolist() == [9, 10, 11, 12]
+
+
+# A 2D network's patch, one slice of 8 x 8, as Cellpose's is one of 256 x 256.
+SLICE = dict(input_size_voxels=(1, 8, 8), output_size_voxels=(1, 8, 8))
+
+
+def _where_raw():
+    """A 32^3 raw whose voxel (z, y, x) holds z * 1024 + y * 32 + x: a patch says where each pixel came from."""
+    z, y, x = np.indices((32,) * 3)
+    return (z * 1024 + y * 32 + x).astype(np.uint16)
+
+
+def _painted_slice(depth_axis):
+    """Paint one voxel thick across ``depth_axis``, at 10: background with a foreground square in it."""
+    labels = np.zeros((32,) * 3, np.uint8)
+    for value, extent in ((1, slice(8, 24)), (2, slice(12, 20))):
+        where = [extent] * 3
+        where[depth_axis] = 10
+        labels[tuple(where)] = value
+    return labels
+
+
+@pytest.mark.parametrize("painted, depth_axis", [
+    pytest.param(np.s_[10, 4:12, 4:12], 0, id="an x-y slice"),
+    pytest.param(np.s_[4:12, 10, 4:12], 1, id="a z-x slice"),
+    pytest.param(np.s_[4:12, 4:12, 10], 2, id="a z-y slice"),
+    pytest.param(np.s_[4:12, 4:12, 10:12], 2, id="a z-y slice two voxels deep"),
+    pytest.param(np.s_[4:12, 4:12, 4:12], 0, id="a blob painted in 3D stays x-y"),
+    pytest.param(np.s_[4:12, 10, 10], 1, id="a line along z, in both side planes"),
+    pytest.param(np.s_[10, 10, 10], 0, id="a lone voxel stays x-y"),
+])
+def test_painted_voxels_lie_in_the_plane_their_paint_is_thinnest_across(painted, depth_axis):
+    labels = np.zeros((16,) * 3, bool)
+    labels[painted] = True
+    assert set(paint_depth_axes(np.argwhere(labels)).tolist()) == {depth_axis}
+
+
+@pytest.mark.parametrize("depth_axis", [pytest.param(0, id="x-y"), pytest.param(1, id="z-x"),
+                                        pytest.param(2, id="z-y")])
+def test_a_one_slice_patch_is_cut_in_the_plane_its_paint_was_drawn_in(annotation_volume, depth_axis):
+    """Paint drawn in a z–y slice is one voxel thick in x, and the x–y patches
+    a 2D network trained on held a line of it a voxel wide: Cellpose learned
+    flows along y alone, and segmented strips."""
+    labels = _painted_slice(depth_axis)
+    dataset = annotation_volume(labels, raw=_where_raw()).dataset(**SLICE, patches_per_epoch=32)
+    rows, columns = (axis for axis in range(3) if axis != depth_axis)
+    for i in range(32):
+        raw, ann = (t[0, 0].numpy().astype(int) for t in dataset[i])
+        where = np.stack([raw // 1024, raw // 32 % 32, raw % 32])
+        assert (where[depth_axis] == 10).all(), "on the painted slice, never jittered off it"
+        assert (np.diff(where[rows], axis=0) == 1).all() and (np.diff(where[columns], axis=1) == 1).all()
+        assert (ann == labels[tuple(where)]).all(), "each label paired with the raw it covers"
+        assert (ann > 0).sum() > 8, "paint, not a line of it"
+
+
+def test_where_the_voxels_are_not_cubes_patches_stay_x_y_and_side_paint_is_warned_about(
+        annotation_volume, monkeypatch, caplog):
+    """A side slice through voxels stored three times as deep is blurred and
+    stretched across z, so it is no x–y slice to learn from."""
+    from cellmap_flow.finetune.data import dataset as dataset_module
+
+    monkeypatch.setattr(dataset_module, "stored_voxel_size", lambda *args: (48.0, 16.0, 16.0))
+    with caplog.at_level("WARNING"):
+        dataset = annotation_volume(_painted_slice(2), raw=_where_raw()).dataset(**SLICE, patches_per_epoch=8)
+    assert "the raw as stored has voxels of 48 x 16 x 16 nm" in caplog.text
+    assert all(len(np.unique(dataset[i][0].numpy() // 1024)) == 1 for i in range(8)), "x-y slices"
+
+
+def test_a_session_painted_in_x_y_draws_what_it_did(annotation_volume):
+    """Its patches, and its random anchors' draws from the RNG, are the ones
+    they were; a 3D patch does not look for planes at all."""
+    labels = _painted_slice(0)
+    one_slice = annotation_volume(labels).dataset(**SLICE, anchor_fraction=None)
+    assert one_slice.sampler.sparse_depth is None and not one_slice.sampler.paint_planes[1:].any()
+    assert annotation_volume(labels, name="3d").dataset().sampler.paint_planes is None
+
+
+def test_random_anchors_are_cut_in_the_planes_the_paint_is_in(annotation_volume):
+    dataset = annotation_volume(_painted_slice(2)).dataset(**SLICE, anchor_fraction=1.0)
+    rng = np.random.default_rng(0)
+    assert {dataset.sampler.draw(rng)[2] for _ in range(20)} == {2}
 
 
 @pytest.mark.parametrize("raw, norms, holds", [
