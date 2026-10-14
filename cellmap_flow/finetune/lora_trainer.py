@@ -38,6 +38,20 @@ from cellmap_flow.finetune.target_transforms import IntervalTargetTransform
 logger = logging.getLogger(__name__)
 
 
+def default_device() -> torch.device:
+    """The device to train on: CUDA, else Apple's GPU (MPS), else the CPU.
+
+    A Mac trained on its CPU before, about 33 s for a batch of eight Cellpose
+    tiles (two days for 20 epochs), while Cellpose served on its GPU.
+    """
+    if torch.cuda.is_available():
+        return torch.device("cuda")
+    mps = getattr(torch.backends, "mps", None)
+    if mps is not None and mps.is_available():
+        return torch.device("mps")
+    return torch.device("cpu")
+
+
 class LoRAFinetuner:
     """
     Trainer for finetuning a model on user corrections: a LoRA adapter, or
@@ -158,7 +172,7 @@ class LoRAFinetuner:
 
         # Device
         if device is None:
-            self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+            self.device = default_device()
         else:
             self.device = torch.device(device)
 
