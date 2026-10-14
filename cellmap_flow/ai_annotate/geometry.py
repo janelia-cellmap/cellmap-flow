@@ -14,9 +14,11 @@ the volume's ``dataset_offset_nm`` is voxel 0's *centre*, and a voxel is in
 a box when its centre is (``fill.box_voxels``). The raw is read on its own
 grid (``io.geometry``), from the voxel that holds the first pixel's centre.
 
-Axes are z, y, x throughout, as everywhere in cellmap-flow. An image's rows
-are the first in-plane axis in that order and its columns the second: y and
-x for a z-depth (XY) plane, z and x for XZ, z and y for YZ.
+Axes are z, y, x throughout, as everywhere in cellmap-flow, except in the
+image sent: that is laid out as the viewer's panel shows the plane
+(``to_screen``), so the model, and the user reviewing its answer, see what
+was on screen. The XZ and YZ planes are transposed from z, y, x order, and the
+XY plane runs x leftwards, as neuroglancer draws it.
 """
 
 from dataclasses import asdict, dataclass
@@ -49,6 +51,48 @@ PLANE_NAMES = ("XY", "XZ", "YZ")
 # theirs z, y, x in that order, so the "xy" panel is a z-y slice looking
 # along x, and the plane cellmap-flow calls XY is neuroglancer's "yz" panel.
 _LAYOUT_DEPTH_SLOT = {"xy": 2, "xz": 1, "yz": 0}
+
+# How the panel looking along each depth axis draws its plane, with
+# cellmap-flow's display dimensions (z, y, x): the axis running down it, the
+# axis running across, and whether across runs backwards. Neuroglancer's "xy"
+# panel draws display dimension 0 across and 1 down; "xz" turns it a quarter
+# about the first, so 0 across and 2 down; "yz" a quarter about the second, so
+# 1 down and 2 across, increasing to the left (AXES_RELATIVE_ORIENTATION's
+# quaternions). The image sent was z, y, x order before, so the XZ and YZ
+# planes went to the model, and back to the user's review, transposed from
+# what was on screen, and the XY plane mirrored.
+_SCREEN = {2: (1, 0, False), 1: (2, 0, False), 0: (1, 2, True)}
+
+
+def _screen(depth_axis):
+    down, across, backwards = _SCREEN[int(depth_axis)]
+    return down > across, backwards
+
+
+def screen_shape(shape, depth_axis) -> tuple:
+    """A plane's ``(rows, cols)`` in z, y, x order, as the panel draws it."""
+    transposed, _ = _screen(depth_axis)
+    rows, cols = (int(s) for s in shape)
+    return (cols, rows) if transposed else (rows, cols)
+
+
+def to_screen(plane, depth_axis) -> np.ndarray:
+    """``plane`` (rows and columns its two axes in z, y, x order) as the panel
+    looking along ``depth_axis`` draws it."""
+    transposed, backwards = _screen(depth_axis)
+    plane = np.asarray(plane)
+    if transposed:
+        plane = np.swapaxes(plane, 0, 1)
+    return plane[:, ::-1] if backwards else plane
+
+
+def from_screen(image, depth_axis) -> np.ndarray:
+    """``to_screen`` undone: an image as the panel draws it, in z, y, x order."""
+    transposed, backwards = _screen(depth_axis)
+    image = np.asarray(image)
+    if backwards:
+        image = image[:, ::-1]
+    return np.swapaxes(image, 0, 1) if transposed else image
 
 
 def _layout_type(layout):
@@ -112,7 +156,8 @@ class PlanePlan:
     ``raw_shape_nm`` are the world box the raw is read over (lower corner
     and size): in plane, the write box's extent; along the depth axis, one
     input voxel centred on the point. ``image_shape`` is the (rows, cols)
-    of the image sent, ``resolution_nm`` its pixel size in nm (square
+    of the image sent, laid out as on screen (``to_screen``),
+    ``resolution_nm`` its pixel size in nm (square
     pixels, which a model needs to see shapes as they are). ``write_lo`` and
     ``write_hi`` are the annotation voxels written, ``[lo, hi)``, clipped to
     the volume and one voxel thick along the depth axis.
@@ -130,7 +175,7 @@ class PlanePlan:
 
     @property
     def plane_axes(self) -> tuple:
-        """The two in-plane axes, z, y, x order: the image's rows, then its columns."""
+        """The two in-plane axes, in z, y, x order."""
         return tuple(a for a in range(3) if a != self.depth_axis)
 
     @property
@@ -140,17 +185,30 @@ class PlanePlan:
 
     @property
     def write_shape(self) -> tuple:
-        """The write box's in-plane shape in annotation voxels, (rows, cols) as the image's."""
+        """The write box's in-plane shape in annotation voxels, its ``plane_axes`` in z, y, x order."""
         return tuple(int(self.write_hi[a] - self.write_lo[a]) for a in self.plane_axes)
 
     @property
     def click_px(self) -> tuple:
         """``(row, col)`` of the point in the image sent."""
+        down, across, backwards = _SCREEN[self.depth_axis]
         position = []
-        for side, a in zip(self.image_shape, self.plane_axes):
+        for side, a in zip(self.image_shape, (down, across)):
             fraction = (self.point_nm[a] - self.raw_offset_nm[a]) / self.raw_shape_nm[a]
             position.append(int(np.clip(np.floor(fraction * side), 0, side - 1)))
+        if backwards:
+            # The pixel counted from the near end, then mirrored, so a point
+            # on a boundary takes the pixel it takes in z, y, x order.
+            position[1] = self.image_shape[1] - 1 - position[1]
         return tuple(position)
+
+    def to_screen(self, plane) -> np.ndarray:
+        """``to_screen`` for this plan's plane."""
+        return to_screen(plane, self.depth_axis)
+
+    def from_screen(self, image) -> np.ndarray:
+        """``from_screen`` for this plan's plane."""
+        return from_screen(image, self.depth_axis)
 
     def to_dict(self) -> dict:
         """The plan as JSON-safe lists, for a staging's meta.json."""
@@ -172,7 +230,8 @@ class PlanePlan:
         )
 
 
-def plan_plane(volume: dict, volume_shape, point_nm, depth_axis: int, crop_size_px: int) -> PlanePlan:
+def plan_plane(volume: dict, volume_shape, point_nm, depth_axis: int, crop_size_px: int,
+               data_box_nm=None) -> PlanePlan:
     """The plane through ``point_nm`` (world nm, z, y, x) across ``depth_axis``.
 
     ``volume`` is the annotation volume's record (``output_voxel_size``,
@@ -183,13 +242,21 @@ def plan_plane(volume: dict, volume_shape, point_nm, depth_axis: int, crop_size_
     annotation voxels whose centres lie in it, clipped to the volume, in the
     annotation voxel that holds the point along the depth axis.
 
+    ``data_box_nm`` is the raw data's extent, ``(lo, hi)`` world nm z, y, x:
+    the field is clipped to it too. The volume is the data rounded up to
+    whole chunks of the model's output, which for Cellpose at 64 nm is up to
+    33 um past the data's edge, and there the plane is only the read's
+    zero padding: an image of it was labelled as background, and the cells
+    beside it smeared into it.
+
     The raw is read over the clipped box's extent, so the image and the box
     cover the same physical area. The image's pixels are the finer in-plane
     input voxel size, square; when that makes a side longer than
     ``MAX_IMAGE_SIDE`` the pixels are made larger to fit.
 
-    Raises AIAnnotateError ("refused") when the point is outside the volume:
-    a field clipped to an edge it does not reach is not what was aimed at.
+    Raises AIAnnotateError ("refused") when the point is outside the volume
+    or the data: a field clipped to an edge it does not reach is not what
+    was aimed at.
     """
     if depth_axis not in (0, 1, 2):
         raise ValueError(f"depth_axis must be 0, 1 or 2 (z, y, x), got {depth_axis!r}")
@@ -217,6 +284,20 @@ def plan_plane(volume: dict, volume_shape, point_nm, depth_axis: int, crop_size_
     side_nm = int(crop_size_px) * float(output_voxel_size[plane].min())
     offset = point - side_nm / 2
     size = np.full(3, side_nm)
+    if data_box_nm is not None:
+        data_lo, data_hi = (np.asarray(v, dtype=float) for v in data_box_nm)
+        if np.any(point < data_lo) or np.any(point >= data_hi):
+            extent = [f"{lo:g}..{hi:g}" for lo, hi in zip(data_lo, data_hi)]
+            raise AIAnnotateError(
+                "refused",
+                f"The point ({', '.join(f'{p:g}' for p in point)}) nm is outside the data "
+                f"(z, y, x {', '.join(extent)} nm): move the view onto the data and try again.",
+                http_status=400,
+            )
+        for a in plane:
+            top = min(offset[a] + size[a], data_hi[a])
+            offset[a] = max(offset[a], data_lo[a])
+            size[a] = top - offset[a]
     # Along the depth axis, exactly the voxel that holds the point: a box
     # one voxel long whose only centre is that voxel's.
     offset[depth_axis] = corner[depth_axis] + voxel[depth_axis] * output_voxel_size[depth_axis]
@@ -233,7 +314,7 @@ def plan_plane(volume: dict, volume_shape, point_nm, depth_axis: int, crop_size_
 
     extent = raw_shape[plane]
     resolution = max(float(input_voxel_size[plane].min()), float(extent.max()) / MAX_IMAGE_SIDE)
-    image_shape = np.maximum(np.round(snap_integral(extent / resolution)), 1).astype(int)
+    image_shape = screen_shape(np.maximum(np.round(snap_integral(extent / resolution)), 1), depth_axis)
     return PlanePlan(
         depth_axis=int(depth_axis),
         point_nm=_floats(point),

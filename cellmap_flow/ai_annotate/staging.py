@@ -140,8 +140,9 @@ def load(corrections_dir, annotate_id):
 def overlay(input_image: Image.Image, mask_write: np.ndarray, target_rgb) -> Image.Image:
     """``input_image`` with the voxels the mask labels tinted ``target_rgb``.
 
-    The mask is the write box's, scaled to the image by nearest neighbour,
-    so the overlay shows what accepting writes, not the model's own image.
+    The mask is the write box's, laid out as the image is (``to_screen``)
+    and scaled to it by nearest neighbour, so the overlay shows what
+    accepting writes, not the model's own image.
     """
     rgb = np.asarray(input_image.convert("RGB"), dtype=np.float32)
     mask = Image.fromarray(np.asarray(mask_write, dtype=np.uint8) * 255).resize(input_image.size, Image.NEAREST)
@@ -158,6 +159,7 @@ def preview(corrections_dir, annotate_id) -> dict:
     Every image is re-encoded here, so nothing the model sent reaches the
     browser as it came.
     """
+    from cellmap_flow.ai_annotate.geometry import to_screen
     from cellmap_flow.ai_annotate.images import png_base64
 
     meta, mask_write, input_image = load(corrections_dir, annotate_id)
@@ -169,7 +171,9 @@ def preview(corrections_dir, annotate_id) -> dict:
     return {
         "input_png": png_base64(input_image),
         "model_png": model_png,
-        "overlay_png": png_base64(overlay(input_image, mask_write, meta["target_rgb"])),
+        "overlay_png": png_base64(
+            overlay(input_image, to_screen(mask_write, meta["plan"]["depth_axis"]), meta["target_rgb"])
+        ),
     }
 
 

@@ -80,9 +80,11 @@ def test_stage_load_preview_discard(tmp_path):
     assert np.all(_decode(shown["input_png"]) == 100)
     assert np.all(_decode(shown["model_png"]) == 0)
     overlay = _decode(shown["overlay_png"])
-    # The mask's voxels (the first 4 x 4 of 8 x 8) cover the first 8 x 8 pixels.
-    assert tuple(overlay[0, 0]) == (178, 50, 50)
-    assert tuple(overlay[7, 7]) == (178, 50, 50)
+    # The mask's voxels (the first 4 x 4 of 8 x 8) cover 8 x 8 pixels: the
+    # top right ones, as x runs leftwards in the XY plane on screen.
+    assert tuple(overlay[0, 15]) == (178, 50, 50)
+    assert tuple(overlay[7, 8]) == (178, 50, 50)
+    assert tuple(overlay[0, 7]) == (100, 100, 100)
     assert tuple(overlay[8, 8]) == (100, 100, 100)
 
     staging.discard(tmp_path, annotate_id)
