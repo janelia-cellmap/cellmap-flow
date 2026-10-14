@@ -93,8 +93,8 @@ def cellpose_panel_data(models_config, running_job_names):
     ticked.
 
     ``{"models": [{"model", "label", "description"}], "running": [{"model",
-    "output", "voxel_size", "stitch_threshold"}]}``; a model running with
-    two outputs is two entries, so two rows.
+    "output", "do_3d", "voxel_size", "stitch_threshold"}]}``; a model
+    running with two outputs (or in 2D and 3D) is two entries, so two rows.
     """
     from cellmap_flow.dashboard.services.launch import CELLPOSE_MODELS
     from cellmap_flow.models.models_config import CellposeModelConfig
@@ -102,7 +102,7 @@ def cellpose_panel_data(models_config, running_job_names):
     running = []
     for mc in models_config:
         if isinstance(mc, CellposeModelConfig) and mc.name in running_job_names:
-            running.append({"model": mc.pretrained_model, "output": mc.output,
+            running.append({"model": mc.pretrained_model, "output": mc.output, "do_3d": mc.do_3d,
                             "voxel_size": list(mc.voxel_size), "stitch_threshold": mc.stitch_threshold})
     return {
         "models": [{"model": model, "label": label, "description": description}
@@ -121,7 +121,7 @@ def cellpose_panel_names(models_config):
     return {
         mc.name for mc in models_config
         if isinstance(mc, CellposeModelConfig) and mc.pretrained_model in CELLPOSE_MODELS
-        and mc.name == cellpose_job_name(mc.pretrained_model, mc.output)
+        and mc.name == cellpose_job_name(mc.pretrained_model, mc.output, mc.do_3d)
     }
 
 

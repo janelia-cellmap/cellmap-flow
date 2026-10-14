@@ -589,8 +589,9 @@ def test_a_server_that_does_not_answer_is_not_asked_again_on_every_poll(monkeypa
 class _CellposeConfig:
     cli_name = "cellpose"
 
-    def __init__(self, output):
+    def __init__(self, output, display_channel=None):
         self.output = output
+        self.display_channel = display_channel
 
 
 @pytest.mark.parametrize("output, instances", [("flows", True), ("probability", False)])
@@ -604,6 +605,13 @@ def test_a_cellpose_flows_server_seeds_its_instances_from_the_masks_it_makes(mon
     channels = view_labels._seed_plan("cp", None)[0]
     # Thresholding a flows server reads its probability, not the flows beside it.
     assert channels == (slice(2, 3) if instances else None)
+
+
+def test_a_3d_cellpose_flows_server_is_thresholded_on_its_fourth_channel(monkeypatch):
+    """In 3D a flow_z channel comes first: the probability is the fourth."""
+    monkeypatch.setattr(view_labels, "find_model_config", lambda name: _CellposeConfig("flows", 3))
+    monkeypatch.setattr(view_labels, "autodetect_output_type", lambda config, output_type, offsets: ("flows", None))
+    assert view_labels._seed_plan("cp", None)[0] == slice(3, 4)
 
 
 @pytest.mark.parametrize("output_type, dtype", [("flows", "uint16"), ("affinities", "uint16"), ("binary", "uint8"),

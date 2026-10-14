@@ -1,14 +1,23 @@
-"""``CellposeModelConfig``: Cellpose 4 (Cellpose-SAM and its successors), slice by slice.
+"""``CellposeModelConfig``: Cellpose 4 (Cellpose-SAM and its successors), in 2D or 3D.
 
-Each z slice of a chunk is segmented in 2D by ``cellpose.models.CellposeModel``,
-read with ``context`` voxels of margin in y and x that are cut off again, so
-that objects at the chunk's edge are seen whole. What the layer shows is
+By default each z slice of a chunk is segmented in 2D by
+``cellpose.models.CellposeModel``, read with ``context`` voxels of margin in
+y and x that are cut off again, so that objects at the chunk's edge are seen
+whole. With ``do_3d`` the chunk is segmented in 3D, as Cellpose's
+``do_3D``: its 2D network runs on every YX, ZY and ZX plane of the chunk,
+their flows are summed into 3D flows (flow_z, flow_y, flow_x) and their
+cell probabilities likewise, and masks follow the 3D flows, so an object
+is one id through z. The chunk is then a cube with context on all six
+sides (``chunk_voxels``), its planes about one tile each, and costs about
+three times what the same voxels do slice by slice. What the layer shows is
 ``output``:
 
 - ``"flows"`` (the default): all of what Cellpose's network predicts, three
   float32 channels named flow_y, flow_x and cell: the flows towards each
   object's centre (Cellpose's ``dP``, about -5 to 5) and the cell
-  probability, 0 to 1, the sigmoid of its logit. The layer colours each
+  probability, 0 to 1, the sigmoid of its logit; in 3D a flow_z channel
+  comes first, and the logit is the sum of the three planes' (Cellpose's
+  own, which its 3D thresholds are on). The layer colours each
   voxel by its flow's direction, dimmed by the cell probability
   (``display_channel``; viewer.layers.flow_channels); the
   CellposeMasksPostprocessor makes masks of them on the server, with
@@ -22,7 +31,8 @@ that objects at the chunk's edge are seen whole. What the layer shows is
   of the one in the slice before that it overlaps by at least that IoU),
   and only within a chunk. The ``MortonSegmentationRelabeling``
   postprocessor makes the ids unique across chunks and shows the layer as a
-  segmentation; it is not applied here (see ``_masks``).
+  segmentation; it is not applied here (see ``_masks``). In 3D the masks
+  are Cellpose's 3D objects, one id through the chunk's z.
 
 Cellpose 4 cannot share cellmap-flow's default environment, whose cellpose 3
 pins an older numpy, so this type runs in the ``cellpose4`` pixi
@@ -61,8 +71,19 @@ logger = logging.getLogger(__name__)
 PRETRAINED_MODELS = ("cpsam_v2", "cpsam", "cpdino", "cpdino-vitb")
 OUTPUTS = ("probability", "flows", "masks")
 # The channels each output serves: Cellpose's dP (flowY, flowX) and its cell
-# probability, as the sigmoid of the logit it predicts.
+# probability, as the sigmoid of the logit it predicts. In 3D, dP has a z
+# flow first.
 OUTPUT_CHANNELS = {"probability": ["cell"], "flows": ["flow_y", "flow_x", "cell"], "masks": ["cell"]}
+OUTPUT_CHANNELS_3D = {**OUTPUT_CHANNELS, "flows": ["flow_z", "flow_y", "flow_x", "cell"]}
+
+# A chunk's voxels a side and the context read around it, in y and x, when
+# not given. In 2D, 512 + 2 * 32 = 576 px slices, 3 x 3 Cellpose-SAM tiles.
+# In 3D every plane of the chunk, in all three orientations, goes through
+# the network, so the chunk is kept to one tile a plane: 192 + 2 * 24 = 240,
+# which Cellpose pads to 256. That is 720 tiles for 192^3 voxels, about 3x
+# a 2D chunk's 72 for 8 x 512^2 per voxel (and ~5 s a chunk on an H100).
+DEFAULT_SLICE_SIZE, DEFAULT_CONTEXT = 512, 32
+DEFAULT_SLICE_SIZE_3D, DEFAULT_CONTEXT_3D = 192, 24
 
 # Cellpose cuts each slice into square tiles, bsize pixels a side,
 # overlapping by tile_overlap (its default, kept). Cellpose-SAM's ViT-L
@@ -93,14 +114,14 @@ def _rescale(diameter) -> float:
     return CELLPOSE_DIAMETER / diameter if diameter is not None and diameter > 0 else 1.0
 
 
-def tiles_per_slice(length: int, tile: int, rescale: float = 1.0) -> int:
-    """How many tiles Cellpose cuts a ``length`` x ``length`` slice into.
+def _tiles_per_side(length: int, tile: int, rescale: float = 1.0) -> int:
+    """How many tiles Cellpose cuts one side of a plane ``length`` px long into.
 
-    ``cellpose.core.run_net``'s arithmetic: the slice is resized by
+    ``cellpose.core.run_net``'s arithmetic: the side is resized by
     ``rescale``, padded by ``transforms.get_pad_yx`` (to a multiple of 16
     plus 16, or up to one tile), then cut into
-    ``ceil((1 + 2 * overlap) * padded / tile)`` tiles a side, or one when it
-    fits in a tile.
+    ``ceil((1 + 2 * overlap) * padded / tile)`` tiles, or one when it fits
+    in a tile.
     """
     resized = int(length * rescale) if rescale != 1.0 else int(length)
     div = 16
@@ -108,8 +129,27 @@ def tiles_per_slice(length: int, tile: int, rescale: float = 1.0) -> int:
         padded = div * math.ceil(resized / div) + div
     else:
         padded = max(resized + div, tile)
-    per_side = 1 if padded <= tile else math.ceil((1.0 + 2 * TILE_OVERLAP) * padded / tile)
-    return per_side * per_side
+    return 1 if padded <= tile else math.ceil((1.0 + 2 * TILE_OVERLAP) * padded / tile)
+
+
+def tiles_per_slice(length: int, tile: int, rescale: float = 1.0) -> int:
+    """How many tiles Cellpose cuts a ``length`` x ``length`` slice into."""
+    return _tiles_per_side(length, tile, rescale) ** 2
+
+
+def tiles_per_volume(shape, tile: int, rescale: float = 1.0, anisotropy: float = 1.0) -> int:
+    """How many tiles Cellpose's ``do_3D`` runs on a (z, y, x) volume of ``shape``.
+
+    ``CellposeModel._run_net`` resizes the volume by ``rescale`` (and z by
+    ``anisotropy`` too), then ``core.run_3D`` runs the network on each of its
+    YX, ZY and ZX planes.
+    """
+    z, y, x = int(shape[0] * anisotropy * rescale), int(shape[1] * rescale), int(shape[2] * rescale)
+
+    def per_plane(height, width):
+        return _tiles_per_side(height, tile) * _tiles_per_side(width, tile)
+
+    return z * per_plane(y, x) + y * per_plane(z, x) + x * per_plane(z, y)
 
 
 def _check_cellpose_4():
@@ -217,7 +257,7 @@ def _serving(model):
 
 
 class CellposeModelConfig(ModelConfig):
-    """Cellpose 4 run on each z slice of a chunk.
+    """Cellpose 4 run on each z slice of a chunk, or on the chunk in 3D.
 
     Args:
         voxel_size: nm per voxel, input and output (one number or one per
@@ -227,11 +267,17 @@ class CellposeModelConfig(ModelConfig):
         pretrained_model: "cpsam_v2" (default), "cpsam", "cpdino",
             "cpdino-vitb", or the path of finetuned Cellpose weights.
         output: "flows" (the default; float32: flow_y, flow_x and the cell
-            probability), "probability" (float32, 0 to 1, one channel) or
-            "masks" (uint64, ids unique within a chunk).
-        slices_per_chunk: z slices in a chunk.
-        slice_size: voxels a side, in y and x, of each chunk's slices.
-        context: voxels read on each side in y and x beyond those, and cut off.
+            probability, with flow_z first in 3D), "probability" (float32,
+            0 to 1, one channel) or "masks" (uint64, ids unique within a
+            chunk).
+        do_3d: segment each chunk in 3D (Cellpose's ``do_3D``) rather than
+            slice by slice.
+        slices_per_chunk: z slices in a chunk (2D only; a 3D chunk's z
+            follows from ``slice_size``, ``chunk_voxels``).
+        slice_size: voxels a side, in y and x, of each chunk's slices; None
+            is 512 in 2D, 192 in 3D (``DEFAULT_SLICE_SIZE``).
+        context: voxels read on each side in y and x beyond those, and cut
+            off, and in z too in 3D; None is 32 in 2D, 24 in 3D.
         batch_size: tiles per GPU pass (``DEFAULT_BATCH_SIZE``; None, as a
             blank form field sends it, is that too).
         diameter: object diameter in input voxels; None keeps the model's
@@ -239,10 +285,14 @@ class CellposeModelConfig(ModelConfig):
             30 / diameter.
         flow_threshold, cellprob_threshold: Cellpose's mask thresholds (masks
             only).
-        stitch_threshold: Cellpose's own slice linking (masks only): a mask
-            takes the id of the mask in the slice before that it overlaps by
-            at least this IoU, within a chunk. 0, the default, leaves each
-            slice's masks apart.
+        stitch_threshold: Cellpose's own slice linking (masks only, 2D
+            only): a mask takes the id of the mask in the slice before that
+            it overlaps by at least this IoU, within a chunk. 0, the
+            default, leaves each slice's masks apart.
+        flow3d_smooth: in 3D, the sigma, in voxels, of a Gaussian Cellpose
+            smooths the 3D flows with before following them (its
+            ``flow3D_smooth``), against objects broken up along z; 0, the
+            default, is none.
     """
 
     cli_name = "cellpose"
@@ -259,11 +309,16 @@ class CellposeModelConfig(ModelConfig):
     finetune_output_type = "flows"
 
     @property
+    def channels(self):
+        """The names of the channels ``output`` serves, in 2D or 3D."""
+        return list((OUTPUT_CHANNELS_3D if self.do_3d else OUTPUT_CHANNELS)[self.output])
+
+    @property
     def display_channel(self):
         """The cell probability's channel when the output has several (flows):
         the layer's flow colours are dimmed by it, and its range is the
         layer's."""
-        channels = OUTPUT_CHANNELS[self.output]
+        channels = self.channels
         return channels.index("cell") if len(channels) > 1 else None
 
     def __init__(
@@ -271,14 +326,16 @@ class CellposeModelConfig(ModelConfig):
         voxel_size,
         pretrained_model: str = "cpsam_v2",
         output: str = "flows",
+        do_3d: bool = False,
         slices_per_chunk: int = 8,
-        slice_size: int = 512,
-        context: int = 32,
+        slice_size: int = None,
+        context: int = None,
         batch_size: int = DEFAULT_BATCH_SIZE,
         diameter: float = None,
         flow_threshold: float = 0.4,
         cellprob_threshold: float = 0.0,
         stitch_threshold: float = 0.0,
+        flow3d_smooth: float = 0.0,
         name=None,
         scale=None,
     ):
@@ -291,7 +348,13 @@ class CellposeModelConfig(ModelConfig):
         self.voxel_size = _voxel_size(voxel_size)
         self.pretrained_model = str(pretrained_model)
         self.output = output
+        # The model form sends a checkbox as a string.
+        self.do_3d = do_3d if isinstance(do_3d, bool) else str(do_3d).strip().lower() in ("1", "true", "yes", "on")
         self.slices_per_chunk = int(slices_per_chunk)
+        if slice_size is None:
+            slice_size = DEFAULT_SLICE_SIZE_3D if self.do_3d else DEFAULT_SLICE_SIZE
+        if context is None:
+            context = DEFAULT_CONTEXT_3D if self.do_3d else DEFAULT_CONTEXT
         self.slice_size = int(slice_size)
         self.context = int(context)
         if self.slices_per_chunk < 1 or self.slice_size < 1 or self.context < 0:
@@ -315,6 +378,13 @@ class CellposeModelConfig(ModelConfig):
             # It links masks; with no masks it would only slow the chunk down
             # (Cellpose computes them to link them) and change nothing shown.
             raise ValueError(f"stitch_threshold links masks: it needs output masks, not {output!r}")
+        if self.stitch_threshold and self.do_3d:
+            raise ValueError("stitch_threshold links 2D slices' masks; in 3D (do_3d) the masks are 3D objects already")
+        self.flow3d_smooth = float(flow3d_smooth)
+        if self.flow3d_smooth < 0:
+            raise ValueError(f"flow3d_smooth is a sigma, 0 or more; got {self.flow3d_smooth}")
+        if self.flow3d_smooth and not self.do_3d:
+            raise ValueError("flow3d_smooth smooths 3D flows: it needs do_3d")
         self.name = name
         self.scale = scale
 
@@ -322,6 +392,28 @@ class CellposeModelConfig(ModelConfig):
     def read_size(self) -> int:
         """Voxels a side, in y and x, of each slice Cellpose is given."""
         return self.slice_size + 2 * self.context
+
+    @property
+    def anisotropy(self) -> float:
+        """z's voxel size over y's: how much Cellpose stretches z in 3D (its
+        ``anisotropy``) so that its planes are square in nm."""
+        return float(self.voxel_size[0]) / float(self.voxel_size[1])
+
+    def chunk_voxels(self):
+        """``(chunk, context)``: a chunk's (z, y, x) voxels, and those read
+        beyond it on each side.
+
+        In 2D, ``slices_per_chunk`` slices of ``slice_size`` squared, with
+        context in y and x only: each slice is segmented on its own. In 3D a
+        cube in nm: ``slice_size`` and ``context`` in y and x, and as many
+        nm in z, so that once Cellpose stretches z by ``anisotropy`` every
+        plane is as wide as a YX one, about one tile.
+        """
+        if not self.do_3d:
+            return (self.slices_per_chunk, self.slice_size, self.slice_size), (0, self.context, self.context)
+        z = max(1, round(self.slice_size / self.anisotropy))
+        z_context = round(self.context / self.anisotropy)
+        return (z, self.slice_size, self.slice_size), (z_context, self.context, self.context)
 
     def _load_model(self):
         from cellpose import models
@@ -357,7 +449,8 @@ class CellposeModelConfig(ModelConfig):
     def _get_config(self):
         model = self._load_model()
         voxel_size = np.asarray(self.voxel_size, dtype=float)
-        slices, size, read = self.slices_per_chunk, self.slice_size, self.read_size
+        chunk, context = (np.asarray(v) for v in self.chunk_voxels())
+        read = chunk + 2 * context
 
         config = Config()
         config.model = model
@@ -365,20 +458,24 @@ class CellposeModelConfig(ModelConfig):
         # 5.24 nm z would be 5, and every chunk placed on the wrong grid.
         config.input_voxel_size = self.voxel_size
         config.output_voxel_size = self.voxel_size
-        # No context in z: each slice is segmented on its own.
-        config.read_shape = _numbers(np.array((slices, read, read)) * voxel_size)
-        config.write_shape = _numbers(np.array((slices, size, size)) * voxel_size)
+        # In 2D no context in z: each slice is segmented on its own.
+        config.read_shape = _numbers(read * voxel_size)
+        config.write_shape = _numbers(chunk * voxel_size)
         config.context = _numbers((np.asarray(config.read_shape) - np.asarray(config.write_shape)) / 2)
-        config.channels = list(OUTPUT_CHANNELS[self.output])
+        config.channels = self.channels
         config.output_channels = len(config.channels)
-        config.block_shape = np.array((slices, size, size, config.output_channels))
+        config.block_shape = np.array((*chunk, config.output_channels))
         config.output_dtype = np.uint64 if self.output == "masks" else np.float32
 
-        # Cellpose cuts each slice into tiles; given the chunk as one batch it
-        # runs batch_size of them, from any of its slices, per GPU pass.
+        # Cellpose cuts each plane into tiles; given the chunk as one batch it
+        # runs batch_size of them, from any of its planes, per GPU pass.
         # bsize is passed too, so Cellpose tiles as counted here.
         bsize = tile_size(getattr(model, "backbone", "sam_vitl"))
-        tiles = tiles_per_slice(read, bsize, _rescale(self.diameter))
+        rescale = _rescale(self.diameter)
+        if self.do_3d:
+            tiles = tiles_per_volume(read, bsize, rescale, self.anisotropy)
+        else:
+            tiles = int(read[0]) * tiles_per_slice(int(read[1]), bsize, rescale)
         config.eval_kwargs = {
             "batch_size": self.batch_size,
             "bsize": bsize,
@@ -392,9 +489,19 @@ class CellposeModelConfig(ModelConfig):
             # its z axis named (and refuses one otherwise). It still segments
             # each slice in 2D, but normalizes the chunk's slices together.
             config.eval_kwargs.update(stitch_threshold=self.stitch_threshold, z_axis=0)
+        if self.do_3d:
+            # The chunk as one 3D image, normalized as a whole; Cellpose
+            # stretches z by the anisotropy before its planes are cut, and
+            # resizes the flows back.
+            config.eval_kwargs.update(do_3D=True, z_axis=0)
+            if self.anisotropy != 1.0:
+                config.eval_kwargs["anisotropy"] = self.anisotropy
+            if self.flow3d_smooth:
+                config.eval_kwargs["flow3D_smooth"] = self.flow3d_smooth
         logger.info(
-            f"Cellpose {self.pretrained_model} ({getattr(model, 'backbone', '?')}): {tiles} tiles "
-            f"of {bsize} px a slice, {slices * tiles} a chunk, batch_size {self.batch_size}"
+            f"Cellpose {self.pretrained_model} ({getattr(model, 'backbone', '?')}"
+            f"{', 3D' if self.do_3d else ''}): {tiles} tiles of {bsize} px a chunk "
+            f"({' x '.join(str(int(n)) for n in read)} voxels read), batch_size {self.batch_size}"
         )
         config.process_chunk = self.process_chunk
         return config
@@ -412,19 +519,17 @@ class CellposeModelConfig(ModelConfig):
         """
         context = _numbers((np.asarray(config.read_shape) - np.asarray(config.write_shape)) / 2)
         data = idi.to_ndarray_ts(output_roi.grow(context, context))
-        # A batch of 2D images, (z, y, x, channel): Cellpose still normalizes
-        # and segments each slice on its own, but batches their tiles
-        # together. A list of slices would be run image by image, a pass or
-        # more per slice; z_axis is refused without do_3D, and a 3D array is
-        # taken for one 2D image with channels.
+        # (z, y, x, channel). In 2D a batch of 2D images: Cellpose still
+        # normalizes and segments each slice on its own, but batches their
+        # tiles together. A list of slices would be run image by image, a
+        # pass or more per slice; z_axis is refused without do_3D or
+        # stitching, and a 3D array is taken for one 2D image with channels.
+        # In 3D (do_3D and z_axis in eval_kwargs) one 3D image.
         with _serving(config.model) as eval_kwargs_override:
             masks, flows, _ = config.model.eval(data[..., np.newaxis], channel_axis=3,
                                                 **{**config.eval_kwargs, **eval_kwargs_override(config.eval_kwargs)})
-        inner = (
-            slice(None),
-            slice(self.context, self.context + self.slice_size),
-            slice(self.context, self.context + self.slice_size),
-        )
+        chunk, margin = self.chunk_voxels()
+        inner = tuple(slice(m, m + w) for m, w in zip(margin, chunk))
         if self.output in ("probability", "flows"):
             # flows[2] is the cell probability as a logit, (z, y, x); Cellpose
             # squeezes a single slice to (y, x).
@@ -432,12 +537,13 @@ class CellposeModelConfig(ModelConfig):
             probability = (1.0 / (1.0 + np.exp(-logits)))[np.newaxis]
             if self.output == "probability":
                 return probability
-            # flows[1] is dP, flowY and flowX, (2, z, y, x), squeezed alike.
-            dp = np.reshape(flows[1], (2, *data.shape))[(slice(None), *inner)].astype(np.float32)
+            # flows[1] is dP, (flowY, flowX) or in 3D (flowZ, flowY, flowX),
+            # then (z, y, x), squeezed alike.
+            dp = np.reshape(flows[1], (-1, *data.shape))[(slice(None), *inner)].astype(np.float32)
             return np.concatenate([dp, probability])
         masks = np.reshape(masks, data.shape)[inner]
-        if config.eval_kwargs.get("stitch_threshold"):
-            # Stitched, an id is one object through the chunk's slices
+        if config.eval_kwargs.get("stitch_threshold") or config.eval_kwargs.get("do_3D"):
+            # Stitched or 3D, an id is one object through the chunk's slices
             # already; numbering each slice apart would split them again.
             return masks.astype(np.uint64)[np.newaxis]
         return self._masks(masks)[np.newaxis]
@@ -461,7 +567,9 @@ class CellposeModelConfig(ModelConfig):
         out of the flow loss, ``instance_flows``). One slice: the network is
         2D and sees each slice alone, so more slices would cost a network
         pass each and add nothing, and a one-slice patch centred on a
-        painted voxel always lands on paint.
+        painted voxel always lands on paint. A 3D model's network is the
+        same 2D one, run on the chunk's planes in all three orientations;
+        it is trained on z slices, the YX planes.
         """
         tile = tile_size(getattr(self.config.model, "backbone", "sam_vitl"))
         patch = (1, tile, tile)
@@ -560,10 +668,14 @@ class CellposeModelConfig(ModelConfig):
             "voxel_size": list(self.voxel_size),
             "pretrained_model": self.pretrained_model,
             "output": self.output,
+        }
+        if self.do_3d:
+            result["do_3d"] = True
+        result.update({
             "slices_per_chunk": self.slices_per_chunk,
             "slice_size": self.slice_size,
             "context": self.context,
-        }
+        })
         result["batch_size"] = self.batch_size
         if self.diameter is not None:
             result["diameter"] = self.diameter
@@ -571,4 +683,6 @@ class CellposeModelConfig(ModelConfig):
         result["cellprob_threshold"] = self.cellprob_threshold
         if self.stitch_threshold:
             result["stitch_threshold"] = self.stitch_threshold
+        if self.flow3d_smooth:
+            result["flow3d_smooth"] = self.flow3d_smooth
         return self._with_name_scale(result)

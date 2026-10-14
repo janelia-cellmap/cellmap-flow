@@ -85,8 +85,15 @@ def fake_cellpose(monkeypatch):
     models.get_user_models = lambda: []
     models.CellposeModel = FakeCellposeModel
     package.models = models
+    # A Cellpose 4: when an earlier test imported the environment's real
+    # Cellpose 3, its cellpose.version stayed loaded, and the version check
+    # refused the stand-in.
+    version = types.ModuleType("cellpose.version")
+    version.version = "4.0.0"
+    package.version = version
     monkeypatch.setitem(sys.modules, "cellpose", package)
     monkeypatch.setitem(sys.modules, "cellpose.models", models)
+    monkeypatch.setitem(sys.modules, "cellpose.version", version)
     FakeCellposeModel.built = []
     return models
 
