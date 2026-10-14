@@ -267,7 +267,7 @@ def _set_chain_and_redraw(spec, dashboard_url, *, built=None, builder=None) -> l
         # the pipeline is (re)submitted.
         session.raw = raw_layer(session.dataset_path, shader=session.shaders.get("data"),
                                 shader_controls=session.shader_controls.get("data"), view=view)
-        s.layers["data"] = session.raw
+        _replace_layer(s.layers, "data", session.raw)
         for index, job in enumerate(session.jobs):
             model = job.model_name
             host = job.host
@@ -278,16 +278,28 @@ def _set_chain_and_redraw(spec, dashboard_url, *, built=None, builder=None) -> l
                 continue
             # Without a shader of the user's, one over the chain's range in
             # the colour the layer had, if its shader was dropped above.
-            s.layers[model] = prediction_layer(
+            _replace_layer(s.layers, model, prediction_layer(
                 model, host, st_data, dataset_path=session.dataset_path, postprocess=session.postprocess,
                 shader=session.shaders.get(model), shader_controls=session.shader_controls.get(model),
                 previous_shader=dropped_shaders.get(model), color=PREDICTION_COLORS[index % len(PREDICTION_COLORS)],
                 info=fetch_model_info(host),
-            )
+            ))
             drawn.append(model)
 
     logger.debug(f"Input normalizers: {session.input_norms}")
     return drawn
+
+
+def _replace_layer(layers, name, layer):
+    """Put ``layer`` in place of the layer ``name``, switched off if that one was.
+
+    A redraw replaces each layer with a new one, which neuroglancer shows, so
+    a model layer the user had switched off came back on with every Submit.
+    """
+    hidden = name in layers and not layers[name].visible
+    layers[name] = layer
+    if hidden:
+        layers[name].visible = False
 
 
 def _problems_with_models(postprocess):
