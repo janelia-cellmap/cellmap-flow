@@ -442,6 +442,12 @@ export function initModelsTab({ onModelsSubmitted } = {}) {
     threeDLabel.textContent = "3D";
     threeDLabel.htmlFor = threeD.id;
     threeDLabel.title = CELLPOSE_3D_TITLE;
+    // In a box of its own (.cellpose-3d-box): inside the row's form-check,
+    // Bootstrap floats a checkbox into the row's left margin, over the
+    // Output list.
+    const threeDBox = document.createElement("div");
+    threeDBox.className = "cellpose-3d-box";
+    threeDBox.append(threeD, threeDLabel);
 
     // 2D masks only: linking each slice's masks to the slice before's.
     const stitchLabel = document.createElement("label");
@@ -458,7 +464,7 @@ export function initModelsTab({ onModelsSubmitted } = {}) {
     stitch.placeholder = "off";
     stitch.title = CELLPOSE_STITCH_TITLE;
     if (settings && settings.stitch_threshold) stitch.value = settings.stitch_threshold;
-    settingsRow.append(voxelLabel, voxel, outputLabel, output, threeD, threeDLabel, stitchLabel, stitch);
+    settingsRow.append(voxelLabel, voxel, outputLabel, output, threeDBox, stitchLabel, stitch);
 
     const hint = document.createElement("div");
     hint.className = "zoo-trained";

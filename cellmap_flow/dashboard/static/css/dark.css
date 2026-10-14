@@ -691,8 +691,24 @@ textarea.form-control[readonly] {
   margin-bottom: 8px;
 }
 
+/* As wide as its longest choice, "Flows + probability", with room for
+   the arrow, which the 12px padding above leaves none. */
 .cellpose-output {
-  width: 8.5rem;
+  width: auto;
+  padding-right: 2rem;
+}
+
+/* The 3D box and its label, in line with the row's other fields: not
+   floated into the row's margin as a form-check's checkbox is. */
+.cellpose-3d-box {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cellpose-3d-box .form-check-input {
+  float: none;
+  margin: 0;
 }
 
 .cellpose-stitch {
