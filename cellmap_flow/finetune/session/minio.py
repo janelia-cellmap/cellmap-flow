@@ -20,6 +20,8 @@ from urllib.parse import urlparse
 
 import s3fs
 
+from cellmap_flow.utils.address import this_machine_ip
+
 logger = logging.getLogger(__name__)
 
 # The mc alias for this dashboard's MinIO, defined per call through
@@ -39,18 +41,6 @@ MINIO_PROXY_URL_ENV = "CELLMAP_FLOW_MINIO_PROXY_URL"
 # Serializes starting MinIO: two requests arriving together could each see
 # no server and start one.
 _minio_lock = threading.Lock()
-
-
-def get_local_ip():
-    """This machine's address on its outgoing interface, else 127.0.0.1."""
-    try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect(("8.8.8.8", 80))
-        local_ip = s.getsockname()[0]
-        s.close()
-        return local_ip
-    except Exception:
-        return "127.0.0.1"
 
 
 def find_available_port(start_port=9000):
@@ -243,7 +233,7 @@ class MinioServer:
         root.mkdir(parents=True, exist_ok=True)
         log_path = root.parent / f"{root.name}.log"
 
-        ip = get_local_ip()
+        ip = this_machine_ip()
         port = find_available_port()
         user, password = _CREDENTIALS
         env = {

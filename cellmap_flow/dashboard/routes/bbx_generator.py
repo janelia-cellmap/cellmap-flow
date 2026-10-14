@@ -6,7 +6,7 @@ from flask import Blueprint, request, jsonify
 from cellmap_flow.dashboard.requests import BbxGenerator, parse
 from cellmap_flow.dashboard.routes.index_page import viewer_url_for
 from cellmap_flow.dashboard.state import get_session
-from cellmap_flow.viewer.bootstrap import new_viewer
+from cellmap_flow.viewer.bootstrap import new_viewer, viewer_url
 
 logger = logging.getLogger(__name__)
 
@@ -89,27 +89,27 @@ def start_bbx_generator():
         bbx_generator_state["bounding_boxes"] = list(existing_bounding_boxes)
         bbx_generator_state["viewer"] = viewer
 
-        # The address the browser loads the viewer from: the request's host
-        # for a viewer on localhost, and behind a reverse proxy the proxy's,
+        # The address the browser loads the viewer from: by this machine's
+        # IP address (viewer_url), the request's host for a viewer on localhost, and behind a reverse proxy the proxy's,
         # as for the dashboard's own viewer.
-        viewer_url = str(viewer)
-        if "localhost" in viewer_url:
+        url = viewer_url(viewer)
+        if "localhost" in url:
             client_host = request.host.split(":")[0]
-            viewer_url = viewer_url.replace("localhost", client_host)
+            url = url.replace("localhost", client_host)
             logger.info(f"Replaced localhost with {client_host} in viewer URL")
-        viewer_url = viewer_url_for(viewer_url, request.headers, request.scheme)
+        url = viewer_url_for(url, request.headers, request.scheme)
 
-        bbx_generator_state["viewer_url"] = viewer_url
+        bbx_generator_state["viewer_url"] = url
         bbx_generator_state["viewer_state"] = viewer.state
 
-        logger.info(f"Starting BBX generator with viewer URL: {viewer_url}")
+        logger.info(f"Starting BBX generator with viewer URL: {url}")
         logger.info(f"Dataset path: {dataset_path}")
         logger.info(f"Target boxes: {num_boxes}")
         logger.info(f"Existing boxes: {len(existing_bounding_boxes)}")
 
         return jsonify({
             "success": True,
-            "viewer_url": viewer_url,
+            "viewer_url": url,
             "dataset_path": dataset_path,
             "num_boxes": num_boxes,
             "existing_count": len(existing_bounding_boxes),

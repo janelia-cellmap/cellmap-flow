@@ -1,9 +1,10 @@
 """From a planned plane to labels: read the raw, ask the model, label the box.
 
 ``read_plane`` reads the plane ``geometry.plan_plane`` planned, on the image
-grid it planned; ``build_request`` makes it the request a backend sends;
-``mask_to_write_shape`` puts the mask the backend returns onto the write
-box's voxels, and ``labels_for_box`` turns that into the labels
+grid it planned and laid out as on screen; ``build_request`` makes it the
+request a backend sends; ``mask_to_write_shape`` puts the mask the backend
+returns onto the write box's voxels, and ``labels_for_box`` turns that into
+the labels
 ``fill.paint_box`` writes: one id per connected object, background
 elsewhere, as a seed from a model's prediction is labelled.
 """
@@ -11,7 +12,7 @@ elsewhere, as a seed from a model's prediction is labelled.
 import numpy as np
 from PIL import Image
 
-from cellmap_flow.ai_annotate.geometry import PlanePlan, raw_box
+from cellmap_flow.ai_annotate.geometry import PlanePlan, raw_box, screen_shape
 
 
 def _resize(plane: np.ndarray, shape) -> np.ndarray:
@@ -30,8 +31,29 @@ def _resize(plane: np.ndarray, shape) -> np.ndarray:
     return np.asarray(resized, dtype=np.float32)
 
 
+def _raw(volume: dict, voxel_size):
+    """The volume's raw dataset at ``voxel_size``, as its trainer reads it."""
+    from cellmap_flow.image_data_interface import ImageDataInterface
+
+    return ImageDataInterface(
+        volume["dataset_path"],
+        voxel_size=voxel_size,
+        normalize=False,
+        on_voxel_size_mismatch="resample" if volume.get("resample") else "relabel",
+    )
+
+
+def raw_extent_nm(volume: dict):
+    """``(lo, hi)``, world nm z, y, x: where the volume's raw data is, read at
+    its input voxel size (``plan_plane``'s ``data_box_nm``)."""
+    idi = _raw(volume, tuple(volume["input_voxel_size"]))
+    lo = np.asarray(idi.offset, dtype=float)[-3:]
+    return lo, lo + np.asarray(idi.shape, dtype=float)[-3:] * np.asarray(idi.voxel_size, dtype=float)[-3:]
+
+
 def read_plane(volume: dict, plan: PlanePlan) -> np.ndarray:
-    """The raw plane ``plan`` reads, as a 2D array of ``plan.image_shape``.
+    """The raw plane ``plan`` reads, as a 2D array of ``plan.image_shape``,
+    laid out as on screen (``PlanePlan.to_screen``).
 
     Read as stored (no input normalization: the image is scaled to 8 bits
     for the model on its own) at the plan's input voxel size, from the level
@@ -40,18 +62,11 @@ def read_plane(volume: dict, plan: PlanePlan) -> np.ndarray:
     padded with 0. The raw's dtype is kept unless the plane had to be
     resized to the image's grid, when it is float32.
     """
-    from cellmap_flow.image_data_interface import ImageDataInterface
-
-    idi = ImageDataInterface(
-        volume["dataset_path"],
-        voxel_size=plan.input_voxel_size,
-        normalize=False,
-        on_voxel_size_mismatch="resample" if volume.get("resample") else "relabel",
-    )
+    idi = _raw(volume, plan.input_voxel_size)
     box = raw_box(plan, idi.voxel_size, idi.offset)
     data = np.asarray(idi.read_box(box))
     plane = np.take(data, 0, axis=plan.depth_axis)
-    return _resize(plane, plan.image_shape)
+    return _resize(plan.to_screen(plane), plan.image_shape)
 
 
 def build_request(plane: np.ndarray, plan: PlanePlan, profile, prompt_override=None):
@@ -77,7 +92,8 @@ def build_request(plane: np.ndarray, plan: PlanePlan, profile, prompt_override=N
 
 
 def mask_to_write_shape(mask: np.ndarray, plan: PlanePlan) -> np.ndarray:
-    """``mask`` (the image's shape) on the write box's in-plane voxels, as bool.
+    """``mask`` (the image's shape, as on screen) on the write box's in-plane
+    voxels, as bool, in z, y, x order (``PlanePlan.write_shape``).
 
     Nearest neighbour, pixel centre to voxel centre: each annotation voxel
     takes the pixel at its centre, so the mask keeps hard edges and lands
@@ -86,11 +102,10 @@ def mask_to_write_shape(mask: np.ndarray, plan: PlanePlan) -> np.ndarray:
     mask = np.asarray(mask, dtype=bool)
     if mask.ndim != 2:
         raise ValueError(f"The mask must be 2D, got shape {mask.shape}")
-    rows, cols = plan.write_shape
-    if mask.shape == (rows, cols):
-        return mask.copy()
-    resized = Image.fromarray(mask.astype(np.uint8) * 255).resize((cols, rows), Image.NEAREST)
-    return np.asarray(resized) > 127
+    rows, cols = screen_shape(plan.write_shape, plan.depth_axis)
+    if mask.shape != (rows, cols):
+        mask = np.asarray(Image.fromarray(mask.astype(np.uint8) * 255).resize((cols, rows), Image.NEAREST)) > 127
+    return np.ascontiguousarray(plan.from_screen(mask))
 
 
 def labels_for_box(mask_write: np.ndarray, existing: np.ndarray, depth_axis: int, count_up: bool,

@@ -438,6 +438,9 @@ class BioModelConfig(ModelConfig):
     # trainable_model() rebuilds the network from its torch weights, with
     # the RDF's normalization and output activation around it.
     finetunable = True
+    # bioimageio.core applies the description's preprocessing (its
+    # normalization) to every sample, and the trainable module does too.
+    normalizes_input = True
 
     def __init__(
         self,

@@ -112,8 +112,11 @@ def test_a_plane_is_centred_on_the_point_one_voxel_thick(depth_axis):
     assert plan.resolution_nm == 4
     assert plan.input_voxel_size == (4.0, 4.0, 4.0)
     assert plan.plane_name == ("XY", "XZ", "YZ")[depth_axis]
-    # The point's pixel: 4 nm pixels from the read's corner.
-    assert plan.click_px == tuple(int((point[a] - raw_lo[a]) // 4) for a in plan.plane_axes)
+    # The point's pixel: 4 nm pixels from the read's corner, laid out as the
+    # panel draws the plane (rows, cols): y, x with x leftwards; x, z; y, z.
+    down, across = {0: (1, 2), 1: (2, 0), 2: (1, 0)}[depth_axis]
+    row, col = (int((point[a] - raw_lo[a]) // 4) for a in (down, across))
+    assert plan.click_px == (row, 128 - 1 - col if depth_axis == 0 else col)
 
 
 def test_a_point_on_a_voxel_boundary_takes_the_voxel_above():
@@ -186,7 +189,8 @@ def test_the_write_box_is_clipped_at_the_volume_edge():
     assert plan.raw_offset_nm[1:] == (0.0, (297 - 32) * 8)
     assert plan.raw_shape_nm[1:] == (35 * 8, 35 * 8)
     assert plan.image_shape == (70, 70)
-    assert plan.click_px == ((3 * 8 + 4) // 4, (32 * 8 + 4) // 4)
+    # x runs leftwards in the XY plane, as neuroglancer draws it.
+    assert plan.click_px == ((3 * 8 + 4) // 4, 70 - 1 - (32 * 8 + 4) // 4)
 
 
 @pytest.mark.parametrize(

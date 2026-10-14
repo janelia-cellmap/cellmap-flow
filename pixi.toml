@@ -5,12 +5,21 @@
 # below). Python dependencies come from pyproject.toml through the editable
 # install; this file adds what PyPI cannot provide: CUDA, and the MinIO
 # server and client and the neuroglancer fork that annotation painting needs.
+#
+# Linux is what deploys (Fileglancer, the cluster); Apple-silicon Macs
+# (osx-arm64) can install it too, to run the viewer and dashboard and serve
+# models on the Mac itself (no bsub there: servers run locally, and models
+# serve and finetune on Apple's GPU). CUDA is Linux-only.
 [workspace]
 name = "cellmap-flow"
 version = "0.2.3"
 description = "Realtime prediction using neuroglancer"
 channels = ["nvidia", "conda-forge", "pytorch"]
-platforms = ["linux-64"]
+platforms = ["linux-64", "osx-arm64"]
+# pixi.lock is lockfile version 7, which pixi reads from 0.68.0 on. An older
+# pixi (Homebrew's lagged at 0.61) did not stop there: it tried to re-solve
+# the lockfile and crashed. With this it says to update instead.
+requires-pixi = ">=0.68.0"
 
 [activation.env]
 # The neuroglancer fork's C++ extension declares `uint64_t` while including
@@ -26,7 +35,6 @@ CELLMAP_FLOW_SERVER_COMMAND = "pixi run cellmap_flow serve"
 [dependencies]
 python = ">=3.11,<4.0"
 pip = "*"
-cuda-toolkit = ">=12.0"
 numpy = "*"
 pyyaml = "*"
 scikit-image = "*"
@@ -36,6 +44,22 @@ pydantic = "*"
 s3fs = "*"
 zarr = "==2.18.4"
 numcodecs = "==0.15.0"
+
+[target.linux-64.dependencies]
+cuda-toolkit = ">=12.0"
+
+[target.osx-arm64.activation.env]
+# Training and serving use Apple's GPU (MPS); an operation PyTorch has no
+# MPS kernel for runs on the CPU instead of failing the run.
+PYTORCH_ENABLE_MPS_FALLBACK = "1"
+
+[target.osx-arm64.dependencies]
+# OpenBLAS's pthreads build, as on Linux. conda-forge's Mac default is its
+# OpenMP build, which loads llvm-openmp's libomp with numpy; PyTorch's PyPI
+# wheel loads its own libomp, and with two in one process training aborted
+# at once ("OMP: Error #15: Initializing libomp.dylib, but found
+# libomp.dylib already initialized").
+libopenblas = { version = "*", build = "pthreads*" }
 
 [pypi-dependencies]
 # finetune: peft and tensorboard; postprocess: edt; ai-annotate: google-genai,
@@ -103,6 +127,13 @@ dacapo-ml = "*"
 # For the `bioimage` model type, which defaults to this environment. timm is
 # what the zoo's BiaPy transformers ("good-microbe", a 2D UNETR) build their
 # blocks from; their weights need it to load.
+[feature.bioimageio.dependencies]
+# bioimageio.core 0.11.0 pins bioimageio.spec 0.5.12.0, which passes pydantic
+# an argument pydantic 2.14 refuses: every model description failed to load
+# ("'index_key' is expected to be an integer or a string"). The Mac's solve
+# had picked 2.14.1; Linux's 2.13.5 loads them.
+pydantic = "<2.14"
+
 [feature.bioimageio.pypi-dependencies]
 bioimageio-core = { version = "==0.11.0", extras = ["onnx", "pytorch"] }
 timm = ">=1.0"

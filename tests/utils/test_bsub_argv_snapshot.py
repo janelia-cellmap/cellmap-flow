@@ -181,7 +181,7 @@ def _submit_finetune(monkeypatch, tmp_path):
 
 FINETUNE_COMMAND = (
     "set -o pipefail; LD_LIBRARY_PATH=<prefix>/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH} "
-    "stdbuf -oL <python> -P -m cellmap_flow.finetune.finetune_cli --model-type script "
+    "PYTHONUNBUFFERED=1 <python> -P -m cellmap_flow.finetune.finetune_cli --model-type script "
     "--model-script /models/mito.py --corrections <tmp>/session/corrections "
     "--output-dir <tmp>/session/runs/mito_<ts> --model-name mito --channels mito "
     "--input-voxel-size 8 8 8 --output-voxel-size 16 16 16 --lora-r 8 --lora-alpha 16 "

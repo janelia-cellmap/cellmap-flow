@@ -31,11 +31,14 @@ Deployment with pixi
 The repository carries a ``pixi.toml`` and lockfile describing the environment
 cellmap-flow is deployed from, including what PyPI cannot provide: the CUDA
 toolkit, and the MinIO server and client that annotation painting needs.
-From a checkout:
+It needs pixi 0.68 or later (``pixi self-update``, or ``brew upgrade pixi``
+if Homebrew installed it), and installs on Linux and Apple-silicon Macs. From
+a checkout, ``pixi install`` sets up the default environment (the dashboard,
+the catalog and cellpose models, and finetuning):
 
 .. code-block:: bash
 
-   pixi install          # the default environment: dashboard, catalog and cellpose models, finetuning
+   pixi install
    pixi run cellmap_flow view -d /path/to/dataset.zarr
 
 ``runnables.yaml`` registers the same commands as Fileglancer apps. Inside a

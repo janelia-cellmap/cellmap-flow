@@ -30,6 +30,7 @@ from cellmap_flow.serving.protocol import (
     split_dataset_url,
 )
 from cellmap_flow.serving.restart_token import TOKEN_HEADER, tokens_match
+from cellmap_flow.utils.address import this_machine_ip
 
 import requests
 import time
@@ -76,27 +77,6 @@ def get_free_port():
     free_port = s.getsockname()[1]
     s.close()
     return free_port
-
-
-def get_public_ip():
-    """
-    Return the local/private IP address in use on this machine
-    (e.g., 10.x.x.x or 192.168.x.x if behind NAT).
-    This *does not* return the real Internet-facing public IP
-    if you're behind NAT.
-    """
-    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    try:
-        # 8.8.8.8 doesn't need to be reachable;
-        # the connect() call will assign a local IP regardless.
-        s.connect(("8.8.8.8", 80))
-        ip = s.getsockname()[0]
-    except Exception:
-        # Fallback if something fails
-        ip = "127.0.0.1"
-    finally:
-        s.close()
-    return ip
 
 
 def _chain_from_url(dataset: str):
@@ -643,7 +623,7 @@ class CellMapFlowServer:
         if port is None or port == 0:
             port = get_free_port()
 
-        address = f"{'https' if ssl_context else 'http'}://{get_public_ip()}:{port}"
+        address = f"{'https' if ssl_context else 'http'}://{this_machine_ip()}:{port}"
         output = f"{IP_PATTERN[0]}{address}{IP_PATTERN[1]}"
         logger.error(output)
         print(output, flush=True)

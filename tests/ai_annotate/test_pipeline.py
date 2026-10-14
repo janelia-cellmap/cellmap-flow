@@ -11,12 +11,13 @@ import pytest
 
 from cellmap_flow.ai_annotate.backends.base import SegmentRequest
 from cellmap_flow.ai_annotate.backends.fake import FakeBackend
-from cellmap_flow.ai_annotate.geometry import plan_plane
+from cellmap_flow.ai_annotate.geometry import from_screen, plan_plane
 from cellmap_flow.ai_annotate.organelles import ORGANELLES
 from cellmap_flow.ai_annotate.pipeline import (
     build_request,
     labels_for_box,
     mask_to_write_shape,
+    raw_extent_nm,
     read_plane,
 )
 
@@ -26,13 +27,13 @@ DIM, BRIGHT = 20, 220
 BLOCK_NM = ((64, 96), (96, 128), (160, 192))
 
 
-def _raw_with_block(raw_zarr, voxel_size, extent_nm, block_nm=BLOCK_NM):
+def _raw_with_block(raw_zarr, voxel_size, extent_nm, block_nm=BLOCK_NM, name="raw"):
     """A raw of ``extent_nm`` at ``voxel_size`` from the origin, DIM but for the block."""
     voxel_size = np.asarray(voxel_size)
     shape = tuple(int(e // v) for e, v in zip(extent_nm, voxel_size))
     data = np.full(shape, DIM, dtype=np.uint8)
     data[tuple(slice(int(lo // v), int(hi // v)) for (lo, hi), v in zip(block_nm, voxel_size))] = BRIGHT
-    return raw_zarr(data, voxel_size=tuple(int(v) for v in voxel_size), offset=(0, 0, 0))
+    return raw_zarr(data, voxel_size=tuple(int(v) for v in voxel_size), offset=(0, 0, 0), name=name)
 
 
 def _volume(raw_path, output, input):
@@ -132,6 +133,69 @@ def test_the_read_is_padded_outside_the_raw(raw_zarr):
     assert np.all(plane[int(rows_in_raw):] == 0)
 
 
+def test_a_field_at_the_datas_edge_stops_there(raw_zarr):
+    # The same volume larger than its raw (to whole chunks), with the data's
+    # extent given: the field stops at the raw's y end, 256 nm, rather than
+    # reading and labelling the padding past it.
+    raw = _raw_with_block(raw_zarr, (4, 4, 4), (192, 256, 320))
+    volume = _volume(raw, (8, 8, 8), (4, 4, 4))
+    data_box = raw_extent_nm(volume)
+    assert [list(v) for v in data_box] == [[0, 0, 0], [192, 256, 320]]
+    plan = plan_plane(volume, (24, 40, 40), (81, 250, 177), 0, crop_size_px=16, data_box_nm=data_box)
+    assert plan.write_hi[1] == 256 // 8
+    assert plan.raw_offset_nm[1] + plan.raw_shape_nm[1] == 256
+    assert np.all(read_plane(volume, plan) == DIM)
+
+
+def test_a_point_past_the_datas_edge_is_refused(raw_zarr):
+    from cellmap_flow.ai_annotate.errors import AIAnnotateError
+
+    raw = _raw_with_block(raw_zarr, (4, 4, 4), (192, 256, 320))
+    volume = _volume(raw, (8, 8, 8), (4, 4, 4))
+    with pytest.raises(AIAnnotateError, match="outside the data"):
+        plan_plane(volume, (24, 40, 40), (81, 280, 177), 0, crop_size_px=16, data_box_nm=raw_extent_nm(volume))
+
+
+@pytest.mark.parametrize("depth_axis", [0, 1, 2])
+def test_the_click_marks_the_points_voxel(raw_zarr, depth_axis):
+    # A mask of the click's pixel alone, as a model answering about the
+    # point would paint it, lands on the annotation voxel the point is in
+    # (a pixel a voxel, so no sampling can skip it).
+    raw = _raw_with_block(raw_zarr, (8, 8, 8), (192, 256, 320))
+    volume = _volume(raw, (8, 8, 8), (8, 8, 8))
+    point = (81, 113, 177)
+    plan = plan_plane(volume, (24, 32, 40), point, depth_axis, crop_size_px=16)
+    image = np.zeros(plan.image_shape, dtype=bool)
+    image[plan.click_px] = True
+    marked = np.argwhere(mask_to_write_shape(image, plan))
+    voxel = [int(point[a] // 8) - plan.write_lo[a] for a in plan.plane_axes]
+    assert marked.tolist() == [voxel]
+
+
+@pytest.mark.parametrize("depth_axis, down, across", [(0, 1, 2), (1, 2, 0), (2, 1, 0)])
+def test_the_image_is_the_plane_as_the_panel_draws_it(raw_zarr, depth_axis, down, across):
+    # Neuroglancer's panels, with cellmap-flow's z, y, x display dimensions:
+    # the XY plane is y down and x across, increasing to the left; XZ is x
+    # down and z across; YZ is y down and z across.
+    point, extent = (96, 128, 160), (192, 256, 320)
+
+    def bright_below_the_point_along(axis):
+        block = [(0, e) for e in extent]
+        block[axis] = (0, point[axis])
+        raw = _raw_with_block(raw_zarr, (4, 4, 4), extent, block, name=f"raw_{axis}")
+        volume = _volume(raw, (8, 8, 8), (4, 4, 4))
+        plan = plan_plane(volume, (24, 32, 40), point, depth_axis, crop_size_px=16)
+        image = read_plane(volume, plan)
+        assert image.shape == tuple(plan.image_shape) == (32, 32)
+        return image == BRIGHT
+
+    top = bright_below_the_point_along(down)
+    assert top[:16].all() and not top[16:].any()
+    side = bright_below_the_point_along(across)
+    near, far = (side[:, 16:], side[:, :16]) if depth_axis == 0 else (side[:, :16], side[:, 16:])
+    assert near.all() and not far.any()
+
+
 # --- the request ------------------------------------------------------------------
 
 
@@ -144,7 +208,8 @@ def test_build_request_states_the_resolution_sent_and_the_click(raw_zarr):
     assert request.image.mode == "RGB"
     assert request.image.size == (plan.image_shape[1], plan.image_shape[0])
     assert request.target_rgb == tuple(ORGANELLES["mito"].rgb)
-    assert request.click_px == plan.click_px == ((113 - 48) // 4, (177 - 112) // 4)
+    # x runs leftwards in the XY plane, as on screen.
+    assert request.click_px == plan.click_px == ((113 - 48) // 4, 32 - 1 - (177 - 112) // 4)
     assert "4 nm/px" in request.prompt
 
     edited = build_request(read_plane(volume, plan), plan, ORGANELLES["mito"], "Paint the bright block red.")
@@ -171,10 +236,11 @@ def test_mask_to_write_shape_samples_each_voxel_centre():
     from types import SimpleNamespace
 
     # A 4 px image over 2 voxels: voxel 0 takes pixel 1 (its centre is at
-    # 1.0, the pixel [1, 2)), voxel 1 pixel 3.
-    plan = SimpleNamespace(write_shape=(1, 2))
-    assert mask_to_write_shape(np.array([[True, False, False, True]]), plan).tolist() == [[False, True]]
-    assert mask_to_write_shape(np.array([[False, True, False, False]]), plan).tolist() == [[True, False]]
+    # 1.0, the pixel [1, 2)), voxel 1 pixel 3. An XZ plane, drawn with z
+    # across: the image's row is the box's column.
+    plan = SimpleNamespace(write_shape=(2, 1), depth_axis=1, from_screen=lambda image: from_screen(image, 1))
+    assert mask_to_write_shape(np.array([[True, False, False, True]]), plan).tolist() == [[False], [True]]
+    assert mask_to_write_shape(np.array([[False, True, False, False]]), plan).tolist() == [[True], [False]]
     with pytest.raises(ValueError):
         mask_to_write_shape(np.zeros((2, 2, 2)), plan)
 

@@ -39,13 +39,10 @@ logger = logging.getLogger(__name__)
 
 
 def _get_device():
-    """Get the appropriate device (CUDA if available, else CPU)."""
-    # Imported here rather than at module scope: importing torch costs
-    # ~7s, and the CLI builds its command list from this module, so
-    # `cellmap_flow --help` paid that before printing anything.
-    import torch
+    """The device models are loaded onto: CUDA, else Apple's GPU, else the CPU (``best_device``)."""
+    from cellmap_flow.utils.device import best_device
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = best_device()
     logger.info(f"Using device: {device}")
     return device
 
@@ -267,6 +264,11 @@ class ModelConfig:
     # opens on it, or, beside flow_y and flow_x channels, dims their colours
     # by it (viewer.layers).
     display_channel = None
+    # Whether the model normalizes its raw input itself (Cellpose each slice
+    # to its 1st-99th percentile, a zoo model by its description's
+    # preprocessing). The dashboard then suggests no input normalization for
+    # it: it suggested [-1, 1], as for any model that declares nothing.
+    normalizes_input = False
     # Whether the finetune trainer can train this type's models: it trains
     # the module ``trainable_model()`` gives, and serves the result through
     # ``serve_trained``. A type sets it once those two do the right thing for

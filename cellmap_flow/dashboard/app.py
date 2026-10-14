@@ -1,5 +1,4 @@
 import os
-import socket
 import logging
 
 from flask import Flask
@@ -18,6 +17,7 @@ from cellmap_flow.dashboard.routes.blockwise import blockwise_bp
 from cellmap_flow.dashboard.routes.bbx_generator import bbx_bp
 from cellmap_flow.dashboard.routes.finetune import finetune_bp
 from cellmap_flow.dashboard.routes.review_routes import review_bp
+from cellmap_flow.utils.address import this_machine_ip
 
 logger = logging.getLogger(__name__)
 
@@ -100,13 +100,14 @@ def create_and_run_app(neuroglancer_url=None):
         configure_logging()
     load_plugins()
     get_session().neuroglancer_url = neuroglancer_url
-    hostname = socket.gethostname()
     # threaded=True is not optional. make_server defaults to one request at a
     # time, and the dashboard has long POSTs (a YAML crop load ran for three
     # minutes) and open SSE log streams, each of which would then block every
     # other request. app.run() used to default to threaded=True; this keeps it.
     server = make_server("0.0.0.0", 0, app, threaded=True)
-    url = f"http://{hostname}:{server.socket.getsockname()[1]}"
+    # By IP address, not hostname (see this_machine_ip): off campus a
+    # laptop's name still pointed at its campus address, and the link hung.
+    url = f"http://{this_machine_ip()}:{server.socket.getsockname()[1]}"
     logger.info(f"Dashboard running at: {url}")
     print(f"\n * Dashboard URL: {url}\n", flush=True)
     _announce_service_url(url)

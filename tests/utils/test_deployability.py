@@ -20,6 +20,7 @@ import click
 import yaml
 
 import cellmap_flow
+from cellmap_flow.utils.address import this_machine_ip
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -88,7 +89,8 @@ def test_the_dashboard_writes_its_url_where_fileglancer_looks(tmp_path, monkeypa
 
     url = url_file.read_text()
     host, port = url.removeprefix("http://").rsplit(":", 1)
-    assert host == socket.gethostname() and int(port) > 0
+    # By address: a hostname can point elsewhere (a laptop off campus).
+    assert host == this_machine_ip() and int(port) > 0
 
 
 def test_the_server_command_is_read_from_the_environment():

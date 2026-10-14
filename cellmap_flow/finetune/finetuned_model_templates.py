@@ -152,6 +152,7 @@ def generate_current_config_yaml(
     walltime: str = None,
     json_data: dict = None,
     resample: bool = False,
+    cluster: bool = True,
 ) -> str:
     """
     Build YAML text snapshotting the dashboard's current live server config
@@ -173,6 +174,10 @@ def generate_current_config_yaml(
         json_data: dict with "input_norm"/"postprocess" keys reflecting the
             currently active normalization/postprocessing, if any
         resample: the dashboard's Resample setting, written either way
+        cluster: whether this machine submits to LSF (has bsub). Without
+            one, queue, charge_group and walltime are left out: nothing
+            read them where it was exported, and a Mac's export said
+            gpu_h100, the site's default queue, which it never used.
 
     Returns:
         YAML text (str) ready to write to a file.
@@ -183,13 +188,12 @@ def generate_current_config_yaml(
     queue = site.default_queue if queue is None else queue
     charge_group = site.default_charge_group if charge_group is None else charge_group
 
-    yaml_dict = {
-        "data_path": data_path,
-        "charge_group": charge_group,
-        "queue": queue,
-    }
-    if walltime:
-        yaml_dict["walltime"] = walltime
+    yaml_dict = {"data_path": data_path}
+    if cluster:
+        yaml_dict["charge_group"] = charge_group
+        yaml_dict["queue"] = queue
+        if walltime:
+            yaml_dict["walltime"] = walltime
     yaml_dict["resample"] = bool(resample)
 
     has_json_data = json_data and (
@@ -205,6 +209,12 @@ def generate_current_config_yaml(
         "# Reload with: cellmap_flow yaml <this file>\n"
         "#\n"
     )
+    if not cluster:
+        header += (
+            "# Exported where there is no cluster (no bsub): its models ran on that\n"
+            "# machine. To run it on the cluster, add charge_group: and queue:.\n"
+            "#\n"
+        )
     if not has_json_data:
         header += (
             "# WARNING: no normalization/postprocessing was active when this\n"

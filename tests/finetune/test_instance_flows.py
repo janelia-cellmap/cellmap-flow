@@ -127,6 +127,14 @@ def test_cellposes_own_flows_point_at_each_instances_centre():
     assert mask[0, :, 0].all()
 
 
+def test_flows_are_diffused_on_the_trainers_gpu_cuda_or_apples():
+    from cellmap_flow.finetune.instance_flows import flow_device
+
+    for name in ("cuda", "mps"):
+        assert flow_device(torch.device(name)) == torch.device(name)
+    assert flow_device(torch.device("cpu")) is None
+
+
 def test_the_flow_loss_unmasked_is_cellposes_loss():
     torch.manual_seed(0)
     pred, target = torch.randn(2, 3, 1, 8, 8), torch.randn(2, 3, 1, 8, 8)

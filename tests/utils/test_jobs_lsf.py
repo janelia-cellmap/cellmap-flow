@@ -190,7 +190,7 @@ def test_a_server_writes_its_ready_file_as_it_prints_its_marker(tmp_path, monkey
     target = tmp_path / "m.ready"
     monkeypatch.setenv(READY_ENV, str(target))
     monkeypatch.setenv("LSB_JOBID", "4242")
-    monkeypatch.setattr(server, "get_public_ip", lambda: "10.1.2.3")
+    monkeypatch.setattr(server, "this_machine_ip", lambda: "10.1.2.3")
     served = []
     fake_server = SimpleNamespace(app=SimpleNamespace(run=lambda **kw: served.append((kw["port"], read_ready_file(target)))))
 

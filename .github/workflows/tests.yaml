@@ -108,3 +108,44 @@ jobs:
       # the deployment at install time.
       - run: curl -fsSL https://pixi.sh/install.sh | PIXI_VERSION=v0.80.0 bash
       - run: ~/.pixi/bin/pixi lock --check
+
+  macos:
+    name: macOS (Apple silicon), pixi environments
+    # macos-latest is Apple silicon. Every other job runs on Linux and installs
+    # with pip, so nothing ran on a Mac or in the pixi environments people
+    # install there; each of these steps catches one way a Mac broke
+    # (2026-10-14). Apple's GPU is not tested: these runners are virtual
+    # machines without it, so the device choices are tested by faking it.
+    runs-on: macos-latest
+    timeout-minutes: 75
+    env:
+      PIXI_CACHE_DIR: /Users/runner/.cache/pixi
+    steps:
+      - uses: actions/checkout@v4
+      - run: curl -fsSL https://pixi.sh/install.sh | PIXI_VERSION=v0.80.0 bash
+      - uses: actions/cache@v4
+        with:
+          path: /Users/runner/.cache/pixi
+          key: pixi-macos-${{ hashFiles('pixi.lock') }}
+          restore-keys: pixi-macos-
+      - name: Install the test, cellpose4 and bioimageio environments
+        run: |
+          ~/.pixi/bin/pixi install --locked -e test
+          ~/.pixi/bin/pixi install --locked -e cellpose4
+          ~/.pixi/bin/pixi install --locked -e bioimageio
+      # The finetune command runs for real (it called stdbuf, which macOS does
+      # not have), training runs torch and numpy together, YAMLs load where
+      # there is no bsub, the address check connects to this machine, and the
+      # serving engine and Cellpose's masks run. Not the whole suite: in the
+      # pixi environment some Cellpose tests fail on their order, on Linux too.
+      - name: The Mac's own paths, in the test environment
+        run: >
+          ~/.pixi/bin/pixi run --frozen -e test python -m pytest
+          -m "not gpu and not lsf and not minio and not network"
+          tests/finetune tests/cli/test_yaml_cli.py tests/utils/test_config_yaml.py
+          tests/utils/test_address.py tests/utils/test_device.py tests/utils/test_postprocessors.py
+          tests/utils/test_chunkmirage_server.py tests/utils/test_smoke_scripts.py
+      - name: One OpenMP runtime in the cellpose4 environment
+        run: ~/.pixi/bin/pixi run --frozen -e cellpose4 python tests/smoke/one_openmp.py
+      - name: A zoo model description loads in the bioimageio environment
+        run: ~/.pixi/bin/pixi run --frozen -e bioimageio python tests/smoke/zoo_description.py

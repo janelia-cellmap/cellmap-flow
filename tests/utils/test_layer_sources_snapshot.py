@@ -37,6 +37,7 @@ from cellmap_flow.pipeline_spec import PipelineSpec
 from cellmap_flow.post.postprocessors import ThresholdPostprocessor
 from cellmap_flow.serving import client
 from cellmap_flow.serving.protocol import ARGS_KEY, decode_to_json
+from cellmap_flow.viewer.bootstrap import viewer_url
 
 RAW_VOXEL_SIZE = (24, 12, 12)
 MODEL_INFO = {
@@ -143,7 +144,7 @@ def test_the_startup_viewer(servers, monkeypatch):
 
     startup.generate_neuroglancer_url(servers)
 
-    assert served == [str(get_session().viewer)]
+    assert served == [viewer_url(get_session().viewer)]
     assert _viewer(get_session().viewer, MODELS) == {
         "layers": [("data", "image"), ("old", "image"), ("new", "image"), ("flat", "image"), ("silent", "image"),
                    ("extra", "image")],

@@ -112,6 +112,13 @@ def cellpose_flows(labels: np.ndarray, device=None) -> np.ndarray:
 FlowFunction = Callable[[np.ndarray, Optional[torch.device]], np.ndarray]
 
 
+def flow_device(device: torch.device) -> Optional[torch.device]:
+    """Where flows are diffused for a trainer on ``device``: there when it is a
+    GPU (CUDA, or Apple's, as Cellpose's own training does), else None, the
+    CPU. On the CPU they take about a second per slice."""
+    return device if device.type in ("cuda", "mps") else None
+
+
 def flow_targets(
     annotation: np.ndarray,
     flow_fn: FlowFunction = cellpose_flows,
@@ -162,9 +169,7 @@ class FlowTargetTransform(TargetTransform):
         ann = annotation.detach().cpu().numpy()
         if ann.ndim != 5 or ann.shape[1] != 1:
             raise ValueError(f"Expected annotation of shape (B, 1, Z, Y, X), got {tuple(ann.shape)}")
-        # The flows are diffused on the trainer's device when it is a GPU:
-        # on the CPU they take about a second per slice.
-        device = annotation.device if annotation.device.type == "cuda" else None
+        device = flow_device(annotation.device)
         targets = np.empty((ann.shape[0], 3, *ann.shape[2:]), dtype=np.float32)
         masks = np.empty_like(targets)
         for b in range(ann.shape[0]):

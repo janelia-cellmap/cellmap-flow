@@ -100,6 +100,18 @@ def test_put_sets_the_chain_and_redraws_the_layers_through_it(call, builder):
         assert get_session().builder_model_configs["mito"] == {"type": "script", "script_path": "/m.py"}
 
 
+def test_a_layer_switched_off_stays_off_through_a_put(call):
+    """Each layer is replaced on a redraw, and a new layer is shown: a model
+    layer switched off came back on with every Submit."""
+    viewer = get_session().viewer
+    with viewer.txn() as s:
+        s.layers["mito"].visible = False
+    assert call("PUT", "/api/pipeline", SUBMITTED)[0] == 200
+    layers = viewer.state.layers
+    assert _drawn() == PipelineSpec.from_json_data(SUBMITTED)  # redrawn
+    assert not layers["mito"].visible and layers["data"].visible
+
+
 def test_a_put_that_leaves_the_chain_as_drawn_leaves_the_viewer_alone(call):
     """The builder PUTs after every edit, a node dragged too. Each redrew the
     viewer, rebuilding every layer and undoing what the user set there."""
