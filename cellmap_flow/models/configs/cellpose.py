@@ -567,9 +567,11 @@ class CellposeModelConfig(ModelConfig):
         out of the flow loss, ``instance_flows``). One slice: the network is
         2D and sees each slice alone, so more slices would cost a network
         pass each and add nothing, and a one-slice patch centred on a
-        painted voxel always lands on paint. A 3D model's network is the
-        same 2D one, run on the chunk's planes in all three orientations;
-        it is trained on z slices, the YX planes.
+        painted voxel always lands on paint. The slice is cut in the plane
+        its paint was drawn in where the voxels are cubes, and turned to face
+        the network, else it is always a YX one (``finetune.data.dataset``).
+        A 3D model's network is the same 2D one, run on the chunk's planes in
+        all three orientations, so paint in its side views trains it there.
         """
         tile = tile_size(getattr(self.config.model, "backbone", "sam_vitl"))
         patch = (1, tile, tile)

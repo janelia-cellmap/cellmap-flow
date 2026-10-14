@@ -362,6 +362,17 @@ def test_the_monitor_reads_one_loss_per_epoch(monitored):
     assert run.job.total_epochs == 10
 
 
+def test_the_status_says_which_epoch_its_loss_is_of(make_job):
+    """While epoch 2 runs, the loss is epoch 1's. The status gave the two as a
+    pair, and the dashboard plotted epoch 1's loss at epoch 2 too."""
+    manager = FinetuneJobManager()
+    job = make_job("RUNNING")
+    manager.jobs[job.job_id] = job
+    monitor._parse_training_progress(job, "Starting epoch 1 of 10...\nEpoch 1/10 - Loss: 0.5\nStarting epoch 2 of 10...\n")
+    status = manager.get_job_status(job.job_id)
+    assert (status["current_epoch"], status["loss"], status["loss_epoch"]) == (2, 0.5, 1)
+
+
 def test_the_last_status_marker_in_the_log_decides(monitored):
     """A restart after a divergence in the same chunk leaves the job running,
     and the reverse leaves it waiting; LSF saying RUNNING does not undo waiting.
@@ -691,7 +702,7 @@ def test_a_dashboard_started_later_finds_each_run_as_it_was_left(fake_lsf, local
     assert rebuilt == {job_id: {
         "job_id": job_id, "model_name": "m", "output_dir": run.format(job_id), "params": PARAMS,
         "created_at": CREATED, "log_file": run.format(job_id) + "/training_log.txt", "finetuned_model_name": None,
-        "model_yaml_path": None, "current_epoch": 0, "total_epochs": 5, "latest_loss": None,
+        "model_yaml_path": None, "current_epoch": 0, "total_epochs": 5, "latest_loss": None, "latest_loss_epoch": None,
         "inference_server_url": None, "inference_server_ready": False,
         "corrections_path": str(session / "corrections"), **fields,
     } for job_id, fields in REATTACHED.items()}

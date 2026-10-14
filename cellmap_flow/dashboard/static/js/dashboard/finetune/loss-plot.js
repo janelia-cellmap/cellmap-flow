@@ -41,16 +41,22 @@ export function createLossPlot(canvas, summary) {
 
     const minLoss = Math.min(...points.map(p => p.loss));
     const maxLoss = Math.max(...points.map(p => p.loss));
+    // The axis spans the losses, or 10% around one alone: a span of nothing
+    // labelled every tick with the same number.
+    const flat = maxLoss - minLoss < 1e-9;
+    const half = Math.max(Math.abs(maxLoss) * 0.05, 1e-6);
+    const axisMin = flat ? minLoss - half : minLoss;
+    const axisMax = flat ? maxLoss + half : maxLoss;
     const minEpoch = points[0].epoch;
     const maxEpoch = points[points.length - 1].epoch;
     const pad = 48;
     const chartW = Math.max(1, width - pad * 2);
     const chartH = Math.max(1, height - pad * 2);
-    const lossSpan = Math.max(1e-9, maxLoss - minLoss);
+    const lossSpan = axisMax - axisMin;
     const epochSpan = Math.max(1, maxEpoch - minEpoch);
 
     const xFor = (e) => pad + ((e - minEpoch) / epochSpan) * chartW;
-    const yFor = (l) => pad + (1 - ((l - minLoss) / lossSpan)) * chartH;
+    const yFor = (l) => pad + (1 - ((l - axisMin) / lossSpan)) * chartH;
 
     // Axes
     ctx.strokeStyle = colorBorder;
@@ -67,7 +73,8 @@ export function createLossPlot(canvas, summary) {
     ctx.lineWidth = 1;
     ctx.strokeStyle = colorBorderHover;
 
-    const xTickCount = Math.min(6, Math.max(2, points.length));
+    // One tick per epoch up to 6: a lone epoch 1 was labelled 1 and 2.
+    const xTickCount = Math.min(6, points.length);
     for (let i = 0; i < xTickCount; i++) {
       const t = xTickCount === 1 ? 0 : i / (xTickCount - 1);
       const epochTick = Math.round(minEpoch + t * epochSpan);
@@ -82,7 +89,7 @@ export function createLossPlot(canvas, summary) {
     const yTickCount = 5;
     for (let i = 0; i < yTickCount; i++) {
       const t = yTickCount === 1 ? 0 : i / (yTickCount - 1);
-      const lossTick = maxLoss - t * lossSpan;
+      const lossTick = axisMax - t * lossSpan;
       const y = yFor(lossTick);
       ctx.beginPath();
       ctx.moveTo(pad - 4, y);

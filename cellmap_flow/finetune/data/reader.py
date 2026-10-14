@@ -4,17 +4,42 @@ Annotation voxel v spans ``corner_nm + v * output_voxel_size`` (the corner
 from session.volume.volume_corner_nm). A patch is whole annotation voxels,
 ``[c - size/2, c + size/2)`` around its centre c, and the raw is read around
 that same patch, so every label is paired with the raw it covers.
+
+A one-slice patch, a 2D network's, can be cut across y or x instead of z
+(``slice_axes``): a z–y slice for paint drawn in one. It is handed over
+turned to the network's orientation, its slice first, so the network sees a
+side slice as it sees an x–y one.
 """
 
 from __future__ import annotations
 
 import logging
 import os
+from typing import Tuple
 
 import numpy as np
 import zarr
 
 logger = logging.getLogger(__name__)
+
+
+def slice_axes(depth_axis: int) -> Tuple[int, int, int]:
+    """The volume's axes in the order a patch cut across ``depth_axis`` is handed over.
+
+    That axis first, where z is for a patch across z, then the other two in
+    order: across x (a z–y slice), (x, z, y), rows z and columns y, which is
+    how Cellpose's 3D mode cuts that plane too (``core.run_3D``). A patch's
+    sizes are given in this order, and the patch is read with them put back
+    in the volume's (``across``).
+    """
+    return (depth_axis, *(axis for axis in range(3) if axis != depth_axis))
+
+
+def across(sizes, depth_axis: int) -> np.ndarray:
+    """``sizes`` given in ``slice_axes(depth_axis)`` order, put in the volume's (z, y, x)."""
+    volume = np.empty(3, dtype=np.asarray(sizes).dtype)
+    volume[list(slice_axes(depth_axis))] = sizes
+    return volume
 
 
 def input_normalizers(input_norm_config) -> list:
@@ -107,19 +132,22 @@ class PatchReader:
                 "model will see different inputs at train vs inference time."
             )
 
-    def snap(self, centre_voxels: np.ndarray) -> np.ndarray:
+    def snap(self, centre_voxels: np.ndarray, depth_axis: int = 0) -> np.ndarray:
         """The nearest centre whose patch, ``[c - size/2, c + size/2)``, is whole voxels.
 
         Without it the annotation patch would be cut at int(c - size/2)
         while the raw was read around c itself: half a voxel apart for an
         odd output size, and for a good region, whose centre falls anywhere.
+        ``depth_axis`` is the axis the patch is cut across (``slice_axes``).
         """
-        half = self.output_size / 2
+        half = across(self.output_size, depth_axis) / 2
         return np.floor(centre_voxels - half + 0.5) + half
 
-    def annotation(self, centre_voxels: np.ndarray) -> np.ndarray:
+    def annotation(self, centre_voxels: np.ndarray, depth_axis: int = 0) -> np.ndarray:
         """The annotation patch around a snapped centre, in the volume's own dtype.
 
+        Cut across ``depth_axis`` and handed over in ``slice_axes`` order,
+        so its shape is ``output_size`` whichever axis it is cut across.
         Out-of-bounds voxels are 0, unannotated, which the trainer's loss
         masks out when ``mask_unannotated`` is on.
 
@@ -129,7 +157,7 @@ class PatchReader:
         257 merged with instance 1. The dataset casts the patch to float32,
         which holds every id below 2**24 exactly.
         """
-        out_size = self.output_size
+        out_size = across(self.output_size, depth_axis)
         lo = (centre_voxels - out_size / 2).astype(int)
         hi = lo + out_size
 
@@ -149,11 +177,12 @@ class PatchReader:
                 for c, d, l in zip(clip_lo, clip_hi, lo)
             )
             patch[dst_slices] = self._volume_arr[src_slices]
-        return patch
+        return np.ascontiguousarray(patch.transpose(slice_axes(depth_axis)))
 
-    def raw(self, centre_voxels: np.ndarray) -> np.ndarray:
+    def raw(self, centre_voxels: np.ndarray, depth_axis: int = 0) -> np.ndarray:
         """The ``input_size`` raw patch centred on the annotation patch, as stored.
 
+        Cut across ``depth_axis`` and turned as the annotation patch is.
         Read with ``normalize=False``, so no process-wide norms apply;
         ``normalize`` applies the session's own afterwards.
 
@@ -177,15 +206,16 @@ class PatchReader:
             )
         raw_voxel_size = np.asarray(self._raw_idi.voxel_size, dtype=float)
         raw_corner_nm = np.asarray(self._raw_idi.offset, dtype=float)
+        in_size = across(self.input_size, depth_axis)
         centre_nm = self.corner_nm + centre_voxels * self.output_voxel_size
-        lower_edge_nm = centre_nm - self.input_size * raw_voxel_size / 2
+        lower_edge_nm = centre_nm - in_size * raw_voxel_size / 2
         # snap_integral: float noise (39.9999999 voxels) counts as the whole
         # number it is.
         begin = np.floor(snap_integral((lower_edge_nm - raw_corner_nm) / raw_voxel_size))
-        box = Box(tuple(int(b) for b in begin), tuple(int(s) for s in self.input_size))
+        box = Box(tuple(int(b) for b in begin), tuple(int(s) for s in in_size))
         # The selected channel, unnormalized (normalize=False), resampled when
         # the volume is; out of the array is padded with 0, as to_ndarray_ts pads.
-        return self._raw_idi.read_box(box)
+        return np.ascontiguousarray(self._raw_idi.read_box(box).transpose(slice_axes(depth_axis)))
 
     def normalize(self, raw: np.ndarray) -> np.ndarray:
         """``raw`` through the session's normalizers, in order, as apply_norms() does for inference."""
