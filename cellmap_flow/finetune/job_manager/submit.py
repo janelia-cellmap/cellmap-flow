@@ -455,7 +455,11 @@ def build_command(
         f"LD_LIBRARY_PATH={shell_quote(env_lib)}"
         '${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH} '
     )
-    # stdbuf on the trainer: it flushes every line it prints. The log is
+    # PYTHONUNBUFFERED on the trainer: it writes every line it prints at
+    # once. Not stdbuf, which macOS does not have ("stdbuf: command not
+    # found" failed every training on a Mac), and which never reached
+    # Python's own buffering anyway: it sets C stdio's, which Python's
+    # print does not go through. The log is
     # written by jobs/synced_tee.py, not tee: tee's lines sat in the job
     # node's NFS page cache for about 30 s before the dashboard's node could
     # read them, so its log and loss plot got ten epochs at once. Run as a
@@ -465,7 +469,7 @@ def build_command(
     # is otherwise its last command's, tee's: a trainer that failed ended
     # its job DONE to LSF, and the monitor made it COMPLETED.
     return (
-        f"set -o pipefail; {loader_path}stdbuf -oL {command} 2>&1 "
+        f"set -o pipefail; {loader_path}PYTHONUNBUFFERED=1 {command} 2>&1 "
         f"| {shell_join([TEE_PYTHON, '-P', SYNCED_TEE, str(log_file)])}"
     )
 
