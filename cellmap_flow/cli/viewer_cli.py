@@ -52,7 +52,7 @@ def main(dataset, project, resample):
     from cellmap_flow.dashboard.state import get_session
     from cellmap_flow.jobs.launch import install_cleanup_handlers
     from cellmap_flow.jobs.settings import launcher_settings
-    from cellmap_flow.viewer.bootstrap import apply_viewer_defaults
+    from cellmap_flow.viewer.bootstrap import apply_viewer_defaults, viewer_url
     from cellmap_flow.viewer.raw import get_raw_layer
 
     # Models picked in the dashboard are jobs too; kill them on the way out.
@@ -95,14 +95,15 @@ def main(dataset, project, resample):
         s.layers["data"] = get_raw_layer(dataset)
 
     # Print viewer URL
-    logger.info(f"Neuroglancer viewer URL: {viewer}")
+    url = viewer_url(viewer)
+    logger.info(f"Neuroglancer viewer URL: {url}")
     print(f"\n{'='*80}")
-    print(f"Neuroglancer viewer: {viewer}")
+    print(f"Neuroglancer viewer: {url}")
     print(f"Dataset: {dataset}")
     print(f"{'='*80}\n")
 
     # Start the dashboard app
-    create_and_run_app(neuroglancer_url=str(viewer))
+    create_and_run_app(neuroglancer_url=url)
 
 
 if __name__ == "__main__":

@@ -8,7 +8,7 @@ from cellmap_flow.post.postprocessors import get_postprocessors_list
 from cellmap_flow.dashboard.requests import SetData, parse
 from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.jobs.lsf import available as bsub_available
-from cellmap_flow.viewer.bootstrap import new_viewer
+from cellmap_flow.viewer.bootstrap import new_viewer, viewer_url
 
 logger = logging.getLogger(__name__)
 
@@ -195,7 +195,7 @@ def set_data():
         # 8 nm z, y, x, as this viewer always had; unlike the CLIs' viewer it
         # does not take its dimensions from the raw.
         session.viewer = new_viewer(dataset_path, scales=(8, 8, 8))
-        session.neuroglancer_url = str(session.viewer)
+        session.neuroglancer_url = viewer_url(session.viewer)
         logger.debug(f"Neuroglancer viewer set up: {session.neuroglancer_url}")
 
         return jsonify({
