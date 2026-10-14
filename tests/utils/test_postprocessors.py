@@ -148,6 +148,19 @@ def test_cellpose_masks_follow_3d_flows_to_3d_objects():
     assert len(np.unique(masks[0, 14:27, 12, 12])) == 1 and masks[0, 20, 12, 12] > 0
 
 
+@pytest.mark.parametrize("best, expected", [("cuda", "cuda"), ("mps", "cpu"), ("cpu", "cpu")])
+def test_cellpose_masks_follow_the_flows_on_cuda_or_else_the_cpu(monkeypatch, best, expected):
+    """On Apple's GPU each of the flow-following steps waited behind the
+    model's forward on another chunk: 40-72 s a chunk instead of about 1."""
+    import torch
+
+    from cellmap_flow.post import postprocessors
+    from cellmap_flow.utils import device
+
+    monkeypatch.setattr(device, "best_device", lambda: torch.device(best))
+    assert postprocessors._masks_device() == torch.device(expected)
+
+
 def test_cellpose_masks_say_which_models_cannot_take_them():
     """Run on a Cellpose server serving its probability, it failed on every chunk
     inside the server, and the page showed an empty layer."""

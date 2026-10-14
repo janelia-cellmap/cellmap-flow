@@ -412,7 +412,8 @@ def _run_job(ai, job, config, volume):
         )
         _stage(ai, job, viewer, "fetching_crop")
         shape = zarr.open_array(f"{volume['zarr_path']}/annotation/s0", mode="r").shape
-        plan = geometry.plan_plane(volume, shape, job["point_nm"], job["depth_axis"], config.crop_size_px)
+        plan = geometry.plan_plane(volume, shape, job["point_nm"], job["depth_axis"], config.crop_size_px,
+                                   data_box_nm=pipeline.raw_extent_nm(volume))
         _set(ai, job, plan=plan, write_box={"lo": [int(v) for v in plan.write_lo],
                                             "hi": [int(v) for v in plan.write_hi]})
         plane = pipeline.read_plane(volume, plan)

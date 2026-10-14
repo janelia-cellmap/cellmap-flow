@@ -3,7 +3,8 @@ description: Real-time neural network inference on EM microscopy data.
 version: "0.2.3"
 
 requirements:
-  - "pixi>=0.40"
+  # pixi.lock is lockfile version 7, which pixi reads from 0.68.0 on.
+  - "pixi>=0.68"
 
 runnables:
   # Keeps the id `run` so apps already added from this manifest keep working.

@@ -33,7 +33,7 @@ class _ViewerAt(SimpleNamespace):
 
 
 @pytest.mark.parametrize("headers, expected", [
-    pytest.param({}, "http://node7:8765/v/abc/", id="direct"),
+    pytest.param({}, "http://10.0.0.7:8765/v/abc/", id="direct"),
     pytest.param({"X-Forwarded-Host": "proxy.example.org"}, "http://proxy.example.org/v/abc/", id="proxy"),
     pytest.param({"X-Forwarded-Host": "proxy.example.org", "X-Forwarded-Proto": "https"},
                  "https://proxy.example.org/v/abc/", id="https-proxy"),
@@ -41,12 +41,12 @@ class _ViewerAt(SimpleNamespace):
 @pytest.mark.parametrize("viewer", ["the-dashboards", "the-box-tools"])
 def test_behind_a_reverse_proxy_the_viewer_is_loaded_through_it(dashboard, monkeypatch, viewer, headers, expected):
     if viewer == "the-dashboards":
-        get_session().neuroglancer_url = "http://node7:8765/v/abc/"
+        get_session().neuroglancer_url = "http://10.0.0.7:8765/v/abc/"
         assert f'<iframe src="{expected}"' in dashboard.get("/", headers=headers).get_data(as_text=True)
     else:
         from cellmap_flow.dashboard.routes import bbx_generator
 
-        monkeypatch.setattr(bbx_generator, "new_viewer", lambda *args, **kwargs: _ViewerAt("http://node7:8765/v/abc/"))
+        monkeypatch.setattr(bbx_generator, "new_viewer", lambda *args, **kwargs: _ViewerAt("http://10.0.0.7:8765/v/abc/"))
         answer = dashboard.post("/api/bbx-generator", json={"dataset_path": "/data/raw.zarr"}, headers=headers)
         assert answer.get_json()["viewer_url"] == expected
 
@@ -267,3 +267,17 @@ def test_each_model_node_carries_its_config(dashboard, applied):
     assert palette == {"catalog/er": {"name": "catalog/er", "category": "catalog", "model_name": "er",
                                       "path": "/models/er"},
                        "mito": {"name": "mito", "type": "script", "script_path": "/mito.py"}}
+
+
+@pytest.mark.parametrize("bsub", [True, False], ids=["cluster", "laptop"])
+def test_the_lsf_settings_are_asked_for_only_where_jobs_go_to_lsf(dashboard, monkeypatch, bsub):
+    """On a Mac (no bsub) every server runs on the machine itself, so the
+    first-run dialog, which cannot be closed without saving queue and charge
+    group, only stood in the way; the GPU queue picker chose nothing."""
+    from cellmap_flow.dashboard.routes import index_page
+
+    monkeypatch.setattr(index_page, "bsub_available", lambda: bsub)
+    html = dashboard.get("/").get_data(as_text=True)
+    assert ('id="serverConfigModal"' in html) is bsub
+    assert ('id="gpuQueueSelect"' in html) is bsub
+    assert ("No cluster here" in html) is not bsub

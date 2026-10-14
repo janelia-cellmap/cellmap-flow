@@ -380,6 +380,24 @@ class SimpleBlockwiseMerger(PostProcessor):
         return True
 
 
+def _masks_device():
+    """Where CellposeMasksPostprocessor follows a chunk's flows: CUDA when
+    there is one, else the CPU.
+
+    Not Apple's GPU, though the model serves there: the flow following is
+    some 200 small steps, and on MPS each waited behind the model's forward
+    on another chunk, so a chunk's masks took 40-72 s instead of about 1 s.
+    On the CPU they take about as long as alone on that GPU (0.1-0.5 s a
+    slice), and the model never holds them up.
+    """
+    import torch
+
+    from cellmap_flow.utils.device import best_device
+
+    device = best_device()
+    return device if device.type == "cuda" else torch.device("cpu")
+
+
 class CellposeMasksPostprocessor(PostProcessor):
     """Cellpose's masks, made from a Cellpose model's flows output.
 
@@ -412,9 +430,10 @@ class CellposeMasksPostprocessor(PostProcessor):
         niter: flow-following steps (Cellpose's default, 200).
     """
 
-    # It follows the flows on the GPU: a server runs one chunk's at a time
-    # (chunkmirage_ops.DevicePostprocessOp). Six at once each took 4 s
-    # instead of 0.8, and the nearest chunks came no sooner than the rest.
+    # It follows the flows on a CUDA GPU (the CPU elsewhere: _masks_device): a
+    # server runs one chunk's at a time (chunkmirage_ops.DevicePostprocessOp).
+    # Six at once each took 4 s instead of 0.8, and the nearest chunks came
+    # no sooner than the rest.
     uses_device = True
 
     def __init__(self, flow_threshold: float = 0.4, cellprob_threshold: float = 0.0, min_size: int = 15,
@@ -438,7 +457,6 @@ class CellposeMasksPostprocessor(PostProcessor):
 
     def _process(self, data):
         try:
-            import torch
             from cellpose import dynamics, utils
         except ImportError as e:
             raise RuntimeError(
@@ -453,7 +471,7 @@ class CellposeMasksPostprocessor(PostProcessor):
         flows = np.asarray(data[:-1], dtype=np.float32)
         probability = np.clip(np.asarray(data[-1], dtype=np.float64), 1e-7, 1 - 1e-7)
         cellprob = np.log(probability / (1 - probability)).astype(np.float32)
-        device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+        device = _masks_device()
         if data.shape[0] == 4:
             masks = dynamics.resize_and_compute_masks(
                 flows, cellprob, niter=self.niter, cellprob_threshold=self.cellprob_threshold,

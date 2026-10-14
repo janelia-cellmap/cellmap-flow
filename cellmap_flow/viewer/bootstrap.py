@@ -3,15 +3,19 @@
 The viewers the dashboard serves are made here: the CLIs' startup viewer
 (dashboard.services.startup.generate_neuroglancer_url), /api/set-data, and the
 bounding-box tool. ``cellmap_flow view`` (cli/viewer_cli.py) still builds its
-own. It never starts the dashboard.
+own. It never starts the dashboard. ``viewer_url()`` is the address a browser
+is given for any of them.
 """
 
+import ipaddress
 import logging
+from urllib.parse import urlparse
 
 import neuroglancer
 
 from cellmap_flow.image_data_interface import legacy_meta
 from cellmap_flow.io import metadata
+from cellmap_flow.utils.address import this_machine_ip
 from cellmap_flow.viewer.layers import raw_layer
 
 logger = logging.getLogger(__name__)
@@ -81,3 +85,30 @@ def new_viewer(dataset_path, *, scales=None, raw=None, raw_name="data", layers=N
         for name, layer in (layers or {}).items():
             s.layers[name] = layer
     return viewer
+
+
+def viewer_url(viewer):
+    """The address to give a browser for ``viewer``: neuroglancer's own, with
+    this machine's IP address (this_machine_ip) in place of its name.
+
+    Neuroglancer names a server that binds every interface, as new_viewer's
+    does, by the machine's DNS name. Off campus, a laptop's name still
+    pointed at its campus address, and the viewer never loaded. A server
+    named by an address or as localhost is bound to that alone, and is left
+    as it is, as is anything without a host.
+    """
+    url = str(viewer)
+    parsed = urlparse(url)
+    host = parsed.hostname
+    if not host or host == "localhost" or _is_address(host):
+        return url
+    ip = this_machine_ip()
+    return parsed._replace(netloc=ip if parsed.port is None else f"{ip}:{parsed.port}").geturl()
+
+
+def _is_address(host):
+    try:
+        ipaddress.ip_address(host)
+    except ValueError:
+        return False
+    return True

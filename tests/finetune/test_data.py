@@ -338,7 +338,8 @@ def test_the_training_loader_keeps_its_workers_and_so_their_draws():
     loader = make_training_loader(data, batch_size=4, num_workers=2)
     assert loader.persistent_workers and loader.multiprocessing_context is not None
     halved = rebuild_loader(loader, 2)
-    assert (halved.batch_size, halved.num_workers, halved.persistent_workers, halved.pin_memory) == (2, 2, True, True)
+    assert (halved.batch_size, halved.num_workers, halved.persistent_workers, halved.pin_memory) == (
+        2, 2, True, loader.pin_memory)
     assert halved.multiprocessing_context is loader.multiprocessing_context and halved.dataset is data
     assert isinstance(rebuild_loader(DataLoader(data, shuffle=True), 2).sampler, RandomSampler)
     assert isinstance(rebuild_loader(DataLoader(data), 2).sampler, SequentialSampler)

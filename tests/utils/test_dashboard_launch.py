@@ -147,6 +147,22 @@ def test_the_resample_box_reaches_the_servers_and_the_exported_config(viewer, da
     assert exported.get("resample", False) is resample
 
 
+@pytest.mark.parametrize("cluster", [True, False])
+def test_the_exported_config_has_cluster_settings_only_where_there_is_a_cluster(dashboard, monkeypatch, cluster):
+    """A Mac (no bsub) exported queue: gpu_h100, the site's default, which
+    nothing there read; without a cluster they are left out, and said so."""
+    from cellmap_flow.jobs import lsf
+
+    monkeypatch.setattr(lsf, "available", lambda: cluster)
+    session = get_session()
+    session.dataset_path, session.queue, session.charge_group = "/data/raw.zarr", "gpu_h100", "my_lab"
+    text = dashboard.get("/api/export-config").data.decode()
+    exported = yaml.safe_load(text)
+    assert ("queue" in exported and "charge_group" in exported) is cluster
+    assert ("no cluster" in text) is not cluster
+    assert exported["data_path"] == "/data/raw.zarr"
+
+
 def test_add_builds_a_pasted_models_entry_and_runs_it_in_its_environment(viewer, dashboard, monkeypatch, tmp_path):
     """POST /api/models/add: what the Models tab's Add sends once resolve's
     needs are filled in."""

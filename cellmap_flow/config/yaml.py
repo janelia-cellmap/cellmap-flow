@@ -120,10 +120,18 @@ def load_config(path: str) -> Dict[str, Any]:
     if "data_path" not in config:
         raise ConfigError("Missing required field in YAML: data_path")
 
+    from cellmap_flow.jobs import lsf
+
     # Fall back to cache then defaults for charge_group and queue
     cached = load_server_config_cache() or {}
 
-    if "charge_group" not in config or not config["charge_group"]:
+    if not lsf.available():
+        # No cluster (no bsub): every server runs on this machine
+        # (jobs.launch) and nothing reads LSF's charge group or queue, so a
+        # YAML without them, as one exported on a Mac is, loads there.
+        config["charge_group"] = config.get("charge_group") or SERVER_CONFIG_DEFAULTS["charge_group"]
+        config["queue"] = config.get("queue") or cached.get("queue", current_site().default_queue)
+    elif "charge_group" not in config or not config["charge_group"]:
         fallback = cached.get("charge_group", SERVER_CONFIG_DEFAULTS.get("charge_group"))
         if fallback:
             logger.warning(f"Missing 'charge_group' in YAML, using cached value: {fallback}")

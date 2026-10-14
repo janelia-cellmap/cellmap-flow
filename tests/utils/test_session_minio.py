@@ -72,7 +72,7 @@ def fake_minio(monkeypatch, tmp_path):
     monkeypatch.setattr(get_session(), "minio_state", {"process": None, "bucket": "annotations",
                                                         "output_base": None, "sync_thread": None})
     monkeypatch.setattr(fu, "_require_minio_binaries", recorded("preflight"))
-    monkeypatch.setattr(session_minio, "get_local_ip", recorded("ip", "127.0.0.1"))
+    monkeypatch.setattr(session_minio, "this_machine_ip", recorded("ip", "127.0.0.1"))
     monkeypatch.setattr(session_minio, "find_available_port", recorded("port", 9123))
     monkeypatch.setattr(session_sync, "start_periodic_sync", recorded("sync thread"))
     monkeypatch.setattr(session_minio, "wait_for_ready", recorded("ready", True))

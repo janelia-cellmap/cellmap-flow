@@ -51,6 +51,7 @@ from cellmap_flow.process_chain import process_chain
 from cellmap_flow.serving.chunkmirage_ops import DevicePostprocessOp, InferenceOp, ServedModel, layer_ops, serve_model
 from cellmap_flow.serving.protocol import ARGS_KEY, split_dataset_url
 from cellmap_flow.serving.restart_token import TOKEN_HEADER, tokens_match
+from cellmap_flow.utils.address import this_machine_ip
 
 logger = logging.getLogger(__name__)
 
@@ -91,19 +92,6 @@ def _env_flag(name):
     if value in ("1", "true", "yes", "on"):
         return True
     raise ValueError(f"{name} must be 1 or 0, got {os.environ[name]!r}")
-
-
-def get_public_ip():
-    """This machine's address on its network (10.x.x.x, say): the interface a
-    connection out would use. Nothing is sent; 127.0.0.1 if there is none."""
-    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    try:
-        s.connect(("8.8.8.8", 80))
-        return s.getsockname()[0]
-    except OSError:
-        return "127.0.0.1"
-    finally:
-        s.close()
 
 
 def _whole(values, what):
@@ -393,7 +381,7 @@ class ChunkmirageServer:
 
         def announce(server):
             self._server, self.port = server, server.port
-            self.address = f"{'https' if tls else 'http'}://{get_public_ip()}:{server.port}"
+            self.address = f"{'https' if tls else 'http'}://{this_machine_ip()}:{server.port}"
             output = f"{IP_PATTERN[0]}{self.address}{IP_PATTERN[1]}"
             logger.error(output)
             print(output, flush=True)

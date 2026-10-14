@@ -34,6 +34,7 @@ from cellmap_flow.finetune.losses import (
 )
 from cellmap_flow.finetune.instance_flows import FlowLoss, FlowTargetTransform
 from cellmap_flow.finetune.target_transforms import IntervalTargetTransform
+from cellmap_flow.utils.device import best_device
 
 logger = logging.getLogger(__name__)
 
@@ -158,7 +159,7 @@ class LoRAFinetuner:
 
         # Device
         if device is None:
-            self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+            self.device = best_device()
         else:
             self.device = torch.device(device)
 

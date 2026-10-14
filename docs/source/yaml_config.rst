@@ -7,18 +7,14 @@ It is the recommended way to launch inference jobs, and the same YAML format is 
 Usage
 -----
 
+Run inference; check the YAML without running it; list the model types; and
+run with more logging:
+
 .. code-block:: bash
 
-    # Run inference
     cellmap_flow yaml config.yaml
-
-    # Validate without running
     cellmap_flow yaml config.yaml --validate-only
-
-    # List available model types
     cellmap_flow yaml --list-types
-
-    # Set log level
     cellmap_flow yaml config.yaml --log-level DEBUG
 
 YAML Structure
@@ -689,9 +685,11 @@ relative path, or to a directory without ``bin/python``, is an error.
 ``cellmap_flow envs``
 ^^^^^^^^^^^^^^^^^^^^^
 
+``cellmap_flow envs`` alone lists each environment, as ``envs list`` does:
+
 .. code-block:: bash
 
-    cellmap_flow envs                  # each environment, as `envs list`
+    cellmap_flow envs
     cellmap_flow envs install cellpose4
     cellmap_flow envs check cellpose4
 

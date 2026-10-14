@@ -84,6 +84,9 @@ def _check_torch_cuda():
         return Result("torch cuda", "fail", "torch not installed", 'pip install -e ".[finetune]"')
     import torch
 
+    mps = getattr(torch.backends, "mps", None)
+    if not torch.cuda.is_available() and mps is not None and mps.is_available():
+        return Result("torch cuda", "ok", f"torch {torch.__version__}, no CUDA: Apple's GPU (MPS)")
     if not torch.cuda.is_available():
         return Result(
             "torch cuda",

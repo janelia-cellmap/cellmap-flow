@@ -208,8 +208,8 @@
   <script type="application/json" id="page-data">{{ {"default_hf_repos": default_hf_repos, "default_bioimage_models": default_bioimage_models, "resample": resample} | tojson }}</script>
   <script type="module" src="{{ url_for('static', filename='js/dashboard/main.js') }}"></script>
 
-  {% if not server_config_cached %}
-  <!-- Server Config Setup Modal -->
+  {% if ask_server_config %}
+  <!-- Server Config Setup Modal: only where jobs go to LSF -->
   <div class="modal fade" id="serverConfigModal" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered">
       <div class="modal-content bg-dark text-light">

@@ -17,7 +17,7 @@ from cellmap_flow.viewer.raw import PREDICTION_COLORS
 from cellmap_flow.serving.client import fetch_model_info
 from cellmap_flow.models.geometry_cache import build_here
 from cellmap_flow.pipeline_spec import PipelineSpec
-from cellmap_flow.viewer.bootstrap import new_viewer
+from cellmap_flow.viewer.bootstrap import new_viewer, viewer_url
 from cellmap_flow.viewer.layers import prediction_layer, prediction_shader_for, raw_layer
 
 logger = logging.getLogger(__name__)
@@ -70,7 +70,7 @@ def generate_neuroglancer_url(dataset_path, wrap_raw=True):
 
     session.raw = raw_layer(dataset_path, wrap_raw=wrap_raw)
     session.viewer = new_viewer(dataset_path, raw=session.raw, layers=layers)
-    viewer_url = str(session.viewer)
-    print("viewer", viewer_url)
+    url = viewer_url(session.viewer)
+    print("viewer", url)
     # Serves the dashboard; does not return.
-    create_and_run_app(neuroglancer_url=viewer_url)
+    create_and_run_app(neuroglancer_url=url)

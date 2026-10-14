@@ -37,14 +37,23 @@ Please feel free to explore and contribute, but note that there may be frequent 
 ### With pixi (recommended)
 
 [pixi](https://pixi.sh) installs cellmap-flow with everything it needs, and
-the separate environments some model families run in:
+the separate environments some model families run in. It needs pixi 0.68 or
+later, which reads this lockfile's format: check with `pixi --version`, and
+update with `pixi self-update`, or `brew upgrade pixi` if Homebrew installed
+it. `pixi install` sets up the default environment, and `pixi run` runs a
+command in it:
 
 ```bash
 git clone https://github.com/janelia-cellmap/cellmap-flow.git
 cd cellmap-flow
-pixi install                      # the default environment
+pixi install
 pixi run cellmap_flow view -d data_path
 ```
+
+It installs on Linux (x86-64) and on Apple-silicon Macs. On a Mac:
+- **Compiler:** install Apple's command-line tools first (`xcode-select --install`). The neuroglancer fork used for painting annotations is compiled during `pixi install`.
+- **Model servers:** a Mac has no cluster to submit jobs to, so the dashboard runs each model's server on the Mac itself. Models serve and finetune on Apple's GPU. It is much slower than the cluster's: Cellpose-SAM takes about 35 s for a chunk of 8 slices, so open one x–y panel rather than four, and for Cellpose consider `slices_per_chunk: 1`.
+- **CUDA:** it is Linux-only.
 
 Model families whose dependencies clash with the default environment run in
 their own pixi environment, chosen by the model's type (see
@@ -138,14 +147,18 @@ Commands:
   view       Start CellMap Flow viewer with a dataset.
   yaml       Run multiple model inference jobs from a YAML configuration...
 
-$ cellmap_flow view -d data_path                       # pick models in the dashboard
-$ cellmap_flow yaml config.yaml                        # the models a YAML lists
+$ cellmap_flow view -d data_path
+$ cellmap_flow yaml config.yaml
 $ cellmap_flow infer huggingface -r cellmap/fly_organelles_run08_438000 -d data_path
-$ cellmap_flow infer cellpose -v 64 -d data_path                 # Cellpose-SAM
+$ cellmap_flow infer cellpose -v 64 -d data_path
 $ cellmap_flow infer bioimage -m conscientious-dromedary -d data_path
 $ cellmap_flow infer fly -c /path/to/run/model_checkpoint_20000 -d data_path
 $ cellmap_flow infer script -s script_path -d data_path
 ```
+
+`view` opens a dataset and you pick models in the dashboard; `yaml` runs the
+models a YAML lists; `infer <type>` runs one model of that type (`cellpose`
+is Cellpose-SAM).
 
 In the dashboard, the Models tab's *Job Logs* shows each model's server output
 as it runs: `starting` while it waits in its queue, installs its environment or
@@ -171,12 +184,12 @@ seen, or changing only the postprocessing, reuses that output instead of
 running the model again. The chunks nearest your view go to the GPU first,
 and chunks you have panned away from are dropped.
 
-**Using the previous Flask server instead.** It is still included for now.
-Set this before starting the viewer or the YAML runner; it carries over to
-every model and finetune job they start:
+**Using the previous Flask server instead.** It is still included for now;
+chunkmirage is the default. Set this before starting the viewer or the YAML
+runner; it carries over to every model and finetune job they start:
 
 ```bash
-export CELLMAP_FLOW_ENGINE=flask      # chunkmirage is the default
+export CELLMAP_FLOW_ENGINE=flask
 ```
 
 **Compatibility:**
@@ -216,10 +229,13 @@ link, a Cellpose model name, a Hugging Face `org/repo`, or
 `dacapo:run@iteration`. A whole config YAML is a run, not a model: run it with
 `cellmap_flow yaml`.
 
+A BioImage Model Zoo model, Cellpose-SAM, a Hugging Face repo, and a
+checkpoint run straight away:
+
 ```bash
-$ cellmap_flow add conscientious-dromedary            # a BioImage Model Zoo model
-$ cellmap_flow add cpsam_v2 -v 64                     # Cellpose-SAM
-$ cellmap_flow add cellmap/fly_organelles_run08_438000 # a Hugging Face repo
+$ cellmap_flow add conscientious-dromedary
+$ cellmap_flow add cpsam_v2 -v 64
+$ cellmap_flow add cellmap/fly_organelles_run08_438000
 $ cellmap_flow add /path/to/run/model_checkpoint_20000 --run -d data_path
 ```
 

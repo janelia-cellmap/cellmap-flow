@@ -167,6 +167,11 @@ class FinetuneModelConfig(ModelConfig):
         """Its base's: a finetune serves the same channels."""
         return getattr(self.base_model_config, "display_channel", None)
 
+    @property
+    def normalizes_input(self):
+        """Its base's: a finetune serves through the same preprocessing."""
+        return bool(getattr(self.base_model_config, "normalizes_input", False))
+
     def finetune_modes(self):
         """Its base's: continuing a finetune trains the same network."""
         return self.base_model_config.finetune_modes()

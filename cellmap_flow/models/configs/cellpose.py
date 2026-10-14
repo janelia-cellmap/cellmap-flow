@@ -300,6 +300,9 @@ class CellposeModelConfig(ModelConfig):
     # module docstring); an entry's explicit env still wins.
     default_env = "cellpose4"
     finetunable = True
+    # Cellpose's eval normalizes each slice to its 1st-99th percentile, and
+    # its trainable module does the same (trainable_model's ScaleRange).
+    normalizes_input = True
     # What a finetune trains it on: Cellpose predicts flows and a cell
     # probability, so the painted instances become flow targets (the
     # dashboard reads this to pick the target; finetune.cli's --output-type).

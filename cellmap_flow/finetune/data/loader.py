@@ -192,7 +192,8 @@ def make_training_loader(dataset, batch_size: int, num_workers: int) -> torch.ut
         batch_size=batch_size,
         shuffle=False,  # the dataset samples randomly already
         num_workers=num_workers,
-        pin_memory=True,
+        # Pinned memory is CUDA's: on a Mac, PyTorch warns it is unsupported.
+        pin_memory=torch.cuda.is_available(),
         persistent_workers=num_workers > 0,
         multiprocessing_context="spawn" if num_workers > 0 else None,
     )
