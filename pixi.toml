@@ -114,6 +114,13 @@ dacapo-ml = "*"
 # For the `bioimage` model type, which defaults to this environment. timm is
 # what the zoo's BiaPy transformers ("good-microbe", a 2D UNETR) build their
 # blocks from; their weights need it to load.
+[feature.bioimageio.dependencies]
+# bioimageio.core 0.11.0 pins bioimageio.spec 0.5.12.0, which passes pydantic
+# an argument pydantic 2.14 refuses: every model description failed to load
+# ("'index_key' is expected to be an integer or a string"). The Mac's solve
+# had picked 2.14.1; Linux's 2.13.5 loads them.
+pydantic = "<2.14"
+
 [feature.bioimageio.pypi-dependencies]
 bioimageio-core = { version = "==0.11.0", extras = ["onnx", "pytorch"] }
 timm = ">=1.0"
