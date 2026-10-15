@@ -42,6 +42,14 @@ describe("POST /api/set-data", () => {
     expect(ctx.session.state.datasetUrl).toBe("https://example.org/em.zarr");
   });
 
+  it("gives the raw layer the contrast the engine sampled, when it sampled one", async () => {
+    const ctx = fakeContext({ dataset: null });
+    ctx.infer.sampledRange = [5490, 5793];
+    await createBackend(ctx).handle(request("POST", "/api/set-data", { dataset_path: "https://example.org/em.zarr" }));
+    expect(ctx.viewer.prepared[0].info?.displayRange).toEqual([5490, 5793]);
+    expect(String(ctx.viewer.prepared[0].raw.shader)).toContain("range=[5490, 5793]");
+  });
+
   it("refuses a missing path and a path that is not a URL with a 400 the connect panel shows", async () => {
     const backend = createBackend(fakeContext({ dataset: null }));
     expect(body(await backend.handle(request("POST", "/api/set-data", { dataset_path: "" })))).toEqual({ success: false, error: "dataset_path is required" });

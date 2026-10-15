@@ -30,6 +30,7 @@ export function dataRoutes(router: Router): void {
     }
     try {
       const info = await ctx.infer.openDataset(url);
+      await ctx.infer.displayRange();  // onto the info, for the raw layer's contrast (a sample, for a dtype other than uint8)
       // The info too: the viewer takes its dimensions and starting position from the volume.
       const viewerUrl = ctx.viewer.prepareDataset(url, rawLayer(url, info), info);
       await ctx.session.update({ datasetUrl: url });

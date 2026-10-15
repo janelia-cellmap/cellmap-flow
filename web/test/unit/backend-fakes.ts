@@ -96,6 +96,14 @@ export class FakeInference implements Inference {
     return this.current;
   }
 
+  /** What displayRange() answers (and puts on the open dataset's info). */
+  sampledRange: [number, number] | null = null;
+
+  async displayRange(): Promise<[number, number] | null> {
+    if (this.current && this.sampledRange) this.current.displayRange = this.sampledRange;
+    return this.current ? this.sampledRange : null;
+  }
+
   async serve(entry: ModelEntry, chain: Chain, blob: string, modelBytes: () => Promise<ArrayBuffer>): Promise<ServedModel> {
     this.serves.push({ name: entry.name, variant: entry.variant.variant, blob, chain });
     this.bytesAsked.set(entry.name, (this.bytesAsked.get(entry.name) ?? 0) + 1);
