@@ -20,7 +20,7 @@ import type { DatasetInfo, LayerSpec, SessionStore, ViewerController } from "../
 import { initialState, RAW_LAYER_NAME, stateWithoutInfo } from "./layers";
 import { withEquivalences } from "./equivalences";
 import { decodeState, encodeState, isStateHash, mirrorFrameHash, rememberedState, rememberState, withHash } from "./share";
-import { datasetUrlFromState, layerShaderOf, type NgState, positionNm, replaceLayers, withoutLayer } from "./state";
+import { datasetUrlFromState, layerShaderOf, layersOf, type NgState, positionNm, replaceLayers, withoutLayer } from "./state";
 
 /** Neuroglancer's page, built beside this one (vite.config.ts serves ./ng/). */
 export const NG_PAGE = "./ng/index.html";
@@ -69,6 +69,24 @@ export function liveEquivalences(viewer: Pick<NgViewer, "layerManager">, name: s
   return sets && typeof sets.restoreState === "function" && typeof sets.clear === "function" ? sets : null;
 }
 
+/** `state` with layer `name` selected and its panel open (Neuroglancer's
+ * `selectedLayer: {layer, visible}`, what the Python API writes for
+ * `s.selected_layer.layer = name; s.selected_layer.visible = True`; the
+ * panel's other settings, its side and size, kept) and, with `tab`, its
+ * panel on that tab (the layer's own `tab` key, as `layer.tab = "Draw"`
+ * sets it). Null when `state` has no layer of that name: Neuroglancer
+ * clears a selection naming a layer it has not got, so the selection waits
+ * until the layer is set. */
+export function withSelectedLayer(state: NgState, name: string, tab?: string): NgState | null {
+  const layers = layersOf(state);
+  if (!layers.some((layer) => layer.name === name)) return null;
+  const panel = state.selectedLayer;
+  const kept = panel && typeof panel === "object" && !Array.isArray(panel) ? (panel as Record<string, unknown>) : {};
+  const next: NgState = { ...state, selectedLayer: { ...kept, layer: name, visible: true } };
+  if (tab !== undefined) next.layers = layers.map((layer) => (layer.name === name ? { ...layer, tab } : layer));
+  return next;
+}
+
 /** The controller, with the one addition to the shared contract: openDataset
  * takes the dataset's geometry when the caller has it, for the viewer's
  * dimensions and centre. */
@@ -93,6 +111,12 @@ export function createViewer(opts: { session: SessionStore; log: (line: string) 
    * the session's models again before the viewer is restored, so that their
    * views exist when the viewer asks): put in the first state mounted. */
   let queued: Record<string, LayerSpec> = {};
+  /** The layer to select, its panel on `tab`, once the viewer has a layer
+   * of that name: selectLayer called before there is an iframe, or before
+   * setLayers has put the layer in (the backend selects the paint layer it
+   * sets in the same breath, as the server's add_annotation_layer does both
+   * in one transaction). */
+  let selection: { name: string; tab?: string } | null = null;
   let stopMirror: (() => void) | null = null;
 
   /** Neuroglancer's viewer in the iframe, once its page has made it. */
@@ -180,12 +204,23 @@ export function createViewer(opts: { session: SessionStore; log: (line: string) 
   }
 
   /** `state` with the layers set before there was an iframe, which are then
-   * no longer queued. */
+   * no longer queued, and the pending selection when it names one of the
+   * state's layers. */
   function withQueued(state: NgState): NgState {
-    if (!Object.keys(queued).length) return state;
+    if (!Object.keys(queued).length) return withSelection(state);
     const merged = replaceLayers(state, queued);
     queued = {};
-    return merged;
+    return withSelection(merged);
+  }
+
+  /** `state` with the pending selection applied, when it names a layer of
+   * `state`; the selection is then no longer pending. */
+  function withSelection(state: NgState): NgState {
+    if (!selection) return state;
+    const selected = withSelectedLayer(state, selection.name, selection.tab);
+    if (!selected) return state;
+    selection = null;
+    return selected;
   }
 
   /** Show `state` as a new viewer: through the hash, which has Neuroglancer
@@ -276,11 +311,12 @@ export function createViewer(opts: { session: SessionStore; log: (line: string) 
         Object.assign(queued, layers);
         return;
       }
-      applyState(replaceLayers(state, layers));
+      applyState(withSelection(replaceLayers(state, layers)));
     },
 
     removeLayer(name) {
       delete queued[name];
+      if (selection?.name === name) selection = null;
       const state = currentState();
       if (!state) return;
       applyState(withoutLayer(state, name));
@@ -327,8 +363,12 @@ export function createViewer(opts: { session: SessionStore; log: (line: string) 
     layerShader(name) {
       return layerShaderOf(currentState(), name);
     },
-    selectLayer(_name, _tab) {
-      // To come: the layer selected, its panel open on `tab`.
+    selectLayer(name, tab) {
+      selection = tab === undefined ? { name } : { name, tab };
+      const state = currentState();
+      if (!state) return;  // no iframe yet: in the first state mounted, with the queued layers
+      const selected = withSelection(state);
+      if (selected !== state) applyState(selected);  // else not a layer yet: selected when setLayers brings it
     },
   };
 }

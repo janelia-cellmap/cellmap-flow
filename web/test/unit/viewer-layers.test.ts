@@ -5,11 +5,12 @@
 // viewer-display.test.ts. The chain helpers are the real ones (src/infer/post.ts).
 import { describe, expect, it } from "vitest";
 
-import type { Chain, DatasetInfo, ModelEntry, ModelInfo, ServedModel } from "../../src/contracts";
+import type { Chain, DatasetInfo, ModelEntry, ModelInfo, PaintVolume, ServedModel } from "../../src/contracts";
 import { predictionShader, rawShader } from "../../src/viewer/display";
 import {
-  centrePosition, DEFAULT_LAYOUT, dimensionsOf, displayChannel, GPU_MEMORY_LIMIT, initialState, layerList, PREDICTION_COLORS,
-  predictionLayer, predictionSource, predictionVoxelOverride, RAW_LAYER_NAME, rawLayer, rawSource, stateWithoutInfo,
+  centrePosition, DEFAULT_LAYOUT, dimensionsOf, displayChannel, GPU_MEMORY_LIMIT, initialState, layerList, PAINT_LAYER_PREFIX, PAINT_TAB,
+  PAINT_TOOL_BINDINGS, paintLayer, paintLayerName, paintLayerUrl, PREDICTION_COLORS, predictionLayer, predictionSource, predictionVoxelOverride,
+  RAW_LAYER_NAME, rawLayer, rawSource, stateWithoutInfo,
 } from "../../src/viewer/layers";
 
 const DATASET = "https://janelia-cosem-datasets.s3.amazonaws.com/jrc_hela-2/jrc_hela-2.zarr/recon-1/em/fibsem-uint8";
@@ -256,5 +257,57 @@ describe("stateWithoutInfo", () => {
     });
     const raw = rawLayer(DATASET, info);
     expect(stateWithoutInfo(DATASET, raw).layers).toEqual([{ ...raw, name: "data" }]);
+  });
+});
+
+describe("the paint layer (overlay.add_annotation_layer)", () => {
+  const volume: PaintVolume = {
+    id: "vol-0badcafe-20261015-130405",
+    type: "annotation_volume",
+    model_name: "mito_aff_setup54_16nm",
+    model_id: "cellmap/onnx-web-models/setup_54",
+    dataset_path: DATASET,
+    chunk_size: [60, 60, 60],
+    input_size: [148, 148, 148],
+    output_voxel_size: [8, 8, 8],
+    input_voxel_size: [8, 8, 8],
+    dataset_offset_nm: [0, 0, 0],
+    dataset_shape_voxels: [1020, 1020, 1020],
+    dtype: "uint16",
+    input_norm: [],
+    postprocess: [],
+    created_at: "2026-10-15T13:04:05.000Z",
+  };
+
+  it("names the layer annotation_<volume id>, as the server's add-to-viewer route does", () => {
+    expect(PAINT_LAYER_PREFIX).toBe("annotation_");
+    expect(paintLayerName(volume.id)).toBe("annotation_vol-0badcafe-20261015-130405");
+  });
+
+  it("paints through the page's paint route as the fork's s3+http(s) endpoint", () => {
+    expect(paintLayerUrl(volume.id, "https://janelia-cellmap.github.io/cellmap-flow/app/"))
+      .toBe("s3+https://janelia-cellmap.github.io/cellmap-flow/app/paint/vol-0badcafe-20261015-130405/annotation");
+    expect(paintLayerUrl(volume.id, "http://localhost:5174/")).toBe("s3+http://localhost:5174/paint/vol-0badcafe-20261015-130405/annotation");
+    // A base without its slash is still a directory.
+    expect(paintLayerUrl("v", "http://localhost:5174")).toBe("s3+http://localhost:5174/paint/v/annotation");
+    // Without a page (here, in node) the default base is a placeholder host.
+    expect(paintLayerUrl("v")).toBe("s3+http://localhost/paint/v/annotation");
+  });
+
+  it("is a writable segmentation layer with the brush and flood fill bound, open on its Draw tab", () => {
+    const url = paintLayerUrl(volume.id, "http://localhost:5174/");
+    expect(paintLayer(url, volume)).toEqual({
+      type: "segmentation",
+      name: "annotation_vol-0badcafe-20261015-130405",
+      source: { url, subsources: { default: { writingEnabled: true }, bounds: {} } },
+      toolBindings: { A: "vox-brush", F: "vox-flood-fill" },
+      tab: "Draw",
+    });
+    // overlay.ANNOTATION_TOOL_BINDINGS, single capital letters as Neuroglancer's tool bindings want
+    expect(PAINT_TOOL_BINDINGS).toEqual({ A: "vox-brush", F: "vox-flood-fill" });
+    expect(Object.keys(PAINT_TOOL_BINDINGS).every((key) => /^[A-Z]$/.test(key))).toBe(true);
+    expect(PAINT_TAB).toBe("Draw");
+    // Each layer gets its own bindings object: Neuroglancer may edit it in place.
+    expect(paintLayer(url, volume).toolBindings).not.toBe(PAINT_TOOL_BINDINGS);
   });
 });
