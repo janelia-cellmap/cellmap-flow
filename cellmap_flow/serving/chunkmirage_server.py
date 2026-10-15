@@ -193,6 +193,11 @@ class ChunkmirageServer:
         from chunkmirage.sources import open_source
 
         idi = self.idi_raw
+        # A plain local path made absolute, as io.store hands one to
+        # tensorstore, which refuses ".." in a path: `serve -d ../data.zarr/raw`
+        # failed to start here while the reader above had opened it. A URL,
+        # or a ``precomputed://`` location, is left as it is.
+        path = idi.path if "://" in idi.path else os.path.abspath(idi.path)
         grid = idi._grid
         actual = np.asarray(idi.actual_voxel_size, dtype=float)
         if idi.resampled:
@@ -210,18 +215,18 @@ class ChunkmirageServer:
                 axes=["c"] * lead + list(self.axes),
             )
 
-        if paths.is_precomputed(idi.path):
+        if paths.is_precomputed(path):
             # cellmap-flow names a precomputed volume's scales ``…/s<N>``,
             # which is no path in the volume: chunkmirage opens the volume at
             # that scale's index. The volume always has a channel axis, one
             # channel or more, which pipeline_for selects from.
-            volume, scale_index = paths.precomputed_volume(idi.path)
+            volume, scale_index = paths.precomputed_volume(path)
             level = TensorStoreSource.from_path(
                 volume, cache_bytes=self.registry.source_cache_bytes, scale_index=scale_index, **placed(1)
             )
-            return MultiscaleSource([level], name=idi.path)
+            return MultiscaleSource([level], name=path)
         return open_source(
-            idi.path,
+            path,
             cache_bytes=self.registry.source_cache_bytes,
             cache=self.registry.cache,
             **placed(len(idi.axes_names) - len(self.axes)),
