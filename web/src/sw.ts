@@ -113,13 +113,14 @@ function localStore(handleKey: string): Promise<FileSystemStore | null> {
 }
 
 /** `.../local/<handleKey>/<path>`: the file at `path` in the directory whose
- * handle the page stored under `handleKey`, streamed as it is (the File is
- * the body; its bytes never pass through this worker). 404 when the handle
- * is gone or the file is not there (a missing chunk, which zarr readers
- * take as the fill value). Permission must have been granted on the page: a
- * service worker cannot ask. A viewer cancels the chunk requests it no
- * longer needs as the view moves (`signal`); their reads are not started,
- * or the ones in flight would hold up the ones it still wants. */
+ * handle the page stored under `handleKey`, its bytes read here (a File
+ * given as the body stalled: Chrome answered the head and never finished
+ * the body). 404 when the handle is gone or the file is not there (a
+ * missing chunk, which zarr readers take as the fill value). Permission
+ * must have been granted on the page: a service worker cannot ask. A viewer
+ * cancels the chunk requests it no longer needs as the view moves
+ * (`signal`); their reads are not started, or the ones in flight would hold
+ * up the ones it still wants. */
 async function serveLocal(rest: string, signal: AbortSignal): Promise<Response> {
   const [handleKey, ...parts] = rest.split("/");
   const path = parts.join("/");
@@ -133,7 +134,8 @@ async function serveLocal(rest: string, signal: AbortSignal): Promise<Response> 
     const file = await store.file(path);
     if (file === undefined) return new Response("not found", { status: 404 });
     const isMeta = /\.z(array|attrs|group)$|zarr\.json$/.test(path);
-    const body: BodyInit = file instanceof Blob ? file : new Uint8Array(await file.arrayBuffer());
+    const body = await file.arrayBuffer();
+    if (signal.aborted) return new Response(null, { status: 499, statusText: "the request was cancelled" });
     return new Response(body, { headers: { "content-type": isMeta ? "application/json" : "application/octet-stream" } });
   } catch (e) {
     localStores.delete(handleKey);
