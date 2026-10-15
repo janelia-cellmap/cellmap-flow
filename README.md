@@ -48,11 +48,11 @@ starts fresh.
   among them; the connect panel's placeholder is one). In Chrome or Edge you
   can instead browse to, or drop, an OME-Zarr, zarr or N5 folder on your
   machine: nothing is uploaded, the page reads it itself. A volume on your
-  institution's network (a host with a private address, `10.x` say) needs one
-  more click in Chrome, which asks, when the volume is opened, whether the
-  site may use your local network; until you allow it, connecting fails with
-  "Failed to fetch" (allow it from the prompt, or later under *Local network
-  access* in the site-information panel beside the address bar).
+  institution's network (a host with a private address, `10.x` say) opens as
+  it does in Neuroglancer; if Chrome asks whether the site may use your local
+  network, allow it (connecting fails with "Failed to fetch" until you do; the
+  setting is under *Local network access* in the site-information panel
+  beside the address bar).
 - **Models.** ONNX exports of cellmap's networks from
   [cellmap/onnx-web-models](https://huggingface.co/cellmap/onnx-web-models)
   on Hugging Face, run with onnxruntime-web on your GPU through WebGPU

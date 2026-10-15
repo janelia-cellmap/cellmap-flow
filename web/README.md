@@ -124,15 +124,16 @@ browser that picked the folder.
   buckets and GitHub Pages do; a plain http server on your machine may need a
   flag.
 - **Data on a private network.** To Chrome, a host with a private address
-  (`10.x`, `192.168.x`, a `.local` name) is on the user's *local network*, and
-  a public site such as the deployed one may fetch from it only with the
-  user's permission (Chrome's Local Network Access). Chrome asks when the
-  page itself makes a request to such a host, and refuses one made by a
-  service worker outright until the permission has been given; so the
-  service worker (`src/sw.ts`) leaves a volume's metadata requests, the first
-  of any volume, to the page, and that request is what brings the prompt up.
-  Until it is allowed, every fetch fails with "Failed to fetch", which the
-  connect panel's error explains (`src/backend/routes/data.ts`). The
+  (`10.x`, `192.168.x`, a `.local` name) is on the user's *local network*,
+  which a public site such as the deployed one may fetch from only with the
+  user's permission (Chrome's Local Network Access). Chrome can ask for it
+  when the page itself makes a request to such a host, and refuses one made
+  by a service worker outright unless the permission was given before. So
+  the service worker (`src/sw.ts`) leaves a volume's metadata requests, the
+  first of any volume, to the page, as Neuroglancer's site reads a volume;
+  on the deployed site a cellmap-vm1 volume had failed with "Failed to
+  fetch" while Neuroglancer read it. When a fetch still gets no answer, the
+  connect panel's error says what to do (`src/backend/routes/data.ts`). The
   permission is per site: in the site-information panel beside the address
   bar, or at `chrome://settings/content/localNetworkAccess`. A page on
   `http://localhost` is not a public site, so there is no such check there.

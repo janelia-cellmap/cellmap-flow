@@ -54,15 +54,16 @@ or N5 folder dropped on it from the file manager. Nothing is uploaded: the
 page reads the files itself. The browser asks once to allow reading the
 folder, and again after a reload. Firefox and Safari have no directory picker.
 
-**A volume on your institution's network.** To Chrome, a host with a private
-address (``10.x``, ``192.168.x``, a ``.local`` name) is on your *local
-network*, and a public site such as this one needs your permission to reach
-it. Chrome asks when the volume is opened ("wants to look for and connect to
-devices on your local network"); until it is allowed, connecting fails with
-*Failed to fetch*, and the connect panel says so. Allow it from the prompt,
-or later from the site-information icon beside the address bar, under *Local
-network access* (or at ``chrome://settings/content/localNetworkAccess``).
-Running the app locally on ``http://localhost`` (below) needs no permission.
+**A volume on your institution's network.** A host with a private address
+(``10.x``, ``192.168.x``, a ``.local`` name) opens as it does in
+Neuroglancer. To Chrome such a host is on your *local network*, which a
+public site such as this one may use only with your permission; if Chrome
+asks ("wants to look for and connect to devices on your local network"),
+allow it. Until it is allowed, connecting fails with *Failed to fetch*, and
+the connect panel says so; the setting is under *Local network access* in
+the site-information panel beside the address bar (or at
+``chrome://settings/content/localNetworkAccess``). Running the app locally
+on ``http://localhost`` (below) is not gated.
 
 Browsers and devices
 --------------------

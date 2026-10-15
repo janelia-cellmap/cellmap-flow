@@ -70,16 +70,17 @@ sw.addEventListener("fetch", (event) => {
   // .onnx files (up to 43 MB) that way, since it keeps them in IndexedDB
   // itself and a second copy here would only push chunks out of the store.
   // A volume's metadata (.zattrs, zarr.json, attributes.json) is left to
-  // the page that asked for it, for Chrome's local-network permission: a
-  // public site such as the deployed one may reach a host on the user's
-  // private network (an institution's 10.x server) only once the user has
-  // allowed it, and Chrome asks only when the page itself makes the
-  // request; one made here, by a service worker, is refused outright until
-  // then, with nothing to click. The metadata is the first thing read of
-  // any volume, so the page's request for it is what brings the prompt up,
-  // and the chunks that follow, read here, are allowed once it is answered.
-  // A handful of small files per volume, read once: nothing lost to the
-  // cache.
+  // the page that asked for it, which is how Neuroglancer's own site reads
+  // a volume. Chrome gates a public site's requests to a host on the user's
+  // private network (an institution's 10.x server) behind a permission it
+  // can ask for, once, when the page makes such a request; a request made
+  // here, by a service worker, it refuses outright unless the permission
+  // was given before, with nothing to ask. On the deployed site a volume on
+  // such a host failed that way ("Failed to fetch") while Neuroglancer read
+  // it. The metadata is the first thing read of any volume, so the page's
+  // request for it is the one Chrome can ask on, if it asks at all, and the
+  // chunks that follow, read here, pass once it has. A handful of small
+  // files per volume, read once: nothing lost to the cache.
   if (req.method !== "GET" || req.destination !== "" || req.cache === "no-store" || METADATA_FILE.test(url.pathname)) return;
   event.respondWith(fromStore(req));
 });

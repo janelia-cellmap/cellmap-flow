@@ -42,8 +42,8 @@ export function explainOpenError(url: string, e: unknown, pageHost = typeof loca
   }
   const reasons = [`it cannot be reached from here`, `its server does not allow this page to read it (CORS)`];
   if (pageHost !== "localhost" && pageHost !== "127.0.0.1") {
-    reasons.push(`it is on a private network (an address like 10.x), which Chrome lets a public site such as this one use only with your permission: `
-      + `look for Chrome's prompt, or allow "Local network access" for this site from the icon beside the address bar, and connect again`);
+    reasons.push(`it is on a private network (an address like 10.x), which Chrome may let a public site such as this one use only with your permission: `
+      + `if Chrome asked, allow it; otherwise allow "Local network access" for this site from the icon beside the address bar, and connect again`);
   }
   return `${why}: the browser got no answer from ${host}. Either ${reasons.slice(0, -1).join(", ")}, or ${reasons[reasons.length - 1]}.`;
 }
