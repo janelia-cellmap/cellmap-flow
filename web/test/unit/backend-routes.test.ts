@@ -43,6 +43,13 @@ describe("POST /api/set-data", () => {
     expect(ctx.session.state.datasetUrl).toBe("https://example.org/em.zarr");
   });
 
+  it("lets a precomputed:// URL through to the engine as it was typed", async () => {
+    const ctx = fakeContext({ dataset: null });
+    const res = await createBackend(ctx).handle(request("POST", "/api/set-data", { dataset_path: "precomputed://gs://flyem-male-cns/em/em-clahe-jpeg" }));
+    expect(res.status).toBe(200);
+    expect(ctx.infer.opened).toEqual(["precomputed://gs://flyem-male-cns/em/em-clahe-jpeg"]);
+  });
+
   it("refuses a missing path and a path that is not a URL with a 400 the connect panel shows", async () => {
     const backend = createBackend(fakeContext({ dataset: null }));
     expect(body(await backend.handle(request("POST", "/api/set-data", { dataset_path: "" })))).toEqual({ success: false, error: "dataset_path is required" });
