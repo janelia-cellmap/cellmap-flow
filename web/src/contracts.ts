@@ -234,6 +234,11 @@ export interface DatasetInfo {
   axes: { name: string; unit: string }[];
   /** Finest first; voxel sizes in nm. */
   levels: { shape: number[]; voxel: number[]; origin: number[] }[];
+  /** The raw layer's starting contrast: the 1st and 99th percentiles of a
+   * region at the volume's centre, sampled by the engine for every dtype
+   * but uint8 (whose whole range is the right window for EM); absent for
+   * uint8, or when the sample failed. */
+  displayRange?: [number, number];
 }
 
 export interface ServedModel {

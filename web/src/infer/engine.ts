@@ -77,6 +77,19 @@ export class InferenceEngine implements Inference {
     if (!source) throw new Error(`the engine opened ${url} but reports no source for it`);
     this.engine = engine;
     this.info = datasetInfoFrom(url, source);
+    if (source.dtype !== "uint8") {
+      // The raw layer's contrast for a dtype whose whole range is not the
+      // data's (a 16-bit volume sits in a sliver of it and comes out flat
+      // gray): the 1st and 99th percentiles of a region at the centre, as
+      // the Python dashboard samples them. uint8 EM spans its range, and
+      // skipping the sample keeps the common case's open fast.
+      try {
+        const [lo, hi] = await engine.sample(RAW_VIEW, [1, 99]);
+        if (Number.isFinite(lo) && Number.isFinite(hi) && lo < hi) this.info.displayRange = [lo, hi];
+      } catch (e) {
+        this.opts.log(`could not sample ${url} for its contrast (the raw layer starts over the dtype's whole range): ${e instanceof Error ? e.message : String(e)}`);
+      }
+    }
     const finest = this.info.levels[0];
     this.opts.log(`opened ${url}: ${source.dtype}, ${source.levels.length} level(s), finest ${finest.shape.join("×")} voxels at ${finest.voxel.join("×")} nm`);
     this.setStatus("dataset open");
