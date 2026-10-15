@@ -53,8 +53,10 @@ sw.addEventListener("fetch", (event) => {
       return event.respondWith(relayed(req, relay(req, { pick: (pages) => appWindows(pages, event.clientId), timeout: API_TIMEOUT_MS })));
     }
     // local/ directly under the page's directory (the worker's scope), not
-    // anywhere in the path: the page's own modules live at src/local/ in
-    // development, and matching those here answered them 404.
+    // anywhere in the path: a page module at such a path would be answered
+    // 404 here (the module for this is src/local-folder/, named so that no
+    // path of the page has /local/ in it, since a worker from an older build
+    // that matched loosely controls the page until the new one takes over).
     const localRoot = new URL("local/", sw.registration.scope).pathname;
     if (url.pathname.startsWith(localRoot)) return event.respondWith(serveLocal(url.pathname.slice(localRoot.length)));
     return; // this origin's own files: never cached here

@@ -23,7 +23,7 @@
   visibility: hidden;
 }
 
-/* A folder on this machine (src/local): the connect panel's "Browse local
+/* A folder on this machine (src/local-folder): the connect panel's "Browse local
    folder…" button with the drop hint beside it (templates/index.html, in its
    browser-only block; panel.ts hides the button where there is no picker),
    the panel lit as a drop target while a folder from the file manager is

@@ -16,7 +16,7 @@
 //      a shared link may name another dataset than the session's), and then
 //      the viewer having been restored first (the iframe, when a dataset is
 //      open; the models' layers are set on it as they are served again).
-//      A dataset that is a folder on this machine (src/local) comes before
+//      A dataset that is a folder on this machine (src/local-folder) comes before
 //      both: after a reload the page must be allowed to read it again.
 // <html data-dashboard="loaded"> marks step 4 done, and data-session="restored"
 // step 5, for tests and for anyone waiting on the page.
@@ -28,7 +28,7 @@ import { createBackend, restoreSession } from "./backend";
 import { listenForApiRequests, registerServiceWorker } from "./backend/relay";
 import type { AppContext } from "./contracts";
 import { createInference } from "./infer";
-import { installLocalFolderUi, restoreLocalFolder } from "./local";
+import { installLocalFolderUi, restoreLocalFolder } from "./local-folder";
 import { createCatalog } from "./models";
 import { installApiRebase } from "./rebase";
 import { openSession } from "./state";
@@ -74,7 +74,7 @@ async function boot() {
   const ctx: AppContext = { session, catalog, infer, viewer, events, log };
   const backend = createBackend(ctx);
   listenForApiRequests(backend);
-  // A dataset that is a folder on this machine (src/local) before anything
+  // A dataset that is a folder on this machine (src/local-folder) before anything
   // reads it: its read permission is gone after a reload and only a click
   // gets it back, so this may show a prompt on the connect panel and wait.
   await restoreLocalFolder({ session, log });

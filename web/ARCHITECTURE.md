@@ -71,7 +71,7 @@ the normalizer and postprocessor bodies (`infer/norms.ts`, `post.ts` and the
 segmentation steps), the two stages and their keys (`infer/stages.ts`), the
 viewer's layer JSON (`viewer/`), the backend
 behind the dashboard's routes (`backend/`), the session (`state/`), a folder
-picked on this machine (`local/`) and the dashboard build (`build/`,
+picked on this machine (`local-folder/`) and the dashboard build (`build/`,
 `vite.config.ts`).
 
 ## Boot (src/main.ts)
@@ -89,7 +89,7 @@ picked on this machine (`local/`) and the dashboard build (`build/`,
    and `listenForApiRequests(backend)`: a `route("/api/", …)` in chunkmirage's
    route table (routes.ts), the one listener the page has for the worker's
    asks; the Engine adds its `/virtual/<page>/` route there when it starts.
-4. `restoreLocalFolder()` (src/local) – when the session's dataset is this
+4. `restoreLocalFolder()` (src/local-folder) – when the session's dataset is this
    page's own `local/<key>/`, a folder picked on this machine, its handle must
    still be in IndexedDB and readable before anything opens it. Chrome drops
    a stored handle's read permission on reload (unless the user chose "allow
@@ -136,7 +136,7 @@ entries it would import the chunk it shares with the page (the IndexedDB
 helpers), which a classic worker cannot do. It is chunkmirage's `relay.ts`
 (the relay for `/virtual/` and `/api/` alike, and the store cache) plus our
 `/local/` route, which serves a picked folder's files from the handle
-`src/local` stored (and asks permission for again after a reload; the worker
+`src/local-folder` stored (and asks permission for again after a reload; the worker
 cannot ask); the Engine registers the same `sw.js` by name, so both get one
 registration.
 
@@ -172,7 +172,7 @@ web/
       router.ts, sse.ts, yaml.ts (the export), serving.ts (serve and re-serve the session's models)
       routes/{data,pipeline,models,config}.ts
     state/                   openSession(): SessionStore (IndexedDB, db.ts); local-store.ts for picked directories
-    local/                   a folder on this machine: index.ts (the local URL and its key, the pick/drop flow,
+    local-folder/            a folder on this machine: index.ts (the local URL and its key, the pick/drop flow,
                              the boot-time permission check), panel.ts (the connect panel's DOM: button, drop target, prompt)
     infer/                   createInference(): Inference — the Engine, one serveStages() view per model
       engine.ts (the views and the stats), stages.ts (the model and postprocess stages, their keys),

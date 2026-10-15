@@ -1,4 +1,4 @@
-// The connect panel's DOM for a folder on this machine (src/local/index.ts
+// The connect panel's DOM for a folder on this machine (src/local-folder/index.ts
 // has the flows): the panel and its parts by the ids the dashboard's
 // template gives them (templates/index.html; the Browse button and the drop
 // hint are in its browser-only block), the one-click permission prompt put

@@ -1,4 +1,4 @@
-// A folder on this machine (src/local/index.ts): the local URL and its key,
+// A folder on this machine (src/local-folder/index.ts): the local URL and its key,
 // the pick flow, and the boot-time permission check, on a fake connect panel,
 // fake directory handles and the in-memory session. The DOM (panel.ts) is
 // not run here.
@@ -16,8 +16,8 @@ import {
   type PickedDirectory,
   restoreLocalFolder,
   UNSUPPORTED_NOTE,
-} from "../../src/local";
-import type { LocalPanel } from "../../src/local/panel";
+} from "../../src/local-folder";
+import type { LocalPanel } from "../../src/local-folder/panel";
 import { memorySession } from "../../src/state";
 import { rawSource } from "../../src/viewer/layers";
 
