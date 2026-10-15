@@ -16,7 +16,7 @@
 }
 
 /* While the page boots with a dataset already open (index.html's inline
-   script sets data-viewer="pending" from the session's localStorage flag),
+   script sets data-viewer="pending" from the session's sessionStorage flag),
    the connect panel stays invisible: the viewer replaces it with the iframe,
    or main.ts clears the attribute when there is nothing to show. */
 [data-viewer="pending"] #noNeuroglancerPanel {

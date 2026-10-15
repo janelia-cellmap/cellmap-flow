@@ -86,7 +86,7 @@ export interface SessionState {
   prefs: Record<string, unknown>;
 }
 
-/** The session, kept in IndexedDB so it survives the page reload that
+/** The session, kept in the tab's sessionStorage so it survives the page reload that
  * connect.js does after /api/set-data. */
 export interface SessionStore {
   readonly state: SessionState;

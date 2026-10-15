@@ -1,22 +1,26 @@
-// The browser mode's IndexedDB database, shared by the session store
-// (index.ts) and the local-directory store (local-store.ts), and by the page
-// and the service worker (IndexedDB is per origin, so both see it).
+// The browser mode's IndexedDB database, for the local-directory store
+// (local-store.ts), shared by the page and the service worker (IndexedDB is
+// per origin, so both see it). The session itself is not here: it is the
+// tab's (index.ts, sessionStorage).
 //
 // One database with every object store in it: two modules each opening the
 // same database with their own version and stores would race on upgrades.
 // Add a store here, bump the version, and the next open creates it.
 //
 // Object stores:
-//   "session": key "state" -> SessionState (contracts.ts)
 //   "handles": key -> FileSystemDirectoryHandle of a zarr directory the user
 //              picked; structured-cloneable, so it survives reloads and a
 //              recycled service worker (permission must be granted again from
 //              a user gesture on the page)
 //   "blobs":   key -> raw bytes shared from the page to the service worker
+//
+// Version 2 dropped the "session" store (the session moved to
+// sessionStorage); a database from version 1 loses it on upgrade.
 
 export const DB_NAME = "cellmap-flow-browser";
-export const DB_VERSION = 1;
-export const STORES = ["session", "handles", "blobs"] as const;
+export const DB_VERSION = 2;
+export const STORES = ["handles", "blobs"] as const;
+const DROPPED_STORES = ["session"];
 export type StoreName = (typeof STORES)[number];
 
 let opening: Promise<IDBDatabase> | null = null;
@@ -29,6 +33,7 @@ export function openDb(): Promise<IDBDatabase> {
     req.onupgradeneeded = () => {
       const db = req.result;
       for (const name of STORES) if (!db.objectStoreNames.contains(name)) db.createObjectStore(name);
+      for (const name of DROPPED_STORES) if (db.objectStoreNames.contains(name)) db.deleteObjectStore(name);
     };
     req.onsuccess = () => {
       const db = req.result;

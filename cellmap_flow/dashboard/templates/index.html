@@ -151,7 +151,7 @@
      viewer is back, instead of flashing it on the reload after Connect. #}
   <script>
     try {
-      if (localStorage.getItem("cellmap-flow:dataset")) document.documentElement.dataset.viewer = "pending";
+      if (sessionStorage.getItem("cellmap-flow:dataset")) document.documentElement.dataset.viewer = "pending";
     } catch (e) { /* no storage: the panel shows until the viewer is restored */ }
   </script>
   {% endif %}

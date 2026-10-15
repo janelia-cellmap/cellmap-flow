@@ -82,7 +82,7 @@ picked on this machine (`local-folder/`) and the dashboard build (`build/`,
 1. `registerServiceWorker()` – `sw.js` beside the page, scope `./`, classic (the
    same registration chunkmirage's Engine makes); waits until it controls the
    page (first visit: one reload).
-2. `openSession()` – the session state from IndexedDB (dataset URL, chains,
+2. `openSession()` – the session state from the tab's sessionStorage (dataset URL, chains,
    served models), which must survive the reload `connect.js` does after
    `/api/set-data`. A shared link's dataset (`datasetUrlFromPage()`) wins over it.
 3. `createViewer`, `createInference`, `createCatalog`, then `createBackend(ctx)`
@@ -171,7 +171,7 @@ web/
       relay.ts  registerServiceWorker(), listenForApiRequests(backend) on chunkmirage's route(); Ask/Reply/Later are chunkmirage's types
       router.ts, sse.ts, yaml.ts (the export), serving.ts (serve and re-serve the session's models)
       routes/{data,pipeline,models,config}.ts
-    state/                   openSession(): SessionStore (IndexedDB, db.ts); local-store.ts for picked directories
+    state/                   openSession(): SessionStore (sessionStorage: the tab is the server's process lifetime); db.ts + local-store.ts for picked directories
     local-folder/            a folder on this machine: index.ts (the local URL and its key, the pick/drop flow,
                              the boot-time permission check), panel.ts (the connect panel's DOM: button, drop target, prompt)
     infer/                   createInference(): Inference — the Engine, one serveStages() view per model
