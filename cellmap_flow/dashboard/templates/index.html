@@ -3,6 +3,7 @@
 
 <head>
   <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>CellMap Flow Dashboard</title>
   <!-- Bootstrap 5 (optional, for styling) -->
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
@@ -13,8 +14,11 @@
       display: flex;
       flex-direction: column;
       height: 100vh;
+      height: 100dvh;  /* what a phone's browser leaves the page under its own bars */
       margin: 0;
       padding: 0;
+      /* A double tap zooms the volume in Neuroglancer (its touch bindings), not the page. */
+      touch-action: manipulation;
     }
 
     .app-header {
@@ -84,6 +88,80 @@
       flex: 1;
       overflow: hidden;
       gap: 0;
+      position: relative;  /* the dashboard column covers it on a phone */
+    }
+
+    #iframe-column {
+      flex: 1;
+      display: flex;
+      overflow: hidden;
+      height: 100%;
+    }
+
+    #dashboard-column {
+      width: 340px;
+      flex-shrink: 0;
+      height: 100%;
+      overflow-y: auto;
+      overflow-x: hidden;
+      border-left: 1px solid var(--border);
+      background: var(--bg-base);
+    }
+
+    /* Toggle Dashboard (the dashboard's main.js) puts dashboard-toggled
+       on the body: the dashboard column the other way from how the layout
+       starts it. Beside the viewer it starts shown, so toggled hides it, and
+       the viewer's column fills the width it leaves. */
+    body.dashboard-toggled #dashboard-column {
+      display: none;
+    }
+
+    /* A phone (under Bootstrap's md breakpoint): no room for the dashboard
+       beside the viewer, so it starts hidden and, toggled, covers the viewer
+       below the header; the header's buttons shrink to stay on one line and
+       wrap when they cannot. */
+    @media (max-width: 767.98px) {
+      .app-header {
+        padding: 8px 12px;
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+
+      .app-logo img {
+        max-height: 22px;
+      }
+
+      .action-btn {
+        padding: 6px 10px;
+        font-size: 13px;
+      }
+
+      .wide-only {
+        display: none;
+      }
+
+      #dashboard-column {
+        display: none;
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        border-left: none;
+      }
+
+      body.dashboard-toggled #dashboard-column {
+        display: block;
+      }
+
+      .no-data-panel {
+        padding: 24px 16px;
+      }
+
+      /* iOS zooms the page in on a focused field with text under 16px, which
+         the dashboard's small fields have; at this width they are 16px. */
+      .form-control,
+      .form-select {
+        font-size: 16px;
+      }
     }
 
     /* No-data panel */
@@ -165,8 +243,9 @@
         alt="CellMap Flow" />
     </div>
     <div class="app-actions">
+      {# wide-only: left off the label on a phone, where the header has no room (the style block above) #}
       <button class="action-btn" type="button" id="toggleDashboardBtn">
-        Toggle Dashboard
+        <span class="wide-only">Toggle </span>Dashboard
       </button>
       {# server-only: the browser mode (web/) hides what only a server can
          serve; the class does nothing in the Flask dashboard. #}
@@ -174,13 +253,13 @@
         Pipeline Builder
       </a>
       <a class="action-btn" href="/api/export-config" download title="Download the current models/normalization/postprocessing/queue config as a reloadable YAML">
-        Export Config
+        Export<span class="wide-only"> Config</span>
       </a>
     </div>
   </div>
 
   <div class="content bg-dark text-light">
-    <div class="col-9" id="iframe-column" style="flex: 1; display: flex; overflow: hidden; height: 100%;">
+    <div class="col-9" id="iframe-column">
       {% if neuroglancer_url %}
         <iframe src="{{ neuroglancer_url }}" style="width:100%;height:100%;border:none;" title="Neuroglancer Data Viewer"
           id="my_iframe">
@@ -226,7 +305,7 @@
         </div>
       {% endif %}
     </div>
-    <div class="col-3" id="dashboard-column" style="width:340px;flex-shrink:0;border-left:1px solid var(--border);overflow-y:auto;overflow-x:hidden;height:100%;background:var(--bg-base);">
+    <div class="col-3" id="dashboard-column">
       <div id="modelAdviceBanner" class="mb-3"></div>
       {% include "_dashboard.html" %}
     </div>
