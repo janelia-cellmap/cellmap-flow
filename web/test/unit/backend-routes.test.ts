@@ -44,6 +44,7 @@ describe("POST /api/set-data", () => {
 
   it("gives the raw layer the contrast the engine sampled, when it sampled one", async () => {
     const ctx = fakeContext({ dataset: null });
+    ctx.infer.dtype = "int16";  // uint8's shader would clip a sampled range to what the dtype holds
     ctx.infer.sampledRange = [5490, 5793];
     await createBackend(ctx).handle(request("POST", "/api/set-data", { dataset_path: "https://example.org/em.zarr" }));
     expect(ctx.viewer.prepared[0].info?.displayRange).toEqual([5490, 5793]);

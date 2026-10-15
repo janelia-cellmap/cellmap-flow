@@ -85,10 +85,13 @@ export class FakeInference implements Inference {
     this.current = dataset;
   }
 
+  /** The dtype the next openDataset reports (uint8 unless a test says otherwise). */
+  dtype = DATASET.dtype;
+
   async openDataset(url: string): Promise<DatasetInfo> {
     if (this.failOpen) throw new Error(this.failOpen);
     this.opened.push(url);
-    this.current = { ...DATASET, url };
+    this.current = { ...DATASET, url, dtype: this.dtype };
     return this.current;
   }
 
