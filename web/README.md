@@ -200,7 +200,8 @@ chunkmirage's engine registers it by that name with scope `./`.
 ```
 cd web
 npm run typecheck && npm test            # TypeScript, and the unit and parity suites (vitest)
-E2E=1 npm run e2e                        # the browser smoke test: a public volume, a model, one chunk
+E2E=1 npm run e2e                        # the browser tests: a public volume, a model, one chunk; then a paint,
+                                         # a finetune of the model's head and the finetuned layer's first chunk
 ```
 
 The parity suites check the TypeScript ports of the normalizers, postprocessors,
@@ -211,10 +212,13 @@ and `tests/web` (pytest) fails while they are stale. The ONNX head editing
 and the trainer run against `test/fixtures/head.onnx`, a small graph shaped
 like the exports' tails that `test/fixtures/make_onnx_fixture.py` writes.
 
-The smoke test runs headless Chromium through Playwright (`npx playwright
+The end-to-end tests run headless Chromium through Playwright (`npx playwright
 install chromium` once; `CHROME_PATH=/path/to/chrome` uses a Chromium of your
-own). Headless Chromium has no WebGPU, so it runs on the WASM provider: about
-half a minute for the first chunk.
+own). Headless Chromium has no WebGPU, so they run on the WASM provider: about
+half a minute for the smoke test's first chunk, and some minutes for the
+finetune test (`test/e2e/finetune.spec.ts`), which drives the Finetune tab's
+routes as the tab does: a volume, a chunk painted through the worker's paint
+route, a training job, the finetuned model served and downloaded.
 
 ## Credits
 
