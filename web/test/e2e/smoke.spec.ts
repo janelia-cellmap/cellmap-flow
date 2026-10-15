@@ -79,8 +79,10 @@ test.describe("browser mode", () => {
       // The viewer mounts its iframe as soon as the route answers, but
       // connect.js, unchanged from server mode, reloads the page a second
       // later; anything clicked before that reload is lost with the page.
-      // So wait for the reload itself, then for the dashboard's script again.
-      const reloaded = page.waitForEvent("framenavigated", { predicate: (frame) => frame === page.mainFrame(), timeout: 120_000 });
+      // So wait for the reload itself (the new document's load event; a
+      // framenavigated event would also fire for the viewer's replaceState of
+      // the page's hash), then for the dashboard's script again.
+      const reloaded = page.waitForEvent("load", { timeout: 120_000 });
       await page.locator("#setDataBtn").click();
       await reloaded;
       await expect(page.locator('html[data-dashboard="loaded"]')).toBeAttached({ timeout: 60_000 });
