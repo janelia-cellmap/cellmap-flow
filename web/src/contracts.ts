@@ -150,8 +150,8 @@ export interface ModelEntry {
 export interface ModelInfo {
   output_channels: number;
   channels: string[];
-  write_shape: number[]; // output block, z y x voxels
-  read_shape: number[]; // input block
+  write_shape: number[]; // output block in nm (z, y, x), as the Python server sends it
+  read_shape: number[]; // input block in nm
   output_voxel_size: number[];
   input_voxel_size: number[];
   effective_output_voxel_size?: number[];

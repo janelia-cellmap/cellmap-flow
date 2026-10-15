@@ -12,8 +12,8 @@ describe("modelInfo", () => {
     expect(info).toEqual({
       output_channels: 3,
       channels: ["mito_aff_z", "mito_aff_y", "mito_aff_x"],
-      write_shape: [44, 44, 44],
-      read_shape: [132, 132, 132],
+      write_shape: [704, 704, 704], // 44 voxels at 16 nm
+      read_shape: [2112, 2112, 2112], // 132 voxels
       output_voxel_size: [16, 16, 16],
       input_voxel_size: [16, 16, 16],
       effective_output_voxel_size: [16, 16, 16],
@@ -31,8 +31,8 @@ describe("modelInfo", () => {
   it("follows the variant: a bigger block on a bigger GPU", () => {
     const big: GpuLimits = { maxBufferSize: 4 * 1024 ** 3, maxStorageBufferBindingSize: null, shaderF16: true };
     const info = modelInfo(entryFixture("setup_53", big));
-    expect(info.read_shape).toEqual([172, 172, 172]);
-    expect(info.write_shape).toEqual([84, 84, 84]);
+    expect(info.read_shape).toEqual([2752, 2752, 2752]); // 172 voxels at 16 nm
+    expect(info.write_shape).toEqual([1344, 1344, 1344]); // 84 voxels
     expect(info.output_channels).toBe(3);
   });
 

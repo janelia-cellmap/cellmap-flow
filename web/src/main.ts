@@ -9,16 +9,23 @@
 //   2. the session (IndexedDB), the inference engine, the model catalog and
 //      the viewer controller exist;
 //   3. the backend listens for the relayed requests;
-//   4. the viewer is restored (the iframe, when a dataset is already open);
-//   5. only then the dashboard's own main.js loads, unchanged.
+//   4. the session is restored: the dataset reopened in the engine and its
+//      models served again (the page reloads after /api/set-data, and a
+//      shared link may name another dataset than the session's);
+//   5. the viewer is restored (the iframe, when a dataset is open);
+//   6. only then the dashboard's own main.js loads, unchanged.
+// Before any of it, the dashboard's root-relative /api/ URLs are rebased onto
+// the page's directory (src/rebase.ts): on GitHub Pages the app is not at the
+// origin's root.
 import "./browser.css";
-import { createBackend } from "./backend";
+import { createBackend, restoreSession } from "./backend";
 import { listenForApiRequests, registerServiceWorker } from "./backend/relay";
 import type { AppContext } from "./contracts";
 import { createInference } from "./infer";
 import { createCatalog } from "./models";
+import { installApiRebase } from "./rebase";
 import { openSession } from "./state";
-import { createViewer } from "./viewer";
+import { createViewer, datasetUrlFromPage } from "./viewer";
 
 /** The dashboard's script, served verbatim beside the page (vite.config.ts). */
 const DASHBOARD_MAIN = "./static/js/dashboard/main.js";
@@ -43,8 +50,13 @@ function showBootError(error: unknown) {
 
 async function boot() {
   document.documentElement.dataset.mode = "browser";
+  installApiRebase();
   await registerServiceWorker();
   const session = await openSession();
+  // A shared link carries its own dataset in the viewer state; it wins over
+  // what this browser's session remembers, before the engine opens anything.
+  const linked = datasetUrlFromPage();
+  if (linked && linked !== session.state.datasetUrl) await session.update({ datasetUrl: linked });
   const events = new EventTarget();
   const viewer = createViewer({ session, log });
   const infer = await createInference({ session, log });
@@ -52,6 +64,7 @@ async function boot() {
   const ctx: AppContext = { session, catalog, infer, viewer, events, log };
   const backend = createBackend(ctx);
   listenForApiRequests(backend);
+  await restoreSession(ctx);
   await viewer.restore();
   // The dashboard, exactly as the Flask app serves it. A runtime import so
   // Vite does not bundle it (vite.config.ts serves it verbatim).

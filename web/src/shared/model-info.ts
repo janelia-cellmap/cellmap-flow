@@ -5,9 +5,12 @@
 // chosen variant instead of from a loaded model and an output probe.
 //
 // Field by field, as the dashboard's layer code reads them:
-//   write_shape / read_shape    the output and input block, z y x voxels;
-//                               the ONNX graph fixes both, so they are the
-//                               variant's sizes, not something to derive;
+//   write_shape / read_shape    the output and input block in nm (z, y, x),
+//                               as ModelGeometry sends them and as the
+//                               Finetune tab shows them ("Output Size (nm)");
+//                               the ONNX graph fixes the voxel counts, so
+//                               they are the variant's sizes times the voxel
+//                               size, not something to derive;
 //   output_voxel_size, input_voxel_size, effective_output_voxel_size
 //                               nm; effective equals output here because the
 //                               browser reads the raw at the model's own
@@ -33,8 +36,8 @@ export function modelInfo(entry: ModelEntry): ModelInfo {
   return {
     output_channels: m.channels.length,
     channels: m.channels.slice(),
-    write_shape: v.output_size.slice(),
-    read_shape: v.input_size.slice(),
+    write_shape: v.output_size.map((n, a) => n * m.output_voxel_size_nm[a]),
+    read_shape: v.input_size.map((n, a) => n * m.input_voxel_size_nm[a]),
     output_voxel_size: m.output_voxel_size_nm.slice(),
     input_voxel_size: m.input_voxel_size_nm.slice(),
     effective_output_voxel_size: m.output_voxel_size_nm.slice(),

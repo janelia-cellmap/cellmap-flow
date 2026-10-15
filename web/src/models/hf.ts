@@ -93,7 +93,10 @@ export async function fetchBytes(
   onProgress?: (loaded: number, total: number | null) => void,
 ): Promise<ArrayBuffer> {
   const what = fileNameOf(url);
-  const response = await fetchImpl(url);
+  // no-store: the bytes go into this module's own IndexedDB cache; the
+  // service worker's store cache (sw.ts) honours the request's cache mode and
+  // would otherwise keep a second copy of every model.
+  const response = await fetchImpl(url, { cache: "no-store" });
   throwForStatus(response, what);
   const total = contentLength(response);
   if (!response.body) {

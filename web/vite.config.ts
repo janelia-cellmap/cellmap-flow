@@ -2,8 +2,9 @@
 // build/render.py), its entry src/main.ts, and the service worker src/sw.ts,
 // built for any base path (the Pages site serves it under /cellmap-flow/app/).
 //
-// The service worker keeps a fixed name, sw.js beside the page, because
-// chunkmirage's Engine registers it by that name with scope ./ .
+// The service worker, sw.js beside the page (chunkmirage's Engine registers it
+// by that name with scope ./), is bundled on its own by the serviceWorker
+// plugin: a classic worker cannot import a chunk shared with the page.
 //
 // The dashboard's own JavaScript and CSS (cellmap_flow/dashboard/static) are
 // not bundled: they are served and copied verbatim under ./static/, so the
@@ -19,7 +20,7 @@ import { resolve } from "node:path";
 import { defineConfig, type ProxyOptions } from "vite";
 
 import { ortRuntime } from "./build/vite-ort.ts";
-import { dashboardStatic, devServiceWorker, localNeuroglancer } from "./build/vite-plugins.ts";
+import { dashboardStatic, localNeuroglancer, serviceWorker } from "./build/vite-plugins.ts";
 
 const here = import.meta.dirname;
 const DASHBOARD_STATIC = resolve(here, "../cellmap_flow/dashboard/static");
@@ -33,13 +34,12 @@ const ngProxy: Record<string, ProxyOptions> = existsSync(NEUROGLANCER_BUILD)
 export default defineConfig({
   base: "./",
   publicDir: false,
-  plugins: [devServiceWorker("src/sw.ts"), dashboardStatic(DASHBOARD_STATIC, "static"), localNeuroglancer(NEUROGLANCER_BUILD, "ng"), ortRuntime("ort")],
+  plugins: [serviceWorker("src/sw.ts"), dashboardStatic(DASHBOARD_STATIC, "static"), localNeuroglancer(NEUROGLANCER_BUILD, "ng"), ortRuntime("ort")],
   build: {
     target: "es2022",
     chunkSizeWarningLimit: 1500, // onnxruntime-web and the zstd/blosc codecs (WebAssembly)
     rolldownOptions: {
-      input: { index: resolve(here, "index.html"), sw: resolve(here, "src/sw.ts") },
-      output: { entryFileNames: (chunk) => (chunk.name === "sw" ? "sw.js" : "assets/[name]-[hash].js") },
+      input: { index: resolve(here, "index.html") },
     },
   },
   worker: { format: "es" },

@@ -83,20 +83,49 @@ export function localNeuroglancer(dir: string, prefix: string): Plugin {
 }
 
 /**
- * Serve the service worker in development.
+ * Build and serve the service worker as a single classic script.
  *
- * The build bundles src/sw.ts into sw.js beside the page (vite.config.ts), and
- * chunkmirage's Engine registers it by that name as a classic worker. The dev
- * server serves no such file: it transforms modules one by one, and a classic
- * service worker cannot `import`. So in development the worker is bundled on
- * its own, by a second Vite build in watch mode into a temporary directory,
- * and served from there at /sw.js, rebuilt as its sources change (reload the
+ * chunkmirage's Engine registers sw.js beside the page as a classic worker,
+ * which cannot `import`. The page's build cannot produce it: as one entry
+ * among the page's, Rolldown splits what the worker and the page share
+ * (src/state/db.ts) into a chunk the worker would have to import. So the
+ * worker is always bundled on its own, from src/sw.ts into one file with no
+ * imports: in the build, into the output directory once the page is built;
+ * in development, by a second Vite build in watch mode into a temporary
+ * directory, served at /sw.js and rebuilt as its sources change (reload the
  * page to pick a new one up: the registration uses updateViaCache "none").
  */
-export function devServiceWorker(entry: string, publicPath = "/sw.js"): Plugin {
+export function serviceWorker(entry: string, publicPath = "/sw.js"): Plugin {
+  let root = ".";
+  let outDir = "dist";
+  let building = false;
   return {
-    name: "cellmap-flow:dev-service-worker",
-    apply: "serve",
+    name: "cellmap-flow:service-worker",
+    configResolved(config) {
+      root = config.root;
+      outDir = resolve(config.root, config.build.outDir);
+      building = config.command === "build";
+    },
+    async closeBundle() {
+      if (!building) return;
+      const { build } = await import("vite");
+      await build({
+        configFile: false,
+        root,
+        logLevel: "warn",
+        publicDir: false,
+        build: {
+          outDir,
+          emptyOutDir: false,
+          copyPublicDir: false,
+          modulePreload: false,
+          rolldownOptions: {
+            input: resolve(root, entry),
+            output: { entryFileNames: "sw.js", format: "iife", inlineDynamicImports: true },
+          },
+        },
+      });
+    },
     async configureServer(server) {
       const { build } = await import("vite");
       const outDir = await mkdtemp(join(tmpdir(), "cellmap-flow-sw-"));
@@ -106,9 +135,12 @@ export function devServiceWorker(entry: string, publicPath = "/sw.js"): Plugin {
         configFile: false,
         root: server.config.root,
         logLevel: "warn",
+        publicDir: false,
         build: {
           outDir,
           emptyOutDir: true,
+          copyPublicDir: false,
+          modulePreload: false,
           watch: {},
           minify: false,
           sourcemap: "inline",

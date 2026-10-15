@@ -44,16 +44,23 @@ from its own URL (`zarr://https://...`).
 
 ## Boot (src/main.ts)
 
-1. `registerServiceWorker()` – `sw.js` beside the page, scope `./`; waits until
-   it controls the page (first visit: one reload).
+0. `installApiRebase()` – the dashboard's root-relative `/api/...` URLs resolve
+   against the page's directory (src/rebase.ts), since on GitHub Pages the app
+   is under `/cellmap-flow/app/`, not at the origin's root.
+1. `registerServiceWorker()` – `sw.js` beside the page, scope `./`, classic (the
+   same registration chunkmirage's Engine makes); waits until it controls the
+   page (first visit: one reload).
 2. `openSession()` – the session state from IndexedDB (dataset URL, chains,
    served models), which must survive the reload `connect.js` does after
-   `/api/set-data`.
+   `/api/set-data`. A shared link's dataset (`datasetUrlFromPage()`) wins over it.
 3. `createViewer`, `createInference`, `createCatalog`, then `createBackend(ctx)`
    and `listenForApiRequests(backend)`.
-4. `viewer.restore()` – the iframe when a dataset is open, else the connect
-   panel with a URL field.
-5. `import("./static/js/dashboard/main.js")` – the dashboard, unchanged.
+4. `restoreSession(ctx)` – reopen the dataset in the engine and serve the
+   session's models again (their views are gone after a reload; the same chain
+   gives the same blob, so the restored layers' URLs still work).
+5. `viewer.restore()` – the iframe when a dataset is open (from the shared
+   link's state when there is one), else the connect panel with a URL field.
+6. `import("./static/js/dashboard/main.js")` – the dashboard, unchanged.
 
 ## Request path for `/api/*`
 
@@ -72,6 +79,13 @@ Review tab's SQLite index, Vertex credentials) answer
 `[data-mode="browser"] .server-only { display: none }` (the template marks them
 with the `server-only` class; render.py sets `data-mode`).
 
+The service worker is one classic script, `sw.js`, bundled on its own from
+`src/sw.ts` (build/vite-plugins.ts `serviceWorker`): bundled as one of the page's
+entries it would import the chunk it shares with the page (the IndexedDB
+helpers), which a classic worker cannot do. It carries chunkmirage's `/virtual/`
+relay verbatim, so `Engine.listen()` finds the protocol it expects; re-check it
+when `chunkmirage.lock` is bumped.
+
 ## State
 
 `src/state/` keeps `SessionState` (see `contracts.ts`) in IndexedDB. Model bytes
@@ -82,32 +96,40 @@ anonymous downloads.
 
 ```
 web/
-  ARCHITECTURE.md            this file
-  package.json, vite.config.ts, tsconfig*.json
+  ARCHITECTURE.md            this file; README.md says how to run and deploy it
+  package.json, vite.config.ts, vitest.config.ts, playwright.config.ts, tsconfig*.json
   chunkmirage.lock           the chunkmirage commit; scripts/fetch-chunkmirage.sh clones it
   neuroglancer.lock          the Neuroglancer fork's commit; scripts/fetch-neuroglancer.sh builds it
-  scripts/                   fetch-chunkmirage.sh, fetch-neuroglancer.sh (the fork that paints)
   build/render.py            renders cellmap_flow/dashboard/templates/index.html → web/index.html
-  build/vite-plugins.ts      serves/copies the dashboard's static files and a local Neuroglancer build
+  build/vite-plugins.ts      the service worker bundle; serves/copies the dashboard's static files and a Neuroglancer build
+  build/vite-ort.ts          serves/copies onnxruntime-web's wasm files under ./ort/
   chunkmirage/               (gitignored) the clone; we import web/chunkmirage/web/src/engine.ts
-  ng/                        (gitignored) a Neuroglancer build, served at ./ng/
+  ng/                        (gitignored) the Neuroglancer build, served at ./ng/
   index.html                 (gitignored) rendered
   src/
     main.ts                  boot
     contracts.ts             the types the modules share
+    rebase.ts                root-relative /api/ URLs → the page's directory
+    browser.css              hides .server-only under data-mode="browser"
     sw.ts                    the service worker: /api/* and /virtual/* relays, /local/ files
     backend/                 the /api/* router and routes, the SW relay (page side)
-      index.ts  createBackend(ctx): Backend
-      relay.ts  registerServiceWorker(), listenForApiRequests(backend)
-      router.ts, routes/{data,pipeline,models,finetune,config,stubs}.ts, sse.ts
-    state/                   openSession(): SessionStore (IndexedDB)
-    infer/                   createInference(): Inference — Engine setup, serve() views, produce()
-      engine.ts, session.ts (ORT), produce.ts, norms.ts, post.ts, geometry.ts, encode.ts
+      index.ts  createBackend(ctx), restoreSession(ctx), the catch-all for server-only routes
+      relay.ts  registerServiceWorker(), listenForApiRequests(backend); protocol.ts its messages
+      router.ts, sse.ts, yaml.ts (the export), serving.ts (serve and re-serve the session's models)
+      routes/{data,pipeline,models,config}.ts
+    state/                   openSession(): SessionStore (IndexedDB, db.ts); local-store.ts for picked directories
+    infer/                   createInference(): Inference — the Engine, serve() views, produce()
+      engine.ts, session.ts (ORT), produce.ts, norms.ts, post.ts, expression.ts (Lambda steps),
+      geometry.ts, encode.ts, semaphore.ts
     shared/                  args.ts (__CFLOW_ARGS__ codec, digest), model-info.ts
     models/                  createCatalog(): Catalog — Hugging Face manifests, variant choice, byte cache
-    viewer/                  createViewer(): ViewerController — iframe, layers JSON (port of viewer/layers.py), position
-  test/                      vitest; fixtures generated by test/fixtures/make_fixtures.py from the Python classes
-  legacy/                    Marwan's prototype files, deleted as each is ported
+    viewer/                  createViewer(): ViewerController — iframe (index.ts), layers.ts (port of
+                             viewer/layers.py), display.ts (shaders, ranges), state.ts, share.ts (the URL)
+  test/
+    unit/                    vitest, one file per module concern
+    parity/                  the TypeScript ports against test/fixtures/*.json, which
+                             test/fixtures/make_fixtures.py writes from the Python classes
+    e2e/                     Playwright smoke test (E2E=1 npm run e2e)
 ```
 
 ## Running it
@@ -130,6 +152,8 @@ deployed site always carries the fork at `/app/ng/`.
 
 ## Credits
 
-The inference loop, the normalizer/postprocessor ports, the zarr reader and the
-local-directory store come from Marwan Zouinkhi's serverless prototype
-(`web/legacy/`, his commits on this branch). The engine is chunkmirage's.
+The inference loop, the normalizer/postprocessor ports, the zarr reading, the
+local-directory store and the shareable URL come from Marwan Zouinkhi's
+serverless prototype (his commits on this branch, under `web/` before this
+restructuring), and the models are his exports on Hugging Face. The engine is
+chunkmirage's.
