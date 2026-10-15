@@ -28,9 +28,40 @@ Please feel free to explore and contribute, but note that there may be frequent 
   <img src="https://raw.githubusercontent.com/janelia-cellmap/cellmap-flow/refs/heads/main/img/jrc.gif" alt="Real-time data processing visualization" />
 </p>
 
+## Try it in your browser
 
+**[janelia-cellmap.github.io/cellmap-flow/app](https://janelia-cellmap.github.io/cellmap-flow/app/)**
+is cellmap-flow with nothing to install: the dashboard as a web page, with the
+models running in your browser. Open a volume, tick a model, and look at its
+predictions in Neuroglancer as you move around. It is the main place to try
+cellmap-flow, and the first place to test a change: every push to `main`
+deploys it.
 
+- **Data.** Paste the URL of an OME-Zarr volume served with CORS (public S3
+  and GCS buckets are, [OpenOrganelle](https://openorganelle.janelia.org)'s
+  among them; the connect panel's placeholder is one). In Chrome or Edge you
+  can instead browse to, or drop, an OME-Zarr, zarr or N5 folder on your
+  machine: nothing is uploaded, the page reads it itself. A volume on your
+  institution's network (a host with a private address, `10.x` say) needs one
+  more click in Chrome, which asks whether the site may use your local
+  network; until you allow it, connecting fails with "Failed to fetch" (allow
+  it from the prompt, or under *Local network access* in the site-information
+  panel beside the address bar).
+- **Models.** ONNX exports of cellmap's networks from
+  [cellmap/onnx-web-models](https://huggingface.co/cellmap/onnx-web-models)
+  on Hugging Face, run with onnxruntime-web on your GPU through WebGPU
+  (Chrome, Edge, Safari 26 and later), or on the CPU without it, far slower.
+  The Input normalizers and Postprocess steps are the server dashboard's.
+- **Phones.** The viewer fills the screen and the *Dashboard* button in the
+  header opens the controls over it.
 
+What the server mode below adds is what a browser cannot do: models that are
+not ONNX exports (PyTorch, TensorFlow, DaCapo, BioImage.io, Cellpose),
+finetuning, the Pipeline Builder and blockwise runs on the cluster.
+[web/README.md](web/README.md) says how the browser mode is built and run
+locally, and the docs'
+[browser page](https://janelia-cellmap.github.io/cellmap-flow/browser.html)
+covers using it.
 
 ## Installation
 

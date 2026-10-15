@@ -11,7 +11,9 @@ ONNX exports of cellmap's networks, fetched from Hugging Face
 ([cellmap/onnx-web-models](https://huggingface.co/cellmap/onnx-web-models))
 and cached in the browser. Anyone with a recent browser can open a volume,
 tick a model and look at its predictions, with nothing to install and no
-cluster account.
+cluster account: it is live at **https://janelia-cellmap.github.io/cellmap-flow/app/**,
+deployed from every push to `main` ([Deployment](#deployment)), and the first
+place to try cellmap-flow and to test a change.
 
 It is the same dashboard as the Flask app's. The templates
 (`cellmap_flow/dashboard/templates`) and the dashboard's JavaScript and CSS
@@ -94,6 +96,15 @@ browser that picked the folder.
   must allow it with CORS (`Access-Control-Allow-Origin`). Public S3 and GCS
   buckets and GitHub Pages do; a plain http server on your machine may need a
   flag.
+- **Data on a private network.** To Chrome, a host with a private address
+  (`10.x`, `192.168.x`, a `.local` name) is on the user's *local network*, and
+  a public site such as the deployed one may fetch from it only with the
+  user's permission (Chrome's Local Network Access). Chrome asks on the first
+  request; until it is allowed every fetch fails with "Failed to fetch", which
+  the connect panel's error explains (`src/backend/routes/data.ts`). The
+  permission is per site: in the site-information panel beside the address
+  bar, or at `chrome://settings/content/localNetworkAccess`. A page on
+  `http://localhost` is not a public site, so there is no such check there.
 
 ## Deployment
 
