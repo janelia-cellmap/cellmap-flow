@@ -185,6 +185,15 @@ export class InferenceEngine implements Inference {
 
   served(): ServedModel[] { return [...this.servedList]; }
 
+  /** Voxels [lo, hi) of raw level `level`, as the engine's reader reads them
+   * for a stage's input (Engine.read on the raw view): what the finetune's
+   * samples are cut from. The box must lie within the level. */
+  readRaw(level: number, lo: number[], hi: number[]): Promise<ArrayBuffer> {
+    if (!this.engine || !this.info) return Promise.reject(new Error("open a dataset before reading it"));
+    if (level < 0 || level >= this.info.levels.length) return Promise.reject(new Error(`the dataset has no level ${level}`));
+    return this.engine.read(RAW_VIEW, level, lo, hi);
+  }
+
   private readonly equivalenceListeners = new Set<(view: string, sets: string[][]) => void>();
 
   onEquivalences(listener: (view: string, sets: string[][]) => void): () => void {

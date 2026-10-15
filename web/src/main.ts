@@ -34,6 +34,7 @@ import { createCatalog } from "./models";
 import { installApiRebase } from "./rebase";
 import { installShareUi } from "./share-link";
 import { defaultChain, openSession } from "./state";
+import { openPaintStore } from "./state/paint-store";
 import { createViewer, datasetUrlFromPage } from "./viewer";
 
 /** The dashboard's script, served verbatim beside the page (vite.config.ts).
@@ -86,7 +87,7 @@ async function boot() {
   // served through it here too, so the link shows what its sender saw.
   const linkedChain = chainFromHash(location.hash);
   if (linkedChain) await session.update({ chain: linkedChain });
-  const ctx: AppContext = { session, catalog, infer, viewer, events, log };
+  const ctx: AppContext = { session, catalog, infer, viewer, paint: openPaintStore(), events, log };
   const backend = createBackend(ctx);
   listenForApiRequests(backend);
   // A dataset that is a folder on this machine (src/local-folder) before anything

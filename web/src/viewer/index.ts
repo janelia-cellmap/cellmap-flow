@@ -327,5 +327,8 @@ export function createViewer(opts: { session: SessionStore; log: (line: string) 
     layerShader(name) {
       return layerShaderOf(currentState(), name);
     },
+    selectLayer(_name, _tab) {
+      // To come: the layer selected, its panel open on `tab`.
+    },
   };
 }

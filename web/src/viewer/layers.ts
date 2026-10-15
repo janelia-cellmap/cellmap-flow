@@ -12,7 +12,7 @@
 // `local_position` as a keyword, emitted as `localPosition`. Neuroglancer
 // expects camelCase in its state JSON (`shaderControls`, `localPosition`,
 // `crossSectionScale`), and that is what is written here.
-import type { Chain, DatasetInfo, LayerSpec, ModelInfo, ServedModel, Step } from "../contracts";
+import type { Chain, DatasetInfo, LayerSpec, ModelInfo, PaintVolume, ServedModel, Step } from "../contracts";
 import { isSegmentation, outputChannels, outputDtype } from "../infer/post";
 import { outputDisplayRange, PREDICTION_COLORS, predictionShader, rawShader } from "./display";
 import type { NgState } from "./state";
@@ -282,4 +282,21 @@ export function stateWithoutInfo(url: string, raw?: LayerSpec): NgState {
     layers: layerList({ [RAW_LAYER_NAME]: layer }),
     layout: DEFAULT_LAYOUT,
   };
+}
+
+// ---------------------------------------------------------------------------
+// The paint layer (to come): the annotation volume as the fork's writable
+// segmentation layer, as dashboard/routes/finetune/overlay.py's
+// add_annotation_layer builds it.
+// ---------------------------------------------------------------------------
+
+/** The URL the viewer paints `volumeId` through: the page's paint route as
+ * an S3-compatible endpoint (`s3+http(s)://<host><page dir>paint/<id>/annotation`). */
+export function paintLayerUrl(_volumeId: string, _pageBase: string = typeof location === "undefined" ? "http://localhost/" : new URL(".", location.href).href): string {
+  throw new Error("paintLayerUrl is not implemented yet");
+}
+
+/** The writable segmentation layer on `url`, with the brush and flood fill bound and its Draw tab open. */
+export function paintLayer(_url: string, _volume: PaintVolume): LayerSpec {
+  throw new Error("paintLayer is not implemented yet");
 }

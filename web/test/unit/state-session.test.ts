@@ -20,6 +20,7 @@ describe("the defaults", () => {
       models: [],
       resample: false,
       prefs: {},
+      paintVolume: null,
     });
     // a fresh object each time, so a caller changing one does not change the default
     expect(defaultChain()).not.toBe(defaultChain());
@@ -36,8 +37,9 @@ describe("completeState", () => {
     expect(partial.models).toEqual([]);
     expect(partial.resample).toBe(false);
     expect(partial.prefs).toEqual({});
-    const whole = completeState({ datasetUrl: null, chain: { input_norm: [], postprocess: [] }, models: [], resample: true, prefs: { a: 1 } });
-    expect(whole).toEqual({ datasetUrl: null, chain: { input_norm: [], postprocess: [] }, models: [], resample: true, prefs: { a: 1 } });
+    expect(partial.paintVolume).toBeNull(); // a session from before the Finetune tab painted
+    const whole = completeState({ datasetUrl: null, chain: { input_norm: [], postprocess: [] }, models: [], resample: true, prefs: { a: 1 }, paintVolume: "vol-1" });
+    expect(whole).toEqual({ datasetUrl: null, chain: { input_norm: [], postprocess: [] }, models: [], resample: true, prefs: { a: 1 }, paintVolume: "vol-1" });
   });
 });
 

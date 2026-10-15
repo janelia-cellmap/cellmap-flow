@@ -9,7 +9,7 @@ import { decodeState, TAB_STATE_KEY } from "../../src/viewer/share";
 
 function fakeSession(state: Partial<SessionState> = {}): SessionStore {
   const current: SessionState = {
-    datasetUrl: null, chain: { input_norm: [], postprocess: [] }, models: [], resample: false, prefs: {}, ...state,
+    datasetUrl: null, chain: { input_norm: [], postprocess: [] }, models: [], resample: false, prefs: {}, paintVolume: null, ...state,
   };
   return {
     get state() { return current; },

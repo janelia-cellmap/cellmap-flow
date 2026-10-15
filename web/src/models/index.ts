@@ -199,7 +199,16 @@ export function createCatalog(opts: CatalogOptions): HfCatalog {
     return chooseVariant(manifest, limits);
   }
 
-  return { list, refresh, resolve, metadataFor, chooseVariant: chooseFor, modelBytes };
+  // Finetuned models (finetuned.ts): to come.
+  async function addFinetuned(): Promise<void> {
+    throw new Error("addFinetuned is not implemented yet");
+  }
+  async function finetuned() {
+    return [];
+  }
+  async function removeFinetuned(): Promise<void> {}
+
+  return { list, refresh, resolve, metadataFor, chooseVariant: chooseFor, modelBytes, addFinetuned, finetuned, removeFinetuned };
 }
 
 function message(error: unknown): string {
