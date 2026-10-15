@@ -198,8 +198,11 @@ export interface ViewerController {
   /** Put the viewer on the page if the session has a dataset, else leave the
    * connect panel (its field takes a URL in the browser). */
   restore(): Promise<void>;
-  /** Open the raw volume at `url` in the viewer; returns the viewer's own URL. */
-  openDataset(url: string, raw: LayerSpec): Promise<string>;
+  /** Open the raw volume at `url` in the viewer; returns the viewer's own URL.
+   * With `info`, the viewer's dimensions and position come from the volume
+   * (the finest voxel size, the centre), as the CLI viewer sets them;
+   * without, Neuroglancer derives them from the layer. */
+  openDataset(url: string, raw: LayerSpec, info?: DatasetInfo): Promise<string>;
   /** Replace the named layers, keeping a layer's visibility if it was hidden. */
   setLayers(layers: Record<string, LayerSpec>): void;
   removeLayer(name: string): void;
