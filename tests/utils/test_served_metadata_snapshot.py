@@ -2,8 +2,12 @@
 
 Neuroglancer, the dashboard and finetune jobs read these, and any of them may
 be older or newer than the server. So the metadata doesn't change, and
-model_info only gains keys: each case below is what the server answered
-before its code moved.
+model_info only gains keys: each case below is what the server answers since
+chunkmirage became the engine (the layer's name followed by ``/zarr``, any
+channel axis first, chunk keys separated by ``/``). Each chunk holds the
+voxels the Flask server before it served: the single-channel chunks hash to
+the same bytes as they did then, and the two-channel one to that server's
+chunk with its channel axis moved first.
 """
 
 import hashlib
@@ -11,15 +15,16 @@ import hashlib
 import numpy as np
 import pytest
 import zarr
+from starlette.testclient import TestClient
 
 from cellmap_flow.models.models_config import ScriptModelConfig
 from cellmap_flow.post.postprocessors import ChannelSelection, ThresholdPostprocessor
-from cellmap_flow.server import CellMapFlowServer
+from cellmap_flow.serving.chunkmirage_server import FORMAT, ChunkmirageServer
 from tests.utils.serving_helpers import (
     IDENTITY_MODEL,
-    decode_chunk,
     get_json,
     layer,
+    read_chunk,
     write_raw,
     write_script,
 )
@@ -102,36 +107,43 @@ def _ome_raw(tmp_path, data, voxel_size, translation):
 
 THRESHOLD = [ThresholdPostprocessor(threshold=0.5)]
 
-# name: (model script, raw writer, {chain name: postprocess}, chunk key)
+# name: (model script, raw writer, {chain name: postprocess}, the pinned chunk's index z.y.x)
 CASES = {
-    "identity": (IDENTITY_MODEL, lambda p: write_raw(p, _data(8)), {"threshold": THRESHOLD}, "1.0.1.0"),
+    "identity": (IDENTITY_MODEL, lambda p: write_raw(p, _data(8)), {"threshold": THRESHOLD}, "1.0.1"),
     "no_channel": (SQUEEZE, lambda p: write_raw(p, _data(8)), {"threshold": THRESHOLD}, "0.1.1"),
     "8nm_to_16nm": (
         COARSER,
         lambda p: write_raw(p, _data(16)),
         {"one_channel": [ChannelSelection("1")]},
-        "1.1.0.0",
+        "1.1.0",
     ),
     # Janelia's levels have their corner at -4 nm.
-    "corner_at_-4nm": (CROP, lambda p: _ome_raw(p, _data(8), 8.0, 0.0), {}, "1.1.1.0"),
+    "corner_at_-4nm": (CROP, lambda p: _ome_raw(p, _data(8), 8.0, 0.0), {}, "1.1.1"),
     # 6 nm data read as if it were 8 nm, voxel for voxel.
-    "relabelled": (IDENTITY_MODEL, lambda p: _ome_raw(p, _data(8), 6.0, 3.0), {}, "1.0.0.0"),
+    "relabelled": (IDENTITY_MODEL, lambda p: _ome_raw(p, _data(8), 6.0, 3.0), {}, "1.0.0"),
 }
+
+
+def chunk_index(key):
+    """The (z, y, x) index a case's chunk key names."""
+    return tuple(int(v) for v in key.split("."))
 
 
 def observe(tmp_path, name):
     script, raw, chains, key = CASES[name]
-    server = CellMapFlowServer(raw(tmp_path), ScriptModelConfig(script_path=write_script(tmp_path, script)))
-    client = server.app.test_client()
+    server = ChunkmirageServer(raw(tmp_path), ScriptModelConfig(script_path=write_script(tmp_path, script)))
+    client = TestClient(server.app)
     datasets = {"plain": "plain", **{chain: layer(posts=posts) for chain, posts in chains.items()}}
-    zarrays = {chain: get_json(client, f"/{path}/s0/.zarray") for chain, path in datasets.items()}
+    zarrays = {chain: get_json(client, f"/{path}/{FORMAT}/s0/.zarray") for chain, path in datasets.items()}
     info = get_json(client, "/__control__/model_info")
     for bound in ("output_min", "output_max"):  # of a random warmup input
         assert isinstance(info.pop(bound), float)
-    meta = zarrays["plain"]
-    chunk = decode_chunk(server, client.get(f"/plain/s0/{key}").data, meta["dtype"], meta["chunks"])
+    zattrs = get_json(client, f"/plain/{FORMAT}/.zattrs")
+    # chunkmirage names the group after the data it is computed from, a path under tmp_path.
+    assert zattrs["multiscales"][0].pop("name") == server.idi_raw.path
+    chunk = read_chunk(client, "plain", chunk_index(key))
     return {
-        "zattrs": get_json(client, "/plain/.zattrs"),
+        "zattrs": zattrs,
         "zarray": zarrays,
         "model_info": info,
         "chunk": [key, str(chunk.dtype), list(chunk.shape), hashlib.sha256(chunk.tobytes()).hexdigest()[:16]],
@@ -139,18 +151,23 @@ def observe(tmp_path, name):
 
 
 def _zattrs(scale, translation, channel):
+    """One level, s0, with any channel axis first. ``translation`` is voxel
+    0's centre; None when it is 0 on every axis, which chunkmirage leaves out."""
     axes = [{"name": a, "type": "space", "unit": "nanometer"} for a in "zyx"]
     if channel:
-        axes.append({"name": "c", "type": "channel"})
-        scale, translation = scale + [1.0], translation + [0.0]
-    transforms = [{"scale": scale, "type": "scale"}, {"translation": translation, "type": "translation"}]
+        axes.insert(0, {"name": "c", "type": "channel"})
+        scale = [1.0] + scale
+        translation = None if translation is None else [0.0] + translation
+    transforms = [{"scale": scale, "type": "scale"}]
+    if translation is not None:
+        transforms.append({"translation": translation, "type": "translation"})
     return {
         "multiscales": [
             {
                 "axes": axes,
-                "coordinateTransformations": [{"scale": [1.0] * len(axes), "type": "scale"}],
                 "datasets": [{"coordinateTransformations": transforms, "path": "s0"}],
-                "name": "plain",
+                "metadata": {"description": "virtual dataset served by chunkmirage"},
+                "type": "chunkmirage",
                 "version": "0.4",
             }
         ]
@@ -160,7 +177,8 @@ def _zattrs(scale, translation, channel):
 def _zarray(shape, chunks, dtype):
     return {
         "chunks": chunks,
-        "compressor": {"clevel": 5, "cname": "zstd", "id": "blosc", "shuffle": 1},
+        "compressor": {"blocksize": 0, "clevel": 3, "cname": "zstd", "id": "blosc", "shuffle": 1},
+        "dimension_separator": "/",
         "dtype": dtype,
         "fill_value": 0,
         "filters": None,
@@ -170,7 +188,7 @@ def _zarray(shape, chunks, dtype):
     }
 
 
-def _info(read, write, in_vs, out_vs, channels=1, names=None, effective=None, channel=True):
+def _info(read, write, in_vs, out_vs, channels=1, names=None, effective=None, channel=True, relabelled_from=None):
     return {
         "available": True,
         "channels": names,
@@ -183,7 +201,13 @@ def _info(read, write, in_vs, out_vs, channels=1, names=None, effective=None, ch
         # Added with ModelGeometry; older dashboards ignore them.
         "effective_output_voxel_size": [effective or out_vs] * 3,
         "has_channel": channel,
-        "output_axes": ["z", "y", "x"] + (["c"] if channel else []),
+        # Channels first, as the chunkmirage engine serves them (the Flask
+        # server before it put the channel axis last).
+        "output_axes": (["c"] if channel else []) + ["z", "y", "x"],
+        # Added with the chunkmirage engine.
+        "engine": "chunkmirage",
+        "input_resampled_from": None,
+        "input_relabelled_from": relabelled_from,
     }
 
 
@@ -191,11 +215,11 @@ EXPECTED = {
     "identity": {
         "zattrs": _zattrs([8.0] * 3, [4.0] * 3, channel=True),
         "zarray": {
-            "plain": _zarray([8, 8, 8, 1], [4, 4, 4, 1], "<f4"),
-            "threshold": _zarray([8, 8, 8, 1], [4, 4, 4, 1], "|u1"),
+            "plain": _zarray([1, 8, 8, 8], [1, 4, 4, 4], "<f4"),
+            "threshold": _zarray([1, 8, 8, 8], [1, 4, 4, 4], "|u1"),
         },
         "model_info": _info(32, 32, 8, 8),
-        "chunk": ["1.0.1.0", "float32", [4, 4, 4, 1], "5f7595af9016c839"],
+        "chunk": ["1.0.1", "float32", [1, 4, 4, 4], "5f7595af9016c839"],
     },
     "no_channel": {
         "zattrs": _zattrs([8.0] * 3, [4.0] * 3, channel=False),
@@ -209,25 +233,26 @@ EXPECTED = {
     "8nm_to_16nm": {
         "zattrs": _zattrs([16.0] * 3, [8.0] * 3, channel=True),
         "zarray": {
-            "plain": _zarray([8, 8, 8, 2], [4, 4, 4, 2], "<f4"),
-            "one_channel": _zarray([8, 8, 8, 1], [4, 4, 4, 1], "<f4"),
+            "plain": _zarray([2, 8, 8, 8], [2, 4, 4, 4], "<f4"),
+            "one_channel": _zarray([1, 8, 8, 8], [1, 4, 4, 4], "<f4"),
         },
         "model_info": _info(64, 64, 8, 16, channels=2, names=["a", "b"]),
-        "chunk": ["1.1.0.0", "float32", [4, 4, 4, 2], "c63bb6d645f2c0cf"],
+        "chunk": ["1.1.0", "float32", [2, 4, 4, 4], "ff5494f7ced2238b"],
     },
     "corner_at_-4nm": {
-        # The corner is -4 nm, so voxel 0's centre is at 0.
-        "zattrs": _zattrs([8.0] * 3, [0.0] * 3, channel=True),
-        "zarray": {"plain": _zarray([8, 8, 8, 1], [4, 4, 4, 1], "<f4")},
+        # The corner is -4 nm, so voxel 0's centre is at 0: no translation is written.
+        "zattrs": _zattrs([8.0] * 3, None, channel=True),
+        "zarray": {"plain": _zarray([1, 8, 8, 8], [1, 4, 4, 4], "<f4")},
         "model_info": _info(48, 32, 8, 8),
-        "chunk": ["1.1.1.0", "float32", [4, 4, 4, 1], "75ad702d5f154932"],
+        "chunk": ["1.1.1", "float32", [1, 4, 4, 4], "75ad702d5f154932"],
     },
     "relabelled": {
-        # Still served as 8 nm; model_info says what a voxel really is.
-        "zattrs": _zattrs([8.0] * 3, [4.0] * 3, channel=True),
-        "zarray": {"plain": _zarray([8, 8, 8, 1], [4, 4, 4, 1], "<f4")},
-        "model_info": _info(32, 32, 8, 8, effective=6),
-        "chunk": ["1.0.0.0", "float32", [4, 4, 4, 1], "9ec594a49555fe11"],
+        # Served where the level really lies, at 6 nm from the data's corner;
+        # model_info says what a voxel really is.
+        "zattrs": _zattrs([6.0] * 3, [3.0] * 3, channel=True),
+        "zarray": {"plain": _zarray([1, 8, 8, 8], [1, 4, 4, 4], "<f4")},
+        "model_info": _info(32, 32, 8, 8, effective=6, relabelled_from=[6, 6, 6]),
+        "chunk": ["1.0.0", "float32", [1, 4, 4, 4], "9ec594a49555fe11"],
     },
 }
 

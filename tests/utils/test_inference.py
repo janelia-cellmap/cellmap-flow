@@ -25,6 +25,7 @@ from cellmap_flow.models.models_config import ScriptModelConfig
 from cellmap_flow.post.postprocessors import PostProcessor, ThresholdPostprocessor
 from cellmap_flow.process_chain import process_chain
 from cellmap_flow.server import CellMapFlowServer
+from cellmap_flow.serving.chunkmirage_server import ChunkmirageServer
 from tests.utils.serving_helpers import IDENTITY_MODEL, layer
 
 ROI = Roi((0, 0, 0), (32, 32, 32))
@@ -182,7 +183,7 @@ def test_half_precision_is_opt_in_and_checked_against_fp32(raw_zarr, model_scrip
     script = model_script(PROBE + ("half_precision = True\n" if in_script else ""), shift=shift)
     config = ScriptModelConfig(script_path=script, name="probe")
     raw = raw_zarr(np.zeros((8, 8, 8), np.uint8))
-    inferencer = CellMapFlowServer(raw, config).inferencer
+    inferencer = ChunkmirageServer(raw, config).inferencer
     assert inferencer.autocast_dtype == expected
     config.config.model.under_autocast.clear()
     assert inferencer.process_chunk(ImageDataInterface(raw, voxel_size=(8, 8, 8)), ROI).dtype == np.float32
@@ -224,7 +225,7 @@ def test_serving_runs_one_forward_the_warmup(model_script):
 def test_a_declared_shape_the_model_does_not_produce_stops_the_server(raw_zarr, model_script):
     config = ScriptModelConfig(script_path=model_script(RECORDING, out=2))
     with pytest.raises(ValueError, match="(?s)shape validation failed.*write_shape mismatch"):
-        CellMapFlowServer(raw_zarr(np.zeros((8, 8, 8), np.uint8)), config)
+        ChunkmirageServer(raw_zarr(np.zeros((8, 8, 8), np.uint8)), config)
     (probe,) = config._config.model.inputs  # raised by the warmup's forward
     assert probe.abs().max() > 0
 

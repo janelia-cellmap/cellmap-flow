@@ -185,19 +185,29 @@ def test_each_submission_gets_a_new_ready_file_named_after_its_job(tmp_path):
 
 
 def test_a_server_writes_its_ready_file_as_it_prints_its_marker(tmp_path, monkeypatch, capsys):
-    from cellmap_flow import server
+    """Both say the same thing, once the port is bound and requests are taken
+    (chunkmirage.serve's on_ready), so a launcher given the file need not bpeek."""
+    import chunkmirage
+
+    from cellmap_flow.serving import chunkmirage_server
 
     target = tmp_path / "m.ready"
     monkeypatch.setenv(READY_ENV, str(target))
     monkeypatch.setenv("LSB_JOBID", "4242")
-    monkeypatch.setattr(server, "this_machine_ip", lambda: "10.1.2.3")
-    served = []
-    fake_server = SimpleNamespace(app=SimpleNamespace(run=lambda **kw: served.append((kw["port"], read_ready_file(target)))))
+    monkeypatch.setattr(chunkmirage_server, "this_machine_ip", lambda: "10.1.2.3")
+    announced = []
 
-    server.CellMapFlowServer.run(fake_server, port=8123)
+    def serve(app, host, port, *, on_ready, **kwargs):
+        on_ready(SimpleNamespace(port=port))
+        announced.append((port, read_ready_file(target)))
 
-    assert served == [(8123, "http://10.1.2.3:8123")], "written before the port is bound"
-    assert f"{IP_PATTERN[0]}http://10.1.2.3:8123{IP_PATTERN[1]}" in capsys.readouterr().out, "the marker still printed"
+    monkeypatch.setattr(chunkmirage, "serve", serve)
+    fake_server = SimpleNamespace(app=object())
+
+    chunkmirage_server.ChunkmirageServer.run(fake_server, port=8123)
+
+    assert announced == [(8123, "http://10.1.2.3:8123")], "written as the server came up"
+    assert f"{IP_PATTERN[0]}http://10.1.2.3:8123{IP_PATTERN[1]}" in capsys.readouterr().out, "the marker is printed too"
     assert json.loads(target.read_text()).keys() == {"url", "host", "pid", "job_id"}
     assert list(target.parent.iterdir()) == [target], "no temporary file is left behind"
 

@@ -10,10 +10,11 @@ import os
 import stat
 
 import pytest
+from starlette.testclient import TestClient
 
 from cellmap_flow.finetune.session_loop import RestartController
 from cellmap_flow.models.models_config import ScriptModelConfig
-from cellmap_flow.server import CellMapFlowServer
+from cellmap_flow.serving.chunkmirage_server import ChunkmirageServer
 from cellmap_flow.serving.restart_token import (
     TOKEN_HEADER,
     read_or_create_restart_token,
@@ -44,12 +45,12 @@ def test_the_token_is_private_and_made_once(tmp_path):
 def test_a_restart_needs_the_jobs_token():
     model_config = ScriptModelConfig(script_path=os.path.join(SCRIPT_TEST, "fake_model_script.py"))
     with pytest.raises(ValueError, match="restart_token"):
-        CellMapFlowServer(RAW, model_config, restart_callback=lambda payload: True)
+        ChunkmirageServer(RAW, model_config, restart_callback=lambda payload: True)
 
     trainer = RestartController()
-    server = CellMapFlowServer(RAW, model_config, restart_callback=trainer.request_restart,
+    server = ChunkmirageServer(RAW, model_config, restart_callback=trainer.request_restart,
                                restart_token="the-job-token")
-    client = server.app.test_client()
+    client = TestClient(server.app)
     signal = {"params": {"learning_rate": 5e-4}}
     for headers in ({}, {TOKEN_HEADER: "guess"}):
         assert client.post("/__control__/restart", json=signal, headers=headers).status_code == 401

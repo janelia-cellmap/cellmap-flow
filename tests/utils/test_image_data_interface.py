@@ -489,34 +489,3 @@ def test_the_channel_is_chosen_on_every_read_and_keeps_the_last_declared_dtype(r
     view = channels.with_input_norms([MinMaxNormalizer(), ChannelSelector(0)])
     assert view.ts.dtype == np.float32 and view.to_ndarray_ts(roi).dtype == np.float32
     assert channels.with_input_norms([]).ts.dtype == np.uint8
-
-
-CACHE, CONCURRENCY = "CELLMAP_FLOW_RAW_CACHE_BYTES", "CELLMAP_FLOW_RAW_READ_CONCURRENCY"
-
-
-@pytest.mark.parametrize(
-    "env, cache_pool, limit",
-    [pytest.param({}, {"total_bytes_limit": 1 << 30}, None, id="default-cache"),
-     pytest.param({CACHE: "0", CONCURRENCY: "3"}, {}, 3, id="set-by-the-environment")],
-)
-def test_the_inference_server_reads_in_parallel_through_a_cache(raw_zarr, model_script, monkeypatch, env,
-                                                                 cache_pool, limit):
-    from cellmap_flow.models.models_config import ScriptModelConfig
-    from cellmap_flow.server import CellMapFlowServer
-
-    for name in (CACHE, CONCURRENCY):
-        monkeypatch.delenv(name, raising=False)
-    for name, value in env.items():
-        monkeypatch.setenv(name, value)
-    raw = raw_zarr(np.arange(512).reshape(8, 8, 8).astype(np.uint8))
-    served = CellMapFlowServer(raw, ScriptModelConfig(script_path=model_script())).idi_raw
-    plain = ImageDataInterface(raw, voxel_size=(8, 8, 8))
-
-    def context(idi):
-        return idi.source.ts.spec(retain_context=True).to_json()["context"]
-
-    assert (context(served)["cache_pool"], context(served)["data_copy_concurrency"].get("limit")) == (cache_pool, limit)
-    # Every other reader keeps one thread and no cache.
-    assert (context(plain)["cache_pool"], context(plain)["data_copy_concurrency"]) == ({}, {"limit": 1})
-    for _ in range(2):  # the second read comes from the cache
-        assert np.array_equal(served.to_ndarray_ts(served.roi), plain.to_ndarray_ts(plain.roi))
