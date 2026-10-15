@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "types": ["@webgpu/types", "vite/client", "node"]
+  },
+  "include": ["src", "build/*.ts", "test", "vite.config.ts", "vitest.config.ts"],
+  "exclude": ["src/sw.ts", "src/**/*.worker.ts"]
+}

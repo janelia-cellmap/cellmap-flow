@@ -1,0 +1,32 @@
+{
+  "name": "cellmap-flow-web",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "cellmap-flow in the browser: the dashboard as a static page, inference with onnxruntime-web on chunkmirage's browser engine, served to Neuroglancer by a service worker",
+  "scripts": {
+    "fetch:chunkmirage": "bash scripts/fetch-chunkmirage.sh",
+    "render": "${PYTHON:-python} build/render.py",
+    "prepare:all": "npm run fetch:chunkmirage && npm run render",
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.worker.json",
+    "test": "vitest run",
+    "e2e": "playwright test",
+    "check": "npm run typecheck && npm test && npm run build"
+  },
+  "dependencies": {
+    "geotiff": "3.1.0-beta.0",
+    "onnxruntime-web": "1.30.0",
+    "zarrita": "0.7.5"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.64.1",
+    "@types/node": "22.19.0",
+    "@webgpu/types": "0.1.74",
+    "typescript": "7.0.2",
+    "vite": "8.3.1",
+    "vitest": "^5.0.4"
+  }
+}

@@ -1,0 +1,5 @@
+# chunkmirage, the browser engine this app is built on: the git commit that
+# web/scripts/fetch-chunkmirage.sh clones into web/chunkmirage/ (gitignored).
+# One line to bump; CI and local builds read the same file.
+repo=https://github.com/JaneliaSciComp/chunkmirage
+sha=1d8aeb69daa1a642d368ee6c3dd0c2b501203921

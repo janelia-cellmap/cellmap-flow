@@ -1,0 +1,8 @@
+# The Neuroglancer the browser mode embeds: briossant's fork with the
+# voxel-annotation tools (branch feature/voxel-annotation, upstream PR
+# google/neuroglancer#858), the viewer the Finetune tab paints labels in.
+# The git commit that web/scripts/fetch-neuroglancer.sh builds into web/ng/
+# (gitignored). The same commit pixi.toml pins for the server mode, so both
+# modes paint with the same viewer: bump the two together.
+repo=https://github.com/briossant/neuroglancer
+sha=fae54db8c667176a602a34f0d9d1028956009836

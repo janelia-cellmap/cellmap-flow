@@ -1,0 +1,179 @@
+{
+  "model": "setup_61",
+  "task": "nuc",
+  "architecture": "ResUNet3DValid",
+  "checkpoint": "model_checkpoint_20000",
+  "params": 10702001,
+  "channels": [
+    "nuc"
+  ],
+  "input_voxel_size_nm": [
+    256,
+    256,
+    256
+  ],
+  "output_voxel_size_nm": [
+    256,
+    256,
+    256
+  ],
+  "output": "raw logits (apply sigmoid / threshold at 0)",
+  "input_norm": [
+    {
+      "name": "MinMaxNormalizer",
+      "min_value": 0,
+      "max_value": 255
+    },
+    {
+      "name": "LambdaNormalizer",
+      "expression": "2*x-1"
+    }
+  ],
+  "io": "input 'input' float32 [1,1,z,y,x]; output 'output' float32 [1,C,z',y',x']",
+  "variants": [
+    {
+      "model": "setup_61",
+      "variant": "fp32",
+      "input_size": 148,
+      "output_size": 60,
+      "file_mb": 42.91,
+      "file": "setup_61_nuc_256nm_in148_fp32.onnx",
+      "max_abs": 0.05411338806152344,
+      "mean_abs": 0.005284508690237999,
+      "flip_frac": 0.0,
+      "ort_cpu_s": 1.53
+    },
+    {
+      "model": "setup_61",
+      "variant": "fp16",
+      "input_size": 148,
+      "output_size": 60,
+      "file_mb": 21.55,
+      "file": "setup_61_nuc_256nm_in148_fp16.onnx",
+      "max_abs": 0.09769058227539062,
+      "mean_abs": 0.008527121506631374,
+      "flip_frac": 0.0,
+      "ort_cpu_s": 2.33
+    },
+    {
+      "model": "setup_61",
+      "variant": "int8w",
+      "input_size": 148,
+      "output_size": 60,
+      "file_mb": 10.88,
+      "file": "setup_61_nuc_256nm_in148_int8w.onnx",
+      "max_abs": 1.2152462005615234,
+      "mean_abs": 0.0846605896949768,
+      "flip_frac": 0.0,
+      "ort_cpu_s": 1.33
+    },
+    {
+      "model": "setup_61",
+      "variant": "int8w_fp16",
+      "input_size": 148,
+      "output_size": 60,
+      "file_mb": 10.91,
+      "file": "setup_61_nuc_256nm_in148_int8w_fp16.onnx",
+      "max_abs": 1.46905517578125,
+      "mean_abs": 0.09118743985891342,
+      "flip_frac": 0.0,
+      "ort_cpu_s": 2.15
+    },
+    {
+      "model": "setup_61",
+      "variant": "fp32",
+      "input_size": 132,
+      "output_size": 44,
+      "file_mb": 42.91,
+      "file": "setup_61_nuc_256nm_in132_fp32.onnx",
+      "max_abs": 0.013306617736816406,
+      "mean_abs": 0.0014700926840305328,
+      "flip_frac": 0.0,
+      "ort_cpu_s": 0.97
+    },
+    {
+      "model": "setup_61",
+      "variant": "fp16",
+      "input_size": 132,
+      "output_size": 44,
+      "file_mb": 21.55,
+      "file": "setup_61_nuc_256nm_in132_fp16.onnx",
+      "max_abs": 0.042456626892089844,
+      "mean_abs": 0.006126813590526581,
+      "flip_frac": 0.0,
+      "ort_cpu_s": 1.58
+    },
+    {
+      "model": "setup_61",
+      "variant": "int8w",
+      "input_size": 132,
+      "output_size": 44,
+      "file_mb": 10.88,
+      "file": "setup_61_nuc_256nm_in132_int8w.onnx",
+      "max_abs": 0.7254524230957031,
+      "mean_abs": 0.07419808954000473,
+      "flip_frac": 1.1739293764087153e-05,
+      "ort_cpu_s": 0.93
+    },
+    {
+      "model": "setup_61",
+      "variant": "int8w_fp16",
+      "input_size": 132,
+      "output_size": 44,
+      "file_mb": 10.91,
+      "file": "setup_61_nuc_256nm_in132_int8w_fp16.onnx",
+      "max_abs": 0.8129501342773438,
+      "mean_abs": 0.07924216240644455,
+      "flip_frac": 1.1739293764087153e-05,
+      "ort_cpu_s": 1.48
+    },
+    {
+      "model": "setup_61",
+      "variant": "fp32",
+      "input_size": 116,
+      "output_size": 28,
+      "file_mb": 42.91,
+      "file": "setup_61_nuc_256nm_in116_fp32.onnx",
+      "max_abs": 0.0022687911987304688,
+      "mean_abs": 0.00030914126546122134,
+      "flip_frac": 0.0,
+      "ort_cpu_s": 0.59
+    },
+    {
+      "model": "setup_61",
+      "variant": "fp16",
+      "input_size": 116,
+      "output_size": 28,
+      "file_mb": 21.55,
+      "file": "setup_61_nuc_256nm_in116_fp16.onnx",
+      "max_abs": 0.028288841247558594,
+      "mean_abs": 0.005165788810700178,
+      "flip_frac": 0.0,
+      "ort_cpu_s": 0.93
+    },
+    {
+      "model": "setup_61",
+      "variant": "int8w",
+      "input_size": 116,
+      "output_size": 28,
+      "file_mb": 10.88,
+      "file": "setup_61_nuc_256nm_in116_int8w.onnx",
+      "max_abs": 0.474090576171875,
+      "mean_abs": 0.06662466377019882,
+      "flip_frac": 0.0,
+      "ort_cpu_s": 0.58
+    },
+    {
+      "model": "setup_61",
+      "variant": "int8w_fp16",
+      "input_size": 116,
+      "output_size": 28,
+      "file_mb": 10.91,
+      "file": "setup_61_nuc_256nm_in116_int8w_fp16.onnx",
+      "max_abs": 0.49416446685791016,
+      "mean_abs": 0.06854952126741409,
+      "flip_frac": 0.0,
+      "ort_cpu_s": 0.98
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+node_modules/
+dist/
+.vite/
+# cloned by scripts/fetch-chunkmirage.sh at the commit chunkmirage.lock names
+chunkmirage/
+# a Neuroglancer build (the fork that paints), by scripts/fetch-neuroglancer.sh
+ng/
+# rendered from cellmap_flow/dashboard/templates by build/render.py
+index.html
+# model bytes and fixtures too large for git (web/models only: src/models is source)
+/models/
+
+# The root .gitignore ignores every build/ (Python build output); web/build/ is source.
+!build/
+# Playwright output
+test-results/
+playwright-report/

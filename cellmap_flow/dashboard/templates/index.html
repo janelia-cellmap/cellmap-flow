@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en"{% if mode %} data-mode="{{ mode }}"{% endif %}>
 
 <head>
   <meta charset="UTF-8" />
@@ -145,6 +145,16 @@
       color: var(--accent-hover);
     }
   </style>
+  {% if mode == "browser" %}
+  {# Before the first paint: a dataset is open in this browser's session
+     (web/src/state keeps the flag), so hide the connect panel until the
+     viewer is back, instead of flashing it on the reload after Connect. #}
+  <script>
+    try {
+      if (sessionStorage.getItem("cellmap-flow:dataset")) document.documentElement.dataset.viewer = "pending";
+    } catch (e) { /* no storage: the panel shows until the viewer is restored */ }
+  </script>
+  {% endif %}
 </head>
 
 <body>
@@ -158,7 +168,9 @@
       <button class="action-btn" type="button" id="toggleDashboardBtn">
         Toggle Dashboard
       </button>
-      <a class="action-btn primary" href="/pipeline-builder" role="button">
+      {# server-only: the browser mode (web/) hides what only a server can
+         serve; the class does nothing in the Flask dashboard. #}
+      <a class="action-btn primary server-only" href="/pipeline-builder" role="button">
         Pipeline Builder
       </a>
       <a class="action-btn" href="/api/export-config" download title="Download the current models/normalization/postprocessing/queue config as a reloadable YAML">
@@ -182,15 +194,33 @@
             </svg>
           </div>
           <div class="no-data-title">No Viewer Connected</div>
+          {# In the browser mode (mode == "browser", set by web/build/render.py) the
+             data is read from a URL, not a path on a file system. Flask passes no
+             mode, so it keeps the wording below. #}
           <div class="no-data-desc">
+            {% if mode == "browser" %}
+            No volume open. Enter the URL of an OME-Zarr volume below to open it in the viewer.
+            {% else %}
             No Neuroglancer URL configured. Enter a dataset path below to connect the viewer.
+            {% endif %}
           </div>
           <div class="no-data-input-group">
-            <input type="text" id="datasetPathInput" class="form-control" placeholder="/path/to/dataset.zarr" style="flex:1;" />
+            <input type="text" id="datasetPathInput" class="form-control" placeholder="{% if mode == 'browser' %}https://host/path/volume.zarr{% else %}/path/to/dataset.zarr{% endif %}" style="flex:1;" />
             <button type="button" class="btn btn-primary" id="setDataBtn">Connect</button>
           </div>
+          {# Browser mode only: a folder on this machine, through the File System
+             Access API. The button opens the directory picker and the panel takes
+             a folder dropped on it (web/src/local, which hides the button where a
+             browser has no picker). Flask passes no mode, so none of this is on
+             its page. #}
+          {% if mode == "browser" %}
+          <div id="localFolderGroup">
+            <button type="button" class="btn btn-outline-secondary" id="browseLocalBtn">Browse local folder&hellip;</button>
+            <span id="localFolderHint">or drop an OME-Zarr, zarr or N5 folder on this panel</span>
+          </div>
+          {% endif %}
           <div id="setDataStatus" style="font-size:11px;color:var(--text-muted);text-align:center;"></div>
-          <div>
+          <div class="server-only">
             <a href="/pipeline-builder" class="no-data-link">Open Pipeline Builder &rarr;</a>
           </div>
         </div>
@@ -206,7 +236,13 @@
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
   {# What the page's scripts need from the server (static/js/lib/page-data.js). #}
   <script type="application/json" id="page-data">{{ {"default_hf_repos": default_hf_repos, "default_bioimage_models": default_bioimage_models, "resample": resample} | tojson }}</script>
+  {# The browser build (web/build/render.py) names its own entry, which starts the
+     in-page backend and then loads this same dashboard script. #}
+  {% if app_entry %}
+  <script type="module" src="{{ app_entry }}"></script>
+  {% else %}
   <script type="module" src="{{ url_for('static', filename='js/dashboard/main.js') }}"></script>
+  {% endif %}
 
   {% if ask_server_config %}
   <!-- Server Config Setup Modal: only where jobs go to LSF -->

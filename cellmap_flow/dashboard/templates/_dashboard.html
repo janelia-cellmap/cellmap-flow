@@ -45,8 +45,10 @@
         </button>
       </li>
 
-      <!-- Finetune Tab -->
-      <li class="nav-item" role="presentation">
+      <!-- Finetune Tab. server-only: the browser mode (web/) hides it for
+           now; finetuning in the browser is a later PR (PLAN_serverless.md,
+           PR 3), and until then the tab has nothing to talk to there. -->
+      <li class="nav-item server-only" role="presentation">
         <button
           class="nav-link"
           id="finetune-tab"
@@ -61,8 +63,9 @@
         </button>
       </li>
 
-      <!-- Review Tab -->
-      <li class="nav-item" role="presentation">
+      <!-- Review Tab. server-only: it queries a SQLite index on the server's
+           file system, which a browser cannot reach. -->
+      <li class="nav-item server-only" role="presentation">
         <button
           class="nav-link"
           id="review-tab"
@@ -105,9 +108,9 @@
         {% include "_output_tab.html" %}
       </div>
 
-      <!-- Finetune Tab Content -->
+      <!-- Finetune Tab Content (server-only, like its tab above) -->
       <div
-        class="tab-pane fade p-3"
+        class="tab-pane fade p-3 server-only"
         id="finetune"
         role="tabpanel"
         aria-labelledby="finetune-tab"
@@ -115,9 +118,9 @@
         {% include "_finetune_tab.html" %}
       </div>
 
-      <!-- Review Tab Content -->
+      <!-- Review Tab Content (server-only, like its tab above) -->
       <div
-        class="tab-pane fade p-3"
+        class="tab-pane fade p-3 server-only"
         id="review"
         role="tabpanel"
         aria-labelledby="review-tab"

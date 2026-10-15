@@ -103,11 +103,11 @@ Relabels segmentation data using Morton-order encoding to ensure chunk-wise uniq
 AffinityPostprocessor
 ~~~~~~~~~~~~~~~~~~~~~
 
-.. class:: AffinityPostprocessor(bias=0.0, neighborhood=...)
+.. class:: AffinityPostprocessor(bias=0.5, neighborhood=...)
 
 Uses multi-scale watershed (`mwatershed`) to generate segmentations from affinity graphs.
 
-- `bias`: Threshold for filtering weak affinities
+- `bias`: the affinity above which neighbours join (0.5 by default, the midpoint of a sigmoid's probabilities)
 - `neighborhood`: List of offset vectors for affinity connectivity
 
 SimpleBlockwiseMerger
