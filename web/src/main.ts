@@ -9,11 +9,15 @@
 //   2. the session (IndexedDB), the inference engine, the model catalog and
 //      the viewer controller exist;
 //   3. the backend listens for the relayed requests;
-//   4. the session is restored: the dataset reopened in the engine and its
-//      models served again (the page reloads after /api/set-data, and a
-//      shared link may name another dataset than the session's);
-//   5. the viewer is restored (the iframe, when a dataset is open);
-//   6. only then the dashboard's own main.js loads, unchanged.
+//   4. the dashboard's own main.js loads, unchanged, so its controls work at
+//      once; its first requests are answered by the backend;
+//   5. meanwhile the session is restored: the dataset reopened in the engine
+//      and its models served again (the page reloads after /api/set-data, and
+//      a shared link may name another dataset than the session's), and then
+//      the viewer (the iframe, when a dataset is open; layers set before the
+//      iframe exists are queued by the viewer).
+// <html data-dashboard="loaded"> marks step 4 done, and data-session="restored"
+// step 5, for tests and for anyone waiting on the page.
 // Before any of it, the dashboard's root-relative /api/ URLs are rebased onto
 // the page's directory (src/rebase.ts): on GitHub Pages the app is not at the
 // origin's root.
@@ -27,8 +31,11 @@ import { installApiRebase } from "./rebase";
 import { openSession } from "./state";
 import { createViewer, datasetUrlFromPage } from "./viewer";
 
-/** The dashboard's script, served verbatim beside the page (vite.config.ts). */
-const DASHBOARD_MAIN = "./static/js/dashboard/main.js";
+/** The dashboard's script, served verbatim beside the page (vite.config.ts).
+ * Resolved against the page, not this module: a relative specifier in
+ * import() resolves against the importing module's URL, which is /src/main.ts
+ * in development and /assets/index-<hash>.js in the build. */
+const DASHBOARD_MAIN = new URL("static/js/dashboard/main.js", document.baseURI).href;
 
 const logLines: string[] = [];
 function log(line: string) {
@@ -64,12 +71,19 @@ async function boot() {
   const ctx: AppContext = { session, catalog, infer, viewer, events, log };
   const backend = createBackend(ctx);
   listenForApiRequests(backend);
-  await restoreSession(ctx);
-  await viewer.restore();
+  // Restoring the session reads the volume's metadata from its bucket and
+  // can take seconds; the dashboard need not wait for it.
+  const restored = restoreSession(ctx)
+    .then(() => viewer.restore())
+    .then(() => {
+      document.documentElement.dataset.session = "restored";
+    });
   // The dashboard, exactly as the Flask app serves it. A runtime import so
   // Vite does not bundle it (vite.config.ts serves it verbatim).
   await import(/* @vite-ignore */ DASHBOARD_MAIN);
+  document.documentElement.dataset.dashboard = "loaded";
   log("dashboard loaded");
+  await restored;
 }
 
 boot().catch(showBootError);

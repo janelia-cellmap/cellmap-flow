@@ -76,7 +76,11 @@ export function chooseVariant(
   const candidates = manifest.variants
     .filter((v) => v.variant === precision)
     .sort((a, b) => volume(a.input_size) - volume(b.input_size));
-  if (limits.maxBufferSize === null) return candidates[Math.floor((candidates.length - 1) / 2)]!;
+  // No maxBufferSize: either the limits were not probed yet (the catalog's
+  // default entries, retuned before serving) or there is no WebGPU and the
+  // model runs on the CPU, where a smaller block answers sooner. The
+  // smallest block serves both.
+  if (limits.maxBufferSize === null) return candidates[0]!;
   const budget = limits.maxBufferSize * PEAK_BUDGET_FRACTION;
   const fitting = candidates.filter((v) => estimatePeakBytes(v.input_size, v.variant) <= budget);
   return fitting.length > 0 ? fitting[fitting.length - 1]! : candidates[0]!;

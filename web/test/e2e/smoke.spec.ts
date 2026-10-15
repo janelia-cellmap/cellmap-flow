@@ -22,7 +22,10 @@ const DATASET =
 // parameters, 5.8 MB as int8w). Matched by substring against the row's checkbox
 // value/id and its label text, then by "mito", then the first row.
 const MODEL = process.env.E2E_MODEL ?? "setup_53";
-const CHUNK_TIMEOUT_MS = 3 * 60_000;
+// On WASM a single block of the smallest model takes minutes on one CPU
+// thread (GitHub Pages cannot set the COOP/COEP headers that would allow
+// threads); E2E_CHUNK_TIMEOUT_MS overrides the wait.
+const CHUNK_TIMEOUT_MS = Number(process.env.E2E_CHUNK_TIMEOUT_MS ?? 8 * 60_000);
 
 /** Whether `url` asks the service worker for a computed chunk, not the
  * array's metadata: `virtual/<page>/<view>/.../<int>/<int>/<int>`. */
@@ -66,11 +69,21 @@ test.describe("browser mode", () => {
       // (src/main.ts); the dashboard's tabs are the sign that main.js loaded.
       await page.goto("./");
       await expect(page.locator("#myTab")).toBeVisible({ timeout: 60_000 });
+      // The dashboard's own script attaches the controls' listeners; main.ts
+      // marks the page once it has loaded.
+      await expect(page.locator('html[data-dashboard="loaded"]')).toBeAttached({ timeout: 60_000 });
 
       // The connect panel takes a URL in browser mode; connect.js posts
       // /api/set-data and reloads, and the reloaded page has the viewer.
       await page.locator("#datasetPathInput").fill(DATASET);
+      // The viewer mounts its iframe as soon as the route answers, but
+      // connect.js, unchanged from server mode, reloads the page a second
+      // later; anything clicked before that reload is lost with the page.
+      // So wait for the reload itself, then for the dashboard's script again.
+      const reloaded = page.waitForEvent("framenavigated", { predicate: (frame) => frame === page.mainFrame(), timeout: 120_000 });
       await page.locator("#setDataBtn").click();
+      await reloaded;
+      await expect(page.locator('html[data-dashboard="loaded"]')).toBeAttached({ timeout: 60_000 });
       await expect(page.locator("#my_iframe")).toBeAttached({ timeout: 120_000 });
       await expect(page.locator("#myTab")).toBeVisible({ timeout: 60_000 });
 

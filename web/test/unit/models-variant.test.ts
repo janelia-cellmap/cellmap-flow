@@ -23,21 +23,21 @@ describe("estimatePeakBytes", () => {
 });
 
 describe("chooseVariant: precision", () => {
-  it("is fp32 and the middle block while the limits are unknown", () => {
+  it("is fp32 and the smallest block while the limits are unknown (no WebGPU: the CPU wants small blocks)", () => {
     const v = chooseVariant(resunet(), UNKNOWN_LIMITS);
     expect(v.variant).toBe("fp32");
-    expect(v.input_size).toEqual([132, 132, 132]);
-    expect(v.output_size).toEqual([44, 44, 44]);
+    expect(v.input_size).toEqual([116, 116, 116]);
+    expect(v.output_size).toEqual([28, 28, 28]);
     const u = chooseVariant(unet(), UNKNOWN_LIMITS);
     expect(u.variant).toBe("fp32");
-    expect(u.input_size).toEqual([140, 140, 140]);
+    expect(u.input_size).toEqual([124, 124, 124]);
   });
 
   it("is fp16 when the device has shader-f16", () => {
     const v = chooseVariant(resunet(), limits({ shaderF16: true }));
     expect(v.variant).toBe("fp16");
-    expect(v.input_size).toEqual([132, 132, 132]);
-    expect(v.file).toBe("setup_54_mito_affinities_16nm_in132_fp16.onnx");
+    expect(v.input_size).toEqual([116, 116, 116]); // no maxBufferSize: the smallest block
+    expect(v.file).toBe("setup_54_mito_affinities_16nm_in116_fp16.onnx");
   });
 
   it("stays fp32 with shader-f16 when the manifest has no fp16 file", () => {

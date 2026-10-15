@@ -24,8 +24,8 @@ const SERVER_COMMAND =
 
 export default defineConfig({
   testDir: "./test/e2e",
-  // One slow test: a chunk on WASM can take a couple of minutes.
-  timeout: 10 * 60_000,
+  // One slow test: a chunk on WASM can take several minutes.
+  timeout: 15 * 60_000,
   expect: { timeout: 30_000 },
   fullyParallel: false,
   workers: 1,
