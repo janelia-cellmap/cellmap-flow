@@ -255,6 +255,13 @@
       <a class="action-btn" href="/api/export-config" download title="Download the current models/normalization/postprocessing/queue config as a reloadable YAML">
         Export<span class="wide-only"> Config</span>
       </a>
+      {# Browser mode only: a link that opens what is open here (the volume,
+         its models, the view), copied to the clipboard (web/src/share-link.ts).
+         The address bar carries none of it, so a tab opened from the bare URL
+         starts fresh. #}
+      {% if mode == "browser" %}
+      <button class="action-btn" type="button" id="shareLinkBtn" title="Copy a link that opens this volume with these models, at this view">Share</button>
+      {% endif %}
     </div>
   </div>
 

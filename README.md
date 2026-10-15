@@ -38,7 +38,10 @@ cellmap-flow, and the first place to test a change: every push to `main`
 deploys it. **[Open this example](https://janelia-cellmap.github.io/cellmap-flow/app/?dataset=https://janelia-cosem-datasets.s3.amazonaws.com/jrc_mus-liver/jrc_mus-liver.zarr/recon-1/em/fibsem-uint8&model=setup_53)** to start from something
 running: an OpenOrganelle mouse-liver volume with the mitochondria model
 `setup_53` on it. A link's query names the volume and the models
-(`?dataset=<url>&model=<name>`), so any such pair can be shared.
+(`?dataset=<url>&model=<name>`), and **Share** in the header copies such a
+link to what you have open: the volume, the models, the view and the
+settings they run with. The address bar itself stays bare, so a new tab
+starts fresh.
 
 - **Data.** Paste the URL of an OME-Zarr volume served with CORS (public S3
   and GCS buckets are, [OpenOrganelle](https://openorganelle.janelia.org)'s

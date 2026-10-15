@@ -9,7 +9,10 @@
 // later tab completed from this URL starts fresh, as a `#!` state link's is
 // (viewer/index.ts). A model the catalog does not know is logged and left
 // out; the rest run.
-import type { ModelEntry } from "./contracts";
+import { ARGS_KEY, type Chain, type ModelEntry } from "./contracts";
+import { decodeArgs } from "./shared/args";
+import { decodeState } from "./viewer/share";
+import { layersOf, sourceUrl } from "./viewer/state";
 
 export const DATASET_PARAM = "dataset";
 export const MODEL_PARAM = "model";
@@ -36,6 +39,26 @@ export function withoutLink(href: string): string {
   url.searchParams.delete(DATASET_PARAM);
   url.searchParams.delete(MODEL_PARAM);
   return url.href;
+}
+
+/** The chain the model layers of a `#!` state were drawn through: a served
+ * view is named after its model with the chain's blob between ARGS_KEY
+ * markers (shared/args.ts), and a layer's source URL names the view. The
+ * first layer's that reads; null when the state has no such layer or the
+ * blob cannot be read, and a shared link then runs this browser's own
+ * chain. */
+export function chainFromHash(hash: string): Chain | null {
+  const marked = new RegExp(`${ARGS_KEY}([^/]+?)${ARGS_KEY}`);
+  for (const layer of layersOf(decodeState(hash))) {
+    const blob = sourceUrl(layer.source)?.match(marked)?.[1];
+    if (!blob) continue;
+    try {
+      return decodeArgs(blob).chain;
+    } catch {
+      // Not a blob this build reads: the next layer may carry one it does.
+    }
+  }
+  return null;
 }
 
 /** The catalog's entries for `refs`, in their order and each once; a ref the

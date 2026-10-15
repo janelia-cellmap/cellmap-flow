@@ -16,7 +16,11 @@ shared::
     https://janelia-cellmap.github.io/cellmap-flow/app/?dataset=<url>&model=<name>&model=<name>
 
 A model is named as the Models tab lists it (``setup_53``) or by its
-repository path (``cellmap/onnx-web-models/setup_53``).
+repository path (``cellmap/onnx-web-models/setup_53``). *Share* in the header
+copies such a link to what you have open, with the view (position, zoom,
+each layer as shown) and the Input and Postprocess settings the models run
+with, for someone else to open. The address bar itself stays bare, so a new
+tab starts fresh.
 
 How it works
 ------------

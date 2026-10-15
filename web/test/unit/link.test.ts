@@ -2,8 +2,10 @@
 // parsed, taken off the URL, and its models resolved through the catalog.
 import { describe, expect, it } from "vitest";
 
-import type { ModelEntry } from "../../src/contracts";
-import { parseLink, resolveLinkedModels, withoutLink } from "../../src/link";
+import { ARGS_KEY, type ModelEntry } from "../../src/contracts";
+import { chainFromHash, parseLink, resolveLinkedModels, withoutLink } from "../../src/link";
+import { encodeArgs } from "../../src/shared/args";
+import { encodeState } from "../../src/viewer/share";
 
 const DATASET = "https://janelia-cosem-datasets.s3.amazonaws.com/jrc_mus-liver/jrc_mus-liver.zarr/recon-1/em/fibsem-uint8";
 
@@ -26,6 +28,26 @@ describe("withoutLink", () => {
     expect(withoutLink(`https://h/app/?dataset=${encodeURIComponent(DATASET)}&model=setup_53`)).toBe("https://h/app/");
     expect(withoutLink("https://h/app/?dataset=x&keep=1&model=a#!state")).toBe("https://h/app/?keep=1#!state");
     expect(withoutLink("https://h/app/")).toBe("https://h/app/");
+  });
+});
+
+describe("chainFromHash", () => {
+  const chain = {
+    input_norm: [{ name: "MinMaxNormalizer", min_value: "0", max_value: "255" }],
+    postprocess: [{ name: "ThresholdPostprocessor", threshold: "0.5" }],
+  };
+  const raw = { type: "image", source: "zarr://https://x/data.zarr/", name: "data" };
+
+  it("reads the chain a model layer's view was drawn through", () => {
+    const view = `mito_aff_setup53_16nm${ARGS_KEY}${encodeArgs(chain, { digest: "abc" })}${ARGS_KEY}`;
+    const model = { type: "image", source: `zarr3://https://h/app/virtual/a30d4ff4/${view}/`, name: "mito_aff_setup53_16nm" };
+    expect(chainFromHash(encodeState({ layers: [raw, model] }))).toEqual(chain);
+  });
+
+  it("is null without such a layer, or without a state", () => {
+    expect(chainFromHash(encodeState({ layers: [raw] }))).toBeNull();
+    expect(chainFromHash("")).toBeNull();
+    expect(chainFromHash("#!not-a-state")).toBeNull();
   });
 });
 

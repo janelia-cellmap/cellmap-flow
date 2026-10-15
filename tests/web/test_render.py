@@ -27,6 +27,7 @@ KEPT = [
     "hfModelAccordion", "submitModelsBtn", "resampleCheckbox",
     "inputNormList", "postProcessList", "datasetPathInput", "setDataBtn",
     "localFolderGroup", "browseLocalBtn",  # a folder on this machine: the browser-only block of the connect panel
+    "shareLinkBtn",  # the header's Share button: a link to what is open, browser-only too
 ]
 
 
@@ -172,6 +173,7 @@ def test_the_flask_dashboard_is_unchanged_by_the_markers(dashboard):
     assert "Models run in this browser" not in html
     # The connect panel's browser-only block (a folder on this machine) is not rendered.
     assert "browseLocalBtn" not in html and "localFolderGroup" not in html
+    assert "shareLinkBtn" not in html
 
 
 def test_both_pages_lay_out_for_a_phone(page, dashboard):
