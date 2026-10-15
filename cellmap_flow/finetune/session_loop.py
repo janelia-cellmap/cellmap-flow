@@ -179,7 +179,7 @@ def _start_inference_server_background(
     # Start in daemon thread (server.run() prints CELLMAP_FLOW_SERVER_IP marker automatically)
     server_thread = threading.Thread(
         target=server.run,
-        kwargs={'port': port, 'debug': False},
+        kwargs={'port': port},
         daemon=True
     )
     server_thread.start()
@@ -578,11 +578,10 @@ class TrainingSession:
         """
         if self.server_started:
             self.model.eval()
-            # A server that caches predictions computes the new iteration's
-            # layer anew rather than serve what the old weights made.
-            weights_changed = getattr(self.inference_server, "weights_changed", None)
-            if weights_changed is not None:
-                weights_changed()
+            # The server caches predictions: told of the new weights, it
+            # computes the new iteration's layer anew rather than serve what
+            # the old weights made.
+            self.inference_server.weights_changed()
             logger.info("Model updated and set to eval mode. Server continuing with new weights.")
             return True
         try:

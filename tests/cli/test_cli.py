@@ -46,8 +46,8 @@ def test_without_q_or_P_the_saved_queue_and_project_are_used_and_kept(monkeypatc
 
 
 def test_server_check_runs_one_chunk_through_the_model():
-    """It called _chunk_impl with six arguments against five, and crashed
-    before touching the model, for every type."""
+    """The check once asked the server for a chunk with one argument too
+    many, and crashed before touching the model, for every type."""
     result = CliRunner().invoke(cli, PER_TYPE + ["--server-check"])
     assert result.exit_code == 0, result.output + repr(result.exception)
     assert "Server check passed" in result.output

@@ -58,7 +58,7 @@ MODEL_YAML_RE = re.compile(r"^.*?FINETUNED_MODEL_YAML:\s*(.+?)\s*$", re.MULTILIN
 # Status markers, in the order they matter: the last one in a chunk of log
 # decides.
 STATUS_MARKER_RE = re.compile(r"TRAINING_DIVERGED|RESTARTING_TRAINING|WAITING_FOR_RESTART")
-# The inference server's address, printed by CellMapFlowServer.run.
+# The inference server's address, printed by ChunkmirageServer.run.
 SERVER_URL_RE = re.compile(re.escape(IP_PATTERN[0]) + r"(.+?)" + re.escape(IP_PATTERN[1]))
 
 

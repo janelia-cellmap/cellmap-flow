@@ -33,11 +33,10 @@ from cellmap_flow.post.postprocessors import (
     ThresholdPostprocessor,
 )
 from cellmap_flow.process_chain import process_chain
-from cellmap_flow.server import CellMapFlowServer
-from cellmap_flow.serving import chunkmirage_ops, virtual_zarr
-from cellmap_flow.serving.chunkmirage_ops import InferenceOp
+from cellmap_flow.serving import chunkmirage_ops
+from cellmap_flow.serving.chunkmirage_ops import InferenceOp, chunk_roi
 from cellmap_flow.serving.chunkmirage_server import FORMAT, INFERENCE_PREFETCH, ChunkmirageServer
-from cellmap_flow.serving.engine import check_server, engine_name, make_server
+from cellmap_flow.serving.engine import check_server, make_server
 from cellmap_flow.serving.protocol import ARGS_KEY
 from cellmap_flow.serving.restart_token import TOKEN_HEADER
 from tests.utils.serving_helpers import IDENTITY_MODEL, get_json, layer, read_chunk, write_raw, write_script
@@ -55,7 +54,7 @@ def _computed(server, index, posts=(), norms=()):
     the chunk's region, read from the level the server reads, through the
     chain -- what a blockwise worker writes for the block."""
     served = server.served
-    roi = virtual_zarr.chunk_roi(index, served.block, served.output_voxel_size, served.origin)
+    roi = chunk_roi(index, served.block, served.output_voxel_size, served.origin)
     out = server.inferencer.process_chunk(
         server.idi_raw, roi, input_norms=list(norms), postprocess=list(posts), grid_origin=served.origin
     )
@@ -118,7 +117,7 @@ def test_the_served_array_covers_the_data_rounded_up_and_its_chunks_start_at_the
     server, client = _server(_ome_raw(tmp_path, data, 8.0, 0.0), write_script(tmp_path, COARSER))
 
     assert get_json(client, f"/{layer()}/{FORMAT}/s0/.zarray")["shape"] == [2, 6, 6, 6]
-    assert virtual_zarr.chunk_roi((1, 1, 1), server.served.block, (16, 16, 16), server.served.origin) == Roi(
+    assert chunk_roi((1, 1, 1), server.served.block, (16, 16, 16), server.served.origin) == Roi(
         (60,) * 3, (64,) * 3
     )
     assert read_chunk(client, layer(), (1, 1, 1)).shape == (2, 2, 2, 2)
@@ -473,44 +472,25 @@ def test_cellmap_flow_serve_resample_serves_the_model_its_own_voxel_size(ome_pyr
         assert np.array_equal(read_chunk(client, "plain", index)[0], expected), index
 
 
-def test_the_engine_is_chosen_by_the_environment(tmp_path, monkeypatch):
+def test_every_launcher_builds_this_server_and_the_check_computes_a_chunk(tmp_path):
+    """`cellmap_flow serve`, `infer --server-check` and the finetune loop
+    build their server with make_server."""
     path, script = write_raw(tmp_path, np.full((8,) * 3, 10, np.uint8)), write_script(tmp_path, IDENTITY_MODEL)
-    monkeypatch.delenv("CELLMAP_FLOW_ENGINE", raising=False)
-    assert engine_name() == "chunkmirage"
     server = make_server(path, ScriptModelConfig(script_path=script))
     assert isinstance(server, ChunkmirageServer)
     assert check_server(server).shape == (1, 4, 4, 4)  # what `infer --server-check` computes
-    monkeypatch.setenv("CELLMAP_FLOW_ENGINE", "flask")
-    assert isinstance(make_server(path, ScriptModelConfig(script_path=script)), CellMapFlowServer)
-    monkeypatch.setenv("CELLMAP_FLOW_ENGINE", "fastest")
-    with pytest.raises(ValueError, match="CELLMAP_FLOW_ENGINE"):
-        engine_name()
 
 
-@pytest.fixture
-def no_chunkmirage(monkeypatch):
-    """An environment without chunkmirage, as a model's own ``env`` may be."""
+def test_where_chunkmirage_is_missing_the_server_says_so(tmp_path, monkeypatch):
+    """A model's own ``env`` (a pixi environment, an alias or a path) must
+    have chunkmirage; one without it gets an error that says what to install
+    rather than a bare import failure."""
     import sys
 
     monkeypatch.setitem(sys.modules, "cellmap_flow.serving.chunkmirage_server", None)
-
-
-def test_where_chunkmirage_is_missing_the_flask_server_serves(tmp_path, monkeypatch, no_chunkmirage, caplog):
     path, script = write_raw(tmp_path, np.full((8,) * 3, 10, np.uint8)), write_script(tmp_path, IDENTITY_MODEL)
-    monkeypatch.delenv("CELLMAP_FLOW_ENGINE", raising=False)
 
-    with caplog.at_level("WARNING", logger="cellmap_flow.serving.engine"):
-        server = make_server(path, ScriptModelConfig(script_path=script))
-
-    assert isinstance(server, CellMapFlowServer)
-    assert "chunkmirage cannot be imported" in caplog.text
-
-
-def test_where_chunkmirage_is_missing_asking_for_it_is_an_error(tmp_path, monkeypatch, no_chunkmirage):
-    path, script = write_raw(tmp_path, np.full((8,) * 3, 10, np.uint8)), write_script(tmp_path, IDENTITY_MODEL)
-    monkeypatch.setenv("CELLMAP_FLOW_ENGINE", "chunkmirage")
-
-    with pytest.raises(ImportError):
+    with pytest.raises(ImportError, match="needs chunkmirage"):
         make_server(path, ScriptModelConfig(script_path=script))
 
 

@@ -42,17 +42,18 @@ check([f"cellmap_flow.io.{m}" for m in ("paths", "metadata", "multiscale", "ome"
     "serving": """
 check(["cellmap_flow.models.geometry", "cellmap_flow.models.geometry_cache", "cellmap_flow.inference.runner",
        "cellmap_flow.inferencer", "cellmap_flow.image_data_interface"]
-      + [f"cellmap_flow.serving.{m}" for m in ("virtual_zarr", "protocol", "client", "probe", "restart_token")],
+      + [f"cellmap_flow.serving.{m}" for m in ("chunkmirage_ops", "protocol", "client", "probe", "restart_token")],
       LIGHT + ["torch"])
 """,
-    # cellmap_flow_server applies --log-level before it imports the server,
-    # which reset it to INFO while the server imported globals.
+    # cellmap_flow serve applies --log-level before it imports the server,
+    # which once reset it to INFO while the server imported globals.
     "server-logging": """
 import logging
 root = logging.getLogger()
 root.setLevel(logging.WARNING)
 handlers = list(root.handlers)
-check(["cellmap_flow.server"], ["cellmap_flow.globals", "cellmap_flow.dashboard", "neuroglancer", "torch"])
+check(["cellmap_flow.serving.chunkmirage_server", "cellmap_flow.serving.engine"],
+      ["cellmap_flow.globals", "cellmap_flow.dashboard", "neuroglancer", "torch"])
 assert (root.level, root.handlers) == (logging.WARNING, handlers)
 """,
     # describe_types() runs when the dashboard opens its model form. It

@@ -1,21 +1,23 @@
-"""An inference server built on chunkmirage.
+"""The inference server, built on chunkmirage.
 
-``ChunkmirageServer`` serves one model's predictions as zarr v2, as the Flask
-``CellMapFlowServer`` does, and takes the same arguments. chunkmirage does the
-serving: reading the raw data around each chunk, caching the model's output,
-queueing chunks for the device (finest level first, dropping those nobody
-waits for any more) and the zarr format. cellmap-flow keeps the model, its
-chains (``serving.chunkmirage_ops``) and the routes the dashboard reads.
+``ChunkmirageServer`` serves one model's predictions over one dataset as
+zarr v2, for Neuroglancer. chunkmirage does the serving: reading the raw
+data around each chunk, caching the model's output, queueing chunks for the
+device (finest level first, dropping those nobody waits for any more) and
+the zarr format. cellmap-flow keeps the model, its chains
+(``serving.chunkmirage_ops``) and the routes the dashboard reads.
 
-A layer is ``zarr://<server>/<model><ARGS_KEY><blob><ARGS_KEY>/zarr``: the same
-name as before, with chunkmirage's format after it. The name is resolved into
-a pipeline on its first request (``pipeline_for``), and the blob's chain is
-the layer's own, so layers sharing a server never share a chain. The array
-has one level, s0, with any channel axis first.
+A layer is ``zarr://<server>/<model><ARGS_KEY><blob><ARGS_KEY>/zarr``: a
+name, then chunkmirage's format. The name is resolved into a pipeline on its
+first request (``pipeline_for``), and the blob's chain is the layer's own, so
+layers sharing a server never share a chain. The array has one level, s0,
+with any channel axis first.
 
-``/__control__/model_info`` (and ``/output_probe``) and ``/__control__/restart``
-stay where they were; model_info says ``"engine": "chunkmirage"``, which is how
-a dashboard tells this server's URLs from the Flask server's.
+``/__control__/model_info`` (and its older name ``/output_probe``) report the
+model's geometry and output activation, and ``/__control__/restart`` asks a
+finetune job to train again. model_info says ``"engine": "chunkmirage"``: the
+release before this one had two engines, and its dashboard reads the field
+to tell their URLs apart.
 
 ``CELLMAP_FLOW_PREDICTION_CACHE_BYTES`` (default 16 GiB; 0 for none) bounds the
 memory kept for computed chunks, the model's output and the raw data read for
@@ -104,12 +106,20 @@ def _whole(values, what):
 class ChunkmirageServer:
     """One model's predictions over ``dataset_name``, served by chunkmirage.
 
-    The arguments are ``CellMapFlowServer``'s: ``resample`` reads a level
-    resampled to the model's input voxel size when the data has none at it,
-    instead of reading the nearest as if it were; ``restart_callback`` (with
-    ``restart_token``) enables POST /__control__/restart.
+    ``resample`` reads a level resampled to the model's input voxel size when
+    the data has none at it (``on_voxel_size_mismatch="resample"``, see
+    ImageDataInterface), instead of reading the nearest level as if it were
+    at that size; ``cellmap_flow serve --resample``. ``restart_callback``
+    enables POST /__control__/restart, which then only accepts requests
+    carrying ``restart_token`` in the X-Restart-Token header.
+
     ``CELLMAP_FLOW_GPU_SLOTS`` (default 1) is how many chunks use the device
-    at once.
+    at once (inference.runner.DeviceSlots); ``CELLMAP_FLOW_HALF_PRECISION=1``
+    serves the model under half-precision autocast, as ``half_precision =
+    True`` in its config does, if it agrees with fp32 at warmup (see
+    Inferencer). The Inferencer is built before anything else, so a model
+    whose output contradicts its declared shapes fails here, on the warmup
+    forward, before the server announces itself.
     """
 
     def __init__(self, dataset_name, model_config, restart_callback=None, restart_token=None, resample=False):
@@ -119,8 +129,8 @@ class ChunkmirageServer:
         self.restart_token = restart_token
         self.resample = resample
 
-        # The runner's slots hold the device for the forward only, as on the
-        # Flask server. chunkmirage's queue (its order, and dropping chunks
+        # The runner's slots hold the device for the forward only.
+        # chunkmirage's queue (its order, and dropping chunks
         # nobody waits for) admits INFERENCE_PREFETCH chunks more, so their
         # input normalization, which the InferenceOp does, overlaps the
         # forward: with the queue's slots the device's, normalizing and the
@@ -133,7 +143,8 @@ class ChunkmirageServer:
         DevicePostprocessOp.slots = device_slots.n
         self.geometry = model_config.geometry
 
-        # The level the model reads, as the Flask server chose and placed it.
+        # The level the model reads, chosen and placed as ImageDataInterface
+        # does for every reader (blockwise reads the same level).
         self.idi_raw = ImageDataInterface(
             dataset_name,
             voxel_size=Coordinate(self.geometry.input_voxel_size),
@@ -153,7 +164,9 @@ class ChunkmirageServer:
             grid=idi._grid,
             level_shape=tuple(int(v) for v in idi.shape),
             # Output voxel 0 starts at the corner of the level the model reads,
-            # in whole nm, as the Flask server's grid did.
+            # so every output voxel sits exactly on the input voxels it is
+            # computed from; anchored at 0 it would be half a raw voxel off
+            # Janelia data, whose corner is -4 nm. Whole nm: Roi is integral.
             origin=np.round(np.array(idi.offset, dtype=float)).astype(int),
             block=block,
             input_voxel_size=tuple(input_voxel_size),
@@ -300,8 +313,19 @@ class ChunkmirageServer:
     # --- the dashboard's routes ----------------------------------------------
 
     def model_info(self) -> dict:
-        """The served model's geometry and output activation (see
-        CellMapFlowServer's model_info), and the engine serving it."""
+        """The served model's geometry and output activation, and the engine serving it.
+
+        Both halves exist so the dashboard does not have to build the model
+        itself: it runs on whatever node launched the jobs, often without a
+        usable GPU. The geometry comes from the validated config, so it is
+        reported even when the warmup probe failed; script-defined models
+        expose nothing else to the dashboard, which makes this the only place
+        it can learn their shapes and channel names. The activation half is
+        measured once at warmup (Inferencer._warmup) and lets the dashboard
+        propose a postprocessing chain, or flag one that contradicts the
+        model. A resampled input really is at input_voxel_size; a relabelled
+        one is at the level's, which moves the output (see to_model_info).
+        """
         idi = self.idi_raw
         info = self.geometry.to_model_info(
             self.axes, idi.voxel_size if idi.resampled else idi.actual_voxel_size
@@ -370,13 +394,12 @@ class ChunkmirageServer:
         lead = (0,) * (pipeline.info(0).ndim - len(index))
         return pipeline.chunk(0, lead + tuple(index))
 
-    def run(self, debug=False, port=None, certfile=None, keyfile=None):
+    def run(self, port=None, certfile=None, keyfile=None):
         """Serve until stopped, on ``port`` (any free one for None or 0).
 
         The address is announced, as the IP_PATTERN marker and in the ready
         file a launcher asked for (jobs/ready.py), once the port is bound and
-        the server is taking requests. ``debug`` is accepted for
-        CellMapFlowServer's callers and ignored.
+        the server is taking requests.
         """
         import chunkmirage
 

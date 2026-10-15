@@ -189,7 +189,7 @@ def run_cli(tmp_path, monkeypatch, capsys, caplog, tiny_script):
         if manifest is not None:
             (corrections / "_virtual_sources.json").write_text(json.dumps(manifest))
         record = SimpleNamespace(session=session, run=run_dir or session / "runs" / "run",
-                                 loaded=[], served=[], waited=0)
+                                 loaded=[], served=[], waited=0, weights_changed=0)
         loads = iter(loaders or [])
         requests = iter(restarts)
 
@@ -216,7 +216,15 @@ def run_cli(tmp_path, monkeypatch, capsys, caplog, tiny_script):
 
         def serve(args, model_config, model, **kwargs):
             record.served.append(model)
-            return server(args, model_config, model) if server else (None, 0)
+            result = server(args, model_config, model) if server else (None, 0)
+
+            def weights_changed():
+                record.weights_changed += 1
+
+            # The server that came up, handed over before the start returns as
+            # the real one is; each later iteration tells it of new weights.
+            kwargs["on_server"](SimpleNamespace(weights_changed=weights_changed))
+            return result
 
         monkeypatch.setattr(session_loop, "create_dataloader", dataloader)
         monkeypatch.setattr(session_loop, "_start_inference_server_background", serve)

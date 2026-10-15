@@ -10,7 +10,7 @@ and writes the chain; this module is only the codec, so a server and a
 dashboard of different versions still understand each other.
 
 The other way, a server announces its address by printing it between the
-two ``IP_PATTERN`` markers (``CellMapFlowServer.run``). They are defined in
+two ``IP_PATTERN`` markers (``ChunkmirageServer.run``). They are defined in
 ``jobs.spec``, which finds them in a job's log.
 
 The same codec carries a dict argument on a command line: a model entry

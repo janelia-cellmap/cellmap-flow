@@ -26,8 +26,9 @@ template_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "templat
 static_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
 # No CORS: the dashboard's pages call it from its own origin, and it can
 # submit LSF jobs and read files, so other sites must not be able to script
-# it through the user's browser. The inference servers keep CORS open because
-# Neuroglancer fetches their chunks cross-origin.
+# it through the user's browser. The inference servers (chunkmirage's app)
+# allow cross-origin requests, because Neuroglancer fetches their chunks
+# from another origin.
 app = Flask(__name__, template_folder=template_dir, static_folder=static_dir)
 
 # Feed the dashboard's log panel.
