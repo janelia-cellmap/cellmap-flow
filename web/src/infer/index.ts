@@ -1,5 +1,6 @@
-// Inference: chunkmirage's Engine with one serve() view per model, whose
-// produce() runs onnxruntime-web. See engine.ts for the pieces.
+// Inference: chunkmirage's Engine with one staged view per model (the model
+// and its postprocessors as stages, stages.ts), the model run by
+// onnxruntime-web (session.ts). See engine.ts for the pieces.
 import type { Inference, SessionStore } from "../contracts";
 import { InferenceEngine } from "./engine";
 

@@ -1,10 +1,13 @@
 // The Inference of contracts.ts on chunkmirage's browser Engine: the raw
-// volume opened as the engine view "raw", and one served view per model and
-// chain whose produce() is produce.ts on an ORT session (session.ts). The
-// engine brings the demand queue (finest level first, chunks the viewer gave
-// up on dropped unrun), the 256 MB chunk cache, the zarr v3 metadata and the
-// service worker relay; this file only has to describe each view's grid and
-// compute its chunks.
+// volume opened as the engine view "raw", and one staged view per model and
+// chain (Engine.serveStages), its stages the model and the postprocessors
+// (stages.ts) on an ONNX runner (session.ts, or chunkmirage's onnx.ts). The
+// engine brings the reader, the input box of each chunk with its padding,
+// the demand queue (finest level first, chunks the viewer gave up on dropped
+// unrun), the per-stage cache and the 256 MB chunk cache, the zarr v3
+// metadata and the service worker relay; this file describes each view's
+// grid, builds its stages and keeps the stats.
+import { TYPED as ENGINE_TYPED } from "../../chunkmirage/web/src/asread";
 import { Engine } from "../../chunkmirage/web/src/engine";
 import type { ViewInfo } from "../../chunkmirage/web/src/types";
 import type { Chain, DatasetInfo, GpuLimits, Inference, InferenceStats, ModelEntry, ServedModel, SessionStore } from "../contracts";
@@ -13,10 +16,10 @@ import { modelInfo } from "../shared/model-info";
 import { chooseRawLevel, datasetInfoFrom, effectiveOutputVoxelSize, geometryOf, outputLevel, outputShape } from "./geometry";
 import { validateNormalizers } from "./norms";
 import { buildPostprocessors, isSegmentation, outputChannels, outputDtype, validatePostprocessors } from "./post";
-import { type ModelOutput, type ProduceContext, produceChunk } from "./produce";
-import { Sessions } from "./session";
+import { type ModelRunner, type RunnerModel, Sessions } from "./session";
+import { type ModelOutput, modelStage, modelStageKey, postprocessStage, postprocessStageKey } from "./stages";
 
-/** The engine view the raw volume is opened as, so Engine.read can read it. */
+/** The engine view the raw volume is opened as: what the model stages read. */
 const RAW_VIEW = "raw";
 /** Its chunk shape is metadata for a view we never serve (the viewer reads the
  * raw volume from its own URL); the Engine wants one all the same. */
@@ -28,16 +31,18 @@ export class InferenceEngine implements Inference {
   private engine: Engine | null = null;
   private info: DatasetInfo | null = null;
   private servedList: ServedModel[] = [];
-  private sessions: Sessions;
+  private runner: ModelRunner;
   private announcedFirst = false;
   private totalMs = 0;
   private lastFailure: string | null = null;
 
   /** `session` is the dashboard's session store: the engine keeps nothing in
    * it (what is served is re-served by the backend after a reload, through
-   * serve()); it is here so the inference can read its settings later. */
-  constructor(private opts: { session: SessionStore; log: (line: string) => void }) {
-    this.sessions = new Sessions(opts.log, (line) => this.setStatus(line));
+   * serve()); it is here so the inference can read its settings later.
+   * `runner` runs the models; the browser mode's own sessions by default
+   * (chunkmirage's `new Onnx({ log })` fits the same interface). */
+  constructor(private opts: { session: SessionStore; log: (line: string) => void; runner?: ModelRunner }) {
+    this.runner = opts.runner ?? new Sessions(opts.log, (line) => this.setStatus(line));
   }
 
   // ------------------------------------------------------------- the dataset
@@ -45,26 +50,20 @@ export class InferenceEngine implements Inference {
   async openDataset(url: string): Promise<DatasetInfo> {
     if (this.engine && this.info && this.info.url === url) return this.info;
     if (this.engine) {
-      // Another URL. The Engine opens a source in start(), once, or in
-      // add()/edit(), which also plan the view's ops in its Pyodide workers
-      // and so wait for Python to load (tens of seconds on a first visit). A
-      // fresh Engine opens the new source with its reader at once. The old
-      // one keeps listening for its own page id and answers nothing of ours;
-      // its workers live until the page unloads (there is no stop()), which
-      // is rare: the dashboard reloads the page after a dataset change
-      // anyway. The served models were on the old dataset's grid, so they
-      // are dropped; the backend serves them again. (Upstream wish: a public
-      // Engine.open(views), or a start() option without Pyodide.)
+      // Another URL: the served models were on the old dataset's grid, so
+      // they go (the backend serves them again), and so does the engine, its
+      // reader and its caches with it. A fresh one opens the new source and
+      // serves under a new page id, so a viewer that cached chunks by URL
+      // fetches afresh.
       this.opts.log(`the dataset changed to ${url}: starting a new engine for it`);
       for (const served of this.servedList.splice(0)) await served.dispose();
+      this.engine.stop();
       this.engine = null;
       this.info = null;
     }
     // start() registers the service worker (the one relay.ts registered, by
-    // the same name), opens the source with its reader worker, and starts the
-    // Pyodide workers in the background. Our views never wait for Python:
-    // answer() awaits `ready` only for a view without infos, and serve()
-    // sets ours. (Upstream wish: a start() option that skips Pyodide.)
+    // the same name) and opens the source with its reader worker. The raw
+    // view has no ops and our views are computed here, so no Pyodide starts.
     const engine = new Engine(() => this.engineChanged());
     await engine.start({ [RAW_VIEW]: { source: url, chunk: RAW_CHUNK } }, (line) => this.setStatus(line));
     const source = engine.sources[RAW_VIEW];
@@ -88,63 +87,88 @@ export class InferenceEngine implements Inference {
     // exists, rather than failing on every chunk.
     validateNormalizers(chain.input_norm);
     validatePostprocessors(chain.postprocess);
+    if (dataset.channels > 1) throw new Error(`${dataset.url} has ${dataset.channels} channels; the browser mode reads single-channel volumes (it does not select a channel yet)`);
 
     const geometry = geometryOf(entry);
     const rawLevel = chooseRawLevel(dataset.levels, geometry.input_voxel_size);
-    const raw = dataset.levels[rawLevel];
-    const level = outputLevel(raw, geometry);
+    const raw = dataset.levels[rawLevel];  // in nm, for the geometry
+    const sourceRaw = engine.sources[RAW_VIEW].levels[rawLevel];  // as the engine declares it, for the view
     const info = modelInfo(entry);
     const effective = effectiveOutputVoxelSize(raw, geometry);
     if (effective) {
       // The level read is not at the model's voxel size: it is read as if it
-      // were, and the viewer draws the output at its real size (layers.py).
+      // were, and the output lies at its real size (outputLevel declares it
+      // there; the viewer's transform from this field changes nothing then).
       info.effective_output_voxel_size = effective;
       this.opts.log(`${entry.name}: no raw level at ${geometry.input_voxel_size.join("×")} nm; reading level ${rawLevel} (${raw.voxel.join("×")} nm) as if it were, so the output really lies at ${effective.join("×")} nm`);
     }
     const channels = outputChannels(chain.postprocess, info.output_channels);
     const dtype = outputDtype(chain.postprocess, "float32");
+    if (!(dtype in ENGINE_TYPED)) {
+      // chunkmirage's stages know the typed arrays of asread.ts's TYPED, which
+      // stop at 32-bit integers: a stage declaring uint64 (the segmentation
+      // steps' ids) fails its `instanceof` check there, and a chunk at the
+      // volume's edge would be laid out with the wrong element size. Until
+      // chunkmirage adds BigUint64Array to its Numbers and TYPED, such a
+      // chain is refused here, before the layer exists.
+      throw new Error(`${entry.name}: the chain's output is ${dtype}, which chunkmirage's browser stages cannot serve yet (their typed arrays stop at 32-bit integers); the segmentation steps wait on that`);
+    }
     const block = outputShape(geometry);
+    const level = outputLevel(sourceRaw, geometry);
     const view = viewName(entry.name, blob);
 
-    // One level at the output voxel size, as the Python server serves it. A
-    // channel axis is declared through `added`: the engine puts it first in
-    // the array and the chunk (see encode.ts for the lines), so the chunk's
-    // bytes are the model's own [C, z, y, x]. `halo`, `lead` and `channels`
-    // are read only for views the Pyodide workers compute.
+    // One level at the output voxel size, as the Python server serves it, in
+    // the source's units and axes (the engine reads the raw level at the
+    // voxel size the source declares and grows the chunk by the ratio of the
+    // two grids, so both must be in the same units). A channel axis is
+    // declared through `added`: the engine puts it first in the array and the
+    // chunk, so a chunk's bytes are the model's own [C, z, y, x]. `out` and
+    // `added` are the last stage's (serveStages sets them); `halo`, `lead`
+    // and `channels` are read only for views the Pyodide workers compute.
     const viewInfo: ViewInfo = {
       dtype, out: dtype, channels: 1, lead: 0, halo: [0, 0, 0],
       kind: isSegmentation(chain.postprocess) ? "label" : "image",
-      axes: dataset.axes.map((a) => ({ name: a.name, unit: a.unit })),
+      axes: engine.sources[RAW_VIEW].axes.map((a) => ({ name: a.name, unit: a.unit })),
       levels: [level],
-      ...(info.has_channel ? { added: [channels] } : {}),
+      added: info.has_channel ? [channels] : [],
     };
-    const key = entry.onnxUrl;
+    const model: RunnerModel = { key: entry.onnxUrl, bytes: modelBytes, input: entry.manifest.io?.input, output: entry.manifest.io?.output };
+    const modelKey = modelStageKey(entry, chain);
     // The steps once for this layer, as the server builds its PostprocessOp
     // once per layer: the merger's equivalences live across chunks and reach
     // the viewer through the listeners.
     const postprocessors = buildPostprocessors(chain.postprocess, {
       onEquivalences: (sets) => { for (const listener of this.equivalenceListeners) listener(view, sets); },
     });
-    const ctx: ProduceContext = {
-      geometry, rawShape: raw.shape, rawDtype: dataset.dtype, chain, postprocessors, hasChannel: info.has_channel,
-      read: (lo, hi) => engine.read(RAW_VIEW, rawLevel, lo, hi),
-      run: (input, dims) => this.run(key, modelBytes, entry.name, input, dims),
-    };
-    engine.serve(view, viewInfo, block, (lvl, index) => this.produce(ctx, view, lvl, index));
-    this.sessions.retain(key);
+    const stages = [
+      modelStage({
+        key: modelKey, geometry, rawShape: [...sourceRaw.shape], inputVoxelSize: [...sourceRaw.voxel], normalizers: chain.input_norm,
+        channels: info.output_channels, hasChannel: info.has_channel,
+        run: (data, dims) => this.run(model, data, dims),
+      }),
+      postprocessStage({
+        key: postprocessStageKey(modelKey, chain), geometry, steps: chain.postprocess, postprocessors,
+        modelChannels: info.output_channels, hasChannel: info.has_channel,
+      }),
+    ];
+    // Zero past the volume, as the Python server's Pipeline(padding="zero").
+    engine.serveStages(view, viewInfo, block, RAW_VIEW, stages, "zero");
+    this.runner.retain(model.key);
 
     const served: ServedModel = {
       entry, view, url: `zarr3://${engine.url(view)}`, info,
       dispose: async () => {
         const i = this.servedList.indexOf(served);
         if (i >= 0) this.servedList.splice(i, 1);
-        // The engine has no unserve(): the view stays registered, but with
-        // its layer gone from the viewer nothing asks for it any more.
-        await this.sessions.release(key);
+        // The view's chunks go (viewers cache by URL, and an edit is a new
+        // name); its stages' outputs stay in the engine's staged cache for a
+        // view served again with a later stage changed.
+        engine.unserve(view);
+        await this.runner.release(model.key);
       },
     };
     this.servedList.push(served);
-    this.opts.log(`serving ${entry.name} (${entry.variant.variant}): ${block.join("×")} voxels per block at ${level.voxel.join("×")} nm, ${channels} channel(s), ${dtype}, ${level.shape.join("×")} voxels in all`);
+    this.opts.log(`serving ${entry.name} (${entry.variant.variant}): ${block.join("×")} voxels per block at ${level.voxel.join("×")} ${viewInfo.axes[0]?.unit || "nm"}, ${channels} channel(s), ${dtype}, ${level.shape.join("×")} voxels in all`);
     return served;
   }
 
@@ -157,52 +181,45 @@ export class InferenceEngine implements Inference {
     return () => { this.equivalenceListeners.delete(listener); };
   }
 
-  /** The engine's produce() for a model view: one output chunk. */
-  private async produce(ctx: ProduceContext, view: string, level: number, index: number[]): Promise<ArrayBuffer> {
-    if (level !== 0) throw new Error(`${view}: level ${level} is not served (a model view has one level)`);
+  /** The forward pass for the model stage: the runner's, with the stats
+   * kept here (blocks, the pass's time, the provider). */
+  private async run(model: RunnerModel, data: Float32Array, dims: number[]): Promise<ModelOutput> {
+    if (!this.announcedFirst) {
+      this.announcedFirst = true;
+      this.opts.log("first inference: compiling GPU kernels, the first block takes a few seconds");
+    }
     this.stats.inflight++;
     this.notify();
     try {
-      return await produceChunk(ctx, index);
+      const out = await this.runner.run(model, data, dims);
+      this.stats.blocks++;
+      this.stats.lastMs = out.ms;
+      this.totalMs += out.ms;
+      this.stats.avgMs = this.totalMs / this.stats.blocks;
+      this.stats.provider = this.runner.provider;
+      if (this.stats.blocks === 1 || this.stats.blocks % 10 === 0) {
+        this.setStatus(`running · ${this.stats.blocks} block(s) done · last ${Math.round(out.ms)} ms`);
+      }
+      return out;
     } finally {
       this.stats.inflight--;
       this.notify();
     }
   }
 
-  /** The forward pass for produce(): the model's session, built on the first
-   * call from the catalog's bytes, run one pass at a time. */
-  private async run(key: string, modelBytes: () => Promise<ArrayBuffer>, name: string, input: Float32Array, dims: number[]): Promise<ModelOutput> {
-    const s = await this.sessions.get(key, modelBytes, name);
-    if (!this.announcedFirst) {
-      this.announcedFirst = true;
-      this.opts.log("first inference: compiling GPU kernels, the first block takes a few seconds");
-    }
-    const { out, ms } = await this.sessions.run(s, input, dims);
-    this.stats.blocks++;
-    this.stats.lastMs = ms;
-    this.totalMs += ms;
-    this.stats.avgMs = this.totalMs / this.stats.blocks;
-    this.stats.provider = this.sessions.provider;
-    if (this.stats.blocks === 1 || this.stats.blocks % 10 === 0) {
-      this.setStatus(`running · ${this.stats.blocks} block(s) done · last ${Math.round(ms)} ms`);
-    }
-    return out;
-  }
-
   // ------------------------------------------------------------- the device
 
   async gpuLimits(): Promise<GpuLimits> {
-    const limits = await this.sessions.gpuLimits();
+    const limits = await this.runner.limits();
     if (this.stats.device === null) {
-      this.stats.device = await this.sessions.deviceName();
+      this.stats.device = await this.runner.device();
       this.notify();
     }
     return limits;
   }
 
   async reset(): Promise<void> {
-    await this.sessions.reset();
+    await this.runner.reset();
     this.announcedFirst = false;
     this.setStatus("reset: sessions released; the next block builds them again");
     this.opts.log("inference reset");

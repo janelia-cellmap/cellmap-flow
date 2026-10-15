@@ -8,6 +8,13 @@
 // deployed site carries the exact version npm installed (Marwan's prototype
 // loaded them from a CDN, pinned by hand). Only the asyncify build is needed:
 // it is the one the webgpu bundle names, and it runs the WASM provider too.
+//
+// chunkmirage ships the same plugin (web/chunkmirage/web/vite-ort.ts), but
+// at the pinned commit it locates the package by resolving
+// "onnxruntime-web/package.json", which the package's exports map does not
+// expose: Node 22 throws ERR_PACKAGE_PATH_NOT_EXPORTED in configResolved.
+// This one finds node_modules by path instead. Switch to chunkmirage's once
+// a commit that resolves an exported file is pinned.
 import { copyFileSync, createReadStream, existsSync, mkdirSync } from "node:fs";
 import { extname, join, resolve } from "node:path";
 import type { Plugin } from "vite";

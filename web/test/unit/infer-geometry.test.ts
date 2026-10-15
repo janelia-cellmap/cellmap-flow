@@ -1,12 +1,12 @@
-// Block geometry: the context, the input box of an output chunk, clipping,
-// the level choice and the output grid, on the Hugging Face models' sizes
-// (setup_54: 148³ voxels in, 60³ out, 16 nm).
+// Block geometry: the context and the ratio the engine grows a chunk by,
+// clipping, the level choice and the output grid, on the Hugging Face
+// models' sizes (setup_54: 148³ voxels in, 60³ out, 16 nm).
 import { describe, expect, it } from "vitest";
 
 import type { ModelEntry } from "../../src/contracts";
 import {
-  type BlockGeometry, asTriple, chooseRawLevel, chunkInputRoi, clipBox, context, datasetInfoFrom, effectiveOutputVoxelSize, geometryOf, halo,
-  inputBox, inputShape, outputLevel, outputShape, sameVoxelSize, volumeShape,
+  type BlockGeometry, asTriple, chooseRawLevel, clipBox, context, datasetInfoFrom, effectiveOutputVoxelSize, geometryOf, halo,
+  inputShape, outputLevel, outputShape, ratio, sameVoxelSize, volumeShape,
 } from "../../src/infer/geometry";
 
 /** setup_54's 148³ variant: 148 voxels in, 60 out, at 16 nm. */
@@ -56,23 +56,19 @@ describe("shapes and context", () => {
   });
 });
 
-describe("the input box of an output chunk", () => {
-  it("grows the chunk's region by the context on both sides (nm)", () => {
-    expect(chunkInputRoi(G, [0, 0, 0])).toEqual({ begin: [-704, -704, -704], size: [2368, 2368, 2368] });
-    expect(chunkInputRoi(G, [1, 0, 2])).toEqual({ begin: [960 - 704, -704, 1920 - 704], size: [2368, 2368, 2368] });
+describe("the ratio the engine grows a chunk by", () => {
+  it("is input voxels per output voxel", () => {
+    expect(ratio(G)).toEqual([1, 1, 1]);
+    expect(ratio(COARSE)).toEqual([2, 2, 2]);
   });
 
-  it("is that region in raw voxels", () => {
-    expect(inputBox(G, [0, 0, 0])).toEqual({ begin: [-44, -44, -44], shape: [148, 148, 148] });
-    expect(inputBox(G, [1, 0, 2])).toEqual({ begin: [16, -44, 76], shape: [148, 148, 148] });
-    // output voxels are two raw voxels: chunk 1 begins at raw voxel 16, minus the halo of 12
-    expect(inputBox(COARSE, [1, 1, 1])).toEqual({ begin: [4, 4, 4], shape: [40, 40, 40] });
-  });
-
-  it("centres the output block in the input block", () => {
-    const { begin } = inputBox(G, [3, 3, 3]);
-    const outBegin = 3 * 60;
-    expect(begin.map((b) => outBegin - b)).toEqual([44, 44, 44]);
+  it("makes an output block grown by the halo the model's input block", () => {
+    // what stages.ts's inputBox does with the halo and the ratio: the output
+    // block, scaled onto the raw grid and padded by the halo on each side
+    for (const g of [G, COARSE]) {
+      const grown = outputShape(g).map((n, a) => n * ratio(g)[a] + 2 * halo(g)[a]);
+      expect(grown).toEqual(inputShape(g));
+    }
   });
 });
 
@@ -143,15 +139,25 @@ describe("levels", () => {
     expect(effectiveOutputVoxelSize(levels[0], COARSE)).toBeNull();
   });
 
-  it("reads a level at another voxel size as if at the model's, and says what the output really measures", () => {
-    // a 16 nm model on a pyramid with 12 nm: the 12 nm level is read as if 16
+  it("declares a level read at another voxel size at the size its output really has, which model_info says too", () => {
+    // a 16 nm model on a pyramid with 12 nm: the 12 nm level is read as if
+    // 16, voxel for voxel, so the output lies at 12 nm and is declared there
     const raw = { shape: [100, 100, 100], voxel: [12, 12, 12], origin: [6, 6, 6] };
     const out = outputLevel(raw, G);
     expect(out.shape).toEqual([100, 100, 100]);
-    expect(out.voxel).toEqual([16, 16, 16]);
-    expect(out.origin).toEqual([8, 8, 8]);  // the corner (0) rescaled, plus half a declared voxel
+    expect(out.voxel).toEqual([12, 12, 12]);
+    expect(out.origin).toEqual([6, 6, 6]);  // the corner (0) plus half a real voxel
     expect(effectiveOutputVoxelSize(raw, G)).toEqual([12, 12, 12]);
     expect(effectiveOutputVoxelSize(raw, COARSE)).toEqual([24, 24, 24]);
+    expect(outputLevel(raw, COARSE)).toEqual({ shape: [50, 50, 50], voxel: [24, 24, 24], origin: [12, 12, 12] });
+  });
+
+  it("works in the source's own units, since the ratio has none", () => {
+    // the same level in micrometers, as a source in µm declares it
+    const raw = { shape: [100, 100, 100], voxel: [0.012, 0.012, 0.012], origin: [0.006, 0.006, 0.006] };
+    const out = outputLevel(raw, COARSE);
+    expect(out.voxel.map((v) => +v.toFixed(9))).toEqual([0.024, 0.024, 0.024]);
+    expect(out.origin.map((v) => +v.toFixed(9))).toEqual([0.012, 0.012, 0.012]);
   });
 });
 

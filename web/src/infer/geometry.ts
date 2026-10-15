@@ -1,9 +1,12 @@
-// Block geometry: which raw level a model reads, the output grid it is served
-// on, and the input box each output chunk needs. Pure functions, from Marwan
-// Zouinkhi's web/legacy/pipeline.js (context, chunkInputRoi, volumeShape,
-// blockShape) and zarr-reader.js (the level choice, the clipped read), made
-// to agree with the Python server (models/geometry.py, io/multiscale.py,
-// serving/chunkmirage_server.py) where the two differed.
+// Block geometry: what a model reads and writes (the manifest's blocks and
+// voxel sizes), which raw level it reads, and the output grid it is served
+// on. Pure functions, from Marwan Zouinkhi's web/legacy/pipeline.js (context,
+// volumeShape, blockShape) and zarr-reader.js (the level choice), made to
+// agree with the Python server (models/geometry.py, io/multiscale.py,
+// serving/chunkmirage_server.py) where the two differed. The input box of a
+// chunk, its clipping to the volume and the padding past it are chunkmirage's
+// engine's (web/chunkmirage/web/src/stages.ts: inputBox, padded), given the
+// halo and the ratio from here.
 //
 // Axis order is (z, y, x) throughout. Lengths named *_shape are in nm, as
 // Python's ModelGeometry has them; a shape in voxels says so.
@@ -62,36 +65,25 @@ export function context(g: BlockGeometry): number[] {
 }
 
 /** The context in voxels of the raw level, which must be whole
- * (chunkmirage_server.py's `_whole` check on the halo). */
+ * (chunkmirage_server.py's `_whole` check on the halo): the engine's `halo`
+ * for the model's stage, in its input's voxels. */
 export function halo(g: BlockGeometry): number[] {
   return context(g).map((c, a) => wholeVoxels(c / g.input_voxel_size[a], "the model's context"));
 }
 
-/** The input region (nm, relative to the grid's corner) to read for output
- * chunk `index`: the chunk's region grown by the context on both sides
- * (server.py's chunk ROI, inferencer.py's output_roi.grow(context, context)). */
-export function chunkInputRoi(g: BlockGeometry, index: number[]): { begin: number[]; size: number[] } {
-  const block = outputShape(g), ovs = g.output_voxel_size, ctx = context(g);
-  const outBegin = block.map((b, a) => b * index[a] * ovs[a]);
-  const outSize = block.map((b, a) => b * ovs[a]);
-  return {
-    begin: outBegin.map((v, a) => v - ctx[a]),
-    size: outSize.map((v, a) => v + 2 * ctx[a]),
-  };
-}
-
-/** The input block of output chunk `index` in raw-level voxels: where it
- * begins (possibly before 0 or past the level's end, which the read pads
- * with zeros) and its shape, the model's input block. */
-export function inputBox(g: BlockGeometry, index: number[]): { begin: number[]; shape: number[] } {
-  const roi = chunkInputRoi(g, index);
-  return { begin: roi.begin.map((v, a) => Math.round(v / g.input_voxel_size[a])), shape: inputShape(g) };
+/** Input voxels per output voxel (chunkmirage_ops.py's `ratio`, fused.py's
+ * `scale`): 1 for a model writing at the voxel size it reads, 2 for one
+ * reading 8 nm and writing 16. The engine grows an output box by it to find
+ * the input box on the raw level's grid. */
+export function ratio(g: BlockGeometry): number[] {
+  return g.output_voxel_size.map((o, a) => o / g.input_voxel_size[a]);
 }
 
 /** The part of the box [begin, begin + shape) inside [0, levelShape): `lo`
  * and `hi` in level voxels and `offset`, where that part sits in the box;
  * null when nothing of it is inside (zarr-reader.js's readRoi, BlockInput in
- * chunkmirage_ops.py). */
+ * chunkmirage_ops.py). The model's stage tells the data from the engine's
+ * padding by it. */
 export function clipBox(begin: number[], shape: number[], levelShape: number[]): { lo: number[]; hi: number[]; offset: number[] } | null {
   const lo = begin.map((b, a) => Math.min(Math.max(b, 0), levelShape[a]));
   const hi = begin.map((b, a) => Math.max(Math.min(b + shape[a], levelShape[a]), lo[a]));
@@ -138,29 +130,35 @@ export function chooseRawLevel(levels: Level[], voxel: number[]): number {
   return last;
 }
 
-/** The one level a model's view is served at, from the raw level it reads.
+/** The one level a model's view is served at, from the raw level it reads,
+ * in that level's own units (the engine's SourceInfo gives it; the ratio is
+ * unitless, so nothing is converted).
  *
  * The raw level is read as if it were at the model's input voxel size, voxel
  * for voxel (the Python server's "relabel"): the output has one voxel per
- * `output_voxel_size` of that, so its shape is floor(raw voxels * input
- * voxel size / output voxel size), declared at `output_voxel_size`. When the
- * raw level's real voxel size differs, the viewer rescales the layer by the
- * `effective_output_voxel_size` of its model_info (effectiveOutputVoxelSize
- * below), as it does for a Python server.
+ * `ratio` raw voxels, so its shape is floor(raw voxels / ratio). The level is
+ * declared at the size its voxels really have, the raw voxel times the
+ * ratio: the Python server declares its array at `output_voxel_size` and
+ * the viewer rescales it by model_info's `effective_output_voxel_size`
+ * (effectiveOutputVoxelSize below), but chunkmirage's engine reads the raw
+ * level at its real voxel size and takes the ratio of the two grids from
+ * the sizes declared, so the view must say the true one. The viewer's
+ * transform from model_info then redeclares the array at the size it
+ * already has, which changes nothing. With the raw level at the model's
+ * voxel size the two agree anyway.
  *
  * Origins are voxel centres, the OME translation chunkmirage's reader gives
  * and its engine writes (ome.ts, engine.ts omeGroup). The output grid starts
  * at the raw level's corner (chunkmirage_server.py: "output voxel 0 starts
- * at the corner of the level the model reads"), rescaled like the voxels
- * when relabelled, so the served origin is that corner plus half an output
- * voxel. With equal voxel sizes it is the raw origin. */
+ * at the corner of the level the model reads"), so the served origin is that
+ * corner plus half an output voxel. With equal voxel sizes it is the raw
+ * origin. */
 export function outputLevel(raw: Level, g: BlockGeometry): Level {
-  const ivs = g.input_voxel_size, ovs = g.output_voxel_size;
-  const corner = raw.origin.map((o, a) => ((o - raw.voxel[a] / 2) * ivs[a]) / raw.voxel[a]);
+  const voxel = raw.voxel.map((v, a) => v * ratio(g)[a]);
   return {
     shape: volumeShape(raw.shape, g),
-    voxel: [...ovs],
-    origin: corner.map((c, a) => c + ovs[a] / 2),
+    voxel,
+    origin: raw.origin.map((o, a) => o - raw.voxel[a] / 2 + voxel[a] / 2),
   };
 }
 

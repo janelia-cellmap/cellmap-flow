@@ -20,27 +20,59 @@ honest "not available in the browser" answer.
 Neuroglancer (same-origin iframe, ./ng/)
    │ GET virtual/<page>/<model__CFLOW_ARGS__blob__CFLOW_ARGS__>/0/z/y/x   (zarr3://)
    ▼
-service worker (src/sw.ts)  ── relays to the page over a MessageChannel; cancels
-   │                           when the viewer gives up
+service worker (src/sw.ts, on chunkmirage's relay.ts)  ── relays to the page over
+   │                           a MessageChannel; cancels when the viewer gives up
    ▼
-chunkmirage Engine (web/chunkmirage/web/src/engine.ts)
+chunkmirage Engine (web/chunkmirage/web/src/engine.ts, serveStages)
    │ demand queue: finest level first, abandoned chunks dropped unrun;
-   │ 256 MB cache of computed chunks
+   │ reads the chunk's input box from the raw level (grown by the model's halo,
+   │ clipped to the volume, zero past it); 512 MB cache of each stage's output
+   │ under the stage's key; 256 MB cache of served chunks; whole-chunk layout
    ▼
-produce(level, index)  (src/infer/)  ─ our code, from Marwan's compute.js:
-   read the input block through the engine's reader (output block + context,
-   clipped to the volume, zero-padded)  →  normalizers  →  one onnxruntime-web
-   session.run on WebGPU (one at a time; WASM fallback)  →  postprocessors  →
-   channels-first → zarr bytes
+stage 1, the model (src/infer/stages.ts modelStage)  ─ our code:
+   normalizers on the data (the padding stays zero, as the Python server pads
+   after the chain) → one forward pass through the ONNX runner (src/infer/
+   session.ts: onnxruntime-web on WebGPU, one at a time; WASM fallback) →
+   the block [C, z, y, x], cropped to a chunk the volume ends in
+   ▼
+stage 2, the postprocessors (postprocessStage)  ─ our code:
+   the chain's steps, built once per layer → the chunk in the chain's dtype
    ▼
 bytes stream back through the service worker; the viewer draws them
 ```
 
-The model's view is registered with `Engine.serve(view, info, chunk, produce)`:
-a single level at the model's output voxel size, so Neuroglancer sees one
-scale, as the Python server serves it. The raw volume is opened as the engine
-view `"raw"` (so `Engine.read` can read it) and shown in the viewer straight
+The model's view is registered with `Engine.serveStages(view, info, chunk,
+"raw", stages, "zero")`: a single level at the model's output voxel size, so
+Neuroglancer sees one scale, as the Python server serves it, read from the raw
+level at the model's input voxel size (the stage's `inputVoxelSize`). Each
+stage has a key (`stages.ts`): the model's names the model file and the
+normalizers, the postprocessors' adds the steps, so a postprocess change finds
+the model's output in the engine's staged cache and a normalizer change
+recomputes. The two map onto the Python server's two ops
+(`serving/chunkmirage_ops.py`: InferenceOp with its input_norm, PostprocessOp),
+and normalization is in the model stage for the reasons the file gives. The raw
+volume is opened as the engine view `"raw"` and shown in the viewer straight
 from its own URL (`zarr://https://...`).
+
+## Who provides what
+
+chunkmirage (`web/chunkmirage/`, the clone at `chunkmirage.lock`'s commit) is
+the engine: the service worker's relay and store cache (`relay.ts`), the page's
+route table (`routes.ts`), the reader and the opened source's levels, the
+input box of a chunk with its clipping and padding, the per-stage cache, the
+demand queue, the chunk cache, the zarr v3 and OME metadata (`engine.ts`,
+`stages.ts`, `asread.ts`, `kept.ts`). Nothing of that is reimplemented here.
+
+cellmap-flow (`src/`) is the app: the model catalog and `model_info`
+(`models/`, `shared/model-info.ts`), the `__CFLOW_ARGS__` codec
+(`shared/args.ts`), the model's block geometry from its manifest
+(`infer/geometry.ts`: the halo, the ratio, the level choice, the served level),
+the normalizer and postprocessor bodies (`infer/norms.ts`, `post.ts` and the
+segmentation steps), the two stages and their keys (`infer/stages.ts`), the
+ONNX runner (`infer/session.ts`, the shape of chunkmirage's `onnx.ts` so the
+engine can take either), the viewer's layer JSON (`viewer/`), the backend
+behind the dashboard's routes (`backend/`), the session (`state/`) and the
+dashboard build (`build/`, `vite.config.ts`).
 
 ## Boot (src/main.ts)
 
@@ -54,7 +86,9 @@ from its own URL (`zarr://https://...`).
    served models), which must survive the reload `connect.js` does after
    `/api/set-data`. A shared link's dataset (`datasetUrlFromPage()`) wins over it.
 3. `createViewer`, `createInference`, `createCatalog`, then `createBackend(ctx)`
-   and `listenForApiRequests(backend)`.
+   and `listenForApiRequests(backend)`: a `route("/api/", …)` in chunkmirage's
+   route table (routes.ts), the one listener the page has for the worker's
+   asks; the Engine adds its `/virtual/<page>/` route there when it starts.
 4. `restoreSession(ctx)` – reopen the dataset in the engine and serve the
    session's models again (their views are gone after a reload; the same chain
    gives the same blob, so the restored layers' URLs still work).
@@ -68,10 +102,17 @@ The dashboard's JavaScript calls `fetch("/api/...")` (lib/api.js,
 finetune/requests.js, raw fetch), opens `EventSource("/api/.../stream")`
 (lib/sse.js and two more), and has one `<a download href="/api/export-config">`.
 All of these are HTTP requests from the page, so the service worker sees them:
-it relays each to the page's backend (`src/backend/`), which routes by method
-and path to a handler with the same JSON contract as the Python route. A
-streamed response (server-sent events) is relayed chunk by chunk. Nothing in
-the dashboard's JavaScript is patched.
+chunkmirage's `relay(request, {pick, timeout})` posts each as an Ask (path,
+range, method, headers, body) to the app window (not the viewer's iframe; the
+requesting tab when it is one), `route("/api/", …)` on the page hands it to
+`src/backend/relay.ts`, which builds an ApiRequest and routes by method and
+path to a handler with the same JSON contract as the Python route
+(`src/backend/`), and answers with a Reply, or a `stream: true` head and
+Laters for a streamed response (server-sent events), chunk by chunk, which
+the worker turns into the Response. Nothing in the dashboard's JavaScript is
+patched. (The Ask carries the path without its query string for now; the one
+route that reads a query, the log stream's `offset`, has Last-Event-ID, a
+header, first.)
 
 Routes that only a server can serve (LSF, the cluster's file systems, the
 Review tab's SQLite index, Vertex credentials) answer
@@ -82,9 +123,10 @@ with the `server-only` class; render.py sets `data-mode`).
 The service worker is one classic script, `sw.js`, bundled on its own from
 `src/sw.ts` (build/vite-plugins.ts `serviceWorker`): bundled as one of the page's
 entries it would import the chunk it shares with the page (the IndexedDB
-helpers), which a classic worker cannot do. It carries chunkmirage's `/virtual/`
-relay verbatim, so `Engine.listen()` finds the protocol it expects; re-check it
-when `chunkmirage.lock` is bumped.
+helpers), which a classic worker cannot do. It is chunkmirage's `relay.ts`
+(the relay for `/virtual/` and `/api/` alike, and the store cache) plus our
+`/local/` route; the Engine registers the same `sw.js` by name, so both get
+one registration.
 
 ## State
 
@@ -102,8 +144,8 @@ web/
   neuroglancer.lock          the Neuroglancer fork's commit; scripts/fetch-neuroglancer.sh builds it
   build/render.py            renders cellmap_flow/dashboard/templates/index.html → web/index.html
   build/vite-plugins.ts      the service worker bundle; serves/copies the dashboard's static files and a Neuroglancer build
-  build/vite-ort.ts          serves/copies onnxruntime-web's wasm files under ./ort/
-  chunkmirage/               (gitignored) the clone; we import web/chunkmirage/web/src/engine.ts
+  build/vite-ort.ts          serves/copies onnxruntime-web's wasm files under ./ort/ (chunkmirage's plugin, once it resolves an exported file)
+  chunkmirage/               (gitignored) the clone; we import web/chunkmirage/web/src/{engine,stages,relay,routes,asread}.ts
   ng/                        (gitignored) the Neuroglancer build, served at ./ng/
   index.html                 (gitignored) rendered
   src/
@@ -111,16 +153,17 @@ web/
     contracts.ts             the types the modules share
     rebase.ts                root-relative /api/ URLs → the page's directory
     browser.css              hides .server-only under data-mode="browser"
-    sw.ts                    the service worker: /api/* and /virtual/* relays, /local/ files
+    sw.ts                    the service worker: chunkmirage's relay for /api/* and /virtual/*, its store cache, our /local/ files
     backend/                 the /api/* router and routes, the SW relay (page side)
       index.ts  createBackend(ctx), restoreSession(ctx), the catch-all for server-only routes
-      relay.ts  registerServiceWorker(), listenForApiRequests(backend); protocol.ts its messages
+      relay.ts  registerServiceWorker(), listenForApiRequests(backend) on chunkmirage's route(); Ask/Reply/Later are chunkmirage's types
       router.ts, sse.ts, yaml.ts (the export), serving.ts (serve and re-serve the session's models)
       routes/{data,pipeline,models,config}.ts
     state/                   openSession(): SessionStore (IndexedDB, db.ts); local-store.ts for picked directories
-    infer/                   createInference(): Inference — the Engine, serve() views, produce()
-      engine.ts, session.ts (ORT), produce.ts, norms.ts, post.ts, expression.ts (Lambda steps),
-      geometry.ts, encode.ts, semaphore.ts
+    infer/                   createInference(): Inference — the Engine, one serveStages() view per model
+      engine.ts (the views and the stats), stages.ts (the model and postprocess stages, their keys),
+      session.ts (the ONNX runner: onnxruntime-web sessions; semaphore.ts its lock), norms.ts, post.ts,
+      expression.ts (Lambda steps), geometry.ts (the manifest's blocks, halo, ratio, levels), dtype.ts (astype)
     shared/                  args.ts (__CFLOW_ARGS__ codec, digest), model-info.ts
     models/                  createCatalog(): Catalog — Hugging Face manifests, variant choice, byte cache
     viewer/                  createViewer(): ViewerController — iframe (index.ts), layers.ts (port of
@@ -152,8 +195,9 @@ deployed site always carries the fork at `/app/ng/`.
 
 ## Credits
 
-The inference loop, the normalizer/postprocessor ports, the zarr reading, the
-local-directory store and the shareable URL come from Marwan Zouinkhi's
-serverless prototype (his commits on this branch, under `web/` before this
-restructuring), and the models are his exports on Hugging Face. The engine is
+The inference loop (now the two stages and the ONNX sessions), the
+normalizer/postprocessor ports, the local-directory store and the shareable
+URL come from Marwan Zouinkhi's serverless prototype (his commits on this
+branch, under `web/` before this restructuring), and the models are his
+exports on Hugging Face. The engine, the reading and the relay are
 chunkmirage's.

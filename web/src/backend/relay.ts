@@ -4,13 +4,20 @@
 // else runs: the dashboard's JavaScript asks /api/... the moment it loads,
 // and a request the service worker does not see goes to the static host and
 // 404s. listenForApiRequests() then answers each relayed request through the
-// Backend: it rebuilds an ApiRequest from the message (src/backend/protocol.ts),
-// calls backend.handle and posts the ApiResponse back as JSON, bytes or a
-// streamed body chunk by chunk.
+// Backend: the service worker (src/sw.ts, on chunkmirage's relay) posts the
+// request as an Ask (web/chunkmirage/web/src/types.ts) with a MessagePort,
+// chunkmirage's route() (routes.ts there) hands the ones under /api/ here,
+// and the answer goes back on the port as a Reply (whole) or a Reply head
+// with `stream: true` and then Laters (an event stream's pieces, then
+// `done`), the shapes relay.ts there turns into a Response. One listener on
+// the page for every route, the engine's /virtual/ share and this one: the
+// worker takes a page's first message as its answer, so two listeners each
+// declining what is not theirs would answer for each other.
 //
 // toApiRequest and sendResponse are the pure parts, exported for the tests.
+import { route } from "../../chunkmirage/web/src/routes";
+import type { Ask, Later, Reply } from "../../chunkmirage/web/src/types";
 import type { ApiRequest, ApiResponse, Backend } from "../contracts";
-import type { ApiAsk, ApiCancel, ApiChunk, ApiHead } from "./protocol";
 
 /** sessionStorage key set across the one reload that makes the service
  * worker control a first visit, so a browser that refuses to let it never
@@ -63,26 +70,20 @@ function flag(value?: string | null): string | null | void {
   }
 }
 
-/** Answer the /api/* requests the service worker relays, through `backend`.
- * Only messages marked `api: true` are this listener's: chunkmirage's Engine
- * listens on the same event for its /virtual/ asks. */
-export function listenForApiRequests(backend: Backend): void {
-  navigator.serviceWorker.addEventListener("message", (e: MessageEvent<Partial<ApiAsk> | null>) => {
-    const ask = e.data;
-    if (!ask || ask.api !== true) return;
-    const port = e.ports[0];
-    if (!port) return;
-    void answer(backend, ask as ApiAsk, port);
-  });
+/** Answer the /api/* requests the service worker relays, through `backend`:
+ * a route for the paths holding "/api/" (matched anywhere, as the worker
+ * matches: the page may be served under a base). Returns what removes it. */
+export function listenForApiRequests(backend: Backend): () => void {
+  return route("/api/", (ask, port) => void answer(backend, ask, port));
 }
 
-async function answer(backend: Backend, ask: ApiAsk, port: MessagePort): Promise<void> {
+async function answer(backend: Backend, ask: Ask, port: MessagePort): Promise<void> {
   let response: ApiResponse;
   try {
     response = await backend.handle(toApiRequest(ask));
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
-    console.error(`[cellmap-flow] ${ask.method} ${ask.url} failed:`, e);
+    console.error(`[cellmap-flow] ${ask.method} ${ask.path} failed:`, e);
     response = { status: 500, json: { success: false, error: message } };
   }
   await sendResponse(response, port);
@@ -90,10 +91,13 @@ async function answer(backend: Backend, ask: ApiAsk, port: MessagePort): Promise
 
 /** The ApiRequest for a relayed request: the path from "/api/" on (the page
  * may be served under a base, and the dashboard's URLs are root-relative),
- * the query, the headers lower-cased, and the body parsed as JSON when it
- * is JSON (null otherwise, as Flask's get_json(silent=True) gives). */
-export function toApiRequest(ask: Pick<ApiAsk, "method" | "url" | "headers" | "body">): ApiRequest {
-  const url = new URL(ask.url, "http://localhost/");
+ * the headers lower-cased, and the body parsed as JSON when it is JSON (null
+ * otherwise, as Flask's get_json(silent=True) gives). The query is what the
+ * path carries after "?": chunkmirage's relay sends the pathname alone
+ * today, so it is empty until the relay passes the search too; the one
+ * route that reads it (sse.ts's `offset`) has Last-Event-ID, a header, first. */
+export function toApiRequest(ask: Pick<Ask, "method" | "path" | "headers" | "body">): ApiRequest {
+  const url = new URL(ask.path, "http://localhost/");
   const at = url.pathname.indexOf("/api/");
   const path = at === -1 ? url.pathname : url.pathname.slice(at);
   const headers: Record<string, string> = {};
@@ -109,27 +113,28 @@ export function toApiRequest(ask: Pick<ApiAsk, "method" | "url" | "headers" | "b
   return { method: ask.method.toUpperCase(), path, query: url.searchParams, body, headers };
 }
 
-/** Post `response` on `port`: a head, then for a streamed body its chunks and
- * an end (or the error that stopped it). A {cancel: true} from the service
- * worker (the client stopped reading) cancels the stream. The port is closed
- * when everything has been sent. */
+/** Post `response` on `port` in the relay's shapes: a Reply, whole; or a
+ * `stream: true` head, then for a streamed body its pieces as Laters
+ * (`chunk`) and `done` (or the `error` that stopped it). A {cancel: true}
+ * from the service worker (the client stopped reading) cancels the stream.
+ * The port is closed when everything has been sent. */
 export async function sendResponse(response: ApiResponse, port: MessagePort): Promise<void> {
-  const post = (m: ApiHead | ApiChunk, transfer: Transferable[] = []) => port.postMessage(m, transfer);
+  const post = (m: Reply | Later, transfer: Transferable[] = []) => port.postMessage(m, transfer);
   if ("json" in response) {
-    post({ status: response.status, headers: [["content-type", "application/json"]], body: JSON.stringify(response.json) });
+    post({ status: response.status, type: "application/json", body: JSON.stringify(response.json) });
     port.close();
     return;
   }
   if ("body" in response) {
-    const headers: [string, string][] = [["content-type", response.type], ...Object.entries(response.headers ?? {})];
     const body = response.body;
-    post({ status: response.status, headers, body }, body instanceof ArrayBuffer ? [body] : []);
+    const extra = Object.entries(response.headers ?? {});
+    post({ status: response.status, type: response.type, body, ...(extra.length ? { headers: extra } : {}) }, body instanceof ArrayBuffer ? [body] : []);
     port.close();
     return;
   }
-  post({ status: response.status, headers: [["content-type", response.type]], stream: true });
+  post({ status: response.status, type: response.type, stream: true });
   const reader = response.stream.getReader();
-  port.onmessage = (m: MessageEvent<ApiCancel>) => {
+  port.onmessage = (m: MessageEvent<{ cancel?: boolean }>) => {
     if (m.data?.cancel) void reader.cancel("the client stopped reading");
   };
   try {
@@ -141,7 +146,7 @@ export async function sendResponse(response: ApiResponse, port: MessagePort): Pr
       const chunk = value.byteOffset === 0 && value.byteLength === value.buffer.byteLength ? (value.buffer as ArrayBuffer) : value.slice().buffer;
       post({ chunk }, [chunk]);
     }
-    post({ end: true });
+    post({ done: true });
   } catch (e) {
     post({ error: e instanceof Error ? e.message : String(e) });
   } finally {

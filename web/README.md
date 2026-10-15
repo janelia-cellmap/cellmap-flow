@@ -118,15 +118,18 @@ half a minute for the first chunk.
 
 The browser mode is a port of
 [Marwan Zouinkhi](https://github.com/mzouink)'s serverless prototype of
-cellmap-flow: the inference loop (read a block with context, normalize, one
-`session.run` at a time on WebGPU with a WebAssembly fallback, postprocess,
-encode as zarr), the ports of the normalizers and postprocessors, the zarr
-reader and the local-directory store all come from it, as do the ONNX
-exports on Hugging Face and their benchmarks. His commits are on this branch;
-the remaining files of the prototype are in `legacy/` and are deleted as each
-is ported.
+cellmap-flow: the inference loop (normalize, one `session.run` at a time on
+WebGPU with a WebAssembly fallback, postprocess; now two stages of
+chunkmirage's engine, `src/infer/stages.ts`), the ports of the normalizers
+and postprocessors and the local-directory store all come from it, as do the
+ONNX exports on Hugging Face and their benchmarks. His commits are on this
+branch; the remaining files of the prototype are in `legacy/` and are deleted
+as each is ported.
 
-The on-demand chunk engine (the demand queue, the cache, the service worker
-relay and the OME-Zarr reader) is [chunkmirage](https://github.com/yuriyzubov/chunkmirage)'s
-browser engine, which `scripts/fetch-chunkmirage.sh` clones at the commit
-`chunkmirage.lock` names.
+The on-demand chunk engine (the OME-Zarr reader, each chunk's input box with
+its padding, the per-stage cache, the demand queue, the chunk cache, the
+service worker relay and the page's route table) is
+[chunkmirage](https://github.com/JaneliaSciComp/chunkmirage)'s browser
+engine, which `scripts/fetch-chunkmirage.sh` clones at the commit
+`chunkmirage.lock` names; `ARCHITECTURE.md` says what is the engine's and
+what is this app's.
