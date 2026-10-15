@@ -172,3 +172,12 @@ def test_the_flask_dashboard_is_unchanged_by_the_markers(dashboard):
     assert "Models run in this browser" not in html
     # The connect panel's browser-only block (a folder on this machine) is not rendered.
     assert "browseLocalBtn" not in html and "localFolderGroup" not in html
+
+
+def test_both_pages_lay_out_for_a_phone(page, dashboard):
+    """The viewport meta tag: without it a phone lays the page out 980px wide
+    and shrinks it to fit, and a tap on a field zooms it back in past the
+    dashboard. Both pages carry it: the template is one."""
+    viewport = '<meta name="viewport" content="width=device-width, initial-scale=1" />'
+    assert viewport in page
+    assert viewport in dashboard.get("/").get_data(as_text=True)
