@@ -56,19 +56,29 @@ test.describe("finetuning in the browser", () => {
       const baseView = viewOf((await baseChunk).url());
       consoleLines.push(`[test] base chunk of ${baseView}`);
 
-      // The Finetune tab's model list names the served model; a new volume for it.
+      // The Finetune tab, as the user reaches it: its model picker fills from
+      // the served model (so the tab's script has started, which in browser
+      // mode happens long after the page was parsed), and New Volume makes
+      // the volume and puts its paint layer in the viewer, selected.
       const models = await api<{ models: { name: string; finetune_modes: string[] }[] }>(page, "/api/finetune/models");
       expect(models.models).toHaveLength(1);
       expect(models.models[0].finetune_modes).toEqual(["head"]);
       const modelName = models.models[0].name;
-      const created = await api<{ success: boolean; volume_id: string; zarr_path: string; neuroglancer_url: string; metadata: { chunk_size: number[]; dataset_shape_voxels: number[] } }>(
-        page, "/api/finetune/create-volume", { model_name: modelName },
-      );
-      expect(created.success).toBe(true);
+      await page.evaluate(() => document.getElementById("finetune-tab")!.click());
+      await expect(page.locator("#modelSelect option")).toHaveCount(1, { timeout: 30_000 });
+      await page.evaluate(() => document.getElementById("createVolumeBtn")!.click());
+      await expect(page.locator("#finetuneLog")).toHaveValue(/Created annotation volume/, { timeout: 30_000 });
+      const current = await api<{ volume_id: string | null; volume: { chunk_size: number[]; dataset_shape_voxels: number[] } }>(page, "/api/finetune/session-volume");
+      expect(current.volume_id).toMatch(/^vol-/);
+      const created = { volume_id: current.volume_id!, zarr_path: `paint/${current.volume_id}`, metadata: current.volume };
       expect(created.metadata.chunk_size[0]).toBe(1); // one slice: a 2D model's block
-      const added = await api<{ success: boolean; layer_name: string }>(page, "/api/finetune/add-to-viewer", { crop_id: created.volume_id, minio_url: created.neuroglancer_url });
-      expect(added.success).toBe(true);
-      expect(added.layer_name).toBe(`annotation_${created.volume_id}`);
+      const selectedLayer = () =>
+        page.evaluate(() => {
+          const frame = document.getElementById("my_iframe") as HTMLIFrameElement | null;
+          const win = frame?.contentWindow as (Window & { viewer?: { state: { toJSON(): { selectedLayer?: { layer?: string } } } } }) | null | undefined;
+          return win?.viewer?.state.toJSON().selectedLayer?.layer ?? null;
+        });
+      await expect.poll(selectedLayer, { timeout: 30_000 }).toBe(`annotation_${created.volume_id}`);
 
       // Paint the centre chunk as the brush would: the whole chunk, uncompressed, PUT to the paint route.
       const painted = await page.evaluate(async (c) => {
