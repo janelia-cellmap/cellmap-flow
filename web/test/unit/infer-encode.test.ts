@@ -3,7 +3,7 @@
 // the little-endian bytes of a whole chunk in each dtype.
 import { describe, expect, it } from "vitest";
 
-import { chunkLayout, encodeChunk, placeBlock, reorderToZarr, toFloat32 } from "../../src/infer/encode";
+import { castInto, chunkLayout, encodeChunk, placeBlock, reorderToZarr, toFloat32 } from "../../src/infer/encode";
 
 describe("toFloat32", () => {
   it("converts the reader's typed bytes", () => {
@@ -19,8 +19,33 @@ describe("toFloat32", () => {
     expect(out.buffer).toBe(f.buffer);
   });
 
+  it("converts uint64 ids through Number", () => {
+    expect(Array.from(toFloat32(new BigUint64Array([0n, 7n, 2n ** 40n]).buffer, "uint64"))).toEqual([0, 7, 2 ** 40]);
+  });
+
   it("refuses a dtype it does not know", () => {
-    expect(() => toFloat32(new ArrayBuffer(8), "uint64")).toThrow(/dtype uint64/);
+    expect(() => toFloat32(new ArrayBuffer(8), "complex64")).toThrow(/dtype complex64/);
+  });
+});
+
+describe("castInto (numpy's astype between number and bigint arrays)", () => {
+  it("truncates numbers toward zero into uint64, zeroes non-finite ones, wraps negatives", () => {
+    const big = new BigUint64Array(5);
+    castInto(big, new Float32Array([1.9, 300, -1, Number.NaN, Number.POSITIVE_INFINITY]));
+    expect(Array.from(big)).toEqual([1n, 300n, 2n ** 64n - 1n, 0n, 0n]);
+  });
+
+  it("takes bigints into a number array through Number, and copies like for like", () => {
+    const u32 = new Uint32Array(2);
+    castInto(u32, new BigUint64Array([5n, 2n ** 32n + 1n]));
+    expect(Array.from(u32)).toEqual([5, 1]);  // the store wraps, as astype(uint32) does
+    const f64 = new Float64Array(1);
+    castInto(f64, new BigUint64Array([2n ** 53n + 1n]));
+    expect(f64[0]).toBe(2 ** 53);  // rounded above 2^53
+    const copy = new BigUint64Array(2);
+    castInto(copy, new BigUint64Array([1n, 2n]));
+    expect(Array.from(copy)).toEqual([1n, 2n]);
+    expect(() => castInto(new Uint8Array(1), new Uint8Array(2))).toThrow(/cannot cast 2 values into 1/);
   });
 });
 
@@ -62,7 +87,7 @@ describe("reorderToZarr (the Flask server's channels-last layout)", () => {
     const out = reorderToZarr(nd);
     expect(out.shape).toEqual([1, 2, 2, 2]);
     // voxel (0,0,0): channels 0 and 1 are 0 and 4; voxel (0,0,1): 1 and 5
-    expect(Array.from(out.data)).toEqual([0, 4, 1, 5, 2, 6, 3, 7]);
+    expect(Array.from(out.data as ArrayLike<number>)).toEqual([0, 4, 1, 5, 2, 6, 3, 7]);
   });
 
   it("reuses the data for one channel", () => {
@@ -103,8 +128,24 @@ describe("encodeChunk", () => {
     expect(Array.from(new Uint8Array(c))).toEqual([1, 2, 0, 0, 3, 4, 0, 0]);
   });
 
+  it("writes uint64 chunks: little-endian 8-byte ids, from bigints or from numbers", () => {
+    const ids = encodeChunk({ data: new BigUint64Array([1n, 2n ** 40n + 3n]), shape: [1, 1, 1, 2] }, "uint64");
+    expect(ids.byteLength).toBe(16);
+    expect(Array.from(new Uint8Array(ids))).toEqual([1, 0, 0, 0, 0, 0, 0, 0, 3, 0, 0, 0, 0, 1, 0, 0]);
+    const cast = encodeChunk({ data: new Float32Array([1.9, 300]), shape: [1, 1, 1, 2] }, "uint64");
+    expect(Array.from(new BigUint64Array(cast))).toEqual([1n, 300n]);
+    // and the other way: uint64 ids into a uint32 chunk
+    const narrowed = encodeChunk({ data: new BigUint64Array([7n]), shape: [1, 1, 1, 1] }, "uint32");
+    expect(Array.from(new Uint32Array(narrowed))).toEqual([7]);
+  });
+
+  it("fills a whole uint64 chunk, zero past the array's end", () => {
+    const buf = encodeChunk({ data: new BigUint64Array([1n, 2n, 3n, 4n]), shape: [1, 2, 2] }, "uint64", [1, 2, 3]);
+    expect(Array.from(new BigUint64Array(buf))).toEqual([1n, 2n, 0n, 3n, 4n, 0n]);
+  });
+
   it("refuses a chunk of another rank or an unknown dtype", () => {
     expect(() => encodeChunk({ data: new Uint8Array(1), shape: [1] }, "uint8", [1, 1])).toThrow(/cannot hold/);
-    expect(() => encodeChunk({ data: new Uint8Array(1), shape: [1] }, "uint64")).toThrow(/dtype uint64/);
+    expect(() => encodeChunk({ data: new Uint8Array(1), shape: [1] }, "complex64")).toThrow(/dtype complex64/);
   });
 });

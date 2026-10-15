@@ -16,6 +16,7 @@
 // it starts, or on hashchange if it is already up: the hash is the queue.
 import type { DatasetInfo, LayerSpec, SessionStore, ViewerController } from "../contracts";
 import { initialState, RAW_LAYER_NAME, stateWithoutInfo } from "./layers";
+import { withEquivalences } from "./equivalences";
 import { decodeState, encodeState, isStateHash, mirrorFrameHash, mirrorToPage } from "./share";
 import { datasetUrlFromState, layerShaderOf, type NgState, positionNm, replaceLayers, withoutLayer } from "./state";
 
@@ -237,6 +238,21 @@ export function createViewer(opts: { session: SessionStore; log: (line: string) 
       const state = currentState();
       if (!state) return;
       applyState(withoutLayer(state, name));
+    },
+
+    setEquivalences(name, sets) {
+      // Every report carries the whole set of joined ids so far, so one
+      // that cannot be shown yet is only a delay: the next brings it too.
+      const state = currentState();
+      if (!state) {
+        // No iframe yet: a layer waiting for the first state carries them
+        // in (the merging step is part of the layer's own chain).
+        if (queued[name]) queued[name] = { ...queued[name], equivalences: sets.map((set) => [...set]) };
+        return;
+      }
+      const next = withEquivalences(state, name, sets);
+      if (!next) return;  // no segmentation layer of that name: removed, or not drawn yet
+      applyState(next);
     },
 
     position() {

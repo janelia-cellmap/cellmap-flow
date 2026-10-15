@@ -10,31 +10,64 @@
 // whether it is labels follow pipeline_spec.py's rule: the last step that
 // declares wins.
 //
-// Only the elementwise steps and ChannelSelection are here. The segmentation
-// steps (Label, Affinity, Morton relabeling, the blockwise merger, Cellpose
-// masks, FillHoles) need libraries or state across chunks; a chain that names
-// one is refused before serving, with the error below naming it.
+// These are op bodies, as the Python classes are op bodies for chunkmirage's
+// pipeline on the server: nothing here reads data, caches or knows about
+// views; the engine does that. A step is built once per served layer
+// (buildPostprocessors), as the server builds its PostprocessOp once per
+// layer, so a stateful step (the blockwise merger's equivalences) keeps its
+// state across chunks; each chunk then runs the built chain with its context
+// (runPostprocessors): the chunk's index on the served grid and the voxels of
+// one output block, which Morton and the affinity segmenter key their ids on,
+// as the server's PostprocessOp.apply_at passes them. The segmentation steps
+// live in affinity.ts, morton.ts, label.ts and merger.ts.
 import type { Step, StepValue } from "../contracts";
+import { affinityPostprocessor } from "./affinity";
 import { compileExpression } from "./expression";
+import { labelPostprocessor } from "./label";
+import { blockwiseMerger } from "./merger";
+import { mortonRelabeling } from "./morton";
 import { asNumber } from "./norms";
 
-export const SUPPORTED_POSTPROCESSORS: readonly string[] = [
-  "SigmoidPostprocessor", "DefaultPostprocessor", "ThresholdPostprocessor", "ChannelSelection", "LambdaPostprocessor",
-];
-
-export type NdData = Float32Array | Uint8Array | Uint16Array | Uint32Array | Int32Array | Float64Array;
+export type NdData = Float32Array | Uint8Array | Uint16Array | Uint32Array | Int32Array | Float64Array | BigUint64Array;
 /** A block, C order, channel first: shape [C, z, y, x]. */
 export type NdArray = { data: NdData; shape: number[] };
 
-type Postprocessor = (nd: NdArray) => NdArray;
+/** Where a chunk sits, for the steps that key their ids on it: its index on
+ * the served grid (the server's chunk_corner) and the voxels of one output
+ * block, spatial axes only (chunk_num_voxels). */
+export interface PostContext {
+  chunkIndex: number[];
+  chunkNumVoxels: number;
+}
+
+/** What a served layer gives its stateful steps: the blockwise merger reports
+ * the ids it has joined so far as sets of decimal uint64 strings, each set
+ * the ids that are one object (neuroglancer's EquivalenceMap.to_json(), and
+ * the shape a Neuroglancer layer's `equivalences` take), for the viewer's
+ * segmentation layer to show. */
+export interface LayerHooks {
+  onEquivalences?: (sets: string[][]) => void;
+}
+
+/** A built step: a block in, a block out, with the chunk's context. */
+export type Postprocessor = (nd: NdArray, context: PostContext) => NdArray;
 
 /** What a step says about its output (SerializableInterface.output_info):
  * a dtype if it declares one, a channel count if it changes it, and whether
- * the output is labels (null: it does not say). */
-interface Declares {
+ * the output is labels (undefined: it does not say). */
+export interface Declares {
   dtype?: string;
   channels?: (given: number) => number;
   isSegmentation?: boolean;
+}
+
+/** A postprocessor class, as the registry below holds it. */
+export interface PostprocessorDef {
+  /** Build the step from its parameters, parsed as the Python constructor
+   * parses them (throw on a bad one), once per served layer. */
+  make(step: Step, hooks: LayerHooks): Postprocessor;
+  /** What the step says about its output, from its parameters. */
+  declares(step: Step): Declares;
 }
 
 /** ChannelSelection's channels: "0,2" from the dashboard's form, or a number,
@@ -49,27 +82,22 @@ export function parseChannels(value: StepValue | unknown[] | undefined): number[
   });
 }
 
-function declares(step: Step): Declares | null {
-  switch (step.name) {
-    case "SigmoidPostprocessor": return { dtype: "float32" };
-    case "DefaultPostprocessor": return { dtype: "uint8", isSegmentation: false };
-    case "ThresholdPostprocessor": return { dtype: "uint8", isSegmentation: true };
-    case "ChannelSelection": { const n = parseChannels(step.channels).length; return { channels: () => n }; }
-    case "LambdaPostprocessor": return { dtype: "float32" };
-    default: return null;  // not a browser step: declares nothing here
-  }
-}
-
-function makePostprocessor(step: Step): Postprocessor {
-  switch (step.name) {
-    case "SigmoidPostprocessor":
+/** The steps the browser runs, by the Python class name the dashboard sends. */
+export const POSTPROCESSORS: Record<string, PostprocessorDef> = {
+  SigmoidPostprocessor: {
+    declares: () => ({ dtype: "float32" }),
+    make: () => {
       // logits to probabilities, in float32
       return ({ data, shape }) => {
         const out = new Float32Array(data.length);
-        for (let i = 0; i < data.length; i++) out[i] = 1 / (1 + Math.exp(-data[i]));
+        for (let i = 0; i < data.length; i++) out[i] = 1 / (1 + Math.exp(-Number(data[i])));
         return { data: out, shape };
       };
-    case "DefaultPostprocessor": {
+    },
+  },
+  DefaultPostprocessor: {
+    declares: () => ({ dtype: "uint8", isSegmentation: false }),
+    make: (step) => {
       // clip, shift and scale into uint8: (x + bias) * multiplier, with the
       // defaults mapping [-1, 1] onto [0, 255]
       const clipMin = asNumber(step.clip_min, -1.0, "DefaultPostprocessor.clip_min");
@@ -81,20 +109,26 @@ function makePostprocessor(step: Step): Postprocessor {
         for (let i = 0; i < data.length; i++) {
           // Storing into a Uint8Array truncates toward zero and wraps modulo
           // 256, which is what numpy's astype(uint8) does on x86.
-          out[i] = (Math.min(Math.max(data[i], clipMin), clipMax) + bias) * multiplier;
+          out[i] = (Math.min(Math.max(Number(data[i]), clipMin), clipMax) + bias) * multiplier;
         }
         return { data: out, shape };
       };
-    }
-    case "ThresholdPostprocessor": {
+    },
+  },
+  ThresholdPostprocessor: {
+    declares: () => ({ dtype: "uint8", isSegmentation: true }),
+    make: (step) => {
       const threshold = asNumber(step.threshold, 0.5, "ThresholdPostprocessor.threshold");
       return ({ data, shape }) => {
         const out = new Uint8Array(data.length);
-        for (let i = 0; i < data.length; i++) out[i] = data[i] > threshold ? 1 : 0;  // strictly greater, as in Python
+        for (let i = 0; i < data.length; i++) out[i] = Number(data[i]) > threshold ? 1 : 0;  // strictly greater, as in Python
         return { data: out, shape };
       };
-    }
-    case "ChannelSelection": {
+    },
+  },
+  ChannelSelection: {
+    declares: (step) => { const n = parseChannels(step.channels).length; return { channels: () => n }; },
+    make: (step) => {
       // data[channels, :, :, :]: the listed channels, in the listed order; the
       // dtype is kept
       const channels = parseChannels(step.channels);
@@ -108,33 +142,65 @@ function makePostprocessor(step: Step): Postprocessor {
         channels.forEach((ch, j) => out.set(data.subarray(ch * plane, (ch + 1) * plane) as never, j * plane));
         return { data: out, shape: [channels.length, z, y, x] };
       };
-    }
-    case "LambdaPostprocessor": {
+    },
+  },
+  LambdaPostprocessor: {
+    declares: () => ({ dtype: "float32" }),
+    make: (step) => {
       // scalar arithmetic on x (expression.ts); float32 in, float32 out
       const fn = compileExpression(step.expression);
       return ({ data, shape }) => {
         const out = new Float32Array(data.length);
-        for (let i = 0; i < data.length; i++) out[i] = fn(Math.fround(data[i]));
+        for (let i = 0; i < data.length; i++) out[i] = fn(Math.fround(Number(data[i])));
         return { data: out, shape };
       };
-    }
-    default:
-      throw new Error(
-        `postprocessor ${JSON.stringify(step.name)} is not available in the browser (supported: ${SUPPORTED_POSTPROCESSORS.join(", ")})`,
-      );
+    },
+  },
+  AffinityPostprocessor: affinityPostprocessor,
+  MortonSegmentationRelabeling: mortonRelabeling,
+  LabelPostprocessor: labelPostprocessor,
+  SimpleBlockwiseMerger: blockwiseMerger,
+};
+
+export const SUPPORTED_POSTPROCESSORS: readonly string[] = Object.keys(POSTPROCESSORS);
+
+function definition(step: Step): PostprocessorDef {
+  const def = POSTPROCESSORS[step.name];
+  if (!def) {
+    throw new Error(
+      `postprocessor ${JSON.stringify(step.name)} is not available in the browser (supported: ${SUPPORTED_POSTPROCESSORS.join(", ")})`,
+    );
   }
+  return def;
+}
+
+function declares(step: Step): Declares | null {
+  return POSTPROCESSORS[step.name]?.declares(step) ?? null;  // not a browser step: declares nothing here
+}
+
+/** The chain's steps built once, for a served layer: stateful steps keep
+ * their state in the closures; `hooks` is what they report through. */
+export function buildPostprocessors(steps: Step[], hooks: LayerHooks = {}): Postprocessor[] {
+  return steps.map((step) => definition(step).make(step, hooks));
 }
 
 /** Every step's constructor run, to reject a chain before anything is served. */
 export function validatePostprocessors(steps: Step[]): void {
-  for (const step of steps) makePostprocessor(step);
+  buildPostprocessors(steps);
 }
 
-/** `nd` through `steps` in order. */
-export function applyPostprocessors(nd: NdArray, steps: Step[]): NdArray {
+/** `nd` through the built chain, for the chunk `context` describes. */
+export function runPostprocessors(processors: Postprocessor[], nd: NdArray, context: PostContext): NdArray {
   let current = nd;
-  for (const step of steps) current = makePostprocessor(step)(current);
+  for (const processor of processors) current = processor(current, context);
   return current;
+}
+
+/** `nd` through `steps` in order, built afresh: for stateless chains and
+ * tests. Without a context the block is taken as chunk 0 of its own grid. */
+export function applyPostprocessors(nd: NdArray, steps: Step[], context?: PostContext): NdArray {
+  const ctx = context ?? { chunkIndex: nd.shape.slice(1).map(() => 0), chunkNumVoxels: nd.shape.slice(1).reduce((a, b) => a * b, 1) };
+  return runPostprocessors(buildPostprocessors(steps), nd, ctx);
 }
 
 /** The dtype the viewer receives (chain_output_dtype): the last step's that

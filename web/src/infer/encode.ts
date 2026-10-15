@@ -19,11 +19,14 @@ import type { NdArray, NdData } from "./post";
 
 type TypedCtor = { new (n: number): NdData; new (buffer: ArrayBuffer, byteOffset?: number, length?: number): NdData; BYTES_PER_ELEMENT: number };
 
-/** The zarr dtypes served, and the typed array of each. 64-bit integers are
- * not among them: no browser step produces them. */
+/** The zarr dtypes served, and the typed array of each. uint64 is the
+ * segmentation steps' dtype (Morton ids, the affinity segmenter, the
+ * blockwise merger): a BigUint64Array, whose elements are bigints, which is
+ * why the casts below spell out the two kinds. int64 has no step and is
+ * left out. */
 export const TYPED: Record<string, TypedCtor> = {
   uint8: Uint8Array, int8: Int8Array as unknown as TypedCtor, uint16: Uint16Array, int16: Int16Array as unknown as TypedCtor,
-  uint32: Uint32Array, int32: Int32Array, float32: Float32Array, float64: Float64Array,
+  uint32: Uint32Array, int32: Int32Array, uint64: BigUint64Array, float32: Float32Array, float64: Float64Array,
 };
 
 export const prod = (shape: number[]) => shape.reduce((a, b) => a * b, 1);
@@ -36,8 +39,34 @@ export function toFloat32(buffer: ArrayBuffer, dtype: string): Float32Array {
   const typed = new Ctor(buffer);
   if (typed instanceof Float32Array) return typed;
   const out = new Float32Array(typed.length);
-  out.set(typed as ArrayLike<number>);
+  castInto(out, typed);
   return out;
+}
+
+/** `src`'s values into `dst`, element by element, as numpy's astype casts:
+ * a number into a BigUint64Array is truncated toward zero (a value that is
+ * not finite becomes 0, where numpy's result is platform-defined; a negative
+ * one wraps modulo 2^64 as the array stores it), a bigint into a number
+ * array goes through Number (exact below 2^53, rounded above), and a store
+ * into a narrower integer array truncates and wraps as the array does. */
+export function castInto(dst: NdData, src: NdData): void {
+  if (dst.length !== src.length) throw new Error(`cannot cast ${src.length} values into ${dst.length}`);
+  const toBig = dst instanceof BigUint64Array, fromBig = src instanceof BigUint64Array;
+  if (toBig && fromBig) {
+    (dst as BigUint64Array).set(src as BigUint64Array);
+  } else if (toBig) {
+    const big = dst as BigUint64Array, numbers = src as ArrayLike<number>;
+    for (let i = 0; i < numbers.length; i++) {
+      const v = numbers[i]!;
+      big[i] = Number.isFinite(v) ? BigInt(Math.trunc(v)) : 0n;
+    }
+  } else if (fromBig) {
+    const numbers = dst as Exclude<NdData, BigUint64Array>, big = src as BigUint64Array;
+    for (let i = 0; i < big.length; i++) numbers[i] = Number(big[i]);
+  } else {
+    const d = dst as Exclude<NdData, BigUint64Array>, s = src as Exclude<NdData, BigUint64Array>;
+    for (let i = 0; i < s.length; i++) d[i] = s[i]!;  // the store casts like astype
+  }
 }
 
 /** `block` (shape `blockShape`) copied into `out` (shape `outShape`) at
@@ -95,21 +124,26 @@ export function encodeChunk(nd: NdArray, dtype: string, chunkShape?: number[]): 
   const shape = chunkShape ?? nd.shape;
   if (shape.length !== nd.shape.length) throw new Error(`a chunk of shape ${shape} cannot hold an array of shape ${nd.shape}`);
   const same = shape.every((n, a) => n === nd.shape[a]);
+  // First into the chunk's dtype (castInto), then, if the chunk is larger,
+  // into its leading part.
   let typed: NdData;
-  if (same && nd.data instanceof Ctor) {
+  if (nd.data instanceof Ctor) {
     typed = nd.data;
-  } else if (same) {
-    typed = new Ctor(nd.data.length);
-    for (let i = 0; i < nd.data.length; i++) typed[i] = nd.data[i];  // the store casts like astype
   } else {
-    typed = new Ctor(prod(shape));
-    copyLeading(typed, shape, nd.data, nd.shape);
+    typed = new Ctor(nd.data.length);
+    castInto(typed, nd.data);
+  }
+  if (!same) {
+    const whole = new Ctor(prod(shape));
+    copyLeading(whole, shape, typed, nd.shape);
+    typed = whole;
   }
   return typed.buffer.slice(typed.byteOffset, typed.byteOffset + typed.byteLength) as ArrayBuffer;
 }
 
 /** `src` (shape `srcShape`) into the leading part of `dst` (shape `dstShape`),
- * any rank, whatever of it fits. */
+ * any rank, whatever of it fits. Both arrays are of the same kind (number or
+ * bigint elements): encodeChunk casts first. */
 function copyLeading(dst: NdData, dstShape: number[], src: NdData, srcShape: number[]): void {
   const n = srcShape.map((s, a) => Math.min(s, dstShape[a]));
   const rank = n.length;

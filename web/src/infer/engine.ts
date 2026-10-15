@@ -12,7 +12,7 @@ import { viewName } from "../shared/args";
 import { modelInfo } from "../shared/model-info";
 import { chooseRawLevel, datasetInfoFrom, effectiveOutputVoxelSize, geometryOf, outputLevel, outputShape } from "./geometry";
 import { validateNormalizers } from "./norms";
-import { isSegmentation, outputChannels, outputDtype, validatePostprocessors } from "./post";
+import { buildPostprocessors, isSegmentation, outputChannels, outputDtype, validatePostprocessors } from "./post";
 import { type ModelOutput, type ProduceContext, produceChunk } from "./produce";
 import { Sessions } from "./session";
 
@@ -119,8 +119,14 @@ export class InferenceEngine implements Inference {
       ...(info.has_channel ? { added: [channels] } : {}),
     };
     const key = entry.onnxUrl;
+    // The steps once for this layer, as the server builds its PostprocessOp
+    // once per layer: the merger's equivalences live across chunks and reach
+    // the viewer through the listeners.
+    const postprocessors = buildPostprocessors(chain.postprocess, {
+      onEquivalences: (sets) => { for (const listener of this.equivalenceListeners) listener(view, sets); },
+    });
     const ctx: ProduceContext = {
-      geometry, rawShape: raw.shape, rawDtype: dataset.dtype, chain, hasChannel: info.has_channel,
+      geometry, rawShape: raw.shape, rawDtype: dataset.dtype, chain, postprocessors, hasChannel: info.has_channel,
       read: (lo, hi) => engine.read(RAW_VIEW, rawLevel, lo, hi),
       run: (input, dims) => this.run(key, modelBytes, entry.name, input, dims),
     };
@@ -143,6 +149,13 @@ export class InferenceEngine implements Inference {
   }
 
   served(): ServedModel[] { return [...this.servedList]; }
+
+  private readonly equivalenceListeners = new Set<(view: string, sets: string[][]) => void>();
+
+  onEquivalences(listener: (view: string, sets: string[][]) => void): () => void {
+    this.equivalenceListeners.add(listener);
+    return () => { this.equivalenceListeners.delete(listener); };
+  }
 
   /** The engine's produce() for a model view: one output chunk. */
   private async produce(ctx: ProduceContext, view: string, level: number, index: number[]): Promise<ArrayBuffer> {

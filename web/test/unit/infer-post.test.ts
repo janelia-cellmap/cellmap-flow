@@ -15,7 +15,7 @@ const Y = [-3, -1, -0.5, 0, 0.5, 1, 3, 10];
 const y = (): NdArray => ({ data: new Float32Array(Y), shape: [1, 1, 2, 4] });
 const z = (): NdArray => ({ data: Float32Array.from({ length: 24 }, (_, i) => i), shape: [3, 2, 2, 2] });
 const run = (nd: NdArray, steps: Step[]) => applyPostprocessors(nd, steps);
-const values = (nd: NdArray) => Array.from(nd.data);
+const values = (nd: NdArray) => Array.from(nd.data as ArrayLike<number>);
 
 describe("SigmoidPostprocessor", () => {
   it("turns logits into probabilities, float32", () => {
@@ -105,9 +105,11 @@ describe("applyPostprocessors", () => {
   });
 
   it("names an unsupported postprocessor, at validation and when applied", () => {
-    expect(() => validatePostprocessors([{ name: "LabelPostprocessor" }])).toThrow(/"LabelPostprocessor" is not available in the browser/);
-    expect(() => run(y(), [{ name: "AffinityPostprocessor" }])).toThrow(/AffinityPostprocessor/);
-    expect(SUPPORTED_POSTPROCESSORS).toContain("SigmoidPostprocessor");
+    expect(() => validatePostprocessors([{ name: "CellposeMasksPostprocessor" }])).toThrow(/"CellposeMasksPostprocessor" is not available in the browser/);
+    expect(() => run(y(), [{ name: "CellposeMasksPostprocessor" }])).toThrow(/CellposeMasksPostprocessor/);
+    for (const name of ["SigmoidPostprocessor", "AffinityPostprocessor", "MortonSegmentationRelabeling", "LabelPostprocessor", "SimpleBlockwiseMerger"]) {
+      expect(SUPPORTED_POSTPROCESSORS).toContain(name);
+    }
   });
 });
 

@@ -3,7 +3,6 @@
 import { describe, expect, it } from "vitest";
 
 import { checkpointIteration, describe as describeEntry, metadataFor, MODELS_AUTHOR } from "../../src/models/metadata";
-import { UNKNOWN_LIMITS } from "../../src/models/variant";
 import { entryFixture } from "./models-helpers";
 
 // The keys of cellmap/mito-aff-unet-setup-16's metadata.json (read 2026-10-14).
@@ -20,7 +19,7 @@ describe("metadataFor", () => {
   });
 
   it("fills them from the manifest and the chosen variant", () => {
-    const entry = entryFixture("setup_54", UNKNOWN_LIMITS);
+    const entry = entryFixture("setup_54");
     const metadata = metadataFor(entry);
     expect(metadata).toMatchObject({
       model_name: "mito_aff_setup54_16nm",

@@ -1,10 +1,12 @@
 """Generate the parity fixtures the TypeScript ports are tested against.
 
-The browser mode re-implements three pieces of the Python package in
-TypeScript: the input normalizers (``web/src/infer/norms.ts`` from
+The browser mode re-implements pieces of the Python package in TypeScript:
+the input normalizers (``web/src/infer/norms.ts`` from
 ``cellmap_flow/norm/input_normalize.py``), the postprocessors
-(``web/src/infer/post.ts`` from ``cellmap_flow/post/postprocessors.py``) and
-the layer URL's args blob (``web/src/shared/args.ts`` from
+(``web/src/infer/post.ts`` from ``cellmap_flow/post/postprocessors.py``, with
+the segmentation steps in ``affinity.ts`` and ``morton.ts``, which also port
+``cellmap_flow/post/segment.py``'s ``mutex_watershed`` and pymorton's
+interleave) and the layer URL's args blob (``web/src/shared/args.ts`` from
 ``cellmap_flow/pipeline_spec.py`` and ``serving/protocol.py``). A shared link
 works across the two modes only if these agree byte for byte, so the vitest
 suite in ``web/test/parity`` checks each port against what the *Python classes
@@ -31,6 +33,8 @@ values, exactly what ``new Float32Array(data)`` takes.
 from __future__ import annotations
 
 import argparse
+import base64
+import inspect
 import json
 import math
 import sys
@@ -51,11 +55,16 @@ from cellmap_flow.pipeline_spec import (  # noqa: E402
     chain_num_channels,
     chain_output_dtype,
 )
-from cellmap_flow.post.postprocessors import DefaultPostprocessor, ThresholdPostprocessor  # noqa: E402
+from cellmap_flow.post import segment  # noqa: E402
+from cellmap_flow.post.postprocessors import (  # noqa: E402
+    AffinityPostprocessor,
+    DefaultPostprocessor,
+    ThresholdPostprocessor,
+)
 from cellmap_flow.serving.protocol import ARGS_KEY  # noqa: E402
 from cellmap_flow.viewer.layers import prediction_url  # noqa: E402
 
-FIXTURES = ("norms.json", "post.json", "args.json")
+FIXTURES = ("norms.json", "post.json", "args.json", "affinity.json", "morton.json")
 
 # The dashboard a browser-mode blob names, and the model/host the layer URL
 # fixture uses. Any values do; they only have to be the same on both sides.
@@ -76,6 +85,29 @@ def array_record(arr: np.ndarray) -> dict:
     """``{"dtype", "shape", "data"}``; ``data`` flat, C order, plain Python numbers."""
     arr = np.ascontiguousarray(arr)
     return {"dtype": arr.dtype.name, "shape": list(arr.shape), "data": arr.ravel().tolist()}
+
+
+def packed_record(arr: np.ndarray) -> dict:
+    """``{"dtype", "shape", "base64"}``: the C-order little-endian bytes, base64.
+
+    For a block too large to list value by value (the indented JSON spends
+    some 30 bytes on each); the tests decode it into the typed array of
+    ``dtype`` directly, so the values are bit-exact.
+    """
+    arr = np.ascontiguousarray(arr)
+    return {"dtype": arr.dtype.name, "shape": list(arr.shape), "base64": base64.b64encode(arr.astype(arr.dtype.newbyteorder("<")).tobytes()).decode("ascii")}
+
+
+def uint64_record(arr: np.ndarray) -> dict:
+    """``{"dtype": "uint64", "shape", "data"}`` with the values as decimal strings.
+
+    A JSON number is a double in JavaScript and loses digits above 2^53;
+    Morton-offset ids on a large volume pass that, so they travel as text
+    and the tests read them with ``BigInt(text)``.
+    """
+    arr = np.ascontiguousarray(arr)
+    assert arr.dtype == np.uint64, f"uint64 expected, got {arr.dtype}"
+    return {"dtype": "uint64", "shape": list(arr.shape), "data": [str(int(v)) for v in arr.ravel()]}
 
 
 def dtype_name(dtype) -> str:
@@ -377,9 +409,226 @@ def make_args() -> dict:
     }
 
 
+# --- affinity.json ------------------------------------------------------------
+
+SHORT_NEIGHBORHOOD = "[[1, 0, 0], [0, 1, 0], [0, 0, 1]]"
+# The class's own default literal (nine offsets, several lines, trailing
+# commas), passed explicitly in one case so the port's literal parser sees it.
+DEFAULT_NEIGHBORHOOD_LITERAL = inspect.signature(AffinityPostprocessor).parameters["neighborhood"].default
+# A chunk off the origin, so the Morton increment is exercised:
+# pymorton.interleave(2, 1, 3) == 46.
+AFFINITY_CORNER = (2, 1, 3)
+AFFINITY_CASES = [
+    # (id, input, step parameters). Without `neighborhood` the step uses its
+    # default; `bias` as a number and as the form's string.
+    ("short_bias_0", "logits_3", {"neighborhood": SHORT_NEIGHBORHOOD}),
+    ("short_bias_0.3", "logits_3", {"neighborhood": SHORT_NEIGHBORHOOD, "bias": 0.3}),
+    ("short_bias_string", "logits_3", {"neighborhood": SHORT_NEIGHBORHOOD, "bias": "0.3"}),
+    # The default neighborhood needs a block of 10 or more voxels along each
+    # axis: mwatershed panics on an offset (9) past an axis's length.
+    ("default_bias_0", "logits_9", {}),
+    ("default_literal_bias_0.3", "logits_9", {"neighborhood": DEFAULT_NEIGHBORHOOD_LITERAL, "bias": 0.3}),
+    # Integer input (DefaultPostprocessor's 0..255) is scaled by 1/255; three
+    # offsets for two channels, cut to the channels.
+    ("uint8_bias_0.3", "bytes_2", {"neighborhood": "[[0, 0, 1], [0, 1, 0], [1, 0, 0]]", "bias": 0.3}),
+]
+# How far an edge's |affinity - bias| must sit from every other's (the
+# mutex watershed takes the edges in that order, and mwatershed breaks a tie
+# as its unstable sort happens to) and from 0 (mwatershed splits there, the
+# port does nothing; the partition is the same, but keep the fixtures clear
+# of it), and a fragment's mean affinity from the bias (the port sums in
+# the same order as numpy, but a different order would still be right).
+EDGE_MARGIN = 1e-9
+MEAN_MARGIN = 1e-6
+
+
+def affinity_inputs(seed: int) -> dict:
+    """The blocks the affinity cases segment, by name.
+
+    ``logits_3``: a [3, 6, 7, 8] float32 block of values in [-3, 3], one
+    channel per unit offset. ``logits_9``: [9, 10, 10, 10], one channel per
+    default offset, the smallest block mwatershed takes with an offset of 9.
+    ``bytes_2``: a [2, 2, 3, 4] uint8 block of distinct byte values, as
+    DefaultPostprocessor's output would be, small enough for its bytes to be
+    distinct (equal bytes would tie).
+    """
+    rng = np.random.default_rng(seed)
+    logits_3 = rng.uniform(-3, 3, size=(3, 6, 7, 8)).astype(np.float32)
+    logits_9 = rng.uniform(-3, 3, size=(9, 10, 10, 10)).astype(np.float32)
+    byte_values = rng.permutation(256)[: 2 * 2 * 3 * 4].astype(np.uint8).reshape(2, 2, 3, 4)
+    return {"logits_3": logits_3, "logits_9": logits_9, "bytes_2": byte_values}
+
+
+def affinity_edge_weights(affinities: np.ndarray, offsets: list, bias: float) -> np.ndarray:
+    """|affinity - bias| of every edge mwatershed builds: per channel, the
+    voxels whose partner at the channel's offset lies inside the block."""
+    weights = []
+    for channel, offset in enumerate(offsets[: affinities.shape[0]]):
+        index = tuple(slice(max(0, -o), min(n, n - o)) for o, n in zip(offset, affinities.shape[1:]))
+        weights.append(np.abs(affinities[channel][index].astype(np.float64) - bias).ravel())
+    return np.concatenate(weights)
+
+
+def affinity_case_is_safe(affinities: np.ndarray, offsets: list, bias: float) -> bool:
+    """No tie or zero among the edge weights, no fragment mean near the bias."""
+    import mwatershed
+
+    weights = np.sort(affinity_edge_weights(affinities, offsets, bias))
+    if weights.size and (weights[0] <= EDGE_MARGIN or np.min(np.diff(weights)) <= EDGE_MARGIN):
+        return False
+    scaled = affinities.astype(np.float64)
+    segmentation = mwatershed.agglom(scaled - bias, [list(o) for o in offsets[: affinities.shape[0]]])
+    mean_affinity = np.mean(scaled, axis=0)
+    for fragment in np.unique(segmentation[segmentation > 0]):
+        if abs(float(mean_affinity[segmentation == fragment].mean()) - bias) <= MEAN_MARGIN:
+            return False
+    return True
+
+
+def run_affinity_case(steps: list, data: np.ndarray):
+    """``(processor, output, segmentation, safe)``: the step built as the
+    server builds it and applied to ``data`` at AFFINITY_CORNER, plus
+    segment.mutex_watershed's labels alone (before the Morton increment)."""
+    processor = PipelineSpec((), steps).build()[1][0]
+    affinities = data / 255.0 if np.issubdtype(data.dtype, np.integer) else data
+    safe = affinity_case_is_safe(affinities, processor.neighborhood, processor.bias)
+    segmentation = segment.mutex_watershed(affinities, processor.neighborhood, processor.bias)
+    chunk_num_voxels = int(np.prod(data.shape[1:]))
+    output = processor(data, chunk_corner=AFFINITY_CORNER, chunk_num_voxels=chunk_num_voxels)
+    return processor, output, segmentation, safe
+
+
+def make_affinity() -> dict:
+    # The first seed whose values keep every case clear of ties and margins.
+    for seed in range(200):
+        inputs = affinity_inputs(seed)
+        results = [(case_id, name, params, *run_affinity_case([{"name": "AffinityPostprocessor", **params}], inputs[name])) for case_id, name, params in AFFINITY_CASES]
+        if all(safe for *_, safe in results):
+            break
+    else:
+        raise RuntimeError("no seed under 200 keeps the affinity fixture clear of ties and margins")
+    cases = []
+    for case_id, name, params, processor, output, segmentation, _ in results:
+        steps = [{"name": "AffinityPostprocessor", **params}]
+        assert output.dtype == np.uint64 and output.shape == (1, *inputs[name].shape[1:]), case_id
+        assert segmentation.max() > 0 and (segmentation == 0).any(), f"{case_id}: objects and background both expected"
+        cases.append(
+            {
+                "id": case_id,
+                "steps": steps,
+                "input": name,
+                "bias": processor.bias,
+                "neighborhood": processor.neighborhood,
+                "chunk_corner": list(AFFINITY_CORNER),
+                "chunk_num_voxels": int(np.prod(inputs[name].shape[1:])),
+                "morton": pymorton_interleave(AFFINITY_CORNER),
+                "segmentation": uint64_record(segmentation),
+                "output": uint64_record(output),
+                "chain_output_dtype": dtype_name(chain_output_dtype([processor], POST_MODEL_DTYPE)),
+                "chain_num_channels": chain_num_channels([processor], inputs[name].shape[0]),
+                "chain_is_segmentation": chain_is_segmentation([processor]),
+            }
+        )
+    return {
+        "_format": (
+            "AffinityPostprocessor, from cellmap_flow/post/postprocessors.py, and segment.mutex_watershed "
+            "from cellmap_flow/post/segment.py. `inputs` are blocks [C, z, y, x] by name (a float block as "
+            "{dtype, shape, base64}: its little-endian C-order bytes); each case applies "
+            "its one step (built by PipelineSpec) to the named input as the server does, with chunk_corner "
+            "and chunk_num_voxels, and records `output` (uint64 [1, z, y, x], ids offset by chunk_num_voxels "
+            "* pymorton.interleave(*chunk_corner) = `morton`), and `segmentation`: segment.mutex_watershed "
+            "(affinities, neighborhood, bias) alone, uint64 [z, y, x], labels 1..n by first appearance, 0 "
+            "background, before the offset (integer input scaled by 1/255 first, as the step does). `bias` "
+            "and `neighborhood` are the step's parsed parameters. uint64 values are decimal strings. The "
+            "seed keeps every edge weight distinct and nonzero and every fragment mean away from the bias, "
+            "so the result depends on no tie. Generated by make_fixtures.py; do not edit."
+        ),
+        "seed": seed,
+        # The float blocks packed (a thousand voxels times nine channels), the byte block listed.
+        "inputs": {name: packed_record(block) if block.dtype == np.float32 else array_record(block) for name, block in inputs.items()},
+        "cases": cases,
+    }
+
+
+# --- morton.json --------------------------------------------------------------
+
+# Corners whose pymorton values the unit tests check, including ones past 10
+# bits: pymorton's interleave keeps 10 bits per coordinate (its first mask),
+# so 1024 is 0 and (1023, 1023, 1023) is 2^30 - 1.
+MORTON_CORNERS = [
+    (0, 0, 0), (1, 0, 0), (0, 1, 0), (0, 0, 1), (1, 2, 3), (5, 0, 7), (2, 1, 3), (7, 7, 7),
+    (100, 200, 300), (1023, 0, 0), (1024, 0, 0), (1023, 1023, 1023), (1025, 1, 2),
+]
+MORTON_CASES = [
+    # (id, input, step parameters, chunk_corner, chunk_num_voxels)
+    ("origin", "labels_uint8", {}, (0, 0, 0), 1000),
+    ("corner_1_2_3", "labels_uint8", {}, (1, 2, 3), 1000),
+    ("corner_5_0_7_uint32", "labels_uint32", {}, (5, 0, 7), 4096),
+    # The channel from the form's string; the other channel is cast but not moved.
+    ("channel_1_string", "labels_uint8", {"channel": "1"}, (1, 2, 3), 1000),
+    # Float ids truncate toward zero (astype(uint64)) before the test for nonzero.
+    ("float_input", "labels_float32", {}, (1, 2, 3), 1000),
+]
+
+
+def pymorton_interleave(corner) -> int:
+    import pymorton
+
+    return int(pymorton.interleave(*corner))
+
+
+def morton_inputs(seed: int) -> dict:
+    """Small [2, 2, 3, 4] label blocks with zeros in them: uint8 ids 0..4,
+    uint32 ids up to 4e9 (past 2^31), and float32 values 0, 1, 2.7, 300.2."""
+    rng = np.random.default_rng(seed)
+    uint8_labels = rng.integers(0, 5, size=(2, 2, 3, 4), dtype=np.uint8)
+    uint32_labels = rng.choice(np.array([0, 1, 7, 123456, 4_000_000_000], dtype=np.uint32), size=(2, 2, 3, 4))
+    float_labels = rng.choice(np.array([0.0, 1.0, 2.7, 300.2], dtype=np.float32), size=(2, 2, 3, 4))
+    return {"labels_uint8": uint8_labels, "labels_uint32": uint32_labels, "labels_float32": float_labels}
+
+
+def make_morton() -> dict:
+    seed = 0
+    inputs = morton_inputs(seed)
+    cases = []
+    for case_id, name, params, corner, chunk_num_voxels in MORTON_CASES:
+        steps = [{"name": "MortonSegmentationRelabeling", **params}]
+        processor = PipelineSpec((), steps).build()[1][0]
+        output = processor(inputs[name], chunk_corner=corner, chunk_num_voxels=chunk_num_voxels)
+        assert output.dtype == np.uint64 and output.shape == inputs[name].shape, case_id
+        cases.append(
+            {
+                "id": case_id,
+                "steps": steps,
+                "input": name,
+                "chunk_corner": list(corner),
+                "chunk_num_voxels": chunk_num_voxels,
+                "morton": pymorton_interleave(corner),
+                "output": uint64_record(output),
+                "chain_output_dtype": dtype_name(chain_output_dtype([processor], POST_MODEL_DTYPE)),
+                "chain_num_channels": chain_num_channels([processor], inputs[name].shape[0]),
+                "chain_is_segmentation": chain_is_segmentation([processor]),
+            }
+        )
+    return {
+        "_format": (
+            "MortonSegmentationRelabeling, from cellmap_flow/post/postprocessors.py. `inputs` are label blocks "
+            "[C, z, y, x] by name; each case applies its one step (built by PipelineSpec) to the named input "
+            "with chunk_corner and chunk_num_voxels, as the server does, and records `output` (uint64, same "
+            "shape: the chosen channel's nonzero ids plus chunk_num_voxels * pymorton.interleave(*chunk_corner) "
+            "= `morton`). `interleave` lists pymorton.interleave(z, y, x) for the corners in `corner`. uint64 "
+            "values are decimal strings. Generated by make_fixtures.py; do not edit."
+        ),
+        "seed": seed,
+        "inputs": {name: array_record(block) for name, block in inputs.items()},
+        "interleave": [{"corner": list(corner), "value": pymorton_interleave(corner)} for corner in MORTON_CORNERS],
+        "cases": cases,
+    }
+
+
 # --- writing and checking -----------------------------------------------------
 
-MAKERS = {"norms.json": make_norms, "post.json": make_post, "args.json": make_args}
+MAKERS = {"norms.json": make_norms, "post.json": make_post, "args.json": make_args, "affinity.json": make_affinity, "morton.json": make_morton}
 
 
 def write_fixtures(out_dir: Path) -> None:

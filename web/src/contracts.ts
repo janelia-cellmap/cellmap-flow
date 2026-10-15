@@ -209,6 +209,10 @@ export interface ViewerController {
   /** The viewer's position, in nm (z, y, x), or null without a viewer. */
   position(): number[] | null;
   viewerUrl(): string | null;
+  /** Show `sets` as layer `name`'s equivalences, as the dashboard's
+   * /update/equivalences route does: sets of decimal uint64 strings, each
+   * set the ids that are one object. */
+  setEquivalences(name: string, sets: string[][]): void;
   /** The raw layer's shader/contrast as the user left it, to keep across redraws. */
   layerShader(name: string): { shader?: string; shaderControls?: Record<string, unknown> } | null;
 }
@@ -261,6 +265,11 @@ export interface Inference {
   gpuLimits(): Promise<GpuLimits>;
   readonly stats: InferenceStats;
   onStats(listener: (stats: InferenceStats) => void): () => void;
+  /** Ids a served layer's merging step has joined so far, as sets of
+   * decimal uint64 strings, each set the ids that are one object, whenever
+   * they grow: the viewer shows them as the segmentation layer's
+   * equivalences. `view` is the served view's name. */
+  onEquivalences(listener: (view: string, sets: string[][]) => void): () => void;
   /** Drop every session and the WebGPU device (recovers a hung run); views are re-created on the next chunk. */
   reset(): Promise<void>;
 }

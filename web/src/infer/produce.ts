@@ -18,7 +18,7 @@ import type { Chain } from "../contracts";
 import { chunkLayout, encodeChunk, placeBlock, prod, toFloat32 } from "./encode";
 import { type BlockGeometry, clipBox, inputBox, inputShape, outputShape } from "./geometry";
 import { applyNormalizers } from "./norms";
-import { applyPostprocessors, outputChannels, outputDtype, type NdArray } from "./post";
+import { type NdArray, outputChannels, outputDtype, type Postprocessor, runPostprocessors } from "./post";
 
 /** What a forward pass returns: the output tensor's values, dims and type. */
 export interface ModelOutput {
@@ -33,6 +33,8 @@ export interface ProduceContext {
   rawShape: number[];
   rawDtype: string;
   chain: Chain;
+  /** The chain's postprocessors, built once for this layer (buildPostprocessors). */
+  postprocessors: Postprocessor[];
   /** Whether the served array has a channel axis (model_info's has_channel). */
   hasChannel: boolean;
   /** Voxels [lo, hi) of the raw level, C order, in its dtype (Engine.read). */
@@ -83,7 +85,7 @@ export async function produceChunk(ctx: ProduceContext, index: number[]): Promis
   if (!block.every((n, a) => n === nd.shape[a + 1])) {
     throw new Error(`the model wrote ${nd.shape.slice(1).join("×")} voxels, not the ${block.join("×")} its manifest says`);
   }
-  nd = applyPostprocessors(nd, ctx.chain.postprocess);
+  nd = runPostprocessors(ctx.postprocessors, nd, { chunkIndex: index, chunkNumVoxels: prod(block) });
   const channels = outputChannels(ctx.chain.postprocess, nd.shape[0]);
   const laid = chunkLayout(nd, ctx.hasChannel);
   const chunkShape = ctx.hasChannel ? [channels, ...block] : block;

@@ -40,13 +40,13 @@ describe("list()", () => {
     expect(lines).toContain("model catalog: 6 models from Hugging Face");
   });
 
-  it("gives each entry fp32 and the middle block as its default variant", async () => {
+  it("gives each entry fp32 and the smallest block as its default variant (retuned to the GPU before serving)", async () => {
     const { catalog } = catalogWith();
     const entries = await catalog.list();
     const by = Object.fromEntries(entries.map((e) => [e.folder, e]));
-    expect(by.setup_54!.variant).toMatchObject({ variant: "fp32", input_size: [132, 132, 132], output_size: [44, 44, 44] });
-    expect(by.setup_53!.variant).toMatchObject({ variant: "fp32", input_size: [140, 140, 140], output_size: [52, 52, 52] });
-    expect(by.setup_54!.onnxUrl).toBe("https://huggingface.co/cellmap/onnx-web-models/resolve/main/setup_54/setup_54_mito_affinities_16nm_in132_fp32.onnx");
+    expect(by.setup_54!.variant).toMatchObject({ variant: "fp32", input_size: [116, 116, 116], output_size: [28, 28, 28] });
+    expect(by.setup_53!.variant).toMatchObject({ variant: "fp32", input_size: [124, 124, 124], output_size: [36, 36, 36] });
+    expect(by.setup_54!.onnxUrl).toBe("https://huggingface.co/cellmap/onnx-web-models/resolve/main/setup_54/setup_54_mito_affinities_16nm_in116_fp32.onnx");
   });
 
   it("asks the Hub once per page: a second list() answers from memory", async () => {

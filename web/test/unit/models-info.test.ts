@@ -2,13 +2,12 @@
 import { describe, expect, it } from "vitest";
 
 import type { GpuLimits } from "../../src/contracts";
-import { UNKNOWN_LIMITS } from "../../src/models/variant";
 import { modelInfo, outputClassOf } from "../../src/shared/model-info";
 import { entryFixture } from "./models-helpers";
 
 describe("modelInfo", () => {
   it("gives the geometry of the chosen variant, channels first", () => {
-    const info = modelInfo(entryFixture("setup_54", UNKNOWN_LIMITS));
+    const info = modelInfo(entryFixture("setup_54"));
     expect(info).toEqual({
       output_channels: 3,
       channels: ["mito_aff_z", "mito_aff_y", "mito_aff_x"],

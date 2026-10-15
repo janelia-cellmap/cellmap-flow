@@ -18,6 +18,7 @@
 // the session still names the dataset and the models, but the Engine views
 // behind their layers are gone with the page, so they are served again.
 import type { ApiRequest, ApiResponse, AppContext, Backend } from "../contracts";
+import { parseViewName } from "../shared/args";
 import { message, Router, unavailable } from "./router";
 import { configRoutes } from "./routes/config";
 import { dataRoutes } from "./routes/data";
@@ -40,6 +41,11 @@ export function createRouter(): Router {
 
 export function createBackend(ctx: AppContext): Backend {
   const router = createRouter();
+  // The ids a layer's merging step joins across chunks go to that layer's
+  // equivalences in the viewer (what the server posts to
+  // /update/equivalences). A served view is named after its model, with
+  // the chain's blob after it; the layer has the model's name.
+  ctx.infer.onEquivalences((view, sets) => ctx.viewer.setEquivalences(parseViewName(view).name, sets));
   return {
     handle(req: ApiRequest): Promise<ApiResponse> {
       return router.handle(req, ctx);

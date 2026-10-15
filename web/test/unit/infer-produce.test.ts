@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import type { Chain } from "../../src/contracts";
 import { type BlockGeometry, inputBox } from "../../src/infer/geometry";
 import { type ModelOutput, type ProduceContext, outputToNdArray, produceChunk, readInputBlock } from "../../src/infer/produce";
+import { buildPostprocessors } from "../../src/infer/post";
 
 /** 6 voxels in, 2 out, at 8 nm: a context of 2 voxels. */
 const G: BlockGeometry = { read_shape: [48, 48, 48], write_shape: [16, 16, 16], input_voxel_size: [8, 8, 8], output_voxel_size: [8, 8, 8] };
@@ -34,7 +35,7 @@ function model(channels: number): (input: Float32Array, dims: number[]) => Promi
 }
 
 function context(chain: Chain, channels = 1, hasChannel = true): ProduceContext {
-  return { geometry: G, rawShape: RAW, rawDtype: "uint16", chain, hasChannel, read, run: model(channels) };
+  return { geometry: G, rawShape: RAW, rawDtype: "uint16", chain, postprocessors: buildPostprocessors(chain.postprocess), hasChannel, read, run: model(channels) };
 }
 
 const NONE: Chain = { input_norm: [], postprocess: [] };

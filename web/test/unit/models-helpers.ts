@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 import type { GpuLimits, ModelEntry } from "../../src/contracts";
 import type { FetchLike } from "../../src/models/hf";
 import { entryFor, parseManifest } from "../../src/models/manifest";
-import { chooseVariant, UNKNOWN_LIMITS } from "../../src/models/variant";
+import { chooseVariant } from "../../src/models/variant";
 
 const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), "fixtures", "onnx-web-models");
 
@@ -30,10 +30,15 @@ export function treeListing(): unknown {
   return readFixture("tree.main.json");
 }
 
-/** A ModelEntry for `folder` with the variant chosen for `limits` (unknown by default: fp32, middle block). */
-export function entryFixture(folder = "setup_54", limits: GpuLimits = UNKNOWN_LIMITS): ModelEntry {
+/** A ModelEntry for `folder`: with `limits`, the variant chooseVariant picks
+ * for them; without, the fp32 middle block (132³ for a ResUNet, 140³ for a
+ * Unet3dIso), a fixed point for the tests' numbers whatever the chooser's
+ * default for unknown limits is. */
+export function entryFixture(folder = "setup_54", limits?: GpuLimits): ModelEntry {
   const manifest = parseManifest(rawManifest(folder), `${folder}/manifest.json`);
-  return entryFor(folder, manifest, chooseVariant(manifest, limits));
+  if (limits) return entryFor(folder, manifest, chooseVariant(manifest, limits));
+  const fp32 = manifest.variants.filter((v) => v.variant === "fp32").sort((a, b) => a.input_size[0]! - b.input_size[0]!);
+  return entryFor(folder, manifest, fp32[Math.floor((fp32.length - 1) / 2)]!);
 }
 
 export function jsonResponse(data: unknown, status = 200): Response {

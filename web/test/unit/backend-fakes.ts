@@ -135,6 +135,10 @@ export class FakeInference implements Inference {
     return this.limits;
   }
 
+  onEquivalences(_listener: (view: string, sets: string[][]) => void): () => void {
+    return () => {};
+  }
+
   onStats(): () => void {
     return () => {};
   }
@@ -208,6 +212,8 @@ export class FakeViewer implements ViewerController {
   viewerUrl(): string | null {
     return "http://localhost/ng/#!state";
   }
+
+  setEquivalences(_name: string, _sets: string[][]): void {}
 
   layerShader(name: string) {
     return this.shaders[name] ?? null;
