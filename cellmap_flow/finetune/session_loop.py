@@ -150,8 +150,8 @@ def _start_inference_server_background(
     model_config.serve_trained(model_config.config, trained_model)
 
     # Start server
-    from cellmap_flow.server import get_free_port
     from cellmap_flow.serving.engine import make_server
+    from cellmap_flow.utils.address import get_free_port
 
     setup_t0 = time.perf_counter()
     logger.info(f"Creating server for dataset: {model_config.name}_finetuned")

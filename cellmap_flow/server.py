@@ -30,7 +30,7 @@ from cellmap_flow.serving.protocol import (
     split_dataset_url,
 )
 from cellmap_flow.serving.restart_token import TOKEN_HEADER, tokens_match
-from cellmap_flow.utils.address import this_machine_ip
+from cellmap_flow.utils.address import get_free_port, this_machine_ip
 
 import requests
 import time
@@ -68,15 +68,6 @@ def _env_flag(name):
     if value in ("1", "true", "yes", "on"):
         return True
     raise ValueError(f"{name} must be 1 or 0, got {os.environ[name]!r}")
-
-
-def get_free_port():
-    """A TCP port free on this machine now, for a server to bind."""
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    s.bind(("0.0.0.0", 0))
-    free_port = s.getsockname()[1]
-    s.close()
-    return free_port
 
 
 def _chain_from_url(dataset: str):

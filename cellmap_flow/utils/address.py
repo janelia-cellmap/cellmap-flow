@@ -1,4 +1,5 @@
-"""This machine's address, as the links handed to browsers give it."""
+"""This machine's address, as the links handed to browsers give it, and a
+port a server here can bind."""
 
 import functools
 import logging
@@ -10,6 +11,21 @@ logger = logging.getLogger(__name__)
 # the address is taken as blocked. A VPN that blocks it drops the packets, so
 # the connection hangs rather than failing.
 SELF_CONNECT_TIMEOUT = 1.0
+
+
+def get_free_port():
+    """A TCP port free on this machine now, for a server to bind.
+
+    The port is free when this returns, not reserved: a caller that needs to
+    know the port before its server binds it (the finetune loop, which waits
+    on the port while the server starts in a thread) takes that small race.
+    A server that can report its port once bound should bind port 0 instead.
+    """
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.bind(("0.0.0.0", 0))
+    free_port = s.getsockname()[1]
+    s.close()
+    return free_port
 
 
 def this_machine_ip():
