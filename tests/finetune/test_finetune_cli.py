@@ -208,6 +208,7 @@ def test_a_served_job_takes_each_restart_once_and_once_written(run_cli, tmp_path
     cli = run_cli("--auto-serve", "--serve-data-path", str(tmp_path), loaders=[None, leave_the_file],
                   restarts=[FIRST_RESTART, lambda signal_file, controller: None])
     assert [load["batch_size"] for load in cli.loaded] == [8, 3, 4]
+    assert cli.weights_changed == 2, "the server was told of each later iteration's weights"
 
 
 @pytest.mark.parametrize("restart", [

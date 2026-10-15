@@ -96,20 +96,18 @@ class ImageDataInterface:
         mode="r",
         output_voxel_size=None,
         custom_fill_value=None,
-        concurrency_limit=1,
         normalize=True,
         input_norms=None,
         on_voxel_size_mismatch="relabel",
-        cache_bytes=0,
     ):
         """``input_norms``: the normalizers (and ChannelSelector) to read with.
         ``None`` follows the process's chain (``process_chain().input_norms``)
         at read time.
 
-        ``concurrency_limit`` and ``cache_bytes`` go to the tensorstore the
-        reads use (see ``io.source.open_array``). The defaults, one reader
-        thread and no cache, are what every caller has always had; the
-        inference server asks for parallel reads and a cache.
+        The reads go through one tensorstore reader thread and no cache
+        (``io.source.open_array``'s defaults), which is what blockwise
+        workers, the finetune trainer and scripts want; the inference server
+        reads through chunkmirage's own cache.
 
         ``output_voxel_size`` (reads resampled to it, see ``_read_resampled``)
         and ``custom_fill_value`` (padding with that value, or "edge", instead
@@ -242,11 +240,9 @@ class ImageDataInterface:
         self.offset = coordinate_or_floats(offset_f, "offset", dataset_path)
         self.roi = self._grid.box_to_world(Box((0,) * len(shape), tuple(shape)))
         self.custom_fill_value = custom_fill_value
-        self.concurrency_limit = concurrency_limit
-        self.cache_bytes = cache_bytes
         # The array as stored (every channel, not normalized), opened on the
         # first read and shared with every with_input_norms() view.
-        self.source = open_array(dataset_path, concurrency_limit, cache_bytes)
+        self.source = open_array(dataset_path)
         if output_voxel_size is not None:
             self.output_voxel_size = Coordinate(output_voxel_size)
         else:

@@ -120,11 +120,19 @@ Serving and jobs
 
    * - Module
      - What it is for
-   * - ``server.py``
-     - ``CellMapFlowServer``, the inference server: one model's output served
-       as a zarr, plus ``/__control__/model_info`` and
-       ``/__control__/restart``. It prints its address and writes the ready
-       file.
+   * - ``serving/chunkmirage_server.py``
+     - ``ChunkmirageServer``, the inference server: one model's output served
+       as a zarr by chunkmirage, plus ``/__control__/model_info`` and
+       ``/__control__/restart``. Once its port is bound it prints its
+       address and writes the ready file.
+   * - ``serving/chunkmirage_ops.py``
+     - The model and its chains as chunkmirage ops: ``InferenceOp`` (the
+       model on the layer's normalizers, its output cached),
+       ``PostprocessOp`` (one per postprocessing step), ``ServedModel`` and
+       the chunk grid's arithmetic (``chunk_roi``).
+   * - ``serving/engine.py``
+     - ``make_server``, which every place that starts a server builds it
+       with, and ``check_server`` (``infer --server-check``).
    * - ``serving/launch.py``
      - The one place a server's command line is built (``server_argv``,
        ``server_argv_for``, ``server_command``).
@@ -132,8 +140,6 @@ Serving and jobs
      - What a layer URL carries to a server: ``ARGS_KEY``,
        ``encode_to_str``, ``decode_to_json``, ``split_dataset_url``; and
        ``IP_PATTERN``, the markers a server prints its address between.
-   * - ``serving/virtual_zarr.py``
-     - The served zarr's metadata and chunk-key arithmetic, with no Flask.
    * - ``serving/client.py``
      - ``fetch_model_info``: ask a running server about its model.
    * - ``serving/probe.py``
@@ -365,7 +371,9 @@ Entry points and process-wide modules
      - The Review tab's SQLite index: reading it, and building one
        (``python -m cellmap_flow.review_index``). See :doc:`review`.
    * - ``utils/``
-     - Two deprecated aliases and nothing else.
+     - ``address`` (this machine's address, as links give it, and a free
+       port for a server to bind), ``device`` (the device torch work runs
+       on), and two deprecated aliases.
 
 
 Request flows
@@ -375,78 +383,56 @@ A chunk served to Neuroglancer
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 #. A prediction layer's source is
-   ``zarr://<server>/<model>__CFLOW_ARGS__<blob>__CFLOW_ARGS__``
-   (``viewer.layers.prediction_source``). The blob is the layer's chain,
-   ``PipelineSpec.to_url_blob(...)``: minified JSON in URL-safe base64
-   (``serving.protocol.encode_to_str``). Every request Neuroglancer makes for
-   the layer carries it.
-#. Neuroglancer asks the model's ``CellMapFlowServer`` for
-   ``<dataset>/.zattrs``, ``<dataset>/s0/.zarray``, then chunks
-   ``<dataset>/s0/<z>.<y>.<x>[.<c>]``. ``serving.virtual_zarr`` works out
-   each answer: the OME attributes, the array's shape and dtype under the
-   chain, and the world ROI of a chunk key.
-#. ``CellMapFlowServer.chain_for`` finds the blob
-   (``serving.protocol.split_dataset_url``), decodes it and builds its steps
-   (``PipelineSpec.from_json_data(..., strict=True).build()``), once per URL;
-   the last 32 chains are kept. A URL without a blob gets the process's chain,
-   ``process_chain()``, which is empty in a server started from the command
-   line; the log then warns that the model is fed raw voxel values.
-#. ``Inferencer.process_chunk`` points the server's ``ImageDataInterface`` at
-   the layer's normalizers (``with_input_norms``) and asks
-   ``ModelRunner.predict`` for the chunk. The runner grows the ROI by the
-   model's context and reads it with ``ImageDataInterface.to_ndarray_ts``:
-   ``io.geometry.Grid.world_to_box`` turns the world ROI into voxels, and
-   ``io.source.read_padded`` reads them through the input chain, padding
-   what lies outside the array. A config with its own ``process_chunk``
-   (TensorFlow, ONNX, cellpose, bioimage.io) runs that instead.
-#. The forward runs inside a ``DeviceSlots`` slot: by default one chunk at a
-   time on the GPU, first come first served (``CELLMAP_FLOW_GPU_SLOTS``). A
-   chunk whose client hung up before its turn is answered 499 without being
-   computed.
-#. The ``(C, *spatial)`` output goes through the layer's postprocessors
-   (``inferencer.apply_postprocess``), is put in the zarr's axis order, cast
-   to the dtype the chain declares (``pipeline_spec.chain_output_dtype``) and
-   encoded. A postprocessor that merges segments across chunks posts its
-   equivalences to ``<dashboard_url>/update/equivalences``, at most every
-   5 s.
-
-The same chunk from the chunkmirage engine
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-By default (``CELLMAP_FLOW_ENGINE=chunkmirage``; ``flask`` for the server
-above, which is also used where chunkmirage cannot be imported;
-``serving.engine.make_server``) the server is
-``serving.chunkmirage_server.ChunkmirageServer``, built on
-`chunkmirage <https://github.com/yuriyzubov/chunkmirage>`_, which reads,
-caches, schedules and serves; cellmap-flow keeps the model, its chains and
-the routes the dashboard reads. The result is the same voxels in the same
-place, with any channel axis first.
-
-#. The layer's source is ``zarr://<server>/<model><ARGS_KEY><blob><ARGS_KEY>/zarr``:
-   the same name, then chunkmirage's format. The dashboard learns which
-   engine a server runs from ``"engine": "chunkmirage"`` in its model_info
-   (``viewer.layers.prediction_url``); a server that does not say is the
-   Flask one, so a dashboard still draws an older finetune job's layer.
+   ``zarr://<server>/<model>__CFLOW_ARGS__<blob>__CFLOW_ARGS__/zarr``
+   (``viewer.layers.prediction_source``): the layer's name, then the format
+   the server serves it in (``serving.protocol.FORMAT``). The blob is the
+   layer's chain, ``PipelineSpec.to_url_blob(...)``: minified JSON in
+   URL-safe base64 (``serving.protocol.encode_to_str``). Every request
+   Neuroglancer makes for the layer carries it.
+#. The server is ``serving.chunkmirage_server.ChunkmirageServer``, built on
+   `chunkmirage <https://github.com/JaneliaSciComp/chunkmirage>`_, which
+   reads, caches, schedules and serves; cellmap-flow keeps the model, its
+   chains and the routes the dashboard reads. Neuroglancer asks it for
+   ``<name>/zarr/.zattrs``, ``<name>/zarr/s0/.zarray``, then chunks
+   ``<name>/zarr/s0/[<c>/]<z>/<y>/<x>``: one level, s0, at the output voxel
+   size from the corner of the level the model reads, with any channel axis
+   first. A level read as if it were at the model's voxel size (no
+   ``--resample``) is served where it really lies, and model_info says so
+   (``input_relabelled_from``).
 #. chunkmirage resolves an unknown name on its first request
    (``ChunkmirageServer.pipeline_for``) into a pipeline of
    ``serving.chunkmirage_ops.layer_ops``: the raw data (the level and grid
    the ``ImageDataInterface`` chose, as a chunkmirage source); an
    ``InferenceOp``, the model on the layer's normalizers; one
-   ``PostprocessOp`` per postprocessing step; and chunkmirage's ``cast`` if
-   the chain leaves another dtype than the one served.
+   ``PostprocessOp`` per postprocessing step (the ``PostProcessor`` steps the
+   Output tab builds, run as they always were, with their state kept for the
+   layer's lifetime); and chunkmirage's ``cast`` if the chain leaves another
+   dtype than the one served. The blob's chain is the layer's own
+   (``serving.protocol.split_dataset_url`` finds it in the name), so layers
+   sharing a server never share a chain. A name without a blob gets the
+   process's chain, ``process_chain()``, which is empty in a server started
+   from the command line; the log then warns that the model is fed raw voxel
+   values.
 #. chunkmirage reads each chunk's input with the model's halo (zeros past
    the data) and queues it for the device, finest level first, dropping
    chunks nobody waits for any more (``InferenceOp.slots``, from
-   ``CELLMAP_FLOW_GPU_SLOTS``). ``InferenceOp`` hands the model a
-   ``BlockInput`` for its ``to_ndarray_ts``, which applies the normalizers
-   to what lies inside the data and pads after, as
-   ``ImageDataInterface.to_ndarray_ts`` does; a chunk the data ends in is
-   computed whole and cropped.
+   ``CELLMAP_FLOW_GPU_SLOTS``, plus a few chunks whose normalization overlaps
+   the running forward). The forward itself runs inside a ``DeviceSlots``
+   slot: by default one chunk at a time on the GPU, first come first
+   served. ``InferenceOp`` hands the model a ``BlockInput`` for its
+   ``to_ndarray_ts``, which applies the normalizers to what lies inside the
+   data and pads after, as ``ImageDataInterface.to_ndarray_ts`` does; a
+   config with its own ``process_chunk`` (TensorFlow, ONNX, cellpose,
+   bioimage.io) reads through the same. A chunk the data ends in is computed
+   whole and cropped.
 #. The model's output is cached (``CELLMAP_FLOW_PREDICTION_CACHE_BYTES``,
    16 GiB by default, 0 for none): panning back, or changing only the
    postprocessing, does not run the model again. Its cache key includes the
    model's weights version, which the finetune loop bumps after each
-   iteration (``ChunkmirageServer.weights_changed``).
+   iteration (``ChunkmirageServer.weights_changed``). A postprocessor that
+   merges segments across chunks posts its equivalences to
+   ``<dashboard_url>/update/equivalences``, at most every 5 s, from a thread
+   of its own.
 
 Submit, or ``PUT /api/pipeline``, and the layers
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -509,11 +495,12 @@ Launching a model server
    bpeek. Then it adds the job to ``jobs.launch.started_jobs()``.
 #. On the GPU node, ``cellmap_flow serve --model <entry> -d <data path>``
    (``cli/server_cli.py``) rebuilds the config with ``registry.build_model``,
-   as a YAML's model entry is rebuilt, and starts ``CellMapFlowServer``. Its ``Inferencer`` loads the model, and the
+   as a YAML's model entry is rebuilt, and starts the server
+   (``serving.engine.make_server``). Its ``Inferencer`` loads the model, and the
    warmup forward checks the declared shapes, probes the output range (for
    ``model_info``) and keeps fp16 only if it agrees with fp32
-   (``CELLMAP_FLOW_HALF_PRECISION``). ``run()`` prints the address marker,
-   writes the ready file and serves.
+   (``CELLMAP_FLOW_HALF_PRECISION``). ``run()`` serves; once the port is
+   bound it prints the address marker and writes the ready file.
 #. The launcher adds the model's layer (``viewer.layers.prediction_layer``).
    The CLIs do it in ``dashboard.services.startup.generate_neuroglancer_url``,
    which then serves the dashboard and does not return.
@@ -575,9 +562,11 @@ A finetune job
    exports into ``iterations/NNN_<ts>/`` and writes a serving YAML
    (``run_outputs``), and prints ``FINETUNED_MODEL_YAML`` and
    ``TRAINING_ITERATION_COMPLETE`` (``markers.emit``). Without
-   ``--auto-serve`` the job ends there. With it, the job starts a
-   ``CellMapFlowServer`` on the model it trained, in the same process (its
-   address marker goes into the same log), prints ``WAITING_FOR_RESTART``, and
+   ``--auto-serve`` the job ends there. With it, the job starts an inference
+   server (``serving.engine.make_server``) on the model it trained, in the
+   same process (its address marker goes into the same log; each later
+   iteration tells the server its weights changed), prints
+   ``WAITING_FOR_RESTART``, and
    waits for ``/__control__/restart`` or a ``restart_signal.json``.
 #. Every 3 s the monitor (``job_manager/monitor.py``) asks the scheduler
    about the job (``state.on_scheduler_status``) and reads the log's new
@@ -852,7 +841,7 @@ Tests
   ``Inferencer`` and ``ImageDataInterface``), the registry (with
   ``config.yaml`` and ``serving.launch``), ``pipeline_spec`` and
   ``process_chain``, the state's owners, ``finetune/session/``, ``review``
-  and ``viewer/``; that importing ``server.py`` or ``blockwise/`` leaves
+  and ``viewer/``; that importing the server or ``blockwise/`` leaves
   logging alone; and that ``import cellmap_flow`` writes nothing under
   ``HOME``.
 
@@ -944,7 +933,6 @@ Each of these still works in 0.3.0, warns, and goes in the next release.
      - Read at the dataset's voxel size and resample what is read.
    * - ``ImageDataInterface(custom_fill_value=...)`` (K18)
      - Read within the dataset's ROI and pad what is read.
-       ``concurrency_limit`` is not deprecated: the inference server uses it.
 
 Using a name through one of the three alias modules raises a
 ``DeprecationWarning`` that names its new path;

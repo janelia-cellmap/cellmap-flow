@@ -1,22 +1,18 @@
 """Running a model on a chunk: inference/runner and Inferencer.
 
-Only the device part of a chunk waits for the GPU, in arrival order, and a
-chunk nobody waits for any more is not computed. A model's declared shapes are
-checked on its warmup forward, half precision is opt-in and checked against
-fp32, and the chain sees the chunk it is given.
+Only the device part of a chunk waits for the GPU, in arrival order. A
+model's declared shapes are checked on its warmup forward, half precision is
+opt-in and checked against fp32, and the chain sees the chunk it is given.
 """
 
-import socket
 import threading
 import time
 from types import SimpleNamespace
 
 import numpy as np
 import pytest
-import requests
 import torch
 from funlib.geometry import Roi
-from werkzeug.serving import make_server
 
 from cellmap_flow.image_data_interface import ImageDataInterface
 from cellmap_flow.inference.runner import DeviceSlots, ModelRunner, predict
@@ -24,8 +20,8 @@ from cellmap_flow.inferencer import Inferencer
 from cellmap_flow.models.models_config import ScriptModelConfig
 from cellmap_flow.post.postprocessors import PostProcessor, ThresholdPostprocessor
 from cellmap_flow.process_chain import process_chain
-from cellmap_flow.server import CellMapFlowServer
-from tests.utils.serving_helpers import IDENTITY_MODEL, layer
+from cellmap_flow.serving.chunkmirage_server import ChunkmirageServer
+from tests.utils.serving_helpers import IDENTITY_MODEL
 
 ROI = Roi((0, 0, 0), (32, 32, 32))
 
@@ -108,44 +104,6 @@ def test_a_chunk_is_read_while_the_device_is_busy():
     assert forwarded.is_set()
 
 
-def test_a_chunk_whose_client_left_is_not_computed(raw_zarr, model_script):
-    config = ScriptModelConfig(script_path=model_script())
-    server = CellMapFlowServer(raw_zarr(np.zeros((8, 8, 8), np.uint8)), config)
-    slots, release, computed = server.inferencer.device_slots, threading.Event(), []
-
-    def forward(x):  # the first chunk keeps the only slot until released
-        computed.append(x.shape)
-        release.wait(5)
-        return x
-
-    config.config.model.forward = forward
-    http = make_server("127.0.0.1", 0, server.app, threaded=True)
-    threading.Thread(target=http.serve_forever, daemon=True).start()
-    path = f"/{layer()}/s0"
-    url = f"http://127.0.0.1:{http.server_port}{path}"
-    answers = []
-    try:
-        holder = threading.Thread(target=lambda: answers.append(requests.get(f"{url}/0.0.0.0")))
-        holder.start()
-        _wait_until(lambda: computed)
-        gone = socket.create_connection(("127.0.0.1", http.server_port))
-        gone.sendall(f"GET {path}/1.0.0.0 HTTP/1.1\r\nHost: x\r\n\r\n".encode())
-        _wait_until(lambda: len(slots._waiting) == 1)
-        stays = threading.Thread(target=lambda: answers.append(requests.get(f"{url}/0.1.0.0")))
-        stays.start()
-        _wait_until(lambda: len(slots._waiting) == 2)
-        gone.close()
-        _wait_until(lambda: len(slots._waiting) == 1)  # the one that left gave up its place
-        release.set()
-        holder.join(10)
-        stays.join(10)
-    finally:
-        release.set()
-        http.shutdown()
-    assert [a.status_code for a in answers] == [200, 200]
-    assert len(computed) == 2  # the holder's and the one that stayed, not the one that left
-
-
 # The identity, shifted by $shift under autocast; it records whether each call ran under it.
 PROBE = IDENTITY_MODEL.replace("model = Identity()", "") + """
 
@@ -182,7 +140,7 @@ def test_half_precision_is_opt_in_and_checked_against_fp32(raw_zarr, model_scrip
     script = model_script(PROBE + ("half_precision = True\n" if in_script else ""), shift=shift)
     config = ScriptModelConfig(script_path=script, name="probe")
     raw = raw_zarr(np.zeros((8, 8, 8), np.uint8))
-    inferencer = CellMapFlowServer(raw, config).inferencer
+    inferencer = ChunkmirageServer(raw, config).inferencer
     assert inferencer.autocast_dtype == expected
     config.config.model.under_autocast.clear()
     assert inferencer.process_chunk(ImageDataInterface(raw, voxel_size=(8, 8, 8)), ROI).dtype == np.float32
@@ -224,7 +182,7 @@ def test_serving_runs_one_forward_the_warmup(model_script):
 def test_a_declared_shape_the_model_does_not_produce_stops_the_server(raw_zarr, model_script):
     config = ScriptModelConfig(script_path=model_script(RECORDING, out=2))
     with pytest.raises(ValueError, match="(?s)shape validation failed.*write_shape mismatch"):
-        CellMapFlowServer(raw_zarr(np.zeros((8, 8, 8), np.uint8)), config)
+        ChunkmirageServer(raw_zarr(np.zeros((8, 8, 8), np.uint8)), config)
     (probe,) = config._config.model.inputs  # raised by the warmup's forward
     assert probe.abs().max() > 0
 

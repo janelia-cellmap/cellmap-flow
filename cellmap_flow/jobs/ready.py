@@ -11,9 +11,10 @@ It is an environment variable, not a command-line flag, so that a server
 from before this existed simply ignores it. The launcher then finds no file
 and reads the marker through bpeek, as it always did.
 
-The file says what the marker says: the server knows its URL. It is written
-just before the server binds its port, not after, so it does not promise
-that the first request will be answered.
+The file says what the marker says: the server's URL. Both are written
+once the server has bound its port and is taking requests
+(``chunkmirage.serve``'s ``on_ready``), so a launcher that has read the
+file can ask the server at once.
 """
 
 import json
