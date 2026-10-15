@@ -12,6 +12,7 @@ import numpy as np
 import pytest
 import zarr
 from funlib.geometry import Coordinate
+from starlette.testclient import TestClient
 
 from cellmap_flow.blockwise import blockwise_processor
 from cellmap_flow.blockwise.blockwise_processor import (
@@ -23,12 +24,12 @@ from cellmap_flow.blockwise.blockwise_processor import (
 from cellmap_flow.models.models_config import ModelConfig, ScriptModelConfig
 from cellmap_flow.jobs.settings import launcher_settings
 from cellmap_flow.post.postprocessors import MortonSegmentationRelabeling, ThresholdPostprocessor
-from cellmap_flow.server import CellMapFlowServer
 from cellmap_flow.jobs.site import current_site
 from cellmap_flow.pipeline_spec import PipelineSpec
 from cellmap_flow.process_chain import process_chain
 from cellmap_flow.config.yaml import ConfigError
-from tests.utils.serving_helpers import decode_chunk, layer
+from cellmap_flow.serving.chunkmirage_server import ChunkmirageServer
+from tests.utils.serving_helpers import layer, read_chunk
 
 JSON_DATA = {
     "input_norm": [{"name": "MinMaxNormalizer", "min_value": 0, "max_value": 255}],
@@ -181,13 +182,13 @@ def test_a_block_gets_the_same_label_ids_served_or_blockwise(ome_pyramid, poolin
     CellMapFlowBlockwiseProcessor(path, create=True)
     worker = CellMapFlowBlockwiseProcessor(path, create=False)
     assert worker.idi_raw.resampled is resample
-    server = CellMapFlowServer(raw, ScriptModelConfig(script_path=model), resample=resample)
+    server = ChunkmirageServer(raw, ScriptModelConfig(script_path=model), resample=resample)
+    client = TestClient(server.app)
     for index in range(2):  # along z
         roi = daisy.Roi((corner + 32 * index, corner, corner), (32, 32, 32))
         worker.process_fn(daisy.Block(roi, roi, roi, task_id="t"))
         written = worker.output_arrays[0].to_ndarray(roi)
-        response = server.app.test_client().get(f"/{layer(posts=posts)}/s0/{index}.0.0.0")
-        served = decode_chunk(server, response.data, np.uint64, (4, 4, 4, 2))[..., 0]
+        served = read_chunk(client, layer(posts=posts), (index, 0, 0))[0]
         assert np.all(written == served) and np.all(served == 1 + 64 * index), index
 
 

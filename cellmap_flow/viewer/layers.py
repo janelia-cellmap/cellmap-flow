@@ -29,7 +29,7 @@ from cellmap_flow.pipeline_spec import chain_is_segmentation, chain_num_channels
 from cellmap_flow.serving.probe import output_display_range
 from cellmap_flow.viewer.raw import PREDICTION_COLORS, flow_shader, get_raw_layer, prediction_shader
 from cellmap_flow.serving.client import fetch_model_info
-from cellmap_flow.serving.protocol import ARGS_KEY
+from cellmap_flow.serving.protocol import ARGS_KEY, FORMAT
 
 logger = logging.getLogger(__name__)
 
@@ -77,30 +77,21 @@ def prediction_voxel_override(host, dataset_path, info=None, fallback_output_vox
     return override
 
 
-# model_info's "engine" for a server built on chunkmirage, and the format its
-# layers are read in, after the name; a server that does not say is the Flask
-# one, whose layers end at the name.
-CHUNKMIRAGE = "chunkmirage"
-CHUNKMIRAGE_FORMAT = "zarr"
-
-
-def prediction_url(host, model, url_blob, engine=None):
+def prediction_url(host, model, url_blob):
     """The URL of ``model``'s zarr on ``host``, with ``url_blob``
-    (PipelineSpec.to_url_blob) in it: what the layer's source points at.
-    ``engine``: the server's model_info "engine"."""
-    url = f"zarr://{host}/{model}{ARGS_KEY}{url_blob}{ARGS_KEY}"
-    return f"{url}/{CHUNKMIRAGE_FORMAT}" if engine == CHUNKMIRAGE else url
+    (PipelineSpec.to_url_blob) in it: what the layer's source points at. The
+    server serves the name in the format after it (serving.protocol.FORMAT)."""
+    return f"zarr://{host}/{model}{ARGS_KEY}{url_blob}{ARGS_KEY}/{FORMAT}"
 
 
-def prediction_source(host, model, url_blob, override_scales=None, has_channel=True, channels_shaded=False,
-                      engine=None):
+def prediction_source(host, model, url_blob, override_scales=None, has_channel=True, channels_shaded=False):
     """The source of ``model``'s layer: its zarr on ``host``, with ``url_blob``
-    (PipelineSpec.to_url_blob) in the URL; ``engine`` as prediction_url takes it.
+    (PipelineSpec.to_url_blob) in the URL.
 
     With ``override_scales`` (z, y, x nm, as prediction_voxel_override gives
     them) it is a dict whose transform declares the array at those scales.
     Neuroglancer wants the same rank on both sides of a transform, so a
-    served array with a channel axis (the last, ``has_channel``) keeps it as a
+    served array with a channel axis (``has_channel``) keeps it as a
     unit-less ``c^``.
 
     Neuroglancer reads a served channel axis as ``c'``, a slider that shows
@@ -108,7 +99,7 @@ def prediction_source(host, model, url_blob, override_scales=None, has_channel=T
     axis, which the shader reads every channel of. A transform renames the
     source dimensions it names and passes the rest through.
     """
-    url = prediction_url(host, model, url_blob, engine)
+    url = prediction_url(host, model, url_blob)
     if override_scales is None and not channels_shaded:
         return url
     dimensions = {}
@@ -192,7 +183,7 @@ def prediction_layer(model, host, url_blob, *, dataset_path, postprocess, shader
     flows = flow_channels(info, postprocess)
     # A server too old to say is taken to have one, as it always was.
     source = prediction_source(host, model, url_blob, override, has_channel=info.get("has_channel", True),
-                               channels_shaded=flows is not None, engine=info.get("engine"))
+                               channels_shaded=flows is not None)
     if chain_is_segmentation(postprocess):
         return neuroglancer.SegmentationLayer(source=source)
     shader = shader or prediction_shader_for(model, host, postprocess, previous_shader, color, info=info)

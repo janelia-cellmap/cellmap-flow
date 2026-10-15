@@ -302,8 +302,9 @@ class SimpleBlockwiseMerger(PostProcessor):
             (0, 0, 1): (slice(None), slice(None), -1),
         }
         self.keys_to_skip = set()
-        # The server calls one instance from every Flask request thread; this
-        # guards the dict, the set and the equivalence map they all share.
+        # The server calls one instance from several request threads at
+        # once; this guards the dict, the set and the equivalence map they
+        # all share.
         self._lock = threading.Lock()
 
     def __getstate__(self):

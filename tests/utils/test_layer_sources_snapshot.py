@@ -8,11 +8,11 @@ The paths:
 - the viewers ``/api/set-data`` and the bounding-box tool open.
 
 Each prediction layer is pinned as neuroglancer receives it: its type, its
-source's URL and the chain blob in it, the scales its source transform
-declares, and its shader. What a viewer is given is what users see, so a
-change here belongs in a commit marked as a behaviour change. The raw
-layer's own content is get_raw_layer's, pinned in test_viewer; here only
-where it goes.
+source's URL (the name, then the chain blob, then ``/zarr``, the server's
+format) and the chain blob in it, the scales its source transform declares,
+and its shader. What a viewer is given is what users see, so a change here
+belongs in a commit marked as a behaviour change. The raw layer's own
+content is get_raw_layer's, pinned in test_viewer; here only where it goes.
 
 The raw data is one level at 24, 12, 12 nm. Four model servers answer, each
 writing 16 nm voxels:
@@ -44,7 +44,7 @@ MODEL_INFO = {
     "http://old:8000": {"output_voxel_size": [16, 16, 16], "output_class": "unit"},
     "http://new:8000": {"output_voxel_size": [16, 16, 16], "output_class": "unit",
                         "effective_output_voxel_size": [16, 16, 16], "has_channel": True,
-                        "output_axes": ["z", "y", "x", "c"]},
+                        "output_axes": ["c", "z", "y", "x"], "engine": "chunkmirage"},
     "http://flat:8000": {"output_voxel_size": [16, 16, 16], "output_class": "unit",
                          "effective_output_voxel_size": [24, 12, 12], "has_channel": False,
                          "output_axes": ["z", "y", "x"]},
@@ -106,7 +106,7 @@ def _layer(layer):
     (source,) = data["source"] if isinstance(data["source"], list) else [data["source"]]
     source = {"url": source} if isinstance(source, str) else source
     url, blob, suffix = source["url"].split(ARGS_KEY)
-    assert suffix == "", source["url"]
+    assert suffix == "/zarr", source["url"]
     transform = source.get("transform")
     if transform is not None:
         assert set(transform) == {"inputDimensions", "outputDimensions"}, transform

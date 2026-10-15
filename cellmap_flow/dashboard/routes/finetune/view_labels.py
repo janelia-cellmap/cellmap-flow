@@ -302,20 +302,18 @@ def methods_for(output_type, serves_integers):
     return methods + ["components"]
 
 
-def _served_base(host, model_name, postprocess=(), engine=None):
+def _served_base(host, model_name, postprocess=()):
     """The URL of the model's served array, with the dashboard's input
-    normalization and ``postprocess`` (none by default). ``engine``: the
-    server's model_info "engine" (see viewer.layers.prediction_url)."""
+    normalization and ``postprocess`` (none by default)."""
     blob = PipelineSpec.from_steps(get_session().input_norms, postprocess).to_url_blob()
-    url = prediction_url(host.rstrip("/"), model_name, blob, engine)
+    url = prediction_url(host.rstrip("/"), model_name, blob)
     return url[len("zarr://"):]
 
 
 def _serves_integers(host, model_name):
     """Whether the model's raw output is integer labels, from the served array's dtype; None when unknown."""
     try:
-        engine = fetch_model_info(host).get("engine")
-        meta = _get(f"{_served_base(host, model_name, engine=engine)}/s0/.zarray", METADATA_TIMEOUT_SECONDS).json()
+        meta = _get(f"{_served_base(host, model_name)}/s0/.zarray", METADATA_TIMEOUT_SECONDS).json()
         return np.dtype(meta["dtype"]).kind in "iu"
     except Exception as e:
         logger.debug(f"Could not read {model_name}'s served dtype: {e}")
@@ -403,9 +401,9 @@ def read_prediction(host, model_name, volume, lo, hi, info, postprocess=()):
     or, when the server serves integer labels, as served (an id past 2^24
     is not exact in float32); and the box, shrunk to what the server covers.
     """
-    base = _served_base(host, model_name, postprocess, info.get("engine"))
+    base = _served_base(host, model_name, postprocess)
     multiscale = _get(f"{base}/.zattrs").json()["multiscales"][0]
-    # Channels last from the Flask server, first from chunkmirage's.
+    # The channel axis comes first; the axes are found by name all the same.
     names = [axis["name"] for axis in multiscale["axes"]]
     if not all(axis in names for axis in "zyx"):
         raise RuntimeError(f"{model_name}'s server serves axes {multiscale['axes']}, not z, y and x")

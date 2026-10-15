@@ -29,6 +29,7 @@ import os
 import re
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 import torch
@@ -356,7 +357,12 @@ def test_the_cli_writes_and_announces_what_it_always_did(lora_r, tmp_path, monke
         return real_wait(**kwargs)
 
     monkeypatch.setattr(session_loop, "create_dataloader", dataloader)
-    monkeypatch.setattr(session_loop, "_start_inference_server_background", lambda *a, **k: served.append(a) or (None, 0))
+    def serve(*args, on_server, **kwargs):
+        served.append(args)
+        on_server(SimpleNamespace(weights_changed=lambda: None))  # the server that came up
+        return None, 0
+
+    monkeypatch.setattr(session_loop, "_start_inference_server_background", serve)
     monkeypatch.setattr(session_loop, "_wait_for_restart_signal", wait)
     monkeypatch.setattr(sys, "argv", [
         "finetune_cli", "--model-type", "script", "--model-script", str(script),

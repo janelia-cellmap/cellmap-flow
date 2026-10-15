@@ -28,6 +28,7 @@ from typing import Any, ClassVar, Optional
 import numpy as np
 from chunkmirage.core import ArrayInfo
 from chunkmirage.ops import Op
+from funlib.geometry import Roi
 from pydantic import PrivateAttr
 
 from cellmap_flow.image_data_interface import apply_norms
@@ -35,7 +36,6 @@ from cellmap_flow.inference import timing
 from cellmap_flow.inferencer import apply_postprocess
 from cellmap_flow.io.geometry import Grid
 from cellmap_flow.pipeline_spec import _output_info, chain_output_dtype
-from cellmap_flow.serving import virtual_zarr
 
 logger = logging.getLogger(__name__)
 
@@ -141,6 +141,16 @@ def _whole(values, what):
     return out
 
 
+def chunk_roi(index, spatial_block, output_voxel_size, origin) -> Roi:
+    """The region (nm) chunk ``index`` covers: ``spatial_block`` output voxels
+    per chunk, the grid starting at ``origin``. The whole chunk, as the model
+    always computed it, also where the data ends inside it."""
+    block = np.array(spatial_block)
+    corner = block * np.array(index)
+    box = np.array([corner, block]) * output_voxel_size
+    return Roi(tuple(int(v) for v in origin + box[0]), tuple(int(v) for v in box[1]))
+
+
 class InferenceOp(Op):
     """A served model's raw output, ``(channels, z, y, x)``, from the layer's
     input normalization of the raw data.
@@ -210,7 +220,7 @@ class InferenceOp(Op):
         index = out_start // np.asarray(served.block)
         # The whole chunk, as the model always computed it; one the data ends
         # in is cropped after.
-        roi = virtual_zarr.chunk_roi(index, served.block, served.output_voxel_size, served.origin)
+        roi = chunk_roi(index, served.block, served.output_voxel_size, served.origin)
         reader = BlockInput(block, start, served.grid, served.level_shape, self._norms)
         timing.start()
         began = time.perf_counter()

@@ -24,7 +24,7 @@ from cellmap_flow.pipeline_spec import PipelineSpec
 from cellmap_flow.post.postprocessors import get_postprocessors_list
 from cellmap_flow.viewer.raw import PREDICTION_COLORS, view_of
 from cellmap_flow.serving.client import fetch_model_info
-from cellmap_flow.viewer.layers import CHUNKMIRAGE, prediction_layer, prediction_url, raw_layer
+from cellmap_flow.viewer.layers import prediction_layer, prediction_url, raw_layer
 
 logger = logging.getLogger(__name__)
 
@@ -162,9 +162,7 @@ def _shows(viewer, jobs, url_blob) -> bool:
             continue
         if job.model_name not in layers:
             return False
-        # Either engine's URL for this chain: the layer was drawn from the server's own.
-        urls = {prediction_url(job.host, job.model_name, url_blob, engine) for engine in (None, CHUNKMIRAGE)}
-        if layers[job.model_name].source[0].url not in urls:
+        if layers[job.model_name].source[0].url != prediction_url(job.host, job.model_name, url_blob):
             return False
     return True
 

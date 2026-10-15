@@ -50,15 +50,12 @@ def _chunk_index(roi, grid_origin=None):
 class Inferencer(ModelRunner):
     """A ModelRunner that normalizes its input and postprocesses its output."""
 
-    def process_chunk(self, idi, roi, input_norms=None, postprocess=None, cancelled=None, grid_origin=None):
+    def process_chunk(self, idi, roi, input_norms=None, postprocess=None, grid_origin=None):
         """Predict ``roi`` and postprocess it.
 
         ``input_norms`` / ``postprocess``: the chain to use for this chunk.
         ``None`` falls back to the process's chain (``process_chain()``), for
         callers (scripts) that set the chain process-wide.
-
-        ``cancelled``: asked while the chunk waits for a device slot; raises
-        ChunkCancelled, without computing it, once that says yes.
 
         ``grid_origin``: where (nm) the chunk grid ``roi`` lies on starts, so
         the steps get ``roi``'s index on that grid as ``chunk_corner``; None
@@ -69,7 +66,7 @@ class Inferencer(ModelRunner):
         if input_norms is not None and hasattr(idi, "with_input_norms"):
             idi = idi.with_input_norms(input_norms)
 
-        result = self.predict(idi, roi, cancelled)
+        result = self.predict(idi, roi)
 
         with timing.stage("postprocess"):
             postprocessed = apply_postprocess(

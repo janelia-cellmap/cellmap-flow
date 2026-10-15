@@ -1,11 +1,14 @@
 """Starting and talking to inference servers.
 
-The server itself is ``cellmap_flow.server.CellMapFlowServer``.
+The server itself is ``serving.chunkmirage_server.ChunkmirageServer``; the
+model and its chains run inside it as chunkmirage ops
+(``serving.chunkmirage_ops``).
 
+- ``engine``: ``make_server``, which every place that starts a server
+  builds it with, and ``check_server``.
 - ``launch``: the command line that starts a server for a model.
 - ``protocol``: what a layer URL carries to a server, and the markers a
   server prints its address between.
-- ``virtual_zarr``: the zarr metadata and chunk keys a server answers with.
 - ``client``: asking a running server about its model (``model_info``).
 - ``probe``: what a model's output range says about the postprocessing it
   needs.

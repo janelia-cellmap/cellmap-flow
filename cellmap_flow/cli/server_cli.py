@@ -29,24 +29,17 @@ from cellmap_flow.plugins import load_plugins
 logger = logging.getLogger(__name__)
 
 
-def run_server(
-    model_config, data_path, debug=False, port=0, certfile=None, keyfile=None, resample=True
-):
-    """Run the inference server with the given configuration; ``resample``
-    as CellMapFlowServer takes it, the engine ``CELLMAP_FLOW_ENGINE``'s
-    (serving.engine)."""
+def run_server(model_config, data_path, port=0, certfile=None, keyfile=None, resample=True):
+    """Run the inference server (serving.engine.make_server) for
+    ``model_config`` over ``data_path``; ``resample`` as ChunkmirageServer
+    takes it."""
     from cellmap_flow.serving.engine import make_server
 
     server = make_server(data_path, model_config, resample=resample)
-    server.run(
-        debug=debug,
-        port=port,
-        certfile=certfile,
-        keyfile=keyfile,
-    )
+    server.run(port=port, certfile=certfile, keyfile=keyfile)
 
 
-def serve_entry(model_json, data_path, debug=False, port=0, certfile=None, keyfile=None, resample=True):
+def serve_entry(model_json, data_path, port=0, certfile=None, keyfile=None, resample=True):
     """Build the model ``model_json`` describes, and serve it.
 
     ``model_json`` is a model entry (``ModelConfig.launch_entry``) as JSON.
@@ -72,7 +65,7 @@ def serve_entry(model_json, data_path, debug=False, port=0, certfile=None, keyfi
         sys.exit(1)
 
     try:
-        run_server(model_config, data_path, debug, port, certfile, keyfile, resample)
+        run_server(model_config, data_path, port, certfile, keyfile, resample)
     except Exception:
         logger.exception(f"Server for {type(model_config).__name__} crashed")
         sys.exit(1)
@@ -86,7 +79,6 @@ def _serve_options(required):
                      help="The model: its launch entry (ModelConfig.launch_entry), as JSON."),
         click.option("-d", "--data-path", required=required, help="Path to the dataset"),
         click.option("-p", "--port", default=0, type=int, help="Port to listen on"),
-        click.option("--debug", is_flag=True, help="Run in debug mode"),
         click.option("--certfile", default=None, help="Path to SSL certificate file"),
         click.option("--keyfile", default=None, help="Path to SSL private key file"),
         # The launchers pass it on (serving.launch.server_argv).
@@ -103,7 +95,7 @@ def _serve_options(required):
 
 @click.command()
 @_serve_options(required=True)
-def serve(model_json, data_path, port, debug, certfile, keyfile, resample):
+def serve(model_json, data_path, port, certfile, keyfile, resample):
     """Serve one model's predictions, as an inference job does on its node.
 
     The launchers (`infer`, `yaml`, the dashboard) run this for you, as
@@ -114,7 +106,7 @@ def serve(model_json, data_path, port, debug, certfile, keyfile, resample):
       cellmap_flow serve -d /path/to/data.zarr/raw \\
         --model '{"type": "script", "script_path": "/path/to/model.py"}'
     """
-    serve_entry(model_json, data_path, debug, port, certfile, keyfile, resample)
+    serve_entry(model_json, data_path, port, certfile, keyfile, resample)
 
 
 def create_dynamic_server_command(cli_name: str, config_class: Type[ModelConfig]):
@@ -126,7 +118,6 @@ def create_dynamic_server_command(cli_name: str, config_class: Type[ModelConfig]
         # Separate model config kwargs from server kwargs
         model_kwargs = {}
         data_path = kwargs.pop("data_path")
-        debug = kwargs.pop("debug", False)
         port = kwargs.pop("port", 0)
         certfile = kwargs.pop("certfile", None)
         keyfile = kwargs.pop("keyfile", None)
@@ -156,7 +147,7 @@ def create_dynamic_server_command(cli_name: str, config_class: Type[ModelConfig]
 
         # Run the server
         try:
-            run_server(model_config, data_path, debug, port, certfile, keyfile)
+            run_server(model_config, data_path, port, certfile, keyfile)
         except Exception:
             logger.exception(f"Server for {config_class.__name__} crashed")
             sys.exit(1)
@@ -172,10 +163,6 @@ def create_dynamic_server_command(cli_name: str, config_class: Type[ModelConfig]
     command_func = click.option(
         "-d", "--data-path", required=True, type=str, help="Path to the dataset"
     )(command_func)
-
-    command_func = click.option("--debug", is_flag=True, help="Run in debug mode")(
-        command_func
-    )
 
     command_func = click.option(
         "-p", "--port", default=0, type=int, help="Port to listen on"
@@ -205,7 +192,7 @@ def create_dynamic_server_command(cli_name: str, config_class: Type[ModelConfig]
 @log_level_option(default="INFO")
 @_serve_options(required=False)
 @click.pass_context
-def cli(ctx, model_json, data_path, port, debug, certfile, keyfile, resample):
+def cli(ctx, model_json, data_path, port, certfile, keyfile, resample):
     """The inference server before 0.3.0: deprecated, and goes in the release
     after it. Use `cellmap_flow serve`.
 
@@ -231,7 +218,7 @@ def cli(ctx, model_json, data_path, port, debug, certfile, keyfile, resample):
     if data_path is None:
         raise click.MissingParameter(param_hint="'-d' / '--data-path'", param_type="option")
     deprecation_notice("cellmap_flow_server", "cellmap_flow serve")
-    serve_entry(model_json, data_path, debug, port, certfile, keyfile, resample)
+    serve_entry(model_json, data_path, port, certfile, keyfile, resample)
 
 
 @cli.command(name="list-models")

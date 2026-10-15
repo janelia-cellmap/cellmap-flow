@@ -261,11 +261,10 @@ INFER = {t: [*options, ENV, RESAMPLE, SERVER_CHECK, PROJECT, QUEUE, DATA_PATH] f
 # cellmap_flow_server takes them instead of a type's command.
 MODEL_JSON_HELP = 'The model: its launch entry (ModelConfig.launch_entry), as JSON.'
 PORT = ('port', ('-p', '--port'), (), 'integer', False, 0, False, 'Port to listen on')
-DEBUG = ('debug', ('--debug',), (), 'boolean', False, False, True, 'Run in debug mode')
 CERTFILE = ('certfile', ('--certfile',), (), 'text', False, None, False, 'Path to SSL certificate file')
 KEYFILE = ('keyfile', ('--keyfile',), (), 'text', False, None, False, 'Path to SSL private key file')
 SERVE = [('model_json', ('--model',), (), 'text', True, None, False, MODEL_JSON_HELP),
-         DATA_PATH, PORT, DEBUG, CERTFILE, KEYFILE, RESAMPLE]
+         DATA_PATH, PORT, CERTFILE, KEYFILE, RESAMPLE]
 
 # Each command by its path; "" is the group's own options. A subcommand's
 # --log-level (yaml, view, blockwise) defaults to the group's.
@@ -341,10 +340,10 @@ HIDDEN = {'list-models', 'list-plugins', 'register', 'run', 'unregister'}
 CELLMAP_FLOW_SERVER = {
     '': [*LOG_LEVEL, ('model_json', ('--model',), (), 'text', False, None, False, MODEL_JSON_HELP),
          ('data_path', ('-d', '--data-path'), (), 'text', False, None, False, 'Path to the dataset'),
-         PORT, DEBUG, CERTFILE, KEYFILE, RESAMPLE],
+         PORT, CERTFILE, KEYFILE, RESAMPLE],
     **dict(sorted({
     'list-models': [],
-    **{t: [*options, KEYFILE, CERTFILE, PORT, DEBUG, DATA_PATH] for t, options in SERVER_MODEL_OPTIONS.items()},
+    **{t: [*options, KEYFILE, CERTFILE, PORT, DATA_PATH] for t, options in SERVER_MODEL_OPTIONS.items()},
     }.items())),
 }
 
