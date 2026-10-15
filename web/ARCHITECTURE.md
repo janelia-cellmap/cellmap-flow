@@ -70,8 +70,9 @@ cellmap-flow (`src/`) is the app: the model catalog and `model_info`
 the normalizer and postprocessor bodies (`infer/norms.ts`, `post.ts` and the
 segmentation steps), the two stages and their keys (`infer/stages.ts`), the
 viewer's layer JSON (`viewer/`), the backend
-behind the dashboard's routes (`backend/`), the session (`state/`) and the
-dashboard build (`build/`, `vite.config.ts`).
+behind the dashboard's routes (`backend/`), the session (`state/`), a folder
+picked on this machine (`local/`) and the dashboard build (`build/`,
+`vite.config.ts`).
 
 ## Boot (src/main.ts)
 
@@ -88,12 +89,22 @@ dashboard build (`build/`, `vite.config.ts`).
    and `listenForApiRequests(backend)`: a `route("/api/", …)` in chunkmirage's
    route table (routes.ts), the one listener the page has for the worker's
    asks; the Engine adds its `/virtual/<page>/` route there when it starts.
-4. `restoreSession(ctx)` – reopen the dataset in the engine and serve the
+4. `restoreLocalFolder()` (src/local) – when the session's dataset is this
+   page's own `local/<key>/`, a folder picked on this machine, its handle must
+   still be in IndexedDB and readable before anything opens it. Chrome drops
+   a stored handle's read permission on reload (unless the user chose "allow
+   on every visit"), and asking again needs a click, so the connect panel
+   shows a one-click prompt and boot waits; a handle that is gone (a link
+   shared from another machine) clears the dataset, and the panel says so.
+5. `restoreSession(ctx)` – reopen the dataset in the engine and serve the
    session's models again (their views are gone after a reload; the same chain
    gives the same blob, so the restored layers' URLs still work).
-5. `viewer.restore()` – the iframe when a dataset is open (from the shared
+6. `viewer.restore()` – the iframe when a dataset is open (from the shared
    link's state when there is one), else the connect panel with a URL field.
-6. `import("./static/js/dashboard/main.js")` – the dashboard, unchanged.
+7. `import("./static/js/dashboard/main.js")` – the dashboard, unchanged; then
+   `installLocalFolderUi()`, the panel's "Browse local folder…" button and
+   drop target, which fill the URL field and press Connect, so connect.js
+   must be listening first.
 
 ## Request path for `/api/*`
 
@@ -124,8 +135,10 @@ The service worker is one classic script, `sw.js`, bundled on its own from
 entries it would import the chunk it shares with the page (the IndexedDB
 helpers), which a classic worker cannot do. It is chunkmirage's `relay.ts`
 (the relay for `/virtual/` and `/api/` alike, and the store cache) plus our
-`/local/` route; the Engine registers the same `sw.js` by name, so both get
-one registration.
+`/local/` route, which serves a picked folder's files from the handle
+`src/local` stored (and asks permission for again after a reload; the worker
+cannot ask); the Engine registers the same `sw.js` by name, so both get one
+registration.
 
 ## State
 
@@ -159,6 +172,8 @@ web/
       router.ts, sse.ts, yaml.ts (the export), serving.ts (serve and re-serve the session's models)
       routes/{data,pipeline,models,config}.ts
     state/                   openSession(): SessionStore (IndexedDB, db.ts); local-store.ts for picked directories
+    local/                   a folder on this machine: index.ts (the local URL and its key, the pick/drop flow,
+                             the boot-time permission check), panel.ts (the connect panel's DOM: button, drop target, prompt)
     infer/                   createInference(): Inference — the Engine, one serveStages() view per model
       engine.ts (the views and the stats), stages.ts (the model and postprocess stages, their keys),
       norms.ts, post.ts,

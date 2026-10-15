@@ -26,6 +26,7 @@ KEPT = [
     "addModelRef",  # Add a model takes a Hugging Face reference
     "hfModelAccordion", "submitModelsBtn", "resampleCheckbox",
     "inputNormList", "postProcessList", "datasetPathInput", "setDataBtn",
+    "localFolderGroup", "browseLocalBtn",  # a folder on this machine: the browser-only block of the connect panel
 ]
 
 
@@ -169,3 +170,5 @@ def test_the_flask_dashboard_is_unchanged_by_the_markers(dashboard):
     # Flask passes no mode, so the connect panel keeps asking for a path.
     assert re.search(r'id="datasetPathInput"[^>]*placeholder="/path/to/dataset.zarr"', html)
     assert "Models run in this browser" not in html
+    # The connect panel's browser-only block (a folder on this machine) is not rendered.
+    assert "browseLocalBtn" not in html and "localFolderGroup" not in html

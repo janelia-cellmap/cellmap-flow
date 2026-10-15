@@ -22,3 +22,55 @@
 [data-viewer="pending"] #noNeuroglancerPanel {
   visibility: hidden;
 }
+
+/* A folder on this machine (src/local): the connect panel's "Browse local
+   folder…" button with the drop hint beside it (templates/index.html, in its
+   browser-only block; panel.ts hides the button where there is no picker),
+   the panel lit as a drop target while a folder from the file manager is
+   over it, and the one-click permission prompt put on the panel after a
+   reload. The tokens are the dashboard's (static/css/tokens.css). */
+#localFolderGroup {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  max-width: 440px;
+}
+
+#localFolderHint {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+#noNeuroglancerPanel.local-drop-target {
+  outline: 2px dashed var(--accent);
+  outline-offset: -12px;
+  background: var(--accent-muted);
+}
+
+.local-permission {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  max-width: 440px;
+  padding: 16px 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+}
+
+.local-permission-text {
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.local-permission-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}

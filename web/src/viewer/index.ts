@@ -39,7 +39,7 @@ export const EXAMPLE_DATASET_URL = "https://janelia-cosem-datasets.s3.amazonaws.
 /** The connect panel's text in the browser, in place of the server's
  * "No Neuroglancer URL configured. Enter a dataset path below". */
 const CONNECT_DESCRIPTION = "No dataset open. Enter the URL of a public OME-Zarr volume (one served with CORS, "
-  + "such as an OpenOrganelle dataset) to open it in the viewer. The models run in this browser.";
+  + "such as an OpenOrganelle dataset), or pick a folder on this machine, to open it in the viewer. The models run in this browser.";
 
 /** What Neuroglancer's default page puts on its window. */
 interface NgViewer {

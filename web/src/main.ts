@@ -16,6 +16,8 @@
 //      a shared link may name another dataset than the session's), and then
 //      the viewer having been restored first (the iframe, when a dataset is
 //      open; the models' layers are set on it as they are served again).
+//      A dataset that is a folder on this machine (src/local) comes before
+//      both: after a reload the page must be allowed to read it again.
 // <html data-dashboard="loaded"> marks step 4 done, and data-session="restored"
 // step 5, for tests and for anyone waiting on the page.
 // Before any of it, the dashboard's root-relative /api/ URLs are rebased onto
@@ -26,6 +28,7 @@ import { createBackend, restoreSession } from "./backend";
 import { listenForApiRequests, registerServiceWorker } from "./backend/relay";
 import type { AppContext } from "./contracts";
 import { createInference } from "./infer";
+import { installLocalFolderUi, restoreLocalFolder } from "./local";
 import { createCatalog } from "./models";
 import { installApiRebase } from "./rebase";
 import { openSession } from "./state";
@@ -71,6 +74,10 @@ async function boot() {
   const ctx: AppContext = { session, catalog, infer, viewer, events, log };
   const backend = createBackend(ctx);
   listenForApiRequests(backend);
+  // A dataset that is a folder on this machine (src/local) before anything
+  // reads it: its read permission is gone after a reload and only a click
+  // gets it back, so this may show a prompt on the connect panel and wait.
+  await restoreLocalFolder({ session, log });
   // The viewer first: with a dataset in the session it mounts the iframe at
   // once (layers set before it exists are queued), and the connect panel the
   // page hid before its first paint (see index.html's inline script and
@@ -87,6 +94,9 @@ async function boot() {
   await import(/* @vite-ignore */ DASHBOARD_MAIN);
   document.documentElement.dataset.dashboard = "loaded";
   log("dashboard loaded");
+  // The connect panel's Browse button and drop target press Connect, which
+  // connect.js (in the dashboard's script) now listens on.
+  installLocalFolderUi({ log });
   await restored;
 }
 

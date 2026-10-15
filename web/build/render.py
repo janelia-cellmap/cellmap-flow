@@ -21,7 +21,10 @@ Usage (from web/)::
     python build/render.py --out -         # writes the page to stdout
     python build/render.py --check         # exits 1 if web/index.html is stale
 
-Needs cellmap_flow importable (the pixi ``default`` environment has it).
+Renders the cellmap_flow beside this script (the repository root, two
+directories up, put first on sys.path, so a worktree renders its own templates
+and not an installed copy's); its dependencies must be importable (the pixi
+``default`` environment has them).
 tests/web/test_render.py renders the page in-process and checks it.
 """
 import argparse
@@ -31,6 +34,11 @@ from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader, StrictUndefined, select_autoescape
 from markupsafe import Markup
+
+# The cellmap_flow this script renders is the one it ships with: the package at
+# the repository root, ahead of any installed copy, so a worktree (or a checkout
+# beside a pip-installed cellmap_flow) renders its own templates.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 HERE = Path(__file__).resolve().parent
 WEB = HERE.parent

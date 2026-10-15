@@ -14,7 +14,7 @@
 //   /virtual/ and src/backend/relay.ts answers /api/ through the Backend
 //   (both through routes.ts there); a page with no route for a path
 //   declines it at once.
-// - /local/<handleKey>/<path>: a file of a zarr directory the user picked
+// - local/<handleKey>/<path> under the page's directory: a file of a zarr directory the user picked
 //   with the File System Access API, whose handle the page stored in
 //   IndexedDB (src/state/local-store.ts). From Marwan Zouinkhi's prototype
 //   (web/legacy/sw.js).
@@ -52,8 +52,11 @@ sw.addEventListener("fetch", (event) => {
     if (url.pathname.includes("/api/")) {
       return event.respondWith(relayed(req, relay(req, { pick: (pages) => appWindows(pages, event.clientId), timeout: API_TIMEOUT_MS })));
     }
-    const local = url.pathname.indexOf("/local/");
-    if (local !== -1) return event.respondWith(serveLocal(url.pathname.slice(local + "/local/".length)));
+    // local/ directly under the page's directory (the worker's scope), not
+    // anywhere in the path: the page's own modules live at src/local/ in
+    // development, and matching those here answered them 404.
+    const localRoot = new URL("local/", sw.registration.scope).pathname;
+    if (url.pathname.startsWith(localRoot)) return event.respondWith(serveLocal(url.pathname.slice(localRoot.length)));
     return; // this origin's own files: never cached here
   }
   // Data a script fetches from elsewhere (not a page, a script or an image).

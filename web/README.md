@@ -55,6 +55,24 @@ separately), `npm test` (vitest unit tests in `test/`), and from the
 repository's root `python -m pytest tests/web` for the rendered page.
 `npm run build` writes the deployable site to `web/dist/`.
 
+## Opening a folder on your machine
+
+In Chrome or Edge the connect panel has a **Browse local folder…** button,
+and takes a folder dropped on it from the file manager: an OME-Zarr, zarr or
+N5 directory on your machine opens with no server and no https, at
+`http://localhost` as well as on the deployed site. The browser asks you once
+to allow reading the folder (the File System Access API); nothing is
+uploaded. The page reads the files itself and serves them to the viewer and
+the models under its own `local/<key>/` URL, through the service worker.
+
+The page reloads once when a volume opens, and after a reload (or the next
+day) Chrome has dropped its permission to read the folder, so the panel
+shows an **Allow access to <folder>** button first; click it, and the viewer
+comes back. Choosing "Allow on every visit" in Chrome's prompt skips this.
+Firefox and Safari have no directory picker, so the button is not shown
+there, and a link to the page with a local folder open works only in the
+browser that picked the folder.
+
 ## Browser requirements
 
 - **WebGPU.** Chrome or Edge (any current version), or Safari 26 and later.

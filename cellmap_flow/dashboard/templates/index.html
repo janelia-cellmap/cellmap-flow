@@ -208,6 +208,17 @@
             <input type="text" id="datasetPathInput" class="form-control" placeholder="{% if mode == 'browser' %}https://host/path/volume.zarr{% else %}/path/to/dataset.zarr{% endif %}" style="flex:1;" />
             <button type="button" class="btn btn-primary" id="setDataBtn">Connect</button>
           </div>
+          {# Browser mode only: a folder on this machine, through the File System
+             Access API. The button opens the directory picker and the panel takes
+             a folder dropped on it (web/src/local, which hides the button where a
+             browser has no picker). Flask passes no mode, so none of this is on
+             its page. #}
+          {% if mode == "browser" %}
+          <div id="localFolderGroup">
+            <button type="button" class="btn btn-outline-secondary" id="browseLocalBtn">Browse local folder&hellip;</button>
+            <span id="localFolderHint">or drop an OME-Zarr, zarr or N5 folder on this panel</span>
+          </div>
+          {% endif %}
           <div id="setDataStatus" style="font-size:11px;color:var(--text-muted);text-align:center;"></div>
           <div class="server-only">
             <a href="/pipeline-builder" class="no-data-link">Open Pipeline Builder &rarr;</a>
