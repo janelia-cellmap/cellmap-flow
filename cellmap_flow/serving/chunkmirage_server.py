@@ -51,7 +51,7 @@ from cellmap_flow.jobs.spec import IP_PATTERN
 from cellmap_flow.pipeline_spec import PipelineSpec
 from cellmap_flow.process_chain import process_chain
 from cellmap_flow.serving.chunkmirage_ops import DevicePostprocessOp, InferenceOp, ServedModel, layer_ops, serve_model
-from cellmap_flow.serving.protocol import ARGS_KEY, split_dataset_url
+from cellmap_flow.serving.protocol import ARGS_KEY, FORMAT, split_dataset_url
 from cellmap_flow.serving.restart_token import TOKEN_HEADER, tokens_match
 from cellmap_flow.utils.address import this_machine_ip
 
@@ -71,9 +71,6 @@ HALF_PRECISION_ENV = "CELLMAP_FLOW_HALF_PRECISION"
 # Chunks read and normalized while the device runs another's forward: a
 # 178^3 input took 0.03-0.3 s to normalize next to a 0.15 s forward on an A100.
 INFERENCE_PREFETCH = 2
-
-# Where a layer's format starts in its URL, after the name.
-FORMAT = "zarr"
 
 
 def _env_count(name, default):

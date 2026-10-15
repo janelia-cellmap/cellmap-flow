@@ -8,8 +8,7 @@ import numpy as np
 import zarr
 
 from cellmap_flow.pipeline_spec import PipelineSpec
-from cellmap_flow.serving.chunkmirage_server import FORMAT
-from cellmap_flow.serving.protocol import ARGS_KEY
+from cellmap_flow.serving.protocol import ARGS_KEY, FORMAT
 
 
 def write_raw(tmp_path, data, resolution=(8, 8, 8), offset=(0, 0, 0), name="raw"):

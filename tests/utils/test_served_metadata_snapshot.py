@@ -19,7 +19,8 @@ from starlette.testclient import TestClient
 
 from cellmap_flow.models.models_config import ScriptModelConfig
 from cellmap_flow.post.postprocessors import ChannelSelection, ThresholdPostprocessor
-from cellmap_flow.serving.chunkmirage_server import FORMAT, ChunkmirageServer
+from cellmap_flow.serving.chunkmirage_server import ChunkmirageServer
+from cellmap_flow.serving.protocol import FORMAT
 from tests.utils.serving_helpers import (
     IDENTITY_MODEL,
     get_json,

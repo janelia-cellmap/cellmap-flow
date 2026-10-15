@@ -35,9 +35,9 @@ from cellmap_flow.post.postprocessors import (
 from cellmap_flow.process_chain import process_chain
 from cellmap_flow.serving import chunkmirage_ops
 from cellmap_flow.serving.chunkmirage_ops import InferenceOp, chunk_roi
-from cellmap_flow.serving.chunkmirage_server import FORMAT, INFERENCE_PREFETCH, ChunkmirageServer
+from cellmap_flow.serving.chunkmirage_server import INFERENCE_PREFETCH, ChunkmirageServer
 from cellmap_flow.serving.engine import check_server, make_server
-from cellmap_flow.serving.protocol import ARGS_KEY
+from cellmap_flow.serving.protocol import ARGS_KEY, FORMAT
 from cellmap_flow.serving.restart_token import TOKEN_HEADER
 from tests.utils.serving_helpers import IDENTITY_MODEL, get_json, layer, read_chunk, write_raw, write_script
 from tests.utils.test_served_metadata_snapshot import CASES, COARSER, _ome_raw, chunk_index

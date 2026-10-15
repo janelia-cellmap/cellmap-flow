@@ -1,12 +1,14 @@
 """What passes between the dashboard and an inference server, as text.
 
-A prediction layer's source is ``zarr://<server>/<model><ARGS_KEY><blob><ARGS_KEY>``.
-The blob is the layer's chain, ``{INPUT_NORM_KEY: [...], POSTPROCESS_KEY:
-[...]}`` followed by extras such as ``dashboard_url`` and ``digest``, as
-minified JSON in URL-safe base64 without padding (``encode_to_str``). Every
-request the viewer makes carries it, and ``split_dataset_url`` finds it in
-the dataset part of a request's path. ``pipeline_spec.PipelineSpec`` reads
-and writes the chain; this module is only the codec, so a server and a
+A prediction layer's source is
+``zarr://<server>/<model><ARGS_KEY><blob><ARGS_KEY>/<FORMAT>``. The part
+before ``/<FORMAT>`` is the layer's name, which the server resolves into a
+pipeline; the blob in it is the layer's chain, ``{INPUT_NORM_KEY: [...],
+POSTPROCESS_KEY: [...]}`` followed by extras such as ``dashboard_url`` and
+``digest``, as minified JSON in URL-safe base64 without padding
+(``encode_to_str``). Every request the viewer makes carries it, and
+``split_dataset_url`` finds it in the name. ``pipeline_spec.PipelineSpec``
+reads and writes the chain; this module is only the codec, so a server and a
 dashboard of different versions still understand each other.
 
 The other way, a server announces its address by printing it between the
@@ -23,6 +25,11 @@ import json
 from typing import Optional
 
 from cellmap_flow.jobs.spec import IP_PATTERN  # noqa: F401  (part of this protocol)
+
+# What follows a layer's name in its URL. chunkmirage serves a name in the
+# format asked for after it; neuroglancer reads the zarr v2 one, with any
+# channel axis first and chunk keys separated by "/".
+FORMAT = "zarr"
 
 ARGS_KEY = "__CFLOW_ARGS__"
 INPUT_NORM_KEY = "input_norm"
