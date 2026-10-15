@@ -944,7 +944,6 @@ Each of these still works in 0.3.0, warns, and goes in the next release.
      - Read at the dataset's voxel size and resample what is read.
    * - ``ImageDataInterface(custom_fill_value=...)`` (K18)
      - Read within the dataset's ROI and pad what is read.
-       ``concurrency_limit`` is not deprecated: the inference server uses it.
 
 Using a name through one of the three alias modules raises a
 ``DeprecationWarning`` that names its new path;
