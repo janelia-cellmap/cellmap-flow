@@ -9,6 +9,16 @@ here=$(cd "$(dirname "$0")/.." && pwd)
 # shellcheck disable=SC1091
 source <(grep -E '^(repo|sha)=' "$here/chunkmirage.lock")
 dest="$here/chunkmirage"
+# Developing chunkmirage itself: CHUNKMIRAGE_LOCAL=/path/to/checkout links that
+# checkout in place of the clone, so its edits show up here at once. The lock's
+# commit is then not what runs; unset it and rerun to go back to the pin.
+if [ -n "${CHUNKMIRAGE_LOCAL:-}" ]; then
+  local_dir=$(cd "$CHUNKMIRAGE_LOCAL" && pwd)
+  rm -rf "$dest"
+  ln -s "$local_dir" "$dest"
+  echo "chunkmirage: $dest -> $local_dir (at $(git -C "$local_dir" rev-parse --short HEAD); the lock's $sha is not used)"
+  exit 0
+fi
 if [ -d "$dest/.git" ] && git -C "$dest" cat-file -e "$sha^{commit}" 2>/dev/null \
    && [ "$(git -C "$dest" rev-parse HEAD)" = "$(git -C "$dest" rev-parse "$sha^{commit}")" ]; then
   echo "chunkmirage already at $sha in $dest"

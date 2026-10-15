@@ -15,7 +15,7 @@
 // pages on its origin): in development /ng/ is relayed from appspot (upstream
 // Neuroglancer, no painting) unless web/ng/ holds a build of the fork, which
 // is then served instead; the deployed site always carries its own build.
-import { existsSync } from "node:fs";
+import { existsSync, realpathSync } from "node:fs";
 import { resolve } from "node:path";
 import { defineConfig, type ProxyOptions } from "vite";
 
@@ -25,6 +25,9 @@ import { dashboardStatic, localNeuroglancer, serviceWorker } from "./build/vite-
 const here = import.meta.dirname;
 const DASHBOARD_STATIC = resolve(here, "../cellmap_flow/dashboard/static");
 const NEUROGLANCER_BUILD = resolve(here, "ng");
+// The clone, or a local checkout linked in its place (CHUNKMIRAGE_LOCAL in
+// scripts/fetch-chunkmirage.sh): Vite allows files by their real path.
+const CHUNKMIRAGE = existsSync(resolve(here, "chunkmirage")) ? realpathSync(resolve(here, "chunkmirage")) : resolve(here, "chunkmirage");
 const NEUROGLANCER_DEMO = "https://neuroglancer-demo.appspot.com";
 
 const ngProxy: Record<string, ProxyOptions> = existsSync(NEUROGLANCER_BUILD)
@@ -44,6 +47,6 @@ export default defineConfig({
   },
   worker: { format: "es" },
   // chunkmirage's Pyodide workers import its Python from web/chunkmirage/src as text
-  server: { proxy: ngProxy, fs: { allow: [here, resolve(here, "chunkmirage"), DASHBOARD_STATIC] } },
+  server: { proxy: ngProxy, fs: { allow: [here, CHUNKMIRAGE, DASHBOARD_STATIC] } },
   preview: { proxy: ngProxy },
 });
