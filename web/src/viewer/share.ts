@@ -1,12 +1,19 @@
-// The shareable URL: the page's own URL carries the viewer's whole state in
-// its `#!` hash, as Neuroglancer's does, so the address bar is a link to
-// what is on screen (from Marwan Zouinkhi's prototype, web/legacy/index.html).
+// The viewer's state outside the viewer: Neuroglancer in the iframe writes
+// its whole state to its own hash as "#!" + encodeURI(JSON) (plain JSON,
+// double quotes, a few characters percent-encoded), and the page keeps a
+// copy of that hash in the tab's sessionStorage as the user navigates, so
+// the reload connect.js does after Connect (and any reload of the tab) puts
+// the viewer back where it was. A page opened with a `#!` hash of its own,
+// a link someone built or Neuroglancer's own URL pasted onto the page's,
+// loads that state instead (viewer/index.ts stateFromPage).
 //
-// Neuroglancer in the iframe writes its state to its own hash as
-// "#!" + encodeURI(JSON) (plain JSON, double quotes, a few characters
-// percent-encoded). The page mirrors that hash to its own URL as the user
-// navigates (history.replaceState: no history entries, no reload), and on
-// boot a page opened with a `#!` hash loads that state into the iframe.
+// The page's own address bar is left alone. Marwan Zouinkhi's prototype
+// mirrored the state into it, as Neuroglancer does, so the address bar was
+// a link to what is on screen; but Chrome's address bar completes
+// "localhost:5174" to the last URL it saw there, hash and all, so a new tab
+// opened that way came back with the old dataset and layers when it should
+// start fresh (the session is the tab's, state/index.ts). A link to share
+// is a control to add, not the address bar.
 //
 // The pure parts (encoding, decoding, the URL arithmetic) are tested; the
 // DOM parts (mirroring the iframe's hash) are kept small enough to read.
@@ -97,28 +104,57 @@ export function withHash(href: string, hash: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// DOM: keeping the page's URL equal to the viewer's state
+// The tab's copy of the viewer's state
 // ---------------------------------------------------------------------------
 
-/** How often the iframe's hash is compared with the page's. Neuroglancer
- * rewrites its hash with history.replaceState, which fires no hashchange
- * event, so listening alone misses most changes. */
-export const MIRROR_INTERVAL_MS = 1000;
+/** The viewer's hash in the tab's sessionStorage. */
+export const TAB_STATE_KEY = "cellmap-flow:viewer";
 
-/** Put `hash` on the page's URL, without a history entry, when it differs
- * from the one there. */
-export function mirrorToPage(hash: string): void {
-  if (!hash || hash === location.hash) return;
-  history.replaceState(null, "", withHash(location.href, hash));
+/** Keep `hash` as the tab's viewer state (nothing without storage). */
+export function rememberState(hash: string): void {
+  if (!hash) return;
+  try {
+    sessionStorage.setItem(TAB_STATE_KEY, hash);
+  } catch {
+    // no storage: the reload starts from the session's dataset alone
+  }
 }
 
-/** Mirror `frame`'s hash to the page's URL as it changes: on each load of the
- * frame, listen for hashchange in it and poll every MIRROR_INTERVAL_MS. The
- * frame is same-origin (the viewer must be, for the service worker to see
- * its chunk requests), so its window is readable; a frame that is not
- * (while it shows about:blank, say) is skipped until it loads. Returns a
- * function that stops the mirroring. */
-export function mirrorFrameHash(frame: HTMLIFrameElement, onHash: (hash: string) => void = mirrorToPage): () => void {
+/** The tab's viewer state, a `#!` hash, or null. */
+export function rememberedState(): string | null {
+  try {
+    const hash = sessionStorage.getItem(TAB_STATE_KEY);
+    return hash && isStateHash(hash) ? hash : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Drop the tab's viewer state (a forgotten dataset). */
+export function forgetState(): void {
+  try {
+    sessionStorage.removeItem(TAB_STATE_KEY);
+  } catch {
+    // nothing kept
+  }
+}
+
+// ---------------------------------------------------------------------------
+// DOM: following the iframe's hash
+// ---------------------------------------------------------------------------
+
+/** How often the iframe's hash is read. Neuroglancer rewrites its hash with
+ * history.replaceState, which fires no hashchange event, so listening alone
+ * misses most changes. */
+export const MIRROR_INTERVAL_MS = 1000;
+
+/** Follow `frame`'s hash as it changes, into the tab's state by default: on
+ * each load of the frame, listen for hashchange in it and poll every
+ * MIRROR_INTERVAL_MS. The frame is same-origin (the viewer must be, for the
+ * service worker to see its chunk requests), so its window is readable; a
+ * frame that is not (while it shows about:blank, say) is skipped until it
+ * loads. Returns a function that stops the mirroring. */
+export function mirrorFrameHash(frame: HTMLIFrameElement, onHash: (hash: string) => void = rememberState): () => void {
   let timer: ReturnType<typeof setInterval> | null = null;
   let detach: (() => void) | null = null;
 

@@ -14,10 +14,12 @@
 // no reload, the camera stays. Until then (the iframe still loading, say)
 // the state goes into the iframe's URL hash, which Neuroglancer reads when
 // it starts, or on hashchange if it is already up: the hash is the queue.
+// Either way the tab keeps a copy of the viewer's hash (share.ts), for the
+// reload connect.js does after Connect and any other reload of the tab.
 import type { DatasetInfo, LayerSpec, SessionStore, ViewerController } from "../contracts";
 import { initialState, RAW_LAYER_NAME, stateWithoutInfo } from "./layers";
 import { withEquivalences } from "./equivalences";
-import { decodeState, encodeState, isStateHash, mirrorFrameHash, mirrorToPage } from "./share";
+import { decodeState, encodeState, isStateHash, mirrorFrameHash, rememberedState, rememberState, withHash } from "./share";
 import { datasetUrlFromState, layerShaderOf, type NgState, positionNm, replaceLayers, withoutLayer } from "./state";
 
 /** Neuroglancer's page, built beside this one (vite.config.ts serves ./ng/). */
@@ -74,10 +76,10 @@ export interface BrowserViewer extends ViewerController {
   openDataset(url: string, raw: LayerSpec, info?: DatasetInfo): Promise<string>;
 }
 
-/** The dataset the page's own `#!` hash shows (a shared link's raw layer),
- * or null: for the boot to point the session at it before anything opens
- * the session's dataset, so a link to another volume wins over what this
- * browser had open. restore() does the same; this is for doing it earlier. */
+/** The dataset the page's own `#!` hash shows (a link's raw layer), or
+ * null: for the boot to point the session at it before anything opens the
+ * session's dataset, so a link to another volume wins over what this tab had
+ * open. restore() does the same; this is for doing it earlier. */
 export function datasetUrlFromPage(): string | null {
   return datasetUrlFromState(decodeState(location.hash));
 }
@@ -131,7 +133,7 @@ export function createViewer(opts: { session: SessionStore; log: (line: string) 
     const hash = encodeState(state);
     pending = state;
     mountFrame(hash);
-    mirrorToPage(hash);
+    rememberState(hash);
   }
 
   /** The iframe showing Neuroglancer at `hash`: created in place of the
@@ -188,31 +190,38 @@ export function createViewer(opts: { session: SessionStore; log: (line: string) 
 
   /** Show `state` as a new viewer: through the hash, which has Neuroglancer
    * reset to it (a new dataset is a new state, not a merge into the old
-   * one), with the page's hash following. */
+   * one), and kept as the tab's. */
   function openState(state: NgState): void {
     const shown = withQueued(state);
     const hash = encodeState(shown);
     pending = shown;
     mountFrame(hash);
-    mirrorToPage(hash);
+    rememberState(hash);
   }
 
-  /** The state the page's `#!` hash holds (a shared link, or this page
-   * reloaded by connect.js after /api/set-data), or null. The session
-   * follows the state's dataset, so the dashboard and the viewer agree on
-   * what is open. */
+  /** The state to put back: the page's own `#!` hash when it has one (a
+   * link someone opened; it wins, and the address bar is cleared of it so a
+   * later tab completed from this URL starts fresh), else the tab's copy of
+   * the viewer's hash (this page reloaded: by connect.js after /api/set-data,
+   * or by the user). Null when there is neither. The session follows the
+   * state's dataset, so the dashboard and the viewer agree on what is open. */
   async function stateFromPage(): Promise<NgState | null> {
-    const hash = location.hash;
-    if (!isStateHash(hash)) return null;
+    let hash = location.hash;
+    if (isStateHash(hash)) {
+      history.replaceState(null, "", withHash(location.href, ""));
+    } else {
+      hash = rememberedState() ?? "";
+    }
+    if (!hash) return null;
     const state = decodeState(hash);
     if (!state) {
-      log("the page's URL holds a viewer state that could not be read; ignoring it");
+      log("a viewer state that could not be read was found; ignoring it");
       return null;
     }
     const url = datasetUrlFromState(state);
     if (url && url !== session.state.datasetUrl) {
       await session.update({ datasetUrl: url });
-      log(`dataset from the page's URL: ${url}`);
+      log(`dataset from the link: ${url}`);
     }
     return state;
   }
@@ -245,17 +254,17 @@ export function createViewer(opts: { session: SessionStore; log: (line: string) 
     },
 
     prepareDataset(url, raw, info) {
-      // Into the page's URL only, which the reload connect.js does a second
+      // Into the tab's state only, which the reload connect.js does a second
       // after /api/set-data answers restores from (restore() above): an iframe
       // mounted now would show the volume, go with the page, and show it
-      // again. An open viewer's hash is no longer mirrored onto the page, or
-      // its next poll would put the old state back before the reload.
+      // again. An open viewer's hash is no longer followed, or its next poll
+      // would put the old state back before the reload.
       stopMirror?.();
       stopMirror = null;
       const state = info ? initialState(info, { [RAW_LAYER_NAME]: raw }) : stateWithoutInfo(url, raw);
       const hash = encodeState(state);
       pending = state;
-      mirrorToPage(hash);
+      rememberState(hash);
       log(`viewer prepared for ${url}: shown when the page reloads`);
       return NG_PAGE + hash;
     },

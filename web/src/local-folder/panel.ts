@@ -9,7 +9,7 @@
 // The dashboard's own connect.js owns the Connect button and the status line
 // and is not changed: this fills the dataset field and clicks Connect, and
 // writes the status line the way connect.js does (its colours too).
-import { withHash } from "../viewer/share";
+import { forgetState, withHash } from "../viewer/share";
 import type { PickedDirectory } from "./index";
 
 /** The panel's ids in templates/index.html: the dashboard's own (connect.js
@@ -38,8 +38,8 @@ export interface LocalPanel {
    * when they choose to open something else. `refused` words it for a
    * permission Chrome did not grant the last time it was asked. */
   askAgain(folderName: string, refused: boolean): Promise<boolean>;
-  /** Drop the viewer state the page's URL carries (a shared link's, or the
-   * reload's), so the viewer does not restore the forgotten folder from it. */
+  /** Drop the viewer state the tab keeps and any the page's URL carries (a
+   * link's), so the viewer does not restore the forgotten folder from it. */
   forgetPageState(): void;
   /** Put `url` in the dataset field and press Connect; connect.js takes it from there. */
   connect(url: string): void;
@@ -126,6 +126,7 @@ export function connectPanel(): LocalPanel {
     },
 
     forgetPageState() {
+      forgetState();
       if (location.hash) history.replaceState(null, "", withHash(location.href, ""));
     },
 

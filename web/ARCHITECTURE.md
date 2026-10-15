@@ -99,8 +99,11 @@ picked on this machine (`local-folder/`) and the dashboard build (`build/`,
 5. `restoreSession(ctx)` – reopen the dataset in the engine and serve the
    session's models again (their views are gone after a reload; the same chain
    gives the same blob, so the restored layers' URLs still work).
-6. `viewer.restore()` – the iframe when a dataset is open (from the shared
-   link's state when there is one), else the connect panel with a URL field.
+6. `viewer.restore()` – the iframe when a dataset is open (from a link's `#!`
+   state when the page has one, else from the tab's copy of the viewer's
+   state, share.ts), else the connect panel with a URL field. The address bar
+   itself never carries the state: Chrome completes a typed `localhost:5174`
+   to the last URL it saw, and a new tab must start fresh.
 7. `import("./static/js/dashboard/main.js")` – the dashboard, unchanged; then
    `installLocalFolderUi()`, the panel's "Browse local folder…" button and
    drop target, which fill the URL field and press Connect, so connect.js
@@ -181,7 +184,7 @@ web/
     shared/                  args.ts (__CFLOW_ARGS__ codec, digest), model-info.ts
     models/                  createCatalog(): Catalog — Hugging Face manifests, variant choice, byte cache
     viewer/                  createViewer(): ViewerController — iframe (index.ts), layers.ts (port of
-                             viewer/layers.py), display.ts (shaders, ranges), state.ts, share.ts (the URL)
+                             viewer/layers.py), display.ts (shaders, ranges), state.ts, share.ts (the viewer's state: the tab's copy, a link's hash)
   test/
     unit/                    vitest, one file per module concern
     parity/                  the TypeScript ports against test/fixtures/*.json, which
@@ -210,8 +213,8 @@ deployed site always carries the fork at `/app/ng/`.
 ## Credits
 
 The inference loop (now the two stages and the ONNX sessions), the
-normalizer/postprocessor ports, the local-directory store and the shareable
-URL come from Marwan Zouinkhi's serverless prototype (his commits on this
+normalizer/postprocessor ports, the local-directory store and the viewer
+state in a `#!` hash come from Marwan Zouinkhi's serverless prototype (his commits on this
 branch, under `web/` before this restructuring), and the models are his
 exports on Hugging Face. The engine, the reading and the relay are
 chunkmirage's.

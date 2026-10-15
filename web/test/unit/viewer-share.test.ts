@@ -1,8 +1,8 @@
 // The shareable URL's pure parts (src/viewer/share.ts): the `#!` hash the
 // page carries, decoded from every form Neuroglancer writes or reads.
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { decodeState, encodeState, isStateHash, urlSafeToJson, withHash } from "../../src/viewer/share";
+import { decodeState, encodeState, forgetState, isStateHash, rememberedState, rememberState, TAB_STATE_KEY, urlSafeToJson, withHash } from "../../src/viewer/share";
 
 const state = {
   dimensions: { z: [8e-9, "m"], y: [8e-9, "m"], x: [8e-9, "m"] },
@@ -103,5 +103,30 @@ describe("withHash", () => {
   });
   it("drops the fragment for an empty hash", () => {
     expect(withHash("https://h/app/#!old", "")).toBe("https://h/app/");
+  });
+});
+
+describe("the tab's copy of the viewer's state", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("is kept in sessionStorage, read back only when it is a state, and dropped on request", () => {
+    const items = new Map<string, string>();
+    vi.stubGlobal("sessionStorage", { getItem: (k: string) => items.get(k) ?? null, setItem: (k: string, v: string) => void items.set(k, v), removeItem: (k: string) => void items.delete(k) });
+    expect(rememberedState()).toBeNull();
+    rememberState(encodeState({ layers: [] }));
+    expect(items.get(TAB_STATE_KEY)).toBe(encodeState({ layers: [] }));
+    expect(rememberedState()).toBe(encodeState({ layers: [] }));
+    rememberState("");  // nothing to keep: the state stays
+    expect(rememberedState()).toBe(encodeState({ layers: [] }));
+    items.set(TAB_STATE_KEY, "#!+diff");  // not a state
+    expect(rememberedState()).toBeNull();
+    forgetState();
+    expect(items.has(TAB_STATE_KEY)).toBe(false);
+  });
+
+  it("does nothing without storage", () => {
+    expect(() => rememberState("#!%7B%7D")).not.toThrow();
+    expect(rememberedState()).toBeNull();
+    expect(() => forgetState()).not.toThrow();
   });
 });
