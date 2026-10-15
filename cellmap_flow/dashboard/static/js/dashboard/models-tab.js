@@ -63,7 +63,9 @@ export function initModelsTab({ onModelsSubmitted } = {}) {
       input.name = "selected_hf_models";
       input.id = "chk_hf_" + displayName;
       input.value = modelId;
-      input.defaultChecked = defaultHfRepos.includes(modelId);
+      // Ticked when the page started with it, or when the listing says it is
+      // being served (the browser mode's, after a reload or from a link).
+      input.defaultChecked = defaultHfRepos.includes(modelId) || metadata.selected === true;
       const label = document.createElement("label");
       label.className = "form-check-label";
       label.htmlFor = input.id;

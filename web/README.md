@@ -11,7 +11,9 @@ ONNX exports of cellmap's networks, fetched from Hugging Face
 ([cellmap/onnx-web-models](https://huggingface.co/cellmap/onnx-web-models))
 and cached in the browser. Anyone with a recent browser can open a volume,
 tick a model and look at its predictions, with nothing to install and no
-cluster account.
+cluster account: it is live at **https://janelia-cellmap.github.io/cellmap-flow/app/**,
+deployed from every push to `main` ([Deployment](#deployment)), and the first
+place to try cellmap-flow and to test a change.
 
 It is the same dashboard as the Flask app's. The templates
 (`cellmap_flow/dashboard/templates`) and the dashboard's JavaScript and CSS
@@ -55,6 +57,33 @@ separately), `npm test` (vitest unit tests in `test/`), and from the
 repository's root `python -m pytest tests/web` for the rendered page.
 `npm run build` writes the deployable site to `web/dist/`.
 
+## A link that opens a volume and runs models
+
+The page's query can name what Connect and Submit would be used for:
+
+```
+https://janelia-cellmap.github.io/cellmap-flow/app/?dataset=<url>&model=<name>&model=<name>
+```
+
+`dataset` is the volume's URL; each `model` is a model as the Models tab
+lists it (`setup_53`) or its repository path
+(`cellmap/onnx-web-models/setup_53`), repeated or comma-separated. At boot
+(`src/main.ts`, `src/link.ts`) they go into the tab's session, the session's
+restore opens the volume and serves the models, and the query is taken off
+the address bar, so a later tab completed from the URL starts fresh. A model
+the catalog does not know is logged and left out. The README's example link
+opens an OpenOrganelle volume with `setup_53` running.
+
+**Share** in the header (`src/share-link.ts`) copies such a link to what the
+tab has open, with the viewer's `#!` state after it: the view (position,
+zoom, layout, each layer as shown with its shader), whose model layers name
+the chain they were drawn through; the recipient's page serves the models
+through that chain and its Input and Postprocess lists show it (`main.js`'s
+`showChain`, called by `src/main.ts` when the session's chain is not the
+rendered default). The address bar never carries any of it: when the page's
+URL mirrored the viewer's, Chrome's omnibox completed a typed address to the
+last view and a new tab came back with it.
+
 ## Opening a folder on your machine
 
 In Chrome or Edge the connect panel has a **Browse local folder…** button,
@@ -94,6 +123,20 @@ browser that picked the folder.
   must allow it with CORS (`Access-Control-Allow-Origin`). Public S3 and GCS
   buckets and GitHub Pages do; a plain http server on your machine may need a
   flag.
+- **Data on a private network.** To Chrome, a host with a private address
+  (`10.x`, `192.168.x`, a `.local` name) is on the user's *local network*,
+  which a public site such as the deployed one may fetch from only with the
+  user's permission (Chrome's Local Network Access). Chrome can ask for it
+  when the page itself makes a request to such a host, and refuses one made
+  by a service worker outright unless the permission was given before. So
+  the service worker (`src/sw.ts`) leaves a volume's metadata requests, the
+  first of any volume, to the page, as Neuroglancer's site reads a volume;
+  on the deployed site a cellmap-vm1 volume had failed with "Failed to
+  fetch" while Neuroglancer read it. When a fetch still gets no answer, the
+  connect panel's error says what to do (`src/backend/routes/data.ts`). The
+  permission is per site: in the site-information panel beside the address
+  bar, or at `chrome://settings/content/localNetworkAccess`. A page on
+  `http://localhost` is not a public site, so there is no such check there.
 
 ## Deployment
 

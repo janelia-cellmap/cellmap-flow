@@ -21,6 +21,21 @@ function toggleDashboard() {
   document.body.classList.toggle("dashboard-toggled");
 }
 
+// The browser mode calls this once it has loaded this script (web/src/main.ts),
+// when the chain its backend serves is not the one this page was rendered
+// with: after a reload of the tab, or from a shared link. `chain` is
+// {input_norm, postprocess}, each [{name, ...params}] with the values as the
+// form sends them; the lists then show it, ticked and in order, as the Flask
+// dashboard shows the session's chain by rendering it into the page.
+export function showChain(chain) {
+  [[inputChain, chain.input_norm], [postChain, chain.postprocess]].forEach(([opChain, steps]) => {
+    if (!Array.isArray(steps)) return;
+    const params = {};
+    steps.forEach((step) => { params[step.name] = step; });
+    opChain.apply(steps.map((step) => step.name), params);
+  });
+}
+
 // Enter in a parameter field of the Input or Postprocess list submits the
 // pipeline, like Submit All. Only there: every submit rebuilds all the
 // viewer's layers, so Enter anywhere else -- a newline in a textarea, the

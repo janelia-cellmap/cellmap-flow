@@ -4,6 +4,7 @@
 import { describe, expect, it } from "vitest";
 
 import { createBackend, restoreSession } from "../../src/backend";
+import { explainOpenError } from "../../src/backend/routes/data";
 import { ARGS_KEY } from "../../src/contracts";
 import type { ApiResponse } from "../../src/contracts";
 import { decodeArgs } from "../../src/shared/args";
@@ -58,6 +59,34 @@ describe("POST /api/set-data", () => {
     expect(res.status).toBe(500);
     expect(body(res)).toEqual({ error: "no zarr.json at that URL" });
     expect(ctx.session.state.datasetUrl).toBeNull();
+  });
+
+  it("explains a fetch that got no answer: unreachable, CORS, or a private network the site may not use", async () => {
+    const ctx = fakeContext({ dataset: null });
+    ctx.infer.failOpen = "Failed to fetch";
+    const res = await createBackend(ctx).handle(request("POST", "/api/set-data", { dataset_path: "https://data.example.org/em.zarr" }));
+    expect(res.status).toBe(500);
+    const error = body(res).error as string;
+    expect(error).toMatch(/^Failed to fetch: the browser got no answer from data.example.org\./);
+    expect(error).toMatch(/CORS/);
+    expect(error).toMatch(/Local network access/); // the test runs on no page, so not on localhost
+  });
+});
+
+describe("explainOpenError", () => {
+  it("passes any other error through as it is", () => {
+    expect(explainOpenError("https://example.org/em.zarr", new Error("no zarr.json at that URL"), "localhost")).toBe("no zarr.json at that URL");
+    expect(explainOpenError("https://example.org/em.zarr", "a string", "localhost")).toBe("a string");
+  });
+
+  it("names the host and, on localhost, leaves out the private-network reason", () => {
+    const error = explainOpenError("https://cellmap-vm1.int.janelia.org/nrs/data/em.zarr/", new TypeError("Failed to fetch"), "localhost");
+    expect(error).toBe("Failed to fetch: the browser got no answer from cellmap-vm1.int.janelia.org. Either it cannot be reached from here, or its server does not allow this page to read it (CORS).");
+  });
+
+  it("knows every browser's wording, and a bucket URL's bucket", () => {
+    expect(explainOpenError("s3://bucket/em.zarr", new TypeError("NetworkError when attempting to fetch resource."), "janelia-cellmap.github.io")).toMatch(/no answer from bucket\. .*Local network access/);
+    expect(explainOpenError("https://example.org/em.zarr", new TypeError("Load failed"), "janelia-cellmap.github.io")).toMatch(/^Load failed: the browser got no answer from example.org\./);
   });
 });
 
@@ -241,6 +270,13 @@ describe("the model lists", () => {
       expect(body(res)[HF54].description).toBe("mito_affinities");
     }
     expect(ctx.catalog.refreshed).toBe(1);
+  });
+
+  it("marks the models the session is serving as selected, and no other", async () => {
+    const ctx = fakeContext({ state: { models: [entry("setup_54")] } });
+    const listing = body(await createBackend(ctx).handle(request("GET", "/api/huggingface-models")));
+    expect(listing[HF54].selected).toBe(true);
+    expect("selected" in listing[HF56]).toBe(false);
   });
 
   it("answers a failed listing with {error} and a 500, which the tab shows in the list", async () => {

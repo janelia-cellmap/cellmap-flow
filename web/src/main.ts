@@ -26,12 +26,14 @@
 import "./browser.css";
 import { createBackend, restoreSession } from "./backend";
 import { listenForApiRequests, registerServiceWorker } from "./backend/relay";
-import type { AppContext } from "./contracts";
+import type { AppContext, Chain } from "./contracts";
 import { createInference } from "./infer";
+import { chainFromHash, parseLink, resolveLinkedModels, withoutLink } from "./link";
 import { installLocalFolderUi, restoreLocalFolder } from "./local-folder";
 import { createCatalog } from "./models";
 import { installApiRebase } from "./rebase";
-import { openSession } from "./state";
+import { installShareUi } from "./share-link";
+import { defaultChain, openSession } from "./state";
 import { createViewer, datasetUrlFromPage } from "./viewer";
 
 /** The dashboard's script, served verbatim beside the page (vite.config.ts).
@@ -63,14 +65,27 @@ async function boot() {
   installApiRebase();
   await registerServiceWorker();
   const session = await openSession();
-  // A shared link carries its own dataset in the viewer state; it wins over
-  // what this browser's session remembers, before the engine opens anything.
-  const linked = datasetUrlFromPage();
+  // A link to the page names its volume and models in the query (src/link.ts),
+  // or a shared `#!` state carries its own dataset; either wins over what this
+  // tab's session remembers, before the engine opens anything.
+  const link = parseLink(location.search);
+  const linked = link.datasetUrl ?? datasetUrlFromPage();
   if (linked && linked !== session.state.datasetUrl) await session.update({ datasetUrl: linked });
   const events = new EventTarget();
   const viewer = createViewer({ session, log });
   const infer = await createInference({ session, log });
   const catalog = createCatalog({ log });
+  if (link.models.length) {
+    // In place of the session's, as Submit would put them: served on the
+    // volume when the session is restored below.
+    await session.update({ models: await resolveLinkedModels(catalog, link.models, log) });
+    log(`models from the link: ${link.models.join(", ")}`);
+  }
+  if (link.datasetUrl || link.models.length) history.replaceState(null, "", withoutLink(location.href));
+  // A shared view's model layers name the chain they were drawn through:
+  // served through it here too, so the link shows what its sender saw.
+  const linkedChain = chainFromHash(location.hash);
+  if (linkedChain) await session.update({ chain: linkedChain });
   const ctx: AppContext = { session, catalog, infer, viewer, events, log };
   const backend = createBackend(ctx);
   listenForApiRequests(backend);
@@ -91,12 +106,18 @@ async function boot() {
   });
   // The dashboard, exactly as the Flask app serves it. A runtime import so
   // Vite does not bundle it (vite.config.ts serves it verbatim).
-  await import(/* @vite-ignore */ DASHBOARD_MAIN);
+  const dashboard = (await import(/* @vite-ignore */ DASHBOARD_MAIN)) as { showChain?: (chain: Chain) => void };
   document.documentElement.dataset.dashboard = "loaded";
   log("dashboard loaded");
+  // The page was rendered with the default chain ticked; when the session's
+  // is another (submitted before this reload, or a shared link's), the Input
+  // and Postprocess lists show that one, which is what the models run through.
+  const { chain } = session.state;
+  if (JSON.stringify(chain) !== JSON.stringify(defaultChain())) dashboard.showChain?.(chain);
   // The connect panel's Browse button and drop target press Connect, which
   // connect.js (in the dashboard's script) now listens on.
   installLocalFolderUi({ log });
+  installShareUi({ session, viewer, log });
   await restored;
 }
 

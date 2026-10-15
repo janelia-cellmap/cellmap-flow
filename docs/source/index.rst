@@ -4,6 +4,7 @@
    :caption: CellMap-Flow API:
 
    install
+   browser
    cli
    scripts
    yaml_config

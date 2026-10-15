@@ -38,6 +38,10 @@ const sw = self as unknown as ServiceWorkerGlobalScope;
  * minutes. */
 const API_TIMEOUT_MS = 240_000;
 
+/** The files that describe a volume rather than hold its voxels: zarr v2's,
+ * zarr v3's and N5's. */
+const METADATA_FILE = /(^|\/)(\.z(array|attrs|group)|zarr\.json|attributes\.json)$/;
+
 sw.addEventListener("install", () => void sw.skipWaiting());
 sw.addEventListener("activate", (event) => event.waitUntil(sw.clients.claim()));
 
@@ -65,7 +69,20 @@ sw.addEventListener("fetch", (event) => {
   // `cache: "no-store"` on the request opts out: the model catalog fetches
   // .onnx files (up to 43 MB) that way, since it keeps them in IndexedDB
   // itself and a second copy here would only push chunks out of the store.
-  if (req.method === "GET" && req.destination === "" && req.cache !== "no-store") event.respondWith(fromStore(req));
+  // A volume's metadata (.zattrs, zarr.json, attributes.json) is left to
+  // the page that asked for it, which is how Neuroglancer's own site reads
+  // a volume. Chrome gates a public site's requests to a host on the user's
+  // private network (an institution's 10.x server) behind a permission it
+  // can ask for, once, when the page makes such a request; a request made
+  // here, by a service worker, it refuses outright unless the permission
+  // was given before, with nothing to ask. On the deployed site a volume on
+  // such a host failed that way ("Failed to fetch") while Neuroglancer read
+  // it. The metadata is the first thing read of any volume, so the page's
+  // request for it is the one Chrome can ask on, if it asks at all, and the
+  // chunks that follow, read here, pass once it has. A handful of small
+  // files per volume, read once: nothing lost to the cache.
+  if (req.method !== "GET" || req.destination !== "" || req.cache === "no-store" || METADATA_FILE.test(url.pathname)) return;
+  event.respondWith(fromStore(req));
 });
 
 sw.addEventListener("message", (event) => {
@@ -137,7 +154,7 @@ async function serveLocal(rest: string, signal: AbortSignal): Promise<Response> 
     if (signal.aborted) return new Response(null, { status: 499, statusText: "the request was cancelled" });
     const file = await store.file(path);
     if (file === undefined) return new Response("not found", { status: 404 });
-    const isMeta = /\.z(array|attrs|group)$|zarr\.json$/.test(path);
+    const isMeta = METADATA_FILE.test(path);
     const type = isMeta ? "application/json" : "application/octet-stream";
     if (file instanceof Blob) return new Response(file, { headers: { "content-type": type, "content-length": String(file.size) } });
     return new Response(await file.arrayBuffer(), { headers: { "content-type": type } });  // a store without Files (a test's)
