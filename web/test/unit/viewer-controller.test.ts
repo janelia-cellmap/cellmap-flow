@@ -4,7 +4,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { SessionState, SessionStore } from "../../src/contracts";
-import { createViewer, EXAMPLE_DATASET_URL, NG_PAGE } from "../../src/viewer/index";
+import { createViewer, EXAMPLE_DATASET_URL, liveEquivalences, NG_PAGE } from "../../src/viewer/index";
 import { decodeState } from "../../src/viewer/share";
 
 function fakeSession(state: Partial<SessionState> = {}): SessionStore {
@@ -49,6 +49,20 @@ describe("createViewer before the iframe exists", () => {
     expect(decodeState(hash)?.layers).toEqual([{ name: "data", ...raw }]);
     expect(viewer.viewerUrl()).toBeNull();  // nothing shown yet
     expect(lines).toEqual(["viewer prepared for https://example.org/em.zarr: shown when the page reloads"]);
+  });
+  it("reaches a loaded segmentation layer's equivalence sets, and nothing else", () => {
+    const sets = { clear() {}, restoreState() {} };
+    const layers: Record<string, { layer: unknown }> = {
+      mito: { layer: { displayState: { segmentationGroupState: { value: { segmentEquivalences: sets } } } } },
+      raw: { layer: { displayState: {} } },  // an image layer
+      loading: { layer: null },  // not loaded yet
+    };
+    const viewer = { layerManager: { getLayerByName: (name: string) => layers[name] as { layer: never } | undefined } };
+    expect(liveEquivalences(viewer, "mito")).toBe(sets);
+    expect(liveEquivalences(viewer, "raw")).toBeNull();
+    expect(liveEquivalences(viewer, "loading")).toBeNull();
+    expect(liveEquivalences(viewer, "gone")).toBeNull();
+    expect(liveEquivalences({}, "mito")).toBeNull();  // an older Neuroglancer without layerManager on the viewer
   });
   it("names the Neuroglancer page beside this one and a real public dataset as the example", () => {
     expect(NG_PAGE).toBe("./ng/index.html");

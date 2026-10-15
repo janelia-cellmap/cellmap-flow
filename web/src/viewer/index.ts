@@ -41,9 +41,30 @@ export const EXAMPLE_DATASET_URL = "https://janelia-cosem-datasets.s3.amazonaws.
 const CONNECT_DESCRIPTION = "No dataset open. Enter the URL of a public OME-Zarr volume (one served with CORS, "
   + "such as an OpenOrganelle dataset), or pick a folder on this machine, to open it in the viewer. The models run in this browser.";
 
-/** What Neuroglancer's default page puts on its window. */
+/** What Neuroglancer's default page puts on its window: its state, and its
+ * layers (for a segmentation layer's equivalence sets, changed in place). */
 interface NgViewer {
   state: { toJSON(): NgState; restoreState(state: NgState): void };
+  layerManager?: { getLayerByName(name: string): { layer: NgUserLayer | null } | undefined };
+}
+
+/** A loaded layer, as far as this file reaches into it: a segmentation
+ * layer's disjoint sets of equivalent ids (SharedDisjointUint64Sets). */
+interface NgUserLayer {
+  displayState?: { segmentationGroupState?: { value?: { segmentEquivalences?: NgEquivalences } } };
+}
+export interface NgEquivalences {
+  clear(): void;
+  /** Sets of decimal uint64 strings, as a layer's `equivalences` JSON. */
+  restoreState(sets: string[][]): void;
+}
+
+/** The live viewer's equivalence sets for layer `name`: null when the layer
+ * is not there, not loaded yet, or not a segmentation layer. */
+export function liveEquivalences(viewer: Pick<NgViewer, "layerManager">, name: string): NgEquivalences | null {
+  const layer = viewer.layerManager?.getLayerByName(name)?.layer;
+  const sets = layer?.displayState?.segmentationGroupState?.value?.segmentEquivalences;
+  return sets && typeof sets.restoreState === "function" && typeof sets.clear === "function" ? sets : null;
 }
 
 /** The controller, with the one addition to the shared contract: openDataset
@@ -259,6 +280,23 @@ export function createViewer(opts: { session: SessionStore; log: (line: string) 
     setEquivalences(name, sets) {
       // Every report carries the whole set of joined ids so far, so one
       // that cannot be shown yet is only a delay: the next brings it too.
+      const live = liveViewer();
+      if (live) {
+        // The loaded layer's own sets, replaced in place. Not through the
+        // state: restoring the whole state re-creates the layers, and with
+        // the mouse over the viewer Neuroglancer's hover tracking reads the
+        // new segmentation layer before its selection state exists
+        // ("Cannot set properties of undefined (setting
+        // 'localPositionValid')"), which blanks the viewer. The sets are in
+        // the viewer's toJSON(), so the page's hash follows all the same.
+        const equivalences = liveEquivalences(live, name);
+        if (equivalences) {
+          equivalences.clear();
+          equivalences.restoreState(sets);
+          return;
+        }
+        // Not loaded yet (or not a segmentation layer): through the state.
+      }
       const state = currentState();
       if (!state) {
         // No iframe yet: a layer waiting for the first state carries them
