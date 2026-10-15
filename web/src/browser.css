@@ -1,0 +1,16 @@
+/* The browser mode's own styles: what the page needs beyond the dashboard's
+   CSS (cellmap_flow/dashboard/static/css), which it loads unchanged.
+
+   web/build/render.py renders the page with data-mode="browser" on <html>
+   (and main.ts sets it again at boot), and the templates mark every control
+   only a server can serve with class="server-only": the Pipeline Builder
+   links, the Local Catalog, the BioImage Zoo and Cellpose sections, the LSF
+   server config, Job Logs, and the Finetune and Review tabs. The Flask
+   dashboard has no data-mode and does not load this file, so the class means
+   nothing there.
+
+   !important because Bootstrap's display utilities (.d-flex, .d-block) are
+   !important too, and some marked elements carry one. */
+[data-mode="browser"] .server-only {
+  display: none !important;
+}

@@ -11,6 +11,7 @@
 //   3. the backend listens for the relayed requests;
 //   4. the viewer is restored (the iframe, when a dataset is already open);
 //   5. only then the dashboard's own main.js loads, unchanged.
+import "./browser.css";
 import { createBackend } from "./backend";
 import { listenForApiRequests, registerServiceWorker } from "./backend/relay";
 import type { AppContext } from "./contracts";

@@ -158,7 +158,9 @@
       <button class="action-btn" type="button" id="toggleDashboardBtn">
         Toggle Dashboard
       </button>
-      <a class="action-btn primary" href="/pipeline-builder" role="button">
+      {# server-only: the browser mode (web/) hides what only a server can
+         serve; the class does nothing in the Flask dashboard. #}
+      <a class="action-btn primary server-only" href="/pipeline-builder" role="button">
         Pipeline Builder
       </a>
       <a class="action-btn" href="/api/export-config" download title="Download the current models/normalization/postprocessing/queue config as a reloadable YAML">
@@ -182,15 +184,22 @@
             </svg>
           </div>
           <div class="no-data-title">No Viewer Connected</div>
+          {# In the browser mode (mode == "browser", set by web/build/render.py) the
+             data is read from a URL, not a path on a file system. Flask passes no
+             mode, so it keeps the wording below. #}
           <div class="no-data-desc">
+            {% if mode == "browser" %}
+            No volume open. Enter the URL of an OME-Zarr volume below to open it in the viewer.
+            {% else %}
             No Neuroglancer URL configured. Enter a dataset path below to connect the viewer.
+            {% endif %}
           </div>
           <div class="no-data-input-group">
-            <input type="text" id="datasetPathInput" class="form-control" placeholder="/path/to/dataset.zarr" style="flex:1;" />
+            <input type="text" id="datasetPathInput" class="form-control" placeholder="{% if mode == 'browser' %}https://host/path/volume.zarr{% else %}/path/to/dataset.zarr{% endif %}" style="flex:1;" />
             <button type="button" class="btn btn-primary" id="setDataBtn">Connect</button>
           </div>
           <div id="setDataStatus" style="font-size:11px;color:var(--text-muted);text-align:center;"></div>
-          <div>
+          <div class="server-only">
             <a href="/pipeline-builder" class="no-data-link">Open Pipeline Builder &rarr;</a>
           </div>
         </div>

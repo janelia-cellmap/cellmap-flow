@@ -16,8 +16,7 @@
 // is then served instead; the deployed site always carries its own build.
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
-import type { ProxyOptions } from "vite";
-import { defineConfig } from "vitest/config";
+import { defineConfig, type ProxyOptions } from "vite";
 
 import { dashboardStatic, localNeuroglancer } from "./build/vite-plugins";
 
@@ -46,8 +45,4 @@ export default defineConfig({
   // chunkmirage's Pyodide workers import its Python from web/chunkmirage/src as text
   server: { proxy: ngProxy, fs: { allow: [here, resolve(here, "chunkmirage"), DASHBOARD_STATIC] } },
   preview: { proxy: ngProxy },
-  test: {
-    environment: "node",
-    include: ["test/**/*.test.ts"],
-  },
 });
