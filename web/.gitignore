@@ -9,3 +9,6 @@ ng/
 index.html
 # model bytes and fixtures too large for git
 models/
+
+# The root .gitignore ignores every build/ (Python build output); web/build/ is source.
+!build/
