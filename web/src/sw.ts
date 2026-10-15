@@ -18,6 +18,13 @@
 //   with the File System Access API, whose handle the page stored in
 //   IndexedDB (src/state/local-store.ts). From Marwan Zouinkhi's prototype
 //   (web/legacy/sw.js).
+// - paint/<volume>/<path> under the page's directory: a file of an annotation
+//   volume the Finetune tab paints, answered from the paint store
+//   (src/state/paint-store.ts, IndexedDB) by src/state/paint-route.ts: GET,
+//   HEAD, PUT and DELETE of whole objects, the little of S3 that the
+//   Neuroglancer fork's writable zarr source uses, which MinIO answers in
+//   server mode. The page itself reads and writes the same store directly
+//   (a new volume's metadata, the paint for training).
 //
 // Cross-origin GETs of data (the zarr chunks the reader worker and the viewer
 // fetch from a bucket) go through chunkmirage's store cache (`fromStore`): a
@@ -29,7 +36,10 @@
 /// <reference lib="webworker" />
 import { fromStore, metadata, relay, stats } from "../chunkmirage/web/src/relay";
 import type { StoreStats } from "../chunkmirage/web/src/types";
+import { PAINT_ROUTE } from "./contracts";
 import { FileSystemStore, getHandle } from "./state/local-store";
+import { servePaint } from "./state/paint-route";
+import { openPaintStore } from "./state/paint-store";
 
 const sw = self as unknown as ServiceWorkerGlobalScope;
 /** How long a page may take to answer /api/ before it counts as declining:
@@ -64,6 +74,9 @@ sw.addEventListener("fetch", (event) => {
     // that matched loosely controls the page until the new one takes over).
     const localRoot = new URL("local/", sw.registration.scope).pathname;
     if (url.pathname.startsWith(localRoot)) return event.respondWith(serveLocal(url.pathname.slice(localRoot.length), req.signal));
+    // paint/ likewise: the annotation volumes' files, every method.
+    const paintRoot = new URL(PAINT_ROUTE, sw.registration.scope).pathname;
+    if (url.pathname.startsWith(paintRoot)) return event.respondWith(servedPaint(req, url, paintRoot));
     return; // this origin's own files: never cached here
   }
   // Data a script fetches from elsewhere (not a page, a script or an image).
@@ -162,5 +175,33 @@ async function serveLocal(rest: string, signal: AbortSignal): Promise<Response> 
   } catch (e) {
     localStores.delete(handleKey);
     return new Response(String((e as Error)?.message ?? e), { status: 500 });
+  }
+}
+
+// ------------------------------------------------ /paint/: the annotation volumes the Finetune tab paints
+
+/** One store for the worker's life; it opens the database on its first
+ * request (db.ts keeps the connection). Same-origin, so a paint request
+ * never reaches `fromStore`. */
+const paintStore = openPaintStore();
+
+/** `.../paint/<volume>/<path>`: the route (src/state/paint-route.ts) on the
+ * paint store, as a Response. A store that fails (IndexedDB refusing, say)
+ * is a 500 with the reason, as the fork's write error shows it, rather than
+ * a network error the viewer cannot tell from the worker being gone. */
+async function servedPaint(req: Request, url: URL, root: string): Promise<Response> {
+  try {
+    const { status, headers, body } = await servePaint(paintStore, {
+      method: req.method,
+      path: url.pathname.slice(root.length),
+      query: url.search,
+      range: req.headers.get("range"),
+      body: () => req.arrayBuffer(),
+    });
+    // The store's bytes are ArrayBuffer-backed (IndexedDB and a request's
+    // body give no SharedArrayBuffer); BodyInit's type insists on it.
+    return new Response(body as Uint8Array<ArrayBuffer> | null, { status, headers });
+  } catch (e) {
+    return new Response(`${req.method} ${url.pathname}: ${String((e as Error)?.message ?? e)}`, { status: 500 });
   }
 }
