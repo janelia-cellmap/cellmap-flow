@@ -416,9 +416,9 @@ describe("everything else under /api/", () => {
   it("is unavailable, with the route named", async () => {
     const backend = createBackend(fakeContext());
     for (const [method, path] of [
-      ["GET", "/api/finetune/models"],
-      ["POST", "/api/finetune/submit"],
-      ["GET", "/api/finetune/job/abc/status"],
+      ["POST", "/api/finetune/load-crops"],
+      ["GET", "/api/finetune/ai-annotate/status"],
+      ["POST", "/api/finetune/good-regions/mark-view"],
       ["GET", "/api/review/status"],
       ["POST", "/api/blockwise/validate"],
       ["GET", "/api/logs/stream"],
