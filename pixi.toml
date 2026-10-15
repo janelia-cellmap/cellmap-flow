@@ -136,6 +136,14 @@ pydantic = "<2.14"
 [feature.bioimageio.pypi-dependencies]
 bioimageio-core = { version = "==0.11.0", extras = ["onnx", "pytorch"] }
 timm = ">=1.0"
+# A zoo model's architecture file may import what its own conda environment
+# would have given it. empanada's (stupendous-sheep, infer_2d.py) imports cv2,
+# which its environment.yaml gets through empanada-dl; without it the model
+# failed to start ("No module named 'cv2'"). The headless wheel: conda-forge's
+# py-opencv brings ffmpeg, X11 and Wayland along, none of which a server
+# needs. scikit-image and PyYAML, the other things it imports, are already in
+# the default dependencies.
+opencv-python-headless = ">=4.8"
 
 [feature.test.dependencies]
 pytest = "*"
