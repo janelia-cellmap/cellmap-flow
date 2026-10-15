@@ -1,134 +1,17 @@
 // modelBytes(): the streamed download with progress, the IndexedDB cache
-// (hit and miss, with a tiny in-memory IndexedDB), the shared in-flight
-// download, and the rate-limit error.
+// (hit and miss, with the tiny in-memory IndexedDB of models-helpers.ts), the
+// shared in-flight download, and the rate-limit error.
 import { describe, expect, it } from "vitest";
 
 import { createCatalog } from "../../src/models";
 import { type ByteCache, IndexedDbByteCache, MemoryByteCache, MODEL_DB_NAME, openByteCache } from "../../src/models/byte-cache";
+import { MemoryFinetunedRegistry } from "../../src/models/finetuned";
 import { fetchBytes, fileNameOf, RateLimitError } from "../../src/models/hf";
 import { MemoryKeyValueStore } from "../../src/models/listing-cache";
-import { entryFixture, fakeHub, fakeLog, type HubOptions, streamedResponse } from "./models-helpers";
+import { entryFixture, fakeHub, fakeIndexedDb, fakeLog, type HubOptions, streamedResponse } from "./models-helpers";
 
 const FILE = "setup_54_mito_affinities_16nm_in132_fp32.onnx";
 const MODEL_BYTES = Uint8Array.from({ length: 100 }, (_, i) => i);
-
-// ---------------------------------------------------------------------------
-// A tiny IndexedDB: open/upgrade, one object store per name, get/put/delete
-// in transactions, callbacks fired asynchronously as the real one does. Just
-// enough for IndexedDbByteCache; not a general implementation.
-// ---------------------------------------------------------------------------
-
-type Callback = ((event: unknown) => void) | null;
-
-class FakeRequest<T> {
-  result!: T;
-  error: Error | null = null;
-  onsuccess: Callback = null;
-  onerror: Callback = null;
-  onupgradeneeded: Callback = null;
-  onblocked: Callback = null;
-}
-
-class FakeStore {
-  constructor(readonly data: Map<string, unknown>) {}
-  get(key: string) {
-    return this.request(() => this.data.get(key));
-  }
-  put(value: unknown, key: string) {
-    return this.request(() => {
-      this.data.set(key, value);
-      return key;
-    });
-  }
-  delete(key: string) {
-    return this.request(() => {
-      this.data.delete(key);
-      return undefined;
-    });
-  }
-  private request<T>(run: () => T) {
-    const req = new FakeRequest<T>();
-    queueMicrotask(() => {
-      req.result = run();
-      req.onsuccess?.({ target: req });
-    });
-    return req;
-  }
-}
-
-class FakeTransaction {
-  oncomplete: Callback = null;
-  onerror: Callback = null;
-  onabort: Callback = null;
-  error: Error | null = null;
-  constructor(private readonly stores: Map<string, Map<string, unknown>>) {
-    // Completes after the requests made in this tick have answered.
-    queueMicrotask(() => queueMicrotask(() => this.oncomplete?.({ target: this })));
-  }
-  objectStore(name: string) {
-    const data = this.stores.get(name);
-    if (!data) throw new Error(`no object store ${name}`);
-    return new FakeStore(data);
-  }
-}
-
-// One connection; the data (`stores`) belongs to the database and outlives it.
-class FakeDatabase {
-  onversionchange: Callback = null;
-  closed = false;
-  constructor(
-    readonly name: string,
-    readonly stores: Map<string, Map<string, unknown>>,
-  ) {}
-  get objectStoreNames() {
-    return { contains: (name: string) => this.stores.has(name) };
-  }
-  createObjectStore(name: string) {
-    this.stores.set(name, new Map());
-  }
-  transaction(_name: string) {
-    if (this.closed) throw new Error("database is closed");
-    return new FakeTransaction(this.stores);
-  }
-  close() {
-    this.closed = true;
-  }
-}
-
-function fakeIndexedDb(options: { failOpen?: boolean } = {}) {
-  // The data of each database by name, and every connection handed out.
-  const databases = new Map<string, Map<string, Map<string, unknown>>>();
-  const connections: FakeDatabase[] = [];
-  let opens = 0;
-  const factory = {
-    open(name: string) {
-      opens++;
-      const req = new FakeRequest<FakeDatabase>();
-      queueMicrotask(() => {
-        if (options.failOpen) {
-          req.error = new Error("open refused");
-          req.onerror?.({ target: req });
-          return;
-        }
-        let stores = databases.get(name);
-        const fresh = !stores;
-        if (!stores) {
-          stores = new Map();
-          databases.set(name, stores);
-        }
-        const db = new FakeDatabase(name, stores);
-        connections.push(db);
-        req.result = db;
-        if (fresh) req.onupgradeneeded?.({ target: req });
-        req.onsuccess?.({ target: req });
-      });
-      return req;
-    },
-  };
-  return { factory: factory as unknown as IDBFactory, databases, connections, opens: () => opens };
-}
-
-// ---------------------------------------------------------------------------
 
 describe("IndexedDbByteCache", () => {
   it("creates the database and store on first open and round-trips bytes", async () => {
@@ -220,7 +103,7 @@ describe("Catalog.modelBytes", () => {
   function catalogWith(options: HubOptions, bytes: ByteCache = new MemoryByteCache()) {
     const hub = fakeHub({ onnx: { [FILE]: MODEL_BYTES }, chunkSize: 40, ...options });
     const { log, lines } = fakeLog();
-    const catalog = createCatalog({ log, fetch: hub.fetch, storage: new MemoryKeyValueStore(), bytes });
+    const catalog = createCatalog({ log, fetch: hub.fetch, storage: new MemoryKeyValueStore(), bytes, finetuned: new MemoryFinetunedRegistry() });
     return { catalog, hub, lines, bytes };
   }
   const entry = () => entryFixture("setup_54");

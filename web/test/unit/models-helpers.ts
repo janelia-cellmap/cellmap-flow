@@ -1,7 +1,8 @@
 // Shared by the models-*.test.ts files: the real manifests and tree listings
 // saved from cellmap/onnx-web-models on 2026-10-14 (fixtures/onnx-web-models),
-// and a stand-in for fetch that answers as the Hub does, so the catalog can
-// be exercised without a network.
+// a stand-in for fetch that answers as the Hub does, so the catalog can be
+// exercised without a network, and a tiny in-memory IndexedDB for the models
+// database.
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -118,4 +119,133 @@ export function streamedResponse(bytes: Uint8Array, chunkSize: number, withLengt
 export function fakeLog(): { log: (line: string) => void; lines: string[] } {
   const lines: string[] = [];
   return { log: (line) => lines.push(line), lines };
+}
+
+// ---------------------------------------------------------------------------
+// A tiny IndexedDB: open/upgrade, one object store per name, get/put/delete/
+// getAll in transactions, callbacks fired asynchronously as the real one
+// does. Just enough for ModelDatabase (the byte cache and the finetuned
+// registry); not a general implementation. Versions are not modelled: the
+// upgrade runs once, when a database is first opened.
+// ---------------------------------------------------------------------------
+
+type Callback = ((event: unknown) => void) | null;
+
+class FakeRequest<T> {
+  result!: T;
+  error: Error | null = null;
+  onsuccess: Callback = null;
+  onerror: Callback = null;
+  onupgradeneeded: Callback = null;
+  onblocked: Callback = null;
+}
+
+class FakeStore {
+  constructor(readonly data: Map<string, unknown>) {}
+  get(key: string) {
+    return this.request(() => this.data.get(key));
+  }
+  getAll() {
+    return this.request(() => [...this.data.values()]);
+  }
+  put(value: unknown, key: string) {
+    return this.request(() => {
+      this.data.set(key, value);
+      return key;
+    });
+  }
+  delete(key: string) {
+    return this.request(() => {
+      this.data.delete(key);
+      return undefined;
+    });
+  }
+  private request<T>(run: () => T) {
+    const req = new FakeRequest<T>();
+    queueMicrotask(() => {
+      req.result = run();
+      req.onsuccess?.({ target: req });
+    });
+    return req;
+  }
+}
+
+class FakeTransaction {
+  oncomplete: Callback = null;
+  onerror: Callback = null;
+  onabort: Callback = null;
+  error: Error | null = null;
+  constructor(private readonly stores: Map<string, Map<string, unknown>>) {
+    // Completes after the requests made in this tick have answered.
+    queueMicrotask(() => queueMicrotask(() => this.oncomplete?.({ target: this })));
+  }
+  objectStore(name: string) {
+    const data = this.stores.get(name);
+    if (!data) throw new Error(`no object store ${name}`);
+    return new FakeStore(data);
+  }
+}
+
+// One connection; the data (`stores`) belongs to the database and outlives it.
+class FakeDatabase {
+  onversionchange: Callback = null;
+  closed = false;
+  constructor(
+    readonly name: string,
+    readonly stores: Map<string, Map<string, unknown>>,
+  ) {}
+  get objectStoreNames() {
+    return { contains: (name: string) => this.stores.has(name) };
+  }
+  createObjectStore(name: string) {
+    this.stores.set(name, new Map());
+  }
+  transaction(_name: string) {
+    if (this.closed) throw new Error("database is closed");
+    return new FakeTransaction(this.stores);
+  }
+  close() {
+    this.closed = true;
+  }
+}
+
+export interface FakeIndexedDb {
+  factory: IDBFactory;
+  /** The data of each database by name: store name -> key -> value. */
+  databases: Map<string, Map<string, Map<string, unknown>>>;
+  /** Every connection handed out, in order. */
+  connections: FakeDatabase[];
+  opens: () => number;
+}
+
+export function fakeIndexedDb(options: { failOpen?: boolean } = {}): FakeIndexedDb {
+  const databases = new Map<string, Map<string, Map<string, unknown>>>();
+  const connections: FakeDatabase[] = [];
+  let opens = 0;
+  const factory = {
+    open(name: string) {
+      opens++;
+      const req = new FakeRequest<FakeDatabase>();
+      queueMicrotask(() => {
+        if (options.failOpen) {
+          req.error = new Error("open refused");
+          req.onerror?.({ target: req });
+          return;
+        }
+        let stores = databases.get(name);
+        const fresh = !stores;
+        if (!stores) {
+          stores = new Map();
+          databases.set(name, stores);
+        }
+        const db = new FakeDatabase(name, stores);
+        connections.push(db);
+        req.result = db;
+        if (fresh) req.onupgradeneeded?.({ target: req });
+        req.onsuccess?.({ target: req });
+      });
+      return req;
+    },
+  };
+  return { factory: factory as unknown as IDBFactory, databases, connections, opens: () => opens };
 }

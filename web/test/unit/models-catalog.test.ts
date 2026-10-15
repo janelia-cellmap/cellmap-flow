@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import { createCatalog, LISTING_KEY } from "../../src/models";
 import { LISTING_TTL_MS, MemoryKeyValueStore } from "../../src/models/listing-cache";
 import { MemoryByteCache } from "../../src/models/byte-cache";
+import { MemoryFinetunedRegistry } from "../../src/models/finetuned";
 import { fakeHub, fakeLog, FOLDERS, type HubOptions } from "./models-helpers";
 
 const T0 = Date.UTC(2026, 9, 14, 12, 0, 0);
@@ -13,7 +14,7 @@ const T0 = Date.UTC(2026, 9, 14, 12, 0, 0);
 function catalogWith(options: HubOptions = {}, storage = new MemoryKeyValueStore(), now = () => T0) {
   const hub = fakeHub(options);
   const { log, lines } = fakeLog();
-  const catalog = createCatalog({ log, fetch: hub.fetch, storage, bytes: new MemoryByteCache(), now });
+  const catalog = createCatalog({ log, fetch: hub.fetch, storage, bytes: new MemoryByteCache(), finetuned: new MemoryFinetunedRegistry(), now });
   return { catalog, hub, lines, storage };
 }
 
@@ -135,7 +136,7 @@ describe("list()", () => {
       return hub.fetch(url);
     };
     const { log, lines } = fakeLog();
-    const catalog = createCatalog({ log, fetch: broken, storage: new MemoryKeyValueStore(), bytes: new MemoryByteCache(), now: () => T0 });
+    const catalog = createCatalog({ log, fetch: broken, storage: new MemoryKeyValueStore(), bytes: new MemoryByteCache(), finetuned: new MemoryFinetunedRegistry(), now: () => T0 });
     const entries = await catalog.list();
     expect(entries.map((e) => e.folder)).toEqual(FOLDERS.filter((f) => f !== "setup_55"));
     expect(lines.some((l) => l.startsWith("model catalog: skipping setup_55: setup_55/manifest.json:"))).toBe(true);
@@ -209,7 +210,7 @@ describe("refresh()", () => {
     let blocked = false;
     const flaky = async (url: string) => (blocked ? new Response("", { status: 429 }) : hub.fetch(url));
     const { log, lines } = fakeLog();
-    const catalog = createCatalog({ log, fetch: flaky, storage: refusing, bytes: new MemoryByteCache(), now: () => T0 });
+    const catalog = createCatalog({ log, fetch: flaky, storage: refusing, bytes: new MemoryByteCache(), finetuned: new MemoryFinetunedRegistry(), now: () => T0 });
     const before = await catalog.list();
     expect(lines).toContain("model catalog: could not cache the model list (storage blocked or full)");
     blocked = true;

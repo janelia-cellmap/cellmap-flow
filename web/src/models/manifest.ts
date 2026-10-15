@@ -11,6 +11,7 @@
 //     can name its feeds and fetches without parsing prose.
 // A manifest that already uses the wide forms is taken as it is, so a future
 // export can switch without a change here.
+import { FINETUNED_REPO } from "../contracts";
 import type { ModelEntry, ModelManifest, ModelVariant, Step, VariantName } from "../contracts";
 
 import { HF_REPO, resolveUrl } from "./hf";
@@ -155,8 +156,21 @@ function slug(text: string): string {
   return text.toLowerCase().replace(/[^a-z0-9.]+/g, "_").replace(/^_+|_+$/g, "");
 }
 
-/** The ModelEntry for `folder`'s manifest with `variant` chosen. */
+/** The ModelEntry for `folder`'s manifest with `variant` chosen.
+ *
+ * For a Hugging Face repo the name follows entryName and the bytes come from
+ * the repo's resolve URL. For FINETUNED_REPO, a model finetuned in this
+ * browser (finetuned.ts), the folder is the name (`<base name>-ft<n>`, which
+ * is already a layer name) and the "URL" is the byte-cache key of bytes that
+ * exist only in this browser: nothing is fetched. Serving re-tunes an entry
+ * through this function with the variant chosen for the GPU (backend/
+ * serving.ts), and a finetuned manifest has one variant, so a finetuned
+ * entry comes through unchanged. */
 export function entryFor(folder: string, manifest: ModelManifest, variant: ModelVariant, repo = HF_REPO): ModelEntry {
+  if (repo === FINETUNED_REPO) {
+    const id = `${FINETUNED_REPO}/${folder}`;
+    return { id, name: folder, repo, folder, manifest, variant, onnxUrl: finetunedBytesKey(id) };
+  }
   return {
     id: `${repo}/${folder}`,
     name: entryName(manifest),
@@ -166,6 +180,13 @@ export function entryFor(folder: string, manifest: ModelManifest, variant: Model
     variant,
     onnxUrl: resolveUrl(`${folder}/${variant.file}`, repo),
   };
+}
+
+/** The byte-cache key a finetuned entry's bytes are kept under, and so its
+ * `onnxUrl`: `finetuned:finetuned/<name>`. Not a URL anyone fetches; the
+ * scheme keeps it apart from the Hugging Face URLs in the same store. */
+export function finetunedBytesKey(id: string): string {
+  return `${FINETUNED_REPO}:${id}`;
 }
 
 // --- field readers --------------------------------------------------------
