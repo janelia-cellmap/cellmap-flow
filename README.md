@@ -60,10 +60,20 @@ starts fresh.
   The Input normalizers and Postprocess steps are the server dashboard's.
 - **Phones.** The viewer fills the screen and the *Dashboard* button in the
   header opens the controls over it.
+- **Finetuning.** The Finetune tab's *New Volume* adds a paint layer to the
+  viewer; paint background and objects on a few slices with the brush, then
+  *Start Finetuning*. The model's last layer (its output convolution) is
+  trained on the painted voxels, in the tab, in seconds, and the finetuned
+  model takes the layer over; paint where it is still wrong and train again.
+  The paint and the finetuned models stay in the browser, listed on the next
+  visit, and download as a zarr and an `.onnx` for the server mode or for
+  sharing. The rest of the network stays as exported: a finetune of the whole
+  network is the server mode's.
 
 What the server mode below adds is what a browser cannot do: models that are
-not ONNX exports (PyTorch, TensorFlow, DaCapo, BioImage.io, Cellpose),
-finetuning, the Pipeline Builder and blockwise runs on the cluster.
+not ONNX exports (PyTorch, TensorFlow, DaCapo, BioImage.io, Cellpose), a
+finetune of a whole network with LoRA, crops imported from disk, the Pipeline
+Builder and blockwise runs on the cluster.
 [web/README.md](web/README.md) says how the browser mode is built and run
 locally, and the docs'
 [browser page](https://janelia-cellmap.github.io/cellmap-flow/browser.html)

@@ -71,8 +71,8 @@ the normalizer and postprocessor bodies (`infer/norms.ts`, `post.ts` and the
 segmentation steps), the two stages and their keys (`infer/stages.ts`), the
 viewer's layer JSON (`viewer/`), the backend
 behind the dashboard's routes (`backend/`), the session (`state/`), a folder
-picked on this machine (`local-folder/`) and the dashboard build (`build/`,
-`vite.config.ts`).
+picked on this machine (`local-folder/`), finetuning (`finetune/`, below) and
+the dashboard build (`build/`, `vite.config.ts`).
 
 ## Boot (src/main.ts)
 
@@ -137,17 +137,52 @@ The service worker is one classic script, `sw.js`, bundled on its own from
 `src/sw.ts` (build/vite-plugins.ts `serviceWorker`): bundled as one of the page's
 entries it would import the chunk it shares with the page (the IndexedDB
 helpers), which a classic worker cannot do. It is chunkmirage's `relay.ts`
-(the relay for `/virtual/` and `/api/` alike, and the store cache) plus our
-`/local/` route, which serves a picked folder's files from the handle
-`src/local-folder` stored (and asks permission for again after a reload; the worker
-cannot ask); the Engine registers the same `sw.js` by name, so both get one
-registration.
+(the relay for `/virtual/` and `/api/` alike, and the store cache) plus two
+routes of ours directly under the page's directory: `local/`, which serves a
+picked folder's files from the handle `src/local-folder` stored (and asks
+permission for again after a reload; the worker cannot ask), and `paint/`,
+the annotation volumes' files from the paint store (`state/paint-store.ts`,
+IndexedDB) as an S3-compatible endpoint (`state/paint-route.ts`: GET, HEAD,
+PUT, DELETE of whole objects), which the Neuroglancer fork's writable zarr
+source paints into as it paints into MinIO in server mode; the Engine
+registers the same `sw.js` by name, so both get one registration.
+
+## Finetuning (src/finetune/)
+
+The Finetune tab works as on the server with the browser in the server's and
+MinIO's places. `volume.ts` (the port of `finetune/session/volume.py`) plans
+an annotation volume over the open dataset on the grid the model's
+predictions are served on, one chunk per output block, and writes its zarr v2
+metadata (uncompressed chunks, `.` separator) into the paint store;
+`viewer/layers.ts` adds it as the fork's writable segmentation layer on
+`s3+http(s)://<host><page dir>paint/<volume>/annotation`. Training fits the
+model's head, the last 1×1 convolution of the ONNX graph: `onnx-head.ts` finds
+it (walking back from the output through the shape-only ops) and makes two
+edits with `onnx-proto.ts`'s field-level protobuf splicing, the head's input
+tensor as a second graph output and new weights in the head's initializers;
+`samples.ts` cuts, pads and normalizes each painted chunk's input block
+exactly as the model stage does (the port of `finetune/data/reader.py`);
+`features.ts` runs the model for its logits and features; `targets.ts` (the
+port of `target_transforms.py`, parity-tested) makes the targets and masks;
+`head-trainer.ts` gathers the painted voxels' features and trains the head
+from the model's own weights with Adam on masked, class-balanced
+BCE-with-logits (the server's loss); `run.ts` is one run of all of it. The
+result is a model entry of the `finetuned` repo (`models/finetuned.ts`: a
+record in IndexedDB, its bytes in the byte cache), served like any other.
+`backend/routes/finetune.ts` and `finetune-jobs.ts` answer the tab's routes
+with the Python routes' JSON (a job is a run in the page; its log streams as
+server-sent events), so the tab's job card, loss plot and log stream are
+unchanged. Why the head and not the network: onnxruntime-web trains nothing
+on the GPU; a WebGPU autograd library would have to rebuild the network, a
+later step behind the same `RunFinetune` seam (`finetune/types.ts`).
 
 ## State
 
-`src/state/` keeps `SessionState` (see `contracts.ts`) in IndexedDB. Model bytes
-(.onnx, 11–43 MB each) are cached in IndexedDB too: Hugging Face rate-limits
-anonymous downloads.
+`src/state/` keeps `SessionState` (see `contracts.ts`) in the tab's
+sessionStorage. IndexedDB holds what outlives the tab: picked folders' handles
+(`db.ts`), the paint (`paint-store.ts`), the model bytes (.onnx, 4–43 MB
+each; Hugging Face rate-limits anonymous downloads) and the finetuned
+models' records and bytes (`models/`).
 
 ## Layout
 
@@ -168,13 +203,16 @@ web/
     contracts.ts             the types the modules share
     rebase.ts                root-relative /api/ URLs → the page's directory
     browser.css              hides .server-only under data-mode="browser"
-    sw.ts                    the service worker: chunkmirage's relay for /api/* and /virtual/*, its store cache, our /local/ files
+    sw.ts                    the service worker: chunkmirage's relay for /api/* and /virtual/*, its store cache, our local/ files and paint/ store
     backend/                 the /api/* router and routes, the SW relay (page side)
       index.ts  createBackend(ctx), restoreSession(ctx), the catch-all for server-only routes
       relay.ts  registerServiceWorker(), listenForApiRequests(backend) on chunkmirage's route(); Ask/Reply/Later are chunkmirage's types
       router.ts, sse.ts, yaml.ts (the export), serving.ts (serve and re-serve the session's models)
-      routes/{data,pipeline,models,config}.ts
-    state/                   openSession(): SessionStore (sessionStorage: the tab is the server's process lifetime); db.ts + local-store.ts for picked directories
+      finetune-jobs.ts (a finetune run as the dashboard's job), routes/{data,pipeline,models,config,finetune}.ts
+    state/                   openSession(): SessionStore (sessionStorage: the tab is the server's process lifetime); db.ts + local-store.ts
+                             for picked directories; paint-store.ts + paint-route.ts: the annotation volumes' files and the worker's paint/ route
+    finetune/                types.ts (the seams), volume.ts (planVolume, the zarr v2 files), samples.ts, targets.ts, onnx-proto.ts,
+                             onnx-head.ts, features.ts, head-trainer.ts, run.ts (runFinetune), zip.ts (the paint's download)
     local-folder/            a folder on this machine: index.ts (the local URL and its key, the pick/drop flow,
                              the boot-time permission check), panel.ts (the connect panel's DOM: button, drop target, prompt)
     infer/                   createInference(): Inference — the Engine, one serveStages() view per model
@@ -182,7 +220,7 @@ web/
       norms.ts, post.ts,
       expression.ts (Lambda steps), geometry.ts (the manifest's blocks, halo, ratio, levels), dtype.ts (astype)
     shared/                  args.ts (__CFLOW_ARGS__ codec, digest), model-info.ts
-    models/                  createCatalog(): Catalog — Hugging Face manifests, variant choice, byte cache
+    models/                  createCatalog(): Catalog — Hugging Face manifests, variant choice, byte cache, finetuned.ts (the models finetuned here)
     viewer/                  createViewer(): ViewerController — iframe (index.ts), layers.ts (port of
                              viewer/layers.py), display.ts (shaders, ranges), state.ts, share.ts (the viewer's state: the tab's copy, a link's hash)
   test/

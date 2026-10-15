@@ -34,11 +34,12 @@ networks from `cellmap/onnx-web-models <https://huggingface.co/cellmap/onnx-web-
 on Hugging Face, cached in the browser after the first download.
 
 It is the same dashboard as the server's: the same Models, Input and
-Postprocess tabs, the same normalizers and postprocessing steps. What is
-missing is what a browser cannot do: models that are not ONNX exports
-(PyTorch, TensorFlow, DaCapo, BioImage.io, Cellpose), finetuning, the
-Pipeline Builder and blockwise runs on the cluster. Those are the server
-mode's (:doc:`cli`).
+Postprocess tabs, the same normalizers and postprocessing steps, and a
+Finetune tab that paints and trains in the browser (below). What is missing
+is what a browser cannot do: models that are not ONNX exports (PyTorch,
+TensorFlow, DaCapo, BioImage.io, Cellpose), a finetune of a whole network,
+crops imported from disk, the Pipeline Builder and blockwise runs on the
+cluster. Those are the server mode's (:doc:`cli`).
 
 Opening a volume
 ----------------
@@ -64,6 +65,34 @@ the connect panel says so; the setting is under *Local network access* in
 the site-information panel beside the address bar (or at
 ``chrome://settings/content/localNetworkAccess``). Running the app locally
 on ``http://localhost`` (below) is not gated.
+
+Finetuning in the browser
+-------------------------
+
+With a model running, the Finetune tab's *New Volume* adds a paint layer to
+the viewer, selected, on its Draw tab: paint background (value 1) and the
+objects (2 and up) on a few slices with the brush (``A``) and flood fill
+(``F``), as on the server (:doc:`finetuning`). On the tab's Training panel,
+*Start Finetuning* trains in the tab: the model's last layer, its output
+convolution, is fitted on the voxels you painted, from the model's own
+weights, in seconds on any machine; the job card and the loss plot follow it.
+With *Auto-serve* on, the finetuned model takes the layer over as soon as it
+is trained. Paint where it is still wrong and train again (*Restart* goes on
+from the trained layer).
+
+What this can and cannot fix. The rest of the network stays as exported, so
+the finetune learns what the model mislabels where its features already tell
+the two apart (a membrane it calls mitochondrion, a texture it misses), not
+new shapes; that is a finetune of the whole network, which the server mode
+runs on the cluster, and whose result the browser can serve as any other
+model.
+
+The paint and the finetuned models stay in the browser (IndexedDB): *Resume
+Existing Volume* lists the volumes painted here, newest first, and the
+Models tab lists the finetuned models under the Hugging Face ones. *Download
+paint* saves the volume as a zarr (zipped, the server's layout, so a server
+session can train on it) and *Download finetuned model* the ``.onnx``.
+Nothing leaves your machine unless you download and share it.
 
 Browsers and devices
 --------------------
