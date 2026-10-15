@@ -113,14 +113,18 @@ function localStore(handleKey: string): Promise<FileSystemStore | null> {
 }
 
 /** `.../local/<handleKey>/<path>`: the file at `path` in the directory whose
- * handle the page stored under `handleKey`, its bytes read here (a File
- * given as the body stalled: Chrome answered the head and never finished
- * the body). 404 when the handle is gone or the file is not there (a
- * missing chunk, which zarr readers take as the fill value). Permission
- * must have been granted on the page: a service worker cannot ask. A viewer
- * cancels the chunk requests it no longer needs as the view moves
- * (`signal`); their reads are not started, or the ones in flight would hold
- * up the ones it still wants. */
+ * handle the page stored under `handleKey`, the File itself as the body:
+ * the browser streams it to the client and its bytes never enter this
+ * worker. Read into the worker instead (arrayBuffer), hundreds of chunks
+ * in flight on a slow volume (a network mount) were hundreds of megabytes
+ * held here, and the worker crawled; the head of a streamed response comes
+ * back before its body, which is the read's own time, not a stall. 404
+ * when the handle is gone or the file is not there (a missing chunk, which
+ * zarr readers take as the fill value). Permission must have been granted
+ * on the page: a service worker cannot ask. A viewer cancels the chunk
+ * requests it no longer needs as the view moves (`signal`); their reads
+ * are not started, or the ones in flight would hold up the ones it still
+ * wants. */
 async function serveLocal(rest: string, signal: AbortSignal): Promise<Response> {
   const [handleKey, ...parts] = rest.split("/");
   const path = parts.join("/");
@@ -134,9 +138,9 @@ async function serveLocal(rest: string, signal: AbortSignal): Promise<Response> 
     const file = await store.file(path);
     if (file === undefined) return new Response("not found", { status: 404 });
     const isMeta = /\.z(array|attrs|group)$|zarr\.json$/.test(path);
-    const body = await file.arrayBuffer();
-    if (signal.aborted) return new Response(null, { status: 499, statusText: "the request was cancelled" });
-    return new Response(body, { headers: { "content-type": isMeta ? "application/json" : "application/octet-stream" } });
+    const type = isMeta ? "application/json" : "application/octet-stream";
+    if (file instanceof Blob) return new Response(file, { headers: { "content-type": type, "content-length": String(file.size) } });
+    return new Response(await file.arrayBuffer(), { headers: { "content-type": type } });  // a store without Files (a test's)
   } catch (e) {
     localStores.delete(handleKey);
     return new Response(String((e as Error)?.message ?? e), { status: 500 });
