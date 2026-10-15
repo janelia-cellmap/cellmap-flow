@@ -7,8 +7,8 @@ chunkmirage/
 ng/
 # rendered from cellmap_flow/dashboard/templates by build/render.py
 index.html
-# model bytes and fixtures too large for git
-models/
+# model bytes and fixtures too large for git (web/models only: src/models is source)
+/models/
 
 # The root .gitignore ignores every build/ (Python build output); web/build/ is source.
 !build/

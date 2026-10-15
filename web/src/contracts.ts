@@ -175,6 +175,8 @@ export interface GpuLimits {
 export interface Catalog {
   /** Every model the browser can run, one entry per manifest with its default variant. */
   list(): Promise<ModelEntry[]>;
+  /** The same, fetched afresh from the Hub (the dashboard's Refresh button). */
+  refresh(): Promise<ModelEntry[]>;
   /** An entry from a reference the dashboard sends: an id, a repo/folder, or a name. */
   resolve(ref: string): Promise<ModelEntry | null>;
   /** The manifest as /api/huggingface-models shows a repo's metadata.json. */

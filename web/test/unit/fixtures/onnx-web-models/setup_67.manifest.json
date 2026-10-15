@@ -1,0 +1,179 @@
+{
+  "model": "setup_67",
+  "task": "er",
+  "architecture": "ResUNet3DValid",
+  "checkpoint": "model_checkpoint_20000",
+  "params": 10702001,
+  "channels": [
+    "er"
+  ],
+  "input_voxel_size_nm": [
+    8,
+    8,
+    8
+  ],
+  "output_voxel_size_nm": [
+    8,
+    8,
+    8
+  ],
+  "output": "raw logits (apply sigmoid / threshold at 0)",
+  "input_norm": [
+    {
+      "name": "MinMaxNormalizer",
+      "min_value": 0,
+      "max_value": 255
+    },
+    {
+      "name": "LambdaNormalizer",
+      "expression": "2*x-1"
+    }
+  ],
+  "io": "input 'input' float32 [1,1,z,y,x]; output 'output' float32 [1,C,z',y',x']",
+  "variants": [
+    {
+      "model": "setup_67",
+      "variant": "fp32",
+      "input_size": 148,
+      "output_size": 60,
+      "file_mb": 42.91,
+      "file": "setup_67_er_8nm_in148_fp32.onnx",
+      "max_abs": 0.0003509521484375,
+      "mean_abs": 4.176835500402376e-05,
+      "flip_frac": 0.0,
+      "ort_cpu_s": 1.48
+    },
+    {
+      "model": "setup_67",
+      "variant": "fp16",
+      "input_size": 148,
+      "output_size": 60,
+      "file_mb": 21.55,
+      "file": "setup_67_er_8nm_in148_fp16.onnx",
+      "max_abs": 0.012736320495605469,
+      "mean_abs": 0.0017244170885533094,
+      "flip_frac": 1.8518518518518518e-05,
+      "ort_cpu_s": 2.3
+    },
+    {
+      "model": "setup_67",
+      "variant": "int8w",
+      "input_size": 148,
+      "output_size": 60,
+      "file_mb": 10.88,
+      "file": "setup_67_er_8nm_in148_int8w.onnx",
+      "max_abs": 0.13861465454101562,
+      "mean_abs": 0.013560449704527855,
+      "flip_frac": 0.0001712962962962963,
+      "ort_cpu_s": 1.4
+    },
+    {
+      "model": "setup_67",
+      "variant": "int8w_fp16",
+      "input_size": 148,
+      "output_size": 60,
+      "file_mb": 10.91,
+      "file": "setup_67_er_8nm_in148_int8w_fp16.onnx",
+      "max_abs": 0.12043094635009766,
+      "mean_abs": 0.013056661002337933,
+      "flip_frac": 0.00015277777777777777,
+      "ort_cpu_s": 2.27
+    },
+    {
+      "model": "setup_67",
+      "variant": "fp32",
+      "input_size": 132,
+      "output_size": 44,
+      "file_mb": 42.91,
+      "file": "setup_67_er_8nm_in132_fp32.onnx",
+      "max_abs": 0.00025773048400878906,
+      "mean_abs": 4.2362815293017775e-05,
+      "flip_frac": 0.0,
+      "ort_cpu_s": 0.97
+    },
+    {
+      "model": "setup_67",
+      "variant": "fp16",
+      "input_size": 132,
+      "output_size": 44,
+      "file_mb": 21.55,
+      "file": "setup_67_er_8nm_in132_fp16.onnx",
+      "max_abs": 0.009136676788330078,
+      "mean_abs": 0.0019501380156725645,
+      "flip_frac": 0.0,
+      "ort_cpu_s": 1.47
+    },
+    {
+      "model": "setup_67",
+      "variant": "int8w",
+      "input_size": 132,
+      "output_size": 44,
+      "file_mb": 10.88,
+      "file": "setup_67_er_8nm_in132_int8w.onnx",
+      "max_abs": 0.07540178298950195,
+      "mean_abs": 0.014426575042307377,
+      "flip_frac": 4.695717505634861e-05,
+      "ort_cpu_s": 0.96
+    },
+    {
+      "model": "setup_67",
+      "variant": "int8w_fp16",
+      "input_size": 132,
+      "output_size": 44,
+      "file_mb": 10.91,
+      "file": "setup_67_er_8nm_in132_int8w_fp16.onnx",
+      "max_abs": 0.08411073684692383,
+      "mean_abs": 0.01446869969367981,
+      "flip_frac": 1.1739293764087153e-05,
+      "ort_cpu_s": 1.49
+    },
+    {
+      "model": "setup_67",
+      "variant": "fp32",
+      "input_size": 116,
+      "output_size": 28,
+      "file_mb": 42.91,
+      "file": "setup_67_er_8nm_in116_fp32.onnx",
+      "max_abs": 0.00012111663818359375,
+      "mean_abs": 2.531671452743467e-05,
+      "flip_frac": 0.0,
+      "ort_cpu_s": 0.52
+    },
+    {
+      "model": "setup_67",
+      "variant": "fp16",
+      "input_size": 116,
+      "output_size": 28,
+      "file_mb": 21.55,
+      "file": "setup_67_er_8nm_in116_fp16.onnx",
+      "max_abs": 0.009019851684570312,
+      "mean_abs": 0.0021523048635572195,
+      "flip_frac": 0.00036443148688046647,
+      "ort_cpu_s": 0.97
+    },
+    {
+      "model": "setup_67",
+      "variant": "int8w",
+      "input_size": 116,
+      "output_size": 28,
+      "file_mb": 10.88,
+      "file": "setup_67_er_8nm_in116_int8w.onnx",
+      "max_abs": 0.09022176265716553,
+      "mean_abs": 0.019372668117284775,
+      "flip_frac": 0.0028698979591836736,
+      "ort_cpu_s": 0.57
+    },
+    {
+      "model": "setup_67",
+      "variant": "int8w_fp16",
+      "input_size": 116,
+      "output_size": 28,
+      "file_mb": 10.91,
+      "file": "setup_67_er_8nm_in116_int8w_fp16.onnx",
+      "max_abs": 0.08383440971374512,
+      "mean_abs": 0.020597415044903755,
+      "flip_frac": 0.002824344023323615,
+      "ort_cpu_s": 0.88
+    }
+  ]
+}

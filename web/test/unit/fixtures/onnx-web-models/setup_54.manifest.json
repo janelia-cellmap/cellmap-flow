@@ -1,0 +1,181 @@
+{
+  "model": "setup_54",
+  "task": "mito_affinities",
+  "architecture": "ResUNet3DValid",
+  "checkpoint": "model_checkpoint_260000",
+  "params": 10702083,
+  "channels": [
+    "mito_aff_z",
+    "mito_aff_y",
+    "mito_aff_x"
+  ],
+  "input_voxel_size_nm": [
+    16,
+    16,
+    16
+  ],
+  "output_voxel_size_nm": [
+    16,
+    16,
+    16
+  ],
+  "output": "raw logits (apply sigmoid / threshold at 0)",
+  "input_norm": [
+    {
+      "name": "MinMaxNormalizer",
+      "min_value": 0,
+      "max_value": 255
+    },
+    {
+      "name": "LambdaNormalizer",
+      "expression": "2*x-1"
+    }
+  ],
+  "io": "input 'input' float32 [1,1,z,y,x]; output 'output' float32 [1,C,z',y',x']",
+  "variants": [
+    {
+      "model": "setup_54",
+      "variant": "fp32",
+      "input_size": 148,
+      "output_size": 60,
+      "file_mb": 42.91,
+      "file": "setup_54_mito_affinities_16nm_in148_fp32.onnx",
+      "max_abs": 0.00048351287841796875,
+      "mean_abs": 5.291725756251253e-05,
+      "flip_frac": 0.0,
+      "ort_cpu_s": 1.37
+    },
+    {
+      "model": "setup_54",
+      "variant": "fp16",
+      "input_size": 148,
+      "output_size": 60,
+      "file_mb": 21.55,
+      "file": "setup_54_mito_affinities_16nm_in148_fp16.onnx",
+      "max_abs": 0.014222145080566406,
+      "mean_abs": 0.002395870164036751,
+      "flip_frac": 9.259259259259259e-06,
+      "ort_cpu_s": 2.17
+    },
+    {
+      "model": "setup_54",
+      "variant": "int8w",
+      "input_size": 148,
+      "output_size": 60,
+      "file_mb": 10.88,
+      "file": "setup_54_mito_affinities_16nm_in148_int8w.onnx",
+      "max_abs": 0.1365518569946289,
+      "mean_abs": 0.019763240590691566,
+      "flip_frac": 9.41358024691358e-05,
+      "ort_cpu_s": 1.38
+    },
+    {
+      "model": "setup_54",
+      "variant": "int8w_fp16",
+      "input_size": 148,
+      "output_size": 60,
+      "file_mb": 10.91,
+      "file": "setup_54_mito_affinities_16nm_in148_int8w_fp16.onnx",
+      "max_abs": 0.11388206481933594,
+      "mean_abs": 0.019133515655994415,
+      "flip_frac": 8.024691358024691e-05,
+      "ort_cpu_s": 2.15
+    },
+    {
+      "model": "setup_54",
+      "variant": "fp32",
+      "input_size": 132,
+      "output_size": 44,
+      "file_mb": 42.91,
+      "file": "setup_54_mito_affinities_16nm_in132_fp32.onnx",
+      "max_abs": 0.00034809112548828125,
+      "mean_abs": 3.223641397198662e-05,
+      "flip_frac": 0.0,
+      "ort_cpu_s": 0.99
+    },
+    {
+      "model": "setup_54",
+      "variant": "fp16",
+      "input_size": 132,
+      "output_size": 44,
+      "file_mb": 21.55,
+      "file": "setup_54_mito_affinities_16nm_in132_fp16.onnx",
+      "max_abs": 0.014939308166503906,
+      "mean_abs": 0.0024741028901189566,
+      "flip_frac": 0.0,
+      "ort_cpu_s": 1.61
+    },
+    {
+      "model": "setup_54",
+      "variant": "int8w",
+      "input_size": 132,
+      "output_size": 44,
+      "file_mb": 10.88,
+      "file": "setup_54_mito_affinities_16nm_in132_int8w.onnx",
+      "max_abs": 0.14522552490234375,
+      "mean_abs": 0.020283304154872894,
+      "flip_frac": 0.00019174179814675682,
+      "ort_cpu_s": 0.94
+    },
+    {
+      "model": "setup_54",
+      "variant": "int8w_fp16",
+      "input_size": 132,
+      "output_size": 44,
+      "file_mb": 10.91,
+      "file": "setup_54_mito_affinities_16nm_in132_int8w_fp16.onnx",
+      "max_abs": 0.1202239990234375,
+      "mean_abs": 0.019063608720898628,
+      "flip_frac": 0.00016043701477585774,
+      "ort_cpu_s": 1.48
+    },
+    {
+      "model": "setup_54",
+      "variant": "fp32",
+      "input_size": 116,
+      "output_size": 28,
+      "file_mb": 42.91,
+      "file": "setup_54_mito_affinities_16nm_in116_fp32.onnx",
+      "max_abs": 0.0001201629638671875,
+      "mean_abs": 2.019471321546007e-05,
+      "flip_frac": 0.0,
+      "ort_cpu_s": 0.6
+    },
+    {
+      "model": "setup_54",
+      "variant": "fp16",
+      "input_size": 116,
+      "output_size": 28,
+      "file_mb": 21.55,
+      "file": "setup_54_mito_affinities_16nm_in116_fp16.onnx",
+      "max_abs": 0.013419151306152344,
+      "mean_abs": 0.0025618269573897123,
+      "flip_frac": 1.5184645286686102e-05,
+      "ort_cpu_s": 1.01
+    },
+    {
+      "model": "setup_54",
+      "variant": "int8w",
+      "input_size": 116,
+      "output_size": 28,
+      "file_mb": 10.88,
+      "file": "setup_54_mito_affinities_16nm_in116_int8w.onnx",
+      "max_abs": 0.1302204132080078,
+      "mean_abs": 0.02130849100649357,
+      "flip_frac": 0.00013666180758017493,
+      "ort_cpu_s": 0.55
+    },
+    {
+      "model": "setup_54",
+      "variant": "int8w_fp16",
+      "input_size": 116,
+      "output_size": 28,
+      "file_mb": 10.91,
+      "file": "setup_54_mito_affinities_16nm_in116_int8w_fp16.onnx",
+      "max_abs": 0.11883735656738281,
+      "mean_abs": 0.02086680941283703,
+      "flip_frac": 7.592322643343052e-05,
+      "ort_cpu_s": 0.96
+    }
+  ]
+}
