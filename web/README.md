@@ -95,6 +95,25 @@ build of the viewer rather than embedding neuroglancer-demo.appspot.com.
 service worker keeps the fixed name `sw.js`, beside the page, because
 chunkmirage's engine registers it by that name with scope `./`.
 
+## Testing
+
+```
+cd web
+npm run typecheck && npm test            # TypeScript, and the unit and parity suites (vitest)
+E2E=1 npm run e2e                        # the browser smoke test: a public volume, a model, one chunk
+```
+
+The parity suites check the TypeScript ports of the normalizers, postprocessors
+and the `__CFLOW_ARGS__` codec against fixtures that
+`test/fixtures/make_fixtures.py` writes from the Python classes; regenerate them
+with that script (the pixi python) when the Python changes, and `tests/web`
+(pytest) fails while they are stale.
+
+The smoke test runs headless Chromium through Playwright (`npx playwright
+install chromium` once; `CHROME_PATH=/path/to/chrome` uses a Chromium of your
+own). Headless Chromium has no WebGPU, so it runs on the WASM provider: about
+half a minute for the first chunk.
+
 ## Credits
 
 The browser mode is a port of

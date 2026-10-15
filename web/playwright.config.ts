@@ -7,7 +7,8 @@
 // E2E=1 no server is started and the test reports itself skipped, so a plain
 // `npm run e2e` is quick and harmless.
 //
-// Knobs (environment): E2E_PORT (default 4173); E2E_SERVER=preview to serve
+// Knobs (environment): E2E_PORT (default 4173); CHROME_PATH (a Chromium binary);
+// E2E_CHUNK_TIMEOUT_MS (how long to wait for the first chunk); E2E_SERVER=preview to serve
 // the build in web/dist with `vite preview` (CI, after `npm run build`)
 // instead of the dev server; E2E_DATASET and E2E_MODEL (see the test).
 import { defineConfig, devices } from "@playwright/test";
@@ -38,6 +39,9 @@ export default defineConfig({
     launchOptions: {
       // Containers (CI) give /dev/shm too little room for Chromium.
       args: ["--disable-dev-shm-usage"],
+      // CHROME_PATH: a Chromium of your own (e.g. one already in Playwright's
+      // cache) when `npx playwright install chromium` cannot download one.
+      ...(process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : {}),
     },
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
