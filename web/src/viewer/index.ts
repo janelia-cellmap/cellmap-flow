@@ -223,6 +223,22 @@ export function createViewer(opts: { session: SessionStore; log: (line: string) 
       return viewerUrl() ?? NG_PAGE + encodeState(pending ?? {});
     },
 
+    prepareDataset(url, raw, info) {
+      // Into the page's URL only, which the reload connect.js does a second
+      // after /api/set-data answers restores from (restore() above): an iframe
+      // mounted now would show the volume, go with the page, and show it
+      // again. An open viewer's hash is no longer mirrored onto the page, or
+      // its next poll would put the old state back before the reload.
+      stopMirror?.();
+      stopMirror = null;
+      const state = info ? initialState(info, { [RAW_LAYER_NAME]: raw }) : stateWithoutInfo(url, raw);
+      const hash = encodeState(state);
+      pending = state;
+      mirrorToPage(hash);
+      log(`viewer prepared for ${url}: shown when the page reloads`);
+      return NG_PAGE + hash;
+    },
+
     setLayers(layers) {
       const state = currentState();
       if (!state) {

@@ -30,14 +30,15 @@ function submit(models: string[], extra: Record<string, unknown> = {}) {
 }
 
 describe("POST /api/set-data", () => {
-  it("opens the URL in the engine and the viewer, keeps it, and answers the viewer's URL", async () => {
+  it("opens the URL in the engine, prepares the viewer for the reload, keeps it, and answers the viewer's URL", async () => {
     const ctx = fakeContext({ dataset: null });
     const res = await createBackend(ctx).handle(request("POST", "/api/set-data", { dataset_path: " https://example.org/em.zarr " }));
     expect(res.status).toBe(200);
     expect(body(res)).toEqual({ success: true, neuroglancer_url: "http://localhost/ng/#!state" });
     expect(ctx.infer.opened).toEqual(["https://example.org/em.zarr"]);
-    expect(ctx.viewer.openedWith[0].url).toBe("https://example.org/em.zarr");
-    expect(ctx.viewer.openedWith[0].info?.url).toBe("https://example.org/em.zarr"); // the volume's info, for the viewer's dimensions and position
+    expect(ctx.viewer.prepared[0].url).toBe("https://example.org/em.zarr");
+    expect(ctx.viewer.prepared[0].info?.url).toBe("https://example.org/em.zarr"); // the volume's info, for the viewer's dimensions and position
+    expect(ctx.viewer.openedWith).toEqual([]); // not shown before connect.js reloads the page
     expect(ctx.session.state.datasetUrl).toBe("https://example.org/em.zarr");
   });
 

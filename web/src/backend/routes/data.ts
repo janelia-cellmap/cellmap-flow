@@ -4,8 +4,10 @@
 // or gs://, to an OME-Zarr group or array, or this page's own local/<key>/
 // for a directory picked on this machine), since there is no file system to
 // read a path from. The answer is {success: true, neuroglancer_url}, after
-// which connect.js reloads the page, and the viewer is rebuilt from the
-// session (viewer.restore). A body without a path is the 400 parse() gives;
+// which connect.js reloads the page; the viewer's state for the volume is put
+// in the page's URL now (viewer.prepareDataset) and shown by the reload
+// (viewer.restore), not mounted before it, which showed the volume twice
+// with the reload between. A body without a path is the 400 parse() gives;
 // a URL that cannot be opened is a 500 {error}, as the Python route answers
 // (connect.js shows either's error).
 import type { Router } from "../router";
@@ -29,7 +31,7 @@ export function dataRoutes(router: Router): void {
     try {
       const info = await ctx.infer.openDataset(url);
       // The info too: the viewer takes its dimensions and starting position from the volume.
-      const viewerUrl = await ctx.viewer.openDataset(url, rawLayer(url, info), info);
+      const viewerUrl = ctx.viewer.prepareDataset(url, rawLayer(url, info), info);
       await ctx.session.update({ datasetUrl: url });
       ctx.log(`Opened ${url} (${info.dtype}, ${info.levels.length} level${info.levels.length === 1 ? "" : "s"})`);
       return json(200, { success: true, neuroglancer_url: viewerUrl });

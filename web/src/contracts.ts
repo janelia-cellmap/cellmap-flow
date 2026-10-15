@@ -203,6 +203,12 @@ export interface ViewerController {
    * (the finest voxel size, the centre), as the CLI viewer sets them;
    * without, Neuroglancer derives them from the layer. */
   openDataset(url: string, raw: LayerSpec, info?: DatasetInfo): Promise<string>;
+  /** Make `url` the dataset the viewer shows after the page reloads, without
+   * showing it now: the state goes into the page's URL, where restore()
+   * reads it. For /api/set-data, which connect.js follows with a reload (the
+   * server's route builds its viewer without showing it either); returns the
+   * viewer's URL for that state. */
+  prepareDataset(url: string, raw: LayerSpec, info?: DatasetInfo): string;
   /** Replace the named layers, keeping a layer's visibility if it was hidden. */
   setLayers(layers: Record<string, LayerSpec>): void;
   removeLayer(name: string): void;

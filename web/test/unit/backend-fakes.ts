@@ -195,6 +195,14 @@ export class FakeViewer implements ViewerController {
     return "http://localhost/ng/#!state";
   }
 
+  /** What prepareDataset was given: the dataset the reload would show. */
+  prepared: { url: string; raw: LayerSpec; info?: DatasetInfo }[] = [];
+
+  prepareDataset(url: string, raw: LayerSpec, info?: DatasetInfo): string {
+    this.prepared.push({ url, raw, info });
+    return "http://localhost/ng/#!state";
+  }
+
   setLayers(layers: Record<string, LayerSpec>): void {
     this.setLayersCalls++;
     Object.assign(this.layers, layers);
