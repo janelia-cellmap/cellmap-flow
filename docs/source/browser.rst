@@ -8,6 +8,16 @@ predictions in Neuroglancer as you move around. It is the main place to try
 cellmap-flow, and the first place to test a change: every push to ``main``
 deploys it (GitHub Pages, from ``.github/workflows/pages.yml``).
 
+`Open this example <https://janelia-cellmap.github.io/cellmap-flow/app/?dataset=https://janelia-cosem-datasets.s3.amazonaws.com/jrc_mus-liver/jrc_mus-liver.zarr/recon-1/em/fibsem-uint8&model=setup_53>`_ to start from something running: an
+OpenOrganelle mouse-liver volume with the mitochondria model ``setup_53`` on
+it. A link's query names the volume and the models, so any such pair can be
+shared::
+
+    https://janelia-cellmap.github.io/cellmap-flow/app/?dataset=<url>&model=<name>&model=<name>
+
+A model is named as the Models tab lists it (``setup_53``) or by its
+repository path (``cellmap/onnx-web-models/setup_53``).
+
 How it works
 ------------
 
@@ -43,12 +53,12 @@ folder, and again after a reload. Firefox and Safari have no directory picker.
 **A volume on your institution's network.** To Chrome, a host with a private
 address (``10.x``, ``192.168.x``, a ``.local`` name) is on your *local
 network*, and a public site such as this one needs your permission to reach
-it. Chrome asks the first time ("wants to look for and connect to devices on
-your local network"); until it is allowed, connecting fails with *Failed to
-fetch*. Allow it from the prompt, or later from the site-information icon
-beside the address bar, under *Local network access* (or at
-``chrome://settings/content/localNetworkAccess``). Running the app locally on
-``http://localhost`` (below) needs no permission.
+it. Chrome asks when the volume is opened ("wants to look for and connect to
+devices on your local network"); until it is allowed, connecting fails with
+*Failed to fetch*, and the connect panel says so. Allow it from the prompt,
+or later from the site-information icon beside the address bar, under *Local
+network access* (or at ``chrome://settings/content/localNetworkAccess``).
+Running the app locally on ``http://localhost`` (below) needs no permission.
 
 Browsers and devices
 --------------------

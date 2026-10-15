@@ -15,13 +15,18 @@ import { serveModels, stepNames } from "../serving";
 
 /** The catalog as /api/huggingface-models lists it: {model id: metadata},
  * the id "cellmap/onnx-web-models/setup_54" (models-tab.js shows its last
- * segment and the metadata's description). `refresh` reads the repository
- * again instead of the cached listing. A listing that fails is {error}
- * with a 500, as the Flask route answers; the tab shows the message. */
+ * segment and the metadata's description). A model the session is serving
+ * (after a reload, or from a link that named it) has `selected: true`, and
+ * the tab ticks it, so the ticks say what is running; the Flask listing
+ * has no such field, so its rows start unticked as before. `refresh` reads
+ * the repository again instead of the cached listing. A listing that fails
+ * is {error} with a 500, as the Flask route answers; the tab shows the
+ * message. */
 async function listModels(ctx: AppContext, refresh: boolean) {
   try {
     const entries = refresh ? await ctx.catalog.refresh() : await ctx.catalog.list();
-    return json(200, Object.fromEntries(entries.map((e) => [e.id, ctx.catalog.metadataFor(e)])));
+    const serving = new Set(ctx.session.state.models.map((m) => m.id));
+    return json(200, Object.fromEntries(entries.map((e) => [e.id, { ...ctx.catalog.metadataFor(e), ...(serving.has(e.id) ? { selected: true } : {}) }])));
   } catch (e) {
     return json(500, { error: message(e) });
   }

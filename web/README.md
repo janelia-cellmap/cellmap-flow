@@ -57,6 +57,23 @@ separately), `npm test` (vitest unit tests in `test/`), and from the
 repository's root `python -m pytest tests/web` for the rendered page.
 `npm run build` writes the deployable site to `web/dist/`.
 
+## A link that opens a volume and runs models
+
+The page's query can name what Connect and Submit would be used for:
+
+```
+https://janelia-cellmap.github.io/cellmap-flow/app/?dataset=<url>&model=<name>&model=<name>
+```
+
+`dataset` is the volume's URL; each `model` is a model as the Models tab
+lists it (`setup_53`) or its repository path
+(`cellmap/onnx-web-models/setup_53`), repeated or comma-separated. At boot
+(`src/main.ts`, `src/link.ts`) they go into the tab's session, the session's
+restore opens the volume and serves the models, and the query is taken off
+the address bar, so a later tab completed from the URL starts fresh. A model
+the catalog does not know is logged and left out. The README's example link
+opens an OpenOrganelle volume with `setup_53` running.
+
 ## Opening a folder on your machine
 
 In Chrome or Edge the connect panel has a **Browse local folder…** button,
@@ -99,9 +116,13 @@ browser that picked the folder.
 - **Data on a private network.** To Chrome, a host with a private address
   (`10.x`, `192.168.x`, a `.local` name) is on the user's *local network*, and
   a public site such as the deployed one may fetch from it only with the
-  user's permission (Chrome's Local Network Access). Chrome asks on the first
-  request; until it is allowed every fetch fails with "Failed to fetch", which
-  the connect panel's error explains (`src/backend/routes/data.ts`). The
+  user's permission (Chrome's Local Network Access). Chrome asks when the
+  page itself makes a request to such a host, and refuses one made by a
+  service worker outright until the permission has been given; so the
+  service worker (`src/sw.ts`) leaves a volume's metadata requests, the first
+  of any volume, to the page, and that request is what brings the prompt up.
+  Until it is allowed, every fetch fails with "Failed to fetch", which the
+  connect panel's error explains (`src/backend/routes/data.ts`). The
   permission is per site: in the site-information panel beside the address
   bar, or at `chrome://settings/content/localNetworkAccess`. A page on
   `http://localhost` is not a public site, so there is no such check there.

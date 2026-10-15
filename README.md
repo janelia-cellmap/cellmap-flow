@@ -35,7 +35,10 @@ is cellmap-flow with nothing to install: the dashboard as a web page, with the
 models running in your browser. Open a volume, tick a model, and look at its
 predictions in Neuroglancer as you move around. It is the main place to try
 cellmap-flow, and the first place to test a change: every push to `main`
-deploys it.
+deploys it. **[Open this example](https://janelia-cellmap.github.io/cellmap-flow/app/?dataset=https://janelia-cosem-datasets.s3.amazonaws.com/jrc_mus-liver/jrc_mus-liver.zarr/recon-1/em/fibsem-uint8&model=setup_53)** to start from something
+running: an OpenOrganelle mouse-liver volume with the mitochondria model
+`setup_53` on it. A link's query names the volume and the models
+(`?dataset=<url>&model=<name>`), so any such pair can be shared.
 
 - **Data.** Paste the URL of an OME-Zarr volume served with CORS (public S3
   and GCS buckets are, [OpenOrganelle](https://openorganelle.janelia.org)'s
@@ -43,10 +46,10 @@ deploys it.
   can instead browse to, or drop, an OME-Zarr, zarr or N5 folder on your
   machine: nothing is uploaded, the page reads it itself. A volume on your
   institution's network (a host with a private address, `10.x` say) needs one
-  more click in Chrome, which asks whether the site may use your local
-  network; until you allow it, connecting fails with "Failed to fetch" (allow
-  it from the prompt, or under *Local network access* in the site-information
-  panel beside the address bar).
+  more click in Chrome, which asks, when the volume is opened, whether the
+  site may use your local network; until you allow it, connecting fails with
+  "Failed to fetch" (allow it from the prompt, or later under *Local network
+  access* in the site-information panel beside the address bar).
 - **Models.** ONNX exports of cellmap's networks from
   [cellmap/onnx-web-models](https://huggingface.co/cellmap/onnx-web-models)
   on Hugging Face, run with onnxruntime-web on your GPU through WebGPU

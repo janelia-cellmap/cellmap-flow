@@ -28,6 +28,7 @@ import { createBackend, restoreSession } from "./backend";
 import { listenForApiRequests, registerServiceWorker } from "./backend/relay";
 import type { AppContext } from "./contracts";
 import { createInference } from "./infer";
+import { parseLink, resolveLinkedModels, withoutLink } from "./link";
 import { installLocalFolderUi, restoreLocalFolder } from "./local-folder";
 import { createCatalog } from "./models";
 import { installApiRebase } from "./rebase";
@@ -63,14 +64,23 @@ async function boot() {
   installApiRebase();
   await registerServiceWorker();
   const session = await openSession();
-  // A shared link carries its own dataset in the viewer state; it wins over
-  // what this browser's session remembers, before the engine opens anything.
-  const linked = datasetUrlFromPage();
+  // A link to the page names its volume and models in the query (src/link.ts),
+  // or a shared `#!` state carries its own dataset; either wins over what this
+  // tab's session remembers, before the engine opens anything.
+  const link = parseLink(location.search);
+  const linked = link.datasetUrl ?? datasetUrlFromPage();
   if (linked && linked !== session.state.datasetUrl) await session.update({ datasetUrl: linked });
   const events = new EventTarget();
   const viewer = createViewer({ session, log });
   const infer = await createInference({ session, log });
   const catalog = createCatalog({ log });
+  if (link.models.length) {
+    // In place of the session's, as Submit would put them: served on the
+    // volume when the session is restored below.
+    await session.update({ models: await resolveLinkedModels(catalog, link.models, log) });
+    log(`models from the link: ${link.models.join(", ")}`);
+  }
+  if (link.datasetUrl || link.models.length) history.replaceState(null, "", withoutLink(location.href));
   const ctx: AppContext = { session, catalog, infer, viewer, events, log };
   const backend = createBackend(ctx);
   listenForApiRequests(backend);

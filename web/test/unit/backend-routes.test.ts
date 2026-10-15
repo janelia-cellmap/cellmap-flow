@@ -272,6 +272,13 @@ describe("the model lists", () => {
     expect(ctx.catalog.refreshed).toBe(1);
   });
 
+  it("marks the models the session is serving as selected, and no other", async () => {
+    const ctx = fakeContext({ state: { models: [entry("setup_54")] } });
+    const listing = body(await createBackend(ctx).handle(request("GET", "/api/huggingface-models")));
+    expect(listing[HF54].selected).toBe(true);
+    expect("selected" in listing[HF56]).toBe(false);
+  });
+
   it("answers a failed listing with {error} and a 500, which the tab shows in the list", async () => {
     const ctx = fakeContext();
     ctx.catalog.failList = "huggingface.co: 429 Too Many Requests";
