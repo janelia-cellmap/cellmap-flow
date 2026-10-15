@@ -92,12 +92,11 @@ async function answer(backend: Backend, ask: Ask, port: MessagePort): Promise<vo
 /** The ApiRequest for a relayed request: the path from "/api/" on (the page
  * may be served under a base, and the dashboard's URLs are root-relative),
  * the headers lower-cased, and the body parsed as JSON when it is JSON (null
- * otherwise, as Flask's get_json(silent=True) gives). The query is what the
- * path carries after "?": chunkmirage's relay sends the pathname alone
- * today, so it is empty until the relay passes the search too; the one
- * route that reads it (sse.ts's `offset`) has Last-Event-ID, a header, first. */
-export function toApiRequest(ask: Pick<Ask, "method" | "path" | "headers" | "body">): ApiRequest {
-  const url = new URL(ask.path, "http://localhost/");
+ * otherwise, as Flask's get_json(silent=True) gives). The query is the
+ * request's search (`?offset=12`, which sse.ts reads), which the relay
+ * passes beside the path. */
+export function toApiRequest(ask: Pick<Ask, "method" | "path" | "search" | "headers" | "body">): ApiRequest {
+  const url = new URL(ask.path + ask.search, "http://localhost/");
   const at = url.pathname.indexOf("/api/");
   const path = at === -1 ? url.pathname : url.pathname.slice(at);
   const headers: Record<string, string> = {};

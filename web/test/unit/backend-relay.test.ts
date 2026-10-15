@@ -22,26 +22,26 @@ function fakePort() {
 
 describe("toApiRequest", () => {
   it("takes the path from /api/ on, whatever base the page has", () => {
-    const req = toApiRequest({ method: "get", path: "/cellmap-flow/app/api/finetune/job/7/logs/stream", headers: [], body: null });
+    const req = toApiRequest({ method: "get", path: "/cellmap-flow/app/api/finetune/job/7/logs/stream", search: "", headers: [], body: null });
     expect(req.method).toBe("GET");
     expect(req.path).toBe("/api/finetune/job/7/logs/stream");
     expect([...req.query.keys()]).toEqual([]);
-    expect(toApiRequest({ method: "GET", path: "/api/models", headers: [], body: null }).path).toBe("/api/models");
+    expect(toApiRequest({ method: "GET", path: "/api/models", search: "", headers: [], body: null }).path).toBe("/api/models");
   });
 
-  it("reads a query the path carries, apart", () => {
-    const req = toApiRequest({ method: "GET", path: "/api/finetune/job/7/logs/stream?offset=12", headers: [], body: null });
+  it("reads the query the relay passes beside the path", () => {
+    const req = toApiRequest({ method: "GET", path: "/api/finetune/job/7/logs/stream", search: "?offset=12", headers: [], body: null });
     expect(req.path).toBe("/api/finetune/job/7/logs/stream");
     expect(req.query.get("offset")).toBe("12");
   });
 
   it("lower-cases the header names", () => {
-    const req = toApiRequest({ method: "GET", path: "/api/x", headers: [["Last-Event-ID", "40"], ["Accept", "text/event-stream"]], body: null });
+    const req = toApiRequest({ method: "GET", path: "/api/x", search: "", headers: [["Last-Event-ID", "40"], ["Accept", "text/event-stream"]], body: null });
     expect(req.headers).toEqual({ "last-event-id": "40", accept: "text/event-stream" });
   });
 
   it("parses a JSON body, and gives null for none or for one that is not JSON", () => {
-    const base = { method: "POST", path: "/api/x", headers: [] as [string, string][] };
+    const base = { method: "POST", path: "/api/x", search: "", headers: [] as [string, string][] };
     expect(toApiRequest({ ...base, body: encode('{"dataset_path": "s3://b/k"}') }).body).toEqual({ dataset_path: "s3://b/k" });
     expect(toApiRequest({ ...base, body: encode("not json") }).body).toBeNull();
     expect(toApiRequest({ ...base, body: new ArrayBuffer(0) }).body).toBeNull();

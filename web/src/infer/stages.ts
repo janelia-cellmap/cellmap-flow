@@ -254,9 +254,8 @@ export function postprocessStage(spec: PostprocessStageSpec): Stage {
       const nd: NdArray = input.shape.length === 3 ? { data: input.data as NdArray["data"], shape: [1, ...input.shape] } : { data: input.data as NdArray["data"], shape: input.shape };
       const out = runPostprocessors(spec.postprocessors, nd, { chunkIndex: at.index, chunkNumVoxels });
       if (out.shape[0] !== channels) throw new Error(`the postprocessors left ${out.shape[0]} channel(s), not the ${channels} the chain declares`);
-      // In the dtype the stage declares, as the engine checks (a 64-bit
-      // output never gets here: serve() refuses it, since chunkmirage's
-      // typed arrays stop at 32 bits).
+      // In the dtype the stage declares, as the engine checks: a
+      // BigUint64Array for the segmentation steps' uint64 ids.
       const data = asDtype(out.data, dtype) as unknown as Numbers;
       if (!spec.hasChannel) {
         if (channels !== 1) throw new Error(`a view without a channel axis cannot serve ${channels} channels`);

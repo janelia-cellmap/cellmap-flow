@@ -8,7 +8,6 @@
 // unrun), the per-stage cache and the 256 MB chunk cache, the zarr v3
 // metadata and the service worker relay; this file describes each view's
 // grid, builds its stages and keeps the stats.
-import { TYPED as ENGINE_TYPED } from "../../chunkmirage/web/src/asread";
 import { Engine } from "../../chunkmirage/web/src/engine";
 import { Onnx, type OnnxModel } from "../../chunkmirage/web/src/onnx";
 import type { ViewInfo } from "../../chunkmirage/web/src/types";
@@ -112,15 +111,6 @@ export class InferenceEngine implements Inference {
     }
     const channels = outputChannels(chain.postprocess, info.output_channels);
     const dtype = outputDtype(chain.postprocess, "float32");
-    if (!(dtype in ENGINE_TYPED)) {
-      // chunkmirage's stages know the typed arrays of asread.ts's TYPED, which
-      // stop at 32-bit integers: a stage declaring uint64 (the segmentation
-      // steps' ids) fails its `instanceof` check there, and a chunk at the
-      // volume's edge would be laid out with the wrong element size. Until
-      // chunkmirage adds BigUint64Array to its Numbers and TYPED, such a
-      // chain is refused here, before the layer exists.
-      throw new Error(`${entry.name}: the chain's output is ${dtype}, which chunkmirage's browser stages cannot serve yet (their typed arrays stop at 32-bit integers); the segmentation steps wait on that`);
-    }
     const block = outputShape(geometry);
     const level = outputLevel(sourceRaw, geometry);
     const view = viewName(entry.name, blob);

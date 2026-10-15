@@ -207,7 +207,18 @@ describe("the postprocess stage", () => {
     expect(post([{ name: "ThresholdPostprocessor", threshold: "0.5" }]).dtype).toBe("uint8");
     expect(post([{ name: "ChannelSelection", channels: "0,2" }], 3).added).toEqual([2]);
     expect(post([], 3).dtype).toBe("float32");
-    expect(post([{ name: "MortonSegmentationRelabeling" }]).dtype).toBe("uint64");  // declared; serve() refuses it for now
+    expect(post([{ name: "MortonSegmentationRelabeling" }]).dtype).toBe("uint64");
+  });
+
+  it("returns a segmentation's uint64 ids as the BigUint64Array the engine fits", async () => {
+    const s = post([{ name: "ThresholdPostprocessor", threshold: "35" }, { name: "MortonSegmentationRelabeling" }]);
+    const input = block(1);
+    const out = fitted(await s.produce(input, at([1, 0, 0])), s.dtype, [1, 2, 2, 2], input.shape, null);
+    expect(out.data).toBeInstanceOf(BigUint64Array);
+    // the foreground is one component, its id the chunk's Morton code times the block's voxels plus 1
+    const ids = new Set(Array.from(out.data as BigUint64Array).filter((v) => v !== 0n));
+    expect(ids.size).toBe(1);
+    expect([...ids][0]).toBeGreaterThan(0n);
   });
 
   it("runs the steps and returns the block in the declared dtype, as the engine checks", async () => {
@@ -215,14 +226,14 @@ describe("the postprocess stage", () => {
     const input = block(1);
     const out = fitted(await s.produce(input, at([0, 0, 0])), s.dtype, [1, 2, 2, 2], input.shape, null);
     expect(out.data).toBeInstanceOf(Uint8Array);
-    expect(Array.from(out.data)).toEqual([0, 0, 0, 0, 1, 1, 1, 1]);
+    expect(Array.from(out.data as ArrayLike<number>)).toEqual([0, 0, 0, 0, 1, 1, 1, 1]);
   });
 
   it("selects channels and casts into the chain's dtype", async () => {
     const s = post([{ name: "DefaultPostprocessor", clip_min: "0", clip_max: "1000", bias: "0", multiplier: "1" }, { name: "ChannelSelection", channels: "2" }], 3);
     const out = (await s.produce(block(3), at([0, 0, 0]))) as Block;
     expect(out.shape).toEqual([1, 2, 2, 2]);
-    expect(Array.from(out.data)).toEqual([160, 170, 180, 190, 200, 210, 220, 230]);
+    expect(Array.from(out.data as ArrayLike<number>)).toEqual([160, 170, 180, 190, 200, 210, 220, 230]);
   });
 
   it("gives the steps the chunk's index and the voxels of one whole block", async () => {
@@ -237,7 +248,7 @@ describe("the postprocess stage", () => {
     const s = post([{ name: "SigmoidPostprocessor" }], 1, false);
     const out = (await s.produce({ data: new Float32Array([0, 0, 0, 0, 0, 0, 0, 0]), shape: [2, 2, 2] }, at([0, 0, 0]))) as Block;
     expect(out.shape).toEqual([2, 2, 2]);
-    expect(Array.from(out.data)).toEqual([0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5]);
+    expect(Array.from(out.data as ArrayLike<number>)).toEqual([0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5]);
     await expect(post([], 2, false).produce(block(2), at([0, 0, 0]))).rejects.toThrow(/cannot serve 2 channels/);
   });
 });
