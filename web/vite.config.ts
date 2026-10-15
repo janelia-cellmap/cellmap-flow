@@ -18,7 +18,8 @@ import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { defineConfig, type ProxyOptions } from "vite";
 
-import { dashboardStatic, localNeuroglancer } from "./build/vite-plugins";
+import { ortRuntime } from "./build/vite-ort.ts";
+import { dashboardStatic, devServiceWorker, localNeuroglancer } from "./build/vite-plugins.ts";
 
 const here = import.meta.dirname;
 const DASHBOARD_STATIC = resolve(here, "../cellmap_flow/dashboard/static");
@@ -32,7 +33,7 @@ const ngProxy: Record<string, ProxyOptions> = existsSync(NEUROGLANCER_BUILD)
 export default defineConfig({
   base: "./",
   publicDir: false,
-  plugins: [dashboardStatic(DASHBOARD_STATIC, "static"), localNeuroglancer(NEUROGLANCER_BUILD, "ng")],
+  plugins: [devServiceWorker("src/sw.ts"), dashboardStatic(DASHBOARD_STATIC, "static"), localNeuroglancer(NEUROGLANCER_BUILD, "ng"), ortRuntime("ort")],
   build: {
     target: "es2022",
     chunkSizeWarningLimit: 1500, // onnxruntime-web and the zstd/blosc codecs (WebAssembly)

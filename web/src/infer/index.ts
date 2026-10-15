@@ -1,7 +1,10 @@
 // Inference: chunkmirage's Engine with one serve() view per model, whose
-// produce() runs onnxruntime-web. STUB: replaced by the infer module.
+// produce() runs onnxruntime-web. See engine.ts for the pieces.
 import type { Inference, SessionStore } from "../contracts";
+import { InferenceEngine } from "./engine";
 
-export async function createInference(_opts: { session: SessionStore; log: (line: string) => void }): Promise<Inference> {
-  throw new Error("infer/index.ts is not implemented yet");
+/** The page's inference. Nothing heavy happens here: the Engine starts with
+ * the first openDataset(), and a model's ORT session with its first chunk. */
+export async function createInference(opts: { session: SessionStore; log: (line: string) => void }): Promise<Inference> {
+  return new InferenceEngine(opts);
 }
