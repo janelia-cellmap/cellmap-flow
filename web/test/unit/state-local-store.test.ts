@@ -30,6 +30,24 @@ function dir(tree: Tree): DirectoryLike {
   };
 }
 
+describe("FileSystemStore keeps the directory handles it walked to", () => {
+  it("looks a directory up once however many files of it are read, and retries one that was missing", async () => {
+    const calls: string[] = [];
+    const tree: Tree = { s0: { "0": { "0": { "0": new Uint8Array([1]), "1": new Uint8Array([2]) } } } };
+    const counted = (d: DirectoryLike, path: string): DirectoryLike => ({
+      async getDirectoryHandle(name) { calls.push(`${path}/${name}`); return counted(await d.getDirectoryHandle(name), `${path}/${name}`); },
+      getFileHandle: (name) => d.getFileHandle(name),
+    });
+    const store = new FileSystemStore(counted(dir(tree), ""));
+    expect(Array.from((await store.get("s0/0/0/0"))!)).toEqual([1]);
+    expect(Array.from((await store.get("s0/0/0/1"))!)).toEqual([2]);
+    expect(calls).toEqual(["/s0", "/s0/0", "/s0/0/0"]);  // the second read walked nothing
+    expect(await store.get("s1/0/0/0")).toBeUndefined();  // s1 is not there (a missing chunk)
+    tree.s1 = { "0": { "0": { "0": new Uint8Array([3]) } } };
+    expect(Array.from((await store.get("s1/0/0/0"))!)).toEqual([3]);  // a directory made later is found
+  });
+});
+
 describe("FileSystemStore", () => {
   const store = new FileSystemStore(
     dir({

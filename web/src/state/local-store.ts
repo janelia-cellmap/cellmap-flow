@@ -31,16 +31,38 @@ export interface DirectoryLike {
 /** Reads files of a picked directory by their path within it, the way a
  * zarr store is read: `get("s0/zarr.json")`, `get("s0/c/0/0/0")`. A path
  * that is not there is undefined (a missing chunk means the fill value), so
- * is an empty path. */
+ * is an empty path.
+ *
+ * Directory handles are kept once looked up: every File System Access call
+ * is a round trip to the browser process, and a viewer asks for hundreds of
+ * chunks of one directory in a row, each of which walked the path from the
+ * root again (a scale's chunks nested two or three directories deep cost
+ * three or four calls before the file was reached), which is what made a
+ * local folder slower than a bucket. A lookup that fails is not kept, so a
+ * directory made later (a label store) or a passing error is tried again. */
 export class FileSystemStore {
+  private readonly dirs = new Map<string, Promise<DirectoryLike>>();
+
   constructor(private readonly dir: DirectoryLike) {}
+
+  /** The directory at `path` (its segments), the root for none. */
+  private directory(path: string[]): Promise<DirectoryLike> {
+    if (path.length === 0) return Promise.resolve(this.dir);
+    const key = path.join("/");
+    let pending = this.dirs.get(key);
+    if (!pending) {
+      pending = this.directory(path.slice(0, -1)).then((parent) => parent.getDirectoryHandle(path[path.length - 1]));
+      pending.catch(() => this.dirs.delete(key));
+      this.dirs.set(key, pending);
+    }
+    return pending;
+  }
 
   async get(key: string): Promise<Uint8Array | undefined> {
     const parts = key.replace(/^\//, "").split("/").filter(Boolean);
     if (parts.length === 0) return undefined;
     try {
-      let dir = this.dir;
-      for (const name of parts.slice(0, -1)) dir = await dir.getDirectoryHandle(name);
+      const dir = await this.directory(parts.slice(0, -1));
       const file = await (await dir.getFileHandle(parts[parts.length - 1])).getFile();
       return new Uint8Array(await file.arrayBuffer());
     } catch (e) {

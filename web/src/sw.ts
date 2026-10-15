@@ -95,6 +95,23 @@ async function relayed(req: Request, response: Promise<Response>): Promise<Respo
 
 // ------------------------------------------------ /local/: a zarr directory picked on this machine
 
+/** One store per picked directory, kept for the worker's life: the handle
+ * is read from IndexedDB once, not per chunk, and the store keeps the
+ * directory handles it has walked to. Dropped when a read fails for a
+ * reason other than a missing file (permission withdrawn, say), so the next
+ * request starts afresh from the stored handle. */
+const localStores = new Map<string, Promise<FileSystemStore | null>>();
+
+function localStore(handleKey: string): Promise<FileSystemStore | null> {
+  let pending = localStores.get(handleKey);
+  if (!pending) {
+    pending = getHandle(handleKey).then((dir) => (dir ? new FileSystemStore(dir) : null));
+    pending.catch(() => localStores.delete(handleKey));
+    localStores.set(handleKey, pending);
+  }
+  return pending;
+}
+
 /** `.../local/<handleKey>/<path>`: the file at `path` in the directory whose
  * handle the page stored under `handleKey`. 404 when the handle is gone or
  * the file is not there (a missing chunk, which zarr readers take as the
@@ -104,15 +121,19 @@ async function serveLocal(rest: string): Promise<Response> {
   const [handleKey, ...parts] = rest.split("/");
   const path = parts.join("/");
   try {
-    const dir = await getHandle(handleKey);
-    if (!dir) return new Response(`no local directory is registered as ${handleKey}`, { status: 404 });
-    const bytes = await new FileSystemStore(dir).get(path);
+    const store = await localStore(handleKey);
+    if (!store) {
+      localStores.delete(handleKey);  // a handle stored after this is found next time
+      return new Response(`no local directory is registered as ${handleKey}`, { status: 404 });
+    }
+    const bytes = await store.get(path);
     if (bytes === undefined) return new Response("not found", { status: 404 });
     const isMeta = /\.z(array|attrs|group)$|zarr\.json$/.test(path);
     // The bytes alone (a Uint8Array may be a view on a larger buffer).
     const body = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
     return new Response(body, { headers: { "content-type": isMeta ? "application/json" : "application/octet-stream" } });
   } catch (e) {
+    localStores.delete(handleKey);
     return new Response(String((e as Error)?.message ?? e), { status: 500 });
   }
 }
