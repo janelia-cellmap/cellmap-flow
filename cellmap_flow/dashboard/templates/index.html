@@ -145,6 +145,16 @@
       color: var(--accent-hover);
     }
   </style>
+  {% if mode == "browser" %}
+  {# Before the first paint: a dataset is open in this browser's session
+     (web/src/state keeps the flag), so hide the connect panel until the
+     viewer is back, instead of flashing it on the reload after Connect. #}
+  <script>
+    try {
+      if (localStorage.getItem("cellmap-flow:dataset")) document.documentElement.dataset.viewer = "pending";
+    } catch (e) { /* no storage: the panel shows until the viewer is restored */ }
+  </script>
+  {% endif %}
 </head>
 
 <body>

@@ -52,6 +52,7 @@ export function completeState(stored: unknown): SessionState {
 /** A SessionStore over `initial`, persisted through `save` after each update. */
 function makeStore(initial: SessionState, save: (state: SessionState) => Promise<void>): SessionStore {
   let state = initial;
+  noteDataset(state);  // a session saved before the flag existed gets it now
   const listeners = new Set<(state: SessionState) => void>();
   return {
     get state() {
@@ -59,6 +60,7 @@ function makeStore(initial: SessionState, save: (state: SessionState) => Promise
     },
     async update(change) {
       state = { ...state, ...change };
+      noteDataset(state);
       await save(state);
       for (const listener of listeners) listener(state);
     },
@@ -67,6 +69,22 @@ function makeStore(initial: SessionState, save: (state: SessionState) => Promise
       return () => void listeners.delete(listener);
     },
   };
+}
+
+/** Whether the session has a dataset, mirrored into localStorage, which a
+ * page can read synchronously before its first paint (IndexedDB cannot be):
+ * index.html's inline script hides the connect panel on that flag, so the
+ * reload connect.js does after Connect shows the viewer's place, not the
+ * panel, until the viewer is restored. Storage can be unavailable; then the
+ * panel just flashes. */
+export const DATASET_FLAG = "cellmap-flow:dataset";
+function noteDataset(state: SessionState): void {
+  try {
+    if (state.datasetUrl) localStorage.setItem(DATASET_FLAG, "1");
+    else localStorage.removeItem(DATASET_FLAG);
+  } catch {
+    // no storage: nothing to note
+  }
 }
 
 /** A session that lives in memory only (tests; the fallback without IndexedDB). */

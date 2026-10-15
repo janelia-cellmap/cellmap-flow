@@ -14,8 +14,8 @@
 //   5. meanwhile the session is restored: the dataset reopened in the engine
 //      and its models served again (the page reloads after /api/set-data, and
 //      a shared link may name another dataset than the session's), and then
-//      the viewer (the iframe, when a dataset is open; layers set before the
-//      iframe exists are queued by the viewer).
+//      the viewer having been restored first (the iframe, when a dataset is
+//      open; the models' layers are set on it as they are served again).
 // <html data-dashboard="loaded"> marks step 4 done, and data-session="restored"
 // step 5, for tests and for anyone waiting on the page.
 // Before any of it, the dashboard's root-relative /api/ URLs are rebased onto
@@ -71,13 +71,17 @@ async function boot() {
   const ctx: AppContext = { session, catalog, infer, viewer, events, log };
   const backend = createBackend(ctx);
   listenForApiRequests(backend);
-  // Restoring the session reads the volume's metadata from its bucket and
-  // can take seconds; the dashboard need not wait for it.
-  const restored = restoreSession(ctx)
-    .then(() => viewer.restore())
-    .then(() => {
-      document.documentElement.dataset.session = "restored";
-    });
+  // The viewer first: with a dataset in the session it mounts the iframe at
+  // once (layers set before it exists are queued), and the connect panel the
+  // page hid before its first paint (see index.html's inline script and
+  // browser.css) can show again where there is no dataset. Then the engine:
+  // restoring the session reads the volume's metadata from its bucket and
+  // can take seconds; neither the viewer nor the dashboard need wait for it.
+  await viewer.restore();
+  delete document.documentElement.dataset.viewer;
+  const restored = restoreSession(ctx).then(() => {
+    document.documentElement.dataset.session = "restored";
+  });
   // The dashboard, exactly as the Flask app serves it. A runtime import so
   // Vite does not bundle it (vite.config.ts serves it verbatim).
   await import(/* @vite-ignore */ DASHBOARD_MAIN);
