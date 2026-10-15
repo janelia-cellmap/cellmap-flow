@@ -10,6 +10,8 @@
 // development and copy it into the build; otherwise do nothing, and
 // vite.config.ts relays /ng/ from appspot instead.
 import { cpSync, createReadStream, existsSync, statSync } from "node:fs";
+import { mkdtemp } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { extname, join, resolve } from "node:path";
 import type { Connect, Plugin } from "vite";
 
@@ -76,6 +78,74 @@ export function localNeuroglancer(dir: string, prefix: string): Plugin {
     },
     closeBundle() {
       if (existsSync(dir)) cpSync(dir, join(outDir, prefix), { recursive: true });
+    },
+  };
+}
+
+/**
+ * Serve the service worker in development.
+ *
+ * The build bundles src/sw.ts into sw.js beside the page (vite.config.ts), and
+ * chunkmirage's Engine registers it by that name as a classic worker. The dev
+ * server serves no such file: it transforms modules one by one, and a classic
+ * service worker cannot `import`. So in development the worker is bundled on
+ * its own, by a second Vite build in watch mode into a temporary directory,
+ * and served from there at /sw.js, rebuilt as its sources change (reload the
+ * page to pick a new one up: the registration uses updateViaCache "none").
+ */
+export function devServiceWorker(entry: string, publicPath = "/sw.js"): Plugin {
+  return {
+    name: "cellmap-flow:dev-service-worker",
+    apply: "serve",
+    async configureServer(server) {
+      const { build } = await import("vite");
+      const outDir = await mkdtemp(join(tmpdir(), "cellmap-flow-sw-"));
+      const file = join(outDir, "sw.js");
+      let failure: string | null = null;
+      const watcher = await build({
+        configFile: false,
+        root: server.config.root,
+        logLevel: "warn",
+        build: {
+          outDir,
+          emptyOutDir: true,
+          watch: {},
+          minify: false,
+          sourcemap: "inline",
+          rolldownOptions: {
+            input: resolve(server.config.root, entry),
+            output: { entryFileNames: "sw.js", format: "iife", inlineDynamicImports: true },
+            onwarn(warning, warn) {
+              warn(warning);
+            },
+          },
+        },
+      });
+      if (watcher && typeof watcher === "object" && "on" in watcher) {
+        const w = watcher as { on(event: string, handler: (e: { code: string; error?: Error }) => void): void; close?: () => Promise<void> };
+        w.on("event", (event) => {
+          if (event.code === "ERROR") {
+            failure = event.error?.message ?? "unknown error";
+            server.config.logger.error(`[sw] ${failure}`);
+          } else if (event.code === "BUNDLE_END") {
+            failure = null;
+            server.config.logger.info("[sw] service worker rebuilt");
+          }
+        });
+        server.httpServer?.once("close", () => void w.close?.());
+      }
+      server.middlewares.use((req, res, next) => {
+        if ((req.url ?? "").split("?")[0] !== publicPath) return next();
+        if (!existsSync(file)) {
+          res.statusCode = 503;
+          res.setHeader("Content-Type", "text/plain");
+          res.end(failure ? `service worker build failed: ${failure}` : "service worker still building; retry");
+          return;
+        }
+        res.setHeader("Content-Type", "text/javascript; charset=utf-8");
+        res.setHeader("Cache-Control", "no-store");
+        createReadStream(file).pipe(res);
+      });
     },
   };
 }

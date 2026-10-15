@@ -12,3 +12,6 @@ index.html
 
 # The root .gitignore ignores every build/ (Python build output); web/build/ is source.
 !build/
+# Playwright output
+test-results/
+playwright-report/
