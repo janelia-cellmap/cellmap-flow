@@ -31,9 +31,10 @@
 // normalizer change changes the key, and the stage after wants the model's
 // output, not its input). The Python op folds them the same way.
 //
-// The forward pass is a function the engine wires (the ONNX runner's run,
-// src/infer/session.ts or chunkmirage's onnx.ts), so everything here runs in
-// node and the tests feed the stages fake blocks and a fake model.
+// The forward pass is a function the engine wires (chunkmirage's Onnx.run),
+// so everything here runs in node and the tests feed the stages fake blocks
+// and a fake model.
+import type { Output } from "../../chunkmirage/web/src/onnx";
 import { inputBox } from "../../chunkmirage/web/src/stages";
 import type { Block, Stage, StageAt } from "../../chunkmirage/web/src/stages";
 import type { Numbers } from "../../chunkmirage/web/src/asread";
@@ -45,13 +46,8 @@ import { applyNormalizers } from "./norms";
 import { type NdArray, outputChannels, outputDtype, type Postprocessor, runPostprocessors } from "./post";
 
 /** What a forward pass returns: the output tensor's values, dims and type,
- * and the pass's time (what chunkmirage's Onnx.run and session.ts give). */
-export interface ModelOutput {
-  data: ArrayLike<number>;
-  dims: readonly number[];
-  type: string;
-  ms: number;
-}
+ * and the pass's time alone (chunkmirage's Onnx.run). */
+export type ModelOutput = Output;
 
 /** The model on a float32 input of `dims` ([1, 1, z, y, x]). */
 export type Forward = (data: Float32Array, dims: number[]) => Promise<ModelOutput>;
@@ -181,7 +177,7 @@ export function modelInput(spec: Pick<ModelStageSpec, "normalizers" | "rawShape"
 export function outputBlock(out: ModelOutput, channels: number, outShape: number[]): { data: Float32Array; shape: number[] } {
   const dims = Array.from(out.dims);
   if (out.type !== "float32") throw new Error(`the model's output is ${out.type}; these models output float32`);
-  const data = out.data instanceof Float32Array ? out.data : Float32Array.from(out.data);
+  const data = out.data instanceof Float32Array ? out.data : Float32Array.from(out.data as ArrayLike<number>);
   let shape: number[];
   if (dims.length === 5) {
     if (dims[0] !== 1) throw new Error(`the model's output has a batch of ${dims[0]}`);

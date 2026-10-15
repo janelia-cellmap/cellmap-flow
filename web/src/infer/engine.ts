@@ -1,14 +1,16 @@
 // The Inference of contracts.ts on chunkmirage's browser Engine: the raw
 // volume opened as the engine view "raw", and one staged view per model and
 // chain (Engine.serveStages), its stages the model and the postprocessors
-// (stages.ts) on an ONNX runner (session.ts, or chunkmirage's onnx.ts). The
-// engine brings the reader, the input box of each chunk with its padding,
+// (stages.ts), the model run by chunkmirage's Onnx (onnxruntime-web on
+// WebGPU, one pass at a time per session, WASM when the browser has no GPU).
+// The engine brings the reader, the input box of each chunk with its padding,
 // the demand queue (finest level first, chunks the viewer gave up on dropped
 // unrun), the per-stage cache and the 256 MB chunk cache, the zarr v3
 // metadata and the service worker relay; this file describes each view's
 // grid, builds its stages and keeps the stats.
 import { TYPED as ENGINE_TYPED } from "../../chunkmirage/web/src/asread";
 import { Engine } from "../../chunkmirage/web/src/engine";
+import { Onnx, type OnnxModel } from "../../chunkmirage/web/src/onnx";
 import type { ViewInfo } from "../../chunkmirage/web/src/types";
 import type { Chain, DatasetInfo, GpuLimits, Inference, InferenceStats, ModelEntry, ServedModel, SessionStore } from "../contracts";
 import { viewName } from "../shared/args";
@@ -16,8 +18,12 @@ import { modelInfo } from "../shared/model-info";
 import { chooseRawLevel, datasetInfoFrom, effectiveOutputVoxelSize, geometryOf, outputLevel, outputShape } from "./geometry";
 import { validateNormalizers } from "./norms";
 import { buildPostprocessors, isSegmentation, outputChannels, outputDtype, validatePostprocessors } from "./post";
-import { type ModelRunner, type RunnerModel, Sessions } from "./session";
 import { type ModelOutput, modelStage, modelStageKey, postprocessStage, postprocessStageKey } from "./stages";
+
+/** What runs the models: chunkmirage's Onnx, or anything of its shape (a
+ * test's fake): sessions built on first use and shared by the views using
+ * them, one forward pass at a time per session. */
+export type ModelRunner = Pick<Onnx, "run" | "retain" | "release" | "reset" | "limits" | "device" | "provider">;
 
 /** The engine view the raw volume is opened as: what the model stages read. */
 const RAW_VIEW = "raw";
@@ -39,10 +45,12 @@ export class InferenceEngine implements Inference {
   /** `session` is the dashboard's session store: the engine keeps nothing in
    * it (what is served is re-served by the backend after a reload, through
    * serve()); it is here so the inference can read its settings later.
-   * `runner` runs the models; the browser mode's own sessions by default
-   * (chunkmirage's `new Onnx({ log })` fits the same interface). */
+   * `runner` runs the models: chunkmirage's Onnx by default, what it says
+   * about a session (built on WebGPU, or on WASM and why) in the log and on
+   * the dashboard's status line. ORT's WebAssembly runtime comes from ./ort/
+   * beside the page, where chunkmirage's Vite plugin puts it (vite.config.ts). */
   constructor(private opts: { session: SessionStore; log: (line: string) => void; runner?: ModelRunner }) {
-    this.runner = opts.runner ?? new Sessions(opts.log, (line) => this.setStatus(line));
+    this.runner = opts.runner ?? new Onnx({ log: (line) => { opts.log(line); this.setStatus(line); } });
   }
 
   // ------------------------------------------------------------- the dataset
@@ -132,7 +140,20 @@ export class InferenceEngine implements Inference {
       levels: [level],
       added: info.has_channel ? [channels] : [],
     };
-    const model: RunnerModel = { key: entry.onnxUrl, bytes: modelBytes, input: entry.manifest.io?.input, output: entry.manifest.io?.output };
+    // The model under a key that is its identity (one session per model
+    // file, shared by the layers using it), its bytes from the catalog (so
+    // its IndexedDB cache is used) when the first chunk needs them.
+    const name = `${entry.id}/${entry.variant.file}`;
+    const model: OnnxModel = {
+      key: name,
+      bytes: async () => {
+        this.setStatus(`loading ${name}…`);
+        const bytes = await modelBytes();
+        this.setStatus(`${name}: building the session…`);
+        return bytes;
+      },
+      input: entry.manifest.io?.input, output: entry.manifest.io?.output,
+    };
     const modelKey = modelStageKey(entry, chain);
     // The steps once for this layer, as the server builds its PostprocessOp
     // once per layer: the merger's equivalences live across chunks and reach
@@ -183,7 +204,7 @@ export class InferenceEngine implements Inference {
 
   /** The forward pass for the model stage: the runner's, with the stats
    * kept here (blocks, the pass's time, the provider). */
-  private async run(model: RunnerModel, data: Float32Array, dims: number[]): Promise<ModelOutput> {
+  private async run(model: OnnxModel, data: Float32Array, dims: number[]): Promise<ModelOutput> {
     if (!this.announcedFirst) {
       this.announcedFirst = true;
       this.opts.log("first inference: compiling GPU kernels, the first block takes a few seconds");

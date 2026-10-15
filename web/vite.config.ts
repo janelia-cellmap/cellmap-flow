@@ -19,7 +19,7 @@ import { existsSync, realpathSync } from "node:fs";
 import { resolve } from "node:path";
 import { defineConfig, type ProxyOptions } from "vite";
 
-import { ortRuntime } from "./build/vite-ort.ts";
+import { ortRuntime } from "./chunkmirage/web/vite-ort.ts";
 import { dashboardStatic, localNeuroglancer, serviceWorker } from "./build/vite-plugins.ts";
 
 const here = import.meta.dirname;

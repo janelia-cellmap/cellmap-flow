@@ -31,9 +31,9 @@ chunkmirage Engine (web/chunkmirage/web/src/engine.ts, serveStages)
    ▼
 stage 1, the model (src/infer/stages.ts modelStage)  ─ our code:
    normalizers on the data (the padding stays zero, as the Python server pads
-   after the chain) → one forward pass through the ONNX runner (src/infer/
-   session.ts: onnxruntime-web on WebGPU, one at a time; WASM fallback) →
-   the block [C, z, y, x], cropped to a chunk the volume ends in
+   after the chain) → one forward pass through chunkmirage's Onnx (onnx.ts:
+   onnxruntime-web on WebGPU, one pass at a time per session; WASM fallback)
+   → the block [C, z, y, x], cropped to a chunk the volume ends in
    ▼
 stage 2, the postprocessors (postprocessStage)  ─ our code:
    the chain's steps, built once per layer → the chunk in the chain's dtype
@@ -69,8 +69,7 @@ cellmap-flow (`src/`) is the app: the model catalog and `model_info`
 (`infer/geometry.ts`: the halo, the ratio, the level choice, the served level),
 the normalizer and postprocessor bodies (`infer/norms.ts`, `post.ts` and the
 segmentation steps), the two stages and their keys (`infer/stages.ts`), the
-ONNX runner (`infer/session.ts`, the shape of chunkmirage's `onnx.ts` so the
-engine can take either), the viewer's layer JSON (`viewer/`), the backend
+viewer's layer JSON (`viewer/`), the backend
 behind the dashboard's routes (`backend/`), the session (`state/`) and the
 dashboard build (`build/`, `vite.config.ts`).
 
@@ -144,8 +143,8 @@ web/
   neuroglancer.lock          the Neuroglancer fork's commit; scripts/fetch-neuroglancer.sh builds it
   build/render.py            renders cellmap_flow/dashboard/templates/index.html → web/index.html
   build/vite-plugins.ts      the service worker bundle; serves/copies the dashboard's static files and a Neuroglancer build
-  build/vite-ort.ts          serves/copies onnxruntime-web's wasm files under ./ort/ (chunkmirage's plugin, once it resolves an exported file)
-  chunkmirage/               (gitignored) the clone; we import web/chunkmirage/web/src/{engine,stages,relay,routes,asread}.ts
+  chunkmirage/               (gitignored) the clone; we import web/chunkmirage/web/src/{engine,stages,onnx,relay,routes,asread}.ts
+                             and its Vite plugin web/vite-ort.ts (onnxruntime-web's wasm files served/copied under ./ort/)
   ng/                        (gitignored) the Neuroglancer build, served at ./ng/
   index.html                 (gitignored) rendered
   src/
@@ -162,7 +161,7 @@ web/
     state/                   openSession(): SessionStore (IndexedDB, db.ts); local-store.ts for picked directories
     infer/                   createInference(): Inference — the Engine, one serveStages() view per model
       engine.ts (the views and the stats), stages.ts (the model and postprocess stages, their keys),
-      session.ts (the ONNX runner: onnxruntime-web sessions; semaphore.ts its lock), norms.ts, post.ts,
+      norms.ts, post.ts,
       expression.ts (Lambda steps), geometry.ts (the manifest's blocks, halo, ratio, levels), dtype.ts (astype)
     shared/                  args.ts (__CFLOW_ARGS__ codec, digest), model-info.ts
     models/                  createCatalog(): Catalog — Hugging Face manifests, variant choice, byte cache
