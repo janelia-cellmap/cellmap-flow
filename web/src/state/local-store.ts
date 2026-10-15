@@ -25,7 +25,13 @@ export const getBlob = (key: string): Promise<ArrayBuffer | Uint8Array | undefin
  * a fake. */
 export interface DirectoryLike {
   getDirectoryHandle(name: string): Promise<DirectoryLike>;
-  getFileHandle(name: string): Promise<{ getFile(): Promise<{ arrayBuffer(): Promise<ArrayBuffer> }> }>;
+  getFileHandle(name: string): Promise<{ getFile(): Promise<FileLike> }>;
+}
+
+/** What a directory's file gives: its bytes, or (a real File, a Blob) a
+ * body a Response can stream without the bytes passing through here. */
+export interface FileLike {
+  arrayBuffer(): Promise<ArrayBuffer>;
 }
 
 /** Reads files of a picked directory by their path within it, the way a
@@ -59,12 +65,18 @@ export class FileSystemStore {
   }
 
   async get(key: string): Promise<Uint8Array | undefined> {
+    const file = await this.file(key);
+    return file && new Uint8Array(await file.arrayBuffer());
+  }
+
+  /** The file at `key` itself (a File in a browser: a Response streams it
+   * without its bytes passing through the caller), or undefined as get(). */
+  async file(key: string): Promise<FileLike | undefined> {
     const parts = key.replace(/^\//, "").split("/").filter(Boolean);
     if (parts.length === 0) return undefined;
     try {
       const dir = await this.directory(parts.slice(0, -1));
-      const file = await (await dir.getFileHandle(parts[parts.length - 1])).getFile();
-      return new Uint8Array(await file.arrayBuffer());
+      return await (await dir.getFileHandle(parts[parts.length - 1])).getFile();
     } catch (e) {
       const name = (e as { name?: string })?.name;
       // NotFoundError: no such file or directory. TypeMismatchError: a file

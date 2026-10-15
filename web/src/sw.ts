@@ -58,7 +58,7 @@ sw.addEventListener("fetch", (event) => {
     // path of the page has /local/ in it, since a worker from an older build
     // that matched loosely controls the page until the new one takes over).
     const localRoot = new URL("local/", sw.registration.scope).pathname;
-    if (url.pathname.startsWith(localRoot)) return event.respondWith(serveLocal(url.pathname.slice(localRoot.length)));
+    if (url.pathname.startsWith(localRoot)) return event.respondWith(serveLocal(url.pathname.slice(localRoot.length), req.signal));
     return; // this origin's own files: never cached here
   }
   // Data a script fetches from elsewhere (not a page, a script or an image).
@@ -113,11 +113,14 @@ function localStore(handleKey: string): Promise<FileSystemStore | null> {
 }
 
 /** `.../local/<handleKey>/<path>`: the file at `path` in the directory whose
- * handle the page stored under `handleKey`. 404 when the handle is gone or
- * the file is not there (a missing chunk, which zarr readers take as the
- * fill value). Permission must have been granted on the page: a service
- * worker cannot ask. */
-async function serveLocal(rest: string): Promise<Response> {
+ * handle the page stored under `handleKey`, streamed as it is (the File is
+ * the body; its bytes never pass through this worker). 404 when the handle
+ * is gone or the file is not there (a missing chunk, which zarr readers
+ * take as the fill value). Permission must have been granted on the page: a
+ * service worker cannot ask. A viewer cancels the chunk requests it no
+ * longer needs as the view moves (`signal`); their reads are not started,
+ * or the ones in flight would hold up the ones it still wants. */
+async function serveLocal(rest: string, signal: AbortSignal): Promise<Response> {
   const [handleKey, ...parts] = rest.split("/");
   const path = parts.join("/");
   try {
@@ -126,11 +129,11 @@ async function serveLocal(rest: string): Promise<Response> {
       localStores.delete(handleKey);  // a handle stored after this is found next time
       return new Response(`no local directory is registered as ${handleKey}`, { status: 404 });
     }
-    const bytes = await store.get(path);
-    if (bytes === undefined) return new Response("not found", { status: 404 });
+    if (signal.aborted) return new Response(null, { status: 499, statusText: "the request was cancelled" });
+    const file = await store.file(path);
+    if (file === undefined) return new Response("not found", { status: 404 });
     const isMeta = /\.z(array|attrs|group)$|zarr\.json$/.test(path);
-    // The bytes alone (a Uint8Array may be a view on a larger buffer).
-    const body = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+    const body: BodyInit = file instanceof Blob ? file : new Uint8Array(await file.arrayBuffer());
     return new Response(body, { headers: { "content-type": isMeta ? "application/json" : "application/octet-stream" } });
   } catch (e) {
     localStores.delete(handleKey);
