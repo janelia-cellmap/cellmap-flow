@@ -420,13 +420,13 @@ DEFAULT_NEIGHBORHOOD_LITERAL = inspect.signature(AffinityPostprocessor).paramete
 AFFINITY_CORNER = (2, 1, 3)
 AFFINITY_CASES = [
     # (id, input, step parameters). Without `neighborhood` the step uses its
-    # default; `bias` as a number and as the form's string.
-    ("short_bias_0", "logits_3", {"neighborhood": SHORT_NEIGHBORHOOD}),
+    # default (0.5); `bias` as a number and as the form's string.
+    ("short_bias_default", "logits_3", {"neighborhood": SHORT_NEIGHBORHOOD}),
     ("short_bias_0.3", "logits_3", {"neighborhood": SHORT_NEIGHBORHOOD, "bias": 0.3}),
     ("short_bias_string", "logits_3", {"neighborhood": SHORT_NEIGHBORHOOD, "bias": "0.3"}),
     # The default neighborhood needs a block of 10 or more voxels along each
     # axis: mwatershed panics on an offset (9) past an axis's length.
-    ("default_bias_0", "logits_9", {}),
+    ("default_bias_default", "logits_9", {}),
     ("default_literal_bias_0.3", "logits_9", {"neighborhood": DEFAULT_NEIGHBORHOOD_LITERAL, "bias": 0.3}),
     # Integer input (DefaultPostprocessor's 0..255) is scaled by 1/255; three
     # offsets for two channels, cut to the channels.

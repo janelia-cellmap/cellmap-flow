@@ -13,7 +13,10 @@ import {
 } from "../../src/infer/affinity";
 import { type NdArray, applyPostprocessors, isSegmentation, outputChannels, outputDtype, validatePostprocessors } from "../../src/infer/post";
 
-const AFFINITY = { name: "AffinityPostprocessor" };
+// The step with a bias of 0, which the small affinity blocks below are written
+// around: an edge above 0 joins. (The class's own default is 0.5, a sigmoid's
+// midpoint; the parity fixtures cover it.)
+const AFFINITY = { name: "AffinityPostprocessor", bias: 0 };
 const UNIT_OFFSETS = [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
 /** Along x only: offsets of 1 and 2 voxels. */
 const X1 = [0, 0, 1], X2 = [0, 0, 2];

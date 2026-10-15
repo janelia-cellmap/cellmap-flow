@@ -51,6 +51,10 @@ import type { NdArray, NdData, PostprocessorDef } from "./post";
 
 /** The Python constructor's default neighborhood: the offsets of the
  * cellmap affinity models' nine channels, as a Python list literal. */
+/** The Python constructor's default `bias`: the midpoint of a sigmoid's
+ * probabilities (with 0 every edge joined, and one object came out). */
+export const DEFAULT_BIAS = 0.5;
+
 export const DEFAULT_NEIGHBORHOOD = "[[1, 0, 0], [0, 1, 0], [0, 0, 1], [3, 0, 0], [0, 3, 0], [0, 0, 3], [9, 0, 0], [0, 9, 0], [0, 0, 9]]";
 
 // --- the neighborhood parameter -------------------------------------------
@@ -480,7 +484,7 @@ export const affinityPostprocessor: PostprocessorDef = {
   // The Python class declares dtype uint64, num_channels 1 and is_segmentation True.
   declares: () => ({ dtype: "uint64", channels: () => 1, isSegmentation: true }),
   make: (step: Step) => {
-    const bias = asNumber(step.bias, 0.0, "AffinityPostprocessor.bias");
+    const bias = asNumber(step.bias, DEFAULT_BIAS, "AffinityPostprocessor.bias");
     const neighborhood = parseNeighborhood(step.neighborhood);
     return ({ data, shape }, context) => {
       const [, z, y, x] = shape;

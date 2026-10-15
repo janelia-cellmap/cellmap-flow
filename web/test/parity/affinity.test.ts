@@ -16,7 +16,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { Step } from "../../src/contracts";
-import { mutexWatershed, parseNeighborhood } from "../../src/infer/affinity";
+import { DEFAULT_BIAS, mutexWatershed, parseNeighborhood } from "../../src/infer/affinity";
 import { mortonIncrement } from "../../src/infer/morton";
 import { asNumber } from "../../src/infer/norms";
 import { type NdArray, applyPostprocessors, isSegmentation, outputChannels, outputDtype } from "../../src/infer/post";
@@ -101,7 +101,7 @@ describe("the step's parameters parse as the Python constructor's", () => {
     it(c.id, () => {
       const step = c.steps[0]!;
       expect(parseNeighborhood(step.neighborhood), "neighborhood").toEqual(c.neighborhood);
-      expect(asNumber(step.bias, 0.0, "bias"), "bias").toBe(c.bias);
+      expect(asNumber(step.bias, DEFAULT_BIAS, "bias"), "bias").toBe(c.bias);
       expect(mortonIncrement(c.chunk_corner, c.chunk_num_voxels), "the Morton increment").toBe(BigInt(c.chunk_num_voxels) * BigInt(c.morton));
     });
   }

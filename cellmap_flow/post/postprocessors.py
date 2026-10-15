@@ -206,14 +206,16 @@ class AffinityPostprocessor(PostProcessor):
     """Objects from affinities by mutex watershed (``segment.mutex_watershed``).
 
     ``bias``: the affinity above which neighbours join, and below which a
-    fragment's mean makes it background. ``neighborhood``: the offset each
-    channel compares, as the model was trained with. Ids are offset by the
-    chunk's Morton index, so they are unique across chunks.
+    fragment's mean makes it background; 0.5 by default, the midpoint of the
+    probabilities a sigmoid gives (with 0 every edge joined and one object
+    came out). ``neighborhood``: the offset each channel compares, as the
+    model was trained with. Ids are offset by the chunk's Morton index, so
+    they are unique across chunks.
     """
 
     def __init__(
         self,
-        bias: float = 0.0,
+        bias: float = 0.5,
         neighborhood: str = """[
                 [1, 0, 0],
                 [0, 1, 0],
@@ -544,9 +546,36 @@ class LambdaPostprocessor(PostProcessor):
         return np.float32
 
 
+# The order the dashboard lists the postprocessors in (the Input/Postprocess
+# tabs, and the browser mode's page, which is rendered from the same list):
+# the steps that map values first, then the ones that make a segmentation,
+# then the ones that work on a segmentation's ids, the relabelling next to
+# last and the merger last, since a chain reads top to bottom and that is the
+# order they are applied in. A postprocessor not named here lists after these,
+# in definition order.
+LISTING_ORDER = [
+    "SigmoidPostprocessor",
+    "DefaultPostprocessor",
+    "ThresholdPostprocessor",
+    "ChannelSelection",
+    "LambdaPostprocessor",
+    "FillHolesPostprocessor",
+    "LabelPostprocessor",
+    "AffinityPostprocessor",
+    "CellposeMasksPostprocessor",
+    "MortonSegmentationRelabeling",
+    "SimpleBlockwiseMerger",
+]
+
+
 def get_postprocessors_list() -> list[dict]:
-    """Returns a list of dictionaries containing the names and parameters of all subclasses of PostProcessor."""
-    postprocess_classes = PostProcessor.__subclasses__()
+    """Returns a list of dictionaries containing the names and parameters of all subclasses of PostProcessor, in LISTING_ORDER."""
+    postprocess_classes = sorted(
+        PostProcessor.__subclasses__(),
+        key=lambda cls: (
+            LISTING_ORDER.index(cls.__name__) if cls.__name__ in LISTING_ORDER else len(LISTING_ORDER)
+        ),
+    )
     postprocessors = []
     for post_cls in postprocess_classes:
         post_name = post_cls.__name__
