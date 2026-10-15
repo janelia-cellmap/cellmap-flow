@@ -96,11 +96,6 @@ describe("rawLayer (layers.raw_layer)", () => {
     expect(RAW_LAYER_NAME).toBe("data");
     expect(rawLayer(DATASET, info)).toEqual({ type: "image", name: "data", source: `zarr://${DATASET}`, shader: rawShader("uint8") });
     expect(rawLayer(DATASET, { ...info, dtype: "uint16" }).shader).toBe(rawShader("uint16"));
-    // a sampled contrast range: the shader's range, the window padded by half of it each way
-    const sampled = rawLayer(DATASET, { ...info, dtype: "int16", displayRange: [5490, 5793] }).shader;
-    expect(sampled).toBe(rawShader("int16", [5490, 5793]));
-    expect(sampled).toContain("range=[5490, 5793], window=[5338, 5945]");
-    expect(rawShader("int16", [7, 7])).toBe(rawShader("int16"));  // an empty range: the dtype's
   });
   it("puts the user's shader and controls back", () => {
     const keep = { shader: "void main(){emitGrayscale(normalized());}", shaderControls: { normalized: { range: [20, 200] } } };

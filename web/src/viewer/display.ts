@@ -92,29 +92,21 @@ export function predictionShader(color: string, range?: readonly [number, number
 
 /** The range of what a raw layer of `dtype` holds, as the contrast window
  * when nothing has been sampled: the integer dtype's whole range, [0, 1] for
- * a float (raw.py's _dtype_default_range). Right for uint8 EM, where the
- * data spans it; a 16-bit volume sits in a sliver of its range and would
- * come out flat gray, which is why the engine samples one (DatasetInfo
- * .displayRange) for every other dtype. */
+ * a float. The Python dashboard samples 1-99% percentiles of the data
+ * (raw.py's _auto_contrast_range, through the input normalizers); in the
+ * browser Neuroglancer reads the raw itself, unnormalized, and the dtype's
+ * range is its fallback too (_dtype_default_range). Neuroglancer's own
+ * range button in the layer's panel does the sampling when the user wants
+ * it. */
 export function dtypeRange(dtype: string): [number, number] {
   return INTEGER_LIMITS[dtype] ?? [0, 1];
 }
 
-/** The raw layer's shader (raw.py's RAW_SHADER), white over `range` when
- * one was sampled (the data's 1st to 99th percentiles, as raw.py's
- * _auto_contrast_range takes them), the slider's window padded by half the
- * range each way so it can still be moved beyond it; else over dtypeRange,
- * the window equal to the range, as Python's fallback has it. */
-export function rawShader(dtype: string, range?: readonly [number, number] | null): string {
-  let bounds: string;
-  if (range && range[0] < range[1]) {
-    const [lo, hi] = range, pad = (hi - lo) * 0.5;
-    bounds = invlerpBounds(lo, hi, lo - pad, hi + pad, dtype);
-  } else {
-    const [lo, hi] = dtypeRange(dtype);
-    bounds = invlerpBounds(lo, hi, lo, hi, dtype);
-  }
-  return `#uicontrol invlerp normalized(${bounds});\n`
+/** The raw layer's shader (raw.py's RAW_SHADER), white over dtypeRange. The
+ * window equals the range, as Python's fallback has it. */
+export function rawShader(dtype: string): string {
+  const [lo, hi] = dtypeRange(dtype);
+  return `#uicontrol invlerp normalized(${invlerpBounds(lo, hi, lo, hi, dtype)});\n`
     + '#uicontrol vec3 color color(default="white");\n'
     + "void main(){emitRGB(color * normalized());}";
 }

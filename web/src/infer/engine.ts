@@ -85,26 +85,6 @@ export class InferenceEngine implements Inference {
 
   dataset(): DatasetInfo | null { return this.info; }
 
-  async displayRange(): Promise<[number, number] | null> {
-    const engine = this.engine, info = this.info;
-    if (!engine || !info) return null;
-    if (info.displayRange) return info.displayRange;
-    // uint8 EM spans its dtype's range, which is the right window; a 16-bit
-    // volume sits in a sliver of its range and comes out flat gray, so its
-    // range is sampled: the 1st and 99th percentiles of a region at the
-    // centre, as the Python dashboard samples them.
-    if (info.dtype === "uint8") return null;
-    try {
-      const [lo, hi] = await engine.sample(RAW_VIEW, [1, 99]);
-      if (!(Number.isFinite(lo) && Number.isFinite(hi) && lo < hi)) return null;
-      info.displayRange = [lo, hi];
-      return info.displayRange;
-    } catch (e) {
-      this.opts.log(`could not sample ${info.url} for its contrast (the raw layer starts over the dtype's whole range): ${e instanceof Error ? e.message : String(e)}`);
-      return null;
-    }
-  }
-
   // ------------------------------------------------------------- the models
 
   async serve(entry: ModelEntry, chain: Chain, blob: string, modelBytes: () => Promise<ArrayBuffer>): Promise<ServedModel> {

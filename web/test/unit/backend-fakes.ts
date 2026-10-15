@@ -85,26 +85,15 @@ export class FakeInference implements Inference {
     this.current = dataset;
   }
 
-  /** The dtype the next openDataset reports (uint8 unless a test says otherwise). */
-  dtype = DATASET.dtype;
-
   async openDataset(url: string): Promise<DatasetInfo> {
     if (this.failOpen) throw new Error(this.failOpen);
     this.opened.push(url);
-    this.current = { ...DATASET, url, dtype: this.dtype };
+    this.current = { ...DATASET, url };
     return this.current;
   }
 
   dataset(): DatasetInfo | null {
     return this.current;
-  }
-
-  /** What displayRange() answers (and puts on the open dataset's info). */
-  sampledRange: [number, number] | null = null;
-
-  async displayRange(): Promise<[number, number] | null> {
-    if (this.current && this.sampledRange) this.current.displayRange = this.sampledRange;
-    return this.current ? this.sampledRange : null;
   }
 
   async serve(entry: ModelEntry, chain: Chain, blob: string, modelBytes: () => Promise<ArrayBuffer>): Promise<ServedModel> {

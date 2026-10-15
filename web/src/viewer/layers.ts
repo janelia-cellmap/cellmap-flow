@@ -101,14 +101,14 @@ export function rawSource(url: string): string {
 
 /** The raw data's layer (layers.py's raw_layer over raw.py's get_raw_layer
  * with wrap_raw=False): an image layer reading `url` itself, with the raw
- * shader over the sampled contrast range (or the dtype's), or with the
- * user's `keep` shader and controls in place of it. */
+ * shader over the dtype's range, or with the user's `keep` shader and
+ * controls in place of it. */
 export function rawLayer(url: string, info: DatasetInfo, keep?: KeptShader): LayerSpec {
   const layer: LayerSpec = {
     type: "image",
     name: RAW_LAYER_NAME,
     source: rawSource(url),
-    shader: keptShader(keep) ?? rawShader(info.dtype, info.displayRange),
+    shader: keptShader(keep) ?? rawShader(info.dtype),
   };
   const controls = keptControls(keep);
   if (controls) layer.shaderControls = controls;

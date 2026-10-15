@@ -234,11 +234,6 @@ export interface DatasetInfo {
   axes: { name: string; unit: string }[];
   /** Finest first; voxel sizes in nm. */
   levels: { shape: number[]; voxel: number[]; origin: number[] }[];
-  /** The raw layer's starting contrast: the 1st and 99th percentiles of a
-   * region at the volume's centre, sampled by the engine for every dtype
-   * but uint8 (whose whole range is the right window for EM); absent for
-   * uint8, or when the sample failed. */
-  displayRange?: [number, number];
 }
 
 export interface ServedModel {
@@ -268,14 +263,6 @@ export interface Inference {
   /** Open the raw volume as the engine's "raw" view; the first call starts the engine. */
   openDataset(url: string): Promise<DatasetInfo>;
   dataset(): DatasetInfo | null;
-  /** The open dataset's contrast range for the raw layer (DatasetInfo
-   * .displayRange), sampled now from a region at the volume's centre and
-   * kept on the info; null for uint8, whose whole range is the window, for
-   * no open dataset, or when the sample failed. Asked for by /api/set-data
-   * alone: the reopen after its reload keeps the layer's shader from the
-   * tab's viewer state, and a sample then would compete with the viewer's
-   * first chunks for a slow volume (a network mount). */
-  displayRange(): Promise<[number, number] | null>;
   /** Serve `entry` through `chain`; `blob` is the chain's URL blob (shared/args.ts), which names the view.
    * `modelBytes` gives the .onnx bytes (Catalog.modelBytes); it is called once per entry, when its
    * session is first built. */
