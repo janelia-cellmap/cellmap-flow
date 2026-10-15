@@ -1,75 +1,130 @@
-name: Deploy serverless web to gh-pages-serveless
+name: Pages
 
-# Builds Neuroglancer (so it is served same-origin — the service worker can only
-# intercept chunk requests from clients it controls) and publishes web/ to the
-# `gh-pages-serveless` branch. Configure GitHub Pages with Source = "Deploy from
-# a branch", Branch = gh-pages-serveless, folder = / (root).
+# The site at https://janelia-cellmap.github.io/cellmap-flow/: one build of
+# three parts, published to the gh-pages branch, whose root GitHub Pages
+# serves (the repository's Pages setting, unchanged from the docs-only days).
+#
+#   /         the Sphinx docs (docs/source), as the Generate Pages workflow
+#             published them until this one took its place
+#   /app/     the browser mode of the dashboard: web/ built by Vite around the
+#             page rendered from cellmap_flow/dashboard/templates (the design
+#             is in web/ARCHITECTURE.md)
+#   /app/ng/  the Neuroglancer the browser mode embeds, built from source
+#
+# The viewer is built here rather than loaded from neuroglancer-demo.appspot.com:
+# the page answers the viewer's chunk requests through a service worker, which
+# only sees requests from pages on its own site, so the viewer has to be served
+# from this site too. And it is briossant's fork (web/neuroglancer.lock, the
+# commit pixi.toml pins for the server mode) because upstream Neuroglancer has
+# no painting tools yet, and the Finetune tab paints. Its build is cached by
+# the pinned commit: only a bump of the lock, or a change to the script that
+# builds it, builds it again.
 on:
   push:
-    branches: [serverless]
-    paths: ["web/**", ".github/workflows/pages.yml"]
+    branches: [main]
+    paths:
+      - web/**
+      - cellmap_flow/**   # the API docs document the package; the app renders its dashboard
+      - docs/**
+      - README.md         # docs/source/index.rst includes it
+      - .github/workflows/pages.yml
   workflow_dispatch:
 
 permissions:
-  contents: write
-  pages: write # request a Pages rebuild via the API after pushing the branch
+  contents: write   # pushes the gh-pages branch
 
+# One deployment at a time, the newest push winning.
 concurrency:
-  group: gh-pages-serveless
+  group: pages
   cancel-in-progress: true
-
-env:
-  NEUROGLANCER_REF: v2.41.2 # pinned upstream build
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
-
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: pyproject.toml
       - uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
 
-      - name: Build Neuroglancer
+      # The docs import the package (autoapi reads its source, sphinx-click
+      # loads its CLI) and web/build/render.py imports its dashboard, so one
+      # install serves both. CPU torch, as tests.yaml installs it: nothing
+      # runs a model here, and the CUDA wheels are gigabytes.
+      - name: Install cellmap_flow with the docs extras
         run: |
-          git clone --depth 1 --branch "${NEUROGLANCER_REF}" \
-            https://github.com/google/neuroglancer.git /tmp/neuroglancer
-          cd /tmp/neuroglancer
-          npm ci
-          npm run build
-          # Locate the built client (find index.html rather than assume dist/client).
-          out_index=$(find dist -name index.html | head -1)
-          if [ -z "$out_index" ]; then echo "neuroglancer build output not found" >&2; exit 1; fi
-          mkdir -p "${GITHUB_WORKSPACE}/web/vendor/neuroglancer"
-          cp -r "$(dirname "$out_index")"/. "${GITHUB_WORKSPACE}/web/vendor/neuroglancer/"
-          # Served from a subdirectory: make root-anchored asset paths relative
-          # (no-op if already relative; the negative class skips // protocol-relative URLs).
-          sed -i -E 's#(src|href)="/([^/])#\1="./\2#g' \
-            "${GITHUB_WORKSPACE}/web/vendor/neuroglancer/index.html"
+          python -m pip install --upgrade pip
+          pip install -e ".[docs]" --extra-index-url https://download.pytorch.org/whl/cpu
 
-      - name: Publish web/ to gh-pages-serveless
+      # As sphinx-notes/pages built them: sphinx-build -b html into the root
+      # of the site, the doctrees left out.
+      - name: Build the docs
         run: |
-          touch web/.nojekyll   # serve files verbatim (don't run Jekyll)
-          cd web
-          git init -q -b gh-pages-serveless
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add -A
-          git commit -q -m "Deploy web/ + neuroglancer from ${GITHUB_SHA}"
-          git push -f "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
-            gh-pages-serveless:gh-pages-serveless
+          sphinx-build -b html docs/source site
+          rm -rf site/.doctrees
+
+      - name: Install the web app's dependencies
+        run: npm ci
+        working-directory: web
+      - name: Fetch chunkmirage, the browser engine (web/chunkmirage.lock)
+        run: npm run fetch:chunkmirage
+        working-directory: web
+
+      # The viewer, cached by the commit the lock pins and by the script that
+      # builds it. A cache hit restores web/ng; Vite copies it into the build
+      # at ./ng/ either way.
+      - uses: actions/cache@v4
+        id: neuroglancer
+        with:
+          path: web/ng
+          key: neuroglancer-${{ hashFiles('web/neuroglancer.lock', 'web/scripts/fetch-neuroglancer.sh') }}
+      - name: Build the Neuroglancer fork (web/neuroglancer.lock)
+        if: steps.neuroglancer.outputs.cache-hit != 'true'
+        run: bash scripts/fetch-neuroglancer.sh
+        working-directory: web
+
+      # The dashboard page, rendered from the Flask app's templates with the
+      # state a fresh browser session has; then the Vite build: the page and
+      # its bundle, the service worker (sw.js beside the page), the
+      # dashboard's own static files under ./static/, the viewer under ./ng/.
+      - name: Render the dashboard page
+        run: npm run render
+        working-directory: web
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PYTHON: python
+      - name: Build the web app
+        run: npm run build
+        working-directory: web
 
-      - name: Request a GitHub Pages build
-        # Pushes made with GITHUB_TOKEN do not trigger the pages-build-deployment
-        # workflow, so the branch-based Pages site never rebuilds on its own.
-        # Explicitly request a build (requires Pages already set to this branch).
+      # The three parts in one tree, checked before anything is published:
+      # a missing piece should fail here, not as a blank page on the site.
+      - name: Assemble the site
         run: |
-          curl -sf -X POST \
-            -H "Authorization: Bearer ${GITHUB_TOKEN}" \
-            -H "Accept: application/vnd.github+json" \
-            "https://api.github.com/repos/${GITHUB_REPOSITORY}/pages/builds"
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          cp -r web/dist site/app
+          # Serve the files as they are: Jekyll would drop every path that
+          # starts with an underscore, Sphinx's _static and _sources among them.
+          touch site/.nojekyll
+          for f in index.html app/index.html app/sw.js app/ng/index.html; do
+            [ -f "site/$f" ] || { echo "::error::site/$f is missing"; exit 1; }
+          done
+          [ -d site/app/static/js ] || { echo "::error::site/app/static/js is missing"; exit 1; }
+          du -sh site site/app site/app/ng
+
+      # One commit on the branch (force_orphan): the site is tens of
+      # megabytes, and a history of every deployment would make the branch a
+      # chore to clone. The message names the commit the site was built from.
+      - uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_branch: gh-pages
+          publish_dir: site
+          force_orphan: true
+          full_commit_message: "Deploy ${{ github.sha }}: the docs, the browser mode at app/ and its Neuroglancer"

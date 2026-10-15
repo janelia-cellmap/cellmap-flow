@@ -85,6 +85,7 @@ web/
   ARCHITECTURE.md            this file
   package.json, vite.config.ts, tsconfig*.json
   chunkmirage.lock           the chunkmirage commit; scripts/fetch-chunkmirage.sh clones it
+  neuroglancer.lock          the Neuroglancer fork's commit; scripts/fetch-neuroglancer.sh builds it
   scripts/                   fetch-chunkmirage.sh, fetch-neuroglancer.sh (the fork that paints)
   build/render.py            renders cellmap_flow/dashboard/templates/index.html → web/index.html
   build/vite-plugins.ts      serves/copies the dashboard's static files and a local Neuroglancer build
@@ -115,13 +116,17 @@ web/
 cd web
 npm install
 npm run fetch:chunkmirage                 # once, and after bumping chunkmirage.lock
+bash scripts/fetch-neuroglancer.sh        # once (a minute or two): the fork that paints, into web/ng/
 PYTHON=../.pixi/envs/default/bin/python npm run render   # after a template change
 npm run dev                               # http://localhost:5173/  (WebGPU needs localhost or https)
 ```
 
-In development `/ng/` is relayed from neuroglancer-demo.appspot.com (upstream,
-no painting). `scripts/fetch-neuroglancer.sh` builds the fork that paints into
-`web/ng/`, which is then served instead; the deployed site always carries it.
+Without `web/ng/`, development relays `/ng/` from neuroglancer-demo.appspot.com
+(upstream Neuroglancer, no painting). With it, the build there is served
+instead; restart `npm run dev` after building it, since the choice is made when
+Vite loads its config. `web/neuroglancer.lock` pins the fork's commit, the same
+one `pixi.toml` installs for the Python viewer: bump both together. The
+deployed site always carries the fork at `/app/ng/`.
 
 ## Credits
 
