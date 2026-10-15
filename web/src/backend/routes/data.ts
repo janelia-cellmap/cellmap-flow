@@ -14,7 +14,7 @@ import type { Router } from "../router";
 import { badRequest, json, message, objectBody } from "../router";
 import { rawLayer } from "../../viewer/layers";
 
-const DATASET_URL = /^(https?|s3|gs):\/\/\S+$/i;
+const DATASET_URL = /^(precomputed:\/\/)?(https?|s3|gs):\/\/\S+$/i;
 
 /** The message of a fetch that got no answer at all, as each browser words
  * it: Chrome's "Failed to fetch", Firefox's "NetworkError when attempting to
@@ -57,7 +57,7 @@ export function dataRoutes(router: Router): void {
     if (!DATASET_URL.test(url)) {
       return json(400, {
         success: false,
-        error: `${url} is not a URL. In the browser the dataset is a URL to an OME-Zarr group or array (https://..., s3://bucket/path or gs://bucket/path, readable without credentials), or a local directory picked on this page.`,
+        error: `${url} is not a URL. In the browser the dataset is a URL to an OME-Zarr group or array or a Neuroglancer precomputed volume (https://..., s3://bucket/path or gs://bucket/path, optionally prefixed precomputed://, readable without credentials), or a local directory picked on this page.`,
       });
     }
     try {

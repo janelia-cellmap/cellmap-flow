@@ -27,7 +27,7 @@
 // files and the viewer are the network's (and the browser's HTTP cache's)
 // as they are.
 /// <reference lib="webworker" />
-import { fromStore, relay, stats } from "../chunkmirage/web/src/relay";
+import { fromStore, metadata, relay, stats } from "../chunkmirage/web/src/relay";
 import type { StoreStats } from "../chunkmirage/web/src/types";
 import { FileSystemStore, getHandle } from "./state/local-store";
 
@@ -39,7 +39,8 @@ const sw = self as unknown as ServiceWorkerGlobalScope;
 const API_TIMEOUT_MS = 240_000;
 
 /** The files that describe a volume rather than hold its voxels: zarr v2's,
- * zarr v3's and N5's. */
+ * zarr v3's and N5's. Only the content type of a local read comes from this;
+ * which requests the page makes for itself is chunkmirage's `metadata`. */
 const METADATA_FILE = /(^|\/)(\.z(array|attrs|group)|zarr\.json|attributes\.json)$/;
 
 sw.addEventListener("install", () => void sw.skipWaiting());
@@ -81,7 +82,7 @@ sw.addEventListener("fetch", (event) => {
   // request for it is the one Chrome can ask on, if it asks at all, and the
   // chunks that follow, read here, pass once it has. A handful of small
   // files per volume, read once: nothing lost to the cache.
-  if (req.method !== "GET" || req.destination !== "" || req.cache === "no-store" || METADATA_FILE.test(url.pathname)) return;
+  if (req.method !== "GET" || req.destination !== "" || req.cache === "no-store" || metadata(url)) return;
   event.respondWith(fromStore(req));
 });
 
