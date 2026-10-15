@@ -12,11 +12,13 @@ import { initModelAdvice, refreshModelAdvice } from "./model-advice.js";
 import { initModelsTab } from "./models-tab.js";
 import { initReviewTab } from "./review/index.js";
 
-// The header's "Toggle Dashboard" button. The Neuroglancer column's inline
-// flex style makes it fill whatever width the dashboard column leaves, so
-// hiding the dashboard is all it takes.
+// The header's "Toggle Dashboard" button: the dashboard column the other way
+// from how the page's layout starts it. templates/index.html does the rest
+// from the class: beside the viewer the column starts shown and this hides
+// it (the viewer's column fills the width it leaves); on a phone it starts
+// hidden and this shows it over the viewer.
 function toggleDashboard() {
-  document.getElementById("dashboard-column").classList.toggle("d-none");
+  document.body.classList.toggle("dashboard-toggled");
 }
 
 // Enter in a parameter field of the Input or Postprocess list submits the
