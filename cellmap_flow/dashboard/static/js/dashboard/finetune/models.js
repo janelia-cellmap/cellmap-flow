@@ -36,9 +36,18 @@ function displayModelInfo(model) {
 // network trains in full only, and some models not at all. null (the
 // dashboard could not ask) offers them all; the trainer refuses what the
 // model cannot do anyway.
+// "head" is the browser mode's answer (web/src/finetune): the model's last
+// layer trains and nothing else, so there is no rank to pick. The Flask
+// server never says it, so the answer itself tells the two apart; the rank's
+// group is hidden in the browser (server-only), and the note says what trains.
 function applyFinetuneModes(modes) {
   const rank = document.getElementById("loraRank");
   const note = document.getElementById("loraRankNote");
+  if (modes && modes.includes("head")) {
+    rank.disabled = true;
+    note.textContent = "Trains the model's last layer (its output convolution) on the painted voxels; the rest of the network stays as it was.";
+    return;
+  }
   const lora = !modes || modes.includes("lora");
   const full = !modes || modes.includes("full");
   Array.from(rank.options).forEach((option) => {

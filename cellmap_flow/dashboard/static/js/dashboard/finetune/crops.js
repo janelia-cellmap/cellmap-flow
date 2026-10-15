@@ -1,7 +1,10 @@
 // The Annotation Crops panel's work on a session's annotations: a new
 // annotation volume, crops loaded from a YAML manifest, the annotated-region
-// boxes, and saving the annotations to disk.
+// boxes, and saving the annotations to disk. In the browser mode (lib/page-data
+// isBrowserMode) the volume needs no output path, and in place of the save
+// the paint can be downloaded as a zarr or deleted.
 import { esc, setBusy } from "../../lib/dom.js";
+import { isBrowserMode } from "../../lib/page-data.js";
 import { getAnswer, postAnswer, watchProgress } from "./requests.js";
 
 // A crop import's progress, as the status line shows it.
@@ -21,14 +24,88 @@ function describeCropImport(p) {
 
 // log: the panel's log; picker: the model picker; form: the training form
 // (its state is saved once a volume exists).
-// Returns { addToViewer(cropId, neuroglancerUrl) }, which shows an
-// annotation volume in the viewer, as the layer annotation_<cropId>: the
-// server names it, so that Load Crops, which looks for that layer before
-// adding its own, finds this one. The tab used to name it
-// sparse_annotation_<id>, and an import into the volume then added a second
-// writable layer over the same data.
+// Returns { addToViewer(cropId, neuroglancerUrl), volumeReady(volumeId) }.
+// addToViewer shows an annotation volume in the viewer, as the layer
+// annotation_<cropId>: the server names it, so that Load Crops, which looks
+// for that layer before adding its own, finds this one. The tab used to name
+// it sparse_annotation_<id>, and an import into the volume then added a
+// second writable layer over the same data. volumeReady says which volume the
+// browser mode's Download paint and Delete volume act on (nothing elsewhere).
 export function initCrops({ log, picker, form }) {
   const outputPathInput = document.getElementById("outputPath");
+  const browser = isBrowserMode();
+
+  // Browser mode: the paint lives in this browser, so the template's
+  // browser-only block offers it as a download (a zip of the zarr, a GET
+  // the service worker relays to the in-page backend as it relays the Export
+  // Config link) and a delete. Both act on the volume last created or
+  // resumed; with none (and again after a delete) the link has no target and
+  // the button is disabled.
+  function showVolumeActions(volumeId) {
+    const download = document.getElementById("downloadVolumeBtn");
+    const remove = document.getElementById("deleteVolumeBtn");
+    if (volumeId) {
+      download.href = `/api/finetune/volume/${encodeURIComponent(volumeId)}/download`;
+      download.classList.remove("disabled");
+      download.removeAttribute("aria-disabled");
+      download.removeAttribute("tabindex");
+      remove.dataset.volumeId = volumeId;
+      remove.disabled = false;
+    } else {
+      download.removeAttribute("href");
+      download.classList.add("disabled");
+      download.setAttribute("aria-disabled", "true");
+      download.setAttribute("tabindex", "-1");
+      delete remove.dataset.volumeId;
+      remove.disabled = true;
+    }
+  }
+
+  function volumeReady(volumeId) {
+    if (browser) showVolumeActions(volumeId);
+  }
+
+  // After a reload the session still has its volume (the backend keeps it
+  // for the tab), so the buttons learn which one from the browser's own
+  // route and work without a New Volume or Resume first.
+  if (browser) {
+    getAnswer("/api/finetune/session-volume")
+      .then((data) => {
+        if (data.success && data.volume_id) volumeReady(data.volume_id);
+      })
+      .catch(() => {});
+  }
+
+  if (browser) {
+    const deleteVolumeBtn = document.getElementById("deleteVolumeBtn");
+    deleteVolumeBtn.addEventListener("click", function () {
+      const volumeId = deleteVolumeBtn.dataset.volumeId;
+      if (!volumeId) return;
+      if (!confirm(`Delete the paint of volume ${volumeId} from this browser?\n\n` +
+        "This cannot be undone; download it first to keep it.")) {
+        return;
+      }
+      setBusy(deleteVolumeBtn, true, "Deleting...");
+      postAnswer("/api/finetune/delete-volume", { volume_id: volumeId })
+        .then(data => {
+          if (data.success) {
+            log.add(`✓ Deleted volume ${volumeId} from this browser`);
+            delete deleteVolumeBtn.dataset.volumeId;
+          } else {
+            log.add(`✗ Error deleting volume: ${data.error}`);
+          }
+        })
+        .catch(err => {
+          log.add(`✗ Error: ${err}`);
+          console.error(err);
+        })
+        .finally(() => {
+          // setBusy enables the button again; a deleted volume leaves nothing to act on.
+          setBusy(deleteVolumeBtn, false);
+          if (!deleteVolumeBtn.dataset.volumeId) showVolumeActions(null);
+        });
+    });
+  }
 
   function addToViewer(cropId, neuroglancerUrl) {
     log.add(`Adding layer to viewer...`);
@@ -56,15 +133,17 @@ export function initCrops({ log, picker, form }) {
       return;
     }
 
-    const outputPath = outputPathInput.value.trim();
-    if (!outputPath) {
+    // Browser mode: the volume goes to the browser's own store, so there is
+    // no path to ask for (the field is hidden), and none is sent.
+    const outputPath = browser ? "" : outputPathInput.value.trim();
+    if (!outputPath && !browser) {
       alert("Please specify an output path for the zarr files");
       return;
     }
 
     setBusy(createVolumeBtn, true, "Creating...");
     log.add(`Creating annotation volume for full dataset...`);
-    log.add(`Output path: ${outputPath}`);
+    if (!browser) log.add(`Output path: ${outputPath}`);
 
     const payload = {
       model_name: selectedModel.name,
@@ -79,18 +158,25 @@ export function initCrops({ log, picker, form }) {
           log.add(`  Dataset shape (voxels): [${data.metadata.dataset_shape_voxels.join(', ')}]`);
           log.add(`  Chunk size (voxels): [${data.metadata.chunk_size.join(', ')}]`);
           log.add(`  Voxel size (nm): [${data.metadata.output_voxel_size.join(', ')}]`);
-          log.add(`  Zarr path: ${data.zarr_path}`);
-          log.add(`  MinIO URL: ${data.minio_url}`);
+          // The browser has no zarr on a disk and no MinIO: its paint is in
+          // the page's store, and the buttons below take it out.
+          if (!browser) {
+            log.add(`  Zarr path: ${data.zarr_path}`);
+            log.add(`  MinIO URL: ${data.minio_url}`);
+          }
           log.add(`  Label scheme: paint 1=background, 2=foreground, 0=unannotated`);
 
-          document.getElementById("minioStatusContent").innerHTML = `
-            <small>
-              <strong>Status:</strong> <span style="color: var(--success);">Running</span><br>
-              <strong>URL:</strong> ${esc(data.minio_url)}
-            </small>
-          `;
-          document.getElementById("minioStatus").style.display = "block";
+          if (!browser) {
+            document.getElementById("minioStatusContent").innerHTML = `
+              <small>
+                <strong>Status:</strong> <span style="color: var(--success);">Running</span><br>
+                <strong>URL:</strong> ${esc(data.minio_url)}
+              </small>
+            `;
+            document.getElementById("minioStatus").style.display = "block";
+          }
 
+          volumeReady(data.volume_id);
           addToViewer(data.volume_id, data.neuroglancer_url);
         } else {
           log.add(`✗ Error: ${data.error}`);
@@ -266,5 +352,5 @@ export function initCrops({ log, picker, form }) {
       .finally(() => setBusy(saveAnnotationsBtn, false));
   });
 
-  return { addToViewer };
+  return { addToViewer, volumeReady };
 }

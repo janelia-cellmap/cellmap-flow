@@ -18,6 +18,15 @@
 // They start in this order, which is the order of the tab's first requests:
 // the saved output path, the models, the good-region count, the AI
 // annotation's configuration, and the job to restore. (The GPU queue picker joins the Models tab's poller.)
+//
+// The same tab serves the browser mode (web/), where an in-page backend
+// answers the requests and the finetune trains the model's last layer in the
+// page: the template hides what needs a server (server-only), and each module
+// asks lib/page-data's isBrowserMode where it must behave differently (no
+// output path to insist on, the paint's download and delete, the finetuned
+// model's download). The patch tools are not started there at all: their
+// sections are hidden and their routes unavailable.
+import { isBrowserMode } from "../../lib/page-data.js";
 import { initAiAnnotate } from "./ai-annotate.js";
 import { initCrops } from "./crops.js";
 import { initGoodRegions } from "./good-regions.js";
@@ -41,9 +50,15 @@ export function initFinetuneTab() {
   const form = initTrainingForm();
   const picker = initModelPicker({ log, savedModelName: form.saved && form.saved.selectedModelName });
   const crops = initCrops({ log, picker, form });
-  initSessions({ log, addToViewer: crops.addToViewer });
-  initGoodRegions({ log });
-  initAiAnnotate({ log });
+  initSessions({ log, addToViewer: crops.addToViewer, volumeReady: crops.volumeReady });
+  // Browser mode: the Label it, AI-assisted annotation and Good regions
+  // sections are server-only (the volume is written through the server's
+  // routes), and good-regions.js polls the seed sources every few seconds;
+  // against a backend that answers unavailable that is only noise.
+  if (!isBrowserMode()) {
+    initGoodRegions({ log });
+    initAiAnnotate({ log });
+  }
   initJobMonitor({ picker, form });
   rememberOpenSections();
 }

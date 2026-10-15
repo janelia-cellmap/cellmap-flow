@@ -12,3 +12,14 @@ export function pageData(id = "page-data") {
   }
   return parsed.get(id);
 }
+
+// Whether the page is the browser mode's (web/): rendered by web/build/
+// render.py with mode "browser" in its page-data, where an in-page backend
+// answers the requests and there is no server, file system or cluster. The
+// Flask dashboard's page says "server" (templates/index.html defaults the
+// key). The templates hide what only a server can do by class (server-only);
+// a script asks this where it must also stop insisting on it, an output path
+// for instance, or must not start a poll of a route the browser cannot answer.
+export function isBrowserMode() {
+  return pageData().mode === "browser";
+}
