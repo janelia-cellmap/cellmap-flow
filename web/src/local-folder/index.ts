@@ -163,8 +163,13 @@ export async function openLocalFolder(handle: PickedDirectory, opts: LocalOption
 
 /** The picker as Chromium has it (not in lib.dom, so `window` is read as this). */
 interface PickerWindow {
-  showDirectoryPicker?(options?: { id?: string; mode?: "read" | "readwrite" }): Promise<PickedDirectory>;
+  showDirectoryPicker?(options?: { id?: string; mode?: "read" | "readwrite"; startIn?: "desktop" | "documents" | "downloads" }): Promise<PickedDirectory>;
 }
+
+/** The picker's options: under `id` Chrome remembers the folder last picked
+ * and opens the dialog there the next time (someone browsing again lands
+ * where they were), Documents the first time. */
+export const PICKER_OPTIONS = { id: "cellmap-flow-data", mode: "read", startIn: "documents" } as const;
 
 /** Whether this browser can pick a folder: Chromium has the File System
  * Access API's picker; Firefox and Safari have only the API's OPFS half. */
@@ -186,7 +191,7 @@ export function installLocalFolderUi(opts: LocalOptions & { pick?: () => Promise
     panel.hideLocalControls(UNSUPPORTED_NOTE);
     return;
   }
-  const pick = opts.pick ?? (() => (window as unknown as Required<PickerWindow>).showDirectoryPicker({ mode: "read" }));
+  const pick = opts.pick ?? (() => (window as unknown as Required<PickerWindow>).showDirectoryPicker(PICKER_OPTIONS));
   panel.onBrowse(async () => {
     let handle: PickedDirectory;
     try {
