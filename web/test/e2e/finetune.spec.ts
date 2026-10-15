@@ -11,9 +11,9 @@
 // Opt-in with E2E=1 (see playwright.config.ts). On the WASM provider the
 // model's passes over the painted chunk and the finetuned layer's first
 // chunk take minutes; the smallest 2D block is the quickest.
-import { expect, type Page, test } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 
-import { isChunkUrl } from "./smoke.spec";
+import { api, isChunkUrl, viewOf } from "./helpers";
 
 const DATASET =
   process.env.E2E_DATASET ??
@@ -22,23 +22,6 @@ const DATASET =
 const MODEL = process.env.E2E_FINETUNE_MODEL ?? "setup_53_2d";
 const CHUNK_TIMEOUT_MS = Number(process.env.E2E_CHUNK_TIMEOUT_MS ?? 8 * 60_000);
 const TRAIN_TIMEOUT_MS = Number(process.env.E2E_TRAIN_TIMEOUT_MS ?? 8 * 60_000);
-
-/** The view a chunk URL belongs to: the segment after /virtual/<page>/. */
-function viewOf(url: string): string {
-  const path = new URL(url).pathname;
-  return decodeURIComponent(path.split("/virtual/")[1]?.split("/")[1] ?? "");
-}
-
-/** A JSON route of the in-page backend, called from the page. */
-async function api<T = Record<string, unknown>>(page: Page, path: string, body?: unknown): Promise<T> {
-  return page.evaluate(
-    async ([path, body]) => {
-      const init: RequestInit = body === undefined ? {} : { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) };
-      return (await fetch(path, init)).json();
-    },
-    [path, body] as const,
-  );
-}
 
 test.describe("finetuning in the browser", () => {
   test.skip(process.env.E2E !== "1", "set E2E=1 to run the browser finetune test (needs the network; minutes on WASM)");

@@ -9,6 +9,8 @@
 // block, hence the long waits.
 import { expect, type Locator, type Page, test } from "@playwright/test";
 
+import { isChunkUrl } from "./helpers";
+
 // A public OME-Zarr multiscale on S3 whose bucket answers with
 // Access-Control-Allow-Origin: * (checked 2026-10-14). jrc_mus-liver's EM is
 // 8 nm isotropic at s0, so s1 is exactly the 16 nm the mito models
@@ -26,17 +28,6 @@ const MODEL = process.env.E2E_MODEL ?? "setup_53";
 // thread (GitHub Pages cannot set the COOP/COEP headers that would allow
 // threads); E2E_CHUNK_TIMEOUT_MS overrides the wait.
 const CHUNK_TIMEOUT_MS = Number(process.env.E2E_CHUNK_TIMEOUT_MS ?? 8 * 60_000);
-
-/** Whether `url` asks the service worker for a computed chunk, not the
- * array's metadata: `virtual/<page>/<view>/.../<int>/<int>/<int>`. */
-export function isChunkUrl(url: string): boolean {
-  const path = new URL(url).pathname;
-  if (!path.includes("/virtual/")) return false;
-  const segments = path.split("/").filter(Boolean);
-  const last = segments[segments.length - 1] ?? "";
-  if (/\.(json|zattrs|zarray|zgroup)$/.test(last) || last === "info") return false;
-  return segments.length >= 3 && segments.slice(-3).every((s) => /^\d+$/.test(s));
-}
 
 /** The Hugging Face row's checkbox for `name`, as forgiving as the catalog's labels require. */
 async function modelCheckbox(page: Page, name: string): Promise<Locator> {
