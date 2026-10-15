@@ -178,37 +178,27 @@ dashboard warns that the model sees the wrong scale.
 
 ## Inference engine
 
-Models are served through [chunkmirage](https://github.com/yuriyzubov/chunkmirage),
+Models are served through [chunkmirage](https://github.com/JaneliaSciComp/chunkmirage),
 which keeps each model's output in memory. Panning back to chunks you have
 seen, or changing only the postprocessing, reuses that output instead of
 running the model again. The chunks nearest your view go to the GPU first,
 and chunks you have panned away from are dropped.
 
-**Using the previous Flask server instead.** It is still included for now;
-chunkmirage is the default. Set this before starting the viewer or the YAML
-runner; it carries over to every model and finetune job they start:
-
-```bash
-export CELLMAP_FLOW_ENGINE=flask
-```
-
-**Compatibility:**
-
-- A model whose environment does not have chunkmirage (one you point it at
-  with `env:`) is served by the Flask server, with a warning in its log.
-  Setting `CELLMAP_FLOW_ENGINE=chunkmirage` makes that an error instead.
-- This dashboard shows layers from either kind of server, including servers
-  started by an older cellmap-flow. A dashboard from an older cellmap-flow
-  cannot show a chunkmirage server's layers: run both from the same version,
-  or set `CELLMAP_FLOW_ENGINE=flask` for servers an older dashboard uses.
-- The layer URLs differ: a chunkmirage layer is
-  `zarr://<server>/<model><settings>/zarr`, with any channel axis first and
-  chunk keys separated by `/`. A Flask layer has no `/zarr`, and puts the
-  channel axis last. Only code that reads a server's zarr directly sees the
-  difference. The `/__control__/...` routes are the same on both.
-- Memory: a chunkmirage server keeps up to 16 GiB of predictions.
+- A layer's URL is `zarr://<server>/<model><settings>/zarr`; the served
+  array puts any channel axis first and separates chunk keys with `/`. Only
+  code that reads a server's zarr directly sees this. The
+  `/__control__/...` routes (`model_info`, `restart`) are where they always
+  were.
+- A model that runs in an environment of its own (`env:`) needs chunkmirage
+  installed there, as every environment in `pixi.toml` has. A server
+  started where it is missing fails with a message saying so.
+- Memory: a server keeps up to 16 GiB of predictions.
   `CELLMAP_FLOW_PREDICTION_CACHE_BYTES` changes that (`0` for none), and
   `CELLMAP_FLOW_RAW_CACHE_BYTES` (1 GiB) bounds the raw data kept.
+- Servers and dashboards from before chunkmirage (the Flask server, removed
+  in this release) do not mix with these: that dashboard cannot draw these
+  layers, and this one no longer draws that server's. Run both from the
+  same version.
 
 ## Model types
 

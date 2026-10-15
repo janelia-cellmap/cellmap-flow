@@ -244,7 +244,7 @@ environments:
       - conda: https://conda.anaconda.org/nvidia/noarch/libnvptxcompiler-dev_linux-64-13.1.115-0.conda
       - pypi: ./
       - pypi: git+https://github.com/briossant/neuroglancer.git?rev=fae54db8c667176a602a34f0d9d1028956009836#fae54db8c667176a602a34f0d9d1028956009836
-      - pypi: git+https://github.com/yuriyzubov/chunkmirage?rev=7331a3fcd0b32a281b74c79766f6d52450a8f2a8#7331a3fcd0b32a281b74c79766f6d52450a8f2a8
+      - pypi: git+https://github.com/JaneliaSciComp/chunkmirage?rev=7331a3fcd0b32a281b74c79766f6d52450a8f2a8#7331a3fcd0b32a281b74c79766f6d52450a8f2a8
       - pypi: https://files.pythonhosted.org/packages/04/4b/29cac41a4d98d144bf5f6d33995617b185d14b22401f75ca86f384e87ff1/h11-0.16.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/06/cf/1731c0dd182ee35f80a39e63afb3d03056ea0dd561b7498932b10b2e34d9/filelock-4.0.7-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/0b/a7/71ac2cff56fec219ed242bb11b8efb69fcc4bec75db06fb7bfe35de520e6/certifi-2026.7.22-py3-none-any.whl
@@ -489,7 +489,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/zstd-1.5.7-hf451053_7.conda
       - pypi: ./
       - pypi: git+https://github.com/briossant/neuroglancer.git?rev=fae54db8c667176a602a34f0d9d1028956009836#fae54db8c667176a602a34f0d9d1028956009836
-      - pypi: git+https://github.com/yuriyzubov/chunkmirage?rev=7331a3fcd0b32a281b74c79766f6d52450a8f2a8#7331a3fcd0b32a281b74c79766f6d52450a8f2a8
+      - pypi: git+https://github.com/JaneliaSciComp/chunkmirage?rev=7331a3fcd0b32a281b74c79766f6d52450a8f2a8#7331a3fcd0b32a281b74c79766f6d52450a8f2a8
       - pypi: https://files.pythonhosted.org/packages/04/4b/29cac41a4d98d144bf5f6d33995617b185d14b22401f75ca86f384e87ff1/h11-0.16.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/07/ea/2e31b67051e91a133189e9c000c222502ddc6969856416de0d095de4c0b0/typer-0.27.3-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/0b/a7/71ac2cff56fec219ed242bb11b8efb69fcc4bec75db06fb7bfe35de520e6/certifi-2026.7.22-py3-none-any.whl
@@ -843,7 +843,7 @@ environments:
       - conda: https://conda.anaconda.org/nvidia/noarch/cuda-version-13.1-h2ff5cdb_4.conda
       - conda: https://conda.anaconda.org/nvidia/noarch/libnvptxcompiler-dev_linux-64-13.1.115-0.conda
       - pypi: ./
-      - pypi: git+https://github.com/yuriyzubov/chunkmirage?rev=7331a3fcd0b32a281b74c79766f6d52450a8f2a8#7331a3fcd0b32a281b74c79766f6d52450a8f2a8
+      - pypi: git+https://github.com/JaneliaSciComp/chunkmirage?rev=7331a3fcd0b32a281b74c79766f6d52450a8f2a8#7331a3fcd0b32a281b74c79766f6d52450a8f2a8
       - pypi: https://files.pythonhosted.org/packages/01/4f/83454fafd628e1e7e1726d74e44fb2332be5969d04c6182ca1fecb6c580e/filelock-4.0.9-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/03/38/311ac322f46ecd789f1342bb7adb0a14b940cf54b5db0e92d4f449aa6cf8/google_auth-2.59.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/04/4b/29cac41a4d98d144bf5f6d33995617b185d14b22401f75ca86f384e87ff1/h11-0.16.0-py3-none-any.whl
@@ -1070,7 +1070,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/zlib-ng-2.3.3-h31dac16_1.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/zstd-1.5.7-hf451053_7.conda
       - pypi: ./
-      - pypi: git+https://github.com/yuriyzubov/chunkmirage?rev=7331a3fcd0b32a281b74c79766f6d52450a8f2a8#7331a3fcd0b32a281b74c79766f6d52450a8f2a8
+      - pypi: git+https://github.com/JaneliaSciComp/chunkmirage?rev=7331a3fcd0b32a281b74c79766f6d52450a8f2a8#7331a3fcd0b32a281b74c79766f6d52450a8f2a8
       - pypi: https://files.pythonhosted.org/packages/04/4b/29cac41a4d98d144bf5f6d33995617b185d14b22401f75ca86f384e87ff1/h11-0.16.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/07/ea/2e31b67051e91a133189e9c000c222502ddc6969856416de0d095de4c0b0/typer-0.27.3-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/0b/a7/71ac2cff56fec219ed242bb11b8efb69fcc4bec75db06fb7bfe35de520e6/certifi-2026.7.22-py3-none-any.whl
@@ -1410,7 +1410,7 @@ environments:
       - conda: https://conda.anaconda.org/nvidia/noarch/libnvptxcompiler-dev_linux-64-13.1.115-0.conda
       - pypi: ./
       - pypi: git+https://github.com/briossant/neuroglancer.git?rev=fae54db8c667176a602a34f0d9d1028956009836#fae54db8c667176a602a34f0d9d1028956009836
-      - pypi: git+https://github.com/yuriyzubov/chunkmirage?rev=7331a3fcd0b32a281b74c79766f6d52450a8f2a8#7331a3fcd0b32a281b74c79766f6d52450a8f2a8
+      - pypi: git+https://github.com/JaneliaSciComp/chunkmirage?rev=7331a3fcd0b32a281b74c79766f6d52450a8f2a8#7331a3fcd0b32a281b74c79766f6d52450a8f2a8
       - pypi: https://files.pythonhosted.org/packages/02/be/5d2d47b1fb58943194fb59dcf222f7c4e35122ec0ffe8c36e18b5d728f0b/tblib-3.2.2-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/04/4b/29cac41a4d98d144bf5f6d33995617b185d14b22401f75ca86f384e87ff1/h11-0.16.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/06/cf/1731c0dd182ee35f80a39e63afb3d03056ea0dd561b7498932b10b2e34d9/filelock-4.0.7-py3-none-any.whl
@@ -1665,7 +1665,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/zstd-1.5.7-hf451053_7.conda
       - pypi: ./
       - pypi: git+https://github.com/briossant/neuroglancer.git?rev=fae54db8c667176a602a34f0d9d1028956009836#fae54db8c667176a602a34f0d9d1028956009836
-      - pypi: git+https://github.com/yuriyzubov/chunkmirage?rev=7331a3fcd0b32a281b74c79766f6d52450a8f2a8#7331a3fcd0b32a281b74c79766f6d52450a8f2a8
+      - pypi: git+https://github.com/JaneliaSciComp/chunkmirage?rev=7331a3fcd0b32a281b74c79766f6d52450a8f2a8#7331a3fcd0b32a281b74c79766f6d52450a8f2a8
       - pypi: https://files.pythonhosted.org/packages/02/be/5d2d47b1fb58943194fb59dcf222f7c4e35122ec0ffe8c36e18b5d728f0b/tblib-3.2.2-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/04/4b/29cac41a4d98d144bf5f6d33995617b185d14b22401f75ca86f384e87ff1/h11-0.16.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/07/ea/2e31b67051e91a133189e9c000c222502ddc6969856416de0d095de4c0b0/typer-0.27.3-py3-none-any.whl
@@ -2061,7 +2061,7 @@ environments:
       - conda: https://conda.anaconda.org/nvidia/noarch/libnvptxcompiler-dev_linux-64-13.1.115-0.conda
       - pypi: ./
       - pypi: git+https://github.com/briossant/neuroglancer.git?rev=fae54db8c667176a602a34f0d9d1028956009836#fae54db8c667176a602a34f0d9d1028956009836
-      - pypi: git+https://github.com/yuriyzubov/chunkmirage?rev=7331a3fcd0b32a281b74c79766f6d52450a8f2a8#7331a3fcd0b32a281b74c79766f6d52450a8f2a8
+      - pypi: git+https://github.com/JaneliaSciComp/chunkmirage?rev=7331a3fcd0b32a281b74c79766f6d52450a8f2a8#7331a3fcd0b32a281b74c79766f6d52450a8f2a8
       - pypi: https://files.pythonhosted.org/packages/04/4b/29cac41a4d98d144bf5f6d33995617b185d14b22401f75ca86f384e87ff1/h11-0.16.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/08/87/6852c1de3390d88512fc1f399b1c18c27ddabc1bc602fc78a62ff3d3e07a/cellpose-3.1.1.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/0b/a7/71ac2cff56fec219ed242bb11b8efb69fcc4bec75db06fb7bfe35de520e6/certifi-2026.7.22-py3-none-any.whl
@@ -2313,7 +2313,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/zstd-1.5.7-hf451053_7.conda
       - pypi: ./
       - pypi: git+https://github.com/briossant/neuroglancer.git?rev=fae54db8c667176a602a34f0d9d1028956009836#fae54db8c667176a602a34f0d9d1028956009836
-      - pypi: git+https://github.com/yuriyzubov/chunkmirage?rev=7331a3fcd0b32a281b74c79766f6d52450a8f2a8#7331a3fcd0b32a281b74c79766f6d52450a8f2a8
+      - pypi: git+https://github.com/JaneliaSciComp/chunkmirage?rev=7331a3fcd0b32a281b74c79766f6d52450a8f2a8#7331a3fcd0b32a281b74c79766f6d52450a8f2a8
       - pypi: https://files.pythonhosted.org/packages/04/4b/29cac41a4d98d144bf5f6d33995617b185d14b22401f75ca86f384e87ff1/h11-0.16.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/05/98/04e766a6de99e6f7f955ecb7829e8d5a557de3427cb85be2236de54dda0c/uvloop-0.23.0-cp312-cp312-macosx_10_13_universal2.whl
       - pypi: https://files.pythonhosted.org/packages/07/ea/2e31b67051e91a133189e9c000c222502ddc6969856416de0d095de4c0b0/typer-0.27.3-py3-none-any.whl
@@ -2705,7 +2705,7 @@ environments:
       - conda: https://conda.anaconda.org/nvidia/noarch/libnvptxcompiler-dev_linux-64-13.1.115-0.conda
       - pypi: ./
       - pypi: git+https://github.com/briossant/neuroglancer.git?rev=fae54db8c667176a602a34f0d9d1028956009836#fae54db8c667176a602a34f0d9d1028956009836
-      - pypi: git+https://github.com/yuriyzubov/chunkmirage?rev=7331a3fcd0b32a281b74c79766f6d52450a8f2a8#7331a3fcd0b32a281b74c79766f6d52450a8f2a8
+      - pypi: git+https://github.com/JaneliaSciComp/chunkmirage?rev=7331a3fcd0b32a281b74c79766f6d52450a8f2a8#7331a3fcd0b32a281b74c79766f6d52450a8f2a8
       - pypi: https://files.pythonhosted.org/packages/04/4b/29cac41a4d98d144bf5f6d33995617b185d14b22401f75ca86f384e87ff1/h11-0.16.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/05/4e/0703722c46447fa03c9425386b3ef3e90254a7c1eb5da654c3c33b210317/pdbpp-0.12.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/08/87/6852c1de3390d88512fc1f399b1c18c27ddabc1bc602fc78a62ff3d3e07a/cellpose-3.1.1.1-py3-none-any.whl
@@ -2988,7 +2988,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/zstd-1.5.7-hf451053_7.conda
       - pypi: ./
       - pypi: git+https://github.com/briossant/neuroglancer.git?rev=fae54db8c667176a602a34f0d9d1028956009836#fae54db8c667176a602a34f0d9d1028956009836
-      - pypi: git+https://github.com/yuriyzubov/chunkmirage?rev=7331a3fcd0b32a281b74c79766f6d52450a8f2a8#7331a3fcd0b32a281b74c79766f6d52450a8f2a8
+      - pypi: git+https://github.com/JaneliaSciComp/chunkmirage?rev=7331a3fcd0b32a281b74c79766f6d52450a8f2a8#7331a3fcd0b32a281b74c79766f6d52450a8f2a8
       - pypi: https://files.pythonhosted.org/packages/04/4b/29cac41a4d98d144bf5f6d33995617b185d14b22401f75ca86f384e87ff1/h11-0.16.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/05/4e/0703722c46447fa03c9425386b3ef3e90254a7c1eb5da654c3c33b210317/pdbpp-0.12.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/05/98/04e766a6de99e6f7f955ecb7829e8d5a557de3427cb85be2236de54dda0c/uvloop-0.23.0-cp312-cp312-macosx_10_13_universal2.whl
@@ -3321,7 +3321,7 @@ environments:
       - conda: https://conda.anaconda.org/nvidia/noarch/cuda-version-13.1-h2ff5cdb_4.conda
       - conda: https://conda.anaconda.org/nvidia/noarch/libnvptxcompiler-dev_linux-64-13.1.115-0.conda
       - pypi: ./
-      - pypi: git+https://github.com/yuriyzubov/chunkmirage?rev=7331a3fcd0b32a281b74c79766f6d52450a8f2a8#7331a3fcd0b32a281b74c79766f6d52450a8f2a8
+      - pypi: git+https://github.com/JaneliaSciComp/chunkmirage?rev=7331a3fcd0b32a281b74c79766f6d52450a8f2a8#7331a3fcd0b32a281b74c79766f6d52450a8f2a8
       - pypi: https://files.pythonhosted.org/packages/01/f9/575c8d760eae1fc99651b7cc5efd96ad5379ca4d6b53750b0fb4fe983f34/imagesize-2.0.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/02/10/5da547df7a391dcde17f59520a231527b8571e6f46fc8efb02ccb370ab12/docutils-0.22.4-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/04/4b/29cac41a4d98d144bf5f6d33995617b185d14b22401f75ca86f384e87ff1/h11-0.16.0-py3-none-any.whl
@@ -3564,7 +3564,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/zlib-ng-2.3.3-h31dac16_1.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/zstd-1.5.7-hf451053_7.conda
       - pypi: ./
-      - pypi: git+https://github.com/yuriyzubov/chunkmirage?rev=7331a3fcd0b32a281b74c79766f6d52450a8f2a8#7331a3fcd0b32a281b74c79766f6d52450a8f2a8
+      - pypi: git+https://github.com/JaneliaSciComp/chunkmirage?rev=7331a3fcd0b32a281b74c79766f6d52450a8f2a8#7331a3fcd0b32a281b74c79766f6d52450a8f2a8
       - pypi: https://files.pythonhosted.org/packages/01/f9/575c8d760eae1fc99651b7cc5efd96ad5379ca4d6b53750b0fb4fe983f34/imagesize-2.0.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/02/10/5da547df7a391dcde17f59520a231527b8571e6f46fc8efb02ccb370ab12/docutils-0.22.4-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/04/4b/29cac41a4d98d144bf5f6d33995617b185d14b22401f75ca86f384e87ff1/h11-0.16.0-py3-none-any.whl
@@ -3924,7 +3924,7 @@ environments:
       - pypi: git+https://github.com/mzouink/fly-organelles?rev=ab89c10#ab89c10470ab819e0ec232d75f0fb117ad3ba9c2
       - pypi: git+https://github.com/neptunes5thmoon/lsd-lite.git?rev=055892b81851fb78b4664144188c40f2d1f4ef05#055892b81851fb78b4664144188c40f2d1f4ef05
       - pypi: git+https://github.com/saalfeldlab/corditea.git#cb1f64a66615cd5d93b54f671ce7938fbc4624ae
-      - pypi: git+https://github.com/yuriyzubov/chunkmirage?rev=7331a3fcd0b32a281b74c79766f6d52450a8f2a8#7331a3fcd0b32a281b74c79766f6d52450a8f2a8
+      - pypi: git+https://github.com/JaneliaSciComp/chunkmirage?rev=7331a3fcd0b32a281b74c79766f6d52450a8f2a8#7331a3fcd0b32a281b74c79766f6d52450a8f2a8
       - pypi: https://files.pythonhosted.org/packages/01/4f/83454fafd628e1e7e1726d74e44fb2332be5969d04c6182ca1fecb6c580e/filelock-4.0.9-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/02/be/5d2d47b1fb58943194fb59dcf222f7c4e35122ec0ffe8c36e18b5d728f0b/tblib-3.2.2-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/03/38/311ac322f46ecd789f1342bb7adb0a14b940cf54b5db0e92d4f449aa6cf8/google_auth-2.59.1-py3-none-any.whl
@@ -4178,7 +4178,7 @@ environments:
       - pypi: git+https://github.com/mzouink/fly-organelles?rev=ab89c10#ab89c10470ab819e0ec232d75f0fb117ad3ba9c2
       - pypi: git+https://github.com/neptunes5thmoon/lsd-lite.git?rev=055892b81851fb78b4664144188c40f2d1f4ef05#055892b81851fb78b4664144188c40f2d1f4ef05
       - pypi: git+https://github.com/saalfeldlab/corditea.git#cb1f64a66615cd5d93b54f671ce7938fbc4624ae
-      - pypi: git+https://github.com/yuriyzubov/chunkmirage?rev=7331a3fcd0b32a281b74c79766f6d52450a8f2a8#7331a3fcd0b32a281b74c79766f6d52450a8f2a8
+      - pypi: git+https://github.com/JaneliaSciComp/chunkmirage?rev=7331a3fcd0b32a281b74c79766f6d52450a8f2a8#7331a3fcd0b32a281b74c79766f6d52450a8f2a8
       - pypi: https://files.pythonhosted.org/packages/02/be/5d2d47b1fb58943194fb59dcf222f7c4e35122ec0ffe8c36e18b5d728f0b/tblib-3.2.2-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/04/4b/29cac41a4d98d144bf5f6d33995617b185d14b22401f75ca86f384e87ff1/h11-0.16.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/07/ea/2e31b67051e91a133189e9c000c222502ddc6969856416de0d095de4c0b0/typer-0.27.3-py3-none-any.whl
@@ -4577,7 +4577,7 @@ environments:
       - conda: https://conda.anaconda.org/nvidia/noarch/libnvptxcompiler-dev_linux-64-13.1.115-0.conda
       - pypi: ./
       - pypi: git+https://github.com/briossant/neuroglancer.git?rev=fae54db8c667176a602a34f0d9d1028956009836#fae54db8c667176a602a34f0d9d1028956009836
-      - pypi: git+https://github.com/yuriyzubov/chunkmirage?rev=7331a3fcd0b32a281b74c79766f6d52450a8f2a8#7331a3fcd0b32a281b74c79766f6d52450a8f2a8
+      - pypi: git+https://github.com/JaneliaSciComp/chunkmirage?rev=7331a3fcd0b32a281b74c79766f6d52450a8f2a8#7331a3fcd0b32a281b74c79766f6d52450a8f2a8
       - pypi: https://files.pythonhosted.org/packages/04/4b/29cac41a4d98d144bf5f6d33995617b185d14b22401f75ca86f384e87ff1/h11-0.16.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/08/87/6852c1de3390d88512fc1f399b1c18c27ddabc1bc602fc78a62ff3d3e07a/cellpose-3.1.1.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/0b/a7/71ac2cff56fec219ed242bb11b8efb69fcc4bec75db06fb7bfe35de520e6/certifi-2026.7.22-py3-none-any.whl
@@ -4837,7 +4837,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/zstd-1.5.7-hf451053_7.conda
       - pypi: ./
       - pypi: git+https://github.com/briossant/neuroglancer.git?rev=fae54db8c667176a602a34f0d9d1028956009836#fae54db8c667176a602a34f0d9d1028956009836
-      - pypi: git+https://github.com/yuriyzubov/chunkmirage?rev=7331a3fcd0b32a281b74c79766f6d52450a8f2a8#7331a3fcd0b32a281b74c79766f6d52450a8f2a8
+      - pypi: git+https://github.com/JaneliaSciComp/chunkmirage?rev=7331a3fcd0b32a281b74c79766f6d52450a8f2a8#7331a3fcd0b32a281b74c79766f6d52450a8f2a8
       - pypi: https://files.pythonhosted.org/packages/04/4b/29cac41a4d98d144bf5f6d33995617b185d14b22401f75ca86f384e87ff1/h11-0.16.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/05/98/04e766a6de99e6f7f955ecb7829e8d5a557de3427cb85be2236de54dda0c/uvloop-0.23.0-cp312-cp312-macosx_10_13_universal2.whl
       - pypi: https://files.pythonhosted.org/packages/07/ea/2e31b67051e91a133189e9c000c222502ddc6969856416de0d095de4c0b0/typer-0.27.3-py3-none-any.whl
@@ -11564,7 +11564,7 @@ packages:
   - requests
   - scipy
   - click
-  - chunkmirage @ git+https://github.com/yuriyzubov/chunkmirage@7331a3fcd0b32a281b74c79766f6d52450a8f2a8
+  - chunkmirage @ git+https://github.com/JaneliaSciComp/chunkmirage@7331a3fcd0b32a281b74c79766f6d52450a8f2a8
   - dacapo-ml ; extra == 'dacapo'
   - cellpose==3.1.1.1 ; extra == 'cellpose'
   - bioimageio-core[onnx,pytorch]==0.11.0 ; extra == 'bioimageio'
@@ -11660,7 +11660,7 @@ packages:
   - scipy
   - lsd-jax @ git+ssh://git@github.com/neptunes5thmoon/LSD_JAX.git@packaging ; extra == 'jax'
   requires_python: '>=3.7'
-- pypi: git+https://github.com/yuriyzubov/chunkmirage?rev=7331a3fcd0b32a281b74c79766f6d52450a8f2a8#7331a3fcd0b32a281b74c79766f6d52450a8f2a8
+- pypi: git+https://github.com/JaneliaSciComp/chunkmirage?rev=7331a3fcd0b32a281b74c79766f6d52450a8f2a8#7331a3fcd0b32a281b74c79766f6d52450a8f2a8
   name: chunkmirage
   version: 0.1.0
   requires_dist:
