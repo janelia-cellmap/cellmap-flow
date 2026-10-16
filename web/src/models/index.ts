@@ -256,16 +256,24 @@ export function createCatalog(opts: CatalogOptions): HfCatalog {
   async function hubBytes(entry: ModelEntry, onProgress?: Progress): Promise<ArrayBuffer> {
     const url = entry.onnxUrl;
     const file = entry.variant.file;
-    const etag = await fetchEtag(fetchImpl, url);
-    const wanted = modelBytesKey(url, etag);
     // The cache's copies of this file: under `<url>#<etag>` keys, and the bare URL.
     let keyed: string[] = [];
     let bare = false;
-    let cached: ArrayBuffer | undefined;
     try {
       const held = await bytes.keys(url);
       keyed = held.filter((key) => key.startsWith(`${url}#`));
       bare = held.includes(url);
+    } catch (error) {
+      log(`${entry.name}: could not read the model cache (${message(error)})`);
+    }
+    // The ETag is asked for only when there is a copy to check it against:
+    // a first download learns it from the GET, and Hugging Face rate-limits
+    // anonymous requests, so a fresh browser serving eight models makes eight
+    // requests, not sixteen.
+    const etag = keyed.length > 0 || bare ? await fetchEtag(fetchImpl, url) : null;
+    const wanted = modelBytesKey(url, etag);
+    let cached: ArrayBuffer | undefined;
+    try {
       const serve = etag !== null ? (keyed.includes(wanted) ? wanted : null) : (keyed[0] ?? (bare ? url : null));
       if (serve !== null) cached = await bytes.get(serve);
     } catch (error) {

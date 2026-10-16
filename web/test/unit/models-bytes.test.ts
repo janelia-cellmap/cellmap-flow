@@ -189,7 +189,7 @@ describe("Catalog.modelBytes", () => {
   const HEAD = `HEAD ${FILE_URL}`;
   const UNCHECKED = `${NAME}: 0.0 MB from the browser's cache (could not check Hugging Face for a newer file)`;
 
-  it("asks Hugging Face for the file's ETag, downloads on a miss with progress, and caches under the URL and ETag", async () => {
+  it("downloads on a miss with progress, without a HEAD first (the GET carries the ETag), and caches under the URL and ETag", async () => {
     const { catalog, hub, lines, bytes } = catalogWith({});
     const progress: [number, number | null][] = [];
     const result = await catalog.modelBytes(entry(), (l, t) => progress.push([l, t]));
@@ -199,7 +199,7 @@ describe("Catalog.modelBytes", () => {
       [80, 100],
       [100, 100],
     ]);
-    expect(hub.calls).toEqual([HEAD, FILE_URL]);
+    expect(hub.calls).toEqual([FILE_URL]);
     expect(KEY).toBe(`${FILE_URL}#${ETAG}`);
     expect(await bytes.get(KEY)).toBe(result);
     expect(await bytes.get(FILE_URL)).toBeUndefined();
@@ -241,18 +241,25 @@ describe("Catalog.modelBytes", () => {
     expect(lines).toEqual([UNCHECKED]);
   });
 
-  it("downloads as before when the HEAD fails and nothing is cached, keying the copy by the download's ETag", async () => {
+  it("asks for no ETag when nothing is cached, so a HEAD that would fail is never made", async () => {
     const { catalog, hub, lines, bytes } = catalogWith({ headFails: true });
     expect(new Uint8Array(await catalog.modelBytes(entry()))).toEqual(MODEL_BYTES);
-    expect(hub.calls).toEqual([HEAD, FILE_URL]);
+    expect(hub.calls).toEqual([FILE_URL]);
     expect(lines[0]).toBe(`${NAME}: downloading ${FILE} (42.9 MB) from Hugging Face`);
     expect(await bytes.keys(FILE_URL)).toEqual([KEY]);
   });
 
-  it("keys the copy by the HEAD's ETag when the download exposes none", async () => {
-    const { catalog, bytes } = catalogWith({ noGetEtag: true });
-    await catalog.modelBytes(entry());
+  it("keys the copy by the HEAD's ETag when the download exposes none, once there is a copy to check", async () => {
+    // The first download has no ETag to key by (no HEAD is made for it), so it is kept under the bare URL.
+    const bytes = new MemoryByteCache();
+    await catalogWith({ noGetEtag: true }, bytes).catalog.modelBytes(entry());
+    expect(await bytes.keys(FILE_URL)).toEqual([FILE_URL]);
+    // The next load checks that copy: unkeyed, so downloaded once more and kept under the HEAD's ETag; the one after serves it.
+    await catalogWith({ noGetEtag: true }, bytes).catalog.modelBytes(entry());
     expect(await bytes.keys(FILE_URL)).toEqual([KEY]);
+    const third = catalogWith({ noGetEtag: true, getStatus: 500 }, bytes);
+    expect(new Uint8Array(await third.catalog.modelBytes(entry()))).toEqual(MODEL_BYTES);
+    expect(third.hub.calls).toEqual([HEAD]);
   });
 
   it("keys by the bare URL for a server that exposes no ETag, and serves that copy unchecked next time", async () => {
@@ -287,7 +294,7 @@ describe("Catalog.modelBytes", () => {
     const idb = fakeIndexedDb();
     const first = catalogWith({}, new IndexedDbByteCache(idb.factory));
     await first.catalog.modelBytes(entry());
-    expect(first.hub.calls).toEqual([HEAD, FILE_URL]);
+    expect(first.hub.calls).toEqual([FILE_URL]);
     expect([...idb.databases.get(MODEL_DB_NAME)!.get("bytes")!.keys()]).toEqual([KEY]);
     const second = catalogWith({ getStatus: 500 }, new IndexedDbByteCache(idb.factory));
     expect(new Uint8Array(await second.catalog.modelBytes(entry()))).toEqual(MODEL_BYTES);
@@ -306,10 +313,10 @@ describe("Catalog.modelBytes", () => {
     const { catalog, hub } = catalogWith({});
     const [a, b] = await Promise.all([catalog.modelBytes(entry()), catalog.modelBytes(entry())]);
     expect(a).toBe(b);
-    expect(hub.calls).toEqual([HEAD, FILE_URL]);
+    expect(hub.calls).toEqual([FILE_URL]);
     // Once done, the cache answers after a HEAD; no second download.
     await catalog.modelBytes(entry());
-    expect(hub.calls).toEqual([HEAD, FILE_URL, HEAD]);
+    expect(hub.calls).toEqual([FILE_URL, HEAD]);
   });
 
   it("still returns the bytes when the cache cannot keep them", async () => {
@@ -329,7 +336,7 @@ describe("Catalog.modelBytes", () => {
     };
     const { catalog, hub, lines } = catalogWith({}, broken);
     expect(new Uint8Array(await catalog.modelBytes(entry()))).toEqual(MODEL_BYTES);
-    expect(hub.calls).toEqual([HEAD, FILE_URL]);
+    expect(hub.calls).toEqual([FILE_URL]);  // nothing known to be cached, so nothing to check
     expect(lines.some((l) => l.includes("could not read the model cache (InvalidStateError)"))).toBe(true);
   });
 
