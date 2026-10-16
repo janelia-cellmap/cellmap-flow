@@ -235,17 +235,22 @@ export function createViewer(opts: { session: SessionStore; log: (line: string) 
     return decodeState(hash) ?? pending;
   }
 
-  /** The listener keepDisplayDimensions left waiting, if any. */
-  let stopKeeping: (() => void) | null = null;
+  /** The display dimensions keepDisplayDimensions is waiting to put back,
+   * and how to stop waiting, while it waits. */
+  let keeping: { wanted: readonly string[]; stop: () => void } | null = null;
 
   /** Neuroglancer restores a state's displayDimensions against its
    * coordinate space as it is at that moment, and restoreState has just
    * emptied that space while the layers come back: the display dimensions
    * fall back to the default (the first three dimensions, z, y, x), and the
    * x–y panel turns back to z–y. They are put back once the space names them
-   * again (checked in Chromium: a frame or so later). */
-  function keepDisplayDimensions(live: NgViewer, wanted: readonly string[] | undefined): void {
-    stopKeeping?.();
+   * again (checked in Chromium: a frame or so later). A state made while the
+   * last ones were still on their way back has none of its own, and those
+   * are still the ones wanted: Draw a box adds its layer, then selects it,
+   * two changes in a row. */
+  function keepDisplayDimensions(live: NgViewer, shown: readonly string[] | undefined): void {
+    const wanted = shown?.length ? shown : keeping?.wanted;
+    keeping?.stop();
     const space = live.coordinateSpace, target = live.navigationState?.pose?.displayDimensions;
     if (!wanted?.length || !space || !target) return;
     const put = (): boolean => {
@@ -258,13 +263,13 @@ export function createViewer(opts: { session: SessionStore; log: (line: string) 
     const stop = () => {
       remove();
       clearTimeout(timer);
-      if (stopKeeping === stop) stopKeeping = null;
+      if (keeping?.stop === stop) keeping = null;
     };
     const remove = space.changed.add(() => {
       if (put()) stop();
     });
     const timer = setTimeout(stop, DISPLAY_DIMENSIONS_WAIT_MS);
-    stopKeeping = stop;
+    keeping = { wanted, stop };
   }
 
   /** Put `state` in the viewer: through the live viewer when there is one,
