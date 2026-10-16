@@ -22,8 +22,10 @@ renders the templates once, at build time, and the TypeScript in `src/`
 answers the dashboard's `fetch("/api/...")` requests in place of the Flask
 routes, with the same request and response JSON. The controls only a server
 can serve (LSF settings, Job Logs, the Local Catalog of cluster paths, the
-Finetune and Review tabs) are hidden; everything else is the dashboard you
-know. `ARCHITECTURE.md` describes how the parts fit together.
+Review tab, and the Finetune tab's crops, seeds and AI annotation) are
+hidden; everything else is the dashboard you know, finetuning included
+([below](#finetuning-in-the-browser)). `ARCHITECTURE.md` describes how the
+parts fit together.
 
 ## Running it locally
 
@@ -102,6 +104,43 @@ Firefox and Safari have no directory picker, so the button is not shown
 there, and a link to the page with a local folder open works only in the
 browser that picked the folder.
 
+## Finetuning in the browser
+
+The Finetune tab works as it does on the server, with the browser in the
+server's and MinIO's places. *New Volume* plans an annotation volume over the
+open dataset on the grid the model's predictions are served on
+(`src/finetune/volume.ts`, the port of `finetune/session/volume.py`: one chunk
+per model output block, labels 0 unpainted, 1 background, 2 and up objects)
+and writes its zarr v2 metadata into the paint store, IndexedDB
+(`src/state/paint-store.ts`). The service worker serves the volume at
+`paint/<volume>/…` under the page as an S3-compatible endpoint (GET, HEAD,
+PUT, DELETE; `src/state/paint-route.ts`), and the paint layer added to the
+viewer is the Neuroglancer fork's writable zarr source on
+`s3+https://<host>/<page>/paint/<volume>/annotation`, which PUTs each chunk
+you paint there, as it PUTs to MinIO in server mode. Chunks are uncompressed,
+so nothing decodes anything.
+
+*Start Finetuning* trains the model's head (`src/finetune/`): the last 1×1
+convolution of the ONNX graph, found by walking back from the output
+(`onnx-head.ts`), is given its input tensor as a second output
+(`onnx-proto.ts` splices the graph at protobuf field level, no dependency),
+the model runs once per painted chunk on the block the model stage would feed
+it (`samples.ts`, through the volume's normalizers) for its logits and
+features (`features.ts`), and the head's weights are trained from the model's
+own on the painted voxels' features with Adam on masked, class-balanced
+BCE-with-logits (`head-trainer.ts`; the targets are `targets.ts`, the port of
+`target_transforms.py`, checked against the Python classes). The trained
+weights are written back into a copy of the model's initializers, and the
+result is an ordinary model entry (`src/models/finetuned.ts`, repo
+`finetuned`, kept in IndexedDB with its bytes): served beside the base
+when *Auto-serve* is on, listed on the Models tab, downloadable as `.onnx`.
+The job routes answer as the server's do (`src/backend/routes/finetune.ts`,
+`finetune-jobs.ts`), so the tab's own job card, loss plot and log stream
+follow the run unchanged. Why the head and not the network: onnxruntime-web
+trains nothing on the GPU; a WebGPU autograd library would have to rebuild
+the network, which is a later step behind the same `RunFinetune` seam
+(`src/finetune/types.ts`).
+
 ## Browser requirements
 
 - **WebGPU.** Chrome or Edge (any current version), or Safari 26 and later.
@@ -116,9 +155,14 @@ browser that picked the folder.
   developing on a remote machine, forward the port and open `localhost`.
 - **Memory.** The largest models' fp32 variants need about half a gigabyte of
   GPU memory for one chunk; the page picks a smaller variant (fp16, int8
-  weights) when the adapter's limits call for it. Model files are 11–43 MB
-  each and are kept in IndexedDB, because Hugging Face rate-limits anonymous
-  downloads.
+  weights) when the adapter's limits call for it. A 2D model (one slice in,
+  one out) runs at the block nearest 512 pixels a side rather than the
+  largest that fits: the viewer shows nothing of a chunk until its whole
+  block is done. Model files are 4–43 MB each and are kept in IndexedDB
+  under their URL and ETag, because Hugging Face rate-limits anonymous
+  downloads; a model re-exported under the same file name is noticed by its
+  ETag and downloaded again, and when Hugging Face cannot be reached the
+  cached copy is served.
 - **Cross-origin data.** The raw volume is fetched by the page, so its server
   must allow it with CORS (`Access-Control-Allow-Origin`). Public S3 and GCS
   buckets and GitHub Pages do; a plain http server on your machine may need a
@@ -161,19 +205,29 @@ chunkmirage's engine registers it by that name with scope `./`.
 ```
 cd web
 npm run typecheck && npm test            # TypeScript, and the unit and parity suites (vitest)
-E2E=1 npm run e2e                        # the browser smoke test: a public volume, a model, one chunk
+E2E=1 npm run e2e                        # the browser tests: a public volume, a model, one chunk; then a paint,
+                                         # a finetune of the model's head and the finetuned layer's first chunk
 ```
 
-The parity suites check the TypeScript ports of the normalizers, postprocessors
-and the `__CFLOW_ARGS__` codec against fixtures that
-`test/fixtures/make_fixtures.py` writes from the Python classes; regenerate them
-with that script (the pixi python) when the Python changes, and `tests/web`
-(pytest) fails while they are stale.
+The parity suites check the TypeScript ports of the normalizers, postprocessors,
+the finetune's target transforms and the `__CFLOW_ARGS__` codec against
+fixtures that `test/fixtures/make_fixtures.py` writes from the Python classes;
+regenerate them with that script (the pixi python) when the Python changes,
+and `tests/web` (pytest) fails while they are stale. The ONNX head editing
+and the trainer run against `test/fixtures/head.onnx`, a small graph shaped
+like the exports' tails that `test/fixtures/make_onnx_fixture.py` writes.
 
-The smoke test runs headless Chromium through Playwright (`npx playwright
+The end-to-end tests run headless Chromium through Playwright (`npx playwright
 install chromium` once; `CHROME_PATH=/path/to/chrome` uses a Chromium of your
-own). Headless Chromium has no WebGPU, so it runs on the WASM provider: about
-half a minute for the first chunk.
+own). By default they run on the WASM provider, since headless Chromium on
+Linux leaves WebGPU off: about half a minute for the smoke test's first chunk,
+and some minutes for the finetune test (`test/e2e/finetune.spec.ts`), which
+drives the Finetune tab's routes as the tab does: a volume, a chunk painted
+through the worker's paint route, a training job, the finetuned model served
+and downloaded. On a Linux machine with a GPU and its Vulkan driver,
+`E2E_WEBGPU=1` launches Chromium with the flags that give the page the GPU
+(`WEBGPU_ARGS` in `playwright.config.ts`); without a Vulkan driver the page
+gets SwiftShader, a CPU emulation, and the tests run no faster.
 
 ## Credits
 

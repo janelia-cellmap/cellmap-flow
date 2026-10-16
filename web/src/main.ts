@@ -34,6 +34,7 @@ import { createCatalog } from "./models";
 import { installApiRebase } from "./rebase";
 import { installShareUi } from "./share-link";
 import { defaultChain, openSession } from "./state";
+import { openPaintStore } from "./state/paint-store";
 import { createViewer, datasetUrlFromPage } from "./viewer";
 
 /** The dashboard's script, served verbatim beside the page (vite.config.ts).
@@ -86,21 +87,22 @@ async function boot() {
   // served through it here too, so the link shows what its sender saw.
   const linkedChain = chainFromHash(location.hash);
   if (linkedChain) await session.update({ chain: linkedChain });
-  const ctx: AppContext = { session, catalog, infer, viewer, events, log };
+  const ctx: AppContext = { session, catalog, infer, viewer, paint: openPaintStore(), events, log };
   const backend = createBackend(ctx);
   listenForApiRequests(backend);
   // A dataset that is a folder on this machine (src/local-folder) before anything
   // reads it: its read permission is gone after a reload and only a click
   // gets it back, so this may show a prompt on the connect panel and wait.
   await restoreLocalFolder({ session, log });
-  // The viewer first: with a dataset in the session it mounts the iframe at
-  // once (layers set before it exists are queued), and the connect panel the
-  // page hid before its first paint (see index.html's inline script and
-  // browser.css) can show again where there is no dataset. Then the engine:
-  // restoring the session reads the volume's metadata from its bucket and
-  // can take seconds; neither the viewer nor the dashboard need wait for it.
+  // The viewer first: with a view of the dataset in the tab (or a link's
+  // `#!` state) it mounts the iframe at once, and with only the session's
+  // dataset it waits for the engine to read the volume's geometry (restoring
+  // the session, below, which can take seconds; datasetOpened); layers set
+  // before it exists are queued either way. The connect panel the page hid
+  // before its first paint (see index.html's inline script and browser.css)
+  // shows again where there is no dataset, and stays hidden while the viewer
+  // waits. The dashboard does not wait for either.
   await viewer.restore();
-  delete document.documentElement.dataset.viewer;
   const restored = restoreSession(ctx).then(() => {
     document.documentElement.dataset.session = "restored";
   });

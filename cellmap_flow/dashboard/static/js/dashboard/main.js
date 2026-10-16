@@ -145,7 +145,13 @@ document.addEventListener("keydown", submitOnEnter);
 initSubmitAll(inputChain, postChain);
 initServerConfigModal();
 initReviewTab();
-// The Finetune tab starts on DOMContentLoaded, as its inline script did, so
-// its first requests still go after the other tabs' (the Models tab asks for
-// the GPU queues only once the server config has answered).
-document.addEventListener("DOMContentLoaded", () => initFinetuneTab());
+// The Finetune tab starts last, so its first requests go after the other
+// tabs' (the Models tab asks for the GPU queues only once the server config
+// has answered): on DOMContentLoaded while the page is still being parsed,
+// as its inline script did, else at once. The browser mode loads this
+// script long after parsing (web/src/main.ts imports it once its backend
+// listens, while the viewer's iframe may still be loading), when that event
+// has fired and would never come; "complete" is not the test, since the
+// page's load event waits for the iframe.
+if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", () => initFinetuneTab());
+else initFinetuneTab();

@@ -1,7 +1,7 @@
 // The browser mode's IndexedDB database, for the local-directory store
-// (local-store.ts), shared by the page and the service worker (IndexedDB is
-// per origin, so both see it). The session itself is not here: it is the
-// tab's (index.ts, sessionStorage).
+// (local-store.ts) and the paint store (paint-store.ts), shared by the page
+// and the service worker (IndexedDB is per origin, so both see it). The
+// session itself is not here: it is the tab's (index.ts, sessionStorage).
 //
 // One database with every object store in it: two modules each opening the
 // same database with their own version and stores would race on upgrades.
@@ -13,13 +13,19 @@
 //              recycled service worker (permission must be granted again from
 //              a user gesture on the page)
 //   "blobs":   key -> raw bytes shared from the page to the service worker
+//   "paint":   "<volume>/<path>" -> the bytes of an annotation volume's file
+//              (paint-store.ts): the page writes a new volume's metadata and
+//              reads its paint for training, the service worker reads and
+//              writes the files on the viewer's behalf (src/sw.ts, the paint
+//              route)
 //
 // Version 2 dropped the "session" store (the session moved to
-// sessionStorage); a database from version 1 loses it on upgrade.
+// sessionStorage); a database from version 1 loses it on upgrade. Version 3
+// added "paint".
 
 export const DB_NAME = "cellmap-flow-browser";
-export const DB_VERSION = 2;
-export const STORES = ["handles", "blobs"] as const;
+export const DB_VERSION = 3;
+export const STORES = ["handles", "blobs", "paint"] as const;
 const DROPPED_STORES = ["session"];
 export type StoreName = (typeof STORES)[number];
 
@@ -76,4 +82,18 @@ export function idbPut(store: StoreName, key: IDBValidKey, value: unknown): Prom
 
 export function idbDelete(store: StoreName, key: IDBValidKey): Promise<void> {
   return request<unknown>(store, "readwrite", (os) => os.delete(key)).then(() => undefined);
+}
+
+/** The keys of `store` from `lower` up to but not including `upper`, every
+ * key when no bounds are given, in IndexedDB's key order (for strings, by
+ * UTF-16 code unit, the order Array.prototype.sort gives). Strings bound a
+ * prefix: `[prefix, prefix + "￿")` is every key that starts with it. */
+export function idbKeys(store: StoreName, lower?: string, upper?: string): Promise<IDBValidKey[]> {
+  const range = lower === undefined || upper === undefined ? undefined : IDBKeyRange.bound(lower, upper, false, true);
+  return request<IDBValidKey[]>(store, "readonly", (os) => os.getAllKeys(range));
+}
+
+/** Delete the keys of `store` from `lower` up to but not including `upper`, in one transaction. */
+export function idbDeleteRange(store: StoreName, lower: string, upper: string): Promise<void> {
+  return request<unknown>(store, "readwrite", (os) => os.delete(IDBKeyRange.bound(lower, upper, false, true))).then(() => undefined);
 }

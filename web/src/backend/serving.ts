@@ -64,7 +64,7 @@ export interface ServeOptions {
  * Returns the served models in `entries` order.
  *
  * A model is served in the variant for this machine's GPU: the catalog's
- * entries carry a default variant (fp32, the middle block size), and
+ * entries carry a default variant (fp32, the smallest block), and
  * Catalog.chooseVariant picks the precision and block size the GPU's limits
  * allow, so the entry is tuned here, just before it is served. The session
  * keeps the entries as the catalog gave them, and tunes again on each load. */

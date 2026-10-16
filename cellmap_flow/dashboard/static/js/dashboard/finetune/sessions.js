@@ -1,6 +1,11 @@
 // Resume Existing Volume: find the sessions under a directory, and copy one
 // into a new session to carry on annotating (the original stays as it was).
+// In the browser mode (lib/page-data isBrowserMode) the sessions are the
+// volumes painted in this browser, listed as the modal opens: there is no
+// directory to scan and no output path to send, and the template hides that
+// row.
 import { esc, setBusy } from "../../lib/dom.js";
+import { isBrowserMode } from "../../lib/page-data.js";
 import { postAnswer, watchProgress } from "./requests.js";
 
 // A session copy's progress, as the status line shows it.
@@ -25,23 +30,29 @@ function describeCopy(p) {
 }
 
 // log: the Annotation Crops panel's log; addToViewer: shows the copied
-// volume in the viewer (crops.js).
-export function initSessions({ log, addToViewer }) {
+// volume in the viewer (crops.js); volumeReady: tells crops.js which volume
+// the browser mode's Download paint and Delete volume act on now.
+export function initSessions({ log, addToViewer, volumeReady }) {
   const outputPathInput = document.getElementById("outputPath");
   const existingSessionsList = document.getElementById("existingSessionsList");
   const existingSessionsEmpty = document.getElementById("existingSessionsEmpty");
   const existingBrowseRoot = document.getElementById("existingBrowseRoot");
   const loadExistingConfirmBtn = document.getElementById("loadExistingConfirmBtn");
+  const browser = isBrowserMode();
   let loadExistingModal = null;
 
   function scanExistingSessions() {
-    const rootPath = existingBrowseRoot.value.trim();
-    if (!rootPath) {
+    // Browser mode: the volumes of this browser's store, under no directory;
+    // the route takes the empty path as that.
+    const rootPath = browser ? "" : existingBrowseRoot.value.trim();
+    if (!rootPath && !browser) {
       existingSessionsList.innerHTML = '<option disabled>Enter a directory above and click Scan</option>';
       existingSessionsEmpty.style.display = "none";
       return;
     }
-    try { localStorage.setItem("existingBrowseRoot", rootPath); } catch (_) {}
+    if (!browser) {
+      try { localStorage.setItem("existingBrowseRoot", rootPath); } catch (_) {}
+    }
     existingSessionsList.innerHTML = '<option>Loading...</option>';
     existingSessionsEmpty.style.display = "none";
     loadExistingConfirmBtn.disabled = true;
@@ -85,6 +96,12 @@ export function initSessions({ log, addToViewer }) {
     if (!loadExistingModal) {
       loadExistingModal = new bootstrap.Modal(document.getElementById("loadExistingModal"));
     }
+    // Browser mode: nothing to type, so the list is filled as the modal opens.
+    if (browser) {
+      loadExistingModal.show();
+      scanExistingSessions();
+      return;
+    }
     // Seed the root: prefer outputPath field, then last used, then blank
     const outputPath = outputPathInput.value.trim();
     const saved = (() => { try { return localStorage.getItem("existingBrowseRoot"); } catch (_) { return null; } })();
@@ -102,14 +119,15 @@ export function initSessions({ log, addToViewer }) {
     const sessionPath = existingSessionsList.value;
     // Target output path: use the outputPath field if set, otherwise the
     // parent of the source session (so we save back into the same root).
-    let outputPath = outputPathInput.value.trim();
-    if (!outputPath) {
+    // Browser mode: none; the volume stays in the browser's store.
+    let outputPath = browser ? "" : outputPathInput.value.trim();
+    if (!outputPath && !browser) {
       outputPath = existingBrowseRoot.value.trim();
       if (outputPath) {
         outputPathInput.value = outputPath;
       }
     }
-    if (!sessionPath || !outputPath) return;
+    if (!sessionPath || (!outputPath && !browser)) return;
 
     const status = document.getElementById("loadExistingStatus");
     setBusy(loadExistingConfirmBtn, true, "Loading...");
@@ -133,15 +151,22 @@ export function initSessions({ log, addToViewer }) {
           log.add(`✗ Error: ${data.error}`);
           return;
         }
-        status.textContent =
-          `Loaded volume ${data.volume_id} (${data.copied_count} entries, ${data.painted_chunk_count || 0} painted chunks).`;
-        log.add(`✓ Loaded volume ${data.volume_id} into ${data.new_session_path}`);
-        log.add(`  Copied ${data.copied_count} files. ${data.painted_chunk_count || 0} painted chunks served.`);
-        if (data.copied_minio) {
-          log.add(`  Migrated MinIO storage from source session.`);
+        if (browser) {
+          // Nothing was copied anywhere: the volume is served from the store it is in.
+          status.textContent = `Resumed volume ${data.volume_id} (${data.painted_chunk_count || 0} painted chunks).`;
+          log.add(`✓ Resumed volume ${data.volume_id}: ${data.painted_chunk_count || 0} painted chunks`);
+        } else {
+          status.textContent =
+            `Loaded volume ${data.volume_id} (${data.copied_count} entries, ${data.painted_chunk_count || 0} painted chunks).`;
+          log.add(`✓ Loaded volume ${data.volume_id} into ${data.new_session_path}`);
+          log.add(`  Copied ${data.copied_count} files. ${data.painted_chunk_count || 0} painted chunks served.`);
+          if (data.copied_minio) {
+            log.add(`  Migrated MinIO storage from source session.`);
+          }
+          log.add(`  MinIO URL: ${data.minio_url}`);
         }
-        log.add(`  MinIO URL: ${data.minio_url}`);
         if (loadExistingModal) loadExistingModal.hide();
+        if (volumeReady) volumeReady(data.volume_id);
         addToViewer(data.volume_id, data.neuroglancer_url);
       })
       .catch(err => {

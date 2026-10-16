@@ -1,7 +1,12 @@
 // The Training panel's job: submitting it, following it (the status poll and
 // the log stream), Restart, Stop Early and Cancel, and finding it again after
 // a page reload. What the Training Status card shows is job-card.js's.
+//
+// In the browser mode (lib/page-data isBrowserMode) the job runs in the page
+// (web/src/finetune) and answers the same routes: no corrections path is
+// asked for, and the finetuned model a status names can be downloaded.
 import { setBusy } from "../../lib/dom.js";
+import { isBrowserMode } from "../../lib/page-data.js";
 import { poll } from "../../lib/poll.js";
 import { TERMINAL, createJobCard } from "./job-card.js";
 import { createJobLog } from "./log-stream.js";
@@ -21,11 +26,32 @@ function showNotification(title, message) {
 // picker: the model picker; form: the training form.
 export function initJobMonitor({ picker, form }) {
   let statusPoller = null;
+  const browser = isBrowserMode();
   const lossPlot = createLossPlot(
     document.getElementById("lossPlotCanvas"), document.getElementById("lossPlotSummary"));
   const card = createJobCard(lossPlot);
   const jobLog = createJobLog({ onLine: card.logLine });
   const appendLog = jobLog.append;
+
+  // Browser mode: the Training Status card's Download finetuned model link
+  // (the template's browser-only anchor), pointed at the model a job's status
+  // says is served (inference_server_ready with finetuned_model_name) and
+  // shown then; hidden on any other status, and for a job just submitted or
+  // restarted, whose model is not made yet. The GET is relayed by the service
+  // worker to the in-page backend, like the Export Config link. Nothing on
+  // the Flask page: it has no such anchor.
+  function showFinetunedDownload(job) {
+    if (!browser) return;
+    const link = document.getElementById("downloadFinetunedBtn");
+    const name = job && job.inference_server_ready && job.finetuned_model_name;
+    if (name) {
+      link.href = `/api/finetune/model/${encodeURIComponent(name)}/download`;
+      link.style.display = "inline-block";
+    } else {
+      link.removeAttribute("href");
+      link.style.display = "none";
+    }
+  }
 
   // Start Finetuning button
   const startFinetuningBtn = document.getElementById("startFinetuningBtn");
@@ -36,9 +62,10 @@ export function initJobMonitor({ picker, form }) {
       return;
     }
 
-    // Get corrections path from output path field
-    const correctionsPath = document.getElementById("outputPath").value.trim();
-    if (!correctionsPath) {
+    // Get corrections path from output path field. Browser mode: the paint
+    // is in the browser's store, so there is none to ask for or send.
+    const correctionsPath = browser ? "" : document.getElementById("outputPath").value.trim();
+    if (!correctionsPath && !browser) {
       alert("Please specify the output path where annotation crops are saved");
       return;
     }
@@ -68,8 +95,10 @@ export function initJobMonitor({ picker, form }) {
     // dashboard is doing real work, not stuck.
     setBusy(startFinetuningBtn, true, "Submitting...");
     const slowLabelTimer = setTimeout(() => {
-      setBusy(startFinetuningBtn, true,
-        "Syncing annotations from MinIO before submit (this can take several minutes)...");
+      // The browser has no MinIO: a slow start there is the paint being read.
+      setBusy(startFinetuningBtn, true, browser
+        ? "Reading the painted chunks..."
+        : "Syncing annotations from MinIO before submit (this can take several minutes)...");
     }, 3000);
 
     try {
@@ -77,6 +106,7 @@ export function initJobMonitor({ picker, form }) {
 
       if (result.success) {
         card.submitted(result.job_id, params.model_name, result.output_type || "binary");
+        showFinetunedDownload(null);
         jobLog.clear();
         // The answer names the job's output directory, not its log file:
         // the job manager writes that there as training_log.txt, and the
@@ -84,8 +114,11 @@ export function initJobMonitor({ picker, form }) {
         jobLog.setLogFile(result.output_dir ? `${result.output_dir}/training_log.txt` : null);
         appendLog("Finetuning job submitted successfully!");
         appendLog(`Job ID: ${result.job_id}`);
-        appendLog(`LSF Job ID: ${result.lsf_job_id || 'N/A'}`);
-        appendLog(`Output directory: ${result.output_dir}`);
+        // A job in the page has neither an LSF id nor an output directory.
+        if (!browser) {
+          appendLog(`LSF Job ID: ${result.lsf_job_id || 'N/A'}`);
+          appendLog(`Output directory: ${result.output_dir}`);
+        }
         if (result.tensorboard_command) appendLog(`TensorBoard: ${result.tensorboard_command}`);
         if (result.note) {
           appendLog(`Note: ${result.note}`);
@@ -143,6 +176,7 @@ export function initJobMonitor({ picker, form }) {
           return;
         }
         card.polled(data);
+        showFinetunedDownload(data);
         if (data.log_file) jobLog.setLogFile(data.log_file);
 
         if (TERMINAL.includes(data.status)) {
@@ -235,21 +269,29 @@ export function initJobMonitor({ picker, form }) {
       return;
     }
 
-    // Build a short summary so user can sanity-check before confirming.
-    const summary =
-      `Restart training with current form values?\n\n` +
-      `  loss:           ${requestBody.loss_type}` +
-      (requestBody.margin !== undefined ? ` (margin=${requestBody.margin})` : '') + '\n' +
-      `  learning_rate:  ${requestBody.learning_rate}\n` +
-      `  lora_r:         ${requestBody.lora_r}\n` +
-      `  epochs:         ${requestBody.num_epochs}\n` +
-      `  batch_size:     ${requestBody.batch_size}\n` +
-      `  patches/epoch:  ${requestBody.patches_per_epoch !== undefined ? requestBody.patches_per_epoch : 'manifest'}\n` +
-      `  rehearsal:      ${requestBody.rehearsal_fraction !== undefined ? requestBody.rehearsal_fraction : 'manifest'}\n` +
-      `  distillation:   ${requestBody.distillation_lambda} (${requestBody.distillation_scope})\n` +
-      `  label_smoothing:${requestBody.label_smoothing}\n` +
-      `  balance_classes:${requestBody.balance_classes}\n` +
-      `  augment:${requestBody.augment}\n`;
+    // Build a short summary so user can sanity-check before confirming. The
+    // browser's run reads only the head's parameters (the rest of the form is
+    // hidden there), so its summary lists only those.
+    const summary = browser
+      ? `Restart training with current form values?\n\n` +
+        `  loss:           ${requestBody.loss_type}\n` +
+        `  learning_rate:  ${requestBody.learning_rate}\n` +
+        `  epochs:         ${requestBody.num_epochs}\n` +
+        `  label_smoothing:${requestBody.label_smoothing}\n` +
+        `  balance_classes:${requestBody.balance_classes}\n`
+      : `Restart training with current form values?\n\n` +
+        `  loss:           ${requestBody.loss_type}` +
+        (requestBody.margin !== undefined ? ` (margin=${requestBody.margin})` : '') + '\n' +
+        `  learning_rate:  ${requestBody.learning_rate}\n` +
+        `  lora_r:         ${requestBody.lora_r}\n` +
+        `  epochs:         ${requestBody.num_epochs}\n` +
+        `  batch_size:     ${requestBody.batch_size}\n` +
+        `  patches/epoch:  ${requestBody.patches_per_epoch !== undefined ? requestBody.patches_per_epoch : 'manifest'}\n` +
+        `  rehearsal:      ${requestBody.rehearsal_fraction !== undefined ? requestBody.rehearsal_fraction : 'manifest'}\n` +
+        `  distillation:   ${requestBody.distillation_lambda} (${requestBody.distillation_scope})\n` +
+        `  label_smoothing:${requestBody.label_smoothing}\n` +
+        `  balance_classes:${requestBody.balance_classes}\n` +
+        `  augment:${requestBody.augment}\n`;
     if (!confirm(summary)) return;
 
     setBusy(restartJobBtn, true);
@@ -262,6 +304,7 @@ export function initJobMonitor({ picker, form }) {
         jobLog.clear();
         appendLog('Restart request sent - training will restart on same GPU...\n');
         card.restarted();
+        showFinetunedDownload(null);
         // A card restored after a reload has no poller running, so start
         // one (this replaces the poller if one is already running).
         startStatusPolling(jobId);
@@ -299,6 +342,7 @@ export function initJobMonitor({ picker, form }) {
 
       const jobId = activeJob.job_id;
       card.restored(activeJob);
+      showFinetunedDownload(activeJob);
       jobLog.setLogFile(activeJob.log_file || null);
 
       // Restore logs and loss plot from the log file. The live stream below

@@ -61,7 +61,7 @@ describe("equivalencesOf", () => {
 });
 
 function fakeSession(): SessionStore {
-  const current: SessionState = { datasetUrl: null, chain: { input_norm: [], postprocess: [] }, models: [], resample: false, prefs: {} };
+  const current: SessionState = { datasetUrl: null, chain: { input_norm: [], postprocess: [] }, models: [], resample: false, prefs: {}, paintVolume: null };
   return { get state() { return current; }, async update(change) { Object.assign(current, change); }, onChange() { return () => {}; } };
 }
 

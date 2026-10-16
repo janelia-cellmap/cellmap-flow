@@ -84,6 +84,10 @@ export interface SessionState {
   resample: boolean;
   /** /api/finetune/user-prefs and the like. */
   prefs: Record<string, unknown>;
+  /** The annotation volume the Finetune tab paints into and trains on: its
+   * id in the paint store (a PaintVolume), or null. Tab-scoped like the
+   * models; the store's listing is the durable one. */
+  paintVolume: string | null;
 }
 
 /** The session, kept in the tab's sessionStorage so it survives the page reload that
@@ -185,6 +189,38 @@ export interface Catalog {
   chooseVariant(manifest: ModelManifest, limits: GpuLimits): ModelVariant;
   /** The .onnx bytes, from IndexedDB when already fetched (Hugging Face rate-limits anonymous downloads). */
   modelBytes(entry: ModelEntry, onProgress?: (loaded: number, total: number | null) => void): Promise<ArrayBuffer>;
+  /** Keep a model finetuned in this browser: its ONNX bytes under
+   * `record.entry.onnxUrl` (the byte cache) and the record itself
+   * (IndexedDB), so that list() and resolve() answer its entry on later
+   * visits too and modelBytes() serves it without a download. */
+  addFinetuned(record: FinetunedRecord, bytes: ArrayBuffer): Promise<void>;
+  /** The finetuned models kept, newest first. */
+  finetuned(): Promise<FinetunedRecord[]>;
+  /** Forget a finetuned model and its bytes. */
+  removeFinetuned(id: string): Promise<void>;
+}
+
+/** The "repo" of the entries finetuned in this browser (ModelEntry.repo and
+ * the first segment of their ids), where Hugging Face models have theirs. */
+export const FINETUNED_REPO = "finetuned";
+
+/** A model finetuned in this browser: the entry it is served as (the base's
+ * manifest under the new name, one variant whose file is `<folder>.onnx`,
+ * `onnxUrl` the key its bytes are kept under), and where it came from. */
+export interface FinetunedRecord {
+  /** The entry's id, `finetuned/<folder>`. */
+  id: string;
+  /** The layer and job name, `<base name>-ft<n>`; also the folder. */
+  name: string;
+  base: { id: string; name: string; file: string };
+  /** The annotation volume it was trained on (PaintVolume.id). */
+  volume: string;
+  created_at: string;
+  /** The training parameters as the Finetune tab sent them. */
+  params: Record<string, unknown>;
+  epochs: number;
+  final_loss: number | null;
+  entry: ModelEntry;
 }
 
 // ---------------------------------------------------------------------------
@@ -221,6 +257,23 @@ export interface ViewerController {
   setEquivalences(name: string, sets: string[][]): void;
   /** The raw layer's shader/contrast as the user left it, to keep across redraws. */
   layerShader(name: string): { shader?: string; shaderControls?: Record<string, unknown> } | null;
+  /** Select layer `name`, its panel open on `tab` (the fork's "Draw" tab for
+   * a paint layer, where the brush is), as the server's
+   * add_annotation_layer does. A name the viewer has no layer of yet is
+   * selected when the layer is set. */
+  selectLayer(name: string, tab?: string): void;
+  /** The session's dataset as the engine opened it, for a viewer restore()
+   * left waiting: when the session names a dataset but the tab has no view
+   * of it (a link, or a reload that lost the view), restore() mounts
+   * nothing, and this mounts the viewer with the raw's geometry (its
+   * dimensions explicit, the view at its centre), as Connect's state has
+   * them. Mounted without the geometry, Neuroglancer takes the coordinate
+   * space from whichever layer's metadata arrives first (8 nm raw, 16 nm
+   * model), and a layer at another voxel size added later can switch it and
+   * move the view; dimensions set after the viewer is up did not hold.
+   * `info` null (the volume could not be opened) mounts the viewer without
+   * it, for Neuroglancer to try. Does nothing when restore() did not wait. */
+  datasetOpened(url: string, info: DatasetInfo | null): void;
 }
 
 // ---------------------------------------------------------------------------
@@ -278,6 +331,12 @@ export interface Inference {
   onEquivalences(listener: (view: string, sets: string[][]) => void): () => void;
   /** Drop every session and the WebGPU device (recovers a hung run); views are re-created on the next chunk. */
   reset(): Promise<void>;
+  /** Voxels [lo, hi) of level `level` of the open dataset (DatasetInfo.levels,
+   * finest first), within the level, as the engine's reader reads them for a
+   * chunk: the bytes of the level's dtype in C order (z, y, x). The caller
+   * clips the box to the level and pads what lies outside (chunkmirage's
+   * `padded`, as the engine does for a stage's input). */
+  readRaw(level: number, lo: number[], hi: number[]): Promise<ArrayBuffer>;
 }
 
 // ---------------------------------------------------------------------------
@@ -289,9 +348,79 @@ export interface AppContext {
   catalog: Catalog;
   infer: Inference;
   viewer: ViewerController;
+  /** The paint: the annotation volumes' files, shared with the service worker (IndexedDB). */
+  paint: PaintStore;
   /** In-page events the backend turns into server-sent events: "log" (a
    * CustomEvent whose detail is a line) and "status". */
   events: EventTarget;
   /** Append a line to the page's log (shown in the dashboard's status area and the console). */
   log(line: string): void;
+}
+
+// ---------------------------------------------------------------------------
+// Finetuning in the browser (src/finetune, backend/routes/finetune.ts): the
+// paint store the service worker serves and the volumes in it
+// ---------------------------------------------------------------------------
+
+/** Where the paint is served: `<page directory>paint/<volume>/<path>`, an
+ * S3-style endpoint (GET, HEAD, PUT, DELETE of whole objects) the service
+ * worker (src/sw.ts) answers from the paint store, which the Neuroglancer
+ * fork's writable zarr source writes to as it writes to MinIO in server
+ * mode. Directly under the page's directory, like `local/`. */
+export const PAINT_ROUTE = "paint/";
+
+/** An annotation volume's files, by volume id and path within the volume
+ * (`.zattrs`, `annotation/s0/.zarray`, `annotation/s0/3.4.5`). The page
+ * writes a new volume's metadata and reads the paint for training; the
+ * service worker reads and writes on the viewer's behalf. IndexedDB in the
+ * browser (both can open it), memory in tests. */
+export interface PaintStore {
+  get(volume: string, path: string): Promise<Uint8Array | undefined>;
+  put(volume: string, path: string, bytes: Uint8Array): Promise<void>;
+  delete(volume: string, path: string): Promise<void>;
+  /** The paths stored under `volume`, those under `prefix` (a directory
+   * within it, with its trailing slash) when given, sorted. */
+  list(volume: string, prefix?: string): Promise<string[]>;
+  /** The ids of the volumes with any file stored, sorted. */
+  volumes(): Promise<string[]>;
+  /** Every file of `volume`. */
+  removeVolume(volume: string): Promise<void>;
+}
+
+/** An annotation volume: the server's record of one
+ * (finetune/session/volume.py: VolumeGeometry.record and the root attrs
+ * create_volume_zarr writes), which is what the volume's root `.zattrs`
+ * holds here too, so a volume downloaded from the browser reads as one made
+ * on the server (read_volume). Labels: 0 unpainted, 1 background, 2 and up
+ * objects. One chunk is one model output block, so each is one training
+ * sample. `dataset_offset_nm` is voxel 0's centre, the OME translation. */
+export interface PaintVolume {
+  /** `vol-<8 hex>-<YYYYmmdd-HHMMSS>` (new_volume_id). */
+  id: string;
+  type: "annotation_volume";
+  model_name: string;
+  /** The ModelEntry's id (the browser's own field; the server has none). */
+  model_id: string;
+  /** The raw volume's URL (the server's dataset_path). */
+  dataset_path: string;
+  /** The model's output block in voxels (z, y, x): the chunk. */
+  chunk_size: number[];
+  /** The model's input block in voxels. */
+  input_size: number[];
+  /** nm: the grid the volume lies on, the prediction's own. */
+  output_voxel_size: number[];
+  input_voxel_size: number[];
+  /** The model's own voxel sizes, for provenance, where the ones above are the raw level's. */
+  claimed_output_voxel_size?: number[];
+  claimed_input_voxel_size?: number[];
+  dataset_offset_nm: number[];
+  /** The volume's extent, padded to whole chunks. */
+  dataset_shape_voxels: number[];
+  /** uint8, or uint16 for an instance model's ids (annotation_dtype_for). */
+  dtype: "uint8" | "uint16";
+  /** The chains when the volume was made: the trainer normalizes through input_norm. */
+  input_norm: Step[];
+  postprocess: Step[];
+  created_at: string;
+  resample?: boolean;
 }

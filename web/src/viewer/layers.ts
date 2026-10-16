@@ -12,7 +12,8 @@
 // `local_position` as a keyword, emitted as `localPosition`. Neuroglancer
 // expects camelCase in its state JSON (`shaderControls`, `localPosition`,
 // `crossSectionScale`), and that is what is written here.
-import type { Chain, DatasetInfo, LayerSpec, ModelInfo, ServedModel, Step } from "../contracts";
+import { PAINT_ROUTE } from "../contracts";
+import type { Chain, DatasetInfo, LayerSpec, ModelInfo, PaintVolume, ServedModel, Step } from "../contracts";
 import { isSegmentation, outputChannels, outputDtype } from "../infer/post";
 import { outputDisplayRange, PREDICTION_COLORS, predictionShader, rawShader } from "./display";
 import type { NgState } from "./state";
@@ -281,5 +282,67 @@ export function stateWithoutInfo(url: string, raw?: LayerSpec): NgState {
     gpuMemoryLimit: GPU_MEMORY_LIMIT,
     layers: layerList({ [RAW_LAYER_NAME]: layer }),
     layout: DEFAULT_LAYOUT,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// The paint layer: the annotation volume as the fork's writable segmentation
+// layer, as dashboard/routes/finetune/overlay.py's add_annotation_layer
+// builds it over MinIO (and selects it: viewer/index.ts selectLayer).
+// ---------------------------------------------------------------------------
+
+/** What a paint layer's name starts with: `annotation_<volume id>`, the
+ * name the server's add-to-viewer route gives it (`annotation_{crop_id}`,
+ * the crop id being the volume's id, as sessions.js sends it) and the one
+ * the tab's crops.js expects: Load Crops looks for that layer before adding
+ * its own. */
+export const PAINT_LAYER_PREFIX = "annotation_";
+
+/** The paint layer's name for the volume `volumeId`. */
+export function paintLayerName(volumeId: string): string {
+  return PAINT_LAYER_PREFIX + volumeId;
+}
+
+/** The keys the layer's draw tools are bound to (overlay.py's
+ * ANNOTATION_TOOL_BINDINGS): the fork's brush and flood fill, from the
+ * voxel_annotation module of google/neuroglancer#858, a single capital
+ * letter each as Neuroglancer's tool bindings want. */
+export const PAINT_TOOL_BINDINGS: Readonly<Record<string, string>> = { A: "vox-brush", F: "vox-flood-fill" };
+
+/** The tab the layer's panel opens on: the fork's Draw tab, where the brush
+ * and flood fill are (voxel_annotation/index.ts adds it to a layer with a
+ * writable subsource). */
+export const PAINT_TAB = "Draw";
+
+/** The URL the viewer paints `volumeId` through: the page's paint route
+ * (PAINT_ROUTE, which the service worker answers from the paint store) as
+ * an S3-compatible endpoint, in the fork's `s3+http(s)://<host>/<path>`
+ * scheme, whose provider reads and writes `http(s)://<host>/<path>/<key>`
+ * unsigned, as the server's `s3+<MinIO url>/annotation` does against MinIO.
+ * `pageBase` is the page's directory with its trailing slash
+ * (`https://janelia-cellmap.github.io/cellmap-flow/app/`,
+ * `http://localhost:5174/`), the service worker's scope; by default this
+ * page's own. */
+export function paintLayerUrl(volumeId: string, pageBase: string = typeof location === "undefined" ? "http://localhost/" : new URL(".", location.href).href): string {
+  const base = pageBase.endsWith("/") ? pageBase : `${pageBase}/`;
+  return `s3+${base}${PAINT_ROUTE}${volumeId}/annotation`;
+}
+
+/** The writable segmentation layer on `url` for `volume`, as
+ * add_annotation_layer builds it: the volume's `annotation` group as its
+ * source, its default subsource writable (the fork paints into a subsource
+ * whose `writingEnabled` is set, and shows the Draw tab for it) and the
+ * bounds subsource on, the brush and flood fill bound to their keys, the
+ * panel on the Draw tab. The fork's own settings (`brushSize` 3,
+ * `brushShape` disk, `floodFillMaxVoxels` 10000, `paintValue` "1", which
+ * is background, the first label to paint) are left at their defaults, as
+ * the server leaves them. */
+export function paintLayer(url: string, volume: PaintVolume): LayerSpec {
+  return {
+    type: "segmentation",
+    name: paintLayerName(volume.id),
+    source: { url, subsources: { default: { writingEnabled: true }, bounds: {} } },
+    toolBindings: { ...PAINT_TOOL_BINDINGS },
+    tab: PAINT_TAB,
   };
 }

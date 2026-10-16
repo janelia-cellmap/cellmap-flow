@@ -17,10 +17,10 @@
 // Either way the tab keeps a copy of the viewer's hash (share.ts), for the
 // reload connect.js does after Connect and any other reload of the tab.
 import type { DatasetInfo, LayerSpec, SessionStore, ViewerController } from "../contracts";
-import { initialState, RAW_LAYER_NAME, stateWithoutInfo } from "./layers";
+import { initialState, RAW_LAYER_NAME, rawLayer, stateWithoutInfo } from "./layers";
 import { withEquivalences } from "./equivalences";
 import { decodeState, encodeState, isStateHash, mirrorFrameHash, rememberedState, rememberState, withHash } from "./share";
-import { datasetUrlFromState, layerShaderOf, type NgState, positionNm, replaceLayers, withoutLayer } from "./state";
+import { datasetUrlFromState, layerShaderOf, layersOf, type NgState, positionNm, replaceLayers, withoutLayer } from "./state";
 
 /** Neuroglancer's page, built beside this one (vite.config.ts serves ./ng/). */
 export const NG_PAGE = "./ng/index.html";
@@ -69,6 +69,32 @@ export function liveEquivalences(viewer: Pick<NgViewer, "layerManager">, name: s
   return sets && typeof sets.restoreState === "function" && typeof sets.clear === "function" ? sets : null;
 }
 
+/** `state` with layer `name` selected and its panel open (Neuroglancer's
+ * `selectedLayer: {layer, visible}`, what the Python API writes for
+ * `s.selected_layer.layer = name; s.selected_layer.visible = True`; the
+ * panel's other settings, its side and size, kept) and, with `tab`, its
+ * panel on that tab (the layer's own `tab` key, as `layer.tab = "Draw"`
+ * sets it). Null when `state` has no layer of that name: Neuroglancer
+ * clears a selection naming a layer it has not got, so the selection waits
+ * until the layer is set. */
+export function withSelectedLayer(state: NgState, name: string, tab?: string): NgState | null {
+  const layers = layersOf(state);
+  if (!layers.some((layer) => layer.name === name)) return null;
+  const panel = state.selectedLayer;
+  const kept = panel && typeof panel === "object" && !Array.isArray(panel) ? (panel as Record<string, unknown>) : {};
+  const next: NgState = { ...state, selectedLayer: { ...kept, layer: name, visible: true } };
+  if (tab !== undefined) next.layers = layers.map((layer) => (layer.name === name ? { ...layer, tab } : layer));
+  return next;
+}
+
+/** The page boots with data-viewer="pending" on <html> when the session has
+ * a dataset (index.html's inline script), which keeps the connect panel
+ * invisible (browser.css) until the viewer replaces it; cleared when the
+ * viewer is mounted, or when restore() finds nothing to show. */
+function viewerSettled(): void {
+  if (typeof document !== "undefined" && document.documentElement?.dataset) delete document.documentElement.dataset.viewer;
+}
+
 /** The controller, with the one addition to the shared contract: openDataset
  * takes the dataset's geometry when the caller has it, for the viewer's
  * dimensions and centre. */
@@ -93,7 +119,17 @@ export function createViewer(opts: { session: SessionStore; log: (line: string) 
    * the session's models again before the viewer is restored, so that their
    * views exist when the viewer asks): put in the first state mounted. */
   let queued: Record<string, LayerSpec> = {};
+  /** The layer to select, its panel on `tab`, once the viewer has a layer
+   * of that name: selectLayer called before there is an iframe, or before
+   * setLayers has put the layer in (the backend selects the paint layer it
+   * sets in the same breath, as the server's add_annotation_layer does both
+   * in one transaction). */
+  let selection: { name: string; tab?: string } | null = null;
   let stopMirror: (() => void) | null = null;
+  /** The dataset restore() left the viewer waiting for (the session names
+   * it, the tab has no view of it): mounted by datasetOpened, with the
+   * geometry the engine read, rather than at once without it. */
+  let awaiting: string | null = null;
 
   /** Neuroglancer's viewer in the iframe, once its page has made it. */
   function liveViewer(): NgViewer | null {
@@ -155,6 +191,7 @@ export function createViewer(opts: { session: SessionStore; log: (line: string) 
     }
     stopMirror ??= mirrorFrameHash(frame);
     frame.src = NG_PAGE + hash;
+    viewerSettled();
     return frame;
   }
 
@@ -180,12 +217,23 @@ export function createViewer(opts: { session: SessionStore; log: (line: string) 
   }
 
   /** `state` with the layers set before there was an iframe, which are then
-   * no longer queued. */
+   * no longer queued, and the pending selection when it names one of the
+   * state's layers. */
   function withQueued(state: NgState): NgState {
-    if (!Object.keys(queued).length) return state;
+    if (!Object.keys(queued).length) return withSelection(state);
     const merged = replaceLayers(state, queued);
     queued = {};
-    return merged;
+    return withSelection(merged);
+  }
+
+  /** `state` with the pending selection applied, when it names a layer of
+   * `state`; the selection is then no longer pending. */
+  function withSelection(state: NgState): NgState {
+    if (!selection) return state;
+    const selected = withSelectedLayer(state, selection.name, selection.tab);
+    if (!selected) return state;
+    selection = null;
+    return selected;
   }
 
   /** Show `state` as a new viewer: through the hash, which has Neuroglancer
@@ -235,18 +283,42 @@ export function createViewer(opts: { session: SessionStore; log: (line: string) 
       }
       const url = session.state.datasetUrl;
       if (url) {
-        // The session knows the dataset but not its geometry (that comes
-        // from the inference module's open): Neuroglancer reads it itself.
-        // The backend puts the proper raw layer and the models' layers in
-        // through setLayers when it serves them again.
-        openState(stateWithoutInfo(url));
-        log(`viewer restored on ${url}`);
+        // The session knows the dataset but not its geometry, which the
+        // engine reads as the session is restored (backend restoreSession,
+        // a second or so): the viewer waits for it (datasetOpened), the
+        // connect panel staying hidden meanwhile, and layers set before
+        // then are queued. Mounted at once without it, Neuroglancer took
+        // the coordinate space from whichever layer's metadata came first,
+        // 8 nm (the raw) or 16 nm (the model's output), and adding the
+        // 16 nm paint layer switched an 8 nm one to 16 nm with the
+        // position's voxel numbers kept, which put the view past the
+        // data's far corner; setting the dimensions once the viewer was up
+        // did not hold either. Connect's state carries them from the start
+        // (prepareDataset), and the Python viewer sets the raw's before any
+        // layer (bootstrap.raw_dimensions), for the same reason.
+        awaiting = url;
         return;
       }
       adjustConnectPanel();
+      viewerSettled();
+    },
+
+    datasetOpened(url, info) {
+      if (awaiting === null || awaiting !== url) return;
+      awaiting = null;
+      if (info) {
+        openState(initialState(info, { [RAW_LAYER_NAME]: rawLayer(url, info) }));
+        log(`viewer restored on ${url}`);
+      } else {
+        // The engine could not open it: Neuroglancer tries on its own, and
+        // says why it cannot in its layer panel.
+        openState(stateWithoutInfo(url));
+        log(`viewer restored on ${url}, without its geometry`);
+      }
     },
 
     async openDataset(url, raw, info) {
+      awaiting = null;
       const layers = { [RAW_LAYER_NAME]: raw };
       openState(info ? initialState(info, layers) : stateWithoutInfo(url, raw));
       log(`viewer opened on ${url}`);
@@ -276,11 +348,12 @@ export function createViewer(opts: { session: SessionStore; log: (line: string) 
         Object.assign(queued, layers);
         return;
       }
-      applyState(replaceLayers(state, layers));
+      applyState(withSelection(replaceLayers(state, layers)));
     },
 
     removeLayer(name) {
       delete queued[name];
+      if (selection?.name === name) selection = null;
       const state = currentState();
       if (!state) return;
       applyState(withoutLayer(state, name));
@@ -326,6 +399,13 @@ export function createViewer(opts: { session: SessionStore; log: (line: string) 
 
     layerShader(name) {
       return layerShaderOf(currentState(), name);
+    },
+    selectLayer(name, tab) {
+      selection = tab === undefined ? { name } : { name, tab };
+      const state = currentState();
+      if (!state) return;  // no iframe yet: in the first state mounted, with the queued layers
+      const selected = withSelection(state);
+      if (selected !== state) applyState(selected);  // else not a layer yet: selected when setLayers brings it
     },
   };
 }

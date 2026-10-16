@@ -1,6 +1,19 @@
+{# This tab serves two pages (web/build/render.py renders it with mode ==
+   "browser" for the browser mode; Flask passes no mode). What needs a server
+   -- an output path on its file system, MinIO, crops from its disks, the
+   patch tools, LoRA's parameters, the GPU queue -- is marked server-only,
+   which web/src/browser.css hides under data-mode="browser" and the Flask
+   page ignores; what only the browser has is inside {% if mode == "browser" %}
+   blocks, so Flask's page does not carry it. The tab's scripts
+   (static/js/dashboard/finetune/) ask lib/page-data's isBrowserMode for the
+   same difference. #}
 <div class="alert alert-info" role="alert">
+  {% if mode == "browser" %}
+  <strong>Finetune:</strong> paint corrections, then train the model's last layer in this tab.
+  {% else %}
   <strong>Finetune:</strong> paint corrections, then train on the GPU cluster.
-  <small class="d-block" title="Crops need the model's write_shape, output_voxel_size and so on. A model submitted from the GUI after startup may lack them; restart with a full model configuration.">Needs a model with full metadata.</small>
+  {% endif %}
+  <small class="d-block server-only" title="Crops need the model's write_shape, output_voxel_size and so on. A model submitted from the GUI after startup may lack them; restart with a full model configuration.">Needs a model with full metadata.</small>
 </div>
 
 <!-- Tabs for Annotation Crops and Training -->
@@ -34,6 +47,11 @@
       </button>
     </div>
     <small class="form-text text-muted">Crops are sized to the model's output.</small>
+    {# Browser mode only: what trains here (web/src/finetune), since it is not
+       the server's LoRA finetune of the whole network. #}
+    {% if mode == "browser" %}
+    <small class="form-text d-block mt-1" id="browserFinetuneNote">In the browser, finetuning trains the model's last layer (its output convolution) on the voxels you paint, on this machine; the rest of the network stays as it was. Paint some background and some objects on a few slices, then train.</small>
+    {% endif %}
   </div>
 
   <!-- Model Info Display -->
@@ -42,8 +60,9 @@
     <div id="modelInfoContent"></div>
   </div>
 
-  <!-- Output Path for Zarr Files -->
-  <div class="mb-3">
+  <!-- Output Path for Zarr Files. server-only: a path on the server's file
+       system; the browser keeps the paint in its own store. -->
+  <div class="mb-3 server-only">
     <label for="outputPath" class="form-label">Output Path for Zarr Files</label>
     <input type="text" class="form-control" id="outputPath" placeholder="/path/to/output/directory">
     <small class="form-text text-muted">Where crops are saved; MinIO must be able to read it.</small>
@@ -59,7 +78,8 @@
       <button type="button" class="btn btn-info" id="loadExistingVolumeBtn" title="Copy and continue an existing annotation volume from a previous session">
         Resume Existing Volume
       </button>
-      <button type="button" class="btn btn-secondary" id="openLoadCropsBtn" title="Bulk-load externally annotated zarr crops from a YAML manifest (paste or load from file)">
+      {# server-only: the crops are zarrs on the server's disks. #}
+      <button type="button" class="btn btn-secondary server-only" id="openLoadCropsBtn" title="Bulk-load externally annotated zarr crops from a YAML manifest (paste or load from file)">
         Load Crops from YAML
       </button>
     </div>
@@ -76,8 +96,11 @@
     <small class="form-text text-muted d-block mt-1">Draws a box in the viewer around each region annotated so far. Only when you click, and not while painting: it drops the selected draw tool.</small>
   </div>
 
-  <!-- The patch on screen: one-click labels, and good regions (rehearsal anchors) -->
-  <div class="patch-tools mb-3">
+  <!-- The patch on screen: one-click labels, and good regions (rehearsal anchors).
+       server-only, the whole box: every section in it (Label it, AI-assisted
+       annotation, Good regions) writes the volume through the server's routes,
+       and the browser mode does not start their scripts (finetune/index.js). -->
+  <div class="patch-tools mb-3 server-only">
     <div class="patch-tools-title">Patch on screen</div>
 
     <details class="patch-tools-group patch-tools-section" id="labelItSection" open>
@@ -218,18 +241,41 @@
     </details>
   </div>
 
-  <!-- Save action -->
-  <div class="mb-2">
+  <!-- Save action. server-only: MinIO and the disk are the server's. -->
+  <div class="mb-2 server-only">
     <button type="button" class="btn btn-success" id="saveAnnotationsBtn" title="Save all annotations from MinIO to local disk">
       Save Annotations to Disk
     </button>
     <small class="form-text text-muted d-block mt-1">Copies the annotations from MinIO to disk.</small>
   </div>
 
+  {# Browser mode only: the paint is kept in this browser already (IndexedDB,
+     behind the service worker), so there is nothing to save; it can be taken
+     out as a zarr, or thrown away. crops.js points both at the volume once
+     one exists (New Volume, or Resume Existing Volume); until then the link
+     has no target and the button is disabled. The download is a GET the
+     service worker relays to the in-page backend, as the Export Config link. #}
+  {% if mode == "browser" %}
+  <div class="mb-2" id="browserVolumeActions">
+    <div class="d-flex align-items-center gap-2 flex-wrap">
+      <a class="btn btn-outline-secondary disabled" id="downloadVolumeBtn" role="button" aria-disabled="true" tabindex="-1" download
+         title="The annotation volume as a zip of its zarr: what the server's finetune reads, and zarr-python">
+        Download paint (zarr)
+      </a>
+      <button type="button" class="btn btn-outline-danger" id="deleteVolumeBtn" disabled
+              title="Removes the volume's paint from this browser and its layer from the viewer. Download it first to keep it.">
+        Delete volume
+      </button>
+    </div>
+    <small class="form-text text-muted d-block mt-1">The paint stays in this browser until you delete it; download it to keep it elsewhere or to train on the server.</small>
+  </div>
+  {% endif %}
+
   <!-- AI-assisted annotation's review, over the page: the plane sent, the
        model's answer and the mask over the plane, large enough to judge
-       (ai-annotate.js). Opens by itself when a result is ready. -->
-  <div class="modal fade" id="aiAnnotateReviewModal" tabindex="-1" aria-labelledby="aiAnnotateReviewTitle" aria-hidden="true">
+       (ai-annotate.js). Opens by itself when a result is ready. server-only,
+       with its panel above. -->
+  <div class="modal fade server-only" id="aiAnnotateReviewModal" tabindex="-1" aria-labelledby="aiAnnotateReviewTitle" aria-hidden="true">
     <div class="modal-dialog modal-xl modal-dialog-scrollable ai-annotate-review-dialog">
       <div class="modal-content">
         <div class="modal-header">
@@ -280,8 +326,8 @@
     </div>
   </div>
 
-  <!-- Load Crops from YAML Modal -->
-  <div class="modal fade" id="loadCropsModal" tabindex="-1" aria-labelledby="loadCropsLabel" aria-hidden="true">
+  <!-- Load Crops from YAML Modal (server-only, with its button above) -->
+  <div class="modal fade server-only" id="loadCropsModal" tabindex="-1" aria-labelledby="loadCropsLabel" aria-hidden="true">
     <div class="modal-dialog modal-lg">
       <div class="modal-content">
         <div class="modal-header">
@@ -343,10 +389,18 @@
           <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
         </div>
         <div class="modal-body">
-          <p class="text-muted small">
+          {# The browser mode lists the volumes of its own paint store, with no
+             directory to scan (sessions.js scans as the modal opens); the
+             server's words and its directory row are server-only. #}
+          <p class="text-muted small server-only">
             The selected session will be <strong>copied</strong> into a new session directory so your previous training data remains intact. Lineage is recorded in <code>loaded_from.json</code>.
           </p>
-          <div class="mb-2">
+          {% if mode == "browser" %}
+          <p class="text-muted small" id="existingVolumesNote">
+            These are the volumes painted in this browser, newest first. Pick one to paint on and train again.
+          </p>
+          {% endif %}
+          <div class="mb-2 server-only">
             <label for="existingBrowseRoot" class="form-label">Search in</label>
             <div class="input-group">
               <input type="text" class="form-control" id="existingBrowseRoot" placeholder="/path/to/output/directory">
@@ -361,7 +415,11 @@
             </select>
           </div>
           <div id="existingSessionsEmpty" class="text-muted small" style="display:none;">
+            {% if mode == "browser" %}
+            No volumes painted in this browser yet: close this and click New Volume.
+            {% else %}
             No existing sessions found under this directory.
+            {% endif %}
           </div>
           <div id="loadExistingStatus" class="text-muted small mt-2"></div>
         </div>
@@ -373,8 +431,8 @@
     </div>
   </div>
 
-  <!-- MinIO Status -->
-  <div class="mt-3 p-2 border rounded" id="minioStatus" style="display: none;">
+  <!-- MinIO Status (server-only: the browser has no MinIO) -->
+  <div class="mt-3 p-2 border rounded server-only" id="minioStatus" style="display: none;">
     <h6>MinIO Status</h6>
     <div id="minioStatusContent"></div>
   </div>
@@ -402,8 +460,14 @@
     <h5>Training Configuration</h5>
   </div>
   <div class="card-body">
+    {# In the browser mode the head alone trains (web/src/finetune), on the
+       whole paint at once, on this machine: no checkpoint on a file system,
+       no LoRA rank, batch, patches, rehearsal, loss choice (BCE), distillation,
+       augmentation or GPU queue. Those groups are server-only; the epochs,
+       learning rate, label smoothing, class balance and Auto-serve stay.
+       web/src/browser.css gives the fields left the full row. #}
     <!-- Optional: Manual checkpoint path override -->
-    <div class="mb-3">
+    <div class="mb-3 server-only">
       <label for="checkpointPath" class="form-label" title="The base model checkpoint to finetune from. Left empty, it is taken from the model's configuration or script.">
         Checkpoint Path (Optional)
         <span class="badge bg-secondary">Advanced</span>
@@ -413,7 +477,7 @@
     </div>
 
     <div class="row">
-      <div class="col-md-6">
+      <div class="col-md-6 server-only">
         <div class="mb-3">
           <label for="loraRank" class="form-label" title="Higher rank = more trainable parameters. Alpha is held at twice the rank, so the step size stays the same when you change it. Rank 0 trains the whole model instead of an adapter: on the mito affinity UNet it was faster per step and lower in memory than rank 64, and exports full weights (~3 GB) rather than a ~100 MB adapter. Switching between 0 and a LoRA rank needs a new job, not a restart.">LoRA Rank</label>
           <select id="loraRank" class="form-select">
@@ -436,7 +500,7 @@
     </div>
 
     <div class="row">
-      <div class="col-md-6">
+      <div class="col-md-6 server-only">
         <div class="mb-3">
           <label for="batchSize" class="form-label">Batch Size</label>
           <select id="batchSize" class="form-select">
@@ -454,6 +518,15 @@
         <div class="mb-3">
           <label for="learningRate" class="form-label">Learning Rate</label>
           <select id="learningRate" class="form-select">
+            {# The browser trains the last layer alone, a few thousand weights
+               started from the model's own, which takes a step a hundred
+               times LoRA's: its own three rates, 1e-2 chosen. Flask passes no
+               mode and keeps the LoRA rates below as they were. #}
+            {% if mode == "browser" %}
+            <option value="0.01" selected>1e-2 (Standard for the last layer)</option>
+            <option value="0.003">3e-3 (Gentler)</option>
+            <option value="0.001">1e-3 (Gentle)</option>
+            {% else %}
             <option value="0.0000001">1e-7 (Ultra Conservative)</option>
             <option value="0.000001">1e-6 (Very Conservative)</option>
             <option value="0.00001">1e-5 (Conservative)</option>
@@ -461,13 +534,18 @@
             <option value="0.001">1e-3 (Aggressive)</option>
             <option value="0.01">1e-2 (Very Aggressive)</option>
             <option value="0.1">1e-1 (Extremely Aggressive)</option>
+            {% endif %}
           </select>
+          {% if mode == "browser" %}
+          <small class="text-muted">1e-2 suits the last layer; lower it if the loss jumps about.</small>
+          {% else %}
           <small class="text-muted">1e-4 suits LoRA.</small>
+          {% endif %}
         </div>
       </div>
     </div>
 
-    <div class="row">
+    <div class="row server-only">
       <div class="col-md-6">
         <div class="mb-3">
           <label for="patchesPerEpoch" class="form-label" title="Blank keeps the manifest's value. 0 picks it from the number of painted chunks. A positive value caps the random patches per epoch.">
@@ -504,7 +582,7 @@
       </div>
     </div>
 
-    <div class="row">
+    <div class="row server-only">
       <div class="col-md-6">
         <div class="mb-3">
           <label for="lossType" class="form-label">Loss Function</label>
@@ -559,7 +637,7 @@
     </div>
     <div class="row">
       <div class="col-md-6">
-        <div class="mb-3">
+        <div class="mb-3 server-only">
           <label for="distillationScope" class="form-label">
             Distillation Scope
             <span class="badge bg-secondary">Advanced</span>
@@ -596,7 +674,7 @@
           </div>
           <small class="text-muted">Weights fg and bg equally.</small>
         </div>
-        <div class="mb-3">
+        <div class="mb-3 server-only">
           <div class="form-check">
             <input class="form-check-input" type="checkbox" id="augment">
             <label class="form-check-label" for="augment" title="Random flips, XY rotations, brightness and noise, on top of the patch-centre jitter that is always applied. Off by default: augmentation earns its keep when a run sees the same patches many times over, so a short correction run mostly just gets noisier gradients.">
@@ -610,7 +688,7 @@
       </div>
     </div>
 
-    <div class="row">
+    <div class="row server-only">
       <div class="col-md-6">
         <div class="mb-3">
           <label for="gpuQueue" class="form-label">GPU Queue</label>
@@ -687,6 +765,18 @@
         <span id="neuroglancerLayer" class="font-monospace small">-</span>
       </div>
     </div>
+
+    {# Browser mode only: the finetuned model as an .onnx file, the base's
+       graph with the trained last layer, for the server mode or another
+       machine. job-monitor.js points it at the model a status answer says is
+       served and shows it then; hidden otherwise. The GET is relayed by the
+       service worker to the in-page backend, as the Export Config link. #}
+    {% if mode == "browser" %}
+    <a class="btn btn-outline-secondary btn-sm mt-3" id="downloadFinetunedBtn" role="button" download style="display: none;"
+       title="The finetuned model as an .onnx file: the base model's graph with the trained last layer in it">
+      Download finetuned model
+    </a>
+    {% endif %}
   </div>
 </div>
 

@@ -16,10 +16,17 @@ RENDER_PY = Path(__file__).resolve().parents[2] / "web" / "build" / "render.py"
 # The elements the browser mode must hide, by id, and those it must keep.
 SERVER_ONLY = [
     "review-tab", "review",  # the Review tab's button and pane
-    "finetune-tab", "finetune",  # finetuning in the browser is a later PR
     "modelAccordion",  # the Local Catalog: cluster paths
     "zooModelAccordion", "cellposeModelAccordion",
     "serverConfigAccordion", "jobLogsBtn", "jobLogsArea",
+    # The Finetune tab's parts that need a server: a path on its file system,
+    # crops from its disks, the patch tools (which write the volume through
+    # its routes), MinIO, and the cluster trainer's parameters.
+    "outputPath", "openLoadCropsBtn", "loadCropsModal",
+    "labelItSection", "aiAnnotatePanel", "aiAnnotateReviewModal", "goodRegionsSection",
+    "saveAnnotationsBtn", "minioStatus", "existingBrowseRoot",
+    "checkpointPath", "loraRank", "batchSize", "patchesPerEpoch", "rehearsalFraction",
+    "lossType", "marginGroup", "distillationLambda", "distillationScope", "augment", "gpuQueue",
 ]
 KEPT = [
     "model-tab", "input-tab", "output-tab", "models", "input", "output",
@@ -28,6 +35,15 @@ KEPT = [
     "inputNormList", "postProcessList", "datasetPathInput", "setDataBtn",
     "localFolderGroup", "browseLocalBtn",  # a folder on this machine: the browser-only block of the connect panel
     "shareLinkBtn",  # the header's Share button: a link to what is open, browser-only too
+    # The Finetune tab, which trains the model's last layer in the page: a
+    # volume to paint, the head's parameters, the job's card, plot and log.
+    "finetune-tab", "finetune",
+    "modelSelect", "createVolumeBtn", "loadExistingVolumeBtn", "existingSessionsList",
+    "showAnnotatedRegionsBtn",  # the browser counts the painted chunks
+    "numEpochs", "learningRate", "labelSmoothing", "balanceClasses", "autoServeCheck", "startFinetuningBtn",
+    "trainingStatusCard", "lossPlotCanvas", "trainingLogs",
+    # Its browser-only controls: the paint out as a zarr or deleted, the finetuned model out as .onnx.
+    "downloadVolumeBtn", "deleteVolumeBtn", "downloadFinetunedBtn",
 ]
 
 
@@ -99,7 +115,8 @@ def test_the_page_is_the_browser_build(page):
 
 
 def test_the_page_data_island_parses(page):
-    assert _page_data(page) == {"default_hf_repos": [], "default_bioimage_models": [], "resample": False}
+    # mode is what the finetune tab's scripts ask (lib/page-data isBrowserMode).
+    assert _page_data(page) == {"default_hf_repos": [], "default_bioimage_models": [], "resample": False, "mode": "browser"}
 
 
 def test_the_default_chain_is_ticked_with_its_values(page):
@@ -139,6 +156,28 @@ def test_the_browser_page_marks_what_only_a_server_can_serve(page):
     assert re.search(r'id="datasetPathInput"[^>]*placeholder="https://', page)
 
 
+def _select_options(html, select_id):
+    """[(value, selected)] of a <select>'s options, in page order."""
+    select = re.search(rf'<select[^>]*id="{select_id}"[^>]*>(.*?)</select>', html, re.S).group(1)
+    return [(value, re.search(r"\sselected\b", option) is not None)
+            for option, value in re.findall(r'(<option[^>]*value="([^"]*)"[^>]*>)', select)]
+
+
+def test_the_browser_page_finetunes_the_last_layer(page):
+    """What the Finetune tab says and offers in the browser: the head trains,
+    at its own learning rates, and the paint and the model can be taken out."""
+    assert "trains the model's last layer (its output convolution)" in page
+    assert "train the model's last layer in this tab" in page
+    assert "volumes painted in this browser, newest first" in page
+    # The head's learning rates, 1e-2 chosen, in place of the LoRA rates.
+    assert _select_options(page, "learningRate") == [("0.01", True), ("0.003", False), ("0.001", False)]
+    # The downloads are links the service worker relays, with no target until
+    # a volume or a finetuned model exists; Delete waits for a volume too.
+    assert re.search(r'<a class="[^"]*\bdisabled\b[^"]*" id="downloadVolumeBtn"[^>]*\bdownload\b', page)
+    assert re.search(r'<button[^>]*id="deleteVolumeBtn"[^>]*\bdisabled\b', page)
+    assert re.search(r'<a class="[^"]*" id="downloadFinetunedBtn"[^>]*\bdownload\b[^>]*style="display: none;"', page)
+
+
 def test_the_browser_page_renders_an_empty_catalog(page):
     assert 'id="cellpose-data">{"models": [], "running": []}</script>' in page
     assert "chk_" not in page, "no Local Catalog rows"
@@ -168,12 +207,23 @@ def test_the_flask_dashboard_is_unchanged_by_the_markers(dashboard):
     classes = _Classes(html).by_id
     assert "review-tab" in classes and "modelAccordion" in classes
     assert "browser.css" not in html
+    # Every marked element of the Finetune tab is on the page too.
+    assert all(i in classes for i in SERVER_ONLY), [i for i in SERVER_ONLY if i not in classes]
     # Flask passes no mode, so the connect panel keeps asking for a path.
     assert re.search(r'id="datasetPathInput"[^>]*placeholder="/path/to/dataset.zarr"', html)
     assert "Models run in this browser" not in html
     # The connect panel's browser-only block (a folder on this machine) is not rendered.
     assert "browseLocalBtn" not in html and "localFolderGroup" not in html
     assert "shareLinkBtn" not in html
+    # Nor the Finetune tab's: its page-data says server, its trainer is the
+    # cluster's at LoRA's learning rates, and nothing is downloaded or deleted.
+    assert _page_data(html)["mode"] == "server"
+    assert "train on the GPU cluster" in html
+    assert "train the model's last layer in this tab" not in html
+    assert "trains the model's last layer (its output convolution)" not in html
+    assert _select_options(html, "learningRate")[3] == ("0.0001", True) and "0.003" not in html
+    for browser_only in ("downloadVolumeBtn", "deleteVolumeBtn", "downloadFinetunedBtn", "existingVolumesNote"):
+        assert browser_only not in html, browser_only
 
 
 def test_both_pages_lay_out_for_a_phone(page, dashboard):

@@ -1,0 +1,170 @@
+{
+  "model": "setup_53_2d",
+  "task": "mito_affinities",
+  "architecture": "Unet3dIso (2D-collapsed)",
+  "checkpoint": "student_60000",
+  "params": 1927907,
+  "channels": [
+    "mito_aff_z",
+    "mito_aff_y",
+    "mito_aff_x"
+  ],
+  "input_voxel_size_nm": [
+    16,
+    16,
+    16
+  ],
+  "output_voxel_size_nm": [
+    16,
+    16,
+    16
+  ],
+  "output": "raw logits (apply sigmoid / threshold at 0)",
+  "input_norm": [
+    {
+      "name": "MinMaxNormalizer",
+      "min_value": 0,
+      "max_value": 255
+    },
+    {
+      "name": "LambdaNormalizer",
+      "expression": "2*x-1"
+    }
+  ],
+  "io": "input 'input' float32 [1,1,1,y,x] (one z-slice); output 'output' float32 [1,C,1,y',x']",
+  "kind": "2D slice student distilled from the 3D model (train_2d_distill.py)",
+  "step": 60000,
+  "distilled_from": "setup_53",
+  "distilled_from_repo": "cellmap/mito-aff-unetiso-setup-53",
+  "variants": [
+    {
+      "model": "setup_53_2d",
+      "variant": "fp32",
+      "input_size": [
+        1,
+        300,
+        300
+      ],
+      "output_size": [
+        1,
+        212,
+        212
+      ],
+      "file": "setup_53_mito_affinities_16nm_2d_in300_fp32.onnx",
+      "file_mb": 7.75,
+      "max_abs": 2.288818359375e-05,
+      "flip_frac": 0.0
+    },
+    {
+      "model": "setup_53_2d",
+      "variant": "fp16",
+      "input_size": [
+        1,
+        300,
+        300
+      ],
+      "output_size": [
+        1,
+        212,
+        212
+      ],
+      "file": "setup_53_mito_affinities_16nm_2d_in300_fp16.onnx",
+      "file_mb": 3.9,
+      "max_abs": 0.10926437377929688,
+      "flip_frac": 4.4499822000712e-05
+    },
+    {
+      "model": "setup_53_2d",
+      "variant": "fp32",
+      "input_size": [
+        1,
+        556,
+        556
+      ],
+      "output_size": [
+        1,
+        468,
+        468
+      ],
+      "file": "setup_53_mito_affinities_16nm_2d_in556_fp32.onnx",
+      "file_mb": 7.75,
+      "max_abs": 2.09808349609375e-05,
+      "flip_frac": 0.0
+    },
+    {
+      "model": "setup_53_2d",
+      "variant": "fp16",
+      "input_size": [
+        1,
+        556,
+        556
+      ],
+      "output_size": [
+        1,
+        468,
+        468
+      ],
+      "file": "setup_53_mito_affinities_16nm_2d_in556_fp16.onnx",
+      "file_mb": 3.9,
+      "max_abs": 0.10926437377929688,
+      "flip_frac": 3.652567755131858e-05
+    },
+    {
+      "model": "setup_53_2d",
+      "variant": "fp32",
+      "input_size": [
+        1,
+        1068,
+        1068
+      ],
+      "output_size": [
+        1,
+        980,
+        980
+      ],
+      "file": "setup_53_mito_affinities_16nm_2d_in1068_fp32.onnx",
+      "file_mb": 7.75,
+      "max_abs": 2.574920654296875e-05,
+      "flip_frac": 0.0
+    },
+    {
+      "model": "setup_53_2d",
+      "variant": "fp16",
+      "input_size": [
+        1,
+        1068,
+        1068
+      ],
+      "output_size": [
+        1,
+        980,
+        980
+      ],
+      "file": "setup_53_mito_affinities_16nm_2d_in1068_fp16.onnx",
+      "file_mb": 3.9,
+      "max_abs": 0.10926437377929688,
+      "flip_frac": 4.859086491739553e-05
+    }
+  ],
+  "val_f1": {
+    "metric": "affinity F1 (mean of 3 channels), 6 GT val crops, centered 200^3, threshold logit>0",
+    "student": {
+      "crop495": 0.8164,
+      "crop496": 0.796,
+      "crop1017": 0.9015,
+      "crop528": 0.9217,
+      "crop1091": 0.9166,
+      "crop1081": 0.9481
+    },
+    "student_mean": 0.8834,
+    "teacher_3d": {
+      "crop495": 0.955,
+      "crop496": 0.928,
+      "crop1017": 0.966,
+      "crop528": 0.9746,
+      "crop1091": 0.9517,
+      "crop1081": 0.9456
+    },
+    "teacher_3d_mean": 0.9535
+  }
+}

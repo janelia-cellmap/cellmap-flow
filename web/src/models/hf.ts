@@ -10,7 +10,8 @@
 //
 // CORS (checked 2026-10-14): the API, raw/ and resolve/ reflect the page's
 // Origin; the CDN that resolve/ redirects to answers "*" and exposes every
-// header, so Content-Length is readable and download progress can be shown.
+// header, so Content-Length is readable and download progress can be shown,
+// and so is ETag, the file's identity (fetchEtag; checked 2026-10-15).
 
 export const HF_REPO = "cellmap/onnx-web-models";
 export const HF_REVISION = "main";
@@ -81,6 +82,46 @@ export function fetchManifest(fetchImpl: FetchLike, folder: string): Promise<unk
   return fetchJson(fetchImpl, rawUrl(`${folder}/manifest.json`), `${folder}/manifest.json`);
 }
 
+/** The identity of the file at `url`, from a HEAD request: the final
+ * response's ETag without its quotes, or null when the request fails
+ * (offline) or the answer is not OK or carries no readable ETag (a server
+ * that does not expose it: CORS hides headers not named in
+ * Access-Control-Expose-Headers). Never throws: a caller that cannot learn
+ * the identity decides for itself what to serve.
+ *
+ * On Hugging Face (checked 2026-10-15 with curl -sIL and an Origin header)
+ * resolve/ answers a HEAD with a 302 whose X-Linked-ETag is the LFS file's
+ * sha256; fetch follows the redirect, and the CDN's answer, the one the
+ * page sees, carries `etag: "<content hash>"` under
+ * Access-Control-Expose-Headers: *, with Content-Length. A GET's final
+ * response carries the same ETag. The hash changes with the bytes and only
+ * with them: a file re-uploaded under the same name (a retrained model,
+ * as setup_53_2d and setup_54_2d were on 2026-10-15) gets a new one, which
+ * is what the model cache keys on (models/index.ts). */
+export async function fetchEtag(fetchImpl: FetchLike, url: string): Promise<string | null> {
+  try {
+    const response = await fetchImpl(url, { method: "HEAD", cache: "no-store" });
+    return response.ok ? etagOf(response) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** `response`'s ETag as a bare token: the quotes and a weak validator's
+ * W/ prefix stripped; null when there is none (or it is empty). */
+export function etagOf(response: Response): string | null {
+  const header = response.headers.get("etag");
+  if (header === null) return null;
+  const bare = header.trim().replace(/^W\//i, "").replace(/^"(.*)"$/, "$1");
+  return bare || null;
+}
+
+/** A downloaded file: its bytes and the ETag its response carried (null when none was readable). */
+export interface FetchedFile {
+  bytes: ArrayBuffer;
+  etag: string | null;
+}
+
 /** Download `url` whole, reporting progress as the body streams in.
  *
  * `onProgress(loaded, total)` runs after every chunk; `total` is the
@@ -92,18 +133,30 @@ export async function fetchBytes(
   url: string,
   onProgress?: (loaded: number, total: number | null) => void,
 ): Promise<ArrayBuffer> {
+  return (await fetchFile(fetchImpl, url, onProgress)).bytes;
+}
+
+/** fetchBytes, with the response's ETag beside the bytes (the model cache
+ * keys on it; the HEAD's ETag of a moment before could in principle be of
+ * an older file than the GET then downloads). */
+export async function fetchFile(
+  fetchImpl: FetchLike,
+  url: string,
+  onProgress?: (loaded: number, total: number | null) => void,
+): Promise<FetchedFile> {
   const what = fileNameOf(url);
   // no-store: the bytes go into this module's own IndexedDB cache; the
   // service worker's store cache (sw.ts) honours the request's cache mode and
   // would otherwise keep a second copy of every model.
   const response = await fetchImpl(url, { cache: "no-store" });
   throwForStatus(response, what);
+  const etag = etagOf(response);
   const total = contentLength(response);
   if (!response.body) {
     // No streaming body (an old runtime, or a test's plain Response): one read.
     const bytes = await response.arrayBuffer();
     onProgress?.(bytes.byteLength, bytes.byteLength);
-    return bytes;
+    return { bytes, etag };
   }
   const reader = response.body.getReader();
   const chunks: Uint8Array[] = [];
@@ -121,7 +174,7 @@ export async function fetchBytes(
     bytes.set(chunk, offset);
     offset += chunk.byteLength;
   }
-  return bytes.buffer;
+  return { bytes: bytes.buffer, etag };
 }
 
 function throwForStatus(response: Response, what: string): void {

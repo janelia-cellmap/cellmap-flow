@@ -8,6 +8,7 @@ import type {
   Catalog,
   Chain,
   DatasetInfo,
+  FinetunedRecord,
   GpuLimits,
   Inference,
   InferenceStats,
@@ -21,6 +22,7 @@ import type {
 } from "../../src/contracts";
 import { entryFor } from "../../src/models";
 import { memorySession } from "../../src/state";
+import { MemoryPaintStore } from "../../src/state/paint-store";
 
 export function manifest(name: string, channels: string[], voxel: number): ModelManifest {
   return {
@@ -144,6 +146,16 @@ export class FakeInference implements Inference {
   }
 
   async reset(): Promise<void> {}
+
+  /** Every readRaw call's box, and zeros of the level's shape for it (uint8). */
+  reads: { level: number; lo: number[]; hi: number[] }[] = [];
+
+  async readRaw(level: number, lo: number[], hi: number[]): Promise<ArrayBuffer> {
+    if (!this.current) throw new Error("open a dataset before reading it");
+    this.reads.push({ level, lo, hi });
+    const n = hi.reduce((acc, h, a) => acc * (h - lo[a]), 1);
+    return new ArrayBuffer(n);
+  }
 }
 
 export class FakeCatalog implements Catalog {
@@ -175,8 +187,29 @@ export class FakeCatalog implements Catalog {
     return limits.maxBufferSize !== null && limits.maxBufferSize < 2 ** 30 ? m.variants[m.variants.length - 1] : m.variants[0];
   }
 
-  async modelBytes(): Promise<ArrayBuffer> {
-    return new ArrayBuffer(8);
+  async modelBytes(entry: ModelEntry): Promise<ArrayBuffer> {
+    return this.finetunedBytes.get(entry.onnxUrl) ?? new ArrayBuffer(8);
+  }
+
+  /** The finetuned models kept, newest first, and their bytes by onnxUrl. */
+  finetunedRecords: FinetunedRecord[] = [];
+  finetunedBytes = new Map<string, ArrayBuffer>();
+
+  async addFinetuned(record: FinetunedRecord, bytes: ArrayBuffer): Promise<void> {
+    this.finetunedRecords = [record, ...this.finetunedRecords.filter((r) => r.id !== record.id)];
+    this.finetunedBytes.set(record.entry.onnxUrl, bytes);
+    if (!this.entries.some((e) => e.id === record.entry.id)) this.entries = [...this.entries, record.entry];
+  }
+
+  async finetuned(): Promise<FinetunedRecord[]> {
+    return this.finetunedRecords;
+  }
+
+  async removeFinetuned(id: string): Promise<void> {
+    const record = this.finetunedRecords.find((r) => r.id === id);
+    this.finetunedRecords = this.finetunedRecords.filter((r) => r.id !== id);
+    if (record) this.finetunedBytes.delete(record.entry.onnxUrl);
+    this.entries = this.entries.filter((e) => e.id !== id);
   }
 }
 
@@ -226,12 +259,27 @@ export class FakeViewer implements ViewerController {
   layerShader(name: string) {
     return this.shaders[name] ?? null;
   }
+
+  /** Every selectLayer call. */
+  selected: { name: string; tab?: string }[] = [];
+
+  selectLayer(name: string, tab?: string): void {
+    this.selected.push(tab === undefined ? { name } : { name, tab });
+  }
+
+  /** Every datasetOpened call: the URL, and the geometry or null. */
+  datasetsOpened: { url: string; info: DatasetInfo | null }[] = [];
+
+  datasetOpened(url: string, info: DatasetInfo | null): void {
+    this.datasetsOpened.push({ url, info });
+  }
 }
 
 export interface FakeContext extends AppContext {
   infer: FakeInference;
   catalog: FakeCatalog;
   viewer: FakeViewer;
+  paint: MemoryPaintStore;
   logged: string[];
 }
 
@@ -243,6 +291,7 @@ export function fakeContext(options: { dataset?: DatasetInfo | null; state?: Par
     catalog: new FakeCatalog(),
     infer: new FakeInference(options.dataset === undefined ? DATASET : options.dataset),
     viewer: new FakeViewer(),
+    paint: new MemoryPaintStore(),
     events: new EventTarget(),
     log: (line) => void logged.push(line),
     logged,

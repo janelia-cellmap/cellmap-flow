@@ -1,6 +1,7 @@
 // The Finetune tab's form: the output path and the training parameters,
 // kept in localStorage (the output path on the server too), the advice shown
 // next to some of them, and the GPU queue picker.
+import { isBrowserMode } from "../../lib/page-data.js";
 import { fillQueueSelect, queueHint, subscribeGpuQueues } from "../../shared/gpu-queues.js";
 import { getAnswer, postAnswer } from "./requests.js";
 
@@ -109,6 +110,13 @@ function trainingParams() {
   }
   if (rehearsalFraction !== undefined) {
     params.rehearsal_fraction = rehearsalFraction;
+  }
+  // Browser mode: the head trains on BCE with logits (web/src/finetune), and
+  // its submit refuses any other loss. The Loss Function field is hidden
+  // there (server-only) and still says the template's margin, or whatever
+  // this browser saved, so the loss is set here rather than read.
+  if (isBrowserMode()) {
+    params.loss_type = "bce";
   }
   if (params.loss_type === "margin") {
     const margin = parseFloat(document.getElementById("marginValue").value);

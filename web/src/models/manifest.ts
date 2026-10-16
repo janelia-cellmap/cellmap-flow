@@ -11,12 +11,13 @@
 //     can name its feeds and fetches without parsing prose.
 // A manifest that already uses the wide forms is taken as it is, so a future
 // export can switch without a change here.
+import { FINETUNED_REPO } from "../contracts";
 import type { ModelEntry, ModelManifest, ModelVariant, Step, VariantName } from "../contracts";
 
 import { HF_REPO, resolveUrl } from "./hf";
 
-/** The model folders known on 2026-10-14, for when the Hub's file list cannot be fetched. */
-export const FALLBACK_FOLDERS: readonly string[] = ["setup_53", "setup_54", "setup_55", "setup_56", "setup_61", "setup_67"];
+/** The model folders known on 2026-10-15, for when the Hub's file list cannot be fetched. */
+export const FALLBACK_FOLDERS: readonly string[] = ["setup_53", "setup_53_2d", "setup_54", "setup_54_2d", "setup_55", "setup_56", "setup_61", "setup_67"];
 
 /** Folders that hold no manifest of their own: conv3d/ repeats every model
  * with native Conv3d nodes, about 16x slower on WebGPU (onnxruntime-web runs
@@ -130,18 +131,22 @@ function sortVariants(variants: ModelVariant[]): ModelVariant[] {
 }
 
 /** The layer and job name for a manifest: `<task>_<model>_<voxel>nm`, e.g.
- * `mito_aff_setup54_16nm`, `nuc_setup56_128nm`, `er_setup67_8nm`.
+ * `mito_aff_setup54_16nm`, `nuc_setup56_128nm`, `er_setup67_8nm`,
+ * `mito_aff_setup53-2d_16nm`.
  *
  * The rule: the task lower-cased with runs of anything but letters and digits
  * turned into one underscore and "affinities" shortened to "aff"; the model
  * id with its underscores removed (so the name's underscores separate its
- * three parts); the input voxel size as one number when isotropic, else
- * z×y×x joined with "x" (16x16x8nm). The result is lower-case letters, digits,
- * underscores and at most a decimal point, which is a valid URL path segment
- * and a Neuroglancer layer name, and carries no ARGS_KEY marker. */
+ * three parts), except that a dimensionality tag at its end (`_2d`, the 2D
+ * students distilled from the 3D models) is kept behind a hyphen, since
+ * `setup532d` reads as setup 532; the input voxel size as one number when
+ * isotropic, else z×y×x joined with "x" (16x16x8nm). The result is
+ * lower-case letters, digits, underscores, at most one hyphen and at most a
+ * decimal point, which is a valid URL path segment and a Neuroglancer layer
+ * name, and carries no ARGS_KEY marker. */
 export function entryName(manifest: ModelManifest): string {
   const task = slug(manifest.task).replace(/affinities/g, "aff") || "model";
-  const model = slug(manifest.model).replace(/_/g, "");
+  const model = slug(manifest.model).replace(/_(\d+d)$/, "-$1").replace(/_/g, "");
   return `${task}_${model}_${voxelLabel(manifest.input_voxel_size_nm)}nm`;
 }
 
@@ -155,8 +160,21 @@ function slug(text: string): string {
   return text.toLowerCase().replace(/[^a-z0-9.]+/g, "_").replace(/^_+|_+$/g, "");
 }
 
-/** The ModelEntry for `folder`'s manifest with `variant` chosen. */
+/** The ModelEntry for `folder`'s manifest with `variant` chosen.
+ *
+ * For a Hugging Face repo the name follows entryName and the bytes come from
+ * the repo's resolve URL. For FINETUNED_REPO, a model finetuned in this
+ * browser (finetuned.ts), the folder is the name (`<base name>-ft<n>`, which
+ * is already a layer name) and the "URL" is the byte-cache key of bytes that
+ * exist only in this browser: nothing is fetched. Serving re-tunes an entry
+ * through this function with the variant chosen for the GPU (backend/
+ * serving.ts), and a finetuned manifest has one variant, so a finetuned
+ * entry comes through unchanged. */
 export function entryFor(folder: string, manifest: ModelManifest, variant: ModelVariant, repo = HF_REPO): ModelEntry {
+  if (repo === FINETUNED_REPO) {
+    const id = `${FINETUNED_REPO}/${folder}`;
+    return { id, name: folder, repo, folder, manifest, variant, onnxUrl: finetunedBytesKey(id) };
+  }
   return {
     id: `${repo}/${folder}`,
     name: entryName(manifest),
@@ -166,6 +184,13 @@ export function entryFor(folder: string, manifest: ModelManifest, variant: Model
     variant,
     onnxUrl: resolveUrl(`${folder}/${variant.file}`, repo),
   };
+}
+
+/** The byte-cache key a finetuned entry's bytes are kept under, and so its
+ * `onnxUrl`: `finetuned:finetuned/<name>`. Not a URL anyone fetches; the
+ * scheme keeps it apart from the Hugging Face URLs in the same store. */
+export function finetunedBytesKey(id: string): string {
+  return `${FINETUNED_REPO}:${id}`;
 }
 
 // --- field readers --------------------------------------------------------
