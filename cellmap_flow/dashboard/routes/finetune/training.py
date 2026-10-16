@@ -8,6 +8,12 @@ Routes:
 - GET ``/api/finetune/job/<job_id>/status`` and ``.../logs``;
 - GET ``/api/finetune/job/<job_id>/logs/stream``: the log as server-sent events;
 - POST ``/api/finetune/job/<job_id>/cancel`` and ``.../stop-early``.
+
+The job list and a job's status bind Shift+R in the viewer, which restarts
+the job the Finetune tab follows (the last whose status it asked for) with
+the tab's settings: the status answer carries the presses
+(``restart_requests``) for the tab to act on, and the restart route says in
+the viewer's status bar how it answered one (restart_key).
 """
 
 import os
@@ -24,6 +30,7 @@ from flask import Response, jsonify, request
 from cellmap_flow.dashboard.finetune_layers import follow_jobs
 from cellmap_flow.dashboard.finetune_utils import sync_all_annotations_from_minio
 from cellmap_flow.dashboard.requests import FinetuneRestart, FinetuneSubmit, parse
+from cellmap_flow.dashboard.routes.finetune import restart_key
 from cellmap_flow.dashboard.routes.finetune.blueprint import finetune_bp
 from cellmap_flow.dashboard.routes.finetune.common import (
     LOG_FILTER_PATTERNS,
@@ -186,8 +193,12 @@ def _rehydrate_jobs():
 @finetune_bp.route("/api/finetune/jobs", methods=["GET"])
 def get_finetuning_jobs():
     try:
+        # The tab asks for the list on every page load, so Shift+R is bound
+        # before there is a job, to say there is none.
+        restart_key.ensure_binding()
         _rehydrate_jobs()
-        return jsonify({"success": True, "jobs": get_session().finetune_job_manager.list_jobs()})
+        jobs = get_session().finetune_job_manager.list_jobs()
+        return jsonify({"success": True, "jobs": [restart_key.with_requests(job) for job in jobs]})
     except Exception as e:
         logger.error(f"Error listing jobs: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
@@ -199,7 +210,11 @@ def get_job_status(job_id):
         status = get_session().finetune_job_manager.get_job_status(job_id)
         if status is None:
             return jsonify({"success": False, "error": "Job not found"}), 404
-        return jsonify({"success": True, **status})
+        # The tab polls the job its card shows, which is the one Shift+R
+        # restarts; and a viewer made while it polls gets the key here.
+        restart_key.ensure_binding()
+        restart_key.follow(job_id)
+        return jsonify({"success": True, **restart_key.with_requests(status)})
     except Exception as e:
         logger.error(f"Error getting job status: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
@@ -608,6 +623,17 @@ def _restart_training_settings(job, updated_params, corrections_dir):
 
 @finetune_bp.route("/api/finetune/job/<job_id>/restart", methods=["POST"])
 def restart_finetuning_job(job_id):
+    # A press of Shift+R waiting on this restart is told how it went, in the
+    # viewer's status bar, whatever the answer.
+    restart_key.taken(job_id)
+    answer = _restart_finetuning_job(job_id)
+    response, _ = answer if isinstance(answer, tuple) else (answer, None)
+    body = response.get_json(silent=True) or {}
+    restart_key.answered(job_id, bool(body.get("success")), body.get("message") or body.get("error") or "")
+    return answer
+
+
+def _restart_finetuning_job(job_id):
     data = request.get_json() or {}
     body, refused = parse(FinetuneRestart, data)
     if refused:

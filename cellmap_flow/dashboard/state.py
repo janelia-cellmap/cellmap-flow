@@ -33,8 +33,9 @@ rather than being stored beside the real one:
 - Blockwise's ``tmp_dir`` and ``blockwise_tasks_dir``, and ``tasks_dir()``.
 - The finetune tab's MinIO and volumes: ``minio_state``, ``label_undo``,
   ``annotation_volumes``, ``output_sessions``; its AI annotation's
-  ``ai_annotate``; its training jobs' ``finetune_job_manager``; the Review
-  tab's ``review``.
+  ``ai_annotate``; its training jobs' ``finetune_job_manager``, and the
+  ``restart_key`` that restarts one from the viewer; the Review tab's
+  ``review``.
 - The log panel's ``log_buffer`` and ``log_clients``; the box tool's
   ``bbx_generator_state``.
 
@@ -66,7 +67,7 @@ class Session:
     __slots__ = ("dataset_path", "resample", "viewer", "raw", "neuroglancer_url", "shaders", "shader_controls", "extra_layers",
                  "models_config", "model_catalog", "_builder_state", "builder_model_configs", "tmp_dir",
                  "blockwise_tasks_dir", "minio_state", "annotation_volumes", "output_sessions", "review",
-                 "_finetune_job_manager", "label_undo", "ai_annotate", "log_buffer", "log_clients",
+                 "_finetune_job_manager", "restart_key", "label_undo", "ai_annotate", "log_buffer", "log_clients",
                  "bbx_generator_state")
 
     def __init__(self):
@@ -152,6 +153,20 @@ class Session:
             "binding_registered_for": None,
         }
         self._finetune_job_manager = None
+        # Shift+R over the viewer (routes/finetune/restart_key.py): the job
+        # the Finetune tab follows, the last whose status it asked for; {job
+        # id: the presses that asked for its restart}, which its status
+        # answer carries for the tab to act on; {job id: when the last press
+        # that no restart has answered yet was made}; the viewer the key is
+        # bound in; and the lock the key's action, on neuroglancer's event
+        # loop, and the routes, in Flask's threads, change these under.
+        self.restart_key = {
+            "followed": None,
+            "requests": {},
+            "asked": {},
+            "bound_for": None,
+            "lock": threading.Lock(),
+        }
 
         # The log panel and the box tool
         # The last log lines, for a log panel that connects late.

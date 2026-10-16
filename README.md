@@ -65,7 +65,8 @@ starts fresh.
   *Start Finetuning*. The model's last layer (its output convolution) is
   trained on the painted voxels, in the tab, in seconds, and the finetuned
   model is served beside the original, to compare the two; paint where it is
-  still wrong and train again.
+  still wrong and train again (Shift+R over the viewer does it with the
+  form's settings, as on the server).
   The paint and the finetuned models stay in the browser, listed on the next
   visit, and download as a zarr and an `.onnx` for the server mode or for
   sharing. The rest of the network stays as exported: a finetune of the whole

@@ -49,6 +49,11 @@ export function createJobCard(lossPlot) {
   let restartEpochResetPending = false;  // a restart began; its epochs start over
   let isServingReady = false;
   let stopRequested = false;
+  // The status the badge shows, and whether Restart is offered: what
+  // Shift+R (job-monitor.js) goes by, so that the key restarts exactly when
+  // the button is there to click.
+  let shownStatus = null;
+  let offersRestart = false;
 
   function shouldAcceptEpochProgress(current, total) {
     if (isServingReady && !restartEpochResetPending) {
@@ -100,7 +105,13 @@ export function createJobCard(lossPlot) {
   }
 
   function showRestart(job) {
-    restartBtn.style.display = restartable(job) ? "inline-block" : "none";
+    offersRestart = restartable(job);
+    restartBtn.style.display = offersRestart ? "inline-block" : "none";
+  }
+
+  function hideRestart() {
+    offersRestart = false;
+    restartBtn.style.display = "none";
   }
 
   function resetProgressBarToWaiting() {
@@ -139,6 +150,7 @@ export function createJobCard(lossPlot) {
   }
 
   function showStatus(status) {
+    shownStatus = status;
     const badge = $("jobStatus");
     badge.textContent = status;
     badge.className = "badge bg-" + (STATUS_COLORS[status] || "secondary");
@@ -189,6 +201,10 @@ export function createJobCard(lossPlot) {
   return {
     // The job's id as the card shows it, or "-" when it shows none.
     jobId: () => $("jobId").textContent,
+    // The status the card shows (SUBMITTED until the first answer), and
+    // whether it offers Restart (the job can take one: restartable).
+    status: () => shownStatus,
+    offersRestart: () => offersRestart,
 
     // A job just submitted, before its first status answer.
     submitted(jobId, modelName, outputType) {
@@ -202,7 +218,7 @@ export function createJobCard(lossPlot) {
       resetProgressBarToWaiting();
       lossPlot.reset();
       serverStatus.style.display = "none";
-      restartBtn.style.display = "none";
+      hideRestart();
     },
 
     // A job found again after a page reload, from its entry in the job
@@ -308,11 +324,15 @@ export function createJobCard(lossPlot) {
       }
     },
 
-    // A restart the job has accepted.
+    // A restart the job has accepted. Accepting it made the job RUNNING
+    // (state.start_iteration, and the browser's FinetuneJob.startIteration),
+    // which the badge says at once rather than at the next poll: until
+    // then it said the job still waited, which Shift+R would have repeated.
     restarted() {
       restarting();
       resetStopEarly();
-      restartBtn.style.display = "none";
+      showStatus("RUNNING");
+      hideRestart();
     },
 
     // Stop Early clicked: disabled, saying so, until the stop is refused or

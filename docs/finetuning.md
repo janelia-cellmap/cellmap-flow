@@ -212,7 +212,9 @@ After reviewing the finetuned model's predictions in Neuroglancer:
 
 1. Add more annotations or correct existing ones in the annotation volume.
 2. Go back to the **Training** tab.
-3. Click **Restart Finetuning** — this retrains on the same GPU using your updated annotations without needing to resubmit a new job.
+3. Click **Restart Training** — this retrains on the same GPU using your updated annotations without needing to resubmit a new job.
 4. Updated parameters (epochs, learning rate, loss, etc.) can be changed before restarting.
+
+Or, without leaving the viewer, press **Shift+R** over it once the job is waiting for a restart (the Training Status card offers **Restart Training**): it restarts the job with the Training tab's settings as they are, as the button does but without asking first. The press reaches the dashboard's page at its next status check, so within 3 seconds, and only while the page is open; Neuroglancer's status bar says what it is doing, then how the restart went, and says why not when there is nothing to restart (no job, or one still training or finished). A second press while the restart is on its way is ignored. Shift+R with the focus on the dashboard itself, outside a text field, does the same.
 
 Repeat this annotate-train-review cycle until the model performs well on your data.
