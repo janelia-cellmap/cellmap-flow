@@ -59,7 +59,7 @@ describe("Inference.materialize", () => {
     expect(written).toEqual({ chunks: 1, written: 1, skipped: 0, bytes: 10, aborted: false });
     expect(asked.materialize).toEqual([{
       view: served.view, store,
-      options: { level: 0, lo: [0, 60, 120], hi: [60, 120, 1000], format: "zarr2", compression: "gzip", skipEmpty: true, attributes: { cellmap_flow: { model_name: "m" } }, signal, onProgress },
+      options: { level: 0, lo: [0, 60, 120], hi: [60, 120, 1000], extent: "box", format: "zarr2", compression: "gzip", skipEmpty: true, attributes: { cellmap_flow: { model_name: "m" } }, signal, onProgress },
     }]);
   });
 

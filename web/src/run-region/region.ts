@@ -4,9 +4,10 @@
 // box drawn in the run_region layer, from the whole volume, or from its
 // fields, which show either and can be edited. Each model is written over
 // the voxels of the level it is served at that the box touches (any part of
-// a voxel counts, so the box is rounded out, never in), and chunkmirage's
-// Engine.materialize rounds that out to whole chunks, one model output
-// block each, which is what a run computes and writes. Pure functions over
+// a voxel counts, so the box is rounded out, never in). That box is what is
+// saved, an array of exactly its voxels; chunkmirage's Engine.materialize
+// computes the model's chunks (one output block each) that the box reaches
+// and stitches the saved array's chunks from them. Pure functions over
 // the dataset, the served models and the layer's JSON, so all of it is
 // unit-tested; the run is run.ts's, the DOM panel.ts's.
 //
@@ -91,8 +92,7 @@ export function levelBox(region: RegionNm, level: Level): { lo: number[]; hi: nu
 }
 
 /** The chunks of a grid chunked by `chunk` that voxels [lo, hi) reach: the
- * number along each axis and in all, as materialize computes and writes
- * them (it rounds the box out to them). */
+ * number along each axis and in all, as materialize computes them. */
 export function chunkGrid(lo: readonly number[], hi: readonly number[], chunk: readonly number[]): { grid: number[]; count: number } {
   const grid = lo.map((l, a) => Math.ceil(hi[a] / chunk[a]) - Math.floor(l / chunk[a]));
   return { grid, count: grid.reduce((n, g) => n * g, 1) };
@@ -117,17 +117,22 @@ export interface ModelPlan {
   level: Level;
   /** One output block of the model's served variant, in voxels: a chunk. */
   chunk: number[];
-  /** The box on the level, in voxels, before materialize rounds it out to chunks. */
+  /** The box on the level, in voxels: what is saved, an array of hi − lo
+   * voxels whose voxel 0 is the level's voxel lo. */
   lo: number[];
   hi: number[];
-  /** The chunks along each axis, and in all. */
+  /** The model's chunks the box reaches, along each axis and in all: what
+   * a run computes. */
   grid: number[];
   chunks: number;
+  /** The saved array's chunks, counted from its corner (the last ones
+   * reaching past the box, stored whole as zarr wants). */
+  savedChunks: number;
   /** What a voxel holds: the view's channels (1 without a channel axis) and dtype. */
   channels: number;
   dtype: string;
-  /** The chunks' bytes before compression: the most a run writes, empty
-   * chunks skipped and gzip being what makes it less. */
+  /** The saved chunks' bytes before compression: the most a run writes,
+   * empty chunks skipped and gzip being what makes it less. */
   bytes: number;
 }
 
@@ -144,8 +149,9 @@ export function planModel(served: ServedModel, dataset: DatasetInfo, region: Reg
   const channels = served.info.has_channel ? outputChannels(chain.postprocess, served.info.output_channels) : 1;
   const dtype = outputDtype(chain.postprocess, "float32");
   const perValue = TYPED[dtype]?.BYTES_PER_ELEMENT ?? 4;
-  const bytes = count * chunk.reduce((n, c) => n * c, 1) * channels * perValue;
-  return { name, served, chain, level, chunk, lo: box.lo, hi: box.hi, grid, chunks: count, channels, dtype, bytes };
+  const savedChunks = box.hi.reduce((n, h, a) => n * Math.ceil((h - box.lo[a]) / chunk[a]), 1);
+  const bytes = savedChunks * chunk.reduce((n, c) => n * c, 1) * channels * perValue;
+  return { name, served, chain, level, chunk, lo: box.lo, hi: box.hi, grid, chunks: count, savedChunks, channels, dtype, bytes };
 }
 
 /** Whether `plan` is one (not a refusal). */
@@ -196,7 +202,7 @@ const dims = (values: readonly number[]) => values.join("×");
  * writes. */
 export function describePlan(plan: ModelPlan): string {
   const voxels = plan.hi.map((h, a) => h - plan.lo[a]);
-  return `${plan.name}: ${dims(voxels)} voxels at ${dims(plan.level.voxel)} nm, ${dims(plan.grid)} = ${plan.chunks.toLocaleString("en-US")} chunk${plan.chunks === 1 ? "" : "s"} of ${dims(plan.chunk)} (at most ${formatBytes(plan.bytes)} before compression)`;
+  return `${plan.name}: ${dims(voxels)} voxels at ${dims(plan.level.voxel)} nm, saved as that box (at most ${formatBytes(plan.bytes)} before compression); computes ${dims(plan.grid)} = ${plan.chunks.toLocaleString("en-US")} chunk${plan.chunks === 1 ? "" : "s"} of ${dims(plan.chunk)}`;
 }
 
 /** What is said of a run of `chunks` chunks before it starts, when there

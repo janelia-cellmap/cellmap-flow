@@ -56,8 +56,9 @@ export interface RunTarget {
 }
 
 /** How far a run has got: the model being written (`model` of `models`,
- * from 1), its chunks done of its total, those written and the bytes, and
- * across the run the chunks done of all models', the time since the start
+ * from 1), its chunks computed of those its box needs, the saved array's
+ * chunks written and the bytes, and across the run the chunks computed of
+ * all models', the time since the start
  * and a rough time left (null until a chunk is done). */
 export interface RunProgress {
   model: number;
@@ -127,17 +128,21 @@ export async function runRegion(opts: RunOptions): Promise<RunOutcome> {
     const plan = opts.plans[i];
     const where = opts.target.where(plan.name);
     if (opts.signal.aborted) break;
-    opts.log(`${plan.name}: writing ${plan.chunks.toLocaleString("en-US")} chunk(s) of voxels ${plan.lo.join(",")}..${plan.hi.join(",")} to ${where}`);
-    let last: RegionWritten = { chunks: plan.chunks, written: 0, skipped: 0, bytes: 0, aborted: false };
+    opts.log(`${plan.name}: computing ${plan.chunks.toLocaleString("en-US")} chunk(s) for voxels ${plan.lo.join(",")}..${plan.hi.join(",")}, saved to ${where}`);
+    let last: RegionWritten = { chunks: plan.savedChunks, written: 0, skipped: 0, bytes: 0, aborted: false };
     try {
       const written = await opts.infer.materialize(plan.served.view, opts.target.store(plan.name), {
         lo: plan.lo, hi: plan.hi, compression: opts.compression === undefined ? "gzip" : opts.compression, attributes: opts.attributes(plan), signal: opts.signal,
         onProgress: (p) => {
           last = { chunks: p.total, written: p.written, skipped: p.done - p.written, bytes: p.bytes, aborted: false };
-          const runDone = before + p.done;
+          // The model's chunks computed, which the time a run takes goes
+          // by: a box off the chunks' edges saves fewer chunks than it
+          // computes (they are stitched from them).
+          const done = p.computed ?? p.done, total = p.needed ?? p.total;
+          const runDone = before + done;
           const elapsedMs = clock() - start;
           opts.onProgress?.({
-            model: i + 1, models: opts.plans.length, name: plan.name, done: p.done, total: p.total, written: p.written, bytes: p.bytes,
+            model: i + 1, models: opts.plans.length, name: plan.name, done, total, written: p.written, bytes: p.bytes,
             runDone, runTotal, runBytes: beforeBytes + p.bytes, elapsedMs,
             remainingMs: runDone > 0 ? (elapsedMs / runDone) * Math.max(0, runTotal - runDone) : null,
           });
@@ -175,5 +180,5 @@ export async function runRegion(opts: RunOptions): Promise<RunOutcome> {
 export function describeProgress(p: RunProgress): string {
   const model = p.models > 1 ? `${p.name} (${p.model} of ${p.models})` : p.name;
   const left = p.remainingMs === null ? "" : `, about ${formatDuration(p.remainingMs)} left`;
-  return `${model}: ${p.done.toLocaleString("en-US")} of ${p.total.toLocaleString("en-US")} chunks, ${p.written.toLocaleString("en-US")} written, ${formatBytes(p.runBytes)} in all; ${formatDuration(p.elapsedMs)} so far${left}`;
+  return `${model}: ${p.done.toLocaleString("en-US")} of ${p.total.toLocaleString("en-US")} chunks computed, ${p.written.toLocaleString("en-US")} saved, ${formatBytes(p.runBytes)} in all; ${formatDuration(p.elapsedMs)} so far${left}`;
 }

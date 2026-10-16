@@ -370,13 +370,14 @@ export interface Inference {
   readOutput(view: string, lo: number[], hi: number[]): Promise<{ data: Float32Array; shape: number[] }>;
   /** Compute the served model `view` (ServedModel.view: the layer's view,
    * the chain's postprocessors and all) over voxels [lo, hi) of the level it
-   * is served at, rounded out to whole chunks, and write it into `store` as
-   * an OME-Zarr: chunkmirage's Engine.materialize, which walks the chunks
-   * (through the engine's caches and demand queue, as the viewer's requests
-   * go) and writes the zarr, its metadata the view's as the engine serves
-   * it (one level, its scale and translation, the level's whole shape; only
-   * the box's chunks written, empty ones skipped). For Run on a region
-   * (src/run-region). The box must lie within the level. */
+   * is served at, and write it into `store` as an OME-Zarr of exactly that
+   * box: chunkmirage's Engine.materialize, which walks the model's chunks
+   * the box reaches (through the engine's caches and demand queue, as the
+   * viewer's requests go), stitches the box's own chunks from them and
+   * writes the zarr: one level of hi − lo voxels, the level's scale, a
+   * translation that puts its voxel 0 on the level's voxel lo, empty chunks
+   * skipped. For Run on a region (src/run-region). The box must lie within
+   * the level. */
   materialize(view: string, store: RegionStore, options: RegionWrite): Promise<RegionWritten>;
 }
 
@@ -387,13 +388,18 @@ export interface RegionStore {
   put(path: string, bytes: Uint8Array): Promise<void>;
 }
 
-/** How far a materialize has got: chunks done of the box's `total`, those
- * `written` (the rest were empty), and the bytes written so far. */
+/** How far a materialize has got: the saved array's chunks done of its
+ * `total`, those `written` (the rest were empty), and the bytes written so
+ * far; and the model's chunks `computed` of those the box `needed`, which a
+ * box off the chunks' edges has more of than it saves (its chunks are
+ * stitched from them). */
 export interface RegionProgress {
   done: number;
   total: number;
   written: number;
   bytes: number;
+  computed?: number;
+  needed?: number;
 }
 
 /** What materialize is asked to write: the box [lo, hi) in voxels of the

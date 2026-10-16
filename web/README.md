@@ -142,9 +142,11 @@ chunks through the same stages, caches and demand queue (behind every chunk
 the viewer waits for, so browsing stays quick, and nothing the viewer has
 computed is computed again) and writes zarr v2 with OME-Zarr 0.4 metadata,
 gzip-compressed (or not: the tab's *Compression*, *None* for Fiji, which
-reads no gzip), empty chunks left out: the served level's scale and
-translation and its whole shape, only the box's chunks, so the zarr opens in
-place in Neuroglancer, zarr-python or the server mode. The group's
+reads no gzip), empty chunks left out: an array of exactly the box's voxels
+(`extent: "box"`; its chunks are stitched from the model's, and the last
+ones end at the box), at the served level's scale, its translation the
+box's corner, so the zarr opens in place in Neuroglancer, zarr-python or the
+server mode. The group's
 attributes hold `cellmap_flow`: the model (name, id, repository, folder,
 variant, file), its normalizers and postprocessors, the dataset, the region
 in nm and the box in voxels, the voxel size, the time and the page's
