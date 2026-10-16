@@ -71,10 +71,10 @@ A configuration file has the following top-level fields:
      - Temporary directory for intermediate files.
    * - ``bounding_boxes``
      - No
-     - List of bounding boxes to process (blockwise).
+     - Regions to process instead of the whole volume, each ``{offset, shape}`` in nm, z, y, x; the output covers only them (blockwise, see :ref:`bounding-boxes`).
    * - ``separate_bounding_boxes_zarrs``
      - No
-     - Write each bounding box to a separate zarr (blockwise).
+     - Write each bounding box to its own output, ``<output_path>/box_<n>`` (blockwise).
    * - ``output_channels``
      - No
      - Which model channels blockwise writes, and to which outputs (see :ref:`output-channels`).
@@ -802,10 +802,12 @@ Behind a Reverse Proxy
 
 When the dashboard is reached through a reverse proxy that sets ``X-Forwarded-Host``, the page loads the neuroglancer viewer from the same path on the proxy's host, so the proxy must route ``/v/`` on to the viewer. Inference servers are addressed as they report themselves (``http://<node>:<port>``) unless ``CELLMAP_FLOW_SERVER_URL_TEMPLATE`` is set in the dashboard's environment, for example to ``https://proxy.example.org/inf-{port}``; ``{url}``, ``{host}`` and ``{port}`` are the reported address and its parts.
 
+.. _bounding-boxes:
+
 Bounding Boxes
 --------------
 
-For blockwise processing, you can specify regions of interest:
+Blockwise processing can run over regions of interest instead of the whole volume. Each box is an ``offset``, its lower corner, and a ``shape``, both in nm, z, y, x (not voxels):
 
 .. code-block:: yaml
 
@@ -815,7 +817,11 @@ For blockwise processing, you can specify regions of interest:
       - offset: [64285, 26408, 15695]
         shape: [11626, 12405, 26847]
 
-Set ``separate_bounding_boxes_zarrs: true`` to write each bounding box to its own zarr subdirectory (``box_1``, ``box_2``, etc).
+The output covers only the box, not the whole volume. A box is widened to every output voxel it touches (snapped outward onto the output voxel grid, which starts at the raw data's corner) and cut to the raw data's extent. The output's offset is the box's corner, and its OME translation the centre of the voxel there, half a voxel in. Its blocks start there and the last block along each axis is cut at the box's end, so nothing is written past it. For example, on data whose corner is at 0, with 8 nm output voxels, a box like the first above, 4674 nm deep from 59611 nm, covers 59608 nm to 64288 nm in z: 585 voxels.
+
+With several boxes, one output covers their bounding box, on each axis from the lowest of their corners to the highest of their far ends; only the boxes' blocks are run, and what lies between the boxes stays 0. Set ``separate_bounding_boxes_zarrs: true`` to give each box its own output instead, the size of the box: ``<output_path>/box_1``, ``box_2`` and so on, in the list's order.
+
+A run resumes into an output only if it covers the same region: one written for other boxes, or for boxes by an older cellmap-flow (which wrote an array the size of the whole volume), is refused. Write to a new output path.
 
 .. _output-channels:
 

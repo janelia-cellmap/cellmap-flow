@@ -42,6 +42,11 @@ def _chunk_index(roi, grid_origin=None):
     from the grid's first chunk: on data whose corner is -4 nm an index taken
     from 0 made the first chunk (-1, -1, -1), which Morton reads as 1023 on
     every axis.
+
+    A ``roi`` off that grid (a blockwise box's block, laid from the box's
+    corner) gets the index of the cell its corner is in, floored. Blocks of
+    one size that do not overlap are a block apart on some axis, so their
+    indices still differ, and neighbours' differ by 1.
     """
     begin = np.array(roi.get_begin()) - (0 if grid_origin is None else np.array(grid_origin))
     return tuple(int(v) for v in begin // np.array(roi.get_shape()))
@@ -59,9 +64,10 @@ class Inferencer(ModelRunner):
 
         ``grid_origin``: where (nm) the chunk grid ``roi`` lies on starts, so
         the steps get ``roi``'s index on that grid as ``chunk_corner``; None
-        means a grid starting at 0. The server and blockwise both start
-        theirs at the raw data's corner (see ``_chunk_index``), so a region
-        gets the same unique label ids from either.
+        means a grid starting at 0. The server and blockwise both pass the
+        raw data's corner (see ``_chunk_index``), so a region gets the same
+        unique label ids from either where their chunks are the same: the
+        whole volume, or a box on that grid.
         """
         if input_norms is not None and hasattr(idi, "with_input_norms"):
             idi = idi.with_input_norms(input_norms)
