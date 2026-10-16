@@ -168,6 +168,27 @@ export class FakeInference implements Inference {
     }
     return bytes.buffer;
   }
+
+  /** Every readOutput call: the view and the box on its level. */
+  outputReads: { view: string; lo: number[]; hi: number[] }[] = [];
+
+  /** The model's output at voxel (z, y, x) of channel `c` of a served
+   * view's level, what readOutput answers; a test sets it. By default a
+   * logit of -4 everywhere: background, well clear of the boundary. */
+  outputAt: (view: string, c: number, z: number, y: number, x: number) => number = () => -4;
+
+  async readOutput(view: string, lo: number[], hi: number[]): Promise<{ data: Float32Array; shape: number[] }> {
+    const served = this.views.find((s) => s.view === view);
+    if (!served) throw new Error(`${view} is not served`);
+    this.outputReads.push({ view, lo, hi });
+    const shape = [served.info.output_channels, ...hi.map((h, a) => h - lo[a])];
+    const data = new Float32Array(shape.reduce((acc, s) => acc * s, 1));
+    let i = 0;
+    for (let c = 0; c < shape[0]; c++) {
+      for (let z = lo[0]; z < hi[0]; z++) for (let y = lo[1]; y < hi[1]; y++) for (let x = lo[2]; x < hi[2]; x++) data[i++] = this.outputAt(view, c, z, y, x);
+    }
+    return { data, shape };
+  }
 }
 
 export class FakeCatalog implements Catalog {

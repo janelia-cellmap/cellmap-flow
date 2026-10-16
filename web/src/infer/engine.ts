@@ -8,14 +8,27 @@
 // unrun), the per-stage cache and the 256 MB chunk cache, the zarr v3
 // metadata and the service worker relay; this file describes each view's
 // grid, builds its stages and keeps the stats.
+//
+// A model's own output (readOutput, for the Finetune tab's Seed from
+// Prediction) is a second staged view beside the layer's, the model stage
+// alone, served under `<view>~output` once first asked for. It is the same
+// stage object, so its outputs are the ones kept under the stage's key: a
+// chunk the viewer had computed is read from the engine's staged cache, not
+// run again. Its chunks are read as any client reads a view, over its URL
+// through the service worker (the engine answers a page's requests by the
+// route it registers there and has no other door to a chunk); they are
+// whole chunks of uncompressed little-endian float32, channels first, as the
+// view's zarr.json declares them.
 import { Engine } from "../../chunkmirage/web/src/engine";
 import { Onnx, type OnnxModel } from "../../chunkmirage/web/src/onnx";
+import type { Stage } from "../../chunkmirage/web/src/stages";
 import type { ViewInfo } from "../../chunkmirage/web/src/types";
 import type { Chain, DatasetInfo, GpuLimits, Inference, InferenceStats, ModelEntry, ServedModel, SessionStore } from "../contracts";
 import { viewName } from "../shared/args";
 import { modelInfo } from "../shared/model-info";
 import { chooseRawLevel, datasetInfoFrom, effectiveOutputVoxelSize, geometryOf, outputLevel, outputShape } from "./geometry";
 import { validateNormalizers } from "./norms";
+import { boxFromChunks } from "./output";
 import { buildPostprocessors, isSegmentation, outputChannels, outputDtype, validatePostprocessors } from "./post";
 import { type ModelOutput, modelStage, modelStageKey, postprocessStage, postprocessStageKey } from "./stages";
 
@@ -30,12 +43,32 @@ const RAW_VIEW = "raw";
  * raw volume from its own URL); the Engine wants one all the same. */
 const RAW_CHUNK = [64, 64, 64];
 
+/** The suffix of the view a served model's own output is read from (readOutput). */
+const OUTPUT_SUFFIX = "~output";
+
+/** A served model's own output, as the view readOutput reads: its name,
+ * its ViewInfo and chunk (the layer's, in float32 with the model's
+ * channels), the model stage, the level's shape, and whether the engine
+ * serves it yet. */
+interface OutputView {
+  name: string;
+  info: ViewInfo;
+  chunk: number[];
+  stage: Stage;
+  channels: number;
+  hasChannel: boolean;
+  levelShape: number[];
+  registered: boolean;
+}
+
 export class InferenceEngine implements Inference {
   readonly stats: InferenceStats = { provider: null, device: null, blocks: 0, inflight: 0, lastMs: null, avgMs: null, status: "idle" };
   private listeners = new Set<(stats: InferenceStats) => void>();
   private engine: Engine | null = null;
   private info: DatasetInfo | null = null;
   private servedList: ServedModel[] = [];
+  /** The output view of each served model, by the served view's name. */
+  private outputs = new Map<string, OutputView>();
   private runner: ModelRunner;
   private announcedFirst = false;
   private totalMs = 0;
@@ -165,6 +198,13 @@ export class InferenceEngine implements Inference {
     // Zero past the volume, as the Python server's Pipeline(padding="zero").
     engine.serveStages(view, viewInfo, block, RAW_VIEW, stages, "zero");
     this.runner.retain(model.key);
+    // The model's own output, for readOutput: served only once asked for.
+    const output: OutputView = {
+      name: `${view}${OUTPUT_SUFFIX}`,
+      info: { ...viewInfo, dtype: "float32", out: "float32", kind: "image", added: info.has_channel ? [info.output_channels] : [] },
+      chunk: block, stage: stages[0], channels: info.output_channels, hasChannel: info.has_channel, levelShape: [...level.shape], registered: false,
+    };
+    this.outputs.set(view, output);
 
     const served: ServedModel = {
       entry, view, url: `zarr3://${engine.url(view)}`, info,
@@ -175,6 +215,10 @@ export class InferenceEngine implements Inference {
         // name); its stages' outputs stay in the engine's staged cache for a
         // view served again with a later stage changed.
         engine.unserve(view);
+        if (this.outputs.get(view) === output) {
+          if (output.registered) engine.unserve(output.name);
+          this.outputs.delete(view);
+        }
         await this.runner.release(model.key);
       },
     };
@@ -192,6 +236,29 @@ export class InferenceEngine implements Inference {
     if (!this.engine || !this.info) return Promise.reject(new Error("open a dataset before reading it"));
     if (level < 0 || level >= this.info.levels.length) return Promise.reject(new Error(`the dataset has no level ${level}`));
     return this.engine.read(RAW_VIEW, level, lo, hi);
+  }
+
+  /** The served model `view`'s own output over voxels [lo, hi) of its level
+   * (contracts.ts), from its output view (see the top of this file): the
+   * chunks the box touches fetched at once, each placed in the box
+   * (output.ts). The engine's demand queue runs the ones not yet computed. */
+  async readOutput(view: string, lo: number[], hi: number[]): Promise<{ data: Float32Array; shape: number[] }> {
+    const engine = this.engine, output = this.outputs.get(view);
+    if (!engine || !output) throw new Error(`${view.split("__CFLOW_ARGS__")[0]} is not served`);
+    if (lo.length !== 3 || hi.length !== 3 || lo.some((l, a) => !Number.isInteger(l) || l < 0 || hi[a] > output.levelShape[a] || hi[a] <= l)) {
+      throw new Error(`the box ${lo.join(",")}..${hi.join(",")} is not within the model's ${output.levelShape.join("×")} output voxels`);
+    }
+    if (!output.registered) {
+      engine.serveStages(output.name, output.info, output.chunk, RAW_VIEW, [output.stage], "zero");
+      output.registered = true;
+    }
+    const base = engine.url(output.name);
+    return boxFromChunks(lo, hi, output.chunk, output.channels, async (index) => {
+      // Level 0, the default chunk key encoding: c/<channel chunk>/z/y/x.
+      const response = await fetch(`${base}0/c/${output.hasChannel ? "0/" : ""}${index.join("/")}`);
+      if (!response.ok) throw new Error(`chunk ${index.join(",")} of the model's output: HTTP ${response.status} ${(await response.text()).slice(0, 200)}`);
+      return new Float32Array(await response.arrayBuffer());
+    });
   }
 
   private readonly equivalenceListeners = new Set<(view: string, sets: string[][]) => void>();
