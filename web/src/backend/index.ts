@@ -80,8 +80,12 @@ export async function restoreSession(ctx: AppContext): Promise<void> {
   const { datasetUrl, models, chain } = ctx.session.state;
   if (!datasetUrl) return;
   try {
-    await ctx.infer.openDataset(datasetUrl);
+    // A viewer that restore() left waiting for the volume's geometry is
+    // mounted with it now, before the models' layers come in at their own
+    // voxel sizes (ViewerController.datasetOpened).
+    ctx.viewer.datasetOpened(datasetUrl, await ctx.infer.openDataset(datasetUrl));
   } catch (e) {
+    ctx.viewer.datasetOpened(datasetUrl, null);
     ctx.log(`Could not open ${datasetUrl} again: ${message(e)}`);
     return;
   }

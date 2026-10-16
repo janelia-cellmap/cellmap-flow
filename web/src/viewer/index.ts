@@ -17,7 +17,7 @@
 // Either way the tab keeps a copy of the viewer's hash (share.ts), for the
 // reload connect.js does after Connect and any other reload of the tab.
 import type { DatasetInfo, LayerSpec, SessionStore, ViewerController } from "../contracts";
-import { initialState, RAW_LAYER_NAME, stateWithoutInfo } from "./layers";
+import { initialState, RAW_LAYER_NAME, rawLayer, stateWithoutInfo } from "./layers";
 import { withEquivalences } from "./equivalences";
 import { decodeState, encodeState, isStateHash, mirrorFrameHash, rememberedState, rememberState, withHash } from "./share";
 import { datasetUrlFromState, layerShaderOf, layersOf, type NgState, positionNm, replaceLayers, withoutLayer } from "./state";
@@ -87,6 +87,14 @@ export function withSelectedLayer(state: NgState, name: string, tab?: string): N
   return next;
 }
 
+/** The page boots with data-viewer="pending" on <html> when the session has
+ * a dataset (index.html's inline script), which keeps the connect panel
+ * invisible (browser.css) until the viewer replaces it; cleared when the
+ * viewer is mounted, or when restore() finds nothing to show. */
+function viewerSettled(): void {
+  if (typeof document !== "undefined" && document.documentElement?.dataset) delete document.documentElement.dataset.viewer;
+}
+
 /** The controller, with the one addition to the shared contract: openDataset
  * takes the dataset's geometry when the caller has it, for the viewer's
  * dimensions and centre. */
@@ -118,6 +126,10 @@ export function createViewer(opts: { session: SessionStore; log: (line: string) 
    * in one transaction). */
   let selection: { name: string; tab?: string } | null = null;
   let stopMirror: (() => void) | null = null;
+  /** The dataset restore() left the viewer waiting for (the session names
+   * it, the tab has no view of it): mounted by datasetOpened, with the
+   * geometry the engine read, rather than at once without it. */
+  let awaiting: string | null = null;
 
   /** Neuroglancer's viewer in the iframe, once its page has made it. */
   function liveViewer(): NgViewer | null {
@@ -179,6 +191,7 @@ export function createViewer(opts: { session: SessionStore; log: (line: string) 
     }
     stopMirror ??= mirrorFrameHash(frame);
     frame.src = NG_PAGE + hash;
+    viewerSettled();
     return frame;
   }
 
@@ -270,18 +283,42 @@ export function createViewer(opts: { session: SessionStore; log: (line: string) 
       }
       const url = session.state.datasetUrl;
       if (url) {
-        // The session knows the dataset but not its geometry (that comes
-        // from the inference module's open): Neuroglancer reads it itself.
-        // The backend puts the proper raw layer and the models' layers in
-        // through setLayers when it serves them again.
-        openState(stateWithoutInfo(url));
-        log(`viewer restored on ${url}`);
+        // The session knows the dataset but not its geometry, which the
+        // engine reads as the session is restored (backend restoreSession,
+        // a second or so): the viewer waits for it (datasetOpened), the
+        // connect panel staying hidden meanwhile, and layers set before
+        // then are queued. Mounted at once without it, Neuroglancer took
+        // the coordinate space from whichever layer's metadata came first,
+        // 8 nm (the raw) or 16 nm (the model's output), and adding the
+        // 16 nm paint layer switched an 8 nm one to 16 nm with the
+        // position's voxel numbers kept, which put the view past the
+        // data's far corner; setting the dimensions once the viewer was up
+        // did not hold either. Connect's state carries them from the start
+        // (prepareDataset), and the Python viewer sets the raw's before any
+        // layer (bootstrap.raw_dimensions), for the same reason.
+        awaiting = url;
         return;
       }
       adjustConnectPanel();
+      viewerSettled();
+    },
+
+    datasetOpened(url, info) {
+      if (awaiting === null || awaiting !== url) return;
+      awaiting = null;
+      if (info) {
+        openState(initialState(info, { [RAW_LAYER_NAME]: rawLayer(url, info) }));
+        log(`viewer restored on ${url}`);
+      } else {
+        // The engine could not open it: Neuroglancer tries on its own, and
+        // says why it cannot in its layer panel.
+        openState(stateWithoutInfo(url));
+        log(`viewer restored on ${url}, without its geometry`);
+      }
     },
 
     async openDataset(url, raw, info) {
+      awaiting = null;
       const layers = { [RAW_LAYER_NAME]: raw };
       openState(info ? initialState(info, layers) : stateWithoutInfo(url, raw));
       log(`viewer opened on ${url}`);

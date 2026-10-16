@@ -262,6 +262,18 @@ export interface ViewerController {
    * add_annotation_layer does. A name the viewer has no layer of yet is
    * selected when the layer is set. */
   selectLayer(name: string, tab?: string): void;
+  /** The session's dataset as the engine opened it, for a viewer restore()
+   * left waiting: when the session names a dataset but the tab has no view
+   * of it (a link, or a reload that lost the view), restore() mounts
+   * nothing, and this mounts the viewer with the raw's geometry (its
+   * dimensions explicit, the view at its centre), as Connect's state has
+   * them. Mounted without the geometry, Neuroglancer takes the coordinate
+   * space from whichever layer's metadata arrives first (8 nm raw, 16 nm
+   * model), and a layer at another voxel size added later can switch it and
+   * move the view; dimensions set after the viewer is up did not hold.
+   * `info` null (the volume could not be opened) mounts the viewer without
+   * it, for Neuroglancer to try. Does nothing when restore() did not wait. */
+  datasetOpened(url: string, info: DatasetInfo | null): void;
 }
 
 // ---------------------------------------------------------------------------

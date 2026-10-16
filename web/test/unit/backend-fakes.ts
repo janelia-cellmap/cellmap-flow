@@ -266,6 +266,13 @@ export class FakeViewer implements ViewerController {
   selectLayer(name: string, tab?: string): void {
     this.selected.push(tab === undefined ? { name } : { name, tab });
   }
+
+  /** Every datasetOpened call: the URL, and the geometry or null. */
+  datasetsOpened: { url: string; info: DatasetInfo | null }[] = [];
+
+  datasetOpened(url: string, info: DatasetInfo | null): void {
+    this.datasetsOpened.push({ url, info });
+  }
 }
 
 export interface FakeContext extends AppContext {

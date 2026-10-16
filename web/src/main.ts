@@ -94,14 +94,15 @@ async function boot() {
   // reads it: its read permission is gone after a reload and only a click
   // gets it back, so this may show a prompt on the connect panel and wait.
   await restoreLocalFolder({ session, log });
-  // The viewer first: with a dataset in the session it mounts the iframe at
-  // once (layers set before it exists are queued), and the connect panel the
-  // page hid before its first paint (see index.html's inline script and
-  // browser.css) can show again where there is no dataset. Then the engine:
-  // restoring the session reads the volume's metadata from its bucket and
-  // can take seconds; neither the viewer nor the dashboard need wait for it.
+  // The viewer first: with a view of the dataset in the tab (or a link's
+  // `#!` state) it mounts the iframe at once, and with only the session's
+  // dataset it waits for the engine to read the volume's geometry (restoring
+  // the session, below, which can take seconds; datasetOpened); layers set
+  // before it exists are queued either way. The connect panel the page hid
+  // before its first paint (see index.html's inline script and browser.css)
+  // shows again where there is no dataset, and stays hidden while the viewer
+  // waits. The dashboard does not wait for either.
   await viewer.restore();
-  delete document.documentElement.dataset.viewer;
   const restored = restoreSession(ctx).then(() => {
     document.documentElement.dataset.session = "restored";
   });

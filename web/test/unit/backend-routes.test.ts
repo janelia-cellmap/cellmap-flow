@@ -453,6 +453,8 @@ describe("restoreSession", () => {
     expect(ctx.infer.served().map((s) => s.entry.name)).toEqual([NAME_54]);
     expect(decodeArgs(ctx.infer.serves[0].blob).chain).toEqual(defaultChain());
     expect(Object.keys(ctx.viewer.layers)).toEqual([NAME_54]);
+    // The viewer, waiting for the volume's geometry, is given it before the model's layer comes in.
+    expect(ctx.viewer.datasetsOpened.map(({ url, info }) => [url, info?.url])).toEqual([["https://example.org/em.zarr", "https://example.org/em.zarr"]]);
   });
 
   it("does nothing without a dataset, and logs rather than throws when the dataset is gone", async () => {
@@ -464,5 +466,7 @@ describe("restoreSession", () => {
     await restoreSession(gone);
     expect(gone.infer.serves).toEqual([]);
     expect(gone.logged.join("\n")).toMatch(/Could not open https:\/\/example.org\/moved.zarr again: 404/);
+    // A volume that cannot be opened: the viewer is mounted without its geometry, for Neuroglancer to try.
+    expect(gone.viewer.datasetsOpened).toEqual([{ url: "https://example.org/moved.zarr", info: null }]);
   });
 });

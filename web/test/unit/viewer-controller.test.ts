@@ -7,6 +7,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { SessionState, SessionStore } from "../../src/contracts";
+import type { DatasetInfo } from "../../src/contracts";
 import { createViewer, EXAMPLE_DATASET_URL, liveEquivalences, NG_PAGE, withSelectedLayer } from "../../src/viewer/index";
 import { decodeState, TAB_STATE_KEY } from "../../src/viewer/share";
 import type { NgState } from "../../src/viewer/state";
@@ -177,5 +178,71 @@ describe("selectLayer", () => {
     viewer.setLayers({ annotation_v: paint });
     await viewer.openDataset("https://example.org/em.zarr", { type: "image", source: "zarr://https://example.org/em.zarr" });
     expect(shown().selectedLayer).toBeUndefined();
+  });
+});
+
+/** jrc_mus-liver's raw as the engine reads it: 8 nm at its finest, voxel 0's centre at 4 nm. */
+const LIVER: DatasetInfo = {
+  url: "https://example.org/liver.zarr",
+  dtype: "uint8",
+  channels: 1,
+  axes: [{ name: "z", unit: "nanometer" }, { name: "y", unit: "nanometer" }, { name: "x", unit: "nanometer" }],
+  levels: [
+    { shape: [8932, 12728, 12747], voxel: [8, 8, 8], origin: [0, 0, 0] },
+    { shape: [4466, 6364, 6373], voxel: [16, 16, 16], origin: [4, 4, 4] },
+  ],
+};
+
+describe("datasetOpened", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  /** A page with no `#!` state of its own (restore() reads the address bar first). */
+  function bareAddress() {
+    vi.stubGlobal("location", { hash: "", href: "http://localhost/" });
+    vi.stubGlobal("history", { replaceState() {} });
+  }
+
+  it("mounts a viewer restored from the session alone once the volume is read, with its dimensions", async () => {
+    const { frame, shown } = stubDocument();
+    bareAddress();
+    const lines: string[] = [];
+    const viewer = createViewer({ session: fakeSession({ datasetUrl: LIVER.url }), log: (l) => lines.push(l) });
+    await viewer.restore();
+    expect(frame.src).toBe("");  // waiting: nothing mounted without the geometry
+    viewer.setLayers({ model: { type: "image", source: "zarr3://http://h/model/" } });  // queued meanwhile
+    viewer.datasetOpened(LIVER.url, LIVER);
+    const state = shown();
+    expect(state.dimensions).toEqual({ z: [8e-9, "m"], y: [8e-9, "m"], x: [8e-9, "m"] });
+    expect(state.position).toEqual([4466, 6364, 6373.5]);
+    expect((state.layers as { name: string }[]).map((l) => l.name)).toEqual(["data", "model"]);
+    expect(lines).toContain(`viewer restored on ${LIVER.url}`);
+    const src = frame.src;
+    viewer.datasetOpened(LIVER.url, LIVER);
+    expect(frame.src).toBe(src);  // once
+  });
+
+  it("mounts it without the geometry when the volume cannot be opened, for Neuroglancer to try", async () => {
+    const { shown } = stubDocument();
+    bareAddress();
+    const viewer = createViewer({ session: fakeSession({ datasetUrl: LIVER.url }), log: () => {} });
+    await viewer.restore();
+    viewer.datasetOpened(LIVER.url, null);
+    expect(shown().dimensions).toBeUndefined();
+    expect((shown().layers as { name: string }[]).map((l) => l.name)).toEqual(["data"]);
+  });
+
+  it("leaves a viewer that did not wait alone: one opened with its geometry, or another dataset's", async () => {
+    const { frame } = stubDocument();
+    const viewer = createViewer({ session: fakeSession(), log: () => {} });
+    await viewer.openDataset(LIVER.url, { type: "image", source: `zarr://${LIVER.url}` }, LIVER);
+    const src = frame.src;
+    viewer.datasetOpened(LIVER.url, LIVER);
+    expect(frame.src).toBe(src);
+    const other = stubDocument();
+    bareAddress();
+    const waiting = createViewer({ session: fakeSession({ datasetUrl: LIVER.url }), log: () => {} });
+    await waiting.restore();
+    waiting.datasetOpened("https://example.org/other.zarr", LIVER);
+    expect(other.frame.src).toBe("");
   });
 });
