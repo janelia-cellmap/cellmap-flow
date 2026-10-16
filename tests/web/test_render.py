@@ -213,13 +213,17 @@ def test_the_browser_page_offers_the_heads_training_controls(page):
 
 def test_the_browser_page_takes_the_ai_annotation_credentials(page):
     """The AI panel's credentials block: hidden until the config names a
-    provider that needs one, the secrets password fields the browser must not
-    autofill, and the project a plain field. Its accepted annotations are
+    provider that needs one, the secrets text fields masked by CSS that a
+    browser's password manager does not offer to save (a password field it
+    does, whatever autocomplete says), and the project a plain field. Its accepted annotations are
     taken back by Label it's Undo, disabled until there is something to take
     back; the panel has no Undo of its own."""
     assert re.search(r'<div class="[^"]*" id="aiAnnotateCredentials" hidden>', page)
     for secret in ("aiAnnotateApiKey", "aiAnnotateAccessToken"):
-        assert re.search(rf'<input type="password"[^>]*id="{secret}"[^>]*autocomplete="off"', page), secret
+        field = re.search(rf'<input [^>]*id="{secret}"[^>]*>', page).group(0)
+        assert 'type="text"' in field and "credential-secret" in field and 'autocomplete="off"' in field, field
+        assert "data-1p-ignore" in field and 'data-lpignore="true"' in field and "data-bwignore" in field, field
+    assert 'type="password"' not in page
     assert re.search(r'<input type="text"[^>]*id="aiAnnotateProject"[^>]*autocomplete="off"', page)
     assert re.search(r'<input type="text"[^>]*id="aiAnnotateModelName"[^>]*\bhidden\b', page)
     assert re.search(r'<button[^>]*id="undoViewLabelsBtn"[^>]*\bdisabled\b', page)

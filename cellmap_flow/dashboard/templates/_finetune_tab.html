@@ -223,8 +223,15 @@
              credentials list names (API key for the Gemini API; project and
              access token for Vertex AI; none for the fake provider, which
              hides the block) and writes the hint for its type. The secrets are
-             password fields, so they are not shown; autocomplete is off, which
-             a browser may still overrule by offering to save them. #}
+             text fields masked by CSS (.credential-secret), not password
+             fields: a password field in this form had Chrome offer to save the
+             key as a password when the form was submitted (with the project as
+             the user name), autocomplete="off" notwithstanding, and its
+             password manager offers only for password fields. The data-*ignore
+             attributes keep the password-manager extensions (1Password,
+             LastPass, Bitwarden) from offering too. A browser that cannot mask
+             a text field gets password fields back from ai-annotate.js, so a
+             key is never shown in the clear. #}
           {% if mode == "browser" %}
           <div class="mt-2" id="aiAnnotateCredentials" hidden>
             <div class="d-flex align-items-baseline justify-content-between">
@@ -233,7 +240,7 @@
             </div>
             <div class="patch-tools-fields ai-annotate-fields">
               <label for="aiAnnotateApiKey" data-credential="api_key">API key</label>
-              <input type="password" class="form-control form-control-sm" id="aiAnnotateApiKey" autocomplete="off" spellcheck="false" data-credential="api_key"
+              <input type="text" class="form-control form-control-sm credential-secret" id="aiAnnotateApiKey" autocomplete="off" spellcheck="false" data-1p-ignore data-lpignore="true" data-bwignore data-credential="api_key"
                      placeholder="From Google AI Studio"
                      title="A Gemini API key (aistudio.google.com/apikey). Used as soon as it is pasted, sent to Google with each plane, kept in this page only: paste it again after a reload.">
               <label for="aiAnnotateProject" data-credential="project">Project</label>
@@ -241,7 +248,7 @@
                      placeholder="my-gcp-project"
                      title="The Google Cloud project that is billed; the Vertex AI API must be enabled in it.">
               <label for="aiAnnotateAccessToken" data-credential="access_token">Access token</label>
-              <input type="password" class="form-control form-control-sm" id="aiAnnotateAccessToken" autocomplete="off" spellcheck="false" data-credential="access_token"
+              <input type="text" class="form-control form-control-sm credential-secret" id="aiAnnotateAccessToken" autocomplete="off" spellcheck="false" data-1p-ignore data-lpignore="true" data-bwignore data-credential="access_token"
                      placeholder="gcloud auth print-access-token"
                      title="The output of gcloud auth print-access-token, run where you are signed in to Google Cloud. It lasts about an hour; paste a new one when a call fails asking you to sign in.">
             </div>

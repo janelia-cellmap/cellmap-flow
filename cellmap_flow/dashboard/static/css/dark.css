@@ -571,6 +571,13 @@ textarea.form-control[readonly] {
   grid-template-columns: auto 1fr;
 }
 
+/* The AI panel's API key and access token: text fields shown as dots, so a
+   browser's password manager does not offer to save them as it does a
+   password field's (_finetune_tab.html says why). */
+.credential-secret {
+  -webkit-text-security: disc;
+}
+
 /* Input | model output | overlay, each scaled to a third of the panel. */
 .ai-annotate-previews {
   display: grid;
