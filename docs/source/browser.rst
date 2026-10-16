@@ -106,10 +106,11 @@ folder on your machine, to open in the app again or to copy to the cluster.
    layer.
 
 Each zarr is zarr v2 with OME-Zarr 0.4 metadata, gzip-compressed (or not,
-with *Compression* set to *None*: Fiji's zarr reader has no gzip), at the
-voxel size and in the place the model's layer has (only the region's chunks
-are written; empty ones are left out), so Neuroglancer, zarr-python and the
-server mode read it as they read any OME-Zarr. Its attributes, under
+with *Compression* set to *None*: Fiji's zarr reader has no gzip), holding
+exactly the region: an array of the region's voxels, not the whole volume's,
+at the voxel size of the model's layer and placed where the layer is by its
+translation (empty chunks are left out), so Neuroglancer, zarr-python and
+the server mode read it as they read any OME-Zarr. Its attributes, under
 ``cellmap_flow``, say what made it: the model and its variant, the
 normalizers and postprocessing, the volume's URL, the region in nm and the
 box in voxels, and when. Saving to a folder needs Chrome or Edge (the File

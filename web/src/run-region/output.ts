@@ -176,7 +176,7 @@ export function savedLayerName(model: string): string {
  * for a model read at another voxel size) on the zarr's URL, `zarr2://`
  * since the run writes zarr v2 (infer/engine.ts materialize), so it looks
  * like the live layer and lies where it does: the zarr declares the served
- * level's scale and translation, which Neuroglancer places it by. `keep`
+ * level's scale and the box's translation, which Neuroglancer places it by. `keep`
  * is the live layer's shader as the user left it, when there is one. */
 export function savedLayer(served: ServedModel, chain: Chain, folderUrl: string, color: string, keep?: KeptShader): LayerSpec {
   const base = folderUrl.endsWith("/") ? folderUrl : `${folderUrl}/`;

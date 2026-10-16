@@ -250,12 +250,14 @@ export class InferenceEngine implements Inference {
    * Engine.materialize on the layer's own view, at its one level (a model
    * is served at a single level, index 0), so the zarr holds what the
    * viewer shows, its postprocessors applied, from the same stages and
-   * caches. Written as zarr v2 with OME-Zarr 0.4 metadata, which
-   * zarr-python 2 and funlib.persistence (what the server's blockwise runs
-   * write with) read, empty chunks skipped, and gzip-compressed unless the
-   * run asks for none (a reader without gzip, Fiji's): the engine's
-   * defaults, spelled out here because they are what a copy to the cluster
-   * relies on. */
+   * caches. The array is exactly the box (extent "box": hi − lo voxels,
+   * placed by its OME translation, the box's chunks stitched from the
+   * served ones and the last ones cut at the box's far edge), not the
+   * level's whole shape. Written as zarr v2 with OME-Zarr 0.4 metadata,
+   * which zarr-python 2 and funlib.persistence (what the server's blockwise
+   * runs write with) read, empty chunks skipped, and gzip-compressed unless
+   * the run asks for none (a reader without gzip, Fiji's): spelled out here
+   * because they are what a copy to the cluster relies on. */
   materialize(view: string, store: RegionStore, options: RegionWrite): Promise<RegionWritten> {
     const engine = this.engine, output = this.outputs.get(view);
     if (!engine || !output) return Promise.reject(new Error(`${view.split("__CFLOW_ARGS__")[0]} is not served`));
@@ -264,7 +266,7 @@ export class InferenceEngine implements Inference {
       return Promise.reject(new Error(`the box ${lo.join(",")}..${hi.join(",")} is not within the model's ${output.levelShape.join("×")} output voxels`));
     }
     return engine.materialize(view, store, {
-      level: 0, lo, hi, format: "zarr2", compression: options.compression === undefined ? "gzip" : options.compression, skipEmpty: true,
+      level: 0, lo, hi, extent: "box", format: "zarr2", compression: options.compression === undefined ? "gzip" : options.compression, skipEmpty: true,
       attributes: options.attributes, signal: options.signal, onProgress: options.onProgress,
     });
   }

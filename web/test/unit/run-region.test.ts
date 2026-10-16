@@ -145,11 +145,23 @@ describe("a model's plan", () => {
     expect(p.level).toEqual(LEVEL_16);
     expect(p.chunk).toEqual([60, 60, 60]);
     expect([p.lo, p.hi]).toEqual([[0, 0, 0], [61, 61, 63]]);
-    expect([p.grid, p.chunks]).toEqual([[2, 2, 2], 8]);
+    expect([p.grid, p.chunks, p.savedChunks]).toEqual([[2, 2, 2], 8, 8]);
     // Three affinities in float32, whole chunks before compression.
     expect([p.channels, p.dtype, p.bytes]).toEqual([3, "float32", 8 * 60 ** 3 * 3 * 4]);
     expect(p.chain).toEqual(SIGMOID);
-    expect(describePlan(p)).toBe(`${NAME_54}: 61×61×63 voxels at 16×16×16 nm, 2×2×2 = 8 chunks of 60×60×60 (at most 21 MB before compression)`);
+    expect(describePlan(p)).toBe(`${NAME_54}: 61×61×63 voxels at 16×16×16 nm, saved as that box (at most 21 MB before compression); computes 2×2×2 = 8 chunks of 60×60×60`);
+  });
+
+  it("saves the box, which off the chunks' edges is fewer chunks than it computes", async () => {
+    const { models } = await served();
+    // Voxels 30..80 along each axis (the level's corner is at -4 nm): across
+    // the model's chunks 0 and 1, but one chunk of the saved array, counted
+    // from its corner.
+    const p = planModel(models[0], PYRAMID, { offset: [476, 476, 476], size: [800, 800, 800] });
+    if (!isPlan(p)) throw new Error(p.error);
+    expect([p.lo, p.hi]).toEqual([[30, 30, 30], [80, 80, 80]]);
+    expect([p.chunks, p.savedChunks]).toEqual([8, 1]);
+    expect(p.bytes).toBe(60 ** 3 * 3 * 4);
   });
 
   it("follows the chain the view was served through: its channels and its dtype", async () => {
@@ -288,7 +300,7 @@ describe("a run", () => {
     const fifth = progress[4];
     expect([fifth.name, fifth.done, fifth.runDone]).toEqual([NAME_54, 5, 5]);
     expect(fifth.remainingMs).toBeCloseTo((fifth.elapsedMs / 5) * 4);
-    expect(describeProgress(fifth)).toMatch(new RegExp(`^${NAME_54} \\(1 of 2\\): 5 of 8 chunks, 5 written, \\d+ B in all; \\d+ s so far, about \\d+ s left$`));
+    expect(describeProgress(fifth)).toMatch(new RegExp(`^${NAME_54} \\(1 of 2\\): 5 of 8 chunks computed, 5 saved, \\d+ B in all; \\d+ s so far, about \\d+ s left$`));
     expect(logged).toContain(`${NAME_54}: done, 8 of 8 chunks written (${formatBytes(target.stores.get(NAME_54)!.get(".zattrs")!.length + 8)}) to out/${NAME_54}.zarr`);
     expect(logged[logged.length - 1]).toMatch(/^run done in \d+ s: 2 model\(s\)$/);
   });
