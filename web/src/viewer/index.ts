@@ -481,14 +481,16 @@ export function createViewer(opts: { session: SessionStore; log: (line: string) 
       return NG_PAGE + hash;
     },
 
-    setLayers(layers) {
+    setLayers(layers, replacing = {}) {
       const state = currentState();
       if (!state) {
         // No iframe yet: shown when restore() or openDataset() makes one.
+        // A layer replaced meanwhile is only queued, with nothing set on it.
+        for (const old of Object.values(replacing)) delete queued[old];
         Object.assign(queued, layers);
         return;
       }
-      applyState(withSelection(replaceLayers(state, layers)), `the layer${Object.keys(layers).length === 1 ? "" : "s"} ${Object.keys(layers).join(", ")}`);
+      applyState(withSelection(replaceLayers(state, layers, replacing)), `the layer${Object.keys(layers).length === 1 ? "" : "s"} ${Object.keys(layers).join(", ")}`);
     },
 
     removeLayer(name) {
