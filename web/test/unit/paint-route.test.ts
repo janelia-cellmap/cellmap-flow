@@ -134,6 +134,23 @@ describe("servePaint: PUT and DELETE (the fork's write and delete)", () => {
     expect(again.body).toBeNull();
   });
 
+  it("reads and writes a volume spelled with the viewer's ~<n> refresh suffix as the volume itself", async () => {
+    // viewer/layers.ts respelledPaintUrl gives the paint layer's source a new
+    // spelling so Neuroglancer re-reads it; the store knows one volume.
+    const store = await painted();
+    for (const spelled of [`${VOL}~1`, `${VOL}~2`, `${VOL}~10`, `${VOL}~0`]) {
+      const got = await servePaint(store, req("GET", `${spelled}/annotation/s0/3.4.5`));
+      expect(got.status, spelled).toBe(200);
+      expect(body(got), spelled).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
+      expect((await servePaint(store, req("HEAD", `${spelled}/annotation/s0/.zarray`))).status, spelled).toBe(200);
+    }
+    await servePaint(store, req("PUT", `${VOL}~3/annotation/s0/0.0.0`, withBody(new Uint8Array([7]))));
+    expect(Array.from((await store.get(VOL, "annotation/s0/0.0.0"))!)).toEqual([7]);  // under the volume, not a "~3" one
+    expect(await store.volumes()).toEqual([VOL]);
+    expect((await servePaint(store, req("DELETE", `${VOL}~1/annotation/s0/0.0.0`))).status).toBe(204);
+    expect(await store.get(VOL, "annotation/s0/0.0.0")).toBeUndefined();
+  });
+
   it("decodes a percent-encoded path, so the store's key is the file's own name", async () => {
     const store = new MemoryPaintStore();
     await servePaint(store, req("PUT", `${VOL}/a%20b/.zattrs`, withBody(new Uint8Array([1]))));
@@ -164,6 +181,20 @@ describe("servePaint: what is refused", () => {
     const put = await servePaint(store, req("PUT", `${VOL}/../x`, withBody(new Uint8Array([1]))));
     expect(put.status).toBe(400);
     expect(await store.volumes()).toEqual([VOL]);
+  });
+
+  it("is a 400 for a '~' in the volume that is not a ~<digits> suffix, which no volume id has", async () => {
+    const store = await painted();
+    for (const spelled of [`${VOL}~`, `${VOL}~x`, `${VOL}~1a`, `~1`, `vol~1-abc`, `${VOL}~1~2`, `${VOL}~-1`]) {
+      const response = await servePaint(store, req("GET", `${spelled}/annotation/s0/3.4.5`));
+      expect(response.status, spelled).toBe(400);
+      expect(textOf(response), spelled).toContain("~");
+    }
+    // Nothing lands under such a spelling either.
+    expect((await servePaint(store, req("PUT", `${VOL}~/x`, withBody(new Uint8Array([1]))))).status).toBe(400);
+    expect(await store.volumes()).toEqual([VOL]);
+    // A "~" in the path within the volume is just a character of a key, as before.
+    expect((await servePaint(store, req("GET", `${VOL}/annotation/s0/3~4`))).status).toBe(404);
   });
 
   it("is a 404 for any request with a query (an S3 listing probe), even of an object that is there", async () => {

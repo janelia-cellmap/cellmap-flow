@@ -22,10 +22,10 @@ renders the templates once, at build time, and the TypeScript in `src/`
 answers the dashboard's `fetch("/api/...")` requests in place of the Flask
 routes, with the same request and response JSON. The controls only a server
 can serve (LSF settings, Job Logs, the Local Catalog of cluster paths, the
-Review tab, and the Finetune tab's crops, seeds and AI annotation) are
-hidden; everything else is the dashboard you know, finetuning included
-([below](#finetuning-in-the-browser)). `ARCHITECTURE.md` describes how the
-parts fit together.
+Review tab, and the Finetune tab's crops, seeds and good regions) are
+hidden; everything else is the dashboard you know, finetuning and
+AI-assisted annotation included ([below](#finetuning-in-the-browser)).
+`ARCHITECTURE.md` describes how the parts fit together.
 
 ## Running it locally
 
@@ -140,6 +140,24 @@ follow the run unchanged. Why the head and not the network: onnxruntime-web
 trains nothing on the GPU; a WebGPU autograd library would have to rebuild
 the network, which is a later step behind the same `RunFinetune` seam
 (`src/finetune/types.ts`).
+
+AI-assisted annotation (`src/ai-annotate/`, the port of
+`cellmap_flow/ai_annotate/`) is in the tab too. Shift+G or *Annotate at View
+Centre* reads one plane of raw EM around the point from the open volume
+(`geometry.ts`, `plane.ts`), sends it from the page to a Gemini image model
+(`gemini.ts`: Google's Gemini API with an API key, or Vertex AI with a project
+and an access token; `fake.ts` paints in the page, for trying it and for the
+tests), turns the colour it painted into a mask (`mask.ts`) and, on *Accept*,
+writes it into the paint store as an object per connected piece (`labels.ts`,
+`fill.ts`), with *Undo* in the panel. The routes
+(`src/backend/routes/ai-annotate.ts`, `src/backend/ai-annotate-job.ts`) answer
+the Python routes' JSON, so the dashboard's `ai-annotate.js` drives both
+modes; the credentials pasted into the panel (`credentials.ts`) are used as
+they are typed, kept in the page's memory only (never in storage, where a key
+would be unencrypted), and reach the provider alone. The daily cap of 200 calls (`usage.ts`) and the audit log
+(`audit.ts`: `ai_annotate_log.jsonl` in the volume, so it is in the paint's
+zip) are the server's. `docs/ai_annotate.md` ("In the browser") says what the
+user sees, and why the Gemini API's free tier is offered with a caveat.
 
 ## Browser requirements
 

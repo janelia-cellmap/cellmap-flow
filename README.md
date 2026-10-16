@@ -69,7 +69,11 @@ starts fresh.
   The paint and the finetuned models stay in the browser, listed on the next
   visit, and download as a zarr and an `.onnx` for the server mode or for
   sharing. The rest of the network stays as exported: a finetune of the whole
-  network is the server mode's.
+  network is the server mode's. AI-assisted annotation is in the tab too:
+  hover and press Shift+G, and the plane on screen goes to a Gemini image
+  model asked to paint the structure, for review before it is written; the
+  page calls Google with a key or token you paste, kept in the page's memory
+  only, so a reload asks for it again.
 
 What the server mode below adds is what a browser cannot do: models that are
 not ONNX exports (PyTorch, TensorFlow, DaCapo, BioImage.io, Cellpose), a

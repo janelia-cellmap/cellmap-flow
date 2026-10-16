@@ -3,7 +3,12 @@
 // iframe exists touches the DOM and is checked by typecheck and in a
 // browser, except the first mount, which the tests below do against a
 // stand-in document whose iframe only records the URL it is given: enough
-// to read the state the viewer would open on.
+// to read the state the viewer would open on; and the reach into a live
+// viewer for the AI-assisted annotation (the pointer, the layout's depth
+// axis, a key binding, a paint layer re-read), done against a stand-in
+// `viewer` object on the iframe's window with the few Neuroglancer members
+// the controller touches (mouseState, inputEventBindings.global,
+// bindAction, state).
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { SessionState, SessionStore } from "../../src/contracts";
@@ -35,6 +40,62 @@ function stubDocument() {
 }
 
 const paint = { type: "segmentation", source: { url: "s3+http://localhost/paint/v/annotation", subsources: { default: { writingEnabled: true }, bounds: {} } }, tab: "Draw" };
+
+/** A stand-in for Neuroglancer's `window.viewer`, with the members the
+ * controller reaches: the state as JSON (restoreState replaces it, as a
+ * test can see), the mouse state, the global key map and bindAction, which
+ * record what was bound; `press(action)` runs the action's listeners as a
+ * key press would. */
+function stubNgViewer(state: NgState) {
+  let current = state;
+  const keys = new Map<string, string>();
+  const listeners = new Map<string, ((event: Event) => void)[]>();
+  const viewer = {
+    state: { toJSON: () => current, restoreState: (next: NgState) => { current = next; } },
+    mouseState: { position: new Float32Array(0) as ArrayLike<number>, active: false },
+    inputEventBindings: { global: { set: (key: string, action: string) => void keys.set(key, action), delete: (key: string) => void keys.delete(key) } },
+    bindAction: (action: string, handler: (event: Event) => void) => void listeners.set(action, [...(listeners.get(action) ?? []), handler]),
+    bindActionCalls: 0,
+  };
+  const bindAction = viewer.bindAction;
+  viewer.bindAction = (action, handler) => { viewer.bindActionCalls++; bindAction(action, handler); };
+  return { viewer, keys, listeners, press: (action: string) => (listeners.get(action) ?? []).forEach((fn) => fn(new Event("action"))) };
+}
+
+/** stubDocument with a live viewer in the iframe's window (its `viewer`
+ * and a location whose hash is empty, as Neuroglancer's is until it writes
+ * its state): `replaceViewer` is a new page of Neuroglancer (a new dataset
+ * opened), `load()` fires the iframe's load event. */
+function liveDocument(state: NgState) {
+  const listeners: Record<string, (() => void)[]> = {};
+  let stub = stubNgViewer(state);
+  // The window also takes the mirror's hashchange listener (share.ts).
+  const win = { viewer: stub.viewer, location: { hash: "" }, addEventListener() {}, removeEventListener() {} };
+  const frame = {
+    id: "", title: "", style: { cssText: "" }, src: "", contentWindow: win,
+    addEventListener: (type: string, fn: () => void) => void (listeners[type] = [...(listeners[type] ?? []), fn]),
+    removeEventListener: (type: string, fn: () => void) => void (listeners[type] = (listeners[type] ?? []).filter((f) => f !== fn)),
+  };
+  vi.stubGlobal("document", { getElementById: () => null, querySelector: () => null, createElement: () => frame, body: { appendChild() {} } });
+  vi.stubGlobal("sessionStorage", { getItem: () => null, setItem() {}, removeItem() {} });
+  return {
+    frame,
+    get stub() { return stub; },
+    load: () => (listeners.load ?? []).forEach((fn) => fn()),
+    replaceViewer(next: NgState) {
+      stub = stubNgViewer(next);
+      win.viewer = stub.viewer;
+      return stub;
+    },
+  };
+}
+
+const live: NgState = {
+  dimensions: { z: [8e-9, "m"], y: [8e-9, "m"], x: [8e-9, "m"] },
+  position: [10.5, 20.5, 30.5],
+  layers: [{ name: "data", type: "image", source: "zarr://https://example.org/em.zarr" }, { name: "annotation_v", ...paint, paintValue: "3", brushSize: 7 }],
+  layout: "yz",
+};
 
 describe("createViewer before the iframe exists", () => {
   afterEach(() => vi.unstubAllGlobals());
@@ -244,5 +305,179 @@ describe("datasetOpened", () => {
     await waiting.restore();
     waiting.datasetOpened("https://example.org/other.zarr", LIVER);
     expect(other.frame.src).toBe("");
+  });
+});
+
+describe("the reach into a live viewer for AI-assisted annotation", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  async function mounted(state: NgState = live) {
+    const doc = liveDocument(state);
+    const viewer = createViewer({ session: fakeSession(), log: () => {} });
+    await viewer.openDataset("https://example.org/em.zarr", { type: "image", source: "zarr://https://example.org/em.zarr" });
+    return { doc, viewer };
+  }
+
+  it("pointerPosition: the mouse state's voxel coordinates in nm, z y x, while the pointer is over a panel", async () => {
+    const { doc, viewer } = await mounted();
+    expect(viewer.pointerPosition()).toBeNull();  // not over the viewer yet (active false, position empty)
+    doc.stub.viewer.mouseState.position = new Float32Array([10.5, 20.5, 30.5]);
+    expect(viewer.pointerPosition()).toBeNull();  // a position, but the pointer has left (active false)
+    doc.stub.viewer.mouseState.active = true;
+    expect(viewer.pointerPosition()).toEqual([84, 164, 244]);
+    doc.stub.viewer.mouseState.position = new Float32Array([NaN, NaN, NaN]);
+    expect(viewer.pointerPosition()).toBeNull();
+  });
+
+  it("pointerPosition is null without a viewer, or with one that has no mouse state", async () => {
+    expect(createViewer({ session: fakeSession(), log: () => {} }).pointerPosition()).toBeNull();
+    const { doc, viewer } = await mounted();
+    delete (doc.stub.viewer as { mouseState?: unknown }).mouseState;
+    expect(viewer.pointerPosition()).toBeNull();
+  });
+
+  it("viewDepthAxis: the live state's layout over its dimensions; the default viewer's without one", async () => {
+    const { doc, viewer } = await mounted();
+    expect(viewer.viewDepthAxis()).toBe(0);  // "yz": the XY plane
+    doc.stub.viewer.state.restoreState({ ...live, layout: "xz" });
+    expect(viewer.viewDepthAxis()).toBe(1);
+    doc.stub.viewer.state.restoreState({ ...live, layout: "4panel" });
+    expect(viewer.viewDepthAxis()).toBe(2);
+    doc.stub.viewer.state.restoreState({ ...live, layout: "xy", displayDimensions: ["x", "y", "z"] });
+    expect(viewer.viewDepthAxis()).toBe(0);
+    expect(createViewer({ session: fakeSession(), log: () => {} }).viewDepthAxis()).toBe(2);
+  });
+
+  it("viewDepthAxis reads the state in the iframe's hash while Neuroglancer is still loading", async () => {
+    const { shown } = stubDocument();
+    const viewer = createViewer({ session: fakeSession(), log: () => {} });
+    await viewer.openDataset("https://example.org/em.zarr", { type: "image", source: "zarr://https://example.org/em.zarr" });
+    expect(shown().layout).toBe("xy");  // DEFAULT_LAYOUT
+    expect(viewer.viewDepthAxis()).toBe(2);
+  });
+
+  it("bindKey binds the key to the action in the global map and the handler to the action, once per viewer", async () => {
+    const { doc, viewer } = await mounted();
+    const presses: string[] = [];
+    viewer.bindKey("shift+keyg", "ai-annotate", () => presses.push("g"));
+    expect(doc.stub.keys.get("shift+keyg")).toBe("ai-annotate");
+    expect(doc.stub.viewer.bindActionCalls).toBe(1);
+    // The viewer is noticed again and again (the load, the mirror's poll, every read): bound once all the same.
+    doc.load();
+    doc.load();
+    viewer.position();
+    viewer.pointerPosition();
+    expect(doc.stub.viewer.bindActionCalls).toBe(1);
+    doc.stub.press("ai-annotate");
+    expect(presses).toEqual(["g"]);
+  });
+
+  it("bindKey puts the bindings on a new viewer when it appears, exactly once each", async () => {
+    const { doc, viewer } = await mounted();
+    const presses: string[] = [];
+    viewer.bindKey("shift+keyg", "ai-annotate", () => presses.push("g"));
+    viewer.bindKey("keyu", "ai-undo", () => presses.push("u"));
+    expect(doc.stub.viewer.bindActionCalls).toBe(2);
+    // A new dataset: a new page of Neuroglancer, a new viewer object with no bindings.
+    const next = doc.replaceViewer({ ...live, layout: "xz" });
+    expect(next.keys.size).toBe(0);
+    doc.load();
+    expect(next.keys.get("shift+keyg")).toBe("ai-annotate");
+    expect(next.keys.get("keyu")).toBe("ai-undo");
+    expect(next.viewer.bindActionCalls).toBe(2);
+    doc.load();
+    viewer.viewDepthAxis();
+    expect(next.viewer.bindActionCalls).toBe(2);
+    next.press("ai-annotate");
+    next.press("ai-undo");
+    expect(presses).toEqual(["g", "u"]);
+  });
+
+  it("bindKey before there is a viewer binds when one appears; the unbind takes the key out and silences the handler", async () => {
+    const doc = liveDocument(live);
+    const viewer = createViewer({ session: fakeSession(), log: () => {} });
+    const presses: string[] = [];
+    const unbind = viewer.bindKey("shift+keyg", "ai-annotate", () => presses.push("g"));
+    expect(doc.stub.keys.size).toBe(0);  // no iframe yet
+    await viewer.openDataset("https://example.org/em.zarr", { type: "image", source: "zarr://https://example.org/em.zarr" });
+    doc.load();
+    expect(doc.stub.keys.get("shift+keyg")).toBe("ai-annotate");
+    doc.stub.press("ai-annotate");
+    unbind();
+    expect(doc.stub.keys.has("shift+keyg")).toBe(false);
+    doc.stub.press("ai-annotate");  // Neuroglancer's listener is still there; it does nothing now
+    expect(presses).toEqual(["g"]);
+    unbind();  // twice is fine
+    // A viewer that appears later does not get the unbound binding.
+    const next = doc.replaceViewer(live);
+    doc.load();
+    expect(next.keys.size).toBe(0);
+    expect(next.viewer.bindActionCalls).toBe(0);
+  });
+
+  it("bindKey leaves a key another binding still wants in the map when one of them is unbound", async () => {
+    const { doc, viewer } = await mounted();
+    const unbindA = viewer.bindKey("shift+keyg", "a", () => {});
+    viewer.bindKey("shift+keyg", "b", () => {});
+    unbindA();
+    expect(doc.stub.keys.get("shift+keyg")).toBe("b");
+  });
+
+  it("bindKey says once per viewer, and binds nothing, when the viewer has no bindings API", async () => {
+    const lines: string[] = [];
+    const doc = liveDocument(live);
+    delete (doc.stub.viewer as { bindAction?: unknown }).bindAction;
+    const viewer = createViewer({ session: fakeSession(), log: (l) => lines.push(l) });
+    await viewer.openDataset("https://example.org/em.zarr", { type: "image", source: "zarr://https://example.org/em.zarr" });
+    viewer.bindKey("shift+keyg", "ai-annotate", () => {});
+    viewer.bindKey("keyu", "ai-undo", () => {});
+    doc.load();
+    expect(doc.stub.keys.size).toBe(0);
+    expect(lines.filter((line) => line.includes("bound"))).toEqual(["this viewer has no key bindings API: shift+keyg is not bound"]);
+  });
+
+  it("refreshLayer respells the paint layer's source URL through the state, keeping the layer's settings and the rest of the state", async () => {
+    const { doc, viewer } = await mounted();
+    expect(viewer.refreshLayer("annotation_v")).toBe(true);
+    const state = doc.stub.viewer.state.toJSON();
+    const layers = state.layers as Record<string, unknown>[];
+    expect(layers.map((l) => l.name)).toEqual(["data", "annotation_v"]);
+    expect(layers[1]).toEqual({
+      name: "annotation_v", ...paint, paintValue: "3", brushSize: 7,
+      source: { url: "s3+http://localhost/paint/v~1/annotation", subsources: { default: { writingEnabled: true }, bounds: {} } },
+    });
+    expect(layers[0]).toEqual(live.layers![0 as never]);
+    expect(state.position).toEqual([10.5, 20.5, 30.5]);
+    expect(state.layout).toBe("yz");
+    // Again: the suffix counts up.
+    expect(viewer.refreshLayer("annotation_v")).toBe(true);
+    const again = (doc.stub.viewer.state.toJSON().layers as Record<string, unknown>[])[1].source as { url: string };
+    expect(again.url).toBe("s3+http://localhost/paint/v~2/annotation");
+  });
+
+  it("refreshLayer keeps a hidden paint layer hidden", async () => {
+    const hidden: NgState = { ...live, layers: [{ name: "annotation_v", ...paint, visible: false }] };
+    const { doc, viewer } = await mounted(hidden);
+    expect(viewer.refreshLayer("annotation_v")).toBe(true);
+    expect((doc.stub.viewer.state.toJSON().layers as Record<string, unknown>[])[0].visible).toBe(false);
+  });
+
+  it("refreshLayer is false for a layer that is not there, one that is not a paint layer, and without a viewer", async () => {
+    const { doc, viewer } = await mounted();
+    const before = doc.stub.viewer.state.toJSON();
+    expect(viewer.refreshLayer("gone")).toBe(false);
+    expect(viewer.refreshLayer("data")).toBe(false);  // the raw layer: not the paint route's
+    expect(doc.stub.viewer.state.toJSON()).toBe(before);  // nothing restored
+    expect(createViewer({ session: fakeSession(), log: () => {} }).refreshLayer("annotation_v")).toBe(false);
+  });
+
+  it("refreshLayer works through the iframe's hash while Neuroglancer is still loading", async () => {
+    const { shown } = stubDocument();
+    const viewer = createViewer({ session: fakeSession(), log: () => {} });
+    viewer.setLayers({ annotation_v: paint });
+    await viewer.openDataset("https://example.org/em.zarr", { type: "image", source: "zarr://https://example.org/em.zarr" });
+    expect(viewer.refreshLayer("annotation_v")).toBe(true);
+    const layer = (shown().layers as Record<string, unknown>[]).find((l) => l.name === "annotation_v")!;
+    expect((layer.source as { url: string }).url).toBe("s3+http://localhost/paint/v~1/annotation");
   });
 });

@@ -801,7 +801,7 @@ describe("in the backend", () => {
     expect((await backend.handle(request("GET", "/api/finetune/job/abc/status"))).status).toBe(404);
     const crops = await backend.handle(request("POST", "/api/finetune/load-crops"));
     expect(crops.status).toBe(503);
-    expect(body(crops).error).toMatch(/needs a server .*crops import, seeds, good regions and AI annotation/);
+    expect(body(crops).error).toMatch(/needs a server .*crops import, seeds and good regions/);
     await tick();
   });
 });

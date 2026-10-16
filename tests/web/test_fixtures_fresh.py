@@ -58,3 +58,29 @@ def test_segment_fixtures_are_fresh():
         "(the pixi default environment's python) and commit the result with the change.\n\n"
         f"{result.stdout}{result.stderr}"
     )
+
+
+AI_SCRIPT = ROOT / "web" / "test" / "fixtures" / "make_ai_fixtures.py"
+
+
+def test_ai_annotate_fixture_is_fresh():
+    # The same for the AI-assisted annotation fixture (ai_annotate.json),
+    # which make_ai_fixtures.py writes from cellmap_flow.ai_annotate
+    # (geometry, pipeline, mask_extraction, prompts, organelles) and
+    # finetune/session/fill.py.
+    pythonpath = os.pathsep.join(p for p in (str(ROOT), os.environ.get("PYTHONPATH", "")) if p)
+    result = subprocess.run(
+        [sys.executable, str(AI_SCRIPT), "--check"],
+        cwd=ROOT,
+        env={**os.environ, "PYTHONPATH": pythonpath},
+        capture_output=True,
+        text=True,
+        timeout=600,
+    )
+    assert result.returncode == 0, (
+        "web/test/fixtures/ai_annotate.json is stale: cellmap_flow.ai_annotate's geometry, pipeline, "
+        "mask_extraction, prompts or organelles, or finetune/session/fill.py, changed since it was generated. Regenerate with\n"
+        "    python web/test/fixtures/make_ai_fixtures.py\n"
+        "(the pixi default environment's python) and commit the result with the change.\n\n"
+        f"{result.stdout}{result.stderr}"
+    )

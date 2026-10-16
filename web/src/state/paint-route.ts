@@ -71,10 +71,24 @@ export async function servePaint(store: PaintStore, request: PaintRequest): Prom
   }
 }
 
+/** The volume segment as the viewer may spell it: the volume id, or the id
+ * with a `~<n>` refresh suffix (viewer/layers.ts respelledPaintUrl). */
+const VOLUME_SEGMENT = /^([^~]+)(?:~\d+)?$/;
+
 /** The volume id and the path within the volume from what followed
  * `paint/`, or why there is none: an empty, "." or ".." segment anywhere is
  * no file of a volume (a zarr writes none, and a store is no place to walk
- * up from). */
+ * up from).
+ *
+ * The volume segment may carry a `~<n>` suffix (`<volume>~2`), which is
+ * dropped: it is how the page has Neuroglancer re-read a paint layer whose
+ * labels were written behind its back (respelledPaintUrl respells the
+ * layer's source URL, which the viewer takes for a new source), the way
+ * the server respells the MinIO port, and every spelling is the same
+ * volume in the store. A "~" anywhere else in the segment, or one with no
+ * digits after it, names no volume (a volume id has no "~"), so it is
+ * refused like the other malformed segments rather than passed to the
+ * store as an id. */
 function parsePath(raw: string): { volume: string; path: string } | { error: string } {
   let decoded: string;
   try {
@@ -82,12 +96,14 @@ function parsePath(raw: string): { volume: string; path: string } | { error: str
   } catch {
     return { error: `malformed percent-encoding in the path ${raw}` };
   }
-  const [volume, ...rest] = decoded.split("/");
-  if (volume === "") return { error: "no volume in the path: expected paint/<volume>/<path>" };
-  if (rest.length === 0 || (rest.length === 1 && rest[0] === "")) return { error: `no file in the path: expected paint/${volume}/<path>` };
-  for (const segment of [volume, ...rest]) {
+  const [spelled, ...rest] = decoded.split("/");
+  if (spelled === "") return { error: "no volume in the path: expected paint/<volume>/<path>" };
+  if (rest.length === 0 || (rest.length === 1 && rest[0] === "")) return { error: `no file in the path: expected paint/${spelled}/<path>` };
+  for (const segment of [spelled, ...rest]) {
     if (segment === "" || segment === "." || segment === "..") return { error: `"${segment}" is not a segment of a volume's file path: ${decoded}` };
   }
+  const volume = VOLUME_SEGMENT.exec(spelled)?.[1];
+  if (volume === undefined) return { error: `"${spelled}" is not a volume: a "~" may only end the volume as its refresh suffix, ~<digits>` };
   return { volume, path: rest.join("/") };
 }
 

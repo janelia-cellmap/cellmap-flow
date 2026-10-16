@@ -147,14 +147,26 @@ export class FakeInference implements Inference {
 
   async reset(): Promise<void> {}
 
-  /** Every readRaw call's box, and zeros of the level's shape for it (uint8). */
+  /** Every readRaw call's box, and zeros of the box's size for it (uint8),
+   * or, with `rawPattern` set, a pattern a test can recognise. */
   reads: { level: number; lo: number[]; hi: number[] }[] = [];
+
+  /** What readRaw returns: zeros, or a gradient along x (the voxel's x
+   * index modulo 256, so the left of every plane is dark), which gives the
+   * fake AI provider dark pixels to mask. */
+  rawPattern: "zeros" | "gradient" = "zeros";
 
   async readRaw(level: number, lo: number[], hi: number[]): Promise<ArrayBuffer> {
     if (!this.current) throw new Error("open a dataset before reading it");
     this.reads.push({ level, lo, hi });
-    const n = hi.reduce((acc, h, a) => acc * (h - lo[a]), 1);
-    return new ArrayBuffer(n);
+    const shape = hi.map((h, a) => h - lo[a]);
+    const n = shape.reduce((acc, s) => acc * s, 1);
+    const bytes = new Uint8Array(n);
+    if (this.rawPattern === "gradient") {
+      const [, , nx] = shape;
+      for (let i = 0; i < n; i++) bytes[i] = (lo[2] + (i % nx)) & 255;
+    }
+    return bytes.buffer;
   }
 }
 
@@ -246,8 +258,11 @@ export class FakeViewer implements ViewerController {
     this.removed.push(name);
   }
 
+  /** The viewer's position in nm (z, y, x), or none; a test sets it (the AI-annotate run's default point). */
+  positionNm: number[] | null = null;
+
   position(): number[] | null {
-    return null;
+    return this.positionNm;
   }
 
   viewerUrl(): string | null {
@@ -272,6 +287,39 @@ export class FakeViewer implements ViewerController {
 
   datasetOpened(url: string, info: DatasetInfo | null): void {
     this.datasetsOpened.push({ url, info });
+  }
+
+  /** Where the pointer is, in nm (z, y, x); a test sets it. */
+  pointer: number[] | null = null;
+
+  pointerPosition(): number[] | null {
+    return this.pointer;
+  }
+
+  /** The depth axis of the layout a test pretends the viewer shows. */
+  depthAxis: 0 | 1 | 2 = 0;
+
+  viewDepthAxis(): 0 | 1 | 2 {
+    return this.depthAxis;
+  }
+
+  /** Every binding made and not yet unbound: a test presses a key by calling its handler. */
+  bindings: { key: string; action: string; handler: () => void }[] = [];
+
+  bindKey(key: string, action: string, handler: () => void): () => void {
+    const binding = { key, action, handler };
+    this.bindings.push(binding);
+    return () => {
+      this.bindings = this.bindings.filter((b) => b !== binding);
+    };
+  }
+
+  /** Every refreshLayer call; a layer the fake has is found. */
+  refreshed: string[] = [];
+
+  refreshLayer(name: string): boolean {
+    this.refreshed.push(name);
+    return name in this.layers;
   }
 }
 

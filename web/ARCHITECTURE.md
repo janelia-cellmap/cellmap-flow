@@ -73,8 +73,9 @@ the normalizer and postprocessor bodies (`infer/norms.ts`, `post.ts` and the
 segmentation steps), the two stages and their keys (`infer/stages.ts`), the
 viewer's layer JSON (`viewer/`), the backend
 behind the dashboard's routes (`backend/`), the session (`state/`), a folder
-picked on this machine (`local-folder/`), finetuning (`finetune/`, below) and
-the dashboard build (`build/`, `vite.config.ts`).
+picked on this machine (`local-folder/`), finetuning (`finetune/`) and
+AI-assisted annotation (`ai-annotate/`), both below, and the dashboard build
+(`build/`, `vite.config.ts`).
 
 ## Boot (src/main.ts)
 
@@ -130,7 +131,7 @@ route that reads a query, the log stream's `offset`, has Last-Event-ID, a
 header, first.)
 
 Routes that only a server can serve (LSF, the cluster's file systems, the
-Review tab's SQLite index, Vertex credentials) answer
+Review tab's SQLite index, the seeds and good regions) answer
 `{success: false, available: false, error}` and their controls are hidden by
 `[data-mode="browser"] .server-only { display: none }` (the template marks them
 with the `server-only` class; render.py sets `data-mode`).
@@ -178,6 +179,53 @@ unchanged. Why the head and not the network: onnxruntime-web trains nothing
 on the GPU; a WebGPU autograd library would have to rebuild the network, a
 later step behind the same `RunFinetune` seam (`finetune/types.ts`).
 
+## AI-assisted annotation (src/ai-annotate/)
+
+The port of `cellmap_flow/ai_annotate/` and of
+`dashboard/routes/finetune/ai_annotate.py`, so the Finetune tab's AI panel
+(`static/js/dashboard/finetune/ai-annotate.js`) drives the page as it drives
+the server: `backend/routes/ai-annotate.ts` answers the Python routes' JSON
+(config, credentials, settings, run, status with `?preview=1`, resend,
+accept, reject, and `view-labels/undo`), and `backend/ai-annotate-job.ts` is
+the job, one at a time, its result staged in memory until Accept or Reject.
+Who does what: `geometry.ts` plans the plane (the depth axis from the
+viewer's layout, the raw box, the image laid out as the panel draws it, the
+click in image pixels); `plane.ts` reads it from the raw level through
+`Inference.readRaw` (clipped to the level and zero past it, as `samples.ts`
+reads), resizes it to the image sent, normalizes it to uint8 RGBA (`mask.ts`)
+and builds the request; `gemini.ts` is the two Google providers
+(`gemini_api`: generativelanguage.googleapis.com with `x-goog-api-key`;
+`vertex_gemini`: aiplatform.googleapis.com, location global, with a bearer
+token), called straight from the page, with the Python's retries and
+timeout, and errors in the module's own words, never the service's body;
+`fake.ts` paints the dark pixels in a disc around the click, for trying the
+panel and for the tests; `mask.ts` reads the model's image into a mask by
+the colour the prompt asked for and draws the overlay; `labels.ts` and
+`fill.ts` are `fill.py` (4-connected objects in the plane, ids seeded from
+what the user painted beside, the box written to the paint store whole
+chunk by whole chunk, with the undo entry); `prompts.ts` and `organelles.ts`
+are the catalog; `credentials.ts`, `usage.ts` and `audit.ts` hold the
+credentials, the daily count (localStorage, 200 a day) and the audit log,
+one JSON line per event appended to `<volume>/ai_annotate_log.jsonl` in the
+paint store, so it travels with the volume's zip. The viewer's side is
+`viewer/index.ts`'s pointerPosition, viewDepthAxis, bindKey (Shift+G, bound
+again when a new viewer is mounted) and refreshLayer.
+
+Two things are the browser's own. Credentials: the page calls Google itself,
+so the panel takes an API key, or a project and an access token
+(`POST .../credentials`, posted by the panel as they are pasted), kept in
+the page's memory only: not in localStorage, where a key would sit
+unencrypted for any script on the site (an earlier build's remembered copy,
+`cellmap-flow:ai-annotate:credentials`, is deleted on load), never in the
+session state (which share links and the state store carry), never in a log
+line, and in no answer beyond `configured: true/false` per provider. The layer
+refresh: the server respells the paint layer's URL (a leading zero on the
+port) so Neuroglancer makes a new source and re-reads it; here the paint
+route's volume segment takes an optional `~<n>` suffix
+(`paint/<volume>~1/annotation/...`), which `state/paint-route.ts` strips
+before the store, and `refreshLayer` toggles it on the layer's source URL
+through the viewer state, keeping the layer's tool, brush and paint value.
+
 ## State
 
 `src/state/` keeps `SessionState` (see `contracts.ts`) in the tab's
@@ -186,7 +234,9 @@ sessionStorage. IndexedDB holds what outlives the tab: picked folders' handles
 each, keyed by URL and ETag: the page asks Hugging Face for a file's ETag
 before serving its cached copy, so a model re-exported under the same name
 is downloaded again; Hugging Face rate-limits anonymous downloads) and the finetuned
-models' records and bytes (`models/`).
+models' records and bytes (`models/`). localStorage holds the AI
+annotation's daily call count (`ai-annotate/usage.ts`); its credentials are
+in no storage at all (`credentials.ts`).
 
 ## Layout
 
@@ -212,11 +262,15 @@ web/
       index.ts  createBackend(ctx), restoreSession(ctx), the catch-all for server-only routes
       relay.ts  registerServiceWorker(), listenForApiRequests(backend) on chunkmirage's route(); Ask/Reply/Later are chunkmirage's types
       router.ts, sse.ts, yaml.ts (the export), serving.ts (serve and re-serve the session's models)
-      finetune-jobs.ts (a finetune run as the dashboard's job), routes/{data,pipeline,models,config,finetune}.ts
+      finetune-jobs.ts (a finetune run as the dashboard's job), ai-annotate-job.ts (one AI annotation, staged for review)
+      routes/{data,pipeline,models,config,finetune,ai-annotate}.ts
     state/                   openSession(): SessionStore (sessionStorage: the tab is the server's process lifetime); db.ts + local-store.ts
                              for picked directories; paint-store.ts + paint-route.ts: the annotation volumes' files and the worker's paint/ route
     finetune/                types.ts (the seams), volume.ts (planVolume, the zarr v2 files), samples.ts, targets.ts, onnx-proto.ts,
                              onnx-head.ts, features.ts, head-trainer.ts, run.ts (runFinetune), zip.ts (the paint's download)
+    ai-annotate/             AI-assisted annotation (above): types.ts, geometry.ts, plane.ts, mask.ts, labels.ts, fill.ts, prompts.ts,
+                             organelles.ts (the pure ports), images.ts (the canvas codec), gemini.ts, fake.ts, providers.ts,
+                             credentials.ts, usage.ts, audit.ts
     local-folder/            a folder on this machine: index.ts (the local URL and its key, the pick/drop flow,
                              the boot-time permission check), panel.ts (the connect panel's DOM: button, drop target, prompt)
     infer/                   createInference(): Inference — the Engine, one serveStages() view per model

@@ -87,6 +87,22 @@ new shapes; that is a finetune of the whole network, which the server mode
 runs on the cluster, and whose result the browser can serve as any other
 model.
 
+AI-assisted annotation is in the tab too, under *Patch on screen*: hover over
+a structure and press ``Shift+G`` (or click *Annotate at View Centre*), and
+one plane of raw EM goes to a Gemini image model asked to paint it; the
+review opens over the page, *Accept* writes the mask into the paint volume as
+an object per piece, *Undo* takes it back. The page calls Google itself, with
+credentials you give it in the panel: a Gemini API key, or a Google Cloud
+project and an access token for Vertex AI (``gcloud auth print-access-token``,
+good for about an hour). They stay in this browser and go to Google alone,
+with each plane, and are kept in the page's memory only, never in the
+browser's storage, so a reload asks for them again. On the Gemini API's free tier Google may use what is
+sent to improve its products, on its paid tier and on Vertex AI it does not;
+the server mode uses Vertex AI for that reason. A *fake* provider paints in
+the page, for trying the panel without a key. The server's guide,
+`docs/ai_annotate.md <https://github.com/janelia-cellmap/cellmap-flow/blob/main/docs/ai_annotate.md>`_,
+has the details under "In the browser".
+
 The paint and the finetuned models stay in the browser (IndexedDB): *Resume
 Existing Volume* lists the volumes painted here, newest first, and the
 Models tab lists the finetuned models under the Hugging Face ones. *Download

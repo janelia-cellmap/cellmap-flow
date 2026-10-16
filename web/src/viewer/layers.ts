@@ -328,6 +328,54 @@ export function paintLayerUrl(volumeId: string, pageBase: string = typeof locati
   return `s3+${base}${PAINT_ROUTE}${volumeId}/annotation`;
 }
 
+/** The paint route's volume segment in a layer's source URL, with the
+ * optional refresh suffix: `.../paint/<volume>[~<n>]/`. The volume id has
+ * no "~" or "/" (`vol-<8 hex>-<YYYYmmdd-HHMMSS>`), so the suffix is
+ * unambiguous. The same shape paint-route.ts strips before the store.
+ * (PAINT_ROUTE is `paint/`, letters and a slash: nothing to escape.) */
+const PAINT_VOLUME_SEGMENT = new RegExp(`(/${PAINT_ROUTE})([^/~]+)(?:~(\\d+))?(?=/)`);
+
+/** `url` with the paint route's volume segment respelled, so that
+ * Neuroglancer takes it for a new source and reads its chunks afresh: the
+ * server's refresh_annotation_layer does the same by respelling the MinIO
+ * port (overlay._respelled_port, `:5000` to `:05000`), since the viewer
+ * caches a source by its URL and labels written behind its back (an
+ * accepted AI annotation, an undo) show only once the chunks are read
+ * again. The volume segment takes a `~<n>` suffix the service worker
+ * strips (paint-route.ts), so every spelling reaches the same volume; `n`
+ * counts up (`<volume>` to `<volume>~1`, `~1` to `~2`, ...) rather than
+ * toggling, so no refresh returns to a spelling the viewer may still hold
+ * chunks for. Null when `url` has no paint route in it. */
+export function respelledPaintUrl(url: string): string | null {
+  const match = PAINT_VOLUME_SEGMENT.exec(url);
+  if (!match) return null;
+  const [whole, route, volume, suffix] = match;
+  const next = suffix === undefined ? 1 : Number(suffix) + 1;
+  return url.slice(0, match.index) + `${route}${volume}~${next}` + url.slice(match.index + whole.length);
+}
+
+/** A layer's `source` with its paint-route URL respelled by
+ * respelledPaintUrl, whichever of Neuroglancer's forms the source is in (a
+ * string, {url, ...} with the rest kept, since `subsources` is where the
+ * fork's `writingEnabled` lives, or an array of either, the first paint
+ * source respelled and the others kept); null when no paint-route URL is
+ * in it. */
+export function respelledPaintSource(source: unknown): unknown | null {
+  if (typeof source === "string") return respelledPaintUrl(source);
+  if (Array.isArray(source)) {
+    for (let i = 0; i < source.length; i++) {
+      const respelled = respelledPaintSource(source[i]);
+      if (respelled !== null) return source.map((entry, j) => (j === i ? respelled : entry));
+    }
+    return null;
+  }
+  if (source && typeof source === "object" && typeof (source as { url?: unknown }).url === "string") {
+    const url = respelledPaintUrl((source as { url: string }).url);
+    return url === null ? null : { ...(source as Record<string, unknown>), url };
+  }
+  return null;
+}
+
 /** The writable segmentation layer on `url` for `volume`, as
  * add_annotation_layer builds it: the volume's `annotation` group as its
  * source, its default subsource writable (the fork paints into a subsource

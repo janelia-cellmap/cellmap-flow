@@ -13,13 +13,17 @@
 //                       training jobs (finetune-jobs.ts: the model's head
 //                       trained in the tab) with their status and log stream,
 //                       the volume and the finetuned model downloaded
+//   routes/ai-annotate.ts  the Finetune tab's AI-assisted annotation: one
+//                       plane of raw EM sent from the page to a Gemini image
+//                       model (or the fake) with the user's own credentials,
+//                       its answer staged for review (ai-annotate-job.ts),
+//                       accepted into the paint volume or undone
 //
 // Every other /api/ route answers unavailable (router.ts): the Review tab,
 // the pipeline builder's routes, the dashboard's log stream, and the parts
 // of the Finetune tab that read files or run models the browser has not
-// (crops import, seeds, good regions, AI annotation) need a server. The
-// template hides their controls in browser mode, so nothing on the page
-// polls them.
+// (crops import, seeds, good regions) need a server. The template hides
+// their controls in browser mode, so nothing on the page polls them.
 //
 // restoreSession(ctx) is the boot-time counterpart of Submit: after a reload
 // the session still names the dataset and the models, but the Engine views
@@ -27,6 +31,7 @@
 import type { ApiRequest, ApiResponse, AppContext, Backend } from "../contracts";
 import { parseViewName } from "../shared/args";
 import { message, Router, unavailable } from "./router";
+import { type AiAnnotateDeps, aiAnnotateRoutes } from "./routes/ai-annotate";
 import { configRoutes } from "./routes/config";
 import { dataRoutes } from "./routes/data";
 import { type FinetuneDeps, finetuneRoutes } from "./routes/finetune";
@@ -37,11 +42,15 @@ import { serveModels } from "./serving";
 export interface BackendOptions {
   /** The finetune routes' seams (a fake run, a fixed volume plan or clock), for tests. */
   finetune?: Partial<FinetuneDeps>;
+  /** The AI-annotate routes' seams (a fake provider, a plain-JavaScript codec, a memory store, a clock), for tests. */
+  aiAnnotate?: Partial<AiAnnotateDeps>;
 }
 
 /** The router with every route of the browser mode registered. The finetune
  * jobs live in it (one set per router, so per page), as the server's live
- * in its job manager. */
+ * in its job manager; so does the AI-annotate state (its settings,
+ * acknowledgements, job and undo stacks), as the server's lives in the
+ * session. */
 export function createRouter(options: BackendOptions = {}): Router {
   const router = new Router();
   dataRoutes(router);
@@ -49,9 +58,10 @@ export function createRouter(options: BackendOptions = {}): Router {
   modelRoutes(router);
   configRoutes(router);
   finetuneRoutes(router, options.finetune);
+  aiAnnotateRoutes(router, options.aiAnnotate);
   router.otherwise((req) =>
     unavailable(
-      `${req.method} ${req.path} is not available in the browser: it needs a server (the Review tab, the pipeline builder, and the finetune tab's crops import, seeds, good regions and AI annotation).`,
+      `${req.method} ${req.path} is not available in the browser: it needs a server (the Review tab, the pipeline builder, and the finetune tab's crops import, seeds and good regions).`,
     ),
   );
   return router;

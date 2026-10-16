@@ -10,7 +10,7 @@ import { predictionShader, rawShader } from "../../src/viewer/display";
 import {
   centrePosition, DEFAULT_LAYOUT, dimensionsOf, displayChannel, GPU_MEMORY_LIMIT, initialState, layerList, PAINT_LAYER_PREFIX, PAINT_TAB,
   PAINT_TOOL_BINDINGS, paintLayer, paintLayerName, paintLayerUrl, PREDICTION_COLORS, predictionLayer, predictionSource, predictionVoxelOverride,
-  RAW_LAYER_NAME, rawLayer, rawSource, stateWithoutInfo,
+  RAW_LAYER_NAME, rawLayer, rawSource, respelledPaintSource, respelledPaintUrl, stateWithoutInfo,
 } from "../../src/viewer/layers";
 
 const DATASET = "https://janelia-cosem-datasets.s3.amazonaws.com/jrc_hela-2/jrc_hela-2.zarr/recon-1/em/fibsem-uint8";
@@ -309,5 +309,48 @@ describe("the paint layer (overlay.add_annotation_layer)", () => {
     expect(PAINT_TAB).toBe("Draw");
     // Each layer gets its own bindings object: Neuroglancer may edit it in place.
     expect(paintLayer(url, volume).toolBindings).not.toBe(PAINT_TOOL_BINDINGS);
+  });
+});
+
+describe("respelledPaintUrl and respelledPaintSource (overlay.refresh_annotation_layer's respelled URL)", () => {
+  const url = paintLayerUrl("vol-0badcafe-20261015-130405", "http://localhost:5174/");
+
+  it("gives the volume segment a ~1 suffix, then counts it up, never returning to a spelling the viewer has seen", () => {
+    const once = respelledPaintUrl(url)!;
+    expect(once).toBe("s3+http://localhost:5174/paint/vol-0badcafe-20261015-130405~1/annotation");
+    const twice = respelledPaintUrl(once)!;
+    expect(twice).toBe("s3+http://localhost:5174/paint/vol-0badcafe-20261015-130405~2/annotation");
+    expect(respelledPaintUrl(twice)).toBe("s3+http://localhost:5174/paint/vol-0badcafe-20261015-130405~3/annotation");
+    expect(respelledPaintUrl("s3+https://janelia-cellmap.github.io/cellmap-flow/app/paint/v~9/annotation"))
+      .toBe("s3+https://janelia-cellmap.github.io/cellmap-flow/app/paint/v~10/annotation");
+    // Only the volume segment changes: the route, the path after it, the scheme and the host are kept.
+    expect(respelledPaintUrl("s3+http://h:5174/app/paint/v/annotation/s0")).toBe("s3+http://h:5174/app/paint/v~1/annotation/s0");
+  });
+
+  it("is null for a URL that is not the paint route's", () => {
+    expect(respelledPaintUrl("zarr://https://example.org/em.zarr/recon-1/em/fibsem-uint8")).toBeNull();
+    expect(respelledPaintUrl("zarr3://http://localhost:5174/virtual/page/model/")).toBeNull();
+    expect(respelledPaintUrl("s3+http://localhost:5174/paint/")).toBeNull();  // no volume
+    expect(respelledPaintUrl("s3+http://localhost:5174/paint/v")).toBeNull();  // no path after the volume
+    expect(respelledPaintUrl("s3+http://localhost:5174/painting/v/annotation")).toBeNull();
+  });
+
+  it("respells a source in each of Neuroglancer's forms, keeping the rest of it", () => {
+    expect(respelledPaintSource(url)).toBe(respelledPaintUrl(url));
+    const object = { url, subsources: { default: { writingEnabled: true }, bounds: {} }, transform: { x: 1 } };
+    expect(respelledPaintSource(object)).toEqual({ ...object, url: respelledPaintUrl(url) });
+    expect(object.url).toBe(url);  // the input is untouched
+    // The Python API's array of sources: the paint source respelled, the others kept.
+    expect(respelledPaintSource([{ url: "zarr://other" }, { url }])).toEqual([{ url: "zarr://other" }, { url: respelledPaintUrl(url) }]);
+    expect(respelledPaintSource([url])).toEqual([respelledPaintUrl(url)]);
+  });
+
+  it("is null for a source without a paint-route URL", () => {
+    expect(respelledPaintSource("zarr://https://example.org/em.zarr")).toBeNull();
+    expect(respelledPaintSource({ url: "zarr3://http://h/m/" })).toBeNull();
+    expect(respelledPaintSource([{ url: "zarr://a" }, "zarr://b"])).toBeNull();
+    expect(respelledPaintSource([])).toBeNull();
+    expect(respelledPaintSource(undefined)).toBeNull();
+    expect(respelledPaintSource({ nope: 1 })).toBeNull();
   });
 });
