@@ -37,9 +37,10 @@ export function initJobMonitor({ picker, form }) {
   // (the template's browser-only anchor), pointed at the model a job's status
   // says is served (inference_server_ready with finetuned_model_name) and
   // shown then; hidden on any other status, and for a job just submitted or
-  // restarted, whose model is not made yet. The GET is relayed by the service
-  // worker to the in-page backend, like the Export Config link. Nothing on
-  // the Flask page: it has no such anchor.
+  // restarted, whose model is not made yet. The page fetches the link on a
+  // click (web/src/rebase.ts), like the Export Config link, and the service
+  // worker relays the GET to the in-page backend. Nothing on the Flask page:
+  // it has no such anchor.
   function showFinetunedDownload(job) {
     if (!browser) return;
     const link = document.getElementById("downloadFinetunedBtn");

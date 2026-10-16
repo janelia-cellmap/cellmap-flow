@@ -36,9 +36,10 @@ export function initCrops({ log, picker, form }) {
   const browser = isBrowserMode();
 
   // Browser mode: the paint lives in this browser, so the template's
-  // browser-only block offers it as a download (a zip of the zarr, a GET
-  // the service worker relays to the in-page backend as it relays the Export
-  // Config link) and a delete. Both act on the volume last created or
+  // browser-only block offers it as a download (a zip of the zarr; the page
+  // fetches the link on a click, web/src/rebase.ts, as it does the Export
+  // Config link, and the service worker relays the GET to the in-page
+  // backend) and a delete. Both act on the volume last created or
   // resumed; with none (and again after a delete) the link has no target and
   // the button is disabled.
   function showVolumeActions(volumeId) {
