@@ -6,9 +6,10 @@
 import { describe, expect, it } from "vitest";
 
 import { createBackend } from "../../src/backend";
-import { type FinetuneDeps, finetuneRoutes, sameDataset } from "../../src/backend/routes/finetune";
+import { type FinetuneDeps, finetuneRoutes, readTraining, sameDataset } from "../../src/backend/routes/finetune";
 import { Router } from "../../src/backend/router";
 import type { ApiRequest, ApiResponse, Chain, ModelEntry, PaintVolume } from "../../src/contracts";
+import { saveGoodRegions } from "../../src/finetune/good-regions";
 import type { Finetuned, FinetuneRun, RunFinetune } from "../../src/finetune/types";
 import { CHUNK_DIR, chunkKey } from "../../src/finetune/volume";
 import { defaultChain } from "../../src/state";
@@ -112,8 +113,10 @@ function fakeRun(baton?: Baton): { run: RunFinetune; calls: FinetuneRun[]; resul
       epochs: losses.length,
       losses,
       finalLoss: losses.length ? losses[losses.length - 1] : null,
+      supervisedLosses: losses,
       pixels: 40,
       chunks: 1,
+      distilled: 0,
     };
     results.push(result);
     return result;
@@ -381,10 +384,11 @@ describe("POST /api/finetune/submit", () => {
     expect(body(unpainted).error).toMatch(/Nothing is painted/);
     expect("needs_volume" in body(unpainted)).toBe(false);
     await paint(ctx, id, [0, 0, 0]);
-    const margin = await h.handle(request("POST", "/api/finetune/submit", submitBody({ loss_type: "margin" })));
-    expect(margin.status).toBe(400);
-    expect(body(margin).error).toMatch(/margin loss needs a server/);
-    expect(body(margin).error).toMatch(/bce/);
+    const dice = await h.handle(request("POST", "/api/finetune/submit", submitBody({ loss_type: "dice" })));
+    expect(dice.status).toBe(400);
+    expect(body(dice).error).toMatch(/dice loss needs a server: Dice is an overlap over each training patch/);
+    expect(body(dice).error).toMatch(/BCE \(bce\), MSE \(mse\) or margin \(margin\)/);
+    expect(body(await h.handle(request("POST", "/api/finetune/submit", submitBody({ loss_type: "interval" })))).error).toMatch(/interval loss needs a server: the browser makes only the binary and affinity targets/);
     const missing = await h.handle(request("POST", "/api/finetune/submit", submitBody({ model_name: "nowhere" })));
     expect(missing.status).toBe(404);
     expect(body(missing).error).toBe("Model nowhere not found");
@@ -423,7 +427,11 @@ describe("a job's life", () => {
     expect(run.dataset).toEqual(DATASET);
     expect(run.paint).toBe(ctx.paint);
     expect(run.infer).toBe(ctx.infer);
-    expect(run.options).toEqual({ epochs: 3, learningRate: 0.01, balanceClasses: true, labelSmoothing: 0, batchPixels: 4096, seed: 0 });
+    expect(run.options).toEqual({
+      epochs: 3, learningRate: 0.01, lossType: "bce", margin: 0.3, balanceClasses: true, labelSmoothing: 0, batchPixels: 4096,
+      distillationLambda: 0.01, distillationScope: "unlabeled", seed: 0,
+    });
+    expect(run.goodRegions).toBeUndefined();
     expect(run.initialHead).toBeUndefined();
     expect(run.baseBytes.byteLength).toBe(8); // the fake catalog's base model
 
@@ -456,6 +464,9 @@ describe("a job's life", () => {
       loss_type: "bce",
       balance_classes: true,
       label_smoothing: 0,
+      batch_pixels: 4096,
+      distillation_lambda: 0.01,
+      distillation_scope: "unlabeled",
       finetune_mode: "head",
       auto_serve: true,
       output_type: "affinities",
@@ -710,9 +721,64 @@ describe("cancel, stop early, restart", () => {
     expect(completed.status).toBe(409);
     expect(body(completed).error).toMatch(/in state COMPLETED/);
     expect((await h.handle(request("POST", "/api/finetune/job/ft-9/restart", FORM))).status).toBe(404);
-    const margin = await h.handle(request("POST", `/api/finetune/job/${job_id}/restart`, { ...FORM, loss_type: "margin" }));
-    expect(margin.status).toBe(400);
-    expect(body(margin).error).toMatch(/margin loss needs a server/);
+    const combined = await h.handle(request("POST", `/api/finetune/job/${job_id}/restart`, { ...FORM, loss_type: "combined" }));
+    expect(combined.status).toBe(400);
+    expect(body(combined).error).toMatch(/combined loss needs a server/);
+  });
+});
+
+describe("the head's training controls", () => {
+  it("reads the loss, its margin, the batch of voxels and the distillation into the run's options and the job's params", () => {
+    const read = readTraining({ ...FORM, loss_type: "margin", margin: 0.2, label_smoothing: 0.1, batch_pixels: 1024, distillation_lambda: 0.5, distillation_scope: "all" });
+    if ("error" in read) throw new Error(read.error);
+    // The margin loss takes no smoothing, as the server sets it.
+    expect(read.options).toMatchObject({ lossType: "margin", margin: 0.2, labelSmoothing: 0, batchPixels: 1024, distillationLambda: 0.5, distillationScope: "all" });
+    expect(read.params).toEqual({
+      num_epochs: 3, learning_rate: 0.01, loss_type: "margin", margin: 0.2, balance_classes: true, label_smoothing: 0,
+      batch_pixels: 1024, distillation_lambda: 0.5, distillation_scope: "all", finetune_mode: "head",
+    });
+    // The margin goes with the margin loss alone; the server's batch of patches is not the browser's.
+    const mse = readTraining({ ...FORM, loss_type: "mse", margin: 0.2, label_smoothing: 0.1 });
+    if ("error" in mse) throw new Error(mse.error);
+    expect(mse.options).toMatchObject({ lossType: "mse", labelSmoothing: 0.1, batchPixels: 4096 });
+    expect("margin" in mse.params).toBe(false);
+    // Nothing sent: the defaults, distillation on at the server form's 0.01.
+    const bare = readTraining({});
+    if ("error" in bare) throw new Error(bare.error);
+    expect(bare.options).toMatchObject({ lossType: "bce", distillationLambda: 0.01, distillationScope: "unlabeled", batchPixels: 4096 });
+  });
+
+  it("refuses values the trainer would refuse, saying which field", () => {
+    const error = (extra: Record<string, unknown>) => (readTraining({ ...FORM, ...extra }) as { error: string }).error;
+    expect(error({ batch_pixels: 0 })).toMatch(/^batch_pixels: /);
+    expect(error({ batch_pixels: 2.5 })).toMatch(/^batch_pixels: /);
+    expect(error({ batch_pixels: 1 << 21 })).toMatch(/^batch_pixels: .* 1048576/);
+    expect(error({ distillation_lambda: -1 })).toMatch(/^distillation_lambda: /);
+    expect(error({ distillation_lambda: "lots" })).toMatch(/^distillation_lambda: /);
+    expect(error({ distillation_scope: "anchor" })).toMatch(/^distillation_scope: expected unlabeled or all/);
+    expect(error({ loss_type: "margin", margin: 0.7 })).toMatch(/^margin: /);
+    expect(error({ loss_type: "dice" })).toMatch(/dice loss needs a server/);
+  });
+
+  it("hands the run the volume's good regions as they are when it starts, and a restart the form's new values", async () => {
+    const baton = new Baton();
+    const { ctx, h, id, calls } = await ready({ baton });
+    const regions = [{ id: "a1b2c3d4", label: "good-1", offset_nm: [0, 0, 0], shape_nm: [16, 32, 32] }];
+    await saveGoodRegions(ctx.paint, id, regions);
+    const { job_id } = body(await h.handle(request("POST", "/api/finetune/submit", submitBody({ loss_type: "mse", batch_pixels: 2048 }))));
+    const job = h.jobs.get(job_id)!;
+    await letRun(baton, job);
+    expect(calls[0].goodRegions).toEqual(regions);
+    expect(calls[0].options).toMatchObject({ lossType: "mse", batchPixels: 2048 });
+    // A region marked since, and new values in the form: the restart takes both.
+    const more = [...regions, { id: "e5f6a7b8", label: "good-2", offset_nm: [16, 0, 0], shape_nm: [16, 32, 32] }];
+    await saveGoodRegions(ctx.paint, id, more);
+    const restart = { ...FORM, loss_type: "margin", margin: 0.25, batch_pixels: 512, distillation_lambda: 1, distillation_scope: "all" };
+    expect(body(await h.handle(request("POST", `/api/finetune/job/${job_id}/restart`, restart))).success).toBe(true);
+    await letRun(baton, job);
+    expect(calls[1].goodRegions).toEqual(more);
+    expect(calls[1].options).toMatchObject({ lossType: "margin", margin: 0.25, batchPixels: 512, distillationLambda: 1, distillationScope: "all" });
+    expect(job.params).toMatchObject({ loss_type: "margin", margin: 0.25, batch_pixels: 512, distillation_lambda: 1, distillation_scope: "all" });
   });
 });
 
