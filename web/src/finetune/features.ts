@@ -11,6 +11,7 @@
 // and this one is released when the run ends (dispose).
 import * as ort from "onnxruntime-web/webgpu";
 
+import { exclusive } from "../../chunkmirage/web/src/onnx";
 import { float16ArrayToFloat32, withFeatureOutput } from "./onnx-head";
 import type { Head, ModelFeatures } from "./types";
 
@@ -62,23 +63,22 @@ export async function createFeatureRunner(options: FeatureRunnerOptions): Promis
   }
   log(`features session ready on ${provider === "webgpu" ? "WebGPU" : "WASM (the CPU)"}: ${head.inChannels} channels of ${head.featureTensor}, ${head.outChannels} of ${output}`);
 
-  // One pass at a time: an InferenceSession is not re-entrant, and two passes
-  // overlapping on WebGPU never resolve (chunkmirage's Onnx has the same turn).
-  let turn: Promise<unknown> = Promise.resolve();
+  // One pass at a time on the page, this session's and the served models'
+  // alike: ORT runs every session in one WebAssembly instance, which can wait
+  // on the GPU for one call at a time, so the passes take chunkmirage's turn
+  // (exclusive) with the engine's own.
   const s = session;
   return {
     provider,
     run(data, dims) {
-      const pass = turn.then(async (): Promise<ModelFeatures> => {
+      return exclusive(async (): Promise<ModelFeatures> => {
         const results = await s.run({ [input]: new ort.Tensor("float32", data, dims) }, [output, head.featureTensor]);
         const logits = results[output], features = results[head.featureTensor];
         return { logits: asFloat32(logits, output), logitsDims: [...logits.dims], features: asFloat32(features, head.featureTensor), featuresDims: [...features.dims] };
       });
-      turn = pass.catch(() => {});
-      return pass;
     },
     async dispose() {
-      await turn;
+      await exclusive(async () => {});  // after the passes started before it
       await s.release();
     },
   };
