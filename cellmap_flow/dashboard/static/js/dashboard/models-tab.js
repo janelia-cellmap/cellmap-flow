@@ -1,7 +1,9 @@
-// The Models tab (templates/_models_tab.html): the local catalog, Hugging
-// Face, BioImage Model Zoo and Cellpose models to serve, the LSF server config, the GPU
-// queue picker, and the inference jobs' own output.
+// The Models tab (templates/_models_tab.html): the models loaded, each with
+// a ✕ to stop it; the local catalog, Hugging Face, BioImage Model Zoo and
+// Cellpose models to serve, the LSF server config, the GPU queue picker,
+// and the inference jobs' own output.
 import { ApiError, getJSON, postJSON } from "../lib/api.js";
+import { onModelsChanged } from "../lib/models-changed.js";
 import { pageData } from "../lib/page-data.js";
 import { poll } from "../lib/poll.js";
 import { fillQueueSelect, queueHint, subscribeGpuQueues } from "../shared/gpu-queues.js";
@@ -11,8 +13,9 @@ import { readCount, saveServerConfig, WALLTIME_RE } from "../shared/server-confi
 export function initModelsTab({ onModelsSubmitted } = {}) {
   const submitBtn = document.getElementById("submitModelsBtn");
   const logArea = document.getElementById("modelSubmissionLogModels");
-  // The repos of the Hugging Face models already running, ticked on load.
-  const defaultHfRepos = pageData().default_hf_repos || [];
+  // The repos of the Hugging Face models already running, ticked on load;
+  // one removed from the Loaded models list is taken out.
+  const hfRunning = new Set(pageData().default_hf_repos || []);
   // The session's Resample setting (a YAML's resample, view --resample).
   const resampleCheckbox = document.getElementById("resampleCheckbox");
   resampleCheckbox.checked = !!pageData().resample;
@@ -65,7 +68,7 @@ export function initModelsTab({ onModelsSubmitted } = {}) {
       input.value = modelId;
       // Ticked when the page started with it, or when the listing says it is
       // being served (the browser mode's, after a reload or from a link).
-      input.defaultChecked = defaultHfRepos.includes(modelId) || metadata.selected === true;
+      input.defaultChecked = hfRunning.has(modelId) || metadata.selected === true;
       const label = document.createElement("label");
       label.className = "form-check-label";
       label.htmlFor = input.id;
@@ -856,10 +859,203 @@ export function initModelsTab({ onModelsSubmitted } = {}) {
         addResult.hidden = true;
         addRef.value = "";
         logArea.value += `Added ${d.name}: starting its server\n`;
+        refreshLoaded();
         if (onModelsSubmitted) onModelsSubmitted();
       })
       .catch((err) => alert("Could not add that model: " + (err instanceof ApiError ? err.message : err)));
   });
+
+  // Loaded models: every model running or starting, wherever on this tab
+  // (or in the YAML, or by a finetune) it was picked, with where it came
+  // from. GET /api/models/loaded lists them (services/launch.loaded_models;
+  // in the browser web/src/backend/routes/models.ts). Each ✕ stops that one
+  // model (POST /api/models/remove) and unticks its rows here, so a Submit
+  // does not start it again; nothing else is sent, so the other models, and
+  // whatever is ticked or unticked below and not submitted, stay as they are.
+  const SOURCE_LABELS = {
+    catalog: "catalog",
+    huggingface: "Hugging Face",
+    bioimage: "zoo",
+    cellpose: "Cellpose",
+    added: "added",
+    finetuned: "finetuned",
+  };
+  const SOURCE_TITLES = {
+    catalog: "From the Local Catalog",
+    huggingface: "From the Hugging Face list",
+    bioimage: "From the BioImage Model Zoo list",
+    cellpose: "From the Cellpose list",
+    added: "Added by reference (Add a model), or by the YAML the dashboard was started with",
+    finetuned: "Made by a finetune on the Finetune tab",
+  };
+  const LOADED_POLL_MS = 5000;
+  const loadedList = document.getElementById("loadedModelsList");
+  let loadedWatcher = null;
+  // Bumped by each refresh and each remove: an answer to an older refresh
+  // (the poll's, in flight while a ✕ was answered) is not drawn over a
+  // newer list.
+  let loadedSeq = 0;
+
+  function loadedRow(model) {
+    const li = document.createElement("li");
+    li.className = "loaded-model-item";
+    li.dataset.name = model.name;
+
+    const text = document.createElement("div");
+    text.className = "loaded-model-text";
+    const head = document.createElement("div");
+    head.className = "loaded-model-head";
+    const name = document.createElement("span");
+    name.className = "loaded-model-name";
+    // A name has no spaces: a line may break after each _, - or ., so a long
+    // one wraps between its words.
+    model.name.split(/(?<=[_.-])/).forEach((part, i) => {
+      if (i) name.append(document.createElement("wbr"));
+      name.append(part);
+    });
+    name.title = model.name;
+    head.append(name, zooTag(SOURCE_LABELS[model.source] || model.source, SOURCE_TITLES[model.source]));
+    if (model.status && model.status !== "running") {
+      const status = zooTag(model.status);
+      status.classList.add("loaded-model-status");
+      head.append(status);
+    }
+    text.append(head);
+    if (model.detail) {
+      const detail = document.createElement("div");
+      detail.className = "loaded-model-detail";
+      detail.textContent = model.detail;
+      detail.title = model.detail;
+      text.append(detail);
+    }
+    if (model.note) {
+      const note = document.createElement("div");
+      note.className = "loaded-model-note";
+      note.textContent = model.note;
+      text.append(note);
+    }
+
+    // The title is on the span around the button: a disabled button gets no
+    // mouse events, so its own would never show.
+    const wrap = document.createElement("span");
+    wrap.className = "loaded-model-remove-wrap";
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "loaded-model-remove";
+    remove.textContent = "\u2715";
+    remove.setAttribute("aria-label", "Remove " + model.name);
+    remove.disabled = !model.removable;
+    wrap.title = model.removable
+      ? "Stop " + model.name + " and remove its layer; the other models stay as they are. "
+        + "Tick it again and Submit to bring it back."
+      : (model.note || "This model cannot be removed here.");
+    remove.addEventListener("click", () => removeLoaded(model, remove));
+    wrap.append(remove);
+    li.append(text, wrap);
+    return li;
+  }
+
+  function renderLoaded(models) {
+    loadedList.replaceChildren(...models.map(loadedRow));
+    document.getElementById("loadedModelsEmpty").hidden = models.length > 0;
+    const starting = models.filter((m) => m.status === "starting").length;
+    const counts = [];
+    if (models.length - starting) counts.push((models.length - starting) + " running");
+    if (starting) counts.push(starting + " starting");
+    document.getElementById("loadedModelsCount").textContent = counts.length ? "(" + counts.join(", ") + ")" : "";
+    // The Cellpose panel's "N running", after a remove or a Submit as on load.
+    const cellposeRunning = models.filter((m) => m.source === "cellpose").length;
+    document.getElementById("cellposeRunningCount").textContent = cellposeRunning ? cellposeRunning + " running" : "";
+    // Asked again while a model is starting (minutes in a queue, or loading),
+    // so the list says when it is up; not otherwise.
+    if (starting && !loadedWatcher) {
+      loadedWatcher = poll(() => refreshLoaded(), { intervalMs: LOADED_POLL_MS, immediate: false, pauseWhenHidden: true });
+    } else if (!starting && loadedWatcher) {
+      loadedWatcher.stop();
+      loadedWatcher = null;
+    }
+  }
+
+  // Quietly: a failed refresh leaves the list as it was.
+  function refreshLoaded() {
+    const seq = ++loadedSeq;
+    return getJSON("/api/models/loaded")
+      .then((data) => { if (seq === loadedSeq) renderLoaded(data.models || []); })
+      .catch((err) => console.warn("Could not list the loaded models:", err));
+  }
+
+  // Untick ``model``'s rows wherever they are on the tab, so a Submit leaves
+  // it stopped: its box in the catalog's lists (the running models' "User"
+  // group, an added model's box), its Hugging Face, zoo or Cellpose row.
+  // A list not loaded yet will not tick it either. Each box is told of the
+  // change, so a zoo or Cellpose row hides its settings as on a click.
+  function untickRows(model) {
+    const untick = (box) => {
+      if (!box.checked) return;
+      box.checked = false;
+      box.dispatchEvent(new Event("change", { bubbles: true }));
+    };
+    document.querySelectorAll("#modelSelectionForm input.model-checkbox").forEach((box) => {
+      if (box.value === model.name) untick(box);
+    });
+    if (model.hf_id) {
+      hfRunning.delete(model.hf_id);
+      document.querySelectorAll("#modelSelectionForm input.hf-model-checkbox").forEach((box) => {
+        if (box.value !== model.hf_id) return;
+        box.defaultChecked = false;
+        untick(box);
+      });
+    }
+    if (model.zoo_id) {
+      zooRunning.delete(model.zoo_id);
+      document.querySelectorAll("#zooModelList .zoo-model-checkbox").forEach((box) => {
+        if (box.value === model.zoo_id) untick(box);
+      });
+      filterZooModels();
+    }
+    if (model.cellpose) {
+      const { model: cpModel, output, do_3d: do3d } = model.cellpose;
+      document.querySelectorAll("#cellposeModelList .cellpose-model-item").forEach((row) => {
+        if (row.dataset.model === cpModel && row.querySelector(".cellpose-output").value === output
+            && row.querySelector(".cellpose-3d").checked === !!do3d) {
+          untick(row.querySelector(".cellpose-model-checkbox"));
+        }
+      });
+    }
+  }
+
+  function removeLoaded(model, button) {
+    button.disabled = true;
+    postJSON("/api/models/remove", { name: model.name })
+      .then((data) => {
+        untickRows(model);
+        // A finetune's model whose job has ended had no server left to stop.
+        logArea.value += `Removed ${model.name}: ${model.status === "ended" ? "its" : "stopped, and its"} layer taken away\n`;
+        logArea.scrollTop = logArea.scrollHeight;
+        loadedSeq += 1;
+        renderLoaded(data.models || []);
+        if (onModelsSubmitted) onModelsSubmitted();
+      })
+      .catch((err) => {
+        const message = err instanceof ApiError ? err.message : String(err);
+        // Gone already (stopped elsewhere, or the list was old): show the list as it is.
+        if (err instanceof ApiError && err.status === 404) {
+          refreshLoaded();
+          return;
+        }
+        button.disabled = !model.removable;
+        logArea.value += `Not removed: ${message}\n`;
+        logArea.scrollTop = logArea.scrollHeight;
+        alert("Could not remove " + model.name + ": " + message);
+      });
+  }
+
+  // When the list may have changed without this tab doing it: a finetune's
+  // model served, replaced or ended; and each time the tab is opened.
+  onModelsChanged(refreshLoaded);
+  const modelTabButton = document.getElementById("model-tab");
+  if (modelTabButton) modelTabButton.addEventListener("shown.bs.tab", refreshLoaded);
+  refreshLoaded();
 
   submitBtn.addEventListener("click", function () {
     // Gather checked local catalog models
@@ -906,6 +1102,7 @@ export function initModelsTab({ onModelsSubmitted } = {}) {
           : "Submitted: no model selected; any running ones are stopped\n";
         logArea.scrollTop = logArea.scrollHeight;
         if (started.length) watchStartingJobs();
+        refreshLoaded();
         if (onModelsSubmitted) onModelsSubmitted();
       })
       .catch((err) => {

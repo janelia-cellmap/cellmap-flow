@@ -66,6 +66,8 @@ URLS = {
     "/api/models": "POST",
     "/api/models/resolve": "POST",
     "/api/models/add": "POST",
+    "/api/models/loaded": "GET",
+    "/api/models/remove": "POST",
     "/api/pipeline": "PUT",
     "/api/pipeline/apply": "POST",
     "/api/process": "POST",

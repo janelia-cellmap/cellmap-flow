@@ -1,6 +1,7 @@
 // The Models tab's routes (routes/models.py, model_resolve.py,
-// model_advice.py): which models there are, which to serve, and advice about
-// the chain they are served through.
+// model_advice.py): which models there are, which to serve, which are
+// served (the Loaded models list) and how to stop one, and advice about the
+// chain they are served through.
 //
 // In the browser the models are the ONNX exports of cellmap/onnx-web-models
 // (the Catalog); "serving" one is an Engine view with an onnxruntime-web
@@ -8,10 +9,11 @@
 // Python route starts and kills inference servers. The BioImage Model Zoo
 // and Cellpose have no web exports: their lists are empty and their
 // selections ignored (the template hides their panels in browser mode).
-import type { AppContext, ModelEntry, ServedModel, Step } from "../../contracts";
+import type { AppContext, FinetunedRecord, ModelEntry, ServedModel, Step } from "../../contracts";
+import { isFinetuned } from "../../models";
 import type { Router } from "../router";
 import { badRequest, json, message, objectBody, unavailable } from "../router";
-import { serveModels, stepNames } from "../serving";
+import { serveModels, stepNames, unserveModel } from "../serving";
 
 /** The catalog as /api/huggingface-models lists it: {model id: metadata},
  * the id "cellmap/onnx-web-models/setup_54" (models-tab.js shows its last
@@ -52,6 +54,55 @@ async function resolveAll(ctx: AppContext, refs: string[]): Promise<{ entries: M
   return { entries };
 }
 
+/** One model of the Loaded models list, as services/launch.py's
+ * loaded_models gives it (models-tab.js reads both): its name, where it came
+ * from ("huggingface", or "finetuned" for one finetuned in this browser),
+ * what it is (the Hugging Face list's folder, or the base it was finetuned
+ * from), whether it is served yet ("starting" while the session's restore
+ * serves it after a reload), and the Hugging Face row that ticks it (the
+ * list's value, the entry's id), which the tab unticks on a remove. Every
+ * model can be removed: nothing runs outside the page, and a finetuned one
+ * stays kept. */
+export interface LoadedModel {
+  name: string;
+  source: "huggingface" | "finetuned";
+  detail: string | null;
+  status: "running" | "starting";
+  removable: true;
+  note: string | null;
+  hf_id: string;
+  zoo_id: null;
+  cellpose: null;
+}
+
+/** The session's models, in order, as the Loaded models list shows them. */
+export async function loadedModels(ctx: AppContext): Promise<LoadedModel[]> {
+  const served = ctx.infer.served();
+  let records: FinetunedRecord[] = [];
+  if (ctx.session.state.models.some(isFinetuned)) {
+    try {
+      records = await ctx.catalog.finetuned();
+    } catch {
+      // Without its record a finetuned model is listed without its base.
+    }
+  }
+  return ctx.session.state.models.map((m) => {
+    const finetuned = isFinetuned(m);
+    const base = finetuned ? records.find((r) => r.id === m.id)?.base.name : undefined;
+    return {
+      name: m.name,
+      source: finetuned ? "finetuned" : "huggingface",
+      detail: finetuned ? (base ? `from ${base}` : null) : m.folder,
+      status: served.some((s) => s.entry.id === m.id) ? "running" : "starting",
+      removable: true,
+      note: finetuned ? "Kept in this browser: ✕ stops serving it; tick it under Hugging Face and Submit to serve it again." : null,
+      hf_id: m.id,
+      zoo_id: null,
+      cellpose: null,
+    };
+  });
+}
+
 const NO_DATASET = "No dataset is open. Enter its URL in the viewer panel first; the models are then run on it.";
 
 export function modelRoutes(router: Router): void {
@@ -88,6 +139,21 @@ export function modelRoutes(router: Router): void {
       cellpose_models: [],
       ...(ignored.length ? { note: `${ignored.join(" and ")} models are not available in the browser and were not started.` } : {}),
     });
+  });
+
+  // The Loaded models list (routes/models.py's /api/models/loaded), and its
+  // ✕: stop serving that one model, whatever else is ticked on the tab.
+  router.get("/api/models/loaded", async (_req, _params, ctx) => json(200, { success: true, models: await loadedModels(ctx) }));
+
+  router.post("/api/models/remove", async (req, _params, ctx) => {
+    const body = objectBody(req);
+    if (!body) return badRequest("expected a JSON object");
+    const name = typeof body.name === "string" ? body.name.trim() : "";
+    if (!name) return badRequest("name is required");
+    const loaded = ctx.session.state.models.some((m) => m.name === name) || ctx.infer.served().some((s) => s.entry.name === name);
+    if (!loaded) return json(404, { success: false, error: `No model named ${name} is running` });
+    await unserveModel(ctx, name);
+    return json(200, { success: true, removed: name, models: await loadedModels(ctx) });
   });
 
   // Add a model by reference: what a Hugging Face ONNX model resolves to, in
