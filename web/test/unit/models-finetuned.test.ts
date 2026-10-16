@@ -132,6 +132,12 @@ describe("nextFinetunedName", () => {
     expect(nextFinetunedName(ft1.entry, [ft1, ft3])).toBe("mito_aff_setup54_16nm-ft4");
   });
 
+  it("passes over the names it is told are taken besides the records' (a shared link's other models)", () => {
+    const ft1 = recordFor(base, "mito_aff_setup54_16nm-ft1");
+    expect(nextFinetunedName(base, [ft1], ["mito_aff_setup54_16nm-ft1", "mito_aff_setup54_16nm-ft4"])).toBe("mito_aff_setup54_16nm-ft5");
+    expect(nextFinetunedName(base, [ft1], ["mito_aff_setup53_16nm-ft9", "my-model-ft7"])).toBe("mito_aff_setup54_16nm-ft2");
+  });
+
   it("is a URL path segment and a layer name", () => {
     const name = nextFinetunedName(base, []);
     expect(encodeURIComponent(name)).toBe(name);

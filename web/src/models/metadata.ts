@@ -63,7 +63,7 @@ export function metadataFor(entry: ModelEntry, record?: FinetunedRecord): Record
     onnx_url: entry.onnxUrl,
     // And where a finetuned model came from, so the base's name or the
     // volume's id find it in the tab's search.
-    ...(record ? { finetuned: { base: record.base, volume: record.volume, created_at: record.created_at, epochs: record.epochs, final_loss: record.final_loss, params: record.params } } : {}),
+    ...(record ? { finetuned: { base: record.base, volume: record.volume, created_at: record.created_at, epochs: record.epochs, final_loss: record.final_loss, params: record.params, ...(record.from_link ? { from_link: record.from_link } : {}) } } : {}),
   };
 }
 
@@ -72,13 +72,21 @@ export function metadataFor(entry: ModelEntry, record?: FinetunedRecord): Record
  * For a model finetuned in this browser the first part says so instead:
  * "finetuned in this browser from mito_aff_setup54_16nm on vol-…, 2026-10-15;
  * 20 epochs, final loss 0.312" with its record, the manifest's checkpoint
- * line ("finetuned in the browser from …") without. */
+ * line ("finetuned in the browser from …") without. One that came from a
+ * shared link says that instead, and the name the link gave it when this
+ * browser serves it under another: "from a shared link (as
+ * mito_aff_setup54_16nm-ft1): mito_aff_setup54_16nm with the link's last
+ * layer, 2026-10-16", with no epochs or loss, which stayed with the
+ * browser that trained it. */
 export function describe(entry: ModelEntry, record?: FinetunedRecord): string {
   const m = entry.manifest;
   const v = entry.variant;
   const parts: string[] = [];
   if (entry.repo === FINETUNED_REPO) {
-    if (record) {
+    if (record?.from_link) {
+      const as = record.from_link.name === record.name ? "" : ` (as ${record.from_link.name})`;
+      parts.push(`from a shared link${as}: ${record.base.name} with the link's last layer, ${dateOf(record.created_at)}`);
+    } else if (record) {
       parts.push(`finetuned in this browser from ${record.base.name} on ${record.volume}, ${dateOf(record.created_at)}`);
       parts.push(`${record.epochs} ${record.epochs === 1 ? "epoch" : "epochs"}, ${record.final_loss === null ? "final loss unknown" : `final loss ${lossLabel(record.final_loss)}`}`);
     } else {
