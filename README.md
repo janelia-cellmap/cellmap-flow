@@ -72,7 +72,8 @@ starts fresh.
   network is the server mode's. AI-assisted annotation is in the tab too:
   hover and press Shift+G, and the plane on screen goes to a Gemini image
   model asked to paint the structure, for review before it is written; the
-  page calls Google with a key or token you give it, kept in your browser.
+  page calls Google with a key or token you paste, kept in the page's memory
+  only, so a reload asks for it again.
 
 What the server mode below adds is what a browser cannot do: models that are
 not ONNX exports (PyTorch, TensorFlow, DaCapo, BioImage.io, Cellpose), a
