@@ -63,6 +63,27 @@
         </button>
       </li>
 
+      {# Run Tab. Browser mode only (web/build/render.py sets mode; Flask
+         passes none, so its page has neither the tab nor its pane): the
+         served models run over a region and saved to a folder on this
+         machine (_run_tab.html, web/src/run-region). #}
+      {% if mode == "browser" %}
+      <li class="nav-item" role="presentation">
+        <button
+          class="nav-link"
+          id="run-tab"
+          data-bs-toggle="tab"
+          data-bs-target="#run"
+          type="button"
+          role="tab"
+          aria-controls="run"
+          aria-selected="false"
+        >
+          Run
+        </button>
+      </li>
+      {% endif %}
+
       <!-- Review Tab. server-only: it queries a SQLite index on the server's
            file system, which a browser cannot reach. -->
       <li class="nav-item server-only" role="presentation">
@@ -117,6 +138,18 @@
       >
         {% include "_finetune_tab.html" %}
       </div>
+
+      {# Run Tab Content (browser mode only, like its tab above) #}
+      {% if mode == "browser" %}
+      <div
+        class="tab-pane fade p-3"
+        id="run"
+        role="tabpanel"
+        aria-labelledby="run-tab"
+      >
+        {% include "_run_tab.html" %}
+      </div>
+      {% endif %}
 
       <!-- Review Tab Content (server-only, like its tab above) -->
       <div

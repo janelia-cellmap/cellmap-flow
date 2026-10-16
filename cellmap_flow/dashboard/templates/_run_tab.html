@@ -1,0 +1,84 @@
+{# The Run tab: the browser mode's alone (web/build/render.py renders it with
+   mode == "browser"; _dashboard.html includes it, and its tab button, only
+   then, so the Flask page carries none of it). It runs the models served on
+   the Models tab over a region of the open volume, or all of it, on this
+   machine's GPU, and saves their predictions as OME-Zarr in a folder on this
+   machine. web/src/run-region/panel.ts drives it, in the page: the folder is
+   picked with the File System Access API in the user's click, and the
+   chunks are written by the engine itself (Inference.materialize), neither
+   of which an /api/ route could do, so there are no routes and no dashboard
+   script for it. The models' list is filled by panel.ts, from the models
+   served. #}
+<div class="alert alert-info" role="alert">
+  <strong>Run on a region:</strong> run the models served on the Models tab over a box of the volume, or all of it, on this machine's GPU, and save their predictions as OME-Zarr in a folder on this machine, to open here again or copy to the cluster.
+</div>
+
+<div class="mb-3">
+  <div class="form-label fw-bold mb-1">Models</div>
+  <div id="runModels"></div>
+  <small class="form-text text-muted d-block">Each model is written to <code>&lt;folder&gt;/&lt;model&gt;.zarr</code>, through the Input and Postprocess steps it is served with.</small>
+</div>
+
+<div class="mb-3">
+  <div class="form-label fw-bold mb-1">Region</div>
+  <div class="d-flex align-items-center gap-2 flex-wrap mb-2">
+    <div class="btn-group btn-group-sm" role="group" aria-label="Where the region comes from">
+      <input type="radio" class="btn-check" name="runRegionMode" id="runRegionBox" value="box" autocomplete="off" checked>
+      <label class="btn btn-outline-secondary" for="runRegionBox"
+             title="The latest box drawn in the viewer's run_region layer, in the fields below as soon as it is drawn.">Box in the viewer</label>
+      <input type="radio" class="btn-check" name="runRegionMode" id="runRegionWhole" value="whole" autocomplete="off">
+      <label class="btn btn-outline-secondary" for="runRegionWhole"
+             title="The whole volume, in the fields below.">Whole volume</label>
+    </div>
+    <button type="button" class="btn btn-sm btn-outline-secondary" id="runDrawBoxBtn"
+            title="Adds the run_region layer to the viewer, if it is not there, for drawing a box in with Ctrl+click.">Draw a box</button>
+  </div>
+  <small class="form-text text-muted d-block mb-2">Draw a box: hold Ctrl and click two opposite corners in the viewer. Scroll between the two clicks to give the box depth; a flat box is one chunk deep. The latest box is used.</small>
+  <div class="run-region-fields">
+    <span></span><span class="run-region-axis">z</span><span class="run-region-axis">y</span><span class="run-region-axis">x</span>
+    <label class="mb-0" for="runOffsetZ">Offset (nm)</label>
+    <input type="number" class="form-control form-control-sm" id="runOffsetZ" step="any" aria-label="Offset z (nm)">
+    <input type="number" class="form-control form-control-sm" id="runOffsetY" step="any" aria-label="Offset y (nm)">
+    <input type="number" class="form-control form-control-sm" id="runOffsetX" step="any" aria-label="Offset x (nm)">
+    <label class="mb-0" for="runSizeZ">Size (nm)</label>
+    <input type="number" class="form-control form-control-sm" id="runSizeZ" step="any" min="0" aria-label="Size z (nm)">
+    <input type="number" class="form-control form-control-sm" id="runSizeY" step="any" min="0" aria-label="Size y (nm)">
+    <input type="number" class="form-control form-control-sm" id="runSizeX" step="any" min="0" aria-label="Size x (nm)">
+  </div>
+  <div class="small mt-2" id="runRegionSummary"></div>
+  <div class="small text-warning mt-1" id="runRegionWarning" role="alert" hidden></div>
+</div>
+
+<div class="mb-3">
+  <div class="form-label fw-bold mb-1">Output folder</div>
+  <div class="d-flex align-items-center gap-2 flex-wrap">
+    <button type="button" class="btn btn-sm btn-outline-secondary" id="runChooseFolderBtn"
+            title="The folder on this machine the predictions are written to, one .zarr per model. The browser asks once to allow writing to it, and again after a reload, when you click Run.">Choose folder&hellip;</button>
+    <span class="small" id="runFolderName">No folder chosen</span>
+  </div>
+  <small class="form-text text-muted d-block" id="runFolderNote"></small>
+  {# Gzip by default: zarr-python, Neuroglancer and napari read it; Fiji's
+     zarr reader does not, hence None. #}
+  <div class="d-flex align-items-center gap-2 mt-2">
+    <label class="small mb-0" for="runCompression">Compression</label>
+    <select class="form-select form-select-sm w-auto" id="runCompression"
+            title="Gzip makes the zarr smaller and is read by zarr-python, Neuroglancer and napari. Pick None for a reader without gzip, such as Fiji.">
+      <option value="gzip" selected>gzip (smaller)</option>
+      <option value="none">None (Fiji reads it)</option>
+    </select>
+  </div>
+</div>
+
+<div class="d-flex align-items-center gap-2 mb-2">
+  <button type="button" class="btn btn-primary" id="runStartBtn"
+          title="Runs the ticked models over the region and writes their predictions. One run at a time; it keeps going while you browse or use the other tabs.">Run</button>
+  <button type="button" class="btn btn-outline-danger" id="runCancelBtn" disabled
+          title="Stops the run: the chunks being written finish, the rest are given up. What was written stays.">Cancel</button>
+</div>
+<div class="small mb-2" id="runStatus" role="status" aria-live="polite"></div>
+<div class="progress mb-1" id="runProgress" role="progressbar" aria-label="Run progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" hidden>
+  <div class="progress-bar" id="runProgressBar" style="width: 0%"></div>
+</div>
+<div class="small text-muted mb-2" id="runProgressText"></div>
+<div class="d-flex align-items-center gap-2 flex-wrap mb-2" id="runResults"></div>
+<textarea id="runLog" class="form-control" rows="5" readonly aria-label="Run log"></textarea>

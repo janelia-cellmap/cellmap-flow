@@ -34,8 +34,9 @@ networks from `cellmap/onnx-web-models <https://huggingface.co/cellmap/onnx-web-
 on Hugging Face, cached in the browser after the first download.
 
 It is the same dashboard as the server's: the same Models, Input and
-Postprocess tabs, the same normalizers and postprocessing steps, and a
-Finetune tab that paints and trains in the browser (below). What is missing
+Postprocess tabs, the same normalizers and postprocessing steps, a Finetune
+tab that paints and trains in the browser, and a Run tab of its own that
+saves the predictions over a region to a folder (both below). What is missing
 is what a browser cannot do: models that are not ONNX exports (PyTorch,
 TensorFlow, DaCapo, BioImage.io, Cellpose), a finetune of a whole network,
 crops imported from disk, the Pipeline Builder and blockwise runs on the
@@ -65,6 +66,50 @@ the connect panel says so; the setting is under *Local network access* in
 the site-information panel beside the address bar (or at
 ``chrome://settings/content/localNetworkAccess``). Running the app locally
 on ``http://localhost`` (below) is not gated.
+
+Running the models over a region
+--------------------------------
+
+The viewer computes the chunks it shows, and keeps none of them. The *Run*
+tab runs the models served on the Models tab over a region, or the whole
+volume, on your GPU, and saves each one's predictions as an OME-Zarr in a
+folder on your machine, to open in the app again or to copy to the cluster.
+
+1. Tick the models (all are ticked at first). Each runs through the Input and
+   Postprocess steps it is served with, so what is saved is what its layer
+   shows.
+2. *Draw a box* adds a ``run_region`` layer to the viewer. Hold ``Ctrl``
+   and click two opposite corners of the box in the viewer, scrolling
+   between the two clicks to give it depth (a flat box is one chunk
+   deep). The latest box drawn fills the *Offset* and *Size* fields (nm, z y
+   x), which you can edit. *Whole volume* fills them with the volume's
+   extent instead. Under the fields, the tab says what each model would
+   compute: the box in its voxels and in chunks (a chunk is one block the
+   model computes at a time), with a warning for a run of more than 2,000
+   chunks.
+3. *Choose folder…* picks the folder to save into; the browser asks you to
+   allow the page to edit files in it. The folder is remembered, and after a
+   reload the browser asks again when you click *Run*.
+4. *Run* writes each model to ``<folder>/<model>.zarr`` with a progress bar
+   (chunks, megabytes, time left) and *Cancel*, which keeps what was written.
+   The run goes on while you move around the viewer or use the other tabs,
+   and the viewer stays responsive: its chunks go first. If a
+   ``<model>.zarr`` is in the folder already, the tab asks before replacing
+   it (it is deleted first, so the old chunks do not mix with the new ones).
+5. *Show the saved predictions in the viewer* adds each saved zarr as a
+   ``<model> (saved)`` layer, read back from the folder, over the model's live
+   layer.
+
+Each zarr is zarr v2 with OME-Zarr 0.4 metadata, gzip-compressed (or not,
+with *Compression* set to *None*: Fiji's zarr reader has no gzip), at the
+voxel size and in the place the model's layer has (only the region's chunks
+are written; empty ones are left out), so Neuroglancer, zarr-python and the
+server mode read it as they read any OME-Zarr. Its attributes, under
+``cellmap_flow``, say what made it: the model and its variant, the
+normalizers and postprocessing, the volume's URL, the region in nm and the
+box in voxels, and when. Saving to a folder needs Chrome or Edge (the File
+System Access API); in Firefox and Safari a run of up to 256 MB of
+predictions is kept in memory and offered as a zip of the ``.zarr`` folders.
 
 Finetuning in the browser
 -------------------------
