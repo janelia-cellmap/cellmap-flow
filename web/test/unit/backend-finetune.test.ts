@@ -705,6 +705,11 @@ describe("cancel, stop early, restart", () => {
     expect(ctx.session.state.models.map((m) => m.name)).toEqual([NAME_54, `${NAME_54}-ft2`, NAME_56]);
     expect(ctx.infer.served().map((x) => x.entry.name).sort()).toEqual([NAME_54, `${NAME_54}-ft2`, NAME_56].sort());
     expect(ctx.catalog.finetunedRecords.map((r) => r.name)).toEqual([`${NAME_54}-ft2`, `${NAME_54}-ft1`]);
+    // ft1's layer was handed to ft2 (its place and the user's settings on
+    // it), not removed and a new one appended.
+    expect(ctx.viewer.replacings.at(-1)).toEqual({ [`${NAME_54}-ft2`]: `${NAME_54}-ft1` });
+    expect(ctx.viewer.removed).not.toContain(`${NAME_54}-ft1`);
+    expect(Object.keys(ctx.viewer.layers)).not.toContain(`${NAME_54}-ft1`);
     expect(results[1].weight).toEqual(results[0].weight.map((w) => w + 1));
   });
 

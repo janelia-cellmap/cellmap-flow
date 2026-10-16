@@ -112,6 +112,35 @@ def test_a_layer_switched_off_stays_off_through_a_put(call):
     assert not layers["mito"].visible and layers["data"].visible
 
 
+def test_what_the_user_set_on_a_layer_survives_a_redraw(call):
+    """A redraw rebuilds every layer, and neuroglancer showed each as built: a
+    model's additive blending and the raw's opacity were back at their
+    defaults when another model's server came up, or the chain changed."""
+    viewer = get_session().viewer
+    with viewer.txn() as s:
+        s.layers["mito"].blend = "additive"
+        s.layers["mito"].opacity = 0.6
+        s.layers["data"].opacity = 0.3
+    get_session().jobs = get_session().jobs + [SimpleNamespace(model_name="nuc", host="http://gpu:8001")]
+    assert call("PUT", "/api/pipeline", SHOWN)[1]["layers"] == ["mito", "nuc"]
+    layers = viewer.state.layers
+    assert (layers["mito"].blend, layers["mito"].opacity, layers["data"].opacity) == ("additive", 0.6, 0.3)
+
+    # A new chain that still gives an image: drawn through it, as the user set it.
+    renormalized = {"input_norm": SUBMITTED["input_norm"], "postprocess": []}
+    assert call("PUT", "/api/pipeline", renormalized)[0] == 200
+    layers = viewer.state.layers
+    assert _drawn() == PipelineSpec.from_json_data(renormalized), "drawn through the new chain"
+    assert (layers["mito"].blend, layers["mito"].opacity, layers["data"].opacity) == ("additive", 0.6, 0.3)
+    assert [layer.name for layer in layers] == ["data", "mito", "nuc"], "each in its place"
+
+    # One that ends in labels makes the layer a segmentation, which has no
+    # blending to keep; the raw's opacity stays.
+    assert call("PUT", "/api/pipeline", SUBMITTED)[0] == 200
+    layers = viewer.state.layers
+    assert layers["mito"].type == "segmentation" and layers["data"].opacity == 0.3
+
+
 def test_a_put_that_leaves_the_chain_as_drawn_leaves_the_viewer_alone(call):
     """The builder PUTs after every edit, a node dragged too. Each redrew the
     viewer, rebuilding every layer and undoing what the user set there."""

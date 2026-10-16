@@ -20,7 +20,7 @@ from cellmap_flow.viewer.raw import PREDICTION_COLORS
 from cellmap_flow.models import bioimage_catalog
 from cellmap_flow.models.models_config import BioModelConfig, CellposeModelConfig, HuggingFaceModelConfig
 from cellmap_flow.pipeline_spec import PipelineSpec
-from cellmap_flow.viewer.layers import prediction_layer
+from cellmap_flow.viewer.layers import prediction_layer, replace_layer
 import threading
 from typing import List
 import re
@@ -66,7 +66,8 @@ def _show(job, st_data):
         color=PREDICTION_COLORS[index % len(PREDICTION_COLORS)],
     )
     with session.viewer.txn() as s:
-        s.layers[job.model_name] = layer
+        # A model started again keeps what the user set on its layer.
+        replace_layer(s.layers, job.model_name, layer)
 
 
 def _reported(launch):
