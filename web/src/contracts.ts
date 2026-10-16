@@ -221,6 +221,13 @@ export interface FinetunedRecord {
   epochs: number;
   final_loss: number | null;
   entry: ModelEntry;
+  /** Set when the model came from a shared link rather than a run in this
+   * browser (link.ts rebuildFinetuned): the name the link gave it, which is
+   * `name` unless this browser had a model of that name already. Such a
+   * record's `base` is the Hugging Face model it was rebuilt on, and it has
+   * no volume here (""), no parameters and no epochs: the training was in
+   * the browser the link was made in. */
+  from_link?: { name: string };
 }
 
 // ---------------------------------------------------------------------------

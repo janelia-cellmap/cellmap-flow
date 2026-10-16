@@ -40,8 +40,11 @@ running: an OpenOrganelle mouse-liver volume with the mitochondria model
 `setup_53` on it. A link's query names the volume and the models
 (`?dataset=<url>&model=<name>`), and **Share** in the header copies such a
 link to what you have open: the volume, the models, the view and the
-settings they run with. The address bar itself stays bare, so a new tab
-starts fresh.
+settings they run with. A model you finetuned in the browser goes in the
+link as its trained last layer's weights and is rebuilt where the link
+opens; your paint stays in your browser, and Share says so (the Finetune
+tab's *Download paint (zarr)* saves it as a file to send). The address bar
+itself stays bare, so a new tab starts fresh.
 
 - **Data.** Paste the URL of an OME-Zarr volume served with CORS (public S3
   and GCS buckets are, [OpenOrganelle](https://openorganelle.janelia.org)'s

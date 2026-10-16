@@ -7,7 +7,9 @@
 //      requests, EventSource streams and the downloads' fetches to the
 //      backend here, and /virtual/* chunk requests to chunkmirage's Engine;
 //   2. the session (IndexedDB), the inference engine, the model catalog and
-//      the viewer controller exist;
+//      the viewer controller exist; a link's models are in the session (a
+//      finetuned one it carries rebuilt into the catalog: src/link.ts), and
+//      its `#!` view has lost the layers this browser cannot show;
 //   3. the backend listens for the relayed requests;
 //   4. the dashboard's own main.js loads, unchanged, so its controls work at
 //      once; its first requests are answered by the backend;
@@ -29,14 +31,15 @@ import { createBackend, restoreSession } from "./backend";
 import { listenForApiRequests, registerServiceWorker } from "./backend/relay";
 import type { AppContext, Chain } from "./contracts";
 import { createInference } from "./infer";
-import { chainFromHash, parseLink, resolveLinkedModels, withoutLink } from "./link";
+import { chainFromHash, linkedHash, type LinkedModels, linkNotes, parseLink, resolveLinkedModels, withoutLink } from "./link";
 import { installLocalFolderUi, restoreLocalFolder } from "./local-folder";
 import { createCatalog } from "./models";
 import { installApiDownloads, installApiRebase } from "./rebase";
-import { installShareUi } from "./share-link";
+import { installShareUi, showLinkNotice } from "./share-link";
 import { defaultChain, openSession } from "./state";
 import { openPaintStore } from "./state/paint-store";
 import { createViewer, datasetUrlFromPage } from "./viewer";
+import { withHash } from "./viewer/share";
 
 /** The dashboard's script, served verbatim beside the page (vite.config.ts).
  * Resolved against the page, not this module: a relative specifier in
@@ -78,18 +81,33 @@ async function boot() {
   const viewer = createViewer({ session, log });
   const infer = await createInference({ session, log });
   const catalog = createCatalog({ log });
+  const paint = openPaintStore();
+  let linkedModels: LinkedModels = { entries: [], renamed: {}, leftOut: [] };
   if (link.models.length) {
     // In place of the session's, as Submit would put them: served on the
-    // volume when the session is restored below.
-    await session.update({ models: await resolveLinkedModels(catalog, link.models, log) });
-    log(`models from the link: ${link.models.join(", ")}`);
+    // volume when the session is restored below. A finetuned model the link
+    // carries is rebuilt here first (its base downloaded, unless the byte
+    // cache has it), so that it is in the catalog when it is served.
+    linkedModels = await resolveLinkedModels(catalog, link.models, log);
+    await session.update({ models: linkedModels.entries });
+    log(`models from the link: ${linkedModels.entries.map((m) => m.name).join(", ") || "none this browser can run"}`);
   }
   if (link.datasetUrl || link.models.length) history.replaceState(null, "", withoutLink(location.href));
   // A shared view's model layers name the chain they were drawn through:
   // served through it here too, so the link shows what its sender saw.
   const linkedChain = chainFromHash(location.hash);
   if (linkedChain) await session.update({ chain: linkedChain });
-  const ctx: AppContext = { session, catalog, infer, viewer, paint: openPaintStore(), events, log };
+  // A shared view's layers that this browser cannot show are taken out of it
+  // before the viewer opens it (viewer.restore() reads the page's hash): the
+  // paint of a volume painted in another browser, and the layers of models
+  // not served here; a finetuned model renamed here has its layer renamed.
+  // The page says what it left out or renamed, beside the Share button.
+  const served = new Set(session.state.models.map((m) => m.name));
+  const view = await linkedHash(location.hash, { served, renamed: linkedModels.renamed, paint, log });
+  if (view.hash !== location.hash) history.replaceState(null, "", withHash(location.href, view.hash));
+  const missing = linkedModels.leftOut.length + view.dropped.length > 0;
+  showLinkNotice(missing ? "Some of the link is not shown here." : "The link opened with a model renamed.", linkNotes(linkedModels, view.dropped), missing ? "warning" : "info");
+  const ctx: AppContext = { session, catalog, infer, viewer, paint, events, log };
   const backend = createBackend(ctx);
   listenForApiRequests(backend);
   // A dataset that is a folder on this machine (src/local-folder) before anything
@@ -121,7 +139,7 @@ async function boot() {
   // The connect panel's Browse button and drop target press Connect, which
   // connect.js (in the dashboard's script) now listens on.
   installLocalFolderUi({ log });
-  installShareUi({ session, viewer, log });
+  installShareUi({ session, viewer, catalog, log });
   await restored;
 }
 

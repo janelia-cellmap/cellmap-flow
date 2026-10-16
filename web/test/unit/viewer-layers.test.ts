@@ -9,7 +9,7 @@ import type { Chain, DatasetInfo, ModelEntry, ModelInfo, PaintVolume, ServedMode
 import { predictionShader, rawShader } from "../../src/viewer/display";
 import {
   centrePosition, DEFAULT_LAYOUT, dimensionsOf, displayChannel, GPU_MEMORY_LIMIT, initialState, layerList, PAINT_LAYER_PREFIX, PAINT_TAB,
-  PAINT_TOOL_BINDINGS, paintLayer, paintLayerName, paintLayerUrl, PREDICTION_COLORS, predictionLayer, predictionSource, predictionVoxelOverride,
+  PAINT_TOOL_BINDINGS, paintLayer, paintLayerName, paintLayerUrl, paintVolumeOf, PREDICTION_COLORS, predictionLayer, predictionSource, predictionVoxelOverride,
   RAW_LAYER_NAME, rawLayer, rawSource, respelledPaintSource, respelledPaintUrl, stateWithoutInfo,
 } from "../../src/viewer/layers";
 
@@ -352,5 +352,25 @@ describe("respelledPaintUrl and respelledPaintSource (overlay.refresh_annotation
     expect(respelledPaintSource([])).toBeNull();
     expect(respelledPaintSource(undefined)).toBeNull();
     expect(respelledPaintSource({ nope: 1 })).toBeNull();
+  });
+});
+
+describe("paintVolumeOf (which paint volume a shared link's layer needs)", () => {
+  const volume = "vol-0badcafe-20261015-130405";
+  const url = paintLayerUrl(volume, "https://janelia-cellmap.github.io/cellmap-flow/app/");
+
+  it("reads the volume from a paint source in each of Neuroglancer's forms, respelled or not", () => {
+    expect(paintVolumeOf(url)).toBe(volume);
+    expect(paintVolumeOf(respelledPaintUrl(respelledPaintUrl(url)!))).toBe(volume);
+    expect(paintVolumeOf({ url, subsources: { default: { writingEnabled: true } } })).toBe(volume);
+    expect(paintVolumeOf([{ url: "zarr://other" }, { url }])).toBe(volume);
+  });
+
+  it("is null for every other layer, a raw volume under a paint folder among them", () => {
+    expect(paintVolumeOf("zarr://https://bucket.s3.amazonaws.com/paint/raw.zarr/s0")).toBeNull();
+    expect(paintVolumeOf("zarr3://https://h/app/virtual/a30d4ff4/setup_53__CFLOW_ARGS__e30__CFLOW_ARGS__/")).toBeNull();
+    expect(paintVolumeOf([{ url: "local://annotations" }])).toBeNull();
+    expect(paintVolumeOf(undefined)).toBeNull();
+    expect(paintVolumeOf({ nope: 1 })).toBeNull();
   });
 });

@@ -97,6 +97,15 @@ AI-assisted annotation (`ai-annotate/`) and the Label it tools
    and `listenForApiRequests(backend)`: a `route("/api/", …)` in chunkmirage's
    route table (routes.ts), the one listener the page has for the worker's
    asks; the Engine adds its `/virtual/<page>/` route there when it starts.
+   Between the catalog and the backend, a link's models go into the session
+   (`resolveLinkedModels` in src/link.ts: a finetuned model's ref, its base
+   and its head's numbers, rebuilt with `withHead` and kept in the catalog
+   under a name no model of this browser has), and its `#!` view loses what
+   this browser cannot show (`linkedHash`: paint layers whose volume is not
+   in the paint store, layers of models not served, a renamed model's layer
+   renamed), before `viewer.restore()` reads the page's hash; the page says
+   what it left out in a notice under the header (`showLinkNotice`, which
+   Share uses too, for the paint a link leaves in this browser).
 4. `restoreLocalFolder()` (src/local-folder) – when the session's dataset is this
    page's own `local/<key>/`, a folder picked on this machine, its handle must
    still be in IndexedDB and readable before anything opens it. Chrome drops
@@ -182,6 +191,11 @@ unpainted ones, all of them, or the good regions' unpainted ones, which
 of it. The
 result is a model entry of the `finetuned` repo (`models/finetuned.ts`: a
 record in IndexedDB, its bytes in the byte cache), served like any other.
+Since the head is all that changed, a link carries the model as its root
+Hugging Face base, the file trained on and the head's float32 numbers
+(`link.ts` `finetunedRef`; Share builds it from the bytes with `headOf`),
+and the page that opens it rebuilds the same bytes from the base. The paint
+stays in the paint store of the browser that painted it.
 `backend/routes/finetune.ts`, `good-regions.ts` and `finetune-jobs.ts` answer the tab's routes
 with the Python routes' JSON (a job is a run in the page; its log streams as
 server-sent events), so the tab's job card, loss plot and log stream are
