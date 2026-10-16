@@ -41,6 +41,7 @@ bioimageio, dacapo or cellmap_models either.
 import inspect
 import json
 import logging
+import os
 from typing import Any, Dict, List, Tuple, get_type_hints
 
 from cellmap_flow.config.yaml import ConfigError
@@ -199,8 +200,12 @@ def required_params(cls) -> List[str]:
     ]
 
 
-def build_model(entry: Dict[str, Any], name: str):
+def build_model(entry: Dict[str, Any], name: str, base_dir: str = None):
     """A model config from a YAML model entry; ``name`` is its key in the YAML.
+
+    ``base_dir`` is the YAML file's folder, when there is one: a relative
+    path in one of the type's ``config_relative_paths`` is taken from there
+    rather than from the working directory.
 
     Raises:
         ConfigError: the entry does not describe a model that can be built.
@@ -235,6 +240,12 @@ def build_model(entry: Dict[str, Any], name: str):
 
     if "name" not in kwargs:
         kwargs["name"] = model_name
+    for param_name in getattr(config_class, "config_relative_paths", ()):
+        value = kwargs.get(param_name)
+        relative = isinstance(value, str) and value and "://" not in value and not os.path.isabs(
+            os.path.expanduser(value))
+        if base_dir and relative:
+            kwargs[param_name] = os.path.join(base_dir, value)
     # Checked before the constructor, which may load files, runs.
     env = _checked_env(entry.get(ENV_KEY), model_name)
 
@@ -278,8 +289,11 @@ def build_model(entry: Dict[str, Any], name: str):
     return model
 
 
-def build_models(model_entries) -> list:
+def build_models(model_entries, base_dir: str = None) -> list:
     """The model configs for a YAML's ``models``: ``build_model`` for each entry.
+
+    ``base_dir``, the YAML file's folder, is where a relative path of a
+    type's ``config_relative_paths`` is taken from.
 
     ``model_entries`` maps each model's name to its entry, or is a list of
     entries that each have a ``name``::
@@ -304,7 +318,7 @@ def build_models(model_entries) -> list:
             entries[entry["name"]] = entry
         model_entries = entries
 
-    return [build_model(entry, model_name) for model_name, entry in model_entries.items()]
+    return [build_model(entry, model_name, base_dir) for model_name, entry in model_entries.items()]
 
 
 # --- click's strings -----------------------------------------------------------

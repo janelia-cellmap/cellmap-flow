@@ -1,0 +1,690 @@
+"""``OnnxModelConfig``: an ONNX export as the browser mode runs it, served with ONNX Runtime.
+
+The model is one of:
+
+- ``path``: a local ``.onnx`` file. A model finetuned in the browser (the
+  file its *Download finetuned model* saves) carries its manifest in the
+  file's ``metadata_props``, under ``cellmap_flow.manifest`` (MANIFEST_KEY),
+  so the file alone says its voxel sizes, block sizes and channels. Any
+  other file says none of that: the entry gives ``input_voxel_size``, and the
+  block sizes and the channel count are read from the graph's input and
+  output shapes when they are fixed, else from ``input_size``,
+  ``output_size`` and ``channels``. A relative ``path`` in a YAML is taken
+  from the YAML file's folder (``config_relative_paths``), so an exported
+  YAML can name the downloaded file beside it.
+- ``folder``: one model of a Hugging Face repo of web exports, ``repo``
+  (cellmap/onnx-web-models by default) at ``revision``: a folder with a
+  ``manifest.json`` and one ``.onnx`` per variant, a precision and a block
+  size. ``file`` names the variant's file (what the browser's Export Config
+  writes: the one it ran); without it, ``variant`` (fp32 by default) and
+  ``input_size`` (by default the largest block) choose one. Both files are
+  downloaded with huggingface_hub, as the huggingface type's are.
+
+A manifest's fields are web/src/models/manifest.ts's, which ``parse_manifest``
+reads the same way: the voxel sizes in nm, the channels, ``output`` (what the
+output is: the exports' "raw logits"), ``input_norm`` (cellmap-flow steps),
+``io`` (the input and output tensors' names) and the variants. Anything the
+entry gives (voxel sizes, sizes, channels, output) wins over the manifest.
+
+Each forward is what the browser feeds (web/src/infer/stages.ts): one block
+of float32 ``[1, 1, z, y, x]`` at the input size, normalized by the chain,
+in and ``[1, C, z', y', x']`` out (``[1, z', y', x']`` is one channel); an
+fp16 export whose graph takes float16 is given float16, and its output is
+served as float32. A 2D student (input and output one slice thick, such as
+setup_53_2d) is given one slice a call, ``slices_per_chunk`` slices a chunk,
+as the bioimage type runs a 2D model. The session is wrapped in a torch
+module (``_onnx_module``), so that the inference runner serves it as it
+serves any network: the warmup forward checks the declared shapes against
+the graph's, and its output probe sees an export's logits unbounded, so the
+dashboard suggests a SigmoidPostprocessor (or the affinity chain for
+affinities), as for any model whose output is logits. The price is one more
+copy each way: the runner puts a block on the device, and the module hands
+it to ONNX Runtime from the host (148³ float32 is 13 MB, milliseconds a
+block next to the forward's tenths of a second).
+
+The manifest's ``input_norm`` is what the browser feeds the model through;
+here, as for every type, the session's chain (a YAML's json_data) does the
+normalizing. ``declared_input_norm`` gives it to the dashboard's model
+advice, which offers it with an Apply button, and the browser's Export
+Config writes the chain the page ran with.
+
+Not finetunable: the finetune trainer trains a torch module, with LoRA's
+adapters or in full, and an ONNX graph is not one; its weights are tensors
+in a protobuf, and no backward pass runs through ONNX Runtime's inference
+sessions. The browser's own finetune trains an export's last layer, and
+its result is served here.
+
+``onnxruntime`` is imported only when the model is built: the CLIs and the
+dashboard's model form import every type. The server runs in pixi.toml's
+``onnx`` environment (onnxruntime-gpu on Linux, onnxruntime on the Mac)
+unless the entry names another ``env``. The manifest is read without it
+(``read_metadata``, ``read_manifest``), so ``cellmap_flow add`` and the
+dashboard's *Add a model* can say what a file is.
+"""
+
+import functools
+import io
+import json
+import logging
+import os
+import re
+import time
+from typing import Dict, Optional
+
+import numpy as np
+
+from cellmap_flow.models.configs.base import Config, ModelConfig, _voxel_size
+from cellmap_flow.models.geometry import _numbers
+
+logger = logging.getLogger(__name__)
+
+# The metadata_props key a model finetuned in the browser carries its
+# manifest under, as JSON (web/src/contracts.ts MANIFEST_METADATA_KEY).
+MANIFEST_KEY = "cellmap_flow.manifest"
+DEFAULT_REPO = "cellmap/onnx-web-models"
+# web/src/models/manifest.ts's VARIANT_NAMES, in its order: a variant of
+# another precision is left out, as the browser leaves it out.
+VARIANTS = ("fp32", "fp16", "int8w", "int8w_fp16")
+DEFAULT_VARIANT = "fp32"
+# As the bioimage type gives a 2D model: z slices a chunk, each its own call.
+DEFAULT_SLICES_PER_CHUNK = 8
+# How long a failed manifest download is remembered before declared_input_norm
+# tries again, as HuggingFaceModelConfig remembers its metadata.json's: the
+# dashboard's model advice asks on every poll.
+MANIFEST_RETRY_SECONDS = 60
+
+
+# --- the file's metadata, without onnx or onnxruntime --------------------------
+
+def _varint(f) -> int:
+    """The varint at ``f``'s position, which is then past it."""
+    value, shift = 0, 0
+    while True:
+        byte = f.read(1)
+        if not byte:
+            raise ValueError("a varint runs past the end of the file")
+        value |= (byte[0] & 0x7F) << shift
+        if not byte[0] & 0x80:
+            return value
+        shift += 7
+        if shift > 63:
+            raise ValueError("a varint is longer than ten bytes")
+
+
+def _string_entry(message: bytes):
+    """(key, value) of a StringStringEntryProto: field 1 the key, field 2 the value."""
+    entry, f = {}, io.BytesIO(message)
+    while f.tell() < len(message):
+        tag = _varint(f)
+        if tag & 7 != 2:
+            raise ValueError("a metadata_props entry holds a field that is not a string")
+        length = _varint(f)
+        entry[tag >> 3] = f.read(length).decode("utf-8")
+    return entry.get(1, ""), entry.get(2, "")
+
+
+def read_metadata(path) -> Dict[str, str]:
+    """The ``metadata_props`` of the ONNX model at ``path`` (ModelProto field 14), by key.
+
+    Read without onnx or onnxruntime, so the dashboard's environment can
+    read it: a model is a protobuf ModelProto, a run of fields, each a tag
+    (its number and wire type) and its value, a varint or a length-prefixed
+    run of bytes. Each field is stepped over but the metadata's entries; the
+    graph (field 7), nearly all of the file, is never read.
+
+    Raises:
+        ValueError: the file is not a protobuf message with a graph, so not
+            an ONNX model (a failed download's HTML page, say).
+    """
+    metadata, graph = {}, False
+    size = os.path.getsize(path)
+    with open(path, "rb") as f:
+        while f.tell() < size:
+            tag = _varint(f)
+            number, wire = tag >> 3, tag & 7
+            if number == 0:
+                raise ValueError(f"{path} is not an ONNX model (a field numbered 0)")
+            if wire == 0:
+                _varint(f)
+            elif wire in (1, 5):  # a fixed 64- or 32-bit value
+                f.seek(8 if wire == 1 else 4, os.SEEK_CUR)
+            elif wire == 2:
+                length = _varint(f)
+                if f.tell() + length > size:
+                    raise ValueError(f"{path} is not an ONNX model (field {number} runs past its end)")
+                if number == 14:
+                    key, value = _string_entry(f.read(length))
+                    metadata[key] = value
+                else:
+                    graph |= number == 7
+                    f.seek(length, os.SEEK_CUR)
+            else:
+                raise ValueError(f"{path} is not an ONNX model (wire type {wire})")
+    if not graph:
+        raise ValueError(f"{path} is not an ONNX model: it has no graph")
+    return metadata
+
+
+def read_manifest(path) -> Optional[dict]:
+    """The cellmap-flow manifest the ONNX file at ``path`` carries (MANIFEST_KEY), parsed; None without one.
+
+    Raises:
+        ValueError: the file is not an ONNX model, or its manifest is not one.
+    """
+    text = read_metadata(path).get(MANIFEST_KEY)
+    if text is None:
+        return None
+    try:
+        raw = json.loads(text)
+    except ValueError as e:
+        raise ValueError(f"{path}'s {MANIFEST_KEY} is not JSON: {e}") from None
+    return parse_manifest(raw, f"{path}'s {MANIFEST_KEY}")
+
+
+# --- the manifest -----------------------------------------------------------------
+
+def _positive_numbers(raw, key, where):
+    value = raw.get(key)
+    if (not isinstance(value, list) or len(value) != 3
+            or not all(isinstance(v, (int, float)) and not isinstance(v, bool) and v > 0 for v in value)):
+        raise ValueError(f"{where}: {key} is not three positive numbers (z, y, x)")
+    return list(_numbers(value))
+
+
+def _block(value, where) -> list:
+    """A variant's block size as z, y, x voxels: one number is a cube, as the manifests write them."""
+    if isinstance(value, int) and not isinstance(value, bool) and value > 0:
+        return [value] * 3
+    if isinstance(value, list) and len(value) == 3 and all(isinstance(v, int) and v > 0 for v in value):
+        return list(value)
+    raise ValueError(f"{where}: expected a positive whole number or three (z, y, x), got {value!r}")
+
+
+def _io(value) -> dict:
+    """The input and output tensors' names: an object, or the exports' sentence with the names in quotes."""
+    if isinstance(value, dict):
+        return {"input": value.get("input") or "input", "output": value.get("output") or "output"}
+    text = value if isinstance(value, str) else ""
+    found = {k: re.search(rf"{k}\s+'([^']+)'", text) for k in ("input", "output")}
+    return {k: m[1] if m else k for k, m in found.items()}
+
+
+def parse_manifest(raw, where="manifest.json") -> dict:
+    """``raw``, a manifest's JSON, checked and widened as the browser's ``parseManifest`` does.
+
+    The exports write a variant's block as one number (a cube) and ``io`` as
+    a sentence; here they are three numbers and ``{"input", "output"}``. A
+    variant of a precision not in VARIANTS is left out.
+
+    Raises:
+        ValueError: a field is missing or of the wrong kind; it says which.
+    """
+    if not isinstance(raw, dict):
+        raise ValueError(f"{where} is not a JSON object")
+    channels = raw.get("channels")
+    if not isinstance(channels, list) or not channels or not all(isinstance(c, str) for c in channels):
+        raise ValueError(f"{where}: channels is not a list of names")
+    input_voxel_size = _positive_numbers(raw, "input_voxel_size_nm", where)
+    output_voxel_size = _positive_numbers(raw, "output_voxel_size_nm", where)
+    variants = []
+    for i, v in enumerate(raw.get("variants") or []):
+        if not isinstance(v, dict) or v.get("variant") not in VARIANTS:
+            continue
+        if not isinstance(v.get("file"), str) or not v["file"]:
+            raise ValueError(f"{where}: variants[{i}] names no file")
+        variants.append({
+            "variant": v["variant"],
+            "input_size": _block(v.get("input_size"), f"{where} variants[{i}].input_size"),
+            "output_size": _block(v.get("output_size"), f"{where} variants[{i}].output_size"),
+            "file": v["file"],
+        })
+    if not variants:
+        raise ValueError(f"{where}: no variant of a known precision ({', '.join(VARIANTS)})")
+    steps = raw.get("input_norm") or []
+    if not isinstance(steps, list) or not all(isinstance(s, dict) and s.get("name") for s in steps):
+        raise ValueError(f"{where}: input_norm is not a list of steps, each with a name")
+    return {
+        "model": raw.get("model") or "",
+        "channels": list(channels),
+        "input_voxel_size": input_voxel_size,
+        "output_voxel_size": output_voxel_size,
+        "output": raw.get("output") if isinstance(raw.get("output"), str) else "",
+        "input_norm": [dict(s) for s in steps],
+        "io": _io(raw.get("io")),
+        "variants": variants,
+    }
+
+
+def _matches(block, size) -> bool:
+    """Whether a variant's input ``block`` is ``size``: three numbers, or one, a cube's or a slice's side."""
+    if len(size) == 1:
+        return block in ([size[0]] * 3, [1, size[0], size[0]])
+    return list(block) == list(size)
+
+
+def choose_variant(manifest, file=None, variant=None, input_size=None) -> dict:
+    """The manifest's variant to serve: the one in ``file``, else of precision
+    ``variant`` (fp32 by default, else the first there is) with an input of
+    ``input_size`` voxels, by default the largest block.
+
+    Raises:
+        ValueError: no variant is the one asked for; the message lists them.
+    """
+    variants = manifest["variants"]
+    listed = ", ".join(f"{v['file']} ({v['variant']}, in {'x'.join(map(str, v['input_size']))})" for v in variants)
+    if file is not None:
+        for v in variants:
+            if v["file"] == file:
+                return v
+        raise ValueError(f"The manifest has no variant in {file}; it has {listed}")
+    precisions = [v["variant"] for v in variants]
+    if variant is None:
+        variant = DEFAULT_VARIANT if DEFAULT_VARIANT in precisions else precisions[0]
+    candidates = [v for v in variants if v["variant"] == variant]
+    if input_size is not None:
+        candidates = [v for v in candidates if _matches(v["input_size"], input_size)]
+    if not candidates:
+        wanted = variant + (f" with an input of {'x'.join(map(str, input_size))}" if input_size else "")
+        raise ValueError(f"The manifest has no {wanted} variant; it has {listed}")
+    return max(candidates, key=lambda v: int(np.prod(v["input_size"])))
+
+
+# --- serving ------------------------------------------------------------------------
+
+def _sizes(value):
+    """None, or ``value`` (one number, "148" or "1,300,300", or a list) as a tuple of positive ints."""
+    if value is None:
+        return None
+    if isinstance(value, str):
+        value = [v for v in value.replace("(", "").replace(")", "").split(",") if v.strip()]
+    if np.ndim(value) == 0:
+        value = [value]
+    sizes = tuple(int(float(v)) for v in value)
+    if len(sizes) not in (1, 3) or any(s < 1 for s in sizes):
+        raise ValueError(f"a block size is one positive whole number or three (z, y, x), got {list(sizes)}")
+    return sizes
+
+
+def _names(value):
+    """None, or channel names from a list or "mito, er"."""
+    if value is None:
+        return None
+    if isinstance(value, str):
+        value = [v.strip() for v in value.split(",") if v.strip()]
+    return [str(v) for v in value]
+
+
+def _fixed(shape) -> list:
+    """A graph tensor's dims, None where it is not a fixed whole number (a symbolic or unknown dim)."""
+    return [d if isinstance(d, int) and d > 0 else None for d in (shape or [])]
+
+
+@functools.lru_cache(maxsize=None)
+def _onnx_module():
+    """The torch module that runs an ONNX Runtime session, defined on first use:
+    this module must not import torch, since the CLIs import every model type."""
+    import torch
+
+    class OnnxModule(torch.nn.Module):
+        """An inference session as a torch module: ``(B, 1, Z, Y, X)`` in, ``(B, C, Z', Y', X')`` out.
+
+        Each image of the batch is one call, ``[1, 1, z, y, x]`` as the
+        browser feeds it, or one call a z slice for a 2D student
+        (``slice_wise``). The input goes to the session as the graph's input
+        type and the output comes back as float32, on the input's device.
+        No parameters: there is nothing here to move, to train or to cast.
+        """
+
+        def __init__(self, session, input_name, output_name, input_dtype, slice_wise):
+            super().__init__()
+            self.session = session
+            self.input_name, self.output_name = input_name, output_name
+            self.input_dtype = input_dtype
+            self.slice_wise = slice_wise
+
+        def forward(self, x):
+            array = x.detach().to("cpu", torch.float32).numpy()
+            if array.ndim != 5 or array.shape[1] != 1:
+                raise ValueError(f"an ONNX model takes (batch, 1, z, y, x), not {tuple(array.shape)}")
+            images = []
+            for image in array:
+                calls = [image[None, :, z:z + 1] for z in range(image.shape[1])] if self.slice_wise else [image[None]]
+                images.append(np.concatenate([self._run(block) for block in calls], axis=2))
+            return torch.from_numpy(np.concatenate(images, axis=0)).to(x.device)
+
+        def _run(self, block):
+            feed = {self.input_name: np.ascontiguousarray(block, dtype=self.input_dtype)}
+            (out,) = self.session.run([self.output_name], feed)
+            out = np.asarray(out, dtype=np.float32)
+            if out.ndim == 4:  # [1, z, y, x]: one channel
+                out = out[:, None]
+            if out.ndim != 5 or out.shape[0] != 1:
+                raise ValueError(f"the model wrote {list(out.shape)}, not [1, C, z, y, x]")
+            return out
+
+    return OnnxModule
+
+
+def _session(path, label):
+    """An onnxruntime session of the model at ``path``: on CUDA where the
+    runner serves on a GPU and onnxruntime has its CUDA provider, else on
+    the CPU, saying which and why.
+
+    torch is imported before it: onnxruntime-gpu's CUDA provider loads
+    cuDNN and cuBLAS by name, and the torch wheels' nvidia packages, which
+    torch loads when it is imported, are where the environment has them.
+
+    onnxruntime sends usage events to Microsoft unless told not to (1.31
+    uploads to mobile.events.data.microsoft.com from a thread it starts on
+    import), and an inference server on the cluster has no business doing
+    so. ORT_DISABLE_TELEMETRY=1 stops it, and only when it is set before the
+    import (disable_telemetry_events afterwards does not); it is set here
+    unless the environment sets it already.
+    """
+    os.environ.setdefault("ORT_DISABLE_TELEMETRY", "1")
+    import onnxruntime as ort
+
+    from cellmap_flow.utils.device import best_device
+
+    if hasattr(ort, "disable_telemetry_events"):  # imported before this ran
+        ort.disable_telemetry_events()
+    device = best_device()
+    available = ort.get_available_providers()
+    cuda = device.type == "cuda" and "CUDAExecutionProvider" in available
+    providers = ["CUDAExecutionProvider", "CPUExecutionProvider"] if cuda else ["CPUExecutionProvider"]
+    session = ort.InferenceSession(str(path), providers=providers)
+    used = session.get_providers()
+    if cuda and "CUDAExecutionProvider" not in used:
+        logger.warning(f"{label}: onnxruntime could not start its CUDA provider (see its log above); "
+                       "running on the CPU, far slower")
+    elif device.type == "cuda" and not cuda:
+        logger.warning(f"{label}: this onnxruntime has no CUDA provider ({', '.join(available)}); running on "
+                       "the CPU, far slower. pixi.toml's onnx environment has onnxruntime-gpu.")
+    logger.info(f"{label}: onnxruntime {ort.__version__} on {', '.join(used)}")
+    return session
+
+
+class OnnxModelConfig(ModelConfig):
+    """An ONNX export, the browser mode's kind of model, served with ONNX Runtime.
+
+    Args:
+        path: a local .onnx file. Relative in a YAML: from the YAML's folder.
+        folder: a model's folder in ``repo`` (setup_54), instead of ``path``.
+        repo: the Hugging Face repo of ``folder``; cellmap/onnx-web-models.
+        revision: the repo's branch, tag or commit; its main branch.
+        file: the ``.onnx`` of ``folder`` to serve: one of its manifest's
+            variants (what the browser's Export Config writes).
+        variant: the precision to serve when ``file`` is not given: fp32
+            (the default), fp16, int8w or int8w_fp16.
+        input_voxel_size: nm per input voxel (one number, or z, y, x). The
+            manifest's; needed for a file without one.
+        output_voxel_size: nm per output voxel: by default the input's times
+            the manifest's ratio of the two, else the input's.
+        input_size: voxels of the block the model reads (one number or z, y,
+            x): the manifest's variant's, else the graph's input. For a
+            ``folder``, it chooses the variant (the largest by default).
+        output_size: voxels it writes: the variant's, else the graph's output.
+        channels: the output channels' names; the manifest's, else
+            channel_0, channel_1, ... for as many as the graph outputs.
+        output: what the output is, as the manifests say it ("raw logits").
+        slices_per_chunk: z slices a chunk of a 2D student (a model whose
+            input and output are one slice thick), each one call; 8 by
+            default. A 3D model ignores it.
+    """
+
+    cli_name = "onnx"
+    # onnxruntime is in none of cellmap-flow's other environments but
+    # bioimageio's, and there without its CUDA provider; pixi.toml's onnx
+    # environment has onnxruntime-gpu.
+    default_env = "onnx"
+    # The trainer trains torch modules; see the module's docstring.
+    finetunable = False
+    # A YAML entry's relative path is the YAML's folder's (registry.build_model).
+    config_relative_paths = ("path",)
+
+    def __init__(
+        self,
+        path: str = None,
+        folder: str = None,
+        repo: str = None,
+        revision: str = None,
+        file: str = None,
+        variant: str = None,
+        input_voxel_size: tuple = None,
+        output_voxel_size: tuple = None,
+        input_size=None,
+        output_size=None,
+        channels: list[str] = None,
+        output: str = None,
+        slices_per_chunk: int = None,
+        name: str = None,
+        scale=None,
+    ):
+        super().__init__()
+        if (path is None) == (folder is None):
+            raise ValueError("An onnx model is a path (a local .onnx file) or a folder of a Hugging Face repo "
+                             f"({DEFAULT_REPO} by default), and not both")
+        if path is not None and (repo is not None or revision is not None or file is not None):
+            raise ValueError("repo, revision and file name a Hugging Face model's file; a path is the file itself")
+        if variant is not None and variant not in VARIANTS:
+            raise ValueError(f"variant must be one of {', '.join(VARIANTS)}, not {variant!r}")
+        self.path = None if path is None else os.path.abspath(os.path.expanduser(str(path)))
+        self.folder = None if folder is None else str(folder).strip("/")
+        self.repo = repo
+        self.revision = revision
+        self.file = file
+        self.variant = variant
+        # Strings from the server CLI and the model form ("16,16,16"); a
+        # number or a list from a YAML. Not _as_int_tuple's, which truncates
+        # a 5.24 nm voxel to 5.
+        self.input_voxel_size = None if input_voxel_size is None else _voxel_size(input_voxel_size)
+        self.output_voxel_size = None if output_voxel_size is None else _voxel_size(output_voxel_size)
+        self.input_size = _sizes(input_size)
+        self.output_size = _sizes(output_size)
+        self.channels = _names(channels)
+        self.output = output
+        self.slices_per_chunk = None if slices_per_chunk is None else int(slices_per_chunk)
+        if self.slices_per_chunk is not None and self.slices_per_chunk < 1:
+            raise ValueError(f"slices_per_chunk must be at least 1, got {self.slices_per_chunk}")
+        if name is None:
+            name = self.folder if self.folder else os.path.splitext(os.path.basename(self.path))[0]
+        self.name = name
+        self.scale = scale
+        self._manifest_cache = None
+        self._manifest_failed_at = None
+
+    # --- what the model is ---------------------------------------------------------
+
+    @property
+    def hub_repo(self) -> str:
+        return self.repo or DEFAULT_REPO
+
+    def _hub_download(self, filename: str) -> str:
+        from huggingface_hub import hf_hub_download
+
+        return hf_hub_download(self.hub_repo, f"{self.folder}/{filename}", revision=self.revision)
+
+    def _manifest(self) -> Optional[dict]:
+        """The model's manifest, parsed: the folder's manifest.json, or the
+        file's own; None for a file without one. Kept once read."""
+        if self._manifest_cache is None:
+            if self.folder is not None:
+                where = f"{self.hub_repo}/{self.folder}/manifest.json"
+                with open(self._hub_download("manifest.json")) as f:
+                    self._manifest_cache = parse_manifest(json.load(f), where)
+            else:
+                self._manifest_cache = read_manifest(self.path) or {}
+        return self._manifest_cache or None
+
+    def declared_input_norm(self) -> Optional[list]:
+        """The input normalization the model's manifest declares, as
+        cellmap-flow steps (``[{"name": ..., **params}]``), or None.
+
+        For the dashboard's model advice (``suggest_input_norm``'s
+        ``declared``), which asks on every poll: a failed download is not
+        tried again for MANIFEST_RETRY_SECONDS.
+        """
+        if self._manifest_failed_at is not None and time.monotonic() - self._manifest_failed_at < MANIFEST_RETRY_SECONDS:
+            return None
+        try:
+            manifest = self._manifest()
+        except Exception as e:
+            self._manifest_failed_at = time.monotonic()
+            logger.info(f"Could not read {self.name}'s manifest ({e}); trying again after {MANIFEST_RETRY_SECONDS} s")
+            return None
+        return (manifest or {}).get("input_norm") or None
+
+    def _variant(self, manifest) -> Optional[dict]:
+        """The manifest's variant this model serves: the folder's chosen by
+        file, variant and input size; the file's own by its name, else the
+        only one, else chosen as a folder's."""
+        if not manifest:
+            return None
+        if self.folder is not None:
+            return choose_variant(manifest, self.file, self.variant, self.input_size)
+        own = [v for v in manifest["variants"] if v["file"] == os.path.basename(self.path)]
+        if own:
+            return own[0]
+        if len(manifest["variants"]) == 1:
+            return manifest["variants"][0]
+        return choose_variant(manifest, None, self.variant, self.input_size)
+
+    def _get_config(self) -> Config:
+        manifest = self._manifest()
+        variant = self._variant(manifest)
+        path = self._hub_download(variant["file"]) if self.folder is not None else self.path
+        label = self.name or os.path.basename(path)
+        session = _session(path, label)
+        config = Config()
+        self._describe(config, manifest or {}, variant, session)
+        config.model = _onnx_module()(session, config.input_name, config.output_name, config.input_dtype,
+                                      config.slice_wise)
+        output = config.output_kind
+        if "logit" in output.lower():
+            logger.info(f"{label}: its output is {output!r}. For probabilities add a SigmoidPostprocessor to the "
+                        "postprocessing (an affinity model: the affinity chain the dashboard suggests)")
+        return config
+
+    def _describe(self, config, manifest, variant, session):
+        """Set ``config``'s geometry from the entry, the manifest and its
+        variant, and the graph's input and output, each where the one
+        before says nothing; check that they agree with the graph."""
+        what = self.name or "the model"
+        inputs, outputs = session.get_inputs(), session.get_outputs()
+        # The manifest's tensor names, as the browser feeds and fetches by
+        # them; else the graph's first input and output.
+        names = manifest.get("io") or {}
+        input_name = names.get("input") if names.get("input") in [i.name for i in inputs] else inputs[0].name
+        output_name = names.get("output") if names.get("output") in [o.name for o in outputs] else outputs[0].name
+        graph_in = next(i for i in inputs if i.name == input_name)
+        graph_out = next(o for o in outputs if o.name == output_name)
+        in_dims, out_dims = _fixed(graph_in.shape), _fixed(graph_out.shape)
+        if len(in_dims) != 5 or in_dims[0] not in (1, None) or in_dims[1] not in (1, None):
+            raise ValueError(
+                f"{what}'s input {input_name} is {graph_in.shape}; cellmap-flow feeds an ONNX model [1, 1, z, y, x], "
+                "as the browser does. Serve another layout with a script model (type: script)"
+            )
+        if len(out_dims) not in (4, 5):
+            raise ValueError(f"{what}'s output {output_name} is {graph_out.shape}, not [1, C, z, y, x]")
+        graph_channels = out_dims[1] if len(out_dims) == 5 else 1
+        variant = variant or {}
+
+        def first(given, *found, what_is_it):
+            for value in (given, *found):
+                if value is not None and (np.ndim(value) == 0 or all(v is not None for v in value)):
+                    return value
+            raise ValueError(f"{what} does not say its {what_is_it}: give it in the entry")
+
+        in_voxel = first(self.input_voxel_size, manifest.get("input_voxel_size"), what_is_it="input_voxel_size")
+        if self.output_voxel_size is not None:
+            out_voxel = self.output_voxel_size
+        elif manifest.get("output_voxel_size"):
+            # The manifest's ratio of output to input, at the input voxel
+            # size the entry may have changed: a 16 nm model run at 8 nm
+            # writes 8 nm voxels, as it wrote 16.
+            out_voxel = (np.asarray(in_voxel, dtype=float) * np.asarray(manifest["output_voxel_size"], dtype=float)
+                         / np.asarray(manifest["input_voxel_size"], dtype=float))
+        else:
+            out_voxel = in_voxel
+        # In the folder's case input_size chose the variant; a file's
+        # manifest's variant is overruled by the entry's sizes.
+        given_in = self.input_size if self.folder is None else None
+        in_size = first(_triple(given_in), variant.get("input_size"), in_dims[2:], what_is_it="input_size")
+        out_size = first(_triple(self.output_size), variant.get("output_size"), out_dims[-3:],
+                         what_is_it="output_size")
+        for kind, size, dims in (("input", in_size, in_dims[2:]), ("output", out_size, out_dims[-3:])):
+            if any(d is not None and d != s for d, s in zip(dims, size)):
+                raise ValueError(f"{what}'s graph has an {kind} of {dims} (z, y, x); the entry or manifest says "
+                                 f"{list(size)}")
+        channels = self.channels or manifest.get("channels")
+        if channels is None:
+            if graph_channels is None:
+                raise ValueError(f"{what}'s output has no fixed number of channels: give channels in the entry")
+            channels = [f"channel_{i}" for i in range(graph_channels)]
+        if graph_channels is not None and graph_channels != len(channels):
+            raise ValueError(f"{what} outputs {graph_channels} channel(s), and {len(channels)} are named: {channels}")
+
+        slice_wise = in_size[0] == 1 and out_size[0] == 1
+        in_voxel = np.asarray(in_voxel, dtype=float)
+        out_voxel = np.asarray(out_voxel, dtype=float)
+        if slice_wise:
+            # Each slice its own call: no context in z, and a slice in is a
+            # slice out, at the input's z spacing.
+            slices = self.slices_per_chunk or DEFAULT_SLICES_PER_CHUNK
+            read, write = (slices, *in_size[1:]), (slices, *out_size[1:])
+            out_voxel[0] = in_voxel[0]
+        else:
+            read, write = tuple(in_size), tuple(out_size)
+        read_shape, write_shape = np.asarray(read) * in_voxel, np.asarray(write) * out_voxel
+        context = (read_shape - write_shape) / 2
+        in_voxels = context / in_voxel
+        if (context < 0).any() or not np.allclose(in_voxels, np.rint(in_voxels)):
+            # The chunk is read around the written region on the input's
+            # grid; half a voxel off, every output would be shifted.
+            raise ValueError(
+                f"{what}'s output ({list(write)} voxels of {list(_numbers(out_voxel))} nm) is not centred on whole "
+                f"voxels of its input ({list(read)} of {list(_numbers(in_voxel))} nm)"
+            )
+
+        config.input_voxel_size = _numbers(in_voxel)
+        config.output_voxel_size = _numbers(out_voxel)
+        config.read_shape = _numbers(read_shape)
+        config.write_shape = _numbers(write_shape)
+        config.input_size = tuple(int(v) for v in read)
+        config.output_size = tuple(int(v) for v in write)
+        config.output_channels = len(channels)
+        config.channels = list(channels)
+        config.block_shape = np.array((*write, len(channels)))
+        config.output_dtype = np.float32
+        config.output_kind = self.output or manifest.get("output") or ""
+        config.input_name, config.output_name = input_name, output_name
+        config.input_dtype = np.float16 if graph_in.type == "tensor(float16)" else np.float32
+        config.slice_wise = slice_wise
+
+    def to_dict(self):
+        """This config as a model entry, which ``registry.build_model`` rebuilds.
+
+        What the manifest or the graph decides unless told otherwise is
+        written only when it was given, so that an exported entry keeps
+        following the model.
+        """
+        result = {"type": "onnx"}
+        # In the constructor's order, as the server's command gives them.
+        for key in ("path", "folder", "repo", "revision", "file", "variant", "input_voxel_size",
+                    "output_voxel_size", "input_size", "output_size", "channels", "output", "slices_per_chunk"):
+            value = getattr(self, key)
+            if value is None:
+                continue
+            if key in ("input_size", "output_size"):
+                value = value[0] if len(value) == 1 else list(value)  # one number as itself, as given
+            elif isinstance(value, (tuple, list)):
+                value = list(value)  # a copy, and no tuple: yaml.safe_load refuses !!python/tuple
+            result[key] = value
+        return self._with_name_scale(result)
+
+
+def _triple(sizes):
+    """One number as a cube's three, three as they are; None as None."""
+    if sizes is None:
+        return None
+    return list(sizes) * 3 if len(sizes) == 1 else list(sizes)

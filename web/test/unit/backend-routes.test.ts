@@ -7,6 +7,7 @@ import { createBackend, restoreSession } from "../../src/backend";
 import { explainOpenError } from "../../src/backend/routes/data";
 import { ARGS_KEY } from "../../src/contracts";
 import type { ApiResponse } from "../../src/contracts";
+import { finetunedEntry } from "../../src/models/finetuned";
 import { decodeArgs } from "../../src/shared/args";
 import { defaultChain } from "../../src/state";
 import { entry, fakeContext, NAME_54, NAME_56, request } from "./backend-fakes";
@@ -302,11 +303,12 @@ describe("the model lists", () => {
 });
 
 describe("adding a model by reference", () => {
-  it("resolves a catalog model to a huggingface entry the form can submit", async () => {
+  it("resolves a catalog model to the server's onnx entry, which the form can submit", async () => {
     const res = await createBackend(fakeContext()).handle(request("POST", "/api/models/resolve", { ref: HF54 }));
     expect(res.status).toBe(200);
     const d = body(res);
-    expect(d).toMatchObject({ success: true, type: "huggingface", params: { repo: "cellmap/onnx-web-models", folder: "setup_54" }, name: NAME_54, env: null, needs: [] });
+    expect(d).toMatchObject({ success: true, type: "onnx", params: { repo: "cellmap/onnx-web-models", folder: "setup_54" }, name: NAME_54, env: null, needs: [] });
+    expect(d.params).not.toHaveProperty("file");  // the one run is chosen for this GPU
     expect(d.how).toMatch(/browser/);
     expect(d.notes.join(" ")).toMatch(/fp32, int8w/);
   });
@@ -323,7 +325,7 @@ describe("adding a model by reference", () => {
     const ctx = fakeContext();
     const backend = createBackend(ctx);
     await backend.handle(submit([HF56]));
-    const res = await backend.handle(request("POST", "/api/models/add", { entry: { type: "huggingface", repo: "cellmap/onnx-web-models", folder: "setup_54", name: NAME_54 } }));
+    const res = await backend.handle(request("POST", "/api/models/add", { entry: { type: "onnx", repo: "cellmap/onnx-web-models", folder: "setup_54", name: NAME_54 } }));
     expect(body(res)).toEqual({ success: true, name: NAME_54 });
     expect(ctx.infer.served().map((s) => s.entry.name)).toEqual([NAME_56, NAME_54]);
     expect(ctx.session.state.models.map((m) => m.name)).toEqual([NAME_56, NAME_54]);
@@ -408,7 +410,33 @@ describe("the settings routes", () => {
     expect(yaml).toContain("data_path: https://example.org/em.zarr\n");
     expect(yaml).toContain("resample: false\n");
     expect(yaml).toContain("json_data:\n  input_norm:\n  - name: MinMaxNormalizer\n    min_value: 0\n    max_value: 255\n  - name: LambdaNormalizer\n    expression: 2*x-1\n  postprocess:\n  - name: SigmoidPostprocessor\n");
-    expect(yaml).toContain(`models:\n- type: huggingface\n  repo: cellmap/onnx-web-models\n  name: ${NAME_54}\n  folder: setup_54\n  onnx: setup_54_fp32.onnx\n`);
+    expect(yaml).toContain(`models:\n- type: onnx\n  name: ${NAME_54}\n  repo: cellmap/onnx-web-models\n  folder: setup_54\n  file: setup_54_fp32.onnx\n`);
+    expect(yaml).toMatch(/^# Exported from the browser mode\. Each model is an ONNX export, which the\n# server serves with ONNX Runtime \(type: onnx/m);
+    expect(yaml).not.toMatch(/PyTorch/);
+  });
+
+  it("exports the variant the page serves on this GPU, not the catalog's default the session keeps", async () => {
+    const ctx = fakeContext({ state: { datasetUrl: "https://example.org/em.zarr" } });
+    ctx.infer.limits = { maxBufferSize: 256 * 2 ** 20, maxStorageBufferBindingSize: null, shaderF16: false };
+    const backend = createBackend(ctx);
+    await backend.handle(submit([HF54]));
+    expect(ctx.session.state.models[0].variant.file).toBe("setup_54_fp32.onnx");
+    const res = await backend.handle(request("GET", "/api/export-config"));
+    if (!("body" in res)) throw new Error("not a body answer");
+    expect(res.body as string).toContain("  folder: setup_54\n  file: setup_54_int8w.onnx\n");
+  });
+
+  it("exports a model finetuned here by the path its download saves, saying where to put it", async () => {
+    const ctx = fakeContext({ state: { datasetUrl: "https://example.org/em.zarr" } });
+    const base = entry("setup_54");
+    const finetuned = finetunedEntry(base, `${NAME_54}-ft1`);
+    await ctx.session.update({ models: [base, finetuned] });
+    const res = await createBackend(ctx).handle(request("GET", "/api/export-config"));
+    if (!("body" in res)) throw new Error("not a body answer");
+    expect(res.body as string).toContain(
+      `models:\n- type: onnx\n  name: ${NAME_54}\n  repo: cellmap/onnx-web-models\n  folder: setup_54\n  file: setup_54_fp32.onnx\n` +
+      `- type: onnx\n  name: ${NAME_54}-ft1\n  path: ${NAME_54}-ft1.onnx  # the file Download finetuned model saves: put it beside this YAML\n`,
+    );
   });
 });
 

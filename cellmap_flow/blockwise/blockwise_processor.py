@@ -106,7 +106,7 @@ def precheck(yaml_config: str) -> dict:
 
     # Constructing a ModelConfig does not load the model; that happens when
     # .config is first read, which nothing here does.
-    models = build_models(config["models"])
+    models = build_models(config["models"], base_dir=os.path.dirname(os.path.abspath(yaml_config)))
     if len(models) == 0:
         raise ConfigError("No models found in the configuration.")
 
@@ -196,7 +196,7 @@ class CellMapFlowBlockwiseProcessor:
             self.tmp_dir = None
 
         # Build model configuration objects
-        models = build_models(self.config["models"])
+        models = build_models(self.config["models"], base_dir=os.path.dirname(os.path.abspath(yaml_config)))
         # The master (create) only needs the models' geometry, to schedule
         # blocks and create the outputs, so it runs no forward at all. The
         # workers run the model: each Inferencer's warmup forward checks the

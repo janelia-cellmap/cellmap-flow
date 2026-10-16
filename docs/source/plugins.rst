@@ -172,11 +172,14 @@ Custom ModelConfig
 
 Subclass ``ModelConfig`` and implement ``_get_config``.
 
-``command`` (how a server is launched for this config) and ``to_dict`` (how it is exported to a YAML) have defaults, built from the constructor arguments the config was created with. Override them only if the config needs something else. The type is named by ``cli_name`` when the class sets one, otherwise by its class name without ``ModelConfig``, lower-cased (``ONNXModelConfig`` is ``onnx``). That name is what ``type:`` in a YAML and the ``cellmap_flow`` subcommand use.
+``command`` (how a server is launched for this config) and ``to_dict`` (how it is exported to a YAML) have defaults, built from the constructor arguments the config was created with. Override them only if the config needs something else. The type is named by ``cli_name`` when the class sets one, otherwise by its class name without ``ModelConfig``, lower-cased (``MyOnnxModelConfig`` is ``myonnx``). That name is what ``type:`` in a YAML and the ``cellmap_flow`` subcommand use; a built-in type keeps its name against a plugin's (``script``, ``onnx``, ...), so give yours one of its own.
 
 The ``_get_config`` method must return a ``Config`` object with the following attributes:
 ``model`` (or ``predict``), ``read_shape``, ``write_shape``, ``input_voxel_size``,
 ``output_voxel_size``, ``output_channels``, and ``block_shape``.
+
+The example below loads an ONNX file, to show how a type is written; to serve
+an ONNX model, the built-in ``type: onnx`` (:ref:`onnx`) does it already.
 
 .. code-block:: python
 
@@ -186,7 +189,7 @@ The ``_get_config`` method must return a ``Config`` object with the following at
     from cellmap_flow.models.models_config import Config, ModelConfig
 
 
-    class ONNXModelConfig(ModelConfig):
+    class MyOnnxModelConfig(ModelConfig):
         """Load a model from an ONNX file."""
 
         def __init__(

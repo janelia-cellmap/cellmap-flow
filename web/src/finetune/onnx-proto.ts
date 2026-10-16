@@ -2,23 +2,27 @@
 // little of ONNX's schema that finetuning the head needs: the graph's nodes,
 // its initializers (where their bytes lie in the file) and its inputs and
 // outputs by name, and two edits, a graph output added and an initializer's
-// values replaced. Protobuf is a sequence of (field number, wire type)
-// tags, each followed by a varint, a fixed-size value or a length-prefixed
-// run of bytes, and a message is such a sequence inside a length-prefixed
-// field; so a model is read without its schema by walking the tags, and
-// edited by re-encoding the one field that changes and copying every other
-// byte for byte. A protobuf library would do the same for a hundred times
-// the code shipped and a full decode of 60 MB of weights into objects; here
-// the weights stay where they are, as views of the file's bytes.
+// values replaced; and the model's metadata_props, read and written, where a
+// finetuned model's download carries its manifest (routes/finetune.ts; the
+// server's onnx model type reads it, cellmap_flow/models/configs/onnx.py).
+// Protobuf is a sequence of (field number, wire type) tags, each followed by
+// a varint, a fixed-size value or a length-prefixed run of bytes, and a
+// message is such a sequence inside a length-prefixed field; so a model is
+// read without its schema by walking the tags, and edited by re-encoding the
+// one field that changes and copying every other byte for byte. A protobuf
+// library would do the same for a hundred times the code shipped and a full
+// decode of 60 MB of weights into objects; here the weights stay where they
+// are, as views of the file's bytes.
 //
 // The field numbers, from onnx/onnx.proto (checked against the exports on
-// 2026-10-15): ModelProto 7 graph; GraphProto 1 node, 5 initializer, 11
-// input, 12 output; NodeProto 1 input, 2 output, 3 name, 4 op_type, 5
-// attribute, 7 domain; AttributeProto 1 name, 3 i, 4 s, 8 ints, 20 type;
-// TensorProto 1 dims, 2 data_type, 8 name, 9 raw_data (4 float_data, 5
-// int32_data, 7 int64_data, 10 double_data, 11 uint64_data are the typed
-// stores it is not in; 13 external_data, 14 data_location); ValueInfoProto
-// 1 name, 2 type; TypeProto 1 tensor_type; TypeProto.Tensor 1 elem_type.
+// 2026-10-15): ModelProto 7 graph, 14 metadata_props; StringStringEntryProto
+// 1 key, 2 value; GraphProto 1 node, 5 initializer, 11 input, 12 output;
+// NodeProto 1 input, 2 output, 3 name, 4 op_type, 5 attribute, 7 domain;
+// AttributeProto 1 name, 3 i, 4 s, 8 ints, 20 type; TensorProto 1 dims, 2
+// data_type, 8 name, 9 raw_data (4 float_data, 5 int32_data, 7 int64_data,
+// 10 double_data, 11 uint64_data are the typed stores it is not in; 13
+// external_data, 14 data_location); ValueInfoProto 1 name, 2 type; TypeProto
+// 1 tensor_type; TypeProto.Tensor 1 elem_type.
 
 export const WIRE_VARINT = 0, WIRE_FIXED64 = 1, WIRE_LENGTH = 2, WIRE_FIXED32 = 5;
 
@@ -322,4 +326,38 @@ export function withGraphOutput(modelBytes: Uint8Array, name: string, elemType: 
   const valueInfo = concatBytes([encodeLengthDelimited(1, utf8Encoder.encode(name)), encodeLengthDelimited(2, tensorType)]);
   const graphBytes = concatBytes([graph.value, encodeLengthDelimited(12, valueInfo)]);
   return concatBytes(fields.map((f) => (f === graph ? encodeLengthDelimited(7, graphBytes) : modelBytes.subarray(f.tagStart, f.end))));
+}
+
+/** The model's metadata_props (ModelProto field 14, each entry a
+ * StringStringEntryProto: field 1 its key, 2 its value), by key; a key
+ * written twice is the later entry's, as onnx's own readers take it. */
+export function readMetadata(modelBytes: Uint8Array): Record<string, string> {
+  const metadata: Record<string, string> = {};
+  for (const f of readModel(modelBytes).fields) {
+    if (f.number !== 14 || f.wireType !== WIRE_LENGTH) continue;
+    const entry = parseFields(f.value, f.start);
+    const key = entry.find((e) => e.number === 1 && e.wireType === WIRE_LENGTH);
+    const value = entry.find((e) => e.number === 2 && e.wireType === WIRE_LENGTH);
+    metadata[key ? text(key) : ""] = value ? text(value) : "";
+  }
+  return metadata;
+}
+
+/** The model with `entries` in its metadata_props: an entry already there
+ * under one of their keys is dropped (onnx's checker refuses a key written
+ * twice), each new one appended as another field 14 (a repeated field's
+ * entries may lie anywhere in the message, after the graph too), every other
+ * field of the model copied as it was. */
+export function withMetadata(modelBytes: Uint8Array, entries: Record<string, string>): Uint8Array<ArrayBuffer> {
+  const { fields } = readModel(modelBytes);
+  const replaced = new Set(Object.keys(entries));
+  const kept = fields.filter((f) => {
+    if (f.number !== 14 || f.wireType !== WIRE_LENGTH) return true;
+    const key = parseFields(f.value, f.start).find((e) => e.number === 1 && e.wireType === WIRE_LENGTH);
+    return !replaced.has(key ? text(key) : "");
+  });
+  const added = Object.entries(entries).map(([key, value]) =>
+    encodeLengthDelimited(14, concatBytes([encodeLengthDelimited(1, utf8Encoder.encode(key)), encodeLengthDelimited(2, utf8Encoder.encode(value))])),
+  );
+  return concatBytes([...kept.map((f) => modelBytes.subarray(f.tagStart, f.end)), ...added]);
 }

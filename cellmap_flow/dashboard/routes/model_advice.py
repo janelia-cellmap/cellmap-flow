@@ -52,6 +52,28 @@ def _model_metadata(model_config) -> dict:
     return meta
 
 
+def _declared_input_norm(model_config):
+    """The input normalization a model declares itself, in suggest_input_norm's
+    ``declared`` form (``{name: params}``, in order), or None.
+
+    An onnx model's manifest declares the steps the browser feeds it through
+    (``OnnxModelConfig.declared_input_norm``); no other type declares any.
+    """
+    declared = getattr(model_config, "declared_input_norm", None)
+    if not callable(declared):
+        return None
+    try:
+        steps = declared() or []
+    except Exception as e:
+        logger.debug(f"Could not read the declared input normalization of {model_config}: {e}")
+        return None
+    norm = {}
+    for step in steps:
+        if isinstance(step, dict) and step.get("name"):
+            norm[step["name"]] = {k: v for k, v in step.items() if k != "name"}
+    return norm or None
+
+
 # Reading the dataset costs a metadata fetch (and, for float data, a sample),
 # and it cannot change while the dashboard runs.
 _raw_range_cache = {}
@@ -177,6 +199,7 @@ def model_advice():
             entry["input_norm_suggestion"] = suggest_input_norm(
                 framework=meta.get("framework"),
                 raw_dtype=raw_dtype,
+                declared=_declared_input_norm(by_name.get(name)),
                 source=meta.get("repo") or meta.get("folder_path"),
                 data_range=raw_range,
             )

@@ -204,6 +204,13 @@ export interface Catalog {
  * the first segment of their ids), where Hugging Face models have theirs. */
 export const FINETUNED_REPO = "finetuned";
 
+/** The metadata_props key a finetuned model's downloaded .onnx carries its
+ * entry's manifest under, as JSON (GET /api/finetune/model/:name/download),
+ * so that the file alone says its voxel sizes, blocks and channels: the
+ * server's onnx model type reads it from there (cellmap_flow/models/configs/
+ * onnx.py MANIFEST_KEY). */
+export const MANIFEST_METADATA_KEY = "cellmap_flow.manifest";
+
 /** A model finetuned in this browser: the entry it is served as (the base's
  * manifest under the new name, one variant whose file is `<folder>.onnx`,
  * `onnxUrl` the key its bytes are kept under), and where it came from. */
