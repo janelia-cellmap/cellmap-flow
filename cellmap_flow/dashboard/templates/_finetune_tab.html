@@ -310,8 +310,9 @@
      behind the service worker), so there is nothing to save; it can be taken
      out as a zarr, or thrown away. crops.js points both at the volume once
      one exists (New Volume, or Resume Existing Volume); until then the link
-     has no target and the button is disabled. The download is a GET the
-     service worker relays to the in-page backend, as the Export Config link. #}
+     has no target and the button is disabled. The page fetches the link on a
+     click (web/src/rebase.ts), as the Export Config link, and the service
+     worker relays the GET to the in-page backend. #}
   {% if mode == "browser" %}
   <div class="mb-2" id="browserVolumeActions">
     <div class="d-flex align-items-center gap-2 flex-wrap">
@@ -877,8 +878,9 @@
     {# Browser mode only: the finetuned model as an .onnx file, the base's
        graph with the trained last layer, for the server mode or another
        machine. job-monitor.js points it at the model a status answer says is
-       served and shows it then; hidden otherwise. The GET is relayed by the
-       service worker to the in-page backend, as the Export Config link. #}
+       served and shows it then; hidden otherwise. The page fetches the link
+       on a click (web/src/rebase.ts), as the Export Config link, and the
+       service worker relays the GET to the in-page backend. #}
     {% if mode == "browser" %}
     <a class="btn btn-outline-secondary btn-sm mt-3" id="downloadFinetunedBtn" role="button" download style="display: none;"
        title="The finetuned model as an .onnx file: the base model's graph with the trained last layer in it">

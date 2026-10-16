@@ -4,7 +4,7 @@
 // Boot order matters. The dashboard's JavaScript starts asking /api/... the
 // moment it loads, so everything that answers must be ready first:
 //   1. the service worker (src/sw.ts) controls this page: it relays /api/*
-//      requests, EventSource streams and the Export Config download to the
+//      requests, EventSource streams and the downloads' fetches to the
 //      backend here, and /virtual/* chunk requests to chunkmirage's Engine;
 //   2. the session (IndexedDB), the inference engine, the model catalog and
 //      the viewer controller exist;
@@ -22,7 +22,8 @@
 // step 5, for tests and for anyone waiting on the page.
 // Before any of it, the dashboard's root-relative /api/ URLs are rebased onto
 // the page's directory (src/rebase.ts): on GitHub Pages the app is not at the
-// origin's root.
+// origin's root. Its download links are saved through fetch (same file):
+// Chrome sends a download link's request past the service worker.
 import "./browser.css";
 import { createBackend, restoreSession } from "./backend";
 import { listenForApiRequests, registerServiceWorker } from "./backend/relay";
@@ -31,7 +32,7 @@ import { createInference } from "./infer";
 import { chainFromHash, parseLink, resolveLinkedModels, withoutLink } from "./link";
 import { installLocalFolderUi, restoreLocalFolder } from "./local-folder";
 import { createCatalog } from "./models";
-import { installApiRebase } from "./rebase";
+import { installApiDownloads, installApiRebase } from "./rebase";
 import { installShareUi } from "./share-link";
 import { defaultChain, openSession } from "./state";
 import { openPaintStore } from "./state/paint-store";
@@ -64,6 +65,7 @@ function showBootError(error: unknown) {
 async function boot() {
   document.documentElement.dataset.mode = "browser";
   installApiRebase();
+  installApiDownloads();
   await registerServiceWorker();
   const session = await openSession();
   // A link to the page names its volume and models in the query (src/link.ts),
