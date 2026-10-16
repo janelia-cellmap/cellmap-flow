@@ -389,6 +389,17 @@ describe("the reach into a live viewer for AI-assisted annotation", () => {
     expect(current.displayDimensions).toEqual(["x", "y", "z"]);
     expect(viewer.viewDisplayDimensions()).toEqual(["x", "y", "z"]);
     expect(listeners.size).toBe(0);
+
+    // Two changes in a row (a layer added, then selected): the second state
+    // is made before they are back, and they are put back all the same.
+    viewer.setLayers({ more: { type: "annotation", source: "local://annotations" } });
+    viewer.selectLayer("more");
+    expect(current.displayDimensions).toBeUndefined();
+    expect(listeners.size).toBe(1);
+    names = ["z", "y", "x"];
+    [...listeners].forEach((fn) => fn());
+    expect(current.displayDimensions).toEqual(["x", "y", "z"]);
+    expect(listeners.size).toBe(0);
   });
 
   it("viewDepthAxis reads the state in the iframe's hash while Neuroglancer is still loading", async () => {
