@@ -78,7 +78,9 @@ convolution, is fitted on the voxels you painted, from the model's own
 weights, in seconds on any machine; the job card and the loss plot follow it.
 With *Auto-serve* on, the finetuned model takes the layer over as soon as it
 is trained. Paint where it is still wrong and train again (*Restart* goes on
-from the trained layer, with the form's values as they are then).
+from the trained layer, with the form's values as they are then). A restart's
+model replaces the one before it: the Models tab keeps one model per job, the
+latest, and a new *Start Finetuning* makes a new one beside it.
 
 The training panel's controls are the server's where they mean something for
 one layer: the epochs, the learning rate, the loss (BCE by default, MSE or
