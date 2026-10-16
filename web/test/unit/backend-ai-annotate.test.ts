@@ -24,6 +24,7 @@ import { bytesToBase64 as base64 } from "../../src/ai-annotate/gemini";
 import { type AiAnnotateDeps, type AiAnnotateState, aiAnnotateRoutes } from "../../src/backend/routes/ai-annotate";
 import { finetuneRoutes } from "../../src/backend/routes/finetune";
 import { Router } from "../../src/backend/router";
+import { viewLabelsRoutes } from "../../src/backend/routes/view-labels";
 import type { ApiRequest, ApiResponse, ModelEntry, PaintVolume } from "../../src/contracts";
 import type { RunFinetune } from "../../src/finetune/types";
 import { readVolume } from "../../src/finetune/volume";
@@ -90,17 +91,20 @@ function providers(gemini = new TestProvider()): Map<string, Provider> {
 }
 
 /** The AI-annotate routes beside the finetune routes (a volume comes to
- * exist through create-volume, with the real plan), on a fake provider, the
- * JavaScript codec, a memory store and a fixed clock; the plane 64 voxels a
- * side, so the images are small. */
+ * exist through create-volume, with the real plan) and the Label it routes
+ * (whose Undo takes an accept back, from the undo stacks the two share, as
+ * createRouter wires them), on a fake provider, the JavaScript codec, a
+ * memory store and a fixed clock; the plane 64 voxels a side, so the images
+ * are small. */
 function harness(ctx: FakeContext, deps: Partial<AiAnnotateDeps> = {}) {
   const router = new Router();
   const run: RunFinetune = async () => {
     throw new Error("no finetune run in these tests");
   };
   finetuneRoutes(router, { run, now: () => NOW });
+  const labels = viewLabelsRoutes(router);
   const storage = deps.storage !== undefined ? deps.storage : new MemoryKeyValueStore();
-  const ai = aiAnnotateRoutes(router, { providers: providers(), codec: jsCodec(), storage, now: () => NOW, cropSizePx: 64, ...deps });
+  const ai = aiAnnotateRoutes(router, { providers: providers(), codec: jsCodec(), storage, now: () => NOW, cropSizePx: 64, undo: labels.undo, ...deps });
   return { handle: (req: ApiRequest) => router.handle(req, ctx), ai, storage };
 }
 
@@ -869,7 +873,7 @@ describe("in the backend", () => {
     expect((await backend.handle(request("POST", "/api/finetune/view-labels/undo", {}))).status).toBe(409);
     const crops = await backend.handle(request("POST", "/api/finetune/load-crops"));
     expect(crops.status).toBe(503);
-    expect(body(crops).error).toMatch(/crops import, seeds and good regions\)/);
+    expect(body(crops).error).toMatch(/finetune tab's crops import\)/);
     expect(body(crops).error).not.toMatch(/AI annotation/);
   });
 

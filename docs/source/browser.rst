@@ -78,7 +78,23 @@ convolution, is fitted on the voxels you painted, from the model's own
 weights, in seconds on any machine; the job card and the loss plot follow it.
 With *Auto-serve* on, the finetuned model takes the layer over as soon as it
 is trained. Paint where it is still wrong and train again (*Restart* goes on
-from the trained layer).
+from the trained layer, with the form's values as they are then).
+
+The training panel's controls are the server's where they mean something for
+one layer: the epochs, the learning rate, the loss (BCE by default, MSE or
+margin; Dice scores whole patches and needs the server), label smoothing,
+class balance, and *Distillation Weight* and *Scope*, which keep the layer
+close to the model's own output where you painted nothing: the loss adds the
+weight times the mean squared distance of the layer's logits from the
+original's, on the unpainted voxels of the painted chunks (or all of their
+voxels), up to 32,768 of them. 0.01, the default, is a light hold; 0.1 to 1
+holds firmly. *Voxels per Step* is the browser's own batch: how many painted
+voxels each step of the training averages over. *Mark as Good*, under *Patch
+on screen*, marks the output block where the viewer looks as one the model
+already gets right; it shows as the ``good_regions`` box layer and is kept
+with the volume. Once there are good regions, distillation holds the model to
+its own output inside them, wherever you have not painted, instead of over
+the scope, as on the server; *clear* removes them.
 
 What this can and cannot fix. The rest of the network stays as exported, so
 the finetune learns what the model mislabels where its features already tell
@@ -87,11 +103,24 @@ new shapes; that is a finetune of the whole network, which the server mode
 runs on the cluster, and whose result the browser can serve as any other
 model.
 
+The *Patch on screen* tools label the box centred where the viewer looks, as
+on the server (:doc:`finetuning`): *Seed from Prediction* copies a model's
+prediction into the unpainted voxels, an id per object and background 1, for
+you to fix with the brush; *All Background* labels them background; *Split
+Objects* gives each connected object an id of its own (paint a background wall
+through a merge first); *Undo* takes back the last of these, or of an accepted
+AI annotation, up to 10. *Prediction from* lists the models served on the
+Models tab, the ones finetuned here among them (default: the volume model's
+latest finetune), and the seed reads the prediction the page has already
+computed for the viewer. Its methods are *Threshold + components* for any
+model and *Mutex watershed* for an affinity model; the server's *Distance
+watershed* and *Model's instances* fit outputs no browser model has.
+
 AI-assisted annotation is in the tab too, under *Patch on screen*: hover over
 a structure and press ``Shift+G`` (or click *Annotate at View Centre*), and
 one plane of raw EM goes to a Gemini image model asked to paint it; the
 review opens over the page, *Accept* writes the mask into the paint volume as
-an object per piece, *Undo* takes it back. The page calls Google itself, with
+an object per piece, and the tools' *Undo* takes it back. The page calls Google itself, with
 credentials you give it in the panel: a Gemini API key, or a Google Cloud
 project and an access token for Vertex AI (``gcloud auth print-access-token``,
 good for about an hour). They stay in this browser and go to Google alone,

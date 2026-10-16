@@ -23,6 +23,7 @@
 // served; restartable), FAILED or CANCELLED. The last three but one are
 // final (TERMINAL_STATUSES): nothing moves a job again once it has one.
 import type { AppContext, FinetunedRecord, ModelEntry, PaintVolume } from "../contracts";
+import { loadGoodRegions } from "../finetune/good-regions";
 import type { Finetuned, FinetuneOptions, RunFinetune, RunReporter } from "../finetune/types";
 import { finetunedEntry, nextFinetunedName } from "../models/finetuned";
 import { message } from "./router";
@@ -365,8 +366,10 @@ export class FinetuneJobs {
     return { ok: true, job };
   }
 
-  /** One run of `job`, start to finish: the base's bytes, the run itself,
-   * then the result kept and served (keep). A cancel while it runs leaves
+  /** One run of `job`, start to finish: the base's bytes and the volume's
+   * good regions as they are now (a restart takes the regions marked since,
+   * as the server's trainer reads good_regions.json when it starts), the
+   * run itself, then the result kept and served (keep). A cancel while it runs leaves
    * the job CANCELLED and the result unkept; any failure is logged into
    * the job and makes it FAILED, never thrown (a job's end is read from its
    * status, as a cluster job's is). */
@@ -378,6 +381,7 @@ export class FinetuneJobs {
       const dataset = ctx.infer.dataset();
       if (!dataset) throw new Error("No dataset is open: open the volume the paint was made on first");
       const baseBytes = await ctx.catalog.modelBytes(entry);
+      const goodRegions = await loadGoodRegions(ctx.paint, volume.id);
       result = await this.deps.run({
         entry,
         baseBytes,
@@ -389,6 +393,7 @@ export class FinetuneJobs {
         options,
         report: job.reporter(),
         ...(initialHead ? { initialHead } : {}),
+        ...(goodRegions.length ? { goodRegions } : {}),
       });
     } catch (e) {
       if (job.isFinal()) {

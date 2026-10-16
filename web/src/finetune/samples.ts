@@ -29,7 +29,7 @@
 import { inputBox, padded, type StageAt } from "../../chunkmirage/web/src/stages";
 import { chooseRawLevel, geometryOf, halo as haloOf, inputShape, outputLevel, outputShape, ratio } from "../infer/geometry";
 import { modelInput } from "../infer/stages";
-import type { FinetuneRun, Sample } from "./types";
+import type { FinetuneRun, PaintedChunk, Sample } from "./types";
 import { paintedChunkIndices, readPaintedChunk } from "./volume";
 
 /** The samples of `run`'s volume, one per painted chunk, in chunk order
@@ -37,8 +37,13 @@ import { paintedChunkIndices, readPaintedChunk } from "./volume";
  * level is skipped, as the engine never serves one; a chunk deleted between
  * the listing and its read is skipped too. The volume's chunk must be the
  * model's output block, or the samples would not be the blocks the model
- * stage computes. */
-export async function* collectSamples(run: Pick<FinetuneRun, "volume" | "entry" | "chain" | "dataset" | "infer" | "paint">): AsyncGenerator<Sample> {
+ * stage computes.
+ *
+ * With `indices`, those chunks instead, in that order, and a chunk never
+ * painted among them is a sample all the same, its labels all 0: a good
+ * region's block anchors the model whether or not anything in it was
+ * painted (run.ts). */
+export async function* collectSamples(run: Pick<FinetuneRun, "volume" | "entry" | "chain" | "dataset" | "infer" | "paint">, indices?: number[][]): AsyncGenerator<Sample> {
   const { volume, dataset, entry } = run;
   // The grid the model is served on, as engine.ts's serve() finds it: the
   // raw level the model reads, and the output level over it.
@@ -53,13 +58,13 @@ export async function* collectSamples(run: Pick<FinetuneRun, "volume" | "entry" 
   const halo = haloOf(g), r = ratio(g), inShape = inputShape(g);
   const spec = { normalizers: volume.input_norm, rawShape: raw.shape };
 
-  for (const index of await paintedChunkIndices(run.paint, volume.id)) {
+  for (const index of indices ?? (await paintedChunkIndices(run.paint, volume.id))) {
     if (index.length !== chunk.length) continue;  // not a chunk of a (z, y, x) array
     // The chunk's box on the output level, clipped to it as the engine clips
     // a chunk (Engine.stagedChunk); nothing to compute past the level.
     const lo = index.map((i, a) => i * chunk[a]), hi = lo.map((o, a) => Math.min(o + chunk[a], level.shape[a]));
     if (hi.some((h, a) => h <= lo[a])) continue;
-    const painted = await readPaintedChunk(run.paint, volume, index);
+    const painted = (await readPaintedChunk(run.paint, volume, index)) ?? (indices ? unpainted(volume.chunk_size, index, volume.dtype) : null);
     if (!painted) continue;
     // The input box on the raw level and what lies inside it, read; the rest
     // zero (Engine.input). Nothing is read for a box wholly outside.
@@ -73,6 +78,12 @@ export async function* collectSamples(run: Pick<FinetuneRun, "volume" | "entry" 
     const input = modelInput(spec, block, at, halo, r, inShape);
     yield { chunk: painted, input, inputDims: [1, 1, ...inShape] };
   }
+}
+
+/** A chunk never painted, as zarr reads one: every voxel 0, in the volume's dtype. */
+function unpainted(shape: number[], index: number[], dtype: FinetuneRun["volume"]["dtype"]): PaintedChunk {
+  const n = shape.reduce((a, b) => a * b, 1);
+  return { index, shape: shape.slice(), labels: dtype === "uint16" ? new Uint16Array(n) : new Uint8Array(n) };
 }
 
 function sameShape(a: readonly number[], b: readonly number[]): boolean {

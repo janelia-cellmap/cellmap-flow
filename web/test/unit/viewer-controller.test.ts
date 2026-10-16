@@ -75,6 +75,12 @@ function liveDocument(state: NgState) {
     id: "", title: "", style: { cssText: "" }, src: "", contentWindow: win,
     addEventListener: (type: string, fn: () => void) => void (listeners[type] = [...(listeners[type] ?? []), fn]),
     removeEventListener: (type: string, fn: () => void) => void (listeners[type] = (listeners[type] ?? []).filter((f) => f !== fn)),
+    // A clone is a new iframe, a fresh page with no viewer yet; replaceWith records it.
+    replacedBy: null as Record<string, unknown> | null,
+    cloneNode() {
+      return { ...frame, src: "", contentWindow: { location: { hash: "" }, addEventListener() {}, removeEventListener() {} }, removeAttribute(name: string) { if (name === "src") this.src = ""; } };
+    },
+    replaceWith(fresh: Record<string, unknown>) { frame.replacedBy = fresh; },
   };
   vi.stubGlobal("document", { getElementById: () => null, querySelector: () => null, createElement: () => frame, body: { appendChild() {} } });
   vi.stubGlobal("sessionStorage", { getItem: () => null, setItem() {}, removeItem() {} });
@@ -453,6 +459,26 @@ describe("the reach into a live viewer for AI-assisted annotation", () => {
     expect(viewer.refreshLayer("annotation_v")).toBe(true);
     const again = (doc.stub.viewer.state.toJSON().layers as Record<string, unknown>[])[1].source as { url: string };
     expect(again.url).toBe("s3+http://localhost/paint/v~2/annotation");
+  });
+
+  it("refreshLayer opens the viewer again on the re-read layer when Neuroglancer throws taking the state, and says so", async () => {
+    const lines: string[] = [];
+    const doc = liveDocument(live);
+    const viewer = createViewer({ session: fakeSession(), log: (l) => lines.push(l) });
+    await viewer.openDataset("https://example.org/em.zarr", { type: "image", source: "zarr://https://example.org/em.zarr" });
+    doc.load();
+    doc.stub.viewer.state.restoreState = () => {
+      throw new Error(`Error restoring property "layout": Cannot read properties of undefined (reading 'generation')`);
+    };
+    expect(viewer.refreshLayer("annotation_v")).toBe(true);
+    const fresh = doc.frame.replacedBy as { src: string } | null;
+    expect(fresh).not.toBeNull();
+    const reopened = decodeState(fresh!.src.replace(/^[^#]*/, ""));
+    expect((reopened?.layers as Record<string, unknown>[])[1].source).toEqual({
+      url: "s3+http://localhost/paint/v~1/annotation", subsources: { default: { writingEnabled: true }, bounds: {} },
+    });
+    expect(reopened?.layout).toBe("yz");
+    expect(lines.some((l) => l.includes("could not take the re-read annotation_v layer") && l.includes("opening it again"))).toBe(true);
   });
 
   it("refreshLayer keeps a hidden paint layer hidden", async () => {

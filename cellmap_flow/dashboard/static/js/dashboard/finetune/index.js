@@ -6,33 +6,35 @@
 // - models.js: the model picker;
 // - crops.js: New Volume, Load Crops from YAML, annotated regions, Save;
 // - sessions.js: Resume Existing Volume;
-// - good-regions.js: Mark This View as Good, Clear, the rehearsal hint, and
-//   Seed from Prediction and All Background over the same patch;
+// - label-it.js: Seed from Prediction, All Background, Split Objects and
+//   Undo, over the patch on screen;
+// - good-region-marks.js: Mark as Good, the count, clear, the rehearsal hint;
 // - ai-annotate.js: AI-assisted annotation, a hosted model's labels for the
-//   plane on screen, reviewed and then accepted (undone by the same Undo) or
-//   rejected;
+//   plane on screen, reviewed and then accepted (undone by Label it's Undo)
+//   or rejected;
 // - job-monitor.js: submit, the status poll, Restart, Stop Early, Cancel,
 //   and the job restored after a reload, with job-card.js (the Training
 //   Status card), log-stream.js (the Training Logs text) and loss-plot.js
 //   (the loss plot).
 // They start in this order, which is the order of the tab's first requests:
-// the saved output path, the models, the good-region count, the AI
-// annotation's configuration, and the job to restore. (The GPU queue picker joins the Models tab's poller.)
+// the saved output path, the models, the seed sources, the good-region
+// count, the AI annotation's configuration, and the job to restore. (The GPU
+// queue picker joins the Models tab's poller.)
 //
 // The same tab serves the browser mode (web/), where an in-page backend
 // answers the requests and the finetune trains the model's last layer in the
 // page: the template hides what needs a server (server-only), and each module
 // asks lib/page-data's isBrowserMode where it must behave differently (no
 // output path to insist on, the paint's download and delete, the finetuned
-// model's download, the AI annotation's credentials). Of the patch tools,
-// Label it and Good regions are not started there at all: their sections are
-// hidden and their routes unavailable. AI-assisted annotation is: the browser
-// mode answers its routes in the page (web/src/ai-annotate).
-import { isBrowserMode } from "../../lib/page-data.js";
+// model's download, the AI annotation's credentials, the head's batch). The
+// patch tools, Label it, AI-assisted annotation and Good regions, all run
+// there, their routes answered in the page (web/src/backend/routes/
+// view-labels.ts, ai-annotate.ts and good-regions.ts).
 import { initAiAnnotate } from "./ai-annotate.js";
 import { initCrops } from "./crops.js";
-import { initGoodRegions } from "./good-regions.js";
+import { initGoodRegionMarks } from "./good-region-marks.js";
 import { initJobMonitor } from "./job-monitor.js";
+import { initLabelIt } from "./label-it.js";
 import { initModelPicker } from "./models.js";
 import { initSessions } from "./sessions.js";
 import { initTrainingForm } from "./training-form.js";
@@ -53,12 +55,8 @@ export function initFinetuneTab() {
   const picker = initModelPicker({ log, savedModelName: form.saved && form.saved.selectedModelName });
   const crops = initCrops({ log, picker, form });
   initSessions({ log, addToViewer: crops.addToViewer, volumeReady: crops.volumeReady });
-  // Browser mode: the Label it and Good regions sections are server-only
-  // (seeds come from a running model's server, good regions are the
-  // session's), and good-regions.js polls the seed sources every few
-  // seconds; against a backend that answers unavailable that is only noise.
-  // AI-assisted annotation runs in both modes.
-  if (!isBrowserMode()) initGoodRegions({ log });
+  initLabelIt({ log });
+  initGoodRegionMarks({ log });
   initAiAnnotate({ log });
   initJobMonitor({ picker, form });
   rememberOpenSections();

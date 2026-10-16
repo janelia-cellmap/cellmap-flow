@@ -1,7 +1,8 @@
 // AI-assisted annotation in the browser: the routes of
-// dashboard/routes/finetune/ai_annotate.py (and the undo of
-// view_labels.py), answered in the page with the same JSON, so the tab's
-// ai-annotate.js drives both. The user hovers a point in the viewer and
+// dashboard/routes/finetune/ai_annotate.py, answered in the page with the
+// same JSON, so the tab's ai-annotate.js drives both. Accept pushes onto
+// the patch tools' undo stacks (routes/view-labels.ts, whose Undo takes it
+// back, as the server's accept uses view_labels._undo_stack). The user hovers a point in the viewer and
 // presses Shift+G (or clicks Annotate at View Centre); the job
 // (../ai-annotate-job.ts) reads one plane of raw EM around the point, in the
 // plane the viewer shows, asks the chosen provider's model to paint the
@@ -22,14 +23,13 @@
 //   this browser's (ai-annotate/usage.ts), and the config answer's
 //   `usage_note` says so where the page would name the server's config.
 // - The audit log is a file of the volume in the paint store
-//   (ai-annotate/audit.ts); the acknowledgements, the settings, the job and
-//   the undo stacks live as long as the router (the page), as the server's
-//   live for the dashboard's life.
+//   (ai-annotate/audit.ts); the acknowledgements, the settings and the job
+//   live as long as the router (the page), as the server's live for the
+//   dashboard's life, and so do the undo stacks, which are view-labels.ts's.
 //
 // The refusals keep the Python's order, statuses and words: the page shows
 // them and keys on `needs_volume` and `needs_acknowledgement`.
 import { createCredentialStore, type CredentialStore } from "../../ai-annotate/credentials";
-import { restoreBox } from "../../ai-annotate/fill";
 import { canvasCodec } from "../../ai-annotate/images";
 import { ORGANELLES, resolveOrganelleProfile } from "../../ai-annotate/organelles";
 import { editablePrompt } from "../../ai-annotate/prompts";
@@ -40,7 +40,6 @@ import { createUsage, limitMessage, type Usage } from "../../ai-annotate/usage";
 import type { AppContext, PaintVolume } from "../../contracts";
 import { readVolume } from "../../finetune/volume";
 import { defaultKeyValueStore, type KeyValueStore } from "../../models/listing-cache";
-import { paintLayerName } from "../../viewer/layers";
 import { AiAnnotateJob, GENERIC_FAILURE, type JobDeps, newAnnotateId, Refused } from "../ai-annotate-job";
 import type { Router } from "../router";
 import { badRequest, json, message, objectBody } from "../router";
@@ -64,7 +63,10 @@ const FIELD_WORDS: Record<CredentialField, string> = { api_key: "API key", proje
  * (the page's canvas; a fake provider and a plain-JavaScript codec in
  * tests), the clock, where credentials and the day's count are kept
  * (localStorage; a MemoryKeyValueStore in tests; null for the page's life
- * only), the plane's size in annotation voxels and the day's cap. */
+ * only), the plane's size in annotation voxels, the day's cap, and the
+ * undo stacks per volume that Accept pushes onto: the patch tools'
+ * (view-labels.ts, whose Undo takes it back), which createRouter passes;
+ * a map of its own when none is given. */
 export interface AiAnnotateDeps {
   providers: Map<string, Provider>;
   codec: ImageCodec;
@@ -72,13 +74,14 @@ export interface AiAnnotateDeps {
   storage: KeyValueStore | null;
   cropSizePx: number;
   dailyCallLimit: number;
+  undo: Map<string, UndoEntry[]>;
 }
 
 /** The page's AI-annotate state (the server's Session.ai_annotate), returned
  * for tests: the settings, the acknowledgements (dataset URL → provider id →
  * the destination acknowledged), the one job, the Shift+G unbind, the undo
- * stacks per volume, the model lists providers have listed live, the
- * credentials and the day's count. */
+ * stacks per volume (the patch tools'), the model lists providers have
+ * listed live, the credentials and the day's count. */
 export interface AiAnnotateState {
   settings: AiSettings | null;
   acknowledged: Map<string, Map<string, string>>;
@@ -109,7 +112,7 @@ export function aiAnnotateRoutes(router: Router, deps: Partial<AiAnnotateDeps> =
     acknowledged: new Map(),
     job: null,
     unbind: null,
-    undo: new Map(),
+    undo: deps.undo ?? new Map(),
     liveModels: new Map(),
     credentials: createCredentialStore(storage),
     usage: createUsage(storage, now),
@@ -333,6 +336,7 @@ export function aiAnnotateRoutes(router: Router, deps: Partial<AiAnnotateDeps> =
     return job;
   }
 
+  /** The volume's undo stack, as view-labels.ts keeps it. */
   function undoStack(volumeId: string): UndoEntry[] {
     let stack = ai.undo.get(volumeId);
     if (!stack) ai.undo.set(volumeId, (stack = []));
@@ -604,29 +608,6 @@ export function aiAnnotateRoutes(router: Router, deps: Partial<AiAnnotateDeps> =
       return json(200, { success: true });
     } catch (e) {
       return answerError(ctx, e);
-    }
-  });
-
-  // POST /api/finetune/view-labels/undo (view_labels.py undo_view_labels):
-  // take back the last accepted annotation of the session's volume. The box
-  // goes back to what it held before, on the voxels still as the action left
-  // them: a stroke painted there since is kept. 409 when there is nothing to
-  // undo.
-  router.post("/api/finetune/view-labels/undo", async (_req, _params, ctx) => {
-    try {
-      const volume = await sessionVolume(ctx);
-      if (!volume) throw new Refused("No annotation volume to undo in.");
-      const stack = undoStack(volume.id);
-      const entry = stack.pop();
-      if (!entry) throw new Refused("Nothing to undo.");
-      const restored = await restoreBox(ctx.paint, volume, entry);
-      const layerRefreshed = restored ? ctx.viewer.refreshLayer(paintLayerName(volume.id)) : false;
-      ctx.log(`Undid the label action on box ${entry.lo.join(",")}..${entry.hi.join(",")} of ${volume.id}: ${restored} voxels restored`);
-      return json(200, { success: true, restored, reload_viewer: restored > 0, layer_refreshed: layerRefreshed, can_undo: stack.length > 0 });
-    } catch (e) {
-      if (e instanceof Refused) return answerError(ctx, e);
-      ctx.log(`Error undoing the label action: ${message(e)}`);
-      return json(500, { success: false, error: message(e) });
     }
   });
 

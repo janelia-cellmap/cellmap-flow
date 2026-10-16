@@ -174,6 +174,17 @@ describe("collectSamples on a 3D model", () => {
     expect(reads.length).toBe(2);  // nothing read for the chunk past the level
   });
 
+  it("yields the chunks asked for, in that order, one never painted as zeros (a good region's block), and none past the level", async () => {
+    const { store, volume } = await volumeIn(G3, RAW3, { "1.1.1": EIGHT });
+    const infer = fakeInfer(RAW3.levels[0].shape);
+    const samples: Sample[] = [];
+    for await (const s of collectSamples({ volume, entry: G3, chain: CHAIN, dataset: RAW3, infer, paint: store }, [[1, 1, 1], [0, 2, 3], [9, 0, 0]])) samples.push(s);
+    expect(samples.map((s) => s.chunk.index)).toEqual([[1, 1, 1], [0, 2, 3]]);
+    expect(Array.from(samples[0].chunk.labels)).toEqual(EIGHT);
+    expect(samples[1].chunk).toEqual({ index: [0, 2, 3], shape: [2, 2, 2], labels: new Uint8Array(8) });
+    expect(infer.reads.length).toBe(2);
+  });
+
   it("carries uint16 labels", async () => {
     const ids = Uint16Array.from([0, 1, 2, 300, 40000, 1, 2, 2]);
     const { samples, volume } = await samplesOf(G3, RAW3, { "1.1.1": ids });

@@ -208,7 +208,7 @@ The Fileglancer app runs the same dashboard as a job on the cluster, as you, fro
 
 ## In the browser
 
-The browser mode ([janelia-cellmap.github.io/cellmap-flow/app](https://janelia-cellmap.github.io/cellmap-flow/app/); the docs' *In the browser* page) has the same panel, under **Patch on screen** in its Finetune tab, once an annotation volume is open. There is no server and no config file: the page itself reads the plane from the raw volume, sends it to the model, turns the answer into a mask, and writes an accepted mask into the paint volume the browser keeps. Hover and **Shift+G**, **Annotate at View Centre**, the review with its three images, **Resend**, **Accept** with **Overwrite existing labels**, **Reject** and the acknowledgement are as above; **Undo** is a button in the panel itself (up to 10 accepted annotations per volume, kept while the page is open).
+The browser mode ([janelia-cellmap.github.io/cellmap-flow/app](https://janelia-cellmap.github.io/cellmap-flow/app/); the docs' *In the browser* page) has the same panel, under **Patch on screen** in its Finetune tab, once an annotation volume is open. There is no server and no config file: the page itself reads the plane from the raw volume, sends it to the model, turns the answer into a mask, and writes an accepted mask into the paint volume the browser keeps. Hover and **Shift+G**, **Annotate at View Centre**, the review with its three images, **Resend**, **Accept** with **Overwrite existing labels**, **Reject** and the acknowledgement are as above, and so is **Undo** in the **Patch on screen** panel (up to 10 actions per volume, accepted annotations and the panel's seeds and fills alike, kept while the page is open).
 
 Three providers, picked in the panel:
 

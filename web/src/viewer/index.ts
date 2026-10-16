@@ -281,6 +281,23 @@ export function createViewer(opts: { session: SessionStore; log: (line: string) 
     return frame;
   }
 
+  /** A fresh page of Neuroglancer at `hash`, in a new iframe in the old
+   * one's place (its id, title and style): for a state the live viewer threw
+   * on part way through taking, which a hash change would only hand the same
+   * viewer again. Without an iframe yet, mountFrame makes the first. */
+  function reopenFrame(hash: string): void {
+    const old = frame;
+    stopMirror?.();
+    stopMirror = null;
+    if (old) {
+      const fresh = old.cloneNode(false) as HTMLIFrameElement;
+      fresh.removeAttribute("src");
+      old.replaceWith(fresh);
+      frame = fresh;
+    }
+    mountFrame(hash);
+  }
+
   /** The connect panel, worded for the browser: a URL, not a cluster path. */
   function adjustConnectPanel(): void {
     const input = document.getElementById(PATH_INPUT_ID) as HTMLInputElement | null;
@@ -539,7 +556,23 @@ export function createViewer(opts: { session: SessionStore; log: (line: string) 
       if (!layer) return false;
       const source = respelledPaintSource(layer.source);
       if (source === null) return false;  // not a paint layer: nothing of ours to re-read
-      applyState(replaceLayers(state, { [name]: { ...layer, source } }));
+      const next = replaceLayers(state, { [name]: { ...layer, source } });
+      try {
+        applyState(next);
+      } catch (e) {
+        // Neuroglancer can throw part way through taking a state, leaving
+        // the viewer half restored (seen after a Seed from Prediction:
+        // "Error restoring property "layout": Cannot read properties of
+        // undefined (reading 'generation')"). The labels are written by
+        // then, so the viewer is opened again on the new state, rather than
+        // the write reported failed or the iframe reloaded on the state it
+        // was first given, which lacks every layer added since.
+        log(`the viewer could not take the re-read ${name} layer (${(e as Error).message ?? e}); opening it again on that state`);
+        const hash = encodeState(next);
+        pending = next;
+        reopenFrame(hash);
+        rememberState(hash);
+      }
       return true;
     },
   };

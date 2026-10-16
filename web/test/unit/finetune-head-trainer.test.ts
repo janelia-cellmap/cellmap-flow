@@ -6,10 +6,16 @@
 // linear map plus noise) brings the loss down and recovers the labels,
 // class balance changes what a 95/5 skew teaches, label smoothing moves the
 // optimum, a cancel stops it between batches, the same seed trains the same
-// head, and the epoch line is the one the dashboard's loss plot parses.
+// head, and the epoch line is the one the dashboard's loss plot parses. The
+// server's other per-voxel losses, MSE on probabilities and the margin
+// loss, have the server's values and their own gradients; with a
+// distillation set and λ the head is held to the teacher (the head it is
+// given, whatever it starts from) by λ, the epoch line names the supervised
+// and distillation terms whose sum it reports, and without one, or at λ 0,
+// it trains exactly as before.
 import { describe, expect, it } from "vitest";
 
-import { batchLoss, concatPixels, gatherPixels, mulberry32, type PixelSet, trainHead, yieldEvery } from "../../src/finetune/head-trainer";
+import { batchLoss, concatPixels, type DistillationSet, gatherPixels, mulberry32, type PixelSet, trainHead, yieldEvery } from "../../src/finetune/head-trainer";
 import { DEFAULT_OPTIONS, type FinetuneOptions, type Head, type ModelFeatures, type RunReporter, type Targets } from "../../src/finetune/types";
 
 // The dashboard's parser (cellmap_flow/dashboard/static/js/dashboard/finetune/loss-plot.js EPOCH_LOSS).
@@ -243,7 +249,7 @@ describe("trainHead", () => {
     expect(Array.from(trained.weight)).not.toEqual([0, 0, 0]);
     // Cancelled before the first epoch: nothing trained, the start returned.
     const cancelledAtOnce = await trainHead(pixels, head(3, 1, [1, 2, 3], [4]), options(), { log: () => {}, cancelled: () => true });
-    expect(cancelledAtOnce).toEqual({ weight: new Float32Array([1, 2, 3]), bias: new Float32Array([4]), losses: [] });
+    expect(cancelledAtOnce).toEqual({ weight: new Float32Array([1, 2, 3]), bias: new Float32Array([4]), losses: [], supervised: [] });
     // Cancelled mid-epoch: the batches so far count, the epoch does not.
     let batches = 0;
     const midEpoch = await trainHead(pixels, head(3, 1), options({ epochs: 30 }), { log: () => {}, cancelled: () => ++batches >= 2 });
@@ -271,6 +277,157 @@ describe("trainHead", () => {
     await expect(trainHead(pixels, head(3, 1), options({ learningRate: 0 }), reporter())).rejects.toThrow(/learning rate/);
     await expect(trainHead(pixels, head(3, 1), options({ labelSmoothing: 1 }), reporter())).rejects.toThrow(/smoothing/);
     await expect(trainHead(pixels, head(2, 1), options(), reporter())).rejects.toThrow(/initial weights of 2 and 1 values for a 1 × 3 head/);
+  });
+});
+
+describe("batchLoss's MSE and margin losses", () => {
+  const z = Float64Array.from([2, -1, 0.5, -3, 4, 0]), y = Float32Array.from([1, 0, 0, 1, 1, 0]), m = Float32Array.from([1, 1, 1, 0, 1, 1]);
+  const sigmoid = (v: number) => 1 / (1 + Math.exp(-v));
+  const masked = [0, 1, 2, 4, 5];
+
+  it("MSE is the squared distance of the probability from the smoothed target, reduced as BCE is", () => {
+    const s = 0.1, t = (i: number) => y[i] * (1 - s) + s / 2;
+    const expected = masked.reduce((sum, i) => sum + (sigmoid(z[i]) - t(i)) ** 2, 0) / 5;
+    expect(batchLoss(z, y, m, { lossType: "mse", balanceClasses: false, labelSmoothing: s }, new Float64Array(6))).toBeCloseTo(expected, 12);
+    const fg = ((sigmoid(z[0]) - t(0)) ** 2 + (sigmoid(z[4]) - t(4)) ** 2) / 2, bg = [1, 2, 5].reduce((sum, i) => sum + (sigmoid(z[i]) - t(i)) ** 2, 0) / 3;
+    expect(batchLoss(z, y, m, { lossType: "mse", balanceClasses: true, labelSmoothing: s }, new Float64Array(6))).toBeCloseTo((fg + bg) / 2, 12);
+  });
+
+  it("margin squares how far the probability falls short of 1 - m (foreground) or past m (background), and takes no smoothing", () => {
+    const margin = 0.3;
+    const per = (i: number) => (y[i] > 0.5 ? Math.max(1 - margin - sigmoid(z[i]), 0) : Math.max(sigmoid(z[i]) - margin, 0)) ** 2;
+    // z 2 and 4 (foreground) and -1 (background) are past the margin and cost nothing; 0.5 and 0 do.
+    expect([0, 1, 4].map(per)).toEqual([0, 0, 0]);
+    const expected = masked.reduce((sum, i) => sum + per(i), 0) / 5;
+    expect(expected).toBeGreaterThan(0);
+    for (const labelSmoothing of [0, 0.2]) {
+      expect(batchLoss(z, y, m, { lossType: "margin", margin, balanceClasses: false, labelSmoothing }, new Float64Array(6))).toBeCloseTo(expected, 12);
+    }
+    const fg = (per(0) + per(4)) / 2, bg = (per(1) + per(2) + per(5)) / 3;
+    expect(batchLoss(z, y, m, { lossType: "margin", margin, balanceClasses: true, labelSmoothing: 0 }, new Float64Array(6))).toBeCloseTo((fg + bg) / 2, 12);
+    // A smaller margin asks for more: at 0.1 the background at z = -1 (p 0.27) costs too.
+    expect(batchLoss(z, y, m, { lossType: "margin", margin: 0.1, balanceClasses: false, labelSmoothing: 0 }, new Float64Array(6))).toBeGreaterThan(expected);
+  });
+
+  it("returns each loss's gradient (finite differences), zero where the mask is", () => {
+    const zs = Float64Array.from([2, -1, 0.5, -3, 0.3, 0]);  // a foreground voxel short of the margin too
+    for (const opts of [
+      { lossType: "mse" as const, balanceClasses: false, labelSmoothing: 0 },
+      { lossType: "mse" as const, balanceClasses: true, labelSmoothing: 0.1 },
+      { lossType: "margin" as const, margin: 0.3, balanceClasses: false, labelSmoothing: 0 },
+      { lossType: "margin" as const, margin: 0.2, balanceClasses: true, labelSmoothing: 0 },
+    ]) {
+      const dz = new Float64Array(6);
+      batchLoss(zs, y, m, opts, dz);
+      expect(dz[3]).toBe(0);
+      for (let i = 0; i < 6; i++) {
+        const h = 1e-6, up = Float64Array.from(zs), down = Float64Array.from(zs);
+        up[i] += h; down[i] -= h;
+        const numeric = (batchLoss(up, y, m, opts, new Float64Array(6)) - batchLoss(down, y, m, opts, new Float64Array(6))) / (2 * h);
+        expect(dz[i]).toBeCloseTo(numeric, 6);
+      }
+    }
+  });
+
+  it("trains a head with either: the loss comes down and the labels are recovered", async () => {
+    const pixels = separable(2000, 4, 1, 21, 0.25);
+    for (const lossType of ["mse", "margin"] as const) {
+      const trained = await trainHead(pixels, head(4, 1), options({ lossType, epochs: 40, learningRate: 0.1 }), reporter());
+      expect(trained.losses[39]).toBeLessThan(trained.losses[0]);
+      expect(accuracy(pixels, trained.weight, trained.bias)).toBeGreaterThan(0.9);
+    }
+  });
+});
+
+/** `count` rows of `inChannels` standard normal features, every channel weighed 1. */
+function heldRows(count: number, inChannels: number, outChannels: number, seed: number): DistillationSet {
+  const gauss = normal(mulberry32(seed));
+  return { x: Float32Array.from({ length: count * inChannels }, gauss), w: new Float32Array(count * outChannels).fill(1), count, inChannels, outChannels };
+}
+
+/** The mean squared distance of `trained`'s logits from `teacher`'s over the rows of `held`. */
+function distance(held: DistillationSet, trained: { weight: Float32Array; bias: Float32Array }, teacher: Head): number {
+  let sum = 0;
+  for (let p = 0; p < held.count; p++) for (let c = 0; c < held.outChannels; c++) {
+    let a = trained.bias[c] - teacher.bias[c];
+    for (let i = 0; i < held.inChannels; i++) a += (trained.weight[c * held.inChannels + i] - teacher.weight[c * held.inChannels + i]) * held.x[p * held.inChannels + i];
+    sum += a * a;
+  }
+  return sum / (held.count * held.outChannels);
+}
+
+describe("trainHead with distillation", () => {
+  const EPOCH_PARTS = /^Epoch (\d+)\/(\d+) - Loss: (\d+\.\d{6}) - Supervised: (\d+\.\d{6}) - Distillation: (\d+\.\d{6})$/;
+
+  it("holds the head to the teacher, the head it is given, wherever it starts from", async () => {
+    // Nothing supervised (every mask 0): distillation alone moves the head.
+    const pixels = { ...separable(400, 3, 1, 7), m: new Float32Array(400) };
+    const teacher = head(3, 1, [1, -2, 0.5], [0.25]);
+    const start = { weight: Float32Array.from([0, 0, 0]), bias: Float32Array.from([0]) };
+    const held = heldRows(500, 3, 1, 8);
+    const trained = await trainHead(pixels, teacher, options({ epochs: 150, learningRate: 0.05, batchPixels: 100, distillationLambda: 1 }), reporter(), start, held);
+    Array.from(trained.weight).forEach((w, i) => expect(w).toBeCloseTo(teacher.weight[i], 2));
+    expect(trained.bias[0]).toBeCloseTo(0.25, 2);
+    expect(trained.supervised.every((loss) => loss === 0)).toBe(true);
+    // At λ 0 nothing moves it.
+    const still = await trainHead(pixels, teacher, options({ epochs: 5, distillationLambda: 0 }), reporter(), start, held);
+    expect(Array.from(still.weight)).toEqual([0, 0, 0]);
+  });
+
+  it("trades the paint against the teacher by λ: the heavier, the nearer the teacher and the further from the paint's optimum", async () => {
+    const pixels = separable(1000, 4, 1, 11, 0.25);
+    const teacher = head(4, 1);  // the zero head: logit 0 everywhere
+    const held = heldRows(800, 4, 1, 12);
+    const runs = [];
+    for (const distillationLambda of [0, 0.01, 1]) {
+      runs.push(await trainHead(pixels, teacher, options({ epochs: 30, distillationLambda }), reporter(), undefined, held));
+    }
+    const distances = runs.map((r) => distance(held, r, teacher)), fits = runs.map((r) => fullLoss(pixels, r.weight, r.bias, options()));
+    expect(distances[1]).toBeLessThan(distances[0]);
+    expect(distances[2]).toBeLessThan(distances[1] / 2);
+    expect(fits[2]).toBeGreaterThan(fits[0]);
+    // A light hold still learns the paint.
+    expect(accuracy(pixels, runs[1].weight, runs[1].bias)).toBeGreaterThan(0.9);
+  });
+
+  it("names the supervised and distillation terms on the epoch line, the loss their sum, the supervised term kept apart", async () => {
+    const pixels = separable(600, 3, 2, 13);
+    const report = reporter();
+    const lambda = 0.5;
+    const trained = await trainHead(pixels, head(3, 2), options({ epochs: 6, distillationLambda: lambda }), report, undefined, heldRows(300, 3, 2, 14));
+    expect(report.lines).toHaveLength(6);
+    report.lines.forEach((line, e) => {
+      const parts = EPOCH_PARTS.exec(line)!;
+      const [epoch, total, loss, supervised, distillation] = parts.slice(1).map(Number);
+      expect([epoch, total]).toEqual([e + 1, 6]);
+      expect(loss).toBeCloseTo(supervised + lambda * distillation, 5);
+      expect(loss).toBe(Number(trained.losses[e].toFixed(6)));
+      expect(supervised).toBe(Number(trained.supervised[e].toFixed(6)));
+      // The dashboard's parser reads the total.
+      expect(Number(EPOCH_LOSS.exec(line)![3])).toBe(loss);
+    });
+    // The head starts at the teacher, where the term is 0; it grows as the paint moves the head.
+    expect(Number(EPOCH_PARTS.exec(report.lines[5])![5])).toBeGreaterThan(0);
+  });
+
+  it("trains exactly as before without a distillation set, with an empty one, or at λ 0", async () => {
+    const pixels = separable(500, 3, 2, 4);
+    const plain = reporter();
+    const before = await trainHead(pixels, head(3, 2), options({ epochs: 4, distillationLambda: 0 }), plain);
+    const noSet = await trainHead(pixels, head(3, 2), options({ epochs: 4, distillationLambda: 0.5 }), reporter(), undefined, null);
+    const empty = await trainHead(pixels, head(3, 2), options({ epochs: 4, distillationLambda: 0.5 }), reporter(), undefined, heldRows(0, 3, 2, 1));
+    const off = await trainHead(pixels, head(3, 2), options({ epochs: 4, distillationLambda: 0 }), reporter(), undefined, heldRows(100, 3, 2, 1));
+    for (const other of [noSet, empty, off]) expect(other).toEqual(before);
+    expect(before.losses).toEqual(before.supervised);
+    expect(plain.lines[0]).toMatch(/^Epoch 1\/4 - Loss: \d\.\d{6}$/);
+  });
+
+  it("refuses a distillation set for another head, a loss it does not have, a margin past 0.5 and a negative λ", async () => {
+    const pixels = separable(10, 3, 1, 1);
+    await expect(trainHead(pixels, head(3, 1), options(), reporter(), undefined, heldRows(5, 4, 1, 1))).rejects.toThrow(/distillation set of 4 → 1 channels for a 3 → 1 head/);
+    await expect(trainHead(pixels, head(3, 1), options({ lossType: "dice" as never }), reporter())).rejects.toThrow(/bce, mse, margin losses, not dice/);
+    await expect(trainHead(pixels, head(3, 1), options({ margin: 0.6 }), reporter())).rejects.toThrow(/margin is from 0 to 0.5/);
+    await expect(trainHead(pixels, head(3, 1), options({ distillationLambda: -1 }), reporter())).rejects.toThrow(/distillation weight/);
   });
 });
 

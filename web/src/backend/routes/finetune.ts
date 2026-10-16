@@ -11,12 +11,17 @@
 // directory, so a "session" is a volume and its id is its path; the catalog
 // for the models directory; a run in the tab (src/finetune/run.ts) for the
 // cluster job, so a submit needs no output path, queue or charge group, and
-// the server-only fields the form still sends (LoRA rank, batch size,
-// distillation, augmentation) are ignored. Only the BCE loss on the head is
-// available: the other losses, crops import, seeds, good regions and AI
-// annotation keep needing a server and stay unavailable (index.ts). One
-// route is the browser's own, GET /api/finetune/session-volume: which volume
-// the session paints into, for the tab's Download and Delete buttons.
+// the server-only fields the form still sends (LoRA rank, the batch of
+// patches, patches per epoch, rehearsal, augmentation) are ignored. The
+// head trains with the server's per-voxel losses (BCE, MSE, margin), its
+// distillation term (λ and scope) and the browser's own batch of voxels
+// per step (readTraining); Dice needs a whole patch per sample and is
+// refused (refuseLoss). The good regions' routes are routes/good-regions.ts,
+// and the patch tools' Label it and AI annotation have routes of their own
+// (view-labels.ts, ai-annotate.ts); crops import keeps needing a server and
+// stays unavailable (index.ts). One route is the browser's own, GET
+// /api/finetune/session-volume: which volume the session paints into, for
+// the tab's Download and Delete buttons.
 //
 // The answers keep the Python routes' keys, so the tab's JavaScript
 // (static/js/dashboard/finetune/*.js) reads them unchanged: a refusal is
@@ -25,7 +30,8 @@
 import type { AppContext, LayerSpec, PaintVolume } from "../../contracts";
 import { PAINT_ROUTE } from "../../contracts";
 import { runFinetune } from "../../finetune/run";
-import type { FinetuneOptions, RunFinetune } from "../../finetune/types";
+import { HEAD_LOSSES } from "../../finetune/head-trainer";
+import type { DistillationScope, FinetuneOptions, HeadLoss, RunFinetune } from "../../finetune/types";
 import { DEFAULT_OPTIONS } from "../../finetune/types";
 import { createVolume, hasAffinityChannels, paintedChunkIndices, planVolume, readVolume } from "../../finetune/volume";
 import { volumeZip, VOLUME_ZIP_SUFFIX } from "../../finetune/zip";
@@ -46,8 +52,10 @@ export interface FinetuneDeps {
 
 const NO_DATASET = "No dataset is open. Enter its URL in the viewer panel first; the volume is painted on it.";
 
-/** The one loss the browser trains with: the head on masked BCE-with-logits (head-trainer.ts). */
-const BROWSER_LOSS = "bce";
+/** The browser's batch of voxels per step, at most: a step's arithmetic and
+ * buffers grow with it, and a million voxels is already every painted voxel
+ * of any session in one step. */
+const MAX_BATCH_PIXELS = 1 << 20;
 
 /** Register the routes; returns the jobs, which live as long as the router (the page). */
 export function finetuneRoutes(router: Router, deps: Partial<FinetuneDeps> = {}): FinetuneJobs {
@@ -387,29 +395,64 @@ async function paintedCount(ctx: AppContext): Promise<number> {
   return id ? (await paintedChunkIndices(ctx.paint, id)).length : 0;
 }
 
-/** Why a loss the form sent cannot be trained with here, or null for the browser's (or none sent). */
+/** Why a loss the form sent cannot be trained with here, or null for one
+ * the head trains with (or none sent: BCE). The head's losses are the
+ * server's per-voxel ones, which a batch of voxels from any chunks defines
+ * as well as a patch does; Dice, and "combined" (Dice + BCE), is an overlap
+ * taken over each sample's whole patch, which the browser's shuffled
+ * voxels are not, and "interval" and "flow" need targets the browser does
+ * not make (a distance model's bounds, Cellpose's flows). */
 function refuseLoss(loss: unknown): string | null {
-  if (loss === undefined || loss === null || loss === "" || loss === BROWSER_LOSS) return null;
-  return `The ${String(loss)} loss needs a server. In the browser the model's head trains with the BCE loss (bce): pick it, or run the dashboard on a server for the others.`;
+  if (loss === undefined || loss === null || loss === "" || HEAD_LOSSES.includes(loss as HeadLoss)) return null;
+  const why = loss === "dice" || loss === "combined"
+    ? "Dice is an overlap over each training patch as a whole, and the browser trains the head on voxels drawn from every painted chunk at once, not on patches"
+    : "the browser makes only the binary and affinity targets";
+  return `The ${String(loss)} loss needs a server: ${why}. In the browser the model's head trains with BCE (bce), MSE (mse) or margin (margin): pick one, or run the dashboard on a server for the others.`;
 }
 
 /** The training parameters of a submit or restart body (training-form.js's
  * trainingParams, as job-monitor.js sends them): the ones the browser's
- * trainer takes, checked, as run.ts's options and as the job's params. The
- * fields only a cluster job uses (lora_r, batch_size, patches_per_epoch,
- * rehearsal_fraction, distillation_*, margin, augment, queue,
- * checkpoint_path) are left out of both. */
+ * trainer takes, checked, as run.ts's options and as the job's params (the
+ * card shows the loss, margin and distillation from them). batch_pixels is
+ * the browser's own: voxels per Adam step, where the server's batch_size
+ * counts patches. The margin goes with the margin loss alone, and label
+ * smoothing is 0 with it, as the server sets it. The fields only a cluster
+ * job uses (lora_r, batch_size, patches_per_epoch, rehearsal_fraction,
+ * augment, queue, checkpoint_path) are left out of both. */
 export function readTraining(body: Record<string, unknown>): { options: FinetuneOptions; params: Record<string, unknown> } | { error: string } {
   const epochs = numberOr(body.num_epochs, DEFAULT_OPTIONS.epochs);
   if (!Number.isInteger(epochs) || epochs < 1) return { error: "num_epochs: expected a whole number of epochs, 1 or more" };
   const learningRate = numberOr(body.learning_rate, DEFAULT_OPTIONS.learningRate);
   if (!Number.isFinite(learningRate) || learningRate <= 0) return { error: "learning_rate: expected a positive number" };
-  const labelSmoothing = numberOr(body.label_smoothing, DEFAULT_OPTIONS.labelSmoothing);
+  const lossType = body.loss_type === undefined || body.loss_type === null || body.loss_type === "" ? DEFAULT_OPTIONS.lossType : (body.loss_type as HeadLoss);
+  if (!HEAD_LOSSES.includes(lossType)) return { error: refuseLoss(lossType)! };
+  const margin = numberOr(body.margin, DEFAULT_OPTIONS.margin);
+  if (!(margin >= 0 && margin <= 0.5)) return { error: "margin: expected a number from 0 to 0.5" };
+  let labelSmoothing = numberOr(body.label_smoothing, DEFAULT_OPTIONS.labelSmoothing);
   if (!(labelSmoothing >= 0 && labelSmoothing < 1)) return { error: "label_smoothing: expected a number from 0 up to, not including, 1" };
+  if (lossType === "margin") labelSmoothing = 0;
   const balanceClasses = typeof body.balance_classes === "boolean" ? body.balance_classes : DEFAULT_OPTIONS.balanceClasses;
+  const batchPixels = numberOr(body.batch_pixels, DEFAULT_OPTIONS.batchPixels);
+  if (!Number.isInteger(batchPixels) || batchPixels < 1 || batchPixels > MAX_BATCH_PIXELS) return { error: `batch_pixels: expected a whole number of voxels per step, from 1 to ${MAX_BATCH_PIXELS}` };
+  const distillationLambda = numberOr(body.distillation_lambda, DEFAULT_OPTIONS.distillationLambda);
+  if (!Number.isFinite(distillationLambda) || distillationLambda < 0) return { error: "distillation_lambda: expected a number, 0 or more (0 switches distillation off)" };
+  const scope = body.distillation_scope === undefined || body.distillation_scope === null || body.distillation_scope === "" ? DEFAULT_OPTIONS.distillationScope : String(body.distillation_scope).toLowerCase();
+  if (scope !== "unlabeled" && scope !== "all") return { error: "distillation_scope: expected unlabeled or all" };
+  const distillationScope = scope as DistillationScope;
   return {
-    options: { ...DEFAULT_OPTIONS, epochs, learningRate, balanceClasses, labelSmoothing },
-    params: { num_epochs: epochs, learning_rate: learningRate, loss_type: BROWSER_LOSS, balance_classes: balanceClasses, label_smoothing: labelSmoothing, finetune_mode: "head" },
+    options: { ...DEFAULT_OPTIONS, epochs, learningRate, lossType, margin, balanceClasses, labelSmoothing, batchPixels, distillationLambda, distillationScope },
+    params: {
+      num_epochs: epochs,
+      learning_rate: learningRate,
+      loss_type: lossType,
+      ...(lossType === "margin" ? { margin } : {}),
+      balance_classes: balanceClasses,
+      label_smoothing: labelSmoothing,
+      batch_pixels: batchPixels,
+      distillation_lambda: distillationLambda,
+      distillation_scope: distillationScope,
+      finetune_mode: "head",
+    },
   };
 }
 

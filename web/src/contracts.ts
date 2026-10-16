@@ -354,6 +354,16 @@ export interface Inference {
    * clips the box to the level and pads what lies outside (chunkmirage's
    * `padded`, as the engine does for a stage's input). */
   readRaw(level: number, lo: number[], hi: number[]): Promise<ArrayBuffer>;
+  /** The served model `view`'s own output (ServedModel.view): what its model
+   * stage computes, the chain's normalizers and none of its postprocessors,
+   * over voxels [lo, hi) of the level it is served at (its output grid,
+   * z, y, x), as [C, z, y, x] float32 in C order (`shape` says it). What the
+   * server's Seed from Prediction reads of a model server, with no
+   * postprocessing (view_labels.read_prediction): a threshold is set on the
+   * raw output. Chunks already computed for the viewer come from the
+   * engine's caches; the rest are computed. The box must lie within the
+   * level. */
+  readOutput(view: string, lo: number[], hi: number[]): Promise<{ data: Float32Array; shape: number[] }>;
 }
 
 // ---------------------------------------------------------------------------

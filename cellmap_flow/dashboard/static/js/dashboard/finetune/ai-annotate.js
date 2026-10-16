@@ -15,8 +15,9 @@
 // The browser mode (web/) has the same panel: its in-page routes
 // (web/src/backend/routes/ai-annotate.ts) answer the same JSON, and the page
 // itself calls the provider, so there the panel also takes the provider's
-// credentials (an API key, or a project and an access token) and has an Undo
-// of its own. The credentials go to the credentials route and nowhere else:
+// credentials (an API key, or a project and an access token); an accepted
+// annotation is undone by Label it's Undo there too. The credentials go to
+// the credentials route and nowhere else:
 // never into a log line, an error or the page's text. Everything browser-only
 // here is behind lib/page-data's isBrowserMode and the template's browser-only
 // elements (null on the Flask page); in server mode the panel behaves as it did.
@@ -84,8 +85,8 @@ export function initAiAnnotate({ log }) {
   // Browser mode only (lib/page-data's isBrowserMode): the template renders
   // these in its browser-only blocks, so on the Flask page they are null and
   // nothing below touches them. The credentials block, its fields by the
-  // credential they hold, the AI section's own Undo, and the model id typed
-  // under the model picker's Other… entry.
+  // credential they hold, and the model id typed under the model picker's
+  // Other… entry.
   const browser = isBrowserMode();
   const credentials = document.getElementById("aiAnnotateCredentials");
   const credsState = document.getElementById("aiAnnotateCredsState");
@@ -96,12 +97,10 @@ export function initAiAnnotate({ log }) {
     project: document.getElementById("aiAnnotateProject"),
     access_token: document.getElementById("aiAnnotateAccessToken"),
   };
-  const aiUndoBtn = document.getElementById("aiAnnotateUndoBtn");
   const modelName = document.getElementById("aiAnnotateModelName");
-  // Whichever Undo the page shows: the AI section's in browser mode (the
-  // server's sits in the server-only Label it grid), else the server's, whose
-  // clicks good-regions.js handles. Accept's answer says whether it can.
-  const undoBtn = aiUndoBtn || document.getElementById("undoViewLabelsBtn");
+  // Label it's Undo, which takes an accepted annotation back as it takes back
+  // a seed (label-it.js handles its clicks). Accept's answer says whether it can.
+  const undoBtn = document.getElementById("undoViewLabelsBtn");
   const previews = [
     [document.getElementById("aiAnnotateInputImg"), "input_png"],
     [document.getElementById("aiAnnotateModelImg"), "model_png"],
@@ -116,9 +115,6 @@ export function initAiAnnotate({ log }) {
   let dailyLimit = null;
   // Browser mode: where its daily cap is kept, said in place of the server's config file.
   let usageNote = null;
-  // Browser mode: whether Undo has something to take back, put back after a
-  // click's busy state (setBusy re-enables the button).
-  let canUndo = false;
   // The last status seen, to tell when a job starts, finishes or changes.
   let last = { status: null, annotate_id: null };
   let poller = null;
@@ -718,10 +714,7 @@ export function initAiAnnotate({ log }) {
         if (d.needs_confirmation && !confirmed) {
           return confirm(d.error) ? accept(true) : undefined;
         }
-        if (d.can_undo !== undefined) {
-          canUndo = d.can_undo;
-          undoBtn.disabled = !d.can_undo;
-        }
+        if (d.can_undo !== undefined) undoBtn.disabled = !d.can_undo;
         if (!d.success) {
           showError(`Could not accept: ${d.error}`);
           log.add(`Could not accept the AI annotation: ${d.error}`);
@@ -757,35 +750,6 @@ export function initAiAnnotate({ log }) {
       .catch((e) => showError(`Could not reject: ${e}`))
       .finally(() => setBusy(rejectBtn, false));
   });
-
-  // Browser mode: the AI section's Undo (the server's is good-regions.js's,
-  // which does not run there). The same route, the same words.
-  if (aiUndoBtn) {
-    aiUndoBtn.addEventListener("click", () => {
-      setBusy(aiUndoBtn, true);
-      postAnswer("/api/finetune/view-labels/undo", {})
-        .then((d) => {
-          if (d.can_undo !== undefined) canUndo = d.can_undo;
-          if (!d.success) {
-            showError(`Could not undo: ${d.error}`);
-            log.add(`Could not undo: ${d.error}`);
-          } else if (d.reload_viewer) {
-            showError("");
-            log.add(`Undid the last label action: ${d.restored} voxels restored` + (d.layer_refreshed ? "" : "; reloading the viewer"));
-            if (!d.layer_refreshed) reloadViewer();
-          } else {
-            showError("");
-            log.add("Undid the last label action: every voxel it changed has been painted since");
-          }
-          log.showEnd();
-        })
-        .catch((e) => showError(`Could not undo: ${e}`))
-        .finally(() => {
-          setBusy(aiUndoBtn, false);
-          aiUndoBtn.disabled = !canUndo;
-        });
-    });
-  }
 
   // ---- Start -------------------------------------------------------------
 
