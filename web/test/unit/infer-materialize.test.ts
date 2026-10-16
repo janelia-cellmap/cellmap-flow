@@ -13,7 +13,7 @@ import { InferenceEngine, type ModelRunner } from "../../src/infer/engine";
 import { memorySession } from "../../src/state";
 import { entry } from "./backend-fakes";
 
-const asked = vi.hoisted(() => ({ materialize: [] as { view: string; store: unknown; options: Record<string, unknown> }[] }));
+const asked = vi.hoisted(() => ({ materialize: [] as { view: string; store: unknown; options: Record<string, unknown> }[], plans: [] as { view: string; options: Record<string, unknown> }[] }));
 
 vi.mock("../../chunkmirage/web/src/engine", () => ({
   Engine: class {
@@ -30,6 +30,10 @@ vi.mock("../../chunkmirage/web/src/engine", () => ({
     serveStages() {}
     unserve() {}
     stop() {}
+    async materializePlan(view: string, options: Record<string, unknown>) {
+      asked.plans.push({ view, options });
+      return { peakBytes: 7, split: [0, 2] };
+    }
     async materialize(view: string, store: unknown, options: Record<string, unknown>) {
       asked.materialize.push({ view, store, options });
       return { chunks: 1, written: 1, skipped: 0, bytes: 10, aborted: false };
@@ -86,5 +90,12 @@ describe("Inference.materialize", () => {
     await served.dispose();
     await expect(inference.materialize(served.view, store, { lo: [0, 0, 0], hi: [1, 1, 1] })).rejects.toThrow("is not served");
     expect(asked.materialize).toEqual([]);
+  });
+  it("asks the engine for the plan of the box a run would write, as the run asks", async () => {
+    const inference = new InferenceEngine({ session: memorySession(), log: () => {}, runner });
+    await inference.openDataset("https://example.org/data.zarr");
+    const served = await inference.serve(entry("setup_54"), CHAIN, "blob", async () => new ArrayBuffer(8));
+    expect(await inference.materializePlan(served.view, { lo: [0, 60, 120], hi: [60, 120, 1000] })).toEqual({ peakBytes: 7, split: [0, 2] });
+    expect(asked.plans.at(-1)).toEqual({ view: served.view, options: { level: 0, lo: [0, 60, 120], hi: [60, 120, 1000], extent: "box", format: "zarr2" } });
   });
 });
