@@ -128,14 +128,14 @@ test.describe("AI-assisted annotation in the browser", () => {
       await expect(page.locator("#aiAnnotateReviewModal")).not.toHaveClass(/\bshow\b/, { timeout: 30_000 });
       expect((await api<Status>(page, "/api/finetune/ai-annotate/status")).status).toBe("idle");
 
-      // Undo puts the plane back: nothing painted in that chunk any more.
-      await expect(page.locator("#aiAnnotateUndoBtn")).toBeEnabled();
-      await page.click("#aiAnnotateUndoBtn");
+      // Label it's Undo puts the plane back: nothing painted in that chunk any more.
+      await expect(page.locator("#undoViewLabelsBtn")).toBeEnabled();
+      await page.click("#undoViewLabelsBtn");
       await expect(page.locator("#finetuneLog")).toHaveValue(/Undid the last label action: \d+ voxels restored/, { timeout: SLOW_MS });
       const restored = await readChunk();
       expect(restored.objects).toBe(0);
       expect(restored.background).toBe(0);
-      await expect(page.locator("#aiAnnotateUndoBtn")).toBeDisabled();
+      await expect(page.locator("#undoViewLabelsBtn")).toBeDisabled();
 
       // The audit log travels with the volume.
       const audit = await page.evaluate(async (volume) => {

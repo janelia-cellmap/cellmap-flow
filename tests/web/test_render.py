@@ -20,13 +20,12 @@ SERVER_ONLY = [
     "zooModelAccordion", "cellposeModelAccordion",
     "serverConfigAccordion", "jobLogsBtn", "jobLogsArea",
     # The Finetune tab's parts that need a server: a path on its file system,
-    # crops from its disks, the patch tools that write the volume through its
-    # routes (seeds from a model's server), MinIO, and the cluster trainer's
-    # parameters (its batch of patches, its rehearsal share, the distance
-    # models' interval loss). AI-assisted annotation and good regions are not
-    # among them: the browser answers their routes itself (KEPT below).
+    # crops from its disks, MinIO, and the cluster trainer's parameters (its
+    # batch of patches, its rehearsal share, the distance models' interval
+    # loss). The patch tools are not among them: the browser answers Label
+    # it's, AI-assisted annotation's and good regions' routes itself (KEPT
+    # below).
     "outputPath", "openLoadCropsBtn", "loadCropsModal",
-    "labelItSection",
     "saveAnnotationsBtn", "minioStatus", "existingBrowseRoot",
     "checkpointPath", "loraRank", "batchSize", "patchesPerEpoch", "rehearsalFraction",
     "distanceModelHint", "augment", "gpuQueue",
@@ -52,17 +51,20 @@ KEPT = [
     # Its browser-only controls: the paint out as a zarr or deleted, the
     # finetuned model out as .onnx, the head's batch of voxels.
     "downloadVolumeBtn", "deleteVolumeBtn", "downloadFinetunedBtn", "batchPixels",
+    # The patch tools' Label it, in both modes: the browser seeds from the
+    # models served in the page, and its Undo takes back an accepted AI
+    # annotation too, so the AI panel has none of its own.
+    "labelItSection", "seedModel", "seedViewBtn", "backgroundViewBtn", "undoViewLabelsBtn", "splitObjectsBtn", "seedSettings",
     # AI-assisted annotation, in both modes: the browser calls the provider itself.
     "aiAnnotatePanel", "aiAnnotateReviewModal",
 ]
 # The AI panel's browser-only parts (the template's browser-mode blocks): the
-# credentials block, the AI section's own Undo (the server's sits in the
-# server-only Label it grid), and the model id typed under Other…. On the
-# browser page, never on the Flask page.
+# credentials block and the model id typed under Other…. On the browser page,
+# never on the Flask page.
 AI_ANNOTATE_BROWSER_ONLY = [
     "aiAnnotateCredentials", "aiAnnotateCredsState", "aiAnnotateApiKey", "aiAnnotateProject", "aiAnnotateAccessToken",
     "aiAnnotateForgetCredsBtn", "aiAnnotateCredsHint",
-    "aiAnnotateUndoBtn", "aiAnnotateModelName",
+    "aiAnnotateModelName",
 ]
 KEPT += AI_ANNOTATE_BROWSER_ONLY
 
@@ -212,19 +214,28 @@ def test_the_browser_page_offers_the_heads_training_controls(page):
 def test_the_browser_page_takes_the_ai_annotation_credentials(page):
     """The AI panel's credentials block: hidden until the config names a
     provider that needs one, the secrets password fields the browser must not
-    autofill, the project a plain field, and Undo disabled until there is
-    something to take back."""
+    autofill, and the project a plain field. Its accepted annotations are
+    taken back by Label it's Undo, disabled until there is something to take
+    back; the panel has no Undo of its own."""
     assert re.search(r'<div class="[^"]*" id="aiAnnotateCredentials" hidden>', page)
     for secret in ("aiAnnotateApiKey", "aiAnnotateAccessToken"):
         assert re.search(rf'<input type="password"[^>]*id="{secret}"[^>]*autocomplete="off"', page), secret
     assert re.search(r'<input type="text"[^>]*id="aiAnnotateProject"[^>]*autocomplete="off"', page)
     assert re.search(r'<input type="text"[^>]*id="aiAnnotateModelName"[^>]*\bhidden\b', page)
-    assert re.search(r'<button[^>]*id="aiAnnotateUndoBtn"[^>]*\bdisabled\b', page)
+    assert re.search(r'<button[^>]*id="undoViewLabelsBtn"[^>]*\bdisabled\b', page)
+    assert "aiAnnotateUndoBtn" not in page
     # Pasted credentials are used as they are typed and kept in the page only: no Save, no Remember.
     assert "aiAnnotateSaveCredsBtn" not in page and "aiAnnotateRememberCreds" not in page
     # The pickers' titles are the browser's, not the server's configuration's.
     assert "Only the providers in the server's AI-annotate configuration are listed." not in page
     assert "Other… takes a model id that is not listed" in page
+
+
+def test_the_browser_page_labels_the_patch_from_the_models_it_serves(page):
+    """Label it in the browser: Seed from Prediction reads the models served
+    in the page, which the picker's title says, not a running server's."""
+    assert "any model served on the Models tab, a model finetuned in this browser among them" in page
+    assert "whichever has a server running" not in page
 
 
 def test_the_browser_page_renders_an_empty_catalog(page):
@@ -279,6 +290,7 @@ def test_the_flask_dashboard_is_unchanged_by_the_markers(dashboard):
     # server's words on the pickers and without the browser's additions.
     assert "aiAnnotatePanel" in classes and "aiAnnotateReviewModal" in classes
     assert "Only the providers in the server's AI-annotate configuration are listed." in html
+    assert "whichever has a server running" in html and "a model finetuned in this browser" not in html
     assert "The provider's models that the server's configuration allows." in html
 
 

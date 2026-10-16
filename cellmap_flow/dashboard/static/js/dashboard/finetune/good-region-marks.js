@@ -5,7 +5,7 @@
 // the browser mode the page's own (web/src/backend/routes/good-regions.ts,
 // where the head's distillation holds the regions), with the same answers,
 // so this runs in both modes. The Label it buttons over the same patch are
-// good-regions.js's, which the browser mode does not start.
+// label-it.js's.
 import { setBusy } from "../../lib/dom.js";
 import { getAnswer, offerNewVolume, postAnswer } from "./requests.js";
 

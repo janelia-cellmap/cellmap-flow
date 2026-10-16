@@ -1,8 +1,7 @@
 {# This tab serves two pages (web/build/render.py renders it with mode ==
    "browser" for the browser mode; Flask passes no mode). What needs a server
    -- an output path on its file system, MinIO, crops from its disks, the
-   patch tools' seeds, LoRA's parameters, the GPU queue --
-   is marked server-only,
+   LoRA's parameters, the GPU queue -- is marked server-only,
    which web/src/browser.css hides under data-mode="browser" and the Flask
    page ignores; what only the browser has is inside {% if mode == "browser" %}
    blocks, so Flask's page does not carry it. The tab's scripts
@@ -98,24 +97,22 @@
   </div>
 
   <!-- The patch on screen: one-click labels, AI-assisted annotation, and good
-       regions (rehearsal anchors). Label it is server-only: it writes the
-       volume through the server's routes (seeds from a running model's
-       server), and the browser mode does not start its script
-       (finetune/index.js). AI-assisted annotation and Good regions are not:
-       the browser mode answers their routes in the page (web/src/ai-annotate,
-       web/src/backend/routes/good-regions.ts, the regions kept with the
-       volume and anchoring the head's distillation), and what only the
-       browser's AI panel has (the credentials, its own Undo, a typed model
-       id) is in browser-only blocks. -->
+       regions (rehearsal anchors). All three run in both modes: the browser
+       mode answers their routes in the page (web/src/backend/routes/
+       view-labels.ts, its seeds from the models served in the page;
+       web/src/ai-annotate; good-regions.ts, the regions kept with the volume
+       and anchoring the head's distillation), and Label it's Undo takes back
+       an accepted AI annotation in both. What only the browser's AI panel has
+       (the credentials, a typed model id) is in browser-only blocks. -->
   <div class="patch-tools mb-3">
     <div class="patch-tools-title">Patch on screen</div>
 
-    <details class="patch-tools-group patch-tools-section server-only" id="labelItSection" open>
+    <details class="patch-tools-group patch-tools-section" id="labelItSection" open>
       <summary><span class="patch-tools-label">Label it</span></summary>
       <div class="d-flex align-items-center gap-2 mb-2">
         <label class="text-muted mb-0 text-nowrap" for="seedModel" style="font-size: 0.85rem;">Prediction from</label>
         <select class="form-select form-select-sm" id="seedModel"
-                title="Whose prediction Seed from Prediction copies into the patch: the model the volume is for, or one of its finetuned iterations, whichever has a server running. Default: the latest finetune."></select>
+                title="{% if mode == "browser" %}Whose prediction Seed from Prediction copies into the patch: any model served on the Models tab, a model finetuned in this browser among them. Default: the latest finetune of the model the volume is for, else that model.{% else %}Whose prediction Seed from Prediction copies into the patch: the model the volume is for, or one of its finetuned iterations, whichever has a server running. Default: the latest finetune.{% endif %}"></select>
       </div>
       <div class="patch-tools-grid">
         <button type="button" class="btn btn-outline-secondary btn-sm" id="seedViewBtn"
@@ -169,9 +166,10 @@
     </details>
 
     <!-- AI-assisted annotation: a hosted model labels one plane, reviewed before
-         it is written (ai-annotate.js). In both modes: the browser mode answers
-         its routes in the page (web/src/ai-annotate); the credentials block, the
-         Undo button and the typed model id below are its alone. -->
+         it is written (ai-annotate.js), and taken back by Label it's Undo. In
+         both modes: the browser mode answers its routes in the page
+         (web/src/ai-annotate); the credentials block and the typed model id
+         below are its alone. -->
     <details class="patch-tools-group patch-tools-section ai-annotate" id="aiAnnotatePanel">
         <summary>
           <span class="patch-tools-label">AI-assisted annotation</span>
@@ -269,15 +267,6 @@
               Annotate at View Centre
             </button>
             <span class="text-muted" style="font-size: 0.85rem;" id="aiAnnotateKeyHint">or hover over the viewer and press Shift+G</span>
-            {# Browser mode only: the server's Undo (undoViewLabelsBtn) sits in
-               the server-only Label it grid, so the browser's accepted
-               annotations are taken back from here, through the same route. #}
-            {% if mode == "browser" %}
-            <button type="button" class="btn btn-outline-secondary btn-sm ms-auto" id="aiAnnotateUndoBtn" disabled
-                    title="Takes back the last accepted AI annotation (up to 10): the patch goes back to what it held before. Voxels you have painted since are kept.">
-              Undo
-            </button>
-            {% endif %}
           </div>
           <small class="text-muted d-block mt-1" id="aiAnnotateUsage"></small>
           <div class="small text-muted mt-1" id="aiAnnotateStatus" role="status" aria-live="polite"></div>

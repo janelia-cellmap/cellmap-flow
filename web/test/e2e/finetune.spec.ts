@@ -2,7 +2,8 @@
 // running, a new annotation volume, one chunk painted the way the fork's
 // brush paints it (a PUT to the worker's paint route), the head trained in
 // the tab, and the finetuned model served in place of the base: a chunk of
-// its layer comes back, the Models tab lists it, the paint and the model
+// its layer comes back, the Models tab lists it, the patch on screen is
+// seeded from its prediction and the seed undone, the paint and the model
 // download. The dashboard's own buttons are not clicked here: they call
 // these routes, which is what this test drives, through the page's fetch
 // (relayed by the service worker to the in-page backend, as the dashboard's
@@ -111,6 +112,25 @@ test.describe("finetuning in the browser", () => {
       expect(listing[`finetuned/${modelName}-ft1`]?.selected).toBe(true);
       const served = await finetunedChunk;
       consoleLines.push(`[test] finetuned chunk ${served.url()}`);
+
+      // Label it: Seed from Prediction reads the finetuned model's own output
+      // (the default, the volume model's latest finetune) under the patch on
+      // screen, from its output view's chunks, which the page fetches through
+      // the service worker as the viewer does; Undo takes the seed back.
+      const sources = await api<{ default: string | null; methods: Record<string, string[]>; box_voxels: number[] | null }>(page, "/api/finetune/view-labels/sources");
+      expect(sources.default).toBe(`${modelName}-ft1`);
+      expect(sources.methods[`${modelName}-ft1`]).toEqual(["mutex_watershed", "components"]);
+      expect(sources.box_voxels).toEqual(created.metadata.chunk_size);
+      const seeded = await api<{ success: boolean; error?: string; model: string; method: string; filled_foreground: number; filled_background: number; can_undo: boolean }>(
+        page, "/api/finetune/view-labels/seed", { method: "mutex_watershed" },
+      );
+      consoleLines.push(`[test] seed: ${JSON.stringify(seeded)}`);
+      expect(seeded.success, seeded.error).toBe(true);
+      expect([seeded.model, seeded.method, seeded.can_undo]).toEqual([`${modelName}-ft1`, "mutex_watershed", true]);
+      const seededVoxels = seeded.filled_foreground + seeded.filled_background;
+      expect(seededVoxels).toBeGreaterThan(0);
+      const undone = await api<{ success: boolean; restored: number; can_undo: boolean }>(page, "/api/finetune/view-labels/undo", {});
+      expect(undone).toMatchObject({ success: true, restored: seededVoxels, can_undo: false });
 
       // The paint as a zip of the zarr, the model as .onnx.
       const downloads = await page.evaluate(async ([volume, name]) => {

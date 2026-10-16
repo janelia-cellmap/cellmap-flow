@@ -1,13 +1,19 @@
-// The Label it buttons, beside the good regions (good-region-marks.js): they
-// act on the patch on screen at once (routes/finetune/view_labels.py): label
-// it from the model's prediction or all background, or relabel its objects
-// by connected component. How a seed makes objects of the prediction (its
-// method) is picked among those that fit the chosen model's output.
+// Label it: three buttons act on the patch on screen at once
+// (routes/finetune/view_labels.py): label it from a model's prediction or
+// all background, or relabel its objects by connected component, and Undo
+// takes back the last of those or of an accepted AI annotation. How a seed
+// makes objects of the prediction (its method) is picked among those that
+// fit the chosen model's output.
+//
+// The same in both modes: in the browser (web/) the page answers the same
+// routes (web/src/backend/routes/view-labels.ts), its prediction the model
+// served in the page and its Undo the one the AI annotation's Accept
+// shares, so the AI panel has no Undo of its own.
 import { setBusy } from "../../lib/dom.js";
 import { getAnswer, offerNewVolume, postAnswer } from "./requests.js";
 
 // log: the Annotation Crops panel's log.
-export function initGoodRegions({ log }) {
+export function initLabelIt({ log }) {
   // Neuroglancer keeps the chunks it has read. The server re-reads the paint
   // layer alone (answer's layer_refreshed); only when it could not does the
   // whole viewer reload, getting its state back from the dashboard. Absent
