@@ -69,13 +69,19 @@ export function finetunedEntry(base: ModelEntry, name: string, fileMb?: number):
  * base is this entry, or whose name is `<base name>-ft<k>`); the first is
  * -ft1. A base that is itself finetuned (`x-ft1`) continues its series
  * (`x-ft2`, not `x-ft1-ft1`): the record keeps the exact lineage in `base`,
- * and the layer list reads as one series of attempts. */
-export function nextFinetunedName(base: ModelEntry, existing: FinetunedRecord[]): string {
+ * and the layer list reads as one series of attempts. `taken` are names
+ * counted as used besides the records' (a shared link's names for its other
+ * finetuned models, which they keep where they can: link.ts). */
+export function nextFinetunedName(base: ModelEntry, existing: FinetunedRecord[], taken: readonly string[] = []): string {
   const series = base.name.replace(/-ft\d+$/, "");
   const inSeries = new RegExp(`^${escapeRegExp(series)}-ft(\\d+)$`);
   let highest = 0;
   for (const record of existing) {
     const match = inSeries.exec(record.name) ?? (record.base.id === base.id ? /-ft(\d+)$/.exec(record.name) : null);
+    if (match) highest = Math.max(highest, Number(match[1]));
+  }
+  for (const name of taken) {
+    const match = inSeries.exec(name);
     if (match) highest = Math.max(highest, Number(match[1]));
   }
   return `${series}-ft${highest + 1}`;

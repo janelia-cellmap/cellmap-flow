@@ -117,22 +117,33 @@ function decodeSegment(segment: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// URL-safe base64 of UTF-8 text, without padding; btoa/atob take latin1 only,
-// so the text goes through bytes. Both exist in browsers and in node 22.
+// URL-safe base64 without padding: of UTF-8 text for the blob, and of bytes
+// for a link's finetuned weights (link.ts); btoa/atob take latin1 only, so
+// the text goes through bytes. Both exist in browsers and in node 22.
 // ---------------------------------------------------------------------------
 
 function base64UrlEncode(text: string): string {
-  const bytes = new TextEncoder().encode(text);
+  return bytesToBase64Url(new TextEncoder().encode(text));
+}
+
+function base64UrlDecode(blob: string): string {
+  return new TextDecoder().decode(base64UrlToBytes(blob));
+}
+
+/** `bytes` in URL-safe base64, without padding. */
+export function bytesToBase64Url(bytes: Uint8Array): string {
   let binary = "";
   for (const b of bytes) binary += String.fromCharCode(b);
   return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
-function base64UrlDecode(blob: string): string {
-  let b64 = blob.replace(/-/g, "+").replace(/_/g, "/").replace(/=+$/, "");
+/** The bytes URL-safe base64 (padded or not) holds; atob's error for text
+ * that is not base64. */
+export function base64UrlToBytes(text: string): Uint8Array {
+  let b64 = text.replace(/-/g, "+").replace(/_/g, "/").replace(/=+$/, "");
   while (b64.length % 4) b64 += "=";
   const binary = atob(b64);
   const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-  return new TextDecoder().decode(bytes);
+  return bytes;
 }

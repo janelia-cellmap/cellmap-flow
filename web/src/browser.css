@@ -84,3 +84,54 @@
   justify-content: center;
   gap: 8px;
 }
+
+/* The link's notice (src/share-link.ts showLinkNotice): on Share, what the
+   link leaves in this browser (a paint volume, a finetuned model it could not
+   carry); on opening a link, what this browser could not show of it. Under
+   the header by the Share button (the script sets `top` where the header
+   ends), over the viewer rather than in the page's flow, so the viewer does
+   not move, in the colours of the dashboard's .alert-info (dark.css), the
+   border amber for what was left out. It stays until closed. */
+.link-notice {
+  position: fixed;
+  right: 16px;
+  z-index: 1000;
+  max-width: min(460px, calc(100vw - 32px));
+  padding: 10px 36px 10px 14px;
+  background: var(--bg-muted);
+  border: 1px solid var(--info);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  color: var(--text-primary);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.link-notice.warning {
+  border-color: var(--warning);
+}
+
+.link-notice strong {
+  font-weight: 600;
+}
+
+.link-notice p {
+  margin: 6px 0 0;
+}
+
+.link-notice-close {
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  padding: 2px 8px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.link-notice-close:hover {
+  color: var(--text-primary);
+}

@@ -376,6 +376,27 @@ export function respelledPaintSource(source: unknown): unknown | null {
   return null;
 }
 
+/** The paint volume a layer's `source` paints into: the volume segment of
+ * its paint-route URL, the refresh suffix dropped, whichever of
+ * Neuroglancer's forms the source is in (the first paint source of an
+ * array); null for any other layer. Only the fork's `s3+` scheme counts, the
+ * one paintLayerUrl writes, so a raw volume whose path happens to hold a
+ * `paint` folder is not taken for one. For a shared link: the paint is in
+ * the paint store of the browser that painted it, so a link's paint layer
+ * opens only where its volume is (link.ts linkedView). */
+export function paintVolumeOf(source: unknown): string | null {
+  if (Array.isArray(source)) {
+    for (const entry of source) {
+      const volume = paintVolumeOf(entry);
+      if (volume !== null) return volume;
+    }
+    return null;
+  }
+  const url = typeof source === "string" ? source : source && typeof source === "object" ? (source as { url?: unknown }).url : null;
+  if (typeof url !== "string" || !url.startsWith("s3+")) return null;
+  return PAINT_VOLUME_SEGMENT.exec(url)?.[2] ?? null;
+}
+
 /** The writable segmentation layer on `url` for `volume`, as
  * add_annotation_layer builds it: the volume's `annotation` group as its
  * source, its default subsource writable (the fork paints into a subsource
