@@ -22,8 +22,8 @@ renders the templates once, at build time, and the TypeScript in `src/`
 answers the dashboard's `fetch("/api/...")` requests in place of the Flask
 routes, with the same request and response JSON. The controls only a server
 can serve (LSF settings, Job Logs, the Local Catalog of cluster paths, the
-Review tab, and the Finetune tab's crops and seeds) are
-hidden; everything else is the dashboard you know, finetuning and
+Review tab, and the Finetune tab's crops import) are hidden;
+everything else is the dashboard you know, finetuning, the patch tools and
 AI-assisted annotation included ([below](#finetuning-in-the-browser)).
 `ARCHITECTURE.md` describes how the parts fit together.
 
@@ -164,7 +164,7 @@ Centre* reads one plane of raw EM around the point from the open volume
 and an access token; `fake.ts` paints in the page, for trying it and for the
 tests), turns the colour it painted into a mask (`mask.ts`) and, on *Accept*,
 writes it into the paint store as an object per connected piece (`labels.ts`,
-`fill.ts`), with *Undo* in the panel. The routes
+`fill.ts`), which the patch tools' *Undo* takes back. The routes
 (`src/backend/routes/ai-annotate.ts`, `src/backend/ai-annotate-job.ts`) answer
 the Python routes' JSON, so the dashboard's `ai-annotate.js` drives both
 modes; the credentials pasted into the panel (`credentials.ts`) are used as
@@ -173,6 +173,24 @@ would be unencrypted), and reach the provider alone. The daily cap of 200 calls 
 (`audit.ts`: `ai_annotate_log.jsonl` in the volume, so it is in the paint's
 zip) are the server's. `docs/ai_annotate.md` ("In the browser") says what the
 user sees, and why the Gemini API's free tier is offered with a caveat.
+
+The patch tools' *Label it* row works as on the server too
+(`src/backend/routes/view-labels.ts`, the routes of `view_labels.py`, which
+the dashboard's `label-it.js` drives in both modes): *Seed from Prediction*
+copies a served model's prediction into the unpainted voxels of the patch on
+screen, an id per object, *All Background* labels them 1, *Split Objects*
+gives each connected object an id of its own, and *Undo* takes back the last
+of those or of an accepted AI annotation (one stack, 10 deep). A seed reads
+the model's own output, through its normalizers and none of its
+postprocessors (`Inference.readOutput`: the model stage served beside the
+layer, so the chunks already computed for the viewer are reused), placed on
+the volume's grid as the server places it (`src/label-it/prediction.ts`), and
+segments it by threshold and connected components or, for an affinity model,
+the mutex watershed (`src/label-it/segment.ts`, on the segmenters the
+postprocessors already use). These are checked against the Python on
+fixtures it writes (`test/fixtures/make_label_it_fixtures.py`). The server's
+distance watershed and a model's own instances are not offered: no model the
+browser runs outputs a distance or instance ids.
 
 ## Browser requirements
 

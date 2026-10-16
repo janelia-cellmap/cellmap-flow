@@ -73,9 +73,10 @@ the normalizer and postprocessor bodies (`infer/norms.ts`, `post.ts` and the
 segmentation steps), the two stages and their keys (`infer/stages.ts`), the
 viewer's layer JSON (`viewer/`), the backend
 behind the dashboard's routes (`backend/`), the session (`state/`), a folder
-picked on this machine (`local-folder/`), finetuning (`finetune/`) and
-AI-assisted annotation (`ai-annotate/`), both below, and the dashboard build
-(`build/`, `vite.config.ts`).
+picked on this machine (`local-folder/`), finetuning (`finetune/`),
+AI-assisted annotation (`ai-annotate/`) and the Label it tools
+(`label-it/`), all three below, and the dashboard build (`build/`,
+`vite.config.ts`).
 
 ## Boot (src/main.ts)
 
@@ -131,7 +132,7 @@ route that reads a query, the log stream's `offset`, has Last-Event-ID, a
 header, first.)
 
 Routes that only a server can serve (LSF, the cluster's file systems, the
-Review tab's SQLite index, the seeds) answer
+Review tab's SQLite index, the crops import) answer
 `{success: false, available: false, error}` and their controls are hidden by
 `[data-mode="browser"] .server-only { display: none }` (the template marks them
 with the `server-only` class; render.py sets `data-mode`).
@@ -191,8 +192,9 @@ The port of `cellmap_flow/ai_annotate/` and of
 (`static/js/dashboard/finetune/ai-annotate.js`) drives the page as it drives
 the server: `backend/routes/ai-annotate.ts` answers the Python routes' JSON
 (config, credentials, settings, run, status with `?preview=1`, resend,
-accept, reject, and `view-labels/undo`), and `backend/ai-annotate-job.ts` is
-the job, one at a time, its result staged in memory until Accept or Reject.
+accept, reject; Accept's Undo is Label it's, below), and
+`backend/ai-annotate-job.ts` is the job, one at a time, its result staged in
+memory until Accept or Reject.
 Who does what: `geometry.ts` plans the plane (the depth axis from the
 viewer's layout, the raw box, the image laid out as the panel draws it, the
 click in image pixels); `plane.ts` reads it from the raw level through
@@ -231,6 +233,36 @@ route's volume segment takes an optional `~<n>` suffix
 before the store, and `refreshLayer` toggles it on the layer's source URL
 through the viewer state, keeping the layer's tool, brush and paint value.
 
+## Label it (src/label-it/)
+
+The Finetune tab's one-click patch tools, Seed from Prediction, All
+Background, Split Objects and Undo: `backend/routes/view-labels.ts` answers
+`dashboard/routes/finetune/view_labels.py`'s routes (sources, seed,
+background, split, undo) with their JSON, so the tab's `label-it.js` drives
+both modes. A seed reads the chosen served model's own output under the box
+on screen: `Inference.readOutput`, the model stage's output (the chain's
+normalizers, none of its postprocessors), as the server reads its model
+server with no postprocessing. `infer/engine.ts` serves that as a second
+staged view beside the layer, `<view>~output`, the model stage alone under
+the same stage object and key, so the chunks the viewer had computed come
+out of the engine's staged cache; the page reads them over the view's URL
+through the service worker, as any client reads a view (the engine answers
+a page's requests through the route it registers, and has no other door to
+a chunk), and `infer/output.ts` places them in the box. `prediction.ts`
+puts each annotation voxel on the served voxel its centre lies in
+(read_prediction: any served model can seed, at its own voxel size);
+`segment.ts` turns the output into a probability by its output class and
+into objects by threshold and connected components or, for an affinity
+model, the mutex watershed (`infer/label.ts` and `infer/affinity.ts`, the
+postprocessors' segmenters, already parity-tested against scipy and
+mwatershed). The distance watershed and a model's own instances are not
+offered: no browser model outputs a distance or instance ids. The ids, the
+writes and the undo are `ai-annotate/labels.ts` and `fill.ts` (seedLabels,
+relabelObjects for Split Objects, paintBox, rewriteForeground, restoreBox).
+One undo stack per volume is the routes', and the AI annotation's Accept
+pushes onto it (createRouter hands it over, as `ai_annotate.py` uses
+`view_labels._undo_stack`), so one Undo takes back whichever came last.
+
 ## State
 
 `src/state/` keeps `SessionState` (see `contracts.ts`) in the tab's
@@ -268,7 +300,7 @@ web/
       relay.ts  registerServiceWorker(), listenForApiRequests(backend) on chunkmirage's route(); Ask/Reply/Later are chunkmirage's types
       router.ts, sse.ts, yaml.ts (the export), serving.ts (serve and re-serve the session's models)
       finetune-jobs.ts (a finetune run as the dashboard's job), ai-annotate-job.ts (one AI annotation, staged for review)
-      routes/{data,pipeline,models,config,finetune,good-regions,ai-annotate}.ts
+      routes/{data,pipeline,models,config,finetune,good-regions,view-labels,ai-annotate}.ts
     state/                   openSession(): SessionStore (sessionStorage: the tab is the server's process lifetime); db.ts + local-store.ts
                              for picked directories; paint-store.ts + paint-route.ts: the annotation volumes' files and the worker's paint/ route
     finetune/                types.ts (the seams), volume.ts (planVolume, the zarr v2 files), samples.ts, targets.ts, onnx-proto.ts,
@@ -276,11 +308,13 @@ web/
                              zip.ts (the paint's download)
     ai-annotate/             AI-assisted annotation (above): types.ts, geometry.ts, plane.ts, mask.ts, labels.ts, fill.ts, prompts.ts,
                              organelles.ts (the pure ports), images.ts (the canvas codec), gemini.ts, fake.ts, providers.ts,
-                             credentials.ts, usage.ts, audit.ts
+                             credentials.ts, usage.ts, audit.ts; labels.ts and fill.ts are Label it's too
+    label-it/                Label it (above): segment.ts (probability, methods, objects), prediction.ts (the output under a box)
     local-folder/            a folder on this machine: index.ts (the local URL and its key, the pick/drop flow,
                              the boot-time permission check), panel.ts (the connect panel's DOM: button, drop target, prompt)
     infer/                   createInference(): Inference — the Engine, one serveStages() view per model
       engine.ts (the views and the stats), stages.ts (the model and postprocess stages, their keys),
+      output.ts (a box of a model's own output from its chunks, readOutput's),
       norms.ts, post.ts,
       expression.ts (Lambda steps), geometry.ts (the manifest's blocks, halo, ratio, levels), dtype.ts (astype)
     shared/                  args.ts (__CFLOW_ARGS__ codec, digest), model-info.ts
