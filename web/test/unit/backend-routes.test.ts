@@ -418,7 +418,6 @@ describe("everything else under /api/", () => {
     for (const [method, path] of [
       ["POST", "/api/finetune/load-crops"],
       ["POST", "/api/finetune/view-labels/seed"],
-      ["POST", "/api/finetune/good-regions/mark-view"],
       ["GET", "/api/review/status"],
       ["POST", "/api/blockwise/validate"],
       ["GET", "/api/logs/stream"],

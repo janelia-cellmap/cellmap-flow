@@ -13,6 +13,9 @@
 //                       training jobs (finetune-jobs.ts: the model's head
 //                       trained in the tab) with their status and log stream,
 //                       the volume and the finetuned model downloaded
+//   routes/good-regions.ts  the Finetune tab's good regions: marked where
+//                       the viewer looks, kept with the volume, drawn as the
+//                       good_regions layer, and held by the head's training
 //   routes/ai-annotate.ts  the Finetune tab's AI-assisted annotation: one
 //                       plane of raw EM sent from the page to a Gemini image
 //                       model (or the fake) with the user's own credentials,
@@ -22,7 +25,7 @@
 // Every other /api/ route answers unavailable (router.ts): the Review tab,
 // the pipeline builder's routes, the dashboard's log stream, and the parts
 // of the Finetune tab that read files or run models the browser has not
-// (crops import, seeds, good regions) need a server. The template hides
+// (crops import, seeds) need a server. The template hides
 // their controls in browser mode, so nothing on the page polls them.
 //
 // restoreSession(ctx) is the boot-time counterpart of Submit: after a reload
@@ -35,6 +38,7 @@ import { type AiAnnotateDeps, aiAnnotateRoutes } from "./routes/ai-annotate";
 import { configRoutes } from "./routes/config";
 import { dataRoutes } from "./routes/data";
 import { type FinetuneDeps, finetuneRoutes } from "./routes/finetune";
+import { goodRegionRoutes } from "./routes/good-regions";
 import { modelRoutes } from "./routes/models";
 import { pipelineRoutes } from "./routes/pipeline";
 import { serveModels } from "./serving";
@@ -58,10 +62,11 @@ export function createRouter(options: BackendOptions = {}): Router {
   modelRoutes(router);
   configRoutes(router);
   finetuneRoutes(router, options.finetune);
+  goodRegionRoutes(router);
   aiAnnotateRoutes(router, options.aiAnnotate);
   router.otherwise((req) =>
     unavailable(
-      `${req.method} ${req.path} is not available in the browser: it needs a server (the Review tab, the pipeline builder, and the finetune tab's crops import, seeds and good regions).`,
+      `${req.method} ${req.path} is not available in the browser: it needs a server (the Review tab, the pipeline builder, and the finetune tab's crops import and seeds).`,
     ),
   );
   return router;

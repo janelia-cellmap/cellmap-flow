@@ -869,7 +869,7 @@ describe("in the backend", () => {
     expect((await backend.handle(request("POST", "/api/finetune/view-labels/undo", {}))).status).toBe(409);
     const crops = await backend.handle(request("POST", "/api/finetune/load-crops"));
     expect(crops.status).toBe(503);
-    expect(body(crops).error).toMatch(/crops import, seeds and good regions\)/);
+    expect(body(crops).error).toMatch(/crops import and seeds\)/);
     expect(body(crops).error).not.toMatch(/AI annotation/);
   });
 
