@@ -1,10 +1,13 @@
 // The pure functions over a Neuroglancer state's JSON (src/viewer/state.ts):
 // replacing layers as the Python dashboard's _replace_layer does, the
-// position in nm, a layer's kept shader, the dataset a state shows.
+// position (and the pointer's) in nm, the data axis the layout looks along
+// (cellmap_flow/ai_annotate/geometry.py's depth_axis_from_layout), a
+// layer's kept shader, the dataset a state shows.
 import { describe, expect, it } from "vitest";
 
 import {
-  datasetUrlFromState, layerShaderOf, layersOf, type NgState, positionNm, replaceLayers, sourceUrl, withoutLayer,
+  datasetUrlFromState, depthAxisFromLayout, layerShaderOf, layersOf, type NgState, pointerNm, positionNm, replaceLayers, sourceUrl,
+  viewDepthAxisOf, withoutLayer,
 } from "../../src/viewer/state";
 
 const raw = { type: "image", name: "data", source: "zarr://https://x/dataset.zarr/recon-1/em/fibsem-uint8", shader: "void main(){}" };
@@ -76,6 +79,84 @@ describe("positionNm", () => {
     expect(positionNm({ dimensions: state.dimensions, position: [1, 2] })).toBeNull();
     expect(positionNm({ dimensions: { z: [1, ""], y: [8e-9, "m"], x: [8e-9, "m"] }, position: [1, 2, 3] })).toBeNull();
     expect(positionNm(null)).toBeNull();
+  });
+});
+
+describe("pointerNm (ai_annotate._zyx_nm: the mouse state's voxel coordinates in nm)", () => {
+  it("converts as positionNm does, from a Float32Array as Neuroglancer's mouse state holds it", () => {
+    expect(pointerNm(new Float32Array([10.5, 20.5, 30.5]), state.dimensions)).toEqual([84, 164, 244]);
+    expect(pointerNm([10.5, 20.5, 30.5], state.dimensions)).toEqual(positionNm(state));
+  });
+  it("puts the axes in z y x order by name, whatever order the viewer has them in", () => {
+    expect(pointerNm([100, 200, 300], { x: [4e-9, "m"], y: [4e-9, "m"], z: [8e-9, "m"] })).toEqual([2400, 800, 400]);
+  });
+  it("is null before the pointer has been over the data (an empty or NaN position), or without dimensions", () => {
+    expect(pointerNm(new Float32Array(0), state.dimensions)).toBeNull();  // Neuroglancer's initial position
+    expect(pointerNm([NaN, NaN, NaN], state.dimensions)).toBeNull();
+    expect(pointerNm([1, NaN, 3], state.dimensions)).toBeNull();
+    expect(pointerNm([1, 2], state.dimensions)).toBeNull();
+    expect(pointerNm(null, state.dimensions)).toBeNull();
+    expect(pointerNm([1, 2, 3], undefined)).toBeNull();
+    expect(pointerNm([1, 2, 3], { z: [8e-9, "m"], y: [8e-9, "m"] })).toBeNull();  // fewer than three axes (the Python refuses too)
+  });
+});
+
+describe("depthAxisFromLayout (geometry.depth_axis_from_layout: docs/ai_annotate.md's table under Choosing the plane)", () => {
+  it("maps each single-panel layout to the data axis it looks along, with z y x display dimensions", () => {
+    expect(depthAxisFromLayout("yz")).toBe(0);  // the XY plane, at the hovered z
+    expect(depthAxisFromLayout("xz")).toBe(1);  // the XZ plane, at the hovered y
+    expect(depthAxisFromLayout("xy")).toBe(2);  // the YZ plane, at the hovered x
+  });
+  it("gives the first panel's (xy, the YZ plane) for 4panel, 3d and anything else", () => {
+    for (const layout of ["4panel", "3d", "4panel-alt", "nonsense", "", null, undefined, 7, {}]) {
+      expect(depthAxisFromLayout(layout), JSON.stringify(layout)).toBe(2);
+    }
+  });
+  it("drops the -3d suffix, reads an object's type, and ignores case", () => {
+    expect(depthAxisFromLayout("yz-3d")).toBe(0);
+    expect(depthAxisFromLayout("xz-3d")).toBe(1);
+    expect(depthAxisFromLayout("xy-3d")).toBe(2);
+    expect(depthAxisFromLayout({ type: "yz", orthographicProjection: true })).toBe(0);
+    expect(depthAxisFromLayout({ type: "xz-3d" })).toBe(1);
+    expect(depthAxisFromLayout("YZ")).toBe(0);
+  });
+  it("lets the display dimensions' names decide which data axis each slot is", () => {
+    // Shown x, y, z: the xy panel looks along slot 2, which is z.
+    expect(depthAxisFromLayout("xy", ["x", "y", "z"])).toBe(0);
+    expect(depthAxisFromLayout("xz", ["x", "y", "z"])).toBe(1);
+    expect(depthAxisFromLayout("yz", ["x", "y", "z"])).toBe(2);
+    // Shown y, x, z: xz looks along slot 1, which is x.
+    expect(depthAxisFromLayout("xz", ["y", "x", "z"])).toBe(2);
+    expect(depthAxisFromLayout("xz", ["z", "y", "x"])).toBe(1);  // the default, spelled out
+  });
+  it("is 0 when the slot's dimension is not z, y or x, or there are fewer than three", () => {
+    expect(depthAxisFromLayout("xy", ["z", "y", "c"])).toBe(0);
+    expect(depthAxisFromLayout("xy", ["z", "y"])).toBe(0);
+    expect(depthAxisFromLayout("yz", ["t", "y", "x"])).toBe(0);
+    expect(depthAxisFromLayout("xz", [])).toBe(1);  // no names given: the default z y x
+  });
+});
+
+describe("viewDepthAxisOf (geometry.depth_axis_for_view)", () => {
+  it("reads the state's layout over the first three dimensions", () => {
+    expect(viewDepthAxisOf({ ...state, layout: "yz" })).toBe(0);
+    expect(viewDepthAxisOf({ ...state, layout: "xz" })).toBe(1);
+    expect(viewDepthAxisOf(state)).toBe(2);  // layout "xy"
+    expect(viewDepthAxisOf({ ...state, layout: { type: "yz-3d" } })).toBe(0);
+    expect(viewDepthAxisOf({ ...state, layout: "4panel" })).toBe(2);
+  });
+  it("prefers the display dimensions the user set", () => {
+    expect(viewDepthAxisOf({ ...state, layout: "xy", displayDimensions: ["x", "y", "z"] })).toBe(0);
+    expect(viewDepthAxisOf({ ...state, layout: "xy", displayDimensions: [] })).toBe(2);  // none set: the dimensions' order
+  });
+  it("takes the first three of more dimensions, in the viewer's order", () => {
+    const withChannel: NgState = { dimensions: { x: [8e-9, "m"], y: [8e-9, "m"], z: [8e-9, "m"], "c^": [1, ""] }, layout: "xy" };
+    expect(viewDepthAxisOf(withChannel)).toBe(0);
+  });
+  it("is the default viewer's (the xy panel over z y x) without a state", () => {
+    expect(viewDepthAxisOf(null)).toBe(2);
+    expect(viewDepthAxisOf({})).toBe(2);
+    expect(viewDepthAxisOf({ layout: "yz" })).toBe(0);
   });
 });
 

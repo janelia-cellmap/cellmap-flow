@@ -274,6 +274,23 @@ export interface ViewerController {
    * `info` null (the volume could not be opened) mounts the viewer without
    * it, for Neuroglancer to try. Does nothing when restore() did not wait. */
   datasetOpened(url: string, info: DatasetInfo | null): void;
+  /** Where the pointer is over the data, in nm (z, y, x), as Neuroglancer's
+   * mouse state has it (the `mouse_voxel_coordinates` the Python's Shift+G
+   * action gets): null when it is not over the viewer, or there is none. */
+  pointerPosition(): number[] | null;
+  /** The data axis the viewer's single-panel layout looks along (0 z: the
+   * XY plane, 1 y: XZ, 2 x: YZ), the first panel's (XY) in a multi-panel
+   * layout, as geometry.depth_axis_for_view reads the Python viewer's. */
+  viewDepthAxis(): 0 | 1 | 2;
+  /** Bind `key` (Neuroglancer's spelling, "shift+keyg") to `action` in the
+   * viewer, `handler` run when it is pressed, now and in every viewer
+   * mounted after (a new dataset is a new page of Neuroglancer); returns
+   * the unbind. */
+  bindKey(key: string, action: string, handler: () => void): () => void;
+  /** Make the viewer read layer `name`'s chunks again (labels written behind
+   * its back, as a server's refresh_annotation_layer does), keeping the
+   * layer's own settings; whether a layer of that name was found. */
+  refreshLayer(name: string): boolean;
 }
 
 // ---------------------------------------------------------------------------

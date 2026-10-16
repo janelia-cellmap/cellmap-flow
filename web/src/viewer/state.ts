@@ -1,8 +1,9 @@
 // Pure functions over a Neuroglancer state's JSON (what
 // `viewer.state.toJSON()` gives and `viewer.state.restoreState()` takes, and
 // what the page's `#!` hash encodes): replacing layers the way the Python
-// dashboard does across a redraw, reading the position in nm, and the
-// user's shader of a layer. No DOM here, so all of it is unit-tested.
+// dashboard does across a redraw, reading the position (and the pointer's)
+// in nm, the data axis the layout looks along, and the user's shader of a
+// layer. No DOM here, so all of it is unit-tested.
 import type { LayerSpec } from "../contracts";
 
 /** A layer in the state: at least its name; `visible: false` when hidden
@@ -23,6 +24,12 @@ export interface NgState {
   dimensions?: Record<string, [number, string]>;
   position?: number[];
   layers?: NgLayer[] | Record<string, Omit<NgLayer, "name">>;
+  /** Neuroglancer's layout: a name ("xy", "4panel", "xy-3d") or an object
+   * with a `type` (when its 3D view has settings of its own). */
+  layout?: unknown;
+  /** The names of the dimensions the panels show, when the user picked
+   * them; otherwise Neuroglancer shows the first three of `dimensions`. */
+  displayDimensions?: string[];
   [key: string]: unknown;
 }
 
@@ -64,32 +71,102 @@ export function withoutLayer(state: NgState, name: string): NgState {
 }
 
 /** The viewer's position in nm, z, y, x, or null when the state has no
- * position or dimensions yet (the browser has not reported them).
- *
- * Neuroglancer's position is in voxels of the viewer's coordinate space,
- * whose scales it reports in SI units (8 nm reads back as 8e-9 m), so each
- * coordinate is multiplied by its axis's scale in nm. Axes are matched by
- * name (z, y, x), falling back to the first three dimensions in order, as
- * review_routes._navigate_viewer and finetune/common.viewer_position_and_scales
- * read it. */
+ * position or dimensions yet (the browser has not reported them). The
+ * conversion is pointerNm's: see there. */
 export function positionNm(state: NgState | null | undefined): number[] | null {
-  const dimensions = state?.dimensions;
-  const position = state?.position;
-  if (!dimensions || !position) return null;
+  return pointerNm(state?.position, state?.dimensions);
+}
+
+/** Viewer voxel coordinates `coords` as nm, z, y, x, over the viewer's
+ * `dimensions`; null when either is missing, they disagree on the rank,
+ * fewer than three axes are there, a coordinate is not a number (the mouse
+ * state's position before the pointer has been over the data), or an axis
+ * is not a length.
+ *
+ * Neuroglancer's positions (the view's, the mouse's) are in voxels of the
+ * viewer's coordinate space, whose scales it reports in SI units (8 nm
+ * reads back as 8e-9 m), so each coordinate is multiplied by its axis's
+ * scale in nm. Axes are matched by name (z, y, x), falling back to the
+ * first three dimensions in order, as review_routes._navigate_viewer,
+ * finetune/common.viewer_position_and_scales and ai_annotate._zyx_nm read
+ * them. */
+export function pointerNm(coords: ArrayLike<number> | null | undefined, dimensions: Record<string, [number, string]> | null | undefined): number[] | null {
+  if (!dimensions || !coords) return null;
   const names = Object.keys(dimensions);
-  if (names.length < 3 || position.length !== names.length) return null;
+  if (names.length < 3 || coords.length !== names.length) return null;
   const nm: number[] = [];
   ["z", "y", "x"].forEach((axis, fallback) => {
     const i = names.includes(axis) ? names.indexOf(axis) : fallback;
     const [scale, unit] = dimensions[names[i]];
     const perUnit = NM_PER_UNIT[unit];
     if (perUnit === undefined) return; // not a length: the position is not in nm
+    const coord = coords[i];
+    if (typeof coord !== "number" || Number.isNaN(coord)) return;
     // Rounded to a millionth of a nanometre, which drops the floating-point
     // noise of the unit conversion (10.5 voxels * 8e-9 m * 1e9 is
     // 84.00000000000001) and nothing a viewer position means.
-    nm.push(Math.round(position[i] * scale * perUnit * 1e6) / 1e6);
+    nm.push(Math.round(coord * scale * perUnit * 1e6) / 1e6);
   });
   return nm.length === 3 ? nm : null;
+}
+
+// ---------------------------------------------------------------------------
+// The plane the viewer shows: cellmap_flow/ai_annotate/geometry.py's
+// depth_axis_from_layout and depth_axis_for_view, for the state's JSON.
+// ---------------------------------------------------------------------------
+
+/** cellmap-flow's data axes, in order (geometry.AXIS_NAMES). */
+const AXIS_NAMES = ["z", "y", "x"] as const;
+
+/** Neuroglancer names its cross-section panels after display-dimension
+ * *slots*, not after the dimensions' names: the "xy" panel shows display
+ * dimensions 0 and 1 and looks along 2, "xz" (rotated about the first)
+ * looks along 1, "yz" (rotated about the second) along 0
+ * (data_panel_layout.ts's AXES_RELATIVE_ORIENTATION). The display dimensions
+ * are the first three of the viewer's coordinate space unless set, and
+ * cellmap-flow's viewers name theirs z, y, x in that order, so the "xy"
+ * panel is a z-y slice looking along x, and the plane cellmap-flow calls XY
+ * is Neuroglancer's "yz" panel (geometry._LAYOUT_DEPTH_SLOT). */
+const LAYOUT_DEPTH_SLOT: Record<string, number> = { xy: 2, xz: 1, yz: 0 };
+
+/** The panel name of a Neuroglancer layout (geometry._layout_type): the
+ * string itself or an object's `type`, lower-cased, a "-3d" suffix (the
+ * layouts with a 3D view beside the panel) dropped; null for anything
+ * else. */
+function layoutType(layout: unknown): string | null {
+  const type = layout && typeof layout === "object" ? (layout as { type?: unknown }).type : layout;
+  if (typeof type !== "string") return null;
+  const name = type.toLowerCase();
+  return name.endsWith("-3d") ? name.slice(0, -"-3d".length) : name;
+}
+
+/** The data axis (0 z, 1 y, 2 x) the panel named by `layout` looks along
+ * (geometry.depth_axis_from_layout).
+ *
+ * `displayDimensions` are the names of the viewer's display dimensions in
+ * order (z, y, x when not given, as cellmap-flow's viewers have them); see
+ * LAYOUT_DEPTH_SLOT for why they matter. Only a single-plane layout says
+ * which plane the user is looking at: Neuroglancer keeps one layout for the
+ * whole viewer, so in "4panel" or "3d" the panel the pointer is in is not
+ * known. Those (and anything unrecognised) get the "xy" panel's axis, the
+ * panel Neuroglancer puts first. A slot whose dimension is not z, y or x
+ * (a channel axis shown as a display dimension, fewer than three) is axis
+ * 0, as the Python answers. A rotated cross-section is not followed. */
+export function depthAxisFromLayout(layout: unknown, displayDimensions?: readonly string[] | null): 0 | 1 | 2 {
+  const names: readonly string[] = displayDimensions?.length ? displayDimensions : AXIS_NAMES;
+  const slot = LAYOUT_DEPTH_SLOT[layoutType(layout) ?? ""] ?? LAYOUT_DEPTH_SLOT.xy;
+  const axis = slot < names.length ? (AXIS_NAMES as readonly string[]).indexOf(names[slot]) : -1;
+  return axis === 1 || axis === 2 ? axis : 0;
+}
+
+/** depthAxisFromLayout for a viewer state's JSON (geometry.depth_axis_for_view):
+ * the display dimensions it sets, else the first three of its coordinate
+ * space, as Neuroglancer takes them. Without a state (no viewer yet) the
+ * default viewer's: the "xy" panel over z, y, x. */
+export function viewDepthAxisOf(state: NgState | null | undefined): 0 | 1 | 2 {
+  const set = state?.displayDimensions;
+  const display = Array.isArray(set) && set.length ? set.filter((name): name is string => typeof name === "string") : Object.keys(state?.dimensions ?? {}).slice(0, 3);
+  return depthAxisFromLayout(state?.layout, display.length ? display : null);
 }
 
 /** The layer `name`'s shader and shader controls as the user left them in

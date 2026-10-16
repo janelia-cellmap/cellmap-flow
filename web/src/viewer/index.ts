@@ -16,11 +16,22 @@
 // it starts, or on hashchange if it is already up: the hash is the queue.
 // Either way the tab keeps a copy of the viewer's hash (share.ts), for the
 // reload connect.js does after Connect and any other reload of the tab.
+//
+// Three things reach into the live viewer beyond its state, for the
+// AI-assisted annotation (the Finetune tab's Shift+G; the Python counterpart
+// is dashboard/routes/finetune/ai_annotate.py, which reaches the Python
+// viewer the same three ways): where the pointer is (`viewer.mouseState`),
+// a key bound to an action (`viewer.inputEventBindings.global` and
+// `viewer.bindAction`), and a paint layer re-read after labels were written
+// behind its back (through the state, its source URL respelled as
+// overlay.refresh_annotation_layer respells the server's). A new dataset is
+// a new page of Neuroglancer and so a new `viewer` object, which forgets
+// its bindings: they are kept here and put on each viewer as it appears.
 import type { DatasetInfo, LayerSpec, SessionStore, ViewerController } from "../contracts";
-import { initialState, RAW_LAYER_NAME, rawLayer, stateWithoutInfo } from "./layers";
+import { initialState, RAW_LAYER_NAME, rawLayer, respelledPaintSource, stateWithoutInfo } from "./layers";
 import { withEquivalences } from "./equivalences";
 import { decodeState, encodeState, isStateHash, mirrorFrameHash, rememberedState, rememberState, withHash } from "./share";
-import { datasetUrlFromState, layerShaderOf, layersOf, type NgState, positionNm, replaceLayers, withoutLayer } from "./state";
+import { datasetUrlFromState, layerShaderOf, layersOf, type NgState, pointerNm, positionNm, replaceLayers, viewDepthAxisOf, withoutLayer } from "./state";
 
 /** Neuroglancer's page, built beside this one (vite.config.ts serves ./ng/). */
 export const NG_PAGE = "./ng/index.html";
@@ -43,11 +54,39 @@ export const EXAMPLE_DATASET_URL = "https://janelia-cosem-datasets.s3.amazonaws.
 const CONNECT_DESCRIPTION = "No dataset open. Enter the URL of a public OME-Zarr volume (one served with CORS, "
   + "such as an OpenOrganelle dataset), or pick a folder on this machine, to open it in the viewer. The models run in this browser.";
 
-/** What Neuroglancer's default page puts on its window: its state, and its
- * layers (for a segmentation layer's equivalence sets, changed in place). */
+/** What Neuroglancer's default page puts on its window: its state, its
+ * layers (for a segmentation layer's equivalence sets, changed in place),
+ * where the pointer is, and its key bindings. The names are Neuroglancer's
+ * public ones (viewer.ts), checked against the fork's bundle: `mouseState`
+ * is its MouseSelectionState (`position`, a Float32Array of voxel
+ * coordinates in the viewer's coordinate space, empty until the pointer
+ * has been over a panel; `active` while it is over one), `inputEventBindings
+ * .global` the EventActionMap that keys pressed anywhere over the viewer
+ * go through (`set(key, action)`, `delete(key)`; the Python's
+ * `input_event_bindings.viewer`), and `bindAction(action, handler)` listens
+ * for the action on the viewer's element (an `action:<name>` event). The
+ * last three are optional here so that an older build without them fails
+ * soft: no binding, not an exception. */
 interface NgViewer {
   state: { toJSON(): NgState; restoreState(state: NgState): void };
   layerManager?: { getLayerByName(name: string): { layer: NgUserLayer | null } | undefined };
+  mouseState?: { position?: ArrayLike<number>; active?: boolean };
+  inputEventBindings?: { global?: { set(key: string, action: string): void; delete?(key: string): void } };
+  bindAction?(action: string, handler: (event: Event) => void): void;
+}
+
+/** A key binding the page asked for (bindKey): put on every viewer as it
+ * appears, `appliedTo` the viewers that have it so that none gets it twice
+ * (Neuroglancer would run the handler once per bindAction). `active` is
+ * cleared by the unbind: a viewer's own listener cannot be removed through
+ * bindAction (it registers a disposer, and returns nothing), so a listener
+ * left on a viewer checks it and does nothing. */
+interface KeyBinding {
+  key: string;
+  action: string;
+  handler: () => void;
+  active: boolean;
+  appliedTo: WeakSet<object>;
 }
 
 /** A loaded layer, as far as this file reaches into it: a segmentation
@@ -130,12 +169,44 @@ export function createViewer(opts: { session: SessionStore; log: (line: string) 
    * it, the tab has no view of it): mounted by datasetOpened, with the
    * geometry the engine read, rather than at once without it. */
   let awaiting: string | null = null;
+  /** The key bindings asked for and not unbound, in the order asked. */
+  const bindings: KeyBinding[] = [];
+  /** The viewers told they have no bindings API, so it is said once each. */
+  const unbindable = new WeakSet<object>();
 
-  /** Neuroglancer's viewer in the iframe, once its page has made it. */
+  /** Neuroglancer's viewer in the iframe, once its page has made it. This
+   * is where a viewer is noticed, so the key bindings it has not got yet
+   * are put on it here: on the iframe's load (Neuroglancer's scripts are
+   * deferred, so `viewer` is on its window by then), on the mirror's poll
+   * of its hash (which it writes once it is up), and whenever the page
+   * reads the viewer. */
   function liveViewer(): NgViewer | null {
     const win = frame?.contentWindow as (Window & { viewer?: NgViewer }) | null | undefined;
     const viewer = win?.viewer;
-    return viewer?.state && typeof viewer.state.toJSON === "function" ? viewer : null;
+    if (!viewer?.state || typeof viewer.state.toJSON !== "function") return null;
+    for (const binding of bindings) applyBinding(viewer, binding);
+    return viewer;
+  }
+
+  /** Put `binding` on `viewer` unless it is there already: the key to the
+   * action in the global map (keys pressed over any panel), the handler on
+   * the action (ai_annotate._ensure_binding: `viewer.actions.add(ACTION,
+   * handler)` and `input_event_bindings.viewer[KEY] = ACTION`). */
+  function applyBinding(viewer: NgViewer, binding: KeyBinding): void {
+    if (!binding.active || binding.appliedTo.has(viewer)) return;
+    const map = viewer.inputEventBindings?.global;
+    if (!map || typeof map.set !== "function" || typeof viewer.bindAction !== "function") {
+      if (!unbindable.has(viewer)) {
+        unbindable.add(viewer);
+        log(`this viewer has no key bindings API: ${binding.key} is not bound`);
+      }
+      return;
+    }
+    binding.appliedTo.add(viewer);
+    map.set(binding.key, binding.action);
+    viewer.bindAction(binding.action, () => {
+      if (binding.active) binding.handler();
+    });
   }
 
   /** The state as the viewer has it now: the live viewer's, else the one in
@@ -189,7 +260,22 @@ export function createViewer(opts: { session: SessionStore; log: (line: string) 
       if (panel) panel.replaceWith(frame);
       else (document.getElementById(COLUMN_ID) ?? document.body).appendChild(frame);
     }
-    stopMirror ??= mirrorFrameHash(frame);
+    if (!stopMirror) {
+      // The mirror's poll reads the hash the viewer writes once it is up,
+      // and the load is when its deferred scripts have run: either way a
+      // new viewer is there to put the key bindings on.
+      const noticeViewer = () => void liveViewer();
+      const stop = mirrorFrameHash(frame, (hash) => {
+        rememberState(hash);
+        noticeViewer();
+      });
+      const mounted = frame;
+      mounted.addEventListener("load", noticeViewer);
+      stopMirror = () => {
+        stop();
+        mounted.removeEventListener("load", noticeViewer);
+      };
+    }
     frame.src = NG_PAGE + hash;
     viewerSettled();
     return frame;
@@ -406,6 +492,55 @@ export function createViewer(opts: { session: SessionStore; log: (line: string) 
       if (!state) return;  // no iframe yet: in the first state mounted, with the queued layers
       const selected = withSelection(state);
       if (selected !== state) applyState(selected);  // else not a layer yet: selected when setLayers brings it
+    },
+
+    pointerPosition() {
+      // The mouse state's position is in the viewer's coordinate space,
+      // the state's `dimensions`, as the view's own position is (the
+      // Python's action_state.mouse_voxel_coordinates, converted by
+      // ai_annotate._zyx_nm). Not over a panel (`active` false, which
+      // Neuroglancer sets as the pointer leaves) is null: the Shift+G
+      // handler then says to hover over the data first.
+      const live = liveViewer();
+      if (!live?.mouseState?.active) return null;
+      return pointerNm(live.mouseState.position, live.state.toJSON().dimensions);
+    },
+
+    viewDepthAxis() {
+      return viewDepthAxisOf(currentState());
+    },
+
+    bindKey(key, action, handler) {
+      const binding: KeyBinding = { key, action, handler, active: true, appliedTo: new WeakSet() };
+      bindings.push(binding);
+      liveViewer();  // on the viewer now, when there is one
+      return () => {
+        if (!binding.active) return;
+        binding.active = false;
+        bindings.splice(bindings.indexOf(binding), 1);
+        // The key is taken out of the live viewer's map, unless another
+        // binding still wants it; the action listener stays, inert.
+        const live = liveViewer();
+        const map = live?.inputEventBindings?.global;
+        if (live && binding.appliedTo.has(live) && typeof map?.delete === "function" && !bindings.some((other) => other.key === key && other.appliedTo.has(live))) {
+          map.delete(key);
+        }
+      };
+    },
+
+    refreshLayer(name) {
+      // Through the state, not by rebuilding the layer: the layer's own
+      // settings (its paint value, brush, tool, colours) are in its JSON
+      // and go with it; only the source's spelling moves, and the view
+      // and the other layers are left alone (overlay.refresh_annotation_layer).
+      const state = currentState();
+      if (!state) return false;
+      const layer = layersOf(state).find((candidate) => candidate.name === name);
+      if (!layer) return false;
+      const source = respelledPaintSource(layer.source);
+      if (source === null) return false;  // not a paint layer: nothing of ours to re-read
+      applyState(replaceLayers(state, { [name]: { ...layer, source } }));
+      return true;
     },
   };
 }
