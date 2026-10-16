@@ -16,17 +16,22 @@
 //   routes/good-regions.ts  the Finetune tab's good regions: marked where
 //                       the viewer looks, kept with the volume, drawn as the
 //                       good_regions layer, and held by the head's training
+//   routes/view-labels.ts  the Finetune tab's Label it tools: the patch on
+//                       screen seeded from a served model's prediction,
+//                       labelled all background, or its objects split, and
+//                       the Undo of those and of an accepted AI annotation
+//                       (one stack per volume, which the AI routes share)
 //   routes/ai-annotate.ts  the Finetune tab's AI-assisted annotation: one
 //                       plane of raw EM sent from the page to a Gemini image
 //                       model (or the fake) with the user's own credentials,
 //                       its answer staged for review (ai-annotate-job.ts),
-//                       accepted into the paint volume or undone
+//                       accepted into the paint volume
 //
 // Every other /api/ route answers unavailable (router.ts): the Review tab,
 // the pipeline builder's routes, the dashboard's log stream, and the parts
-// of the Finetune tab that read files or run models the browser has not
-// (crops import, seeds) need a server. The template hides
-// their controls in browser mode, so nothing on the page polls them.
+// of the Finetune tab that read files the browser has not (crops import)
+// need a server. The template hides their controls in browser mode, so
+// nothing on the page polls them.
 //
 // restoreSession(ctx) is the boot-time counterpart of Submit: after a reload
 // the session still names the dataset and the models, but the Engine views
@@ -41,6 +46,7 @@ import { type FinetuneDeps, finetuneRoutes } from "./routes/finetune";
 import { goodRegionRoutes } from "./routes/good-regions";
 import { modelRoutes } from "./routes/models";
 import { pipelineRoutes } from "./routes/pipeline";
+import { viewLabelsRoutes } from "./routes/view-labels";
 import { serveModels } from "./serving";
 
 export interface BackendOptions {
@@ -52,9 +58,11 @@ export interface BackendOptions {
 
 /** The router with every route of the browser mode registered. The finetune
  * jobs live in it (one set per router, so per page), as the server's live
- * in its job manager; so does the AI-annotate state (its settings,
- * acknowledgements, job and undo stacks), as the server's lives in the
- * session. */
+ * in its job manager; so do the patch tools' undo stacks and the
+ * AI-annotate state (its settings, acknowledgements and job), as the
+ * server's live in the session. The undo stacks are the Label it routes',
+ * and the AI annotation's Accept pushes onto them, so the one Undo takes
+ * back either (the server's ai_annotate.py uses view_labels._undo_stack). */
 export function createRouter(options: BackendOptions = {}): Router {
   const router = new Router();
   dataRoutes(router);
@@ -63,10 +71,11 @@ export function createRouter(options: BackendOptions = {}): Router {
   configRoutes(router);
   finetuneRoutes(router, options.finetune);
   goodRegionRoutes(router);
-  aiAnnotateRoutes(router, options.aiAnnotate);
+  const labels = viewLabelsRoutes(router);
+  aiAnnotateRoutes(router, { ...options.aiAnnotate, undo: labels.undo });
   router.otherwise((req) =>
     unavailable(
-      `${req.method} ${req.path} is not available in the browser: it needs a server (the Review tab, the pipeline builder, and the finetune tab's crops import and seeds).`,
+      `${req.method} ${req.path} is not available in the browser: it needs a server (the Review tab, the pipeline builder, and the finetune tab's crops import).`,
     ),
   );
   return router;

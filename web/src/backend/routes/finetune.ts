@@ -16,9 +16,10 @@
 // head trains with the server's per-voxel losses (BCE, MSE, margin), its
 // distillation term (λ and scope) and the browser's own batch of voxels
 // per step (readTraining); Dice needs a whole patch per sample and is
-// refused (refuseLoss). The good regions' routes are routes/good-regions.ts;
-// crops import and seeds keep needing a server and stay unavailable
-// (index.ts). One route is the browser's own, GET
+// refused (refuseLoss). The good regions' routes are routes/good-regions.ts,
+// and the patch tools' Label it and AI annotation have routes of their own
+// (view-labels.ts, ai-annotate.ts); crops import keeps needing a server and
+// stays unavailable (index.ts). One route is the browser's own, GET
 // /api/finetune/session-volume: which volume the session paints into, for
 // the tab's Download and Delete buttons.
 //

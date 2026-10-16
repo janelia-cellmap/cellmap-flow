@@ -417,7 +417,6 @@ describe("everything else under /api/", () => {
     const backend = createBackend(fakeContext());
     for (const [method, path] of [
       ["POST", "/api/finetune/load-crops"],
-      ["POST", "/api/finetune/view-labels/seed"],
       ["GET", "/api/review/status"],
       ["POST", "/api/blockwise/validate"],
       ["GET", "/api/logs/stream"],
