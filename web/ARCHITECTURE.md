@@ -82,7 +82,11 @@ AI-assisted annotation (`ai-annotate/`) and the Label it tools
 
 0. `installApiRebase()` – the dashboard's root-relative `/api/...` URLs resolve
    against the page's directory (src/rebase.ts), since on GitHub Pages the app
-   is under `/cellmap-flow/app/`, not at the origin's root.
+   is under `/cellmap-flow/app/`, not at the origin's root. `installApiDownloads()`
+   (same file) – a click on one of its download links (`<a download>`: Export
+   Config, the Finetune tab's volume and model) is fetched and saved from a
+   `blob:` URL, since Chrome sends a download link's own request to the
+   network, past the service worker.
 1. `registerServiceWorker()` – `sw.js` beside the page, scope `./`, classic (the
    same registration chunkmirage's Engine makes); waits until it controls the
    page (first visit: one reload).
