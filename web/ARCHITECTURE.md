@@ -32,7 +32,9 @@ chunkmirage Engine (web/chunkmirage/web/src/engine.ts, serveStages)
 stage 1, the model (src/infer/stages.ts modelStage)  ─ our code:
    normalizers on the data (the padding stays zero, as the Python server pads
    after the chain) → one forward pass through chunkmirage's Onnx (onnx.ts:
-   onnxruntime-web on WebGPU, one pass at a time per session; WASM fallback)
+   onnxruntime-web on WebGPU, one call into ORT at a time on the page whatever
+   the model, its `exclusive`, which the finetune's feature session takes
+   too; WASM fallback)
    → the block [C, z, y, x], cropped to a chunk the volume ends in
    ▼
 stage 2, the postprocessors (postprocessStage)  ─ our code:
