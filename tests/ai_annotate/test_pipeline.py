@@ -238,7 +238,8 @@ def test_mask_to_write_shape_samples_each_voxel_centre():
     # A 4 px image over 2 voxels: voxel 0 takes pixel 1 (its centre is at
     # 1.0, the pixel [1, 2)), voxel 1 pixel 3. An XZ plane, drawn with z
     # across: the image's row is the box's column.
-    plan = SimpleNamespace(write_shape=(2, 1), depth_axis=1, from_screen=lambda image: from_screen(image, 1))
+    plan = SimpleNamespace(write_shape=(2, 1), depth_axis=1, display_dimensions=None,
+                           from_screen=lambda image: from_screen(image, 1))
     assert mask_to_write_shape(np.array([[True, False, False, True]]), plan).tolist() == [[False], [True]]
     assert mask_to_write_shape(np.array([[False, True, False, False]]), plan).tolist() == [[True], [False]]
     with pytest.raises(ValueError):

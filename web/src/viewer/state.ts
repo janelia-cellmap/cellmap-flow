@@ -196,10 +196,13 @@ const AXIS_NAMES = ["z", "y", "x"] as const;
  * dimensions 0 and 1 and looks along 2, "xz" (rotated about the first)
  * looks along 1, "yz" (rotated about the second) along 0
  * (data_panel_layout.ts's AXES_RELATIVE_ORIENTATION). The display dimensions
- * are the first three of the viewer's coordinate space unless set, and
- * cellmap-flow's viewers name theirs z, y, x in that order, so the "xy"
- * panel is a z-y slice looking along x, and the plane cellmap-flow calls XY
- * is Neuroglancer's "yz" panel (geometry._LAYOUT_DEPTH_SLOT). */
+ * are the first three of the viewer's coordinate space unless set.
+ * cellmap-flow's viewers name their dimensions z, y, x and set the display
+ * dimensions to x, y, z (layers.ts displayDimensionsFor), so the "xy" panel
+ * is the XY plane, looking along z. A viewer that sets none (a link made
+ * before they were set) shows z, y, x: its "xy" panel is a z-y slice
+ * looking along x, and the XY plane is its "yz" panel
+ * (geometry._LAYOUT_DEPTH_SLOT). */
 const LAYOUT_DEPTH_SLOT: Record<string, number> = { xy: 2, xz: 1, yz: 0 };
 
 /** The panel name of a Neuroglancer layout (geometry._layout_type): the
@@ -217,7 +220,8 @@ function layoutType(layout: unknown): string | null {
  * (geometry.depth_axis_from_layout).
  *
  * `displayDimensions` are the names of the viewer's display dimensions in
- * order (z, y, x when not given, as cellmap-flow's viewers have them); see
+ * order (z, y, x when not given, as a viewer that sets none over z, y, x
+ * shows them); see
  * LAYOUT_DEPTH_SLOT for why they matter. Only a single-plane layout says
  * which plane the user is looking at: Neuroglancer keeps one layout for the
  * whole viewer, so in "4panel" or "3d" the panel the pointer is in is not
@@ -232,13 +236,19 @@ export function depthAxisFromLayout(layout: unknown, displayDimensions?: readonl
   return axis === 1 || axis === 2 ? axis : 0;
 }
 
-/** depthAxisFromLayout for a viewer state's JSON (geometry.depth_axis_for_view):
- * the display dimensions it sets, else the first three of its coordinate
- * space, as Neuroglancer takes them. Without a state (no viewer yet) the
- * default viewer's: the "xy" panel over z, y, x. */
-export function viewDepthAxisOf(state: NgState | null | undefined): 0 | 1 | 2 {
+/** A viewer state's display dimensions (geometry.display_dimensions_for_view):
+ * those it sets, else the first three of its coordinate space, as
+ * Neuroglancer takes them; empty when it has neither. */
+export function displayDimensionsOf(state: NgState | null | undefined): string[] {
   const set = state?.displayDimensions;
-  const display = Array.isArray(set) && set.length ? set.filter((name): name is string => typeof name === "string") : Object.keys(state?.dimensions ?? {}).slice(0, 3);
+  return Array.isArray(set) && set.length ? set.filter((name): name is string => typeof name === "string") : Object.keys(state?.dimensions ?? {}).slice(0, 3);
+}
+
+/** depthAxisFromLayout for a viewer state's JSON (geometry.depth_axis_for_view),
+ * over its display dimensions (displayDimensionsOf). Without a state (no
+ * viewer yet) the default viewer's: the "xy" panel over z, y, x. */
+export function viewDepthAxisOf(state: NgState | null | undefined): 0 | 1 | 2 {
+  const display = displayDimensionsOf(state);
   return depthAxisFromLayout(state?.layout, display.length ? display : null);
 }
 

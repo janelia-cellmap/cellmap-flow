@@ -31,7 +31,7 @@ import type { DatasetInfo, LayerSpec, SessionStore, ViewerController } from "../
 import { initialState, RAW_LAYER_NAME, rawLayer, respelledPaintSource, stateWithoutInfo } from "./layers";
 import { withEquivalences } from "./equivalences";
 import { decodeState, encodeState, isStateHash, mirrorFrameHash, rememberedState, rememberState, withHash } from "./share";
-import { datasetUrlFromState, layerShaderOf, layersOf, type NgState, pointerNm, positionNm, replaceLayers, viewDepthAxisOf, withoutLayer } from "./state";
+import { datasetUrlFromState, displayDimensionsOf, layerShaderOf, layersOf, type NgState, pointerNm, positionNm, replaceLayers, viewDepthAxisOf, withoutLayer } from "./state";
 
 /** Neuroglancer's page, built beside this one (vite.config.ts serves ./ng/). */
 export const NG_PAGE = "./ng/index.html";
@@ -573,6 +573,10 @@ export function createViewer(opts: { session: SessionStore; log: (line: string) 
       const found = layersOf(currentState()).find((candidate) => candidate.name === name);
       if (found) return { ...found };
       return queued[name] ? { ...queued[name], name } : null;
+    },
+
+    viewDisplayDimensions() {
+      return displayDimensionsOf(currentState());
     },
 
     bindKey(key, action, handler) {

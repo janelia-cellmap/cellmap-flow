@@ -367,6 +367,13 @@ export class FakeViewer implements ViewerController {
     return this.depthAxis;
   }
 
+  /** The display dimensions a test pretends the viewer shows. */
+  displayDimensions: string[] = ["x", "y", "z"];
+
+  viewDisplayDimensions(): string[] {
+    return this.displayDimensions;
+  }
+
   /** Every binding made and not yet unbound: a test presses a key by calling its handler. */
   bindings: { key: string; action: string; handler: () => void }[] = [];
 

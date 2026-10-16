@@ -354,6 +354,14 @@ describe("the reach into a live viewer for AI-assisted annotation", () => {
     expect(createViewer({ session: fakeSession(), log: () => {} }).viewDepthAxis()).toBe(2);
   });
 
+  it("a dataset opened with its geometry is shown x, y, z: the one panel is the XY plane", async () => {
+    stubDocument();
+    const viewer = createViewer({ session: fakeSession(), log: () => {} });
+    await viewer.openDataset(LIVER.url, { type: "image", source: `zarr://${LIVER.url}` }, LIVER);
+    expect(viewer.viewDisplayDimensions()).toEqual(["x", "y", "z"]);
+    expect(viewer.viewDepthAxis()).toBe(0);
+  });
+
   it("viewDepthAxis reads the state in the iframe's hash while Neuroglancer is still loading", async () => {
     const { shown } = stubDocument();
     const viewer = createViewer({ session: fakeSession(), log: () => {} });
