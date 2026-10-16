@@ -44,7 +44,8 @@ export async function createFeatureRunner(options: FeatureRunnerOptions): Promis
   let session: ort.InferenceSession | null = null, provider: FeatureRunner["provider"] = "wasm";
   if (typeof navigator !== "undefined" && navigator.gpu) {
     try {
-      session = await ort.InferenceSession.create(bytes, { executionProviders: ["webgpu"] });
+      // in the turn: building calls into the instance a served model's pass may be suspended in
+      session = await exclusive(() => ort.InferenceSession.create(bytes, { executionProviders: ["webgpu"] }));
       provider = "webgpu";
     } catch (e) {
       log(`no WebGPU session for the features (${(e as Error).message ?? e}); on WASM (the CPU) instead`);
@@ -52,21 +53,24 @@ export async function createFeatureRunner(options: FeatureRunnerOptions): Promis
   } else {
     log("navigator.gpu is unavailable: the features run on WASM (the CPU), which is slow");
   }
-  session ??= await ort.InferenceSession.create(bytes, { executionProviders: ["wasm"] });
+  session ??= await exclusive(() => ort.InferenceSession.create(bytes, { executionProviders: ["wasm"] }));
   const input = options.inputName ?? session.inputNames[0], output = options.outputName ?? session.outputNames[0];
   for (const [what, name] of [["input", input], ["output", output], ["feature tensor", head.featureTensor]] as const) {
     const names = what === "input" ? session.inputNames : session.outputNames;
     if (!names.includes(name)) {
-      await session.release();
+      const unwanted = session;
+      await exclusive(() => unwanted.release());
       throw new Error(`the model has no ${what} ${name} (it has ${names.join(", ")})`);
     }
   }
   log(`features session ready on ${provider === "webgpu" ? "WebGPU" : "WASM (the CPU)"}: ${head.inChannels} channels of ${head.featureTensor}, ${head.outChannels} of ${output}`);
 
-  // One pass at a time on the page, this session's and the served models'
-  // alike: ORT runs every session in one WebAssembly instance, which can wait
-  // on the GPU for one call at a time, so the passes take chunkmirage's turn
-  // (exclusive) with the engine's own.
+  // One call into ORT at a time on the page, this session's and the served
+  // models' alike: ORT runs every session in one WebAssembly instance, which
+  // can wait on the GPU for one call at a time, so this session's build,
+  // passes and release take chunkmirage's turn (exclusive) with the engine's
+  // own. It is imported from the module the engine's Onnx is, so there is
+  // one turn: a second copy of onnx.ts would bring a second.
   const s = session;
   return {
     provider,
@@ -78,8 +82,7 @@ export async function createFeatureRunner(options: FeatureRunnerOptions): Promis
       });
     },
     async dispose() {
-      await exclusive(async () => {});  // after the passes started before it
-      await s.release();
+      await exclusive(() => s.release());  // in the turn, after the passes started before it
     },
   };
 }

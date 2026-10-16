@@ -2,4 +2,4 @@
 # web/scripts/fetch-chunkmirage.sh clones into web/chunkmirage/ (gitignored).
 # One line to bump; CI and local builds read the same file.
 repo=https://github.com/JaneliaSciComp/chunkmirage
-sha=baed52bc343eec1d310313d348567fc3207cfd33
+sha=9eaf3089ffb36904f0c1bfb66764c34757439e78
