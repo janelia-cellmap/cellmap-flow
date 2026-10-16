@@ -149,6 +149,10 @@ weights are written back into a copy of the model's initializers, and the
 result is an ordinary model entry (`src/models/finetuned.ts`, repo
 `finetuned`, kept in IndexedDB with its bytes): served beside the base
 when *Auto-serve* is on, listed on the Models tab, downloadable as `.onnx`.
+A Restart's model takes the place of the job's previous one, its layer
+included, and the previous one is removed from IndexedDB, record and bytes:
+a job keeps its latest model only, as the server serves only a job's latest
+iteration; a new job's model is a new entry.
 The job routes answer as the server's do (`src/backend/routes/finetune.ts`,
 `finetune-jobs.ts`), so the tab's own job card, loss plot and log stream
 follow the run unchanged. Why the head and not the network: onnxruntime-web
