@@ -22,7 +22,7 @@ renders the templates once, at build time, and the TypeScript in `src/`
 answers the dashboard's `fetch("/api/...")` requests in place of the Flask
 routes, with the same request and response JSON. The controls only a server
 can serve (LSF settings, Job Logs, the Local Catalog of cluster paths, the
-Review tab, and the Finetune tab's crops, seeds and good regions) are
+Review tab, and the Finetune tab's crops and seeds) are
 hidden; everything else is the dashboard you know, finetuning and
 AI-assisted annotation included ([below](#finetuning-in-the-browser)).
 `ARCHITECTURE.md` describes how the parts fit together.
@@ -127,9 +127,24 @@ convolution of the ONNX graph, found by walking back from the output
 the model runs once per painted chunk on the block the model stage would feed
 it (`samples.ts`, through the volume's normalizers) for its logits and
 features (`features.ts`), and the head's weights are trained from the model's
-own on the painted voxels' features with Adam on masked, class-balanced
-BCE-with-logits (`head-trainer.ts`; the targets are `targets.ts`, the port of
-`target_transforms.py`, checked against the Python classes). The trained
+own on the painted voxels' features with Adam on a masked, class-balanced
+loss (`head-trainer.ts`; the targets are `targets.ts`, the port of
+`target_transforms.py`, checked against the Python classes): BCE-with-logits
+by default, or the server's MSE on probabilities or margin loss; Dice, a
+whole patch's overlap, needs the server. *Voxels per Step* is the head's
+batch (the server's *Batch Size* counts patches). *Distillation Weight* λ
+adds λ × the mean squared distance of the head's logits from the starting
+head's, `W₀x + b₀` on the same cached features (`distillation.ts`, the
+server's `distillation_loss`): over the painted chunks' unpainted voxels or
+all of them (*Distillation Scope*), sampled to 32,768 voxels a run, or, once
+good regions are marked, over their unpainted voxels instead, as the
+server's anchors; 0.01 by default, the server form's. The teacher is the head
+the job started from, on a Restart too, as on the server. *Mark as Good*
+records a region where the viewer looks (one output block), kept in the
+volume as `good_regions.json`, drawn as the `good_regions` layer
+(`src/backend/routes/good-regions.ts`, `src/finetune/good-regions.ts`); a
+region's block is run through the model even when nothing in it is painted,
+and paint inside a region wins over it. The trained
 weights are written back into a copy of the model's initializers, and the
 result is an ordinary model entry (`src/models/finetuned.ts`, repo
 `finetuned`, kept in IndexedDB with its bytes): served beside the base

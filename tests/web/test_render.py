@@ -21,14 +21,15 @@ SERVER_ONLY = [
     "serverConfigAccordion", "jobLogsBtn", "jobLogsArea",
     # The Finetune tab's parts that need a server: a path on its file system,
     # crops from its disks, the patch tools that write the volume through its
-    # routes (seeds from a model's server, good regions), MinIO, and the
-    # cluster trainer's parameters. AI-assisted annotation is not among them:
-    # the browser answers its routes itself (KEPT below).
+    # routes (seeds from a model's server), MinIO, and the cluster trainer's
+    # parameters (its batch of patches, its rehearsal share, the distance
+    # models' interval loss). AI-assisted annotation and good regions are not
+    # among them: the browser answers their routes itself (KEPT below).
     "outputPath", "openLoadCropsBtn", "loadCropsModal",
-    "labelItSection", "goodRegionsSection",
+    "labelItSection",
     "saveAnnotationsBtn", "minioStatus", "existingBrowseRoot",
     "checkpointPath", "loraRank", "batchSize", "patchesPerEpoch", "rehearsalFraction",
-    "lossType", "marginGroup", "distillationLambda", "distillationScope", "augment", "gpuQueue",
+    "distanceModelHint", "augment", "gpuQueue",
 ]
 KEPT = [
     "model-tab", "input-tab", "output-tab", "models", "input", "output",
@@ -43,9 +44,14 @@ KEPT = [
     "modelSelect", "createVolumeBtn", "loadExistingVolumeBtn", "existingSessionsList",
     "showAnnotatedRegionsBtn",  # the browser counts the painted chunks
     "numEpochs", "learningRate", "labelSmoothing", "balanceClasses", "autoServeCheck", "startFinetuningBtn",
+    # The head's loss (its own options), its margin, and the distillation it is held by.
+    "lossType", "marginGroup", "distillationLambda", "distillationScope",
     "trainingStatusCard", "lossPlotCanvas", "trainingLogs",
-    # Its browser-only controls: the paint out as a zarr or deleted, the finetuned model out as .onnx.
-    "downloadVolumeBtn", "deleteVolumeBtn", "downloadFinetunedBtn",
+    # Good regions: marked, counted and cleared in the page, held by the head's distillation.
+    "goodRegionsSection", "markGoodRegionBtn", "goodRegionCount", "clearGoodRegionsBtn",
+    # Its browser-only controls: the paint out as a zarr or deleted, the
+    # finetuned model out as .onnx, the head's batch of voxels.
+    "downloadVolumeBtn", "deleteVolumeBtn", "downloadFinetunedBtn", "batchPixels",
     # AI-assisted annotation, in both modes: the browser calls the provider itself.
     "aiAnnotatePanel", "aiAnnotateReviewModal",
 ]
@@ -192,6 +198,17 @@ def test_the_browser_page_finetunes_the_last_layer(page):
     assert re.search(r'<a class="[^"]*" id="downloadFinetunedBtn"[^>]*\bdownload\b[^>]*style="display: none;"', page)
 
 
+def test_the_browser_page_offers_the_heads_training_controls(page):
+    """The head's own choices: the server's per-voxel losses, BCE chosen (no
+    Dice, which scores whole patches); its batch in voxels, 4,096 chosen; and
+    the distillation weight and scope, the server form's defaults."""
+    assert _select_options(page, "lossType") == [("bce", True), ("mse", False), ("margin", False)]
+    assert _select_options(page, "batchPixels") == [("1024", False), ("4096", True), ("16384", False), ("65536", False)]
+    assert ("0.01", True) in _select_options(page, "distillationLambda")
+    assert _select_options(page, "distillationScope") == [("unlabeled", True), ("all", False)]
+    assert "Good regions, once marked, decide instead." in page
+
+
 def test_the_browser_page_takes_the_ai_annotation_credentials(page):
     """The AI panel's credentials block: hidden until the config names a
     provider that needs one, the secrets password fields the browser must not
@@ -254,7 +271,9 @@ def test_the_flask_dashboard_is_unchanged_by_the_markers(dashboard):
     assert "train the model's last layer in this tab" not in html
     assert "trains the model's last layer (its output convolution)" not in html
     assert _select_options(html, "learningRate")[3] == ("0.0001", True) and "0.003" not in html
-    for browser_only in ("downloadVolumeBtn", "deleteVolumeBtn", "downloadFinetunedBtn", "existingVolumesNote", *AI_ANNOTATE_BROWSER_ONLY):
+    # The cluster trainer's losses, margin chosen, and no batch of voxels.
+    assert _select_options(html, "lossType") == [("margin", True), ("mse", False), ("bce", False), ("dice", False), ("combined", False)]
+    for browser_only in ("downloadVolumeBtn", "deleteVolumeBtn", "downloadFinetunedBtn", "existingVolumesNote", "batchPixels", *AI_ANNOTATE_BROWSER_ONLY):
         assert browser_only not in html, browser_only
     # The AI panel and its review are on the Flask page as before, with the
     # server's words on the pickers and without the browser's additions.

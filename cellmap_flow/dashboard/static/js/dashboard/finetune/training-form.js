@@ -34,9 +34,22 @@ const SAVED_FIELDS = [
   ["gpuQueue", "gpuQueue", "value"],
 ];
 
+// The fields saved in this mode. The browser mode keeps the Loss Function
+// under a key of its own, headLossType: the field was hidden there before
+// the head had a choice of losses, and every browser that saved the form
+// saved the server template's default, margin, which must not come back as
+// the browser's loss. Its batch, voxels per step, is a field of its own
+// (batchPixels, in the template's browser-only block).
+function savedFields() {
+  if (!isBrowserMode()) return SAVED_FIELDS;
+  return SAVED_FIELDS
+    .map((field) => (field[1] === "lossType" ? ["headLossType", "lossType", "value"] : field))
+    .concat([["batchPixels", "batchPixels", "value"]]);
+}
+
 function saveFinetuneState() {
   const state = {};
-  for (const [key, id, kind] of SAVED_FIELDS) {
+  for (const [key, id, kind] of savedFields()) {
     const el = document.getElementById(id);
     state[key] = kind === "checkbox" ? el.checked : el.value;
   }
@@ -51,7 +64,7 @@ function restoreFinetuneState() {
 }
 
 function applySavedState(saved) {
-  for (const [key, id, kind] of SAVED_FIELDS) {
+  for (const [key, id, kind] of savedFields()) {
     const el = document.getElementById(id);
     const value = saved[key];
     if (kind === "checkbox") {
@@ -111,12 +124,13 @@ function trainingParams() {
   if (rehearsalFraction !== undefined) {
     params.rehearsal_fraction = rehearsalFraction;
   }
-  // Browser mode: the head trains on BCE with logits (web/src/finetune), and
-  // its submit refuses any other loss. The Loss Function field is hidden
-  // there (server-only) and still says the template's margin, or whatever
-  // this browser saved, so the loss is set here rather than read.
+  // Browser mode: the head's batch is voxels per step, its own field; the
+  // server-only fields above go too and the page's routes ignore them
+  // (web/src/backend/routes/finetune.ts readTraining). The Loss Function
+  // offers the head's losses there (BCE, MSE, margin) and is read as on
+  // the server.
   if (isBrowserMode()) {
-    params.loss_type = "bce";
+    params.batch_pixels = parseInt(document.getElementById("batchPixels").value, 10);
   }
   if (params.loss_type === "margin") {
     const margin = parseFloat(document.getElementById("marginValue").value);
@@ -144,10 +158,13 @@ function showDistanceModelHint(name) {
 // The distillation a distance model trains with on scribbles, set in the form
 // when one is picked so the form shows what the job will get: submit applies
 // the same (training_settings), and a form left at 0.01 read as if that would
-// be used. Only on picking a model, so values edited afterwards stand.
+// be used. Only on picking a model, so values edited afterwards stand. Not in
+// the browser mode, whose head trains a distance model on the loss picked
+// (it has no interval loss, so the distillation that goes with it does not
+// apply; the hint is server-only there).
 export function applyModelDefaults(name) {
   showDistanceModelHint(name);
-  if (!isDistanceModel(name)) return;
+  if (!isDistanceModel(name) || isBrowserMode()) return;
   const distillation = document.getElementById("distillationLambda");
   if (!(parseFloat(distillation.value) >= 0.5)) distillation.value = "0.5";
   saveFinetuneState();
@@ -238,9 +255,11 @@ export function initTrainingForm() {
 
   const saved = restoreFinetuneState();
   if (saved) applySavedState(saved);
+  // A restored loss sets the field without a change event.
+  updateMarginVisibility();
 
   // Save the state on every change, and on every keystroke in text fields.
-  for (const id of [...SAVED_FIELDS.map(([, fieldId]) => fieldId), "modelSelect"]) {
+  for (const id of [...savedFields().map(([, fieldId]) => fieldId), "modelSelect"]) {
     const el = document.getElementById(id);
     el.addEventListener("change", saveFinetuneState);
     if (el.type === "text" || el.type === "number") {

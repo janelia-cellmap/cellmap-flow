@@ -6,8 +6,9 @@
 // - models.js: the model picker;
 // - crops.js: New Volume, Load Crops from YAML, annotated regions, Save;
 // - sessions.js: Resume Existing Volume;
-// - good-regions.js: Mark This View as Good, Clear, the rehearsal hint, and
-//   Seed from Prediction and All Background over the same patch;
+// - good-region-marks.js: Mark as Good, the count, clear, the rehearsal hint;
+// - good-regions.js: Label it over the same patch: Seed from Prediction,
+//   All Background, Split Objects, Undo;
 // - ai-annotate.js: AI-assisted annotation, a hosted model's labels for the
 //   plane on screen, reviewed and then accepted (undone by the same Undo) or
 //   rejected;
@@ -24,13 +25,15 @@
 // page: the template hides what needs a server (server-only), and each module
 // asks lib/page-data's isBrowserMode where it must behave differently (no
 // output path to insist on, the paint's download and delete, the finetuned
-// model's download, the AI annotation's credentials). Of the patch tools,
-// Label it and Good regions are not started there at all: their sections are
-// hidden and their routes unavailable. AI-assisted annotation is: the browser
-// mode answers its routes in the page (web/src/ai-annotate).
+// model's download, the AI annotation's credentials, the head's batch). Of
+// the patch tools, Label it is not started there at all: its section is
+// hidden and its routes unavailable. Good regions and AI-assisted annotation
+// are: the browser mode answers their routes in the page
+// (web/src/backend/routes/good-regions.ts, web/src/ai-annotate).
 import { isBrowserMode } from "../../lib/page-data.js";
 import { initAiAnnotate } from "./ai-annotate.js";
 import { initCrops } from "./crops.js";
+import { initGoodRegionMarks } from "./good-region-marks.js";
 import { initGoodRegions } from "./good-regions.js";
 import { initJobMonitor } from "./job-monitor.js";
 import { initModelPicker } from "./models.js";
@@ -53,11 +56,12 @@ export function initFinetuneTab() {
   const picker = initModelPicker({ log, savedModelName: form.saved && form.saved.selectedModelName });
   const crops = initCrops({ log, picker, form });
   initSessions({ log, addToViewer: crops.addToViewer, volumeReady: crops.volumeReady });
-  // Browser mode: the Label it and Good regions sections are server-only
-  // (seeds come from a running model's server, good regions are the
-  // session's), and good-regions.js polls the seed sources every few
-  // seconds; against a backend that answers unavailable that is only noise.
-  // AI-assisted annotation runs in both modes.
+  // Good regions run in both modes. Browser mode: the Label it section is
+  // server-only (seeds come from a running model's server), and
+  // good-regions.js polls the seed sources every few seconds; against a
+  // backend that answers unavailable that is only noise. AI-assisted
+  // annotation runs in both modes.
+  initGoodRegionMarks({ log });
   if (!isBrowserMode()) initGoodRegions({ log });
   initAiAnnotate({ log });
   initJobMonitor({ picker, form });

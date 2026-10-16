@@ -131,7 +131,7 @@ route that reads a query, the log stream's `offset`, has Last-Event-ID, a
 header, first.)
 
 Routes that only a server can serve (LSF, the cluster's file systems, the
-Review tab's SQLite index, the seeds and good regions) answer
+Review tab's SQLite index, the seeds) answer
 `{success: false, available: false, error}` and their controls are hidden by
 `[data-mode="browser"] .server-only { display: none }` (the template marks them
 with the `server-only` class; render.py sets `data-mode`).
@@ -168,11 +168,16 @@ exactly as the model stage does (the port of `finetune/data/reader.py`);
 `features.ts` runs the model for its logits and features; `targets.ts` (the
 port of `target_transforms.py`, parity-tested) makes the targets and masks;
 `head-trainer.ts` gathers the painted voxels' features and trains the head
-from the model's own weights with Adam on masked, class-balanced
-BCE-with-logits (the server's loss); `run.ts` is one run of all of it. The
+from the model's own weights with Adam on a masked, class-balanced loss
+(BCE-with-logits, MSE or margin: the server's per-voxel losses), plus λ ×
+the distillation term toward the starting head on the voxels
+`distillation.ts` samples from the same feature maps (the painted chunks'
+unpainted ones, all of them, or the good regions' unpainted ones, which
+`good-regions.ts` places on the volume's grid); `run.ts` is one run of all
+of it. The
 result is a model entry of the `finetuned` repo (`models/finetuned.ts`: a
 record in IndexedDB, its bytes in the byte cache), served like any other.
-`backend/routes/finetune.ts` and `finetune-jobs.ts` answer the tab's routes
+`backend/routes/finetune.ts`, `good-regions.ts` and `finetune-jobs.ts` answer the tab's routes
 with the Python routes' JSON (a job is a run in the page; its log streams as
 server-sent events), so the tab's job card, loss plot and log stream are
 unchanged. Why the head and not the network: onnxruntime-web trains nothing
@@ -263,11 +268,12 @@ web/
       relay.ts  registerServiceWorker(), listenForApiRequests(backend) on chunkmirage's route(); Ask/Reply/Later are chunkmirage's types
       router.ts, sse.ts, yaml.ts (the export), serving.ts (serve and re-serve the session's models)
       finetune-jobs.ts (a finetune run as the dashboard's job), ai-annotate-job.ts (one AI annotation, staged for review)
-      routes/{data,pipeline,models,config,finetune,ai-annotate}.ts
+      routes/{data,pipeline,models,config,finetune,good-regions,ai-annotate}.ts
     state/                   openSession(): SessionStore (sessionStorage: the tab is the server's process lifetime); db.ts + local-store.ts
                              for picked directories; paint-store.ts + paint-route.ts: the annotation volumes' files and the worker's paint/ route
     finetune/                types.ts (the seams), volume.ts (planVolume, the zarr v2 files), samples.ts, targets.ts, onnx-proto.ts,
-                             onnx-head.ts, features.ts, head-trainer.ts, run.ts (runFinetune), zip.ts (the paint's download)
+                             onnx-head.ts, features.ts, head-trainer.ts, distillation.ts, good-regions.ts, run.ts (runFinetune),
+                             zip.ts (the paint's download)
     ai-annotate/             AI-assisted annotation (above): types.ts, geometry.ts, plane.ts, mask.ts, labels.ts, fill.ts, prompts.ts,
                              organelles.ts (the pure ports), images.ts (the canvas codec), gemini.ts, fake.ts, providers.ts,
                              credentials.ts, usage.ts, audit.ts

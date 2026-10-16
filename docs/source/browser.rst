@@ -78,7 +78,23 @@ convolution, is fitted on the voxels you painted, from the model's own
 weights, in seconds on any machine; the job card and the loss plot follow it.
 With *Auto-serve* on, the finetuned model takes the layer over as soon as it
 is trained. Paint where it is still wrong and train again (*Restart* goes on
-from the trained layer).
+from the trained layer, with the form's values as they are then).
+
+The training panel's controls are the server's where they mean something for
+one layer: the epochs, the learning rate, the loss (BCE by default, MSE or
+margin; Dice scores whole patches and needs the server), label smoothing,
+class balance, and *Distillation Weight* and *Scope*, which keep the layer
+close to the model's own output where you painted nothing: the loss adds the
+weight times the mean squared distance of the layer's logits from the
+original's, on the unpainted voxels of the painted chunks (or all of their
+voxels), up to 32,768 of them. 0.01, the default, is a light hold; 0.1 to 1
+holds firmly. *Voxels per Step* is the browser's own batch: how many painted
+voxels each step of the training averages over. *Mark as Good*, under *Patch
+on screen*, marks the output block where the viewer looks as one the model
+already gets right; it shows as the ``good_regions`` box layer and is kept
+with the volume. Once there are good regions, distillation holds the model to
+its own output inside them, wherever you have not painted, instead of over
+the scope, as on the server; *clear* removes them.
 
 What this can and cannot fix. The rest of the network stays as exported, so
 the finetune learns what the model mislabels where its features already tell
