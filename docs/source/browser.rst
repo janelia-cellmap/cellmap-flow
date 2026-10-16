@@ -141,8 +141,30 @@ The paint and the finetuned models stay in the browser (IndexedDB): *Resume
 Existing Volume* lists the volumes painted here, newest first, and the
 Models tab lists the finetuned models under the Hugging Face ones. *Download
 paint* saves the volume as a zarr (zipped, the server's layout, so a server
-session can train on it) and *Download finetuned model* the ``.onnx``.
+session can train on it) and *Download finetuned model* the ``.onnx``, with
+its manifest (voxel sizes, block, channels, input normalization) written into
+the file's metadata, so that the server mode serves the file as it is.
 Nothing leaves your machine unless you download and share it.
+
+To run the same models on the cluster, *Export Config* (in the header) saves
+a YAML that ``cellmap_flow yaml`` runs: each model a ``type: onnx`` entry
+(:ref:`onnx`), a Hugging Face export by its repo, folder and the file this
+browser ran, a finetuned one by ``path: <name>.onnx``, the file *Download
+finetuned model* saves, which goes beside the YAML (a relative path is the
+YAML's folder's), and the Input and Postprocess steps as its ``json_data``.
+Add ``charge_group:`` and ``queue:`` for the cluster:
+
+.. code-block:: yaml
+
+    models:
+    - type: onnx
+      name: mito_aff_setup54_16nm
+      repo: cellmap/onnx-web-models
+      folder: setup_54
+      file: setup_54_mito_affinities_16nm_in132_fp16.onnx
+    - type: onnx
+      name: mito_aff_setup54_16nm-ft1
+      path: mito_aff_setup54_16nm-ft1.onnx  # the file Download finetuned model saves: put it beside this YAML
 
 Browsers and devices
 --------------------

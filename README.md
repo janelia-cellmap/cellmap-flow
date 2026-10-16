@@ -72,10 +72,13 @@ itself stays bare, so a new tab starts fresh.
   form's settings, as on the server).
   The paint and the finetuned models stay in the browser, listed on the next
   visit, and download as a zarr and an `.onnx` for the server mode or for
-  sharing. The rest of the network stays as exported: a finetune of the whole
-  network is the server mode's. AI-assisted annotation is in the tab too:
-  hover and press Shift+G, and the plane on screen goes to a Gemini image
-  model asked to paint the structure, for review before it is written; the
+  sharing; the `.onnx` carries its manifest, so the server serves it as it
+  is (`type: onnx`), and *Export Config* writes a YAML `cellmap_flow yaml`
+  runs, its models the ONNX files the page ran. The rest of the network
+  stays as exported: a finetune of the whole network is the server mode's.
+  AI-assisted annotation is in the tab too: hover and press Shift+G, and the
+  plane on screen goes to a Gemini image model asked to paint the structure,
+  for review before it is written; the
   page calls Google with a key or token you paste, kept in the page's memory
   only, so a reload asks for it again. The patch tools beside it work as on the
   server: *Seed from Prediction* fills the patch on screen from a model's
@@ -274,8 +277,9 @@ the dashboard, paste the same `REF` into the Models tab's *Add a model* box:
 *Resolve* says what it is and where it runs and asks for anything missing
 (a Cellpose model's voxel size, say), and *Run* starts it, ticked among the
 models, without a YAML or a restart. `REF` is a path (a model script, an
-exported folder, a checkpoint, Cellpose weights), a zoo nickname or bioimage.io
-link, a Cellpose model name, a Hugging Face `org/repo`, or
+exported folder, a checkpoint, Cellpose weights, an `.onnx`), a zoo nickname or
+bioimage.io link, a Cellpose model name, a Hugging Face `org/repo`, a folder of
+cellmap/onnx-web-models (`setup_54`, or `cellmap/onnx-web-models/setup_54`), or
 `dacapo:run@iteration`. A whole config YAML is a run, not a model: run it with
 `cellmap_flow yaml`.
 
@@ -296,6 +300,7 @@ $ cellmap_flow add /path/to/run/model_checkpoint_20000 --run -d data_path
 | `fly` | A fly_organelles training checkpoint, `.ts` or `model.pt` | `fly` (a `.ts`: this environment) |
 | `cellpose` | Cellpose 4: Cellpose-SAM (`cpsam_v2`, `cpsam`) or finetuned weights | `cellpose4` |
 | `bioimage` | Any BioImage Model Zoo model: id, nickname, DOI, URL or `rdf.yaml` | `bioimageio` |
+| `onnx` | An ONNX export as the browser mode runs it: a folder of cellmap/onnx-web-models, or an `.onnx` file (one finetuned in the browser says its own voxel size; any other needs it) | `onnx` |
 | `dacapo` | A DaCapo run and iteration | this environment (DaCapo does not install in pixi's `dacapo` environment yet: give `env:` a conda environment with it) |
 | `script` | Any model, from a Python script that defines it | this environment |
 | `finetune` | A LoRA adapter or full finetune on top of another model | its base model's |
@@ -411,6 +416,31 @@ cellmap_flow infer fly -c /path/to/run/model_checkpoint_20000 -d data_path
 ```
 
 A folder cellmap_models exported is served with `type: cellmap` instead.
+
+### ONNX exports and models finetuned in the browser
+
+`type: onnx` serves the browser mode's models with ONNX Runtime (on the GPU in
+pixi's `onnx` environment), fed as the browser feeds them: a folder of
+[cellmap/onnx-web-models](https://huggingface.co/cellmap/onnx-web-models), whose
+`manifest.json` gives the voxel sizes, blocks and channels, or the `.onnx` the
+browser's *Download finetuned model* saves, which carries its manifest. The
+browser's *Export Config* writes such entries, a finetuned model's `path`
+relative to the YAML's folder:
+
+```yaml
+models:
+  mito_aff_setup54_16nm:
+    type: onnx
+    folder: setup_54            # cellmap/onnx-web-models; file: picks a variant, else fp32 at the largest block
+  mito_aff_setup54_16nm-ft1:
+    type: onnx
+    path: mito_aff_setup54_16nm-ft1.onnx
+```
+
+The exports output logits: add a `SigmoidPostprocessor` (the dashboard suggests
+it, and their manifests' input normalization). Any other `.onnx` that takes
+`[1, 1, z, y, x]` works too, given its `input_voxel_size`. See
+[example/onnx_web_models.yaml](example/onnx_web_models.yaml).
 
 ### DaCapo
 

@@ -347,8 +347,8 @@ def suggest_input_norm(
     """Propose an input_norm config for a model.
 
     Priority:
-      1. ``declared`` -- an explicit input_norm in the model's own metadata.
-         Nothing writes this today, but honour it when it appears.
+      1. ``declared`` -- an explicit input_norm in the model's own metadata:
+         an onnx model's manifest (the browser's exports declare theirs).
       2. The training framework's convention. DaCapo trains on [-1, 1], hence
          the extra ``x*2-1`` on top of the 0-1 rescale.
       3. ``source`` -- where the model came from. A CellMap model follows the

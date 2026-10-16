@@ -36,6 +36,7 @@ from cellmap_flow.models.models_config import (
     FinetuneModelConfig,
     FlyModelConfig,
     HuggingFaceModelConfig,
+    OnnxModelConfig,
     ScriptModelConfig,
 )
 
@@ -173,8 +174,25 @@ def _cellpose_options(*pretrained_model_opts):
     ]
 
 
+def _onnx_options(*path_opts):
+    def optional(name, opts, kind='text'):
+        return (name, opts, (), kind, False, None, False, f'Parameter: {name} (optional)')
+
+    return [
+        optional('path', path_opts), optional('folder', ('-f', '--folder')), optional('repo', ('-r', '--repo')),
+        optional('revision', ('--revision',)), optional('file', ('--file',)), optional('variant', ('-v', '--variant')),
+        optional('input_voxel_size', ('-i', '--input-voxel-size')),
+        optional('output_voxel_size', ('-o', '--output-voxel-size')),
+        optional('input_size', ('--input-size',)), optional('output_size', ('--output-size',)),
+        ('channels', ('-c', '--channels'), (), 'text', False, None, False,
+         'Parameter: channels (optional) [comma-separated values]'),
+        optional('output', ('--output',)), optional('slices_per_chunk', ('-s', '--slices-per-chunk'), 'integer'),
+        NAME, LONG_SCALE,
+    ]
+
+
 # Each model type's own options, the same in both CLIs but for cellpose's
-# --pretrained-model: cellmap_flow_server's -p is its port.
+# --pretrained-model and onnx's --path: cellmap_flow_server's -p is its port.
 MODEL_OPTIONS = {
     'script': [
         ('script_path', ('-s', '--script-path'), (), 'text', True, None, False, 'Parameter: script_path'),
@@ -231,8 +249,10 @@ MODEL_OPTIONS = {
         NAME, SCALE,
     ],
     'cellpose': _cellpose_options('-p', '--pretrained-model'),
+    'onnx': _onnx_options('-p', '--path'),
 }
-SERVER_MODEL_OPTIONS = {**MODEL_OPTIONS, 'cellpose': _cellpose_options('--pretrained-model')}
+SERVER_MODEL_OPTIONS = {**MODEL_OPTIONS, 'cellpose': _cellpose_options('--pretrained-model'),
+                        'onnx': _onnx_options('--path')}
 
 SERVER_CHECK = ('server_check', ('--server-check',), (), 'boolean', False, False, True,
                 'Run server check instead of full inference')
@@ -417,6 +437,9 @@ _LISTED = [
      "checkpoint_path, channels, input_voxel_size, output_voxel_size, name, input_size, output_size, scale, sigmoid",
      "checkpoint_path"),
     ("huggingface", "HuggingFaceModelConfig", "repo, revision, name, scale", "repo"),
+    ("onnx", "OnnxModelConfig",
+     "path, folder, repo, revision, file, variant, input_voxel_size, output_voxel_size, input_size, output_size, "
+     "channels, output, slices_per_chunk, name, scale", ""),
     ("script", "ScriptModelConfig", "script_path, name, scale", "script_path"),
 ]
 
@@ -590,6 +613,27 @@ CONFIGS = {
         " --slice-size 512 --context 32 --batch-size 12 --diameter 45.0 --flow-threshold 0.4"
         " --cellprob-threshold 0.0 --name cp --scale s2",
     ),
+    "onnx": (
+        lambda: OnnxModelConfig(path="/ft/my model-ft1.onnx", input_voxel_size=(16, 8, 8), input_size=(1, 300, 300),
+                                output_size=(1, 212, 212), channels=["mito"], output="raw logits",
+                                slices_per_chunk=4, scale="s1"),
+        {'type': 'onnx', 'path': '/ft/my model-ft1.onnx', 'input_voxel_size': [16, 8, 8],
+         'input_size': [1, 300, 300], 'output_size': [1, 212, 212], 'channels': ['mito'], 'output': 'raw logits',
+         'slices_per_chunk': 4, 'name': 'my model-ft1', 'scale': 's1'},
+        "onnx --path '/ft/my model-ft1.onnx' --input-voxel-size 16,8,8 --input-size 1,300,300"
+        " --output-size 1,212,212 --channels mito --output 'raw logits' --slices-per-chunk 4"
+        " --name 'my model-ft1' --scale s1",
+    ),
+    # What the browser's Export Config writes for a Hugging Face model; the
+    # rest follows its manifest, and nothing is downloaded until it is built.
+    "onnx_hub": (
+        lambda: OnnxModelConfig(folder="setup_54", repo="cellmap/onnx-web-models",
+                                file="setup_54_mito_affinities_16nm_in132_fp16.onnx", name="mito_aff_setup54_16nm"),
+        {'type': 'onnx', 'folder': 'setup_54', 'repo': 'cellmap/onnx-web-models',
+         'file': 'setup_54_mito_affinities_16nm_in132_fp16.onnx', 'name': 'mito_aff_setup54_16nm'},
+        "onnx --folder setup_54 --repo cellmap/onnx-web-models --file setup_54_mito_affinities_16nm_in132_fp16.onnx"
+        " --name mito_aff_setup54_16nm",
+    ),
     "finetune_of_finetune": (
         lambda: FinetuneModelConfig(weights_path="/runs/r2/full_finetune/model_state_dict.pt",
                                     base_model=INNER_FINETUNE),
@@ -705,6 +749,19 @@ MODEL_CONFIG_TYPES = {
         "HuggingFaceModelConfig", "Hugging Face Model",
         _param_info("repo", "string", True, "text"), _param_info("revision", "string", False, "text", None),
         _NAME, _SCALE,
+    ),
+    "OnnxModelConfig": _type_info(
+        "OnnxModelConfig", "Onnx Model",
+        _param_info("path", "str", False, "file", None),
+        *[_param_info(name, "str", False, "text", None) for name in ("folder", "repo", "revision", "file", "variant")],
+        _param_info("input_voxel_size", "tuple", False, "textarea", None),
+        _param_info("output_voxel_size", "tuple", False, "textarea", None),
+        _param_info("input_size", "string", False, "number", None),
+        _param_info("output_size", "string", False, "number", None),
+        _param_info("channels", "list", False, "textarea", None),
+        _param_info("output", "str", False, "text", None),
+        _param_info("slices_per_chunk", "int", False, "text", None),
+        _STR_NAME, _SCALE,
     ),
     "ScriptModelConfig": _type_info(
         "ScriptModelConfig", "Script Model", _param_info("script_path", "string", True, "file"), _NAME, _SCALE,

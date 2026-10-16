@@ -188,6 +188,18 @@ A Restart's model takes the place of the job's previous one, its layer
 included, and the previous one is removed from IndexedDB, record and bytes:
 a job keeps its latest model only, as the server serves only a job's latest
 iteration; a new job's model is a new entry.
+
+The download (`GET /api/finetune/model/:name/download`,
+`downloadableOnnx` in `src/backend/routes/finetune.ts`) writes the entry's
+manifest into the model's `metadata_props` under `cellmap_flow.manifest`
+(`withMetadata` in `src/finetune/onnx-proto.ts`: one field 14 appended, every
+other byte as it was), so that the server's `type: onnx`
+(`cellmap_flow/models/configs/onnx.py`) serves the file on its own; the
+bytes kept in IndexedDB stay the ones the run wrote. *Export Config*
+(`GET /api/export-config`, `src/backend/routes/config.ts`) writes a YAML
+`cellmap_flow yaml` runs: each served model a `type: onnx` entry, a Hugging
+Face export by repo, folder and the file this page ran, a finetuned one by
+`path: <name>.onnx`, the file its download saves, beside the YAML.
 The job routes answer as the server's do (`src/backend/routes/finetune.ts`,
 `finetune-jobs.ts`), so the tab's own job card, loss plot and log stream
 follow the run unchanged. Shift+R over the viewer, bound by the job list

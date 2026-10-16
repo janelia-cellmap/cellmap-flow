@@ -9,6 +9,8 @@ import { createBackend } from "../../src/backend";
 import { type FinetuneDeps, finetuneRoutes, readTraining, RESTART_ACTION, RESTART_EVENT, RESTART_KEY, sameDataset } from "../../src/backend/routes/finetune";
 import { Router } from "../../src/backend/router";
 import type { ApiRequest, ApiResponse, Chain, ModelEntry, PaintVolume } from "../../src/contracts";
+import { MANIFEST_METADATA_KEY } from "../../src/contracts";
+import { readMetadata } from "../../src/finetune/onnx-proto";
 import { saveGoodRegions } from "../../src/finetune/good-regions";
 import type { Finetuned, FinetuneRun, RunFinetune } from "../../src/finetune/types";
 import { CHUNK_DIR, chunkKey } from "../../src/finetune/volume";
@@ -103,8 +105,11 @@ function fakeRun(baton?: Baton): { run: RunFinetune; calls: FinetuneRun[]; resul
       losses.push(0.5 / i);
       r.report.log(`Epoch ${i}/${n} - Loss: ${(0.5 / i).toFixed(6)}`);
     }
+    // A ModelProto as far as its fields go (ir_version 1, then a graph field
+    // holding two bytes, the weights' and the epochs' counts), so that the
+    // download can write its manifest into it.
     const bytes = new ArrayBuffer(6);
-    new Uint8Array(bytes).set([0x08, 0x01, 0x12, 0x00, weight.length, losses.length]);
+    new Uint8Array(bytes).set([0x08, 0x01, 0x3a, 0x02, weight.length, losses.length]);
     const result: Finetuned = {
       bytes,
       head: { featureTensor: "features", weightName: "final_conv.weight", biasName: "final_conv.bias", inChannels: 32, outChannels: 3, weight, bias, dtype: "float32" },
@@ -883,8 +888,8 @@ describe("downloads and deletion", () => {
     expect((await h.handle(request("GET", "/api/finetune/volume/vol-nope/download"))).status).toBe(404);
   });
 
-  it("downloads a finetuned model's bytes as .onnx, by its name", async () => {
-    const { h, results } = await ready();
+  it("downloads a finetuned model's bytes as .onnx, by its name, its manifest written into them", async () => {
+    const { ctx, h, results } = await ready();
     const { job_id } = body(await h.handle(request("POST", "/api/finetune/submit", submitBody())));
     await h.jobs.get(job_id)!.settled();
     const res = await h.handle(request("GET", `/api/finetune/model/${NAME_54}-ft1/download`));
@@ -892,7 +897,16 @@ describe("downloads and deletion", () => {
     if (!("body" in res)) throw new Error("not a body answer");
     expect(res.type).toBe("application/octet-stream");
     expect(res.headers).toEqual({ "content-disposition": `attachment; filename="${NAME_54}-ft1.onnx"` });
-    expect(res.body).toBe(results[0].bytes);
+    // The bytes the run wrote, then the manifest the server's onnx type
+    // reads: the record's, whose one variant is this file.
+    const downloaded = new Uint8Array(res.body as ArrayBuffer), kept = new Uint8Array(results[0].bytes);
+    expect(downloaded.subarray(0, kept.length)).toEqual(kept);
+    const [record] = await ctx.catalog.finetuned();
+    const manifest = JSON.parse(readMetadata(downloaded)[MANIFEST_METADATA_KEY]);
+    expect(manifest).toEqual(record.entry.manifest);
+    expect(manifest).toMatchObject({ model: `${NAME_54}-ft1`, channels: ["mito_aff_z", "mito_aff_y", "mito_aff_x"], variants: [{ file: `${NAME_54}-ft1.onnx` }] });
+    // What the catalog keeps is unchanged: the manifest goes in on the way out.
+    expect(ctx.catalog.finetunedBytes.get(record.entry.onnxUrl)).toBe(results[0].bytes);
     const missing = await h.handle(request("GET", `/api/finetune/model/${NAME_54}/download`));
     expect(missing.status).toBe(404);
     expect(body(missing).error).toMatch(/No model finetuned in this browser/);

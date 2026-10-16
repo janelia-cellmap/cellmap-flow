@@ -86,7 +86,7 @@ Models
      - One module per model type. ``base`` has ``ModelConfig`` (its
        ``config``, ``geometry``, ``to_dict()`` and ``command``) and
        ``Config``; then ``script``, ``dacapo``, ``fly``, ``bio``,
-       ``cellmap``, ``finetune`` and ``huggingface``.
+       ``cellmap``, ``finetune``, ``huggingface``, ``cellpose`` and ``onnx``.
    * - ``models/models_config.py``
      - The classes' public import path, which the docs and plugins use, and
        ``Config``.

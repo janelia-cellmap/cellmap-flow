@@ -145,6 +145,23 @@ timm = ">=1.0"
 # the default dependencies.
 opencv-python-headless = ">=4.8"
 
+# For the `onnx` model type, which defaults to this environment: the browser
+# mode's ONNX exports, and the models finetuned in the browser, served with
+# ONNX Runtime. On Linux onnxruntime-gpu, whose CUDA provider is built for
+# CUDA 13 from 1.27 on, as the torch wheels and the cuda-toolkit here are; it
+# loads cuDNN and cuBLAS from the nvidia packages torch brings, which the
+# server has loaded by then (configs/onnx.py, _session). PyPI's onnxruntime
+# for Linux is CPU-only, and it is what bioimageio-core[onnx] pulls into the
+# bioimageio environment, so an ONNX model would run on the CPU there. On the
+# Mac, onnxruntime, on the CPU; not pinned as Linux's is, since its wheels
+# from 1.24 on want macOS 14 and the lock solves for 13 (bioimageio's has
+# 1.23.2).
+[feature.onnx.target.linux-64.pypi-dependencies]
+onnxruntime-gpu = ">=1.27"
+
+[feature.onnx.target.osx-arm64.pypi-dependencies]
+onnxruntime = ">=1.20"
+
 [feature.test.dependencies]
 pytest = "*"
 pytest-cov = "*"
@@ -174,6 +191,10 @@ dev = { features = ["finetune", "cellpose", "test", "dev"], solve-group = "defau
 docs = { features = ["docs"] }
 dacapo = { features = ["finetune", "dacapo"] }
 bioimageio = { features = ["finetune", "bioimageio"] }
+# The `onnx` model type's. Solved on its own, so that onnxruntime-gpu does not
+# move the deployed environment's packages; not finetunable, so without the
+# finetune feature's MinIO and neuroglancer fork, which only the dashboard uses.
+onnx = { features = ["onnx"] }
 # For models that set `env: cellpose4`; its own solve group, so cellpose 4
 # can have the torch and numpy it needs without moving the default env's.
 cellpose4 = { features = ["cellpose4"], solve-group = "cellpose4" }
