@@ -155,10 +155,14 @@ a job keeps its latest model only, as the server serves only a job's latest
 iteration; a new job's model is a new entry.
 The job routes answer as the server's do (`src/backend/routes/finetune.ts`,
 `finetune-jobs.ts`), so the tab's own job card, loss plot and log stream
-follow the run unchanged. Why the head and not the network: onnxruntime-web
-trains nothing on the GPU; a WebGPU autograd library would have to rebuild
-the network, which is a later step behind the same `RunFinetune` seam
-(`src/finetune/types.ts`).
+follow the run unchanged. Shift+R over the viewer, bound by the job list
+route (`ctx.viewer.bindKey`), sends the page `cellmap-flow:restart-finetune`,
+and the tab's `job-monitor.js` restarts the job as its Restart does, without
+the confirm, or says why not; the server's key, in its Python process,
+counts the press in the job's status for the tab's poll instead. Why the
+head and not the network: onnxruntime-web trains nothing on the GPU; a WebGPU
+autograd library would have to rebuild the network, which is a later step
+behind the same `RunFinetune` seam (`src/finetune/types.ts`).
 
 AI-assisted annotation (`src/ai-annotate/`, the port of
 `cellmap_flow/ai_annotate/`) is in the tab too. Shift+G or *Annotate at View

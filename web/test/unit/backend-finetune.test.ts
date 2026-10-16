@@ -6,7 +6,7 @@
 import { describe, expect, it } from "vitest";
 
 import { createBackend } from "../../src/backend";
-import { type FinetuneDeps, finetuneRoutes, readTraining, sameDataset } from "../../src/backend/routes/finetune";
+import { type FinetuneDeps, finetuneRoutes, readTraining, RESTART_ACTION, RESTART_EVENT, RESTART_KEY, sameDataset } from "../../src/backend/routes/finetune";
 import { Router } from "../../src/backend/router";
 import type { ApiRequest, ApiResponse, Chain, ModelEntry, PaintVolume } from "../../src/contracts";
 import { saveGoodRegions } from "../../src/finetune/good-regions";
@@ -164,12 +164,12 @@ const FORM = {
 };
 const submitBody = (extra: Record<string, unknown> = {}) => ({ model_name: NAME_54, corrections_path: "", ...FORM, auto_serve: true, queue: "", ...extra });
 
-/** Two models served, a volume created for setup_54 and (unless `paint: false`) one chunk painted. */
-async function ready(options: { baton?: Baton; paint?: boolean } = {}) {
+/** Two models served, a volume created for setup_54 and (unless `paint: false`) one chunk painted; `deps` over the harness's. */
+async function ready(options: { baton?: Baton; paint?: boolean; deps?: Partial<FinetuneDeps> } = {}) {
   const ctx = fakeContext();
   await serve(ctx, entry("setup_54"), entry("setup_56", "nuc", ["nuc"], 128));
   const { run, calls, results } = fakeRun(options.baton);
-  const h = harness(ctx, { run });
+  const h = harness(ctx, { run, ...options.deps });
   const created = body(await h.handle(request("POST", "/api/finetune/create-volume", { model_name: NAME_54 })));
   const id = created.volume_id as string;
   if (options.paint !== false) await paint(ctx, id, [0, 0, 0]);
@@ -746,6 +746,45 @@ describe("cancel, stop early, restart", () => {
     const combined = await h.handle(request("POST", `/api/finetune/job/${job_id}/restart`, { ...FORM, loss_type: "combined" }));
     expect(combined.status).toBe(400);
     expect(body(combined).error).toMatch(/combined loss needs a server/);
+  });
+});
+
+describe("Shift+R over the viewer", () => {
+  it("is bound when the tab asks for the jobs, before there is one, once per router, as restart_key.py binds it", async () => {
+    const ctx = fakeContext();
+    const h = harness(ctx);
+    for (let i = 0; i < 2; i++) expect(body(await h.handle(request("GET", "/api/finetune/jobs")))).toEqual({ success: true, jobs: [] });
+    expect(ctx.viewer.bindings.map((b) => [b.key, b.action])).toEqual([["shift+keyr", "finetune-restart"]]);
+    expect([RESTART_KEY, RESTART_ACTION]).toEqual(["shift+keyr", "finetune-restart"]);
+  });
+
+  it("tells the page, whose job-monitor.js restarts the job; the job itself is left to it, and its status carries no count", async () => {
+    const page = new EventTarget();
+    const heard: string[] = [];
+    page.addEventListener(RESTART_EVENT, (event) => heard.push(event.type));
+    const baton = new Baton();
+    const { ctx, h } = await ready({ baton, deps: { page: () => page } });
+    const { job_id } = body(await h.handle(request("POST", "/api/finetune/submit", submitBody())));
+    const job = h.jobs.get(job_id)!;
+    await letRun(baton, job);
+    expect(job.status).toBe("WAITING_FOR_RESTART");
+    await h.handle(request("GET", "/api/finetune/jobs"));
+
+    ctx.viewer.bindings[0].handler();
+
+    expect(heard).toEqual(["cellmap-flow:restart-finetune"]);
+    // The form's values are the page's: it sends the restart, as its Restart does.
+    expect(job.status).toBe("WAITING_FOR_RESTART");
+    // The server's key counts presses in the status (restart_requests) for
+    // its page to poll; this one has told the page already.
+    expect(await status(h, job_id)).not.toHaveProperty("restart_requests");
+  });
+
+  it("does nothing, and does not throw, with no document to tell (as here, in node)", async () => {
+    const ctx = fakeContext();
+    const h = harness(ctx);
+    await h.handle(request("GET", "/api/finetune/jobs"));
+    expect(() => ctx.viewer.bindings[0].handler()).not.toThrow();
   });
 });
 
