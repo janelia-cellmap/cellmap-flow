@@ -189,7 +189,7 @@
                     title="{% if mode == "browser" %}Where the plane is sent: Google's Gemini API with an API key, Vertex AI with a project and an access token, or the fake provider, which runs in this browser and sends nothing.{% else %}Where the plane is sent. Only the providers in the server's AI-annotate configuration are listed.{% endif %}"></select>
             <label for="aiAnnotateModel">Model</label>
             <select class="form-select form-select-sm" id="aiAnnotateModel"
-                    title="{% if mode == "browser" %}The provider's image models. The Gemini API's are listed once a key is saved; Other… takes a model id that is not listed.{% else %}The provider's models that the server's configuration allows.{% endif %}"></select>
+                    title="{% if mode == "browser" %}The provider's image models. The Gemini API's are listed once a key is pasted; Other… takes a model id that is not listed.{% else %}The provider's models that the server's configuration allows.{% endif %}"></select>
             {# Browser mode only: the model id typed under Other…, a row of the
                grid to itself. ai-annotate.js adds the Other… entry and shows this. #}
             {% if mode == "browser" %}
