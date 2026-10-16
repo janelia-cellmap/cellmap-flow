@@ -63,7 +63,9 @@ the engine: the service worker's relay and store cache (`relay.ts`), the page's
 route table (`routes.ts`), the reader and the opened source's levels, the
 input box of a chunk with its clipping and padding, the per-stage cache, the
 demand queue, the chunk cache, the zarr v3 and OME metadata (`engine.ts`,
-`stages.ts`, `asread.ts`, `kept.ts`). Nothing of that is reimplemented here.
+`stages.ts`, `asread.ts`, `kept.ts`), and a region of a view written out as
+an OME-Zarr of its own (`materialize.ts`). Nothing of that is reimplemented
+here.
 
 cellmap-flow (`src/`) is the app: the model catalog and `model_info`
 (`models/`, `shared/model-info.ts`), the `__CFLOW_ARGS__` codec
@@ -74,9 +76,9 @@ segmentation steps), the two stages and their keys (`infer/stages.ts`), the
 viewer's layer JSON (`viewer/`), the backend
 behind the dashboard's routes (`backend/`), the session (`state/`), a folder
 picked on this machine (`local-folder/`), finetuning (`finetune/`),
-AI-assisted annotation (`ai-annotate/`) and the Label it tools
-(`label-it/`), all three below, and the dashboard build (`build/`,
-`vite.config.ts`).
+AI-assisted annotation (`ai-annotate/`), the Label it tools
+(`label-it/`) and Run on a region (`run-region/`), all four below, and the
+dashboard build (`build/`, `vite.config.ts`).
 
 ## Boot (src/main.ts)
 
@@ -111,7 +113,8 @@ AI-assisted annotation (`ai-annotate/`) and the Label it tools
 7. `import("./static/js/dashboard/main.js")` – the dashboard, unchanged; then
    `installLocalFolderUi()`, the panel's "Browse local folder…" button and
    drop target, which fill the URL field and press Connect, so connect.js
-   must be listening first.
+   must be listening first; the Share button; and `installRunRegionUi()`,
+   the Run tab (below).
 
 ## Request path for `/api/*`
 
@@ -268,11 +271,56 @@ One undo stack per volume is the routes', and the AI annotation's Accept
 pushes onto it (createRouter hands it over, as `ai_annotate.py` uses
 `view_labels._undo_stack`), so one Undo takes back whichever came last.
 
+## Run on a region (src/run-region/)
+
+The Run tab (`templates/_run_tab.html`, included by `_dashboard.html` in
+browser mode only) runs the served models over a region and saves their
+predictions as OME-Zarr in a folder on this machine, where the viewer only
+ever computes the chunks it shows. It is the one tab that is not a dashboard
+script on `/api/` routes: its folder is picked with `showDirectoryPicker`,
+whose picker and permission prompt need the user's click in this window, and
+the engine writes into the directory handle, which no request through the
+service worker can carry. So `panel.ts` wires the tab's DOM from the page,
+as `share-link.ts` wires the header's Share button, and `main.ts` installs
+it; `tests/web/test_render.py` checks the ids of its `IDS` table are on the
+browser page and nowhere on the Flask one.
+
+`region.ts` is the geometry: the region is a box in nm, z y x, from the
+latest axis-aligned box in the `run_region` annotation layer (a local layer
+at 1 nm, built as the good regions' layer is, with Neuroglancer's
+`annotateBoundingBox` as its `tool`, drawn with two Ctrl+clicks: a legacy
+annotation tool, which `toolBindings` cannot take; `ViewerController.layer` reads
+it from the live viewer's state, the tab polling once a second while shown),
+from the whole volume (the finest level's extent), or typed; each model's
+box is the voxels of its served level the region touches (`servedLevel`,
+the level `infer/engine.ts` serves its view at, voxel 0's centre its OME
+translation, as `label-it/prediction.ts` places a seed), and its chunks are
+its output blocks, which the summary counts and a large run (over 2,000)
+is warned of. `run.ts` runs the models one after another through
+`Inference.materialize`, with the progress across them, the stop (an
+AbortSignal), and the provenance under `cellmap_flow` in each zarr's group
+attributes (the model, its chain from the served view's blob, the dataset,
+the region and the box, the voxel size, the time, the page). `infer/engine.ts`
+maps materialize onto chunkmirage's `Engine.materialize` on the layer's own
+view at its one level, as zarr v2 with OME-Zarr 0.4 metadata, gzip, empty
+chunks skipped; the engine walks the chunks through the view's stages,
+caches and demand queue (behind the viewer's chunks) and writes the
+metadata and the chunks, none of which is here. `output.ts` is the rest:
+the folder's handle in IndexedDB (`run-region:output`, beside the picked
+volumes'), write permission asked in the Run click, a `<model>.zarr` in the
+way removed whole after a confirm (empty chunks are skipped, so an old one
+would survive in a new zarr), the zip of a run kept in memory where there is
+no File System Access API (Firefox, Safari; up to 256 MB, with
+`finetune/zip.ts`), and the layer a saved zarr opens as: the model's own
+layer (`predictionLayer`) on `zarr2://<page>local/<key>/<model>.zarr/`, the
+folder's handle stored under a fresh `local/` key for the service worker's
+`local/` route, so the saved predictions are read back from the folder.
+
 ## State
 
 `src/state/` keeps `SessionState` (see `contracts.ts`) in the tab's
 sessionStorage. IndexedDB holds what outlives the tab: picked folders' handles
-(`db.ts`), the paint (`paint-store.ts`), the model bytes (.onnx, 4–43 MB
+(`db.ts`; the Run tab's output folder among them), the paint (`paint-store.ts`), the model bytes (.onnx, 4–43 MB
 each, keyed by URL and ETag: the page asks Hugging Face for a file's ETag
 before serving its cached copy, so a model re-exported under the same name
 is downloaded again; Hugging Face rate-limits anonymous downloads) and the finetuned
@@ -290,7 +338,7 @@ web/
   neuroglancer.lock          the Neuroglancer fork's commit; scripts/fetch-neuroglancer.sh builds it
   build/render.py            renders cellmap_flow/dashboard/templates/index.html → web/index.html
   build/vite-plugins.ts      the service worker bundle; serves/copies the dashboard's static files and a Neuroglancer build
-  chunkmirage/               (gitignored) the clone; we import web/chunkmirage/web/src/{engine,stages,onnx,relay,routes,asread}.ts
+  chunkmirage/               (gitignored) the clone; we import web/chunkmirage/web/src/{engine,stages,onnx,relay,routes,asread,materialize}.ts
                              and its Vite plugin web/vite-ort.ts (onnxruntime-web's wasm files served/copied under ./ort/)
   ng/                        (gitignored) the Neuroglancer build, served at ./ng/
   index.html                 (gitignored) rendered
@@ -315,10 +363,12 @@ web/
                              organelles.ts (the pure ports), images.ts (the canvas codec), gemini.ts, fake.ts, providers.ts,
                              credentials.ts, usage.ts, audit.ts; labels.ts and fill.ts are Label it's too
     label-it/                Label it (above): segment.ts (probability, methods, objects), prediction.ts (the output under a box)
+    run-region/              Run on a region (above): region.ts (the box on each model's level, the run_region layer), run.ts
+                             (the run, its progress and provenance), output.ts (the folder, the zip, the saved layer), panel.ts (the tab)
     local-folder/            a folder on this machine: index.ts (the local URL and its key, the pick/drop flow,
                              the boot-time permission check), panel.ts (the connect panel's DOM: button, drop target, prompt)
     infer/                   createInference(): Inference — the Engine, one serveStages() view per model
-      engine.ts (the views and the stats), stages.ts (the model and postprocess stages, their keys),
+      engine.ts (the views, the stats, a region written out: materialize), stages.ts (the model and postprocess stages, their keys),
       output.ts (a box of a model's own output from its chunks, readOutput's),
       norms.ts, post.ts,
       expression.ts (Lambda steps), geometry.ts (the manifest's blocks, halo, ratio, levels), dtype.ts (astype)

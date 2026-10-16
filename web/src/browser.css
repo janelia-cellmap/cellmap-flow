@@ -53,6 +53,15 @@
   color: var(--text-muted);
 }
 
+/* The Run tab's Output folder block while a folder is dragged over it
+   (src/run-region/panel.ts acceptDroppedFolder). */
+#runFolderDrop.local-drop-target {
+  outline: 2px dashed var(--accent);
+  outline-offset: 4px;
+  background: var(--accent-muted);
+  border-radius: var(--radius-md);
+}
+
 #noNeuroglancerPanel.local-drop-target {
   outline: 2px dashed var(--accent);
   outline-offset: -12px;
@@ -83,4 +92,27 @@
   flex-wrap: wrap;
   justify-content: center;
   gap: 8px;
+}
+
+/* Run on a region (the browser-only Run tab, templates/_run_tab.html, driven
+   by src/run-region/panel.ts): the region's offset and size in nm as a grid,
+   a row each, a column per axis (z, y, x) under a header row, narrow enough
+   for the dashboard's column on a phone; and the models' checkboxes, one a
+   line. */
+.run-region-fields {
+  display: grid;
+  grid-template-columns: max-content repeat(3, minmax(0, 1fr));
+  align-items: center;
+  gap: 4px 8px;
+  max-width: 440px;
+  font-size: 0.85rem;
+}
+
+.run-region-axis {
+  text-align: center;
+  color: var(--text-muted);
+}
+
+#runModels .form-check {
+  margin-bottom: 2px;
 }

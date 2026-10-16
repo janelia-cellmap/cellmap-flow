@@ -291,6 +291,10 @@ export interface ViewerController {
    * its back, as a server's refresh_annotation_layer does), keeping the
    * layer's own settings; whether a layer of that name was found. */
   refreshLayer(name: string): boolean;
+  /** Layer `name` as the viewer has it now, its JSON in the viewer's state
+   * (what the user did in it included: the boxes drawn in an annotation
+   * layer), or null when the viewer has no such layer. */
+  layer(name: string): LayerSpec | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -364,6 +368,75 @@ export interface Inference {
    * engine's caches; the rest are computed. The box must lie within the
    * level. */
   readOutput(view: string, lo: number[], hi: number[]): Promise<{ data: Float32Array; shape: number[] }>;
+  /** Compute the served model `view` (ServedModel.view: the layer's view,
+   * the chain's postprocessors and all) over voxels [lo, hi) of the level it
+   * is served at, and write it into `store` as an OME-Zarr of exactly that
+   * box: chunkmirage's Engine.materialize, which walks the model's chunks
+   * the box reaches (through the engine's caches and demand queue, as the
+   * viewer's requests go), stitches the box's own chunks from them and
+   * writes the zarr: one level of hi − lo voxels, the level's scale, a
+   * translation that puts its voxel 0 on the level's voxel lo, empty chunks
+   * skipped. For Run on a region (src/run-region). The box must lie within
+   * the level. */
+  materialize(view: string, store: RegionStore, options: RegionWrite): Promise<RegionWritten>;
+  /** What materialize would hold over that box, before anything is
+   * computed (chunkmirage's Engine.materializePlan): the most bytes of the
+   * saved array's chunks held at once while they are stitched from the
+   * model's, and the axes the box's corner is off the model's chunk edges
+   * along (z 0, y 1, x 2), the ones putting it on an edge shrinks that. */
+  materializePlan?(view: string, box: { lo: number[]; hi: number[] }): Promise<RegionPlan>;
+}
+
+/** Where materialize writes a zarr's files, by their path within it
+ * (`.zattrs`, `0/.zarray`, `0/0.1.2`): chunkmirage's WritableStore, which
+ * its directoryStore (a folder on this machine) and memoryStore are. */
+export interface RegionStore {
+  put(path: string, bytes: Uint8Array): Promise<void>;
+}
+
+/** How far a materialize has got: the saved array's chunks done of its
+ * `total`, those `written` (the rest were empty), and the bytes written so
+ * far; and the model's chunks `computed` of those the box `needed`, which a
+ * box off the chunks' edges has more of than it saves (its chunks are
+ * stitched from them). */
+export interface RegionProgress {
+  done: number;
+  total: number;
+  written: number;
+  bytes: number;
+  computed?: number;
+  needed?: number;
+}
+
+/** What materialize is asked to write: the box [lo, hi) in voxels of the
+ * served level (z, y, x), attributes merged into the zarr group's (the
+ * provenance), a signal that stops it and a progress callback. */
+export interface RegionWrite {
+  lo: number[];
+  hi: number[];
+  /** The chunks' compression: gzip (the default, smaller; zarr-python,
+   * Neuroglancer and napari read it) or none (null), for a reader without
+   * gzip, such as Fiji's. */
+  compression?: "gzip" | null;
+  attributes?: Record<string, unknown>;
+  signal?: AbortSignal;
+  onProgress?: (progress: RegionProgress) => void;
+}
+
+/** What a materialize would hold (Inference.materializePlan). */
+export interface RegionPlan {
+  peakBytes: number;
+  split: number[];
+}
+
+/** What a materialize did: the box's chunks, those written and skipped
+ * (empty), the bytes written, and whether the signal stopped it first. */
+export interface RegionWritten {
+  chunks: number;
+  written: number;
+  skipped: number;
+  bytes: number;
+  aborted: boolean;
 }
 
 // ---------------------------------------------------------------------------

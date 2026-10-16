@@ -32,6 +32,7 @@ import { chainFromHash, parseLink, resolveLinkedModels, withoutLink } from "./li
 import { installLocalFolderUi, restoreLocalFolder } from "./local-folder";
 import { createCatalog } from "./models";
 import { installApiRebase } from "./rebase";
+import { installRunRegionUi } from "./run-region/panel";
 import { installShareUi } from "./share-link";
 import { defaultChain, openSession } from "./state";
 import { openPaintStore } from "./state/paint-store";
@@ -120,6 +121,9 @@ async function boot() {
   // connect.js (in the dashboard's script) now listens on.
   installLocalFolderUi({ log });
   installShareUi({ session, viewer, log });
+  // The Run tab (src/run-region): its own DOM, the folder picker in its
+  // clicks and the engine's materialize; nothing of the dashboard's script.
+  installRunRegionUi(ctx);
   await restored;
 }
 

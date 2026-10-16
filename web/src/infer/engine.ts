@@ -19,11 +19,18 @@
 // route it registers there and has no other door to a chunk); they are
 // whole chunks of uncompressed little-endian float32, channels first, as the
 // view's zarr.json declares them.
+//
+// A run on a region (materialize, for src/run-region) writes the layer's own
+// view over a box into a folder on this machine, or into memory for a zip:
+// chunkmirage's Engine.materialize walks the box's chunks through the same
+// stages, caches and demand queue the viewer's requests go through, and
+// writes the OME-Zarr. Nothing of the walk or the zarr is here; this file
+// names the view's one level and the format.
 import { Engine } from "../../chunkmirage/web/src/engine";
 import { Onnx, type OnnxModel } from "../../chunkmirage/web/src/onnx";
 import type { Stage } from "../../chunkmirage/web/src/stages";
 import type { ViewInfo } from "../../chunkmirage/web/src/types";
-import type { Chain, DatasetInfo, GpuLimits, Inference, InferenceStats, ModelEntry, ServedModel, SessionStore } from "../contracts";
+import type { Chain, DatasetInfo, GpuLimits, Inference, InferenceStats, ModelEntry, RegionPlan, RegionStore, RegionWrite, RegionWritten, ServedModel, SessionStore } from "../contracts";
 import { viewName } from "../shared/args";
 import { modelInfo } from "../shared/model-info";
 import { chooseRawLevel, datasetInfoFrom, effectiveOutputVoxelSize, geometryOf, outputLevel, outputShape } from "./geometry";
@@ -236,6 +243,42 @@ export class InferenceEngine implements Inference {
     if (!this.engine || !this.info) return Promise.reject(new Error("open a dataset before reading it"));
     if (level < 0 || level >= this.info.levels.length) return Promise.reject(new Error(`the dataset has no level ${level}`));
     return this.engine.read(RAW_VIEW, level, lo, hi);
+  }
+
+  /** The served model `view` over voxels [lo, hi) of its level, written into
+   * `store` (contracts.ts; Run on a region): chunkmirage's
+   * Engine.materialize on the layer's own view, at its one level (a model
+   * is served at a single level, index 0), so the zarr holds what the
+   * viewer shows, its postprocessors applied, from the same stages and
+   * caches. The array is exactly the box (extent "box": hi − lo voxels,
+   * placed by its OME translation, the box's chunks stitched from the
+   * served ones and the last ones cut at the box's far edge), not the
+   * level's whole shape. Written as zarr v2 with OME-Zarr 0.4 metadata,
+   * which zarr-python 2 and funlib.persistence (what the server's blockwise
+   * runs write with) read, empty chunks skipped, and gzip-compressed unless
+   * the run asks for none (a reader without gzip, Fiji's): spelled out here
+   * because they are what a copy to the cluster relies on. */
+  materialize(view: string, store: RegionStore, options: RegionWrite): Promise<RegionWritten> {
+    const engine = this.engine, output = this.outputs.get(view);
+    if (!engine || !output) return Promise.reject(new Error(`${view.split("__CFLOW_ARGS__")[0]} is not served`));
+    const { lo, hi } = options;
+    if (lo.length !== 3 || hi.length !== 3 || lo.some((l, a) => !Number.isInteger(l) || !Number.isInteger(hi[a]) || l < 0 || hi[a] > output.levelShape[a] || hi[a] <= l)) {
+      return Promise.reject(new Error(`the box ${lo.join(",")}..${hi.join(",")} is not within the model's ${output.levelShape.join("×")} output voxels`));
+    }
+    return engine.materialize(view, store, {
+      level: 0, lo, hi, extent: "box", format: "zarr2", compression: options.compression === undefined ? "gzip" : options.compression, skipEmpty: true,
+      attributes: options.attributes, signal: options.signal, onProgress: options.onProgress,
+    });
+  }
+
+  /** What materialize would hold over the same box (contracts.ts): the
+   * engine's materializePlan, asked as materialize asks, so its peak is the
+   * run's. Nothing is computed. */
+  async materializePlan(view: string, box: { lo: number[]; hi: number[] }): Promise<RegionPlan> {
+    const engine = this.engine;
+    if (!engine || !this.outputs.get(view)) throw new Error(`${view.split("__CFLOW_ARGS__")[0]} is not served`);
+    const p = await engine.materializePlan(view, { level: 0, lo: box.lo, hi: box.hi, extent: "box", format: "zarr2" });
+    return { peakBytes: p.peakBytes, split: p.split };
   }
 
   /** The served model `view`'s own output over voxels [lo, hi) of its level

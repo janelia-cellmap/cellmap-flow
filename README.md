@@ -58,6 +58,13 @@ starts fresh.
   on Hugging Face, run with onnxruntime-web on your GPU through WebGPU
   (Chrome, Edge, Safari 26 and later), or on the CPU without it, far slower.
   The Input normalizers and Postprocess steps are the server dashboard's.
+- **Run on a region.** The *Run* tab runs the served models over a box you
+  draw in the viewer (Ctrl+click two corners), or over the whole volume, on your GPU, and
+  saves each model's predictions as an OME-Zarr, `<model>.zarr`, in a folder
+  on your machine: open it here again as a layer, or copy it to the cluster
+  as it is. The zarr's attributes say which model, settings, volume and
+  region made it. Saving to a folder needs Chrome or Edge; Firefox and Safari
+  save a small run (up to 256 MB) as a zip instead.
 - **Phones.** The viewer fills the screen and the *Dashboard* button in the
   header opens the controls over it.
 - **Finetuning.** The Finetune tab's *New Volume* adds a paint layer to the
