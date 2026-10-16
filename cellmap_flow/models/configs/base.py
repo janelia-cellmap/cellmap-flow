@@ -274,6 +274,12 @@ class ModelConfig:
     # ``serve_trained``. A type sets it once those two do the right thing for
     # it; the trainer refuses the others before submitting a job.
     finetunable = False
+    # Constructor arguments that name a file, which a YAML entry may give
+    # relative to the YAML file's own folder (``registry.build_model``'s
+    # ``base_dir``): an exported YAML can then name a file downloaded beside
+    # it, wherever `cellmap_flow yaml` is run from. None of the older types
+    # sets it; their relative paths stay the working directory's.
+    config_relative_paths = ()
 
     def finetune_modes(self):
         """What this model can be finetuned with: ("lora", "full"), ("full",)

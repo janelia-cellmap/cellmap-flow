@@ -12,6 +12,7 @@ import type { AppContext, ModelEntry, ServedModel, Step } from "../../contracts"
 import type { Router } from "../router";
 import { badRequest, json, message, objectBody, unavailable } from "../router";
 import { serveModels, stepNames } from "../serving";
+import { serverParams } from "./config";
 
 /** The catalog as /api/huggingface-models lists it: {model id: metadata},
  * the id "cellmap/onnx-web-models/setup_54" (models-tab.js shows its last
@@ -91,8 +92,10 @@ export function modelRoutes(router: Router): void {
   });
 
   // Add a model by reference: what a Hugging Face ONNX model resolves to, in
-  // the shape models/resolve.py's Resolved gives; anything else (a path, a
-  // checkpoint, a zoo id) needs a server.
+  // the shape models/resolve.py's Resolved gives, as the server's onnx type's
+  // entry (routes/config.ts serverParams, without the file: the one run is
+  // chosen for this GPU); anything else (a path, a checkpoint, a zoo id)
+  // needs a server.
   router.post("/api/models/resolve", async (req, _params, ctx) => {
     const body = objectBody(req);
     if (!body) return badRequest("expected a JSON object");
@@ -106,8 +109,8 @@ export function modelRoutes(router: Router): void {
     const v = entry.variant;
     return json(200, {
       success: true,
-      type: "huggingface",
-      params: { repo: entry.repo, folder: entry.folder },
+      type: "onnx",
+      params: serverParams(entry, false),
       name: entry.name,
       env: null,
       how: "an ONNX export run in the browser (onnxruntime-web)",

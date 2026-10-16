@@ -1,0 +1,41 @@
+# The browser mode's models on the cluster: ONNX exports from Hugging Face's
+# cellmap/onnx-web-models, and a model finetuned in the browser, served with
+# ONNX Runtime on a GPU. Each folder's manifest.json gives the voxel sizes,
+# blocks and channels; a finetuned model's .onnx carries its own.
+#   cellmap_flow yaml example/onnx_web_models.yaml
+# Their servers run in pixi.toml's `onnx` environment (onnxruntime-gpu), the
+# onnx type's default; no `env:` is needed.
+data_path: "/nrs/cellmap/data/jrc_mus-salivary-1/jrc_mus-salivary-1.zarr/recon-1/em/fibsem-uint8"
+
+charge_group: "cellmap"
+
+queue: "gpu_h100"
+
+# The exports were trained on EM scaled to [-1, 1], as their manifests'
+# input_norm says (the dashboard offers it too), and output logits, which the
+# sigmoid makes probabilities.
+json_data:
+  input_norm:
+    MinMaxNormalizer: {min_value: 0, max_value: 255}
+    LambdaNormalizer: {expression: "2*x-1"}
+  postprocess:
+    SigmoidPostprocessor: {}
+
+models:
+  nuc_setup56_128nm:
+    type: onnx
+    # cellmap/onnx-web-models/setup_56: nuclei, at 128 nm. Without `file`,
+    # its fp32 variant at the largest block (148 in, 60 out).
+    folder: setup_56
+  mito_aff_setup53-2d_16nm:
+    type: onnx
+    # A 2D student: one z slice a call, as the browser runs it, 8 slices a
+    # chunk (slices_per_chunk). `file` names one variant instead.
+    folder: setup_53_2d
+    variant: fp16
+  # A model finetuned in the browser: the .onnx its Finetune tab's *Download
+  # finetuned model* saves, which carries its manifest. A relative path is
+  # this YAML's folder's.
+  # mito_aff_setup54_16nm-ft1:
+  #   type: onnx
+  #   path: mito_aff_setup54_16nm-ft1.onnx

@@ -47,3 +47,23 @@ def test_a_model_that_declares_nothing_is_still_assumed_to_take_minus_one_to_one
     # subclass, and the type listings' tests would see one more.
     suggestion = advice(SimpleNamespace(name="mine", to_dict=dict))
     assert suggestion["order"] == ["MinMaxNormalizer", "LambdaNormalizer"] and suggestion["confidence"] == "low"
+
+
+def test_an_onnx_models_manifest_declares_its_input_normalization(advice, tmp_path):
+    """The browser feeds an export through its manifest's input_norm; the
+    server's advice offers the same steps, in order, as declared."""
+    import json
+
+    from cellmap_flow.models.configs.onnx import MANIFEST_KEY
+    from cellmap_flow.models.models_config import OnnxModelConfig
+    from tests.utils.onnx_helpers import FINETUNED_MANIFEST, HEAD, with_metadata
+
+    path = tmp_path / "ft.onnx"
+    path.write_bytes(with_metadata(HEAD.read_bytes(), {MANIFEST_KEY: json.dumps(FINETUNED_MANIFEST)}))
+    suggestion = advice(OnnxModelConfig(path=str(path), name="ft"))
+    assert suggestion["order"] == ["MinMaxNormalizer", "LambdaNormalizer"]
+    assert suggestion["input_norm"] == {"MinMaxNormalizer": {"min_value": 0, "max_value": 255},
+                                        "LambdaNormalizer": {"expression": "2*x-1"}}
+    assert suggestion["confidence"] == "high" and "Declared" in suggestion["reason"]
+    # Without a manifest it declares nothing, and the usual assumption stands.
+    assert advice(OnnxModelConfig(path=str(HEAD), name="plain"))["confidence"] == "low"

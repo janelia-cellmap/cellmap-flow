@@ -21,14 +21,17 @@
 // (view-labels.ts, ai-annotate.ts); crops import keeps needing a server and
 // stays unavailable (index.ts). One route is the browser's own, GET
 // /api/finetune/session-volume: which volume the session paints into, for
-// the tab's Download and Delete buttons.
+// the tab's Download and Delete buttons. A finetuned model downloads with its
+// manifest in the file's metadata_props (downloadableOnnx), so that the
+// server's onnx model type can serve the file on its own.
 //
 // The answers keep the Python routes' keys, so the tab's JavaScript
 // (static/js/dashboard/finetune/*.js) reads them unchanged: a refusal is
 // {success: false, error} at the Python's status, with `needs_volume` where
 // requests.js's offerNewVolume keys on it.
-import type { AppContext, LayerSpec, PaintVolume } from "../../contracts";
-import { PAINT_ROUTE } from "../../contracts";
+import type { AppContext, FinetunedRecord, LayerSpec, PaintVolume } from "../../contracts";
+import { MANIFEST_METADATA_KEY, PAINT_ROUTE } from "../../contracts";
+import { withMetadata } from "../../finetune/onnx-proto";
 import { runFinetune } from "../../finetune/run";
 import { HEAD_LOSSES } from "../../finetune/head-trainer";
 import type { DistillationScope, FinetuneOptions, HeadLoss, RunFinetune } from "../../finetune/types";
@@ -331,11 +334,12 @@ export function finetuneRoutes(router: Router, deps: Partial<FinetuneDeps> = {})
   });
 
   // GET /api/finetune/model/:name/download: a finetuned model's .onnx, by
-  // its name (the layer's) or id, from the catalog's byte cache.
+  // its name (the layer's) or id, from the catalog's byte cache, with its
+  // manifest written in (downloadableOnnx).
   router.get("/api/finetune/model/:name/download", async (_req, params, ctx) => {
     const record = (await ctx.catalog.finetuned()).find((r) => r.name === params.name || r.id === params.name);
     if (!record) return json(404, { success: false, error: `No model finetuned in this browser is named ${params.name}` });
-    const bytes = await ctx.catalog.modelBytes(record.entry);
+    const bytes = downloadableOnnx(record, await ctx.catalog.modelBytes(record.entry));
     return text(200, bytes, "application/octet-stream", { "content-disposition": `attachment; filename="${record.name}.onnx"` });
   });
 
@@ -504,4 +508,17 @@ function* notFound(id: string): Generator<SseEvent> {
 function exactBuffer(bytes: Uint8Array): ArrayBuffer {
   if (bytes.byteOffset === 0 && bytes.byteLength === bytes.buffer.byteLength) return bytes.buffer as ArrayBuffer;
   return bytes.slice().buffer as ArrayBuffer;
+}
+
+/** A finetuned model's bytes as they download: the ONNX the catalog keeps,
+ * with the record's manifest (the base's under the new name, its one variant
+ * this file, `<name>.onnx`) as JSON in the model's metadata_props under
+ * MANIFEST_METADATA_KEY. Written here rather than when the model is made,
+ * so that the kept bytes stay the ones the run wrote (served, and the base
+ * of a later finetune, as they are) and a model kept before this was added
+ * downloads with its manifest too. The manifest says what the file alone
+ * does not: its voxel sizes, its block, its channels, what its output is
+ * and the normalization it was trained behind. */
+export function downloadableOnnx(record: FinetunedRecord, bytes: ArrayBuffer): ArrayBuffer {
+  return withMetadata(new Uint8Array(bytes), { [MANIFEST_METADATA_KEY]: JSON.stringify(record.entry.manifest) }).buffer;
 }
