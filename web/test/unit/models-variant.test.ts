@@ -1,16 +1,18 @@
 // chooseVariant across GPU limits: the precision from shader-f16, the block
-// from the memory estimate against maxBufferSize.
+// from the memory estimate against maxBufferSize (the largest that fits for
+// a 3D model, the one nearest PREFERRED_2D_SIDE for a one-slice model).
 import { describe, expect, it } from "vitest";
 
 import type { GpuLimits } from "../../src/contracts";
 import { parseManifest } from "../../src/models/manifest";
-import { bytesPerValue, chooseVariant, estimatePeakBytes, PEAK_VALUES_PER_VOXEL, UNKNOWN_LIMITS } from "../../src/models/variant";
+import { bytesPerValue, chooseVariant, estimatePeakBytes, isOneSlice, PEAK_VALUES_PER_VOXEL, PREFERRED_2D_SIDE, UNKNOWN_LIMITS } from "../../src/models/variant";
 import { rawManifest } from "./models-helpers";
 
 const MiB = 1024 * 1024;
 const limits = (over: Partial<GpuLimits>): GpuLimits => ({ ...UNKNOWN_LIMITS, ...over });
 const resunet = () => parseManifest(rawManifest("setup_54")); // blocks 116 / 132 / 148
 const unet = () => parseManifest(rawManifest("setup_53")); // blocks 124 / 140 / 172
+const twoD = () => parseManifest(rawManifest("setup_53_2d")); // one-slice blocks 300² / 556² / 1068², fp32 and fp16 (saved 2026-10-15)
 
 describe("estimatePeakBytes", () => {
   it("is 40 values per input voxel, 4 bytes in fp32 and 2 in fp16 (the README's 519 / 259 MB at N=148)", () => {
@@ -102,5 +104,56 @@ describe("chooseVariant: block size", () => {
   it("ignores maxStorageBufferBindingSize for now", () => {
     const only = limits({ maxBufferSize: 4096 * MiB, maxStorageBufferBindingSize: 16 * MiB });
     expect(chooseVariant(resunet(), only).input_size).toEqual([148, 148, 148]);
+  });
+});
+
+describe("chooseVariant: one-slice (2D) models", () => {
+  it("knows a one-slice block by its first axis", () => {
+    expect(isOneSlice([1, 556, 556])).toBe(true);
+    expect(isOneSlice([116, 116, 116])).toBe(false);
+    expect(isOneSlice([556, 556])).toBe(false);
+    expect(twoD().variants.every((v) => isOneSlice(v.input_size))).toBe(true);
+    expect(resunet().variants.some((v) => isOneSlice(v.input_size))).toBe(false);
+  });
+
+  it("is fp32 and the smallest block while the limits are unknown, as for a 3D model", () => {
+    const v = chooseVariant(twoD(), UNKNOWN_LIMITS);
+    expect(v.variant).toBe("fp32");
+    expect(v.input_size).toEqual([1, 300, 300]);
+    expect(v.output_size).toEqual([1, 212, 212]);
+  });
+
+  it("is the fitting block nearest PREFERRED_2D_SIDE on a GPU, not the largest: 556 of 300/556/1068", () => {
+    expect(PREFERRED_2D_SIDE).toBe(512);
+    // 4 GiB: every block fits (1068² fp32 is 182 MB); the 3D rule would take 1068.
+    const v = chooseVariant(twoD(), limits({ maxBufferSize: 4096 * MiB }));
+    expect(v.input_size).toEqual([1, 556, 556]);
+    expect(v.output_size).toEqual([1, 468, 468]);
+    expect(v.file).toBe("setup_53_mito_affinities_16nm_2d_in556_fp32.onnx");
+    const h = chooseVariant(twoD(), limits({ maxBufferSize: 4096 * MiB, shaderF16: true }));
+    expect(h.variant).toBe("fp16");
+    expect(h.file).toBe("setup_53_mito_affinities_16nm_2d_in556_fp16.onnx");
+  });
+
+  it("is still bounded by memory: 300 when 556 does not fit, the smallest when nothing does", () => {
+    // 60 MiB: half is 30 MiB; 300² fp32 is 14 MB, 556² is 49 MB.
+    expect(chooseVariant(twoD(), limits({ maxBufferSize: 60 * MiB })).input_size).toEqual([1, 300, 300]);
+    // 16 MiB: half is 8 MiB, under 300² fp32's 14 MB: the smallest, to be tried.
+    expect(chooseVariant(twoD(), limits({ maxBufferSize: 16 * MiB })).input_size).toEqual([1, 300, 300]);
+    // WebGPU's 256 MiB default: half is 128 MiB; 1068² fp32 (182 MB) is out, 556² in.
+    expect(chooseVariant(twoD(), limits({ maxBufferSize: 256 * MiB })).input_size).toEqual([1, 556, 556]);
+  });
+
+  it("is the nearest, not the largest or the smallest: 300 of 300/1068, the smaller of two equally near", () => {
+    const m = twoD();
+    m.variants = m.variants.filter((v) => v.input_size[1] !== 556);
+    // |300 − 512| = 212, |1068 − 512| = 556.
+    expect(chooseVariant(m, limits({ maxBufferSize: 4096 * MiB })).input_size).toEqual([1, 300, 300]);
+    const tie = twoD();
+    const sides = [400, 624, 1000]; // 400 and 624 are both 112 from 512
+    tie.variants = tie.variants
+      .filter((v) => v.variant === "fp32")
+      .map((v, i) => ({ ...v, input_size: [1, sides[i]!, sides[i]!], output_size: [1, sides[i]! - 88, sides[i]! - 88] }));
+    expect(chooseVariant(tie, limits({ maxBufferSize: 4096 * MiB })).input_size).toEqual([1, 400, 400]);
   });
 });

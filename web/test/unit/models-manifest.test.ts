@@ -75,7 +75,9 @@ describe("parseManifest on the repo's manifests", () => {
     for (const folder of FOLDERS) {
       const m = parseManifest(rawManifest(folder), folder);
       expect(m.model).toBe(folder);
-      expect(m.variants).toHaveLength(12);
+      // Twelve files per 3D folder (three blocks × four precisions); six per
+      // 2D student (three blocks × fp32, fp16: no int8 export).
+      expect(m.variants).toHaveLength(folder.endsWith("_2d") ? 6 : 12);
       expect(m.channels.length).toBeGreaterThan(0);
     }
   });
@@ -117,12 +119,15 @@ describe("entryName", () => {
     expect(entryName(parseManifest(rawManifest("setup_56")))).toBe("nuc_setup56_128nm");
     expect(entryName(parseManifest(rawManifest("setup_61")))).toBe("nuc_setup61_256nm");
     expect(entryName(parseManifest(rawManifest("setup_67")))).toBe("er_setup67_8nm");
+    // The 2D students keep their tag behind a hyphen: "setup532d" would read as setup 532.
+    expect(entryName(parseManifest(rawManifest("setup_53_2d")))).toBe("mito_aff_setup53-2d_16nm");
+    expect(entryName(parseManifest(rawManifest("setup_54_2d")))).toBe("mito_aff_setup54-2d_16nm");
   });
 
   it("is a URL path segment and a Neuroglancer layer name", () => {
     for (const folder of FOLDERS) {
       const name = entryName(parseManifest(rawManifest(folder)));
-      expect(name).toMatch(/^[a-z0-9_.]+$/);
+      expect(name).toMatch(/^[a-z0-9_.-]+$/);
       expect(encodeURIComponent(name)).toBe(name);
       expect(name).not.toContain("__CFLOW_ARGS__");
     }

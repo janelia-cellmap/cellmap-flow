@@ -2,12 +2,22 @@
 // database "cellmap-flow-models", two object stores.
 //
 //   "bytes":     key -> ArrayBuffer of a .onnx file. For a Hugging Face model
-//                the key is the file's URL and the bytes are a cache: a model
-//                is 11–43 MB and Hugging Face rate-limits anonymous downloads,
-//                so a page that re-downloaded on every load would soon be told
-//                to wait. For a model finetuned in this browser the key is
-//                `finetuned:<id>` (manifest.ts finetunedBytesKey) and the
-//                bytes are the only copy there is.
+//                the key is `<url>#<etag>` (modelBytesKey below: the file's
+//                resolve URL and the ETag its download carried, the content
+//                hash the CDN gives it) and the bytes are a cache: a model is
+//                4–43 MB and Hugging Face rate-limits anonymous downloads, so
+//                a page that re-downloaded on every load would soon be told
+//                to wait. The ETag is in the key because a model is re-exported
+//                under the same file name when it is retrained (setup_53_2d and
+//                setup_54_2d on 2026-10-15), and a key of the URL alone would
+//                serve the old weights for ever; models/index.ts asks the Hub
+//                for the file's ETag before serving a cached copy. A key of the
+//                bare URL is a copy from before the ETag was in the key (or from
+//                a server that exposed none): served only when the Hub cannot be
+//                asked, replaced by a keyed copy when it can. For a model
+//                finetuned in this browser the key is `finetuned:<id>`
+//                (manifest.ts finetunedBytesKey) and the bytes are the only
+//                copy there is.
 //   "finetuned": id -> FinetunedRecord (finetuned.ts): what a finetuned
 //                model is, so it is listed again on the next visit.
 //
@@ -28,6 +38,18 @@ export interface ByteCache {
   get(key: string): Promise<ArrayBuffer | undefined>;
   put(key: string, bytes: ArrayBuffer): Promise<void>;
   delete(key: string): Promise<void>;
+  /** The keys that start with `prefix`, in key order (sorted by UTF-16 code unit, as IndexedDB orders strings). */
+  keys(prefix: string): Promise<string[]>;
+  /** Delete every key that starts with `prefix`, but `except`: the other copies of a file once a new one is in. */
+  deleteWhere(prefix: string, except?: string): Promise<void>;
+}
+
+/** The cache key of a Hugging Face model file: its URL and the ETag of the
+ * copy, `<url>#<etag>`; the bare URL when no ETag is known (a server that
+ * exposes none). A resolve URL has no "#" of its own (resolveUrl encodes
+ * each path segment), so the first "#" always parts the two. */
+export function modelBytesKey(url: string, etag: string | null): string {
+  return etag === null ? url : `${url}#${etag}`;
 }
 
 export const MODEL_DB_NAME = "cellmap-flow-models";
@@ -52,6 +74,14 @@ export class MemoryByteCache implements ByteCache {
 
   async delete(key: string): Promise<void> {
     this.entries.delete(key);
+  }
+
+  async keys(prefix: string): Promise<string[]> {
+    return [...this.entries.keys()].filter((key) => key.startsWith(prefix)).sort();
+  }
+
+  async deleteWhere(prefix: string, except?: string): Promise<void> {
+    for (const key of await this.keys(prefix)) if (key !== except) this.entries.delete(key);
   }
 }
 
@@ -126,6 +156,19 @@ export class IndexedDbByteCache implements ByteCache {
 
   async delete(key: string): Promise<void> {
     await this.db.run("bytes", "readwrite", (store) => store.delete(key));
+  }
+
+  /** The keys from `prefix` up to but not including prefix + "\uffff": every
+   * string key that starts with it (state/db.ts idbKeys does the same). */
+  keys(prefix: string): Promise<string[]> {
+    const range = IDBKeyRange.bound(prefix, `${prefix}\uffff`, false, true);
+    return this.db.run("bytes", "readonly", (store) => store.getAllKeys(range) as IDBRequest<string[]>);
+  }
+
+  /** One transaction per key: the store holds a handful of models, and a
+   * failure half way leaves spare copies, not a missing one. */
+  async deleteWhere(prefix: string, except?: string): Promise<void> {
+    for (const key of await this.keys(prefix)) if (key !== except) await this.delete(key);
   }
 }
 

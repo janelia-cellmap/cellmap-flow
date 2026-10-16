@@ -181,7 +181,9 @@ later step behind the same `RunFinetune` seam (`finetune/types.ts`).
 `src/state/` keeps `SessionState` (see `contracts.ts`) in the tab's
 sessionStorage. IndexedDB holds what outlives the tab: picked folders' handles
 (`db.ts`), the paint (`paint-store.ts`), the model bytes (.onnx, 4–43 MB
-each; Hugging Face rate-limits anonymous downloads) and the finetuned
+each, keyed by URL and ETag: the page asks Hugging Face for a file's ETag
+before serving its cached copy, so a model re-exported under the same name
+is downloaded again; Hugging Face rate-limits anonymous downloads) and the finetuned
 models' records and bytes (`models/`).
 
 ## Layout
@@ -220,7 +222,7 @@ web/
       norms.ts, post.ts,
       expression.ts (Lambda steps), geometry.ts (the manifest's blocks, halo, ratio, levels), dtype.ts (astype)
     shared/                  args.ts (__CFLOW_ARGS__ codec, digest), model-info.ts
-    models/                  createCatalog(): Catalog — Hugging Face manifests, variant choice, byte cache, finetuned.ts (the models finetuned here)
+    models/                  createCatalog(): Catalog — Hugging Face manifests, variant choice (the largest block that fits for a 3D model, the one nearest 512 a side for a 2D one), byte cache keyed by URL and ETag, finetuned.ts (the models finetuned here)
     viewer/                  createViewer(): ViewerController — iframe (index.ts), layers.ts (port of
                              viewer/layers.py), display.ts (shaders, ranges), state.ts, share.ts (the viewer's state: the tab's copy, a link's hash)
   test/

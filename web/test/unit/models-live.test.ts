@@ -20,7 +20,7 @@ describe.skipIf(!live)("cellmap/onnx-web-models on the Hub", () => {
 
     const entries = await catalog.list();
     expect(entries.map((e) => e.folder)).toEqual(FOLDERS);
-    expect(lines).toContain("model catalog: 6 models from Hugging Face");
+    expect(lines).toContain("model catalog: 8 models from Hugging Face");
     for (const entry of entries) {
       expect(entry.variant.variant).toBe("fp32");
       expect(modelInfo(entry).read_shape.map((n, i) => n - modelInfo(entry).write_shape[i]!)).toEqual([88, 88, 88]);

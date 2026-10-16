@@ -22,13 +22,15 @@ const treeCalls = (calls: string[]) => calls.filter((u) => u.includes("/tree/mai
 const manifestCalls = (calls: string[]) => calls.filter((u) => u.endsWith("/manifest.json"));
 
 describe("list()", () => {
-  it("lists the six models from the Hub's tree and manifests, conv3d left out", async () => {
+  it("lists the eight models from the Hub's tree and manifests, conv3d left out", async () => {
     const { catalog, hub, lines } = catalogWith();
     const entries = await catalog.list();
     expect(entries.map((e) => e.folder)).toEqual(FOLDERS);
     expect(entries.map((e) => e.name)).toEqual([
       "mito_aff_setup53_16nm",
+      "mito_aff_setup53-2d_16nm",
       "mito_aff_setup54_16nm",
+      "mito_aff_setup54-2d_16nm",
       "nuc_setup55_128nm",
       "nuc_setup56_128nm",
       "nuc_setup61_256nm",
@@ -38,7 +40,7 @@ describe("list()", () => {
     expect(treeCalls(hub.calls)).toEqual(["https://huggingface.co/api/models/cellmap/onnx-web-models/tree/main"]);
     expect(manifestCalls(hub.calls)).toEqual(FOLDERS.map((f) => `https://huggingface.co/cellmap/onnx-web-models/raw/main/${f}/manifest.json`));
     expect(hub.calls.some((u) => u.includes("conv3d"))).toBe(false);
-    expect(lines).toContain("model catalog: 6 models from Hugging Face");
+    expect(lines).toContain("model catalog: 8 models from Hugging Face");
   });
 
   it("gives each entry fp32 and the smallest block as its default variant (retuned to the GPU before serving)", async () => {
@@ -67,9 +69,9 @@ describe("list()", () => {
     // A new page 23 hours later: nothing fetched.
     const later = catalogWith({ treeStatus: 500, manifestStatus: Object.fromEntries(FOLDERS.map((f) => [f, 500])) }, storage, () => T0 + LISTING_TTL_MS - 3600_000);
     const entries = await later.catalog.list();
-    expect(entries).toHaveLength(6);
+    expect(entries).toHaveLength(8);
     expect(later.hub.calls).toHaveLength(0);
-    expect(later.lines).toContain("model catalog: 6 models from the browser's cache");
+    expect(later.lines).toContain("model catalog: 8 models from the browser's cache");
 
     // A day later the listing is fetched again.
     const nextDay = catalogWith({}, storage, () => T0 + LISTING_TTL_MS);
@@ -82,7 +84,7 @@ describe("list()", () => {
     const entries = await catalog.list();
     expect(entries.map((e) => e.folder)).toEqual(FOLDERS);
     expect(manifestCalls(hub.calls)).toHaveLength(FOLDERS.length);
-    expect(lines.some((l) => l.includes("could not list cellmap/onnx-web-models") && l.includes("HTTP 429") && l.includes("built-in list of 6 folders"))).toBe(true);
+    expect(lines.some((l) => l.includes("could not list cellmap/onnx-web-models") && l.includes("HTTP 429") && l.includes("built-in list of 8 folders"))).toBe(true);
   });
 
   it("serves the stale cache when no manifest can be fetched", async () => {
@@ -91,9 +93,9 @@ describe("list()", () => {
     const blocked = { treeStatus: 429, manifestStatus: Object.fromEntries(FOLDERS.map((f) => [f, 429])) };
     const stale = catalogWith(blocked, storage, () => T0 + 3 * LISTING_TTL_MS);
     const entries = await stale.catalog.list();
-    expect(entries).toHaveLength(6);
+    expect(entries).toHaveLength(8);
     expect(stale.lines.some((l) => l.includes("no manifest could be fetched") && l.includes("2026-10-14T12:00:00.000Z"))).toBe(true);
-    expect(stale.lines).toContain("model catalog: 6 models from the browser's cache (stale)");
+    expect(stale.lines).toContain("model catalog: 8 models from the browser's cache (stale)");
   });
 
   it("fails with the rate-limit message when there is nothing to fall back on", async () => {
@@ -126,7 +128,7 @@ describe("list()", () => {
     const gap = catalogWith({ manifestStatus: { setup_61: 500 } }, storage, () => T0 + 2 * LISTING_TTL_MS);
     const entries = await gap.catalog.list();
     expect(entries.map((e) => e.folder)).toEqual(FOLDERS);
-    expect(gap.lines).toContain("model catalog: 6 models from Hugging Face");
+    expect(gap.lines).toContain("model catalog: 8 models from Hugging Face");
   });
 
   it("skips a folder whose manifest is malformed and says so", async () => {
@@ -146,11 +148,11 @@ describe("list()", () => {
     const storage = new MemoryKeyValueStore();
     storage.setItem(LISTING_KEY, "{not json");
     const { catalog, hub } = catalogWith({}, storage);
-    expect(await catalog.list()).toHaveLength(6);
+    expect(await catalog.list()).toHaveLength(8);
     expect(treeCalls(hub.calls)).toHaveLength(1);
     storage.setItem(LISTING_KEY, JSON.stringify({ v: 7, manifests: {} }));
     const other = catalogWith({}, storage);
-    expect(await other.catalog.list()).toHaveLength(6);
+    expect(await other.catalog.list()).toHaveLength(8);
   });
 });
 
@@ -183,7 +185,7 @@ describe("refresh()", () => {
     expect(hub.calls).toHaveLength(0);
     const refreshed = await catalog.refresh();
     expect(treeCalls(hub.calls)).toHaveLength(1);
-    expect(refreshed).toHaveLength(6);
+    expect(refreshed).toHaveLength(8);
     expect(refreshed).not.toBe(cached);
     expect(await catalog.list()).toBe(refreshed);
   });
@@ -196,7 +198,7 @@ describe("refresh()", () => {
     const before = await catalog.list();
     const after = await catalog.refresh();
     expect(after.map((e) => e.folder)).toEqual(before.map((e) => e.folder));
-    expect(lines).toContain("model catalog: 6 models from the browser's cache (stale)");
+    expect(lines).toContain("model catalog: 8 models from the browser's cache (stale)");
   });
 
   it("keeps the list in memory when a refresh fails and nothing could be cached", async () => {

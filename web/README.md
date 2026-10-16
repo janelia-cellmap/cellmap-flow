@@ -155,9 +155,14 @@ the network, which is a later step behind the same `RunFinetune` seam
   developing on a remote machine, forward the port and open `localhost`.
 - **Memory.** The largest models' fp32 variants need about half a gigabyte of
   GPU memory for one chunk; the page picks a smaller variant (fp16, int8
-  weights) when the adapter's limits call for it. Model files are 11–43 MB
-  each and are kept in IndexedDB, because Hugging Face rate-limits anonymous
-  downloads.
+  weights) when the adapter's limits call for it. A 2D model (one slice in,
+  one out) runs at the block nearest 512 pixels a side rather than the
+  largest that fits: the viewer shows nothing of a chunk until its whole
+  block is done. Model files are 4–43 MB each and are kept in IndexedDB
+  under their URL and ETag, because Hugging Face rate-limits anonymous
+  downloads; a model re-exported under the same file name is noticed by its
+  ETag and downloaded again, and when Hugging Face cannot be reached the
+  cached copy is served.
 - **Cross-origin data.** The raw volume is fetched by the page, so its server
   must allow it with CORS (`Access-Control-Allow-Origin`). Public S3 and GCS
   buckets and GitHub Pages do; a plain http server on your machine may need a

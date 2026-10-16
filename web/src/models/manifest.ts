@@ -16,8 +16,8 @@ import type { ModelEntry, ModelManifest, ModelVariant, Step, VariantName } from 
 
 import { HF_REPO, resolveUrl } from "./hf";
 
-/** The model folders known on 2026-10-14, for when the Hub's file list cannot be fetched. */
-export const FALLBACK_FOLDERS: readonly string[] = ["setup_53", "setup_54", "setup_55", "setup_56", "setup_61", "setup_67"];
+/** The model folders known on 2026-10-15, for when the Hub's file list cannot be fetched. */
+export const FALLBACK_FOLDERS: readonly string[] = ["setup_53", "setup_53_2d", "setup_54", "setup_54_2d", "setup_55", "setup_56", "setup_61", "setup_67"];
 
 /** Folders that hold no manifest of their own: conv3d/ repeats every model
  * with native Conv3d nodes, about 16x slower on WebGPU (onnxruntime-web runs
@@ -131,18 +131,22 @@ function sortVariants(variants: ModelVariant[]): ModelVariant[] {
 }
 
 /** The layer and job name for a manifest: `<task>_<model>_<voxel>nm`, e.g.
- * `mito_aff_setup54_16nm`, `nuc_setup56_128nm`, `er_setup67_8nm`.
+ * `mito_aff_setup54_16nm`, `nuc_setup56_128nm`, `er_setup67_8nm`,
+ * `mito_aff_setup53-2d_16nm`.
  *
  * The rule: the task lower-cased with runs of anything but letters and digits
  * turned into one underscore and "affinities" shortened to "aff"; the model
  * id with its underscores removed (so the name's underscores separate its
- * three parts); the input voxel size as one number when isotropic, else
- * z×y×x joined with "x" (16x16x8nm). The result is lower-case letters, digits,
- * underscores and at most a decimal point, which is a valid URL path segment
- * and a Neuroglancer layer name, and carries no ARGS_KEY marker. */
+ * three parts), except that a dimensionality tag at its end (`_2d`, the 2D
+ * students distilled from the 3D models) is kept behind a hyphen, since
+ * `setup532d` reads as setup 532; the input voxel size as one number when
+ * isotropic, else z×y×x joined with "x" (16x16x8nm). The result is
+ * lower-case letters, digits, underscores, at most one hyphen and at most a
+ * decimal point, which is a valid URL path segment and a Neuroglancer layer
+ * name, and carries no ARGS_KEY marker. */
 export function entryName(manifest: ModelManifest): string {
   const task = slug(manifest.task).replace(/affinities/g, "aff") || "model";
-  const model = slug(manifest.model).replace(/_/g, "");
+  const model = slug(manifest.model).replace(/_(\d+d)$/, "-$1").replace(/_/g, "");
   return `${task}_${model}_${voxelLabel(manifest.input_voxel_size_nm)}nm`;
 }
 

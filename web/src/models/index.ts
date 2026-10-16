@@ -1,37 +1,41 @@
 // The model catalog: the models the browser can run, from the Hugging Face
 // repo cellmap/onnx-web-models, one folder per model with a manifest.json
-// and twelve .onnx files (three block sizes, four precisions), and after
-// them the models finetuned in this browser (finetuned.ts).
+// and its .onnx files (three block sizes times four precisions for a 3D
+// model, times two for a 2D one), and after them the models finetuned in
+// this browser (finetuned.ts).
 //
 // list() reads the repo's folder list from the Hub API and each folder's
 // manifest, keeps them in localStorage for a day (listing-cache.ts), and
 // falls back to the folders known at the time of writing when the Hub will
 // not answer (it rate-limits anonymous requests). Each manifest becomes one
-// ModelEntry with a default variant (fp32, the middle block: the choice for
-// a GPU nobody has asked yet). Whoever knows the GPU, the inference side,
-// calls chooseVariant again with its limits and swaps the variant in. Then
-// come the finetuned models' entries, newest first, from their records in
-// IndexedDB (the FinetunedRegistry); addFinetuned() and removeFinetuned()
+// ModelEntry with a default variant (fp32, the smallest block: the choice
+// for a GPU nobody has asked yet). Whoever knows the GPU, the inference
+// side, calls chooseVariant again with its limits and swaps the variant in.
+// Then come the finetuned models' entries, newest first, from their records
+// in IndexedDB (the FinetunedRegistry); addFinetuned() and removeFinetuned()
 // keep that part of the list in step without another load.
 //
 // modelBytes() downloads the chosen file with progress and keeps the bytes
-// in IndexedDB (byte-cache.ts), so the next visit does not download again.
-// A finetuned model's bytes are in that same store or nowhere: there is no
-// download to fall back on, and the error says to train it again.
+// in IndexedDB (byte-cache.ts) under the file's URL and ETag, so the next
+// visit does not download again; it asks the Hub for the file's ETag first
+// (one HEAD), so a model re-exported under the same name is downloaded
+// again, and serves what it has when the Hub cannot be asked. A finetuned
+// model's bytes are in that same store or nowhere: there is no download to
+// fall back on, and the error says to train it again.
 import type { Catalog, FinetunedRecord, GpuLimits, ModelEntry, ModelManifest, ModelVariant } from "../contracts";
 
-import { type ByteCache, openByteCache } from "./byte-cache";
+import { type ByteCache, modelBytesKey, openByteCache } from "./byte-cache";
 import { type FinetunedRegistry, isFinetuned, newestFirst, openFinetunedRegistry } from "./finetuned";
-import { type FetchLike, fetchBytes, fetchManifest, fetchTree, HF_REPO, HF_REVISION, RateLimitError } from "./hf";
+import { type FetchLike, fetchEtag, fetchFile, fetchManifest, fetchTree, HF_REPO, HF_REVISION, RateLimitError } from "./hf";
 import { defaultKeyValueStore, type KeyValueStore, ListingCache } from "./listing-cache";
 import { chooseVariant, UNKNOWN_LIMITS } from "./variant";
 import { entryFor, FALLBACK_FOLDERS, finetunedBytesKey, modelFolders, parseManifest } from "./manifest";
 
-export { chooseVariant, estimatePeakBytes, PREFER_SMALL_DOWNLOAD, UNKNOWN_LIMITS } from "./variant";
+export { chooseVariant, estimatePeakBytes, isOneSlice, PREFER_SMALL_DOWNLOAD, PREFERRED_2D_SIDE, UNKNOWN_LIMITS } from "./variant";
 export { entryFor, entryName, FALLBACK_FOLDERS, finetunedBytesKey, ManifestError, parseManifest } from "./manifest";
 export { FINETUNED_AUTHOR, metadataFor, MODELS_AUTHOR } from "./metadata";
-export { HF_REPO, HF_REVISION, RateLimitError, resolveUrl } from "./hf";
-export { IndexedDbByteCache, MemoryByteCache, MODEL_DB_NAME, MODEL_DB_VERSION, ModelDatabase, type ByteCache } from "./byte-cache";
+export { fetchEtag, HF_REPO, HF_REVISION, RateLimitError, resolveUrl } from "./hf";
+export { IndexedDbByteCache, MemoryByteCache, MODEL_DB_NAME, MODEL_DB_VERSION, ModelDatabase, modelBytesKey, type ByteCache } from "./byte-cache";
 export { type KeyValueStore, LISTING_TTL_MS, MemoryKeyValueStore } from "./listing-cache";
 export {
   finetunedEntry,
@@ -225,42 +229,75 @@ export function createCatalog(opts: CatalogOptions): HfCatalog {
     return all.find((e) => e.id === key || e.folder === key || e.name === key) ?? null;
   }
 
-  function modelBytes(entry: ModelEntry, onProgress?: (loaded: number, total: number | null) => void): Promise<ArrayBuffer> {
+  function modelBytes(entry: ModelEntry, onProgress?: Progress): Promise<ArrayBuffer> {
     if (isFinetuned(entry)) return finetunedBytes(entry, onProgress);
     const url = entry.onnxUrl;
     const underway = downloads.get(url);
     // A second caller gets the same bytes; the first caller's progress callback is the one that runs.
     if (underway) return underway;
-    const download = (async () => {
-      let cached: ArrayBuffer | undefined;
-      try {
-        cached = await bytes.get(url);
-      } catch (error) {
-        log(`${entry.name}: could not read the model cache (${message(error)})`);
-      }
-      if (cached) {
-        log(`${entry.name}: ${mb(cached.byteLength)} MB from the browser's cache`);
-        onProgress?.(cached.byteLength, cached.byteLength);
-        return cached;
-      }
-      log(`${entry.name}: downloading ${entry.variant.file} (${entry.variant.file_mb.toFixed(1)} MB) from Hugging Face`);
-      const downloaded = await fetchBytes(fetchImpl, url, onProgress);
-      log(`${entry.name}: downloaded ${mb(downloaded.byteLength)} MB`);
-      try {
-        await bytes.put(url, downloaded);
-      } catch (error) {
-        log(`${entry.name}: could not cache the model (${message(error)}); it will be downloaded again next time`);
-      }
-      return downloaded;
-    })().finally(() => downloads.delete(url));
+    const download = hubBytes(entry, onProgress).finally(() => downloads.delete(url));
     downloads.set(url, download);
     return download;
+  }
+
+  // A Hugging Face model's bytes: the cached copy when it is the file as the
+  // Hub has it now, else a download.
+  //
+  // The Hub is asked for the file's ETag first (fetchEtag, one HEAD) and the
+  // cache is read under `<url>#<etag>` (modelBytesKey): a model is
+  // re-exported under the same file name when it is retrained, so a copy
+  // keyed by URL alone could be the old weights. A miss downloads, keeps the
+  // bytes under the ETag of the download (the HEAD's when the GET exposes
+  // none) and deletes the URL's other copies: an older ETag's, and the bare
+  // URL's from before the ETag was in the key. When the Hub cannot be asked
+  // (offline, or a server that exposes no ETag) the copy the cache holds for
+  // the URL is served, whichever key it is under, with a line saying it was
+  // not checked; with none, the download goes ahead as it always did.
+  async function hubBytes(entry: ModelEntry, onProgress?: Progress): Promise<ArrayBuffer> {
+    const url = entry.onnxUrl;
+    const file = entry.variant.file;
+    const etag = await fetchEtag(fetchImpl, url);
+    const wanted = modelBytesKey(url, etag);
+    // The cache's copies of this file: under `<url>#<etag>` keys, and the bare URL.
+    let keyed: string[] = [];
+    let bare = false;
+    let cached: ArrayBuffer | undefined;
+    try {
+      const held = await bytes.keys(url);
+      keyed = held.filter((key) => key.startsWith(`${url}#`));
+      bare = held.includes(url);
+      const serve = etag !== null ? (keyed.includes(wanted) ? wanted : null) : (keyed[0] ?? (bare ? url : null));
+      if (serve !== null) cached = await bytes.get(serve);
+    } catch (error) {
+      log(`${entry.name}: could not read the model cache (${message(error)})`);
+    }
+    if (cached) {
+      const unchecked = etag === null ? " (could not check Hugging Face for a newer file)" : "";
+      log(`${entry.name}: ${mb(cached.byteLength)} MB from the browser's cache${unchecked}`);
+      onProgress?.(cached.byteLength, cached.byteLength);
+      return cached;
+    }
+    const size = `${entry.variant.file_mb.toFixed(1)} MB`;
+    if (etag !== null && keyed.length > 0) log(`${entry.name}: ${file} updated on Hugging Face (new ${etag.slice(0, 8)}…); downloading again`);
+    else if (etag !== null && bare) log(`${entry.name}: the cached ${file} predates the version check; downloading it again (${size}) from Hugging Face`);
+    else log(`${entry.name}: downloading ${file} (${size}) from Hugging Face`);
+    const downloaded = await fetchFile(fetchImpl, url, onProgress);
+    log(`${entry.name}: downloaded ${mb(downloaded.bytes.byteLength)} MB`);
+    const key = modelBytesKey(url, downloaded.etag ?? etag);
+    try {
+      await bytes.put(key, downloaded.bytes);
+      await bytes.deleteWhere(`${url}#`, key);
+      if (key !== url) await bytes.delete(url);
+    } catch (error) {
+      log(`${entry.name}: could not cache the model (${message(error)}); it will be downloaded again next time`);
+    }
+    return downloaded.bytes;
   }
 
   // A finetuned model's bytes: in the byte cache under its onnxUrl, or gone
   // (site data cleared, or this is another browser or profile than the one
   // that trained it). Never a download: nothing on the network has them.
-  async function finetunedBytes(entry: ModelEntry, onProgress?: (loaded: number, total: number | null) => void): Promise<ArrayBuffer> {
+  async function finetunedBytes(entry: ModelEntry, onProgress?: Progress): Promise<ArrayBuffer> {
     let kept: ArrayBuffer | undefined;
     try {
       kept = await bytes.get(entry.onnxUrl);
@@ -331,6 +368,9 @@ export function createCatalog(opts: CatalogOptions): HfCatalog {
 
   return { list, refresh, resolve, metadataFor: metadataOf, chooseVariant: chooseFor, modelBytes, addFinetuned, finetuned, removeFinetuned };
 }
+
+/** modelBytes's progress callback: bytes so far, and the total when the server said (null otherwise). */
+type Progress = (loaded: number, total: number | null) => void;
 
 function message(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
