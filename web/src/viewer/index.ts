@@ -235,9 +235,6 @@ export function createViewer(opts: { session: SessionStore; log: (line: string) 
     return decodeState(hash) ?? pending;
   }
 
-  /** Put `state` in the viewer: through the live viewer when there is one,
-   * else through the iframe's hash (a reset to that state when Neuroglancer
-   * reads it). Either way the page's hash follows. */
   /** The listener keepDisplayDimensions left waiting, if any. */
   let stopKeeping: (() => void) | null = null;
 
@@ -270,6 +267,9 @@ export function createViewer(opts: { session: SessionStore; log: (line: string) 
     stopKeeping = stop;
   }
 
+  /** Put `state` in the viewer: through the live viewer when there is one,
+   * else through the iframe's hash (a reset to that state when Neuroglancer
+   * reads it). Either way the page's hash follows. */
   function applyState(state: NgState): void {
     const live = liveViewer();
     if (live) {
