@@ -33,6 +33,8 @@ SERVER_ONLY = [
 KEPT = [
     "model-tab", "input-tab", "output-tab", "models", "input", "output",
     "addModelRef",  # Add a model takes a Hugging Face reference
+    # The Loaded models list, whose ✕ stops serving one model in the page too.
+    "loadedModels", "loadedModelsList", "loadedModelsEmpty", "loadedModelsCount",
     "hfModelAccordion", "submitModelsBtn", "resampleCheckbox",
     "inputNormList", "postProcessList", "datasetPathInput", "setDataBtn",
     "localFolderGroup", "browseLocalBtn",  # a folder on this machine: the browser-only block of the connect panel

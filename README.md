@@ -216,8 +216,13 @@ $ cellmap_flow infer script -s script_path -d data_path
 models a YAML lists; `infer <type>` runs one model of that type (`cellpose`
 is Cellpose-SAM).
 
-In the dashboard, the Models tab's *Job Logs* shows each model's server output
-as it runs: `starting` while it waits in its queue, installs its environment or
+In the dashboard, *Loaded models* at the top of the Models tab lists every
+model running or starting, wherever it was picked (the catalog, Hugging Face,
+the BioImage Model Zoo, Cellpose, *Add a model*, the YAML, a finetune), and
+the ✕ beside one stops that model alone, takes its layer away and unticks
+it, leaving the rest of the tab as it is. A finetune's model keeps its ✕
+disabled while its training job is alive: Cancel that on the Finetune tab.
+The Models tab's *Job Logs* shows each model's server output as it runs: `starting` while it waits in its queue, installs its environment or
 loads, then its status, and `failed to start` with its traceback when it dies
 before serving.
 

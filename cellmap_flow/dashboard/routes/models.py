@@ -3,8 +3,8 @@ from datetime import datetime
 
 from flask import Blueprint, request, jsonify, Response
 
-from cellmap_flow.dashboard.requests import CreateModelConfig, ServerConfigUpdate, SubmitModels, parse
-from cellmap_flow.dashboard.services.launch import update_run_models
+from cellmap_flow.dashboard.requests import CreateModelConfig, RemoveModel, ServerConfigUpdate, SubmitModels, parse
+from cellmap_flow.dashboard.services.launch import NotRemovable, loaded_models, remove_model, update_run_models
 from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.jobs import lsf
 
@@ -143,6 +143,33 @@ def submit_models():
             "cellpose_models": selected_cellpose,
         }
     )
+
+
+@models_bp.route("/api/models/loaded")
+def get_loaded_models():
+    """The Models tab's Loaded models list: every model running or starting,
+    with where it came from and whether its ✕ can remove it
+    (services.launch.loaded_models). ``{"success": true, "models": [...]}``."""
+    return jsonify({"success": True, "models": loaded_models()})
+
+
+@models_bp.route("/api/models/remove", methods=["POST"])
+def remove_loaded_model():
+    """The ✕ of one model on the Loaded models list, ``{"name": ...}``: stop
+    that model and take its layer away, and nothing else
+    (services.launch.remove_model). Answers the list as it is then; a 404
+    when no model of that name is running, a 409 for a finetune job's model
+    while the job is alive, which the Finetune tab stops."""
+    body, error = parse(RemoveModel, request.get_json(silent=True))
+    if error:
+        return error
+    try:
+        models = remove_model(body.name)
+    except LookupError as e:
+        return jsonify({"success": False, "error": str(e)}), 404
+    except NotRemovable as e:
+        return jsonify({"success": False, "error": str(e)}), 409
+    return jsonify({"success": True, "removed": body.name, "models": models})
 
 
 @models_bp.route("/api/job-logs")

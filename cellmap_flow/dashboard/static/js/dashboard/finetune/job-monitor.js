@@ -6,6 +6,7 @@
 // (web/src/finetune) and answers the same routes: no corrections path is
 // asked for, and the finetuned model a status names can be downloaded.
 import { setBusy } from "../../lib/dom.js";
+import { announceModelsChanged } from "../../lib/models-changed.js";
 import { isBrowserMode } from "../../lib/page-data.js";
 import { poll } from "../../lib/poll.js";
 import { TERMINAL, createJobCard } from "./job-card.js";
@@ -51,6 +52,17 @@ export function initJobMonitor({ picker, form }) {
       link.removeAttribute("href");
       link.style.display = "none";
     }
+  }
+
+  // The Models tab's Loaded models list is told when the job's model may
+  // have come, gone or been replaced: when its status, its server's
+  // readiness or its model's name changes from what was last seen.
+  let servedSeen = null;
+  function noteServed(job) {
+    const seen = job ? [job.status, Boolean(job.inference_server_ready), job.finetuned_model_name || ""].join("|") : null;
+    if (seen === servedSeen) return;
+    servedSeen = seen;
+    announceModelsChanged();
   }
 
   // Start Finetuning button
@@ -177,6 +189,7 @@ export function initJobMonitor({ picker, form }) {
         }
         card.polled(data);
         showFinetunedDownload(data);
+        noteServed(data);
         if (data.log_file) jobLog.setLogFile(data.log_file);
 
         if (TERMINAL.includes(data.status)) {
@@ -343,6 +356,7 @@ export function initJobMonitor({ picker, form }) {
       const jobId = activeJob.job_id;
       card.restored(activeJob);
       showFinetunedDownload(activeJob);
+      noteServed(activeJob);
       jobLog.setLogFile(activeJob.log_file || null);
 
       // Restore logs and loss plot from the log file. The live stream below
