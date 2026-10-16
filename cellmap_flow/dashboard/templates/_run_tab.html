@@ -47,6 +47,10 @@
   </div>
   <div class="small mt-2" id="runRegionSummary"></div>
   <div class="small text-warning mt-1" id="runRegionWarning" role="alert" hidden></div>
+  {# What a box off the model's chunk edges holds while its chunks are
+     stitched, when that is a lot, with a button that moves its corner onto
+     an edge (run-region/panel.ts checkPeak). #}
+  <div class="small text-warning mt-1" id="runPeakWarning" role="alert" hidden></div>
 </div>
 
 {# A folder dropped anywhere on this block is chosen as the picker's would be

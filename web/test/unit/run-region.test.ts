@@ -18,8 +18,8 @@ import {
 } from "../../src/run-region/output";
 import {
   BOX_TOOL, chainOf, chunkGrid, describePlan, formatBytes, formatDuration, isPlan, LARGE_RUN_CHUNKS, largeRunWarning,
-  latestBox, levelBox, type ModelPlan, planModel, regionError, roundedOut, RUN_REGION_LAYER, runRegionLayer, sameRegion, TYPED_BOX_ID,
-  wholeVolumeNm, withBox,
+  latestBox, levelBox, type ModelPlan, planModel, regionError, roundedOut, RUN_REGION_LAYER, runRegionLayer, sameRegion, snappedRegion,
+  TYPED_BOX_ID, wholeVolumeNm, withBox,
 } from "../../src/run-region/region";
 import { describeProgress, provenance, PROVENANCE_KEY, type RunProgress, runRegion, type RunTarget } from "../../src/run-region/run";
 import { DATASET, type FakeContext, fakeContext, NAME_54, NAME_56 } from "./backend-fakes";
@@ -150,6 +150,23 @@ describe("a model's plan", () => {
     expect([p.channels, p.dtype, p.bytes]).toEqual([3, "float32", 8 * 60 ** 3 * 3 * 4]);
     expect(p.chain).toEqual(SIGMOID);
     expect(describePlan(p)).toBe(`${NAME_54}: 61×61×63 voxels at 16×16×16 nm, saved as that box (at most 21 MB before compression); computes 2×2×2 = 8 chunks of 60×60×60`);
+  });
+
+  it("snaps the box's corner back to its model chunk's start along one axis, the far side kept", async () => {
+    const { models } = await served();
+    const region = { offset: [476, 476, 476], size: [800, 800, 800] };
+    const p = planModel(models[0], PYRAMID, region);
+    if (!isPlan(p)) throw new Error(p.error);
+    // Voxel 30 of 60-voxel chunks goes back to voxel 0, at the level's corner (-4 nm).
+    const snapped = snappedRegion(region, p, 0);
+    expect(snapped).toEqual({ offset: [-4, 476, 476], size: [1280, 800, 800] });
+    const again = planModel(models[0], PYRAMID, snapped);
+    if (!isPlan(again)) throw new Error(again.error);
+    expect([again.lo, again.hi]).toEqual([[0, 30, 30], [80, 80, 80]]);
+    // A voxel of 10.48 nm: the new corner, in whole nm, still lies in voxel 144, the chunk's first.
+    const level = { shape: [3000, 3000, 3000], voxel: [10.48, 8, 8], origin: [5.24, 4, 4] };
+    const fine = snappedRegion({ offset: [1838, 0, 0], size: [3000, 8, 8] }, { lo: [175, 0, 0], chunk: [36, 36, 36], level }, 0);
+    expect(levelBox(roundedOut(fine), level)?.lo[0]).toBe(144);
   });
 
   it("saves the box, which off the chunks' edges is fewer chunks than it computes", async () => {

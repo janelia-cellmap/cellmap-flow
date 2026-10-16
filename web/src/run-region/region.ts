@@ -58,6 +58,25 @@ export function wholeVolumeNm(dataset: Pick<DatasetInfo, "levels">): RegionNm {
   };
 }
 
+/** `region` with its corner moved back along `axis` (0 z, 1 y, 2 x) to the
+ * start of the model chunk it is in, its far side kept: a box whose corner
+ * is on the model's chunk edges along an axis is saved without holding a
+ * slab of stitched chunks across it (Inference.materializePlan). The region
+ * grows by less than a chunk. The new corner is rounded up to a whole nm,
+ * as the fields hold whole nm and round a corner down: rounded down, a
+ * voxel of 10.48 nm put it a fraction of a voxel before the edge, in the
+ * chunk before. */
+export function snappedRegion(region: RegionNm, plan: Pick<ModelPlan, "lo" | "chunk" | "level">, axis: number): RegionNm {
+  const { level } = plan;
+  const corner = level.origin[axis] - level.voxel[axis] / 2;
+  const start = corner + Math.floor(plan.lo[axis] / plan.chunk[axis]) * plan.chunk[axis] * level.voxel[axis];
+  const offset = [...region.offset], size = [...region.size];
+  const at = Math.ceil(steady(start));
+  size[axis] = steady(region.offset[axis] + region.size[axis] - at);
+  offset[axis] = at;
+  return { offset, size };
+}
+
 /** Why a region's numbers cannot be run, or null: three finite offsets and
  * three sizes, none negative. A size of 0 is a box drawn without scrolling
  * between its two clicks (flat along the axis the view looks along), which
