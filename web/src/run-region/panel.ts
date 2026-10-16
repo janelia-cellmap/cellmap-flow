@@ -26,6 +26,7 @@ import { directoryStore, memoryStore } from "../../chunkmirage/web/src/materiali
 import { pageBase } from "../backend/serving";
 import type { AppContext, LayerSpec, ServedModel } from "../contracts";
 import { localKeyFor, localUrl, supportsLocalFolders } from "../local-folder";
+import { carriesFiles, DROP_CLASS, type HandleItem } from "../local-folder/panel";
 import { getHandle, putHandle } from "../state/local-store";
 import { shaderColor } from "../viewer/display";
 import { dimensionsOf, PREDICTION_COLORS } from "../viewer/layers";
@@ -35,7 +36,7 @@ import {
 } from "./output";
 import {
   describePlan, formatBytes, formatDuration, isPlan, largeRunWarning, latestBox, type ModelPlan, planModel, type RegionNm, regionError,
-  roundedOut, RUN_REGION_LAYER, runRegionLayer, wholeVolumeNm,
+  roundedOut, RUN_REGION_LAYER, runRegionLayer, sameRegion, wholeVolumeNm, withBox,
 } from "./region";
 import { describeProgress, provenance, type RunOutcome, type RunProgress, runRegion, type RunTarget } from "./run";
 
@@ -58,6 +59,7 @@ export const IDS = {
   summary: "runRegionSummary",
   warning: "runRegionWarning",
   chooseFolder: "runChooseFolderBtn",
+  folderDrop: "runFolderDrop",
   folderName: "runFolderName",
   folderNote: "runFolderNote",
   compression: "runCompression",
@@ -81,6 +83,11 @@ const POLL_MS = 1000;
 
 /** What the tab says where the browser cannot write to a folder. */
 export const NO_FOLDER_NOTE = `Saving to a folder needs Chrome or Edge (the File System Access API). In this browser a run of up to ${formatBytes(ZIP_LIMIT_BYTES)} of predictions is kept in memory and saved as a zip of the .zarr folders.`;
+
+/** How long typing in the region's fields pauses before the box in the
+ * viewer is redrawn to them (showTypedBox): each redraw sets the viewer's
+ * state, which is not worth doing at every key. */
+export const TYPED_BOX_DELAY_MS = 400;
 
 /** The picker as Chromium has it (not in lib.dom, so `window` is read as this). */
 interface PickerWindow {
@@ -112,7 +119,8 @@ export function installRunRegionUi(ctx: AppContext, opts: { folders?: FolderStor
     offset: [IDS.offsetZ, IDS.offsetY, IDS.offsetX].map((id) => byId<HTMLInputElement>(id)!),
     size: [IDS.sizeZ, IDS.sizeY, IDS.sizeX].map((id) => byId<HTMLInputElement>(id)!),
     summary: byId(IDS.summary)!, warning: byId(IDS.warning)!,
-    chooseFolder: byId<HTMLButtonElement>(IDS.chooseFolder)!, folderName: byId(IDS.folderName)!, folderNote: byId(IDS.folderNote)!,
+    chooseFolder: byId<HTMLButtonElement>(IDS.chooseFolder)!, folderDrop: byId(IDS.folderDrop)!, folderName: byId(IDS.folderName)!,
+    folderNote: byId(IDS.folderNote)!,
     start: byId<HTMLButtonElement>(IDS.start)!, cancel: byId<HTMLButtonElement>(IDS.cancel)!, status: byId(IDS.status)!,
     progress: byId(IDS.progress)!, progressBar: byId(IDS.progressBar)!, progressText: byId(IDS.progressText)!,
     results: byId(IDS.results)!, log: byId<HTMLTextAreaElement>(IDS.log)!,
@@ -249,8 +257,39 @@ export function installRunRegionUi(ctx: AppContext, opts: { folders?: FolderStor
     if (key === seenBox) return;
     seenBox = key;
     if (!box) return;
+    // The box drawn from the fields (showTypedBox) reads back a little off,
+    // its corners kept as 32-bit floats: it is not a new one.
+    const typed = readRegion();
+    if (typed && sameRegion(box, typed)) return;
     fillRegion(box);
     summarize();
+  }
+
+  /** The fields' region drawn as the run_region layer's box, so the box in
+   * the viewer follows what is typed, as the fields follow a box drawn
+   * (takeNewBox). Only in box mode, once every field is a number and the
+   * size positive; the layer is added when it is not there yet. */
+  function showTypedBox(): void {
+    if (typedBoxTimer !== null) clearTimeout(typedBoxTimer);
+    typedBoxTimer = null;
+    if (!el.modeBox.checked) return;
+    const region = readRegion();
+    if (!region || ![...region.offset, ...region.size].every(Number.isFinite) || region.size.some((s) => s <= 0)) return;
+    const dataset = ctx.infer.dataset();
+    if (!dataset) return;
+    const layer = ctx.viewer.layer(RUN_REGION_LAYER) ?? runRegionLayer(Object.keys(dimensionsOf(dataset)));
+    const shown = latestBox(layer);
+    if (shown && sameRegion(shown, region)) return;
+    const next = withBox(layer, region);
+    seenBox = JSON.stringify(latestBox(next));
+    ctx.viewer.setLayers({ [RUN_REGION_LAYER]: next });
+  }
+
+  /** showTypedBox once typing pauses: each redraw sets the viewer's state. */
+  let typedBoxTimer: ReturnType<typeof setTimeout> | null = null;
+  function showTypedBoxSoon(): void {
+    if (typedBoxTimer !== null) clearTimeout(typedBoxTimer);
+    typedBoxTimer = setTimeout(showTypedBox, TYPED_BOX_DELAY_MS);
   }
 
   function chooseMode(): void {
@@ -294,25 +333,63 @@ export function installRunRegionUi(ctx: AppContext, opts: { folders?: FolderStor
     el.folderName.textContent = folder ? folder.name : "No folder chosen";
     el.folderNote.textContent = folder
       ? `Each model goes to ${folder.name}/<model>.zarr. The browser asks to allow writing to the folder when you click Run, when it has not yet (after a reload, say).`
-      : "Choose where the predictions go: each model is written to <folder>/<model>.zarr.";
+      : "Choose where the predictions go, or drop a folder here: each model is written to <folder>/<model>.zarr. Chrome won't let a page write straight into Downloads or your home folder (\"it contains system files\"): make a new folder inside it (the picker has a New Folder button) and choose that.";
   }
 
   /** The picker, in the user's click; the folder chosen, or null when the dialog was cancelled. */
   async function pickFolder(): Promise<OutputFolder | null> {
     try {
       const picked = await (window as unknown as Required<PickerWindow>).showDirectoryPicker(OUTPUT_PICKER_OPTIONS);
-      folder = picked;
-      showFolder();
-      log(`output folder: ${picked.name}`);
-      // Kept for the next visit; a store that refuses (a private window)
-      // costs only that.
-      await folders.put(OUTPUT_FOLDER_KEY, picked).catch((e: unknown) => log(`the folder is not remembered for the next visit: ${message(e)}`));
+      await useFolder(picked);
       return picked;
     } catch (e) {
       // AbortError: the dialog was cancelled, which needs no message.
       if ((e as { name?: string })?.name !== "AbortError") status(`Could not pick a folder: ${message(e)}`, "error");
       return null;
     }
+  }
+
+  /** `picked` as the output folder, shown and kept for the next visit (a
+   * store that refuses, in a private window, costs only that). */
+  async function useFolder(picked: OutputFolder): Promise<void> {
+    folder = picked;
+    showFolder();
+    log(`output folder: ${picked.name}`);
+    await folders.put(OUTPUT_FOLDER_KEY, picked).catch((e: unknown) => log(`the folder is not remembered for the next visit: ${message(e)}`));
+  }
+
+  /** A folder dropped on the Output folder row, taken as the picker's would
+   * be; the browser asks to allow writing to it when Run is clicked (start).
+   * Asked for in the drop event: the drag's items are gone once it ends. */
+  function acceptDroppedFolder(): void {
+    const zone = el.folderDrop;
+    zone.addEventListener("dragover", (event) => {
+      if (!carriesFiles(event.dataTransfer)) return;
+      event.preventDefault();
+      event.dataTransfer.dropEffect = "link";
+      zone.classList.add(DROP_CLASS);
+    });
+    zone.addEventListener("dragleave", (event) => {
+      // Leaving for one of the row's own children is not leaving.
+      if (!zone.contains(event.relatedTarget as Node | null)) zone.classList.remove(DROP_CLASS);
+    });
+    zone.addEventListener("drop", (event) => {
+      zone.classList.remove(DROP_CLASS);
+      if (!carriesFiles(event.dataTransfer)) return;
+      event.preventDefault();
+      const items = Array.from(event.dataTransfer.items).filter((item) => item.kind === "file") as HandleItem[];
+      if (items.length !== 1) return status("Drop one folder: the one the predictions go to.", "error");
+      const item = items[0];
+      if (!item.getAsFileSystemHandle) return status("This browser gives no handle for a dropped folder: use Choose folder… in Chrome or Edge.", "error");
+      item.getAsFileSystemHandle().then(
+        (handle) => {
+          if (!handle || handle.kind !== "directory") return status(`${handle ? handle.name : "What was dropped"} is not a folder: drop the folder the predictions go to.`, "error");
+          status(`Output folder: ${handle.name}. The browser asks to allow writing to it when you click Run.`);
+          return useFolder(handle as unknown as OutputFolder);
+        },
+        (e: unknown) => status(`Could not take the dropped folder: ${message(e)}`, "error"),
+      );
+    });
   }
 
   // ---------------------------------------------------------------- the run
@@ -468,7 +545,14 @@ export function installRunRegionUi(ctx: AppContext, opts: { folders?: FolderStor
 
   el.modeBox.addEventListener("change", chooseMode);
   el.modeWhole.addEventListener("change", chooseMode);
-  for (const f of fields()) f.addEventListener("input", summarize);
+  for (const f of fields()) {
+    f.addEventListener("input", () => {
+      summarize();
+      showTypedBoxSoon();
+    });
+    f.addEventListener("change", showTypedBox);
+  }
+  if (supported) acceptDroppedFolder();
   el.drawBox.addEventListener("click", drawBox);
   el.chooseFolder.addEventListener("click", () => void pickFolder());
   el.start.addEventListener("click", () => void start());

@@ -118,10 +118,13 @@ over a region and saves the predictions in a folder on your machine:
    bounding-box tool as its tool: hold Ctrl and click two
    opposite corners (scroll between the clicks to give the box depth; a flat
    box is one chunk deep). The latest box drawn fills the offset and size
-   fields (nm, z y x), which can be edited. Or *Whole volume*. The tab says
+   fields (nm, z y x), and typing in them redraws the box to match once
+   typing pauses (`withBox`, 400 ms). Or *Whole volume*. The tab says
    each model's box in voxels and chunks of the level it is served at (a
    chunk is one model output block), and warns past 2,000 chunks.
-3. *Choose folder…* picks the folder, with write access; it is remembered
+3. *Choose folder…* picks the folder, with write access, or a folder dropped
+   on the *Output folder* block is taken; Chrome refuses Downloads and the
+   home folder themselves (a folder inside them is fine). It is remembered
    (IndexedDB), and after a reload the browser asks again when you click
    *Run*.
 4. *Run* writes each model to `<folder>/<model>.zarr`, one model after the

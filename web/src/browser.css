@@ -53,6 +53,15 @@
   color: var(--text-muted);
 }
 
+/* The Run tab's Output folder block while a folder is dragged over it
+   (src/run-region/panel.ts acceptDroppedFolder). */
+#runFolderDrop.local-drop-target {
+  outline: 2px dashed var(--accent);
+  outline-offset: 4px;
+  background: var(--accent-muted);
+  border-radius: var(--radius-md);
+}
+
 #noNeuroglancerPanel.local-drop-target {
   outline: 2px dashed var(--accent);
   outline-offset: -12px;

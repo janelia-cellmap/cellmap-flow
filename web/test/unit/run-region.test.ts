@@ -18,7 +18,8 @@ import {
 } from "../../src/run-region/output";
 import {
   BOX_TOOL, chainOf, chunkGrid, describePlan, formatBytes, formatDuration, isPlan, LARGE_RUN_CHUNKS, largeRunWarning,
-  latestBox, levelBox, type ModelPlan, planModel, regionError, roundedOut, RUN_REGION_LAYER, runRegionLayer, wholeVolumeNm,
+  latestBox, levelBox, type ModelPlan, planModel, regionError, roundedOut, RUN_REGION_LAYER, runRegionLayer, sameRegion, TYPED_BOX_ID,
+  wholeVolumeNm, withBox,
 } from "../../src/run-region/region";
 import { describeProgress, provenance, PROVENANCE_KEY, type RunProgress, runRegion, type RunTarget } from "../../src/run-region/run";
 import { DATASET, type FakeContext, fakeContext, NAME_54, NAME_56 } from "./backend-fakes";
@@ -212,6 +213,38 @@ describe("the run_region layer", () => {
     // The source's own (input) dimensions win over the space it is shown in.
     const shown = { ...layer, source: { url: "local://annotations", transform: { inputDimensions: { z: [1e-6, "m"], y: [1e-6, "m"], x: [1e-6, "m"] }, outputDimensions: space } } };
     expect(latestBox(shown)).toEqual({ offset: [1000, 2000, 3000], size: [1000, 2000, 3000] });
+  });
+
+  it("draws the typed region as its one box, which reads back as that region (withBox)", () => {
+    const drawn = {
+      ...runRegionLayer(["z", "y", "x"]),
+      annotations: [
+        { type: "axis_aligned_bounding_box", id: "a", pointA: [0, 0, 0], pointB: [10, 10, 10] },
+        { type: "point", id: "p", point: [1, 2, 3] },
+      ],
+    };
+    const region = { offset: [100, 2000, 3000], size: [64, 1600, 1600] };
+    const typed = withBox(drawn, region);
+    expect(latestBox(typed)).toEqual(region);
+    // The box drawn before is replaced; anything else in the layer is kept.
+    expect(typed.annotations).toEqual([
+      { type: "point", id: "p", point: [1, 2, 3] },
+      { type: "axis_aligned_bounding_box", id: TYPED_BOX_ID, pointA: [100, 2000, 3000], pointB: [164, 3600, 4600] },
+    ]);
+    expect(drawn.annotations).toHaveLength(2);
+    // Into the layer's own space: 8 nm, listed x, y, z.
+    const space = { x: [8e-9, "m"], y: [8e-9, "m"], z: [8e-9, "m"] };
+    const eight = { type: "annotation", source: { url: "local://annotations", transform: { outputDimensions: space } }, annotations: [] };
+    const box = withBox(eight, { offset: [8, 16, 24], size: [8, 16, 24] }).annotations as { pointA: number[]; pointB: number[] }[];
+    expect([box[0].pointA, box[0].pointB]).toEqual([[3, 2, 1], [6, 4, 2]]);
+  });
+
+  it("takes a box read back a little off as the same region (Neuroglancer's 32-bit corners)", () => {
+    const region = { offset: [100, 2000, 3000.4], size: [64, 1600, 1600] };
+    const read = { offset: [100, 2000, Math.fround(3000.4)], size: [64, 1600, Math.fround(4600.4) - Math.fround(3000.4)] };
+    expect(read.offset[2]).not.toBe(region.offset[2]);
+    expect(sameRegion(read, region)).toBe(true);
+    expect(sameRegion({ offset: [100, 2000, 3001], size: [64, 1600, 1600] }, region)).toBe(false);
   });
 
   it("has no box without one drawn, or without the layer", () => {
