@@ -82,14 +82,19 @@ folder on your machine, to open in the app again or to copy to the cluster.
    and click two opposite corners of the box in the viewer, scrolling
    between the two clicks to give it depth (a flat box is one chunk
    deep). The latest box drawn fills the *Offset* and *Size* fields (nm, z y
-   x), which you can edit. *Whole volume* fills them with the volume's
+   x), and typing in them moves the box in the viewer to match, once you
+   pause. *Whole volume* fills them with the volume's
    extent instead. Under the fields, the tab says what each model would
    compute: the box in its voxels and in chunks (a chunk is one block the
    model computes at a time), with a warning for a run of more than 2,000
    chunks.
-3. *Choose folder…* picks the folder to save into; the browser asks you to
-   allow the page to edit files in it. The folder is remembered, and after a
-   reload the browser asks again when you click *Run*.
+3. *Choose folder…* picks the folder to save into, or drop a folder on the
+   *Output folder* block; the browser asks you to allow the page to edit
+   files in it. Chrome refuses some folders themselves, such as Downloads
+   and your home folder ("it contains system files"): make a new folder
+   inside one (the picker has a *New Folder* button) and choose that. The
+   folder is remembered, and after a reload the browser asks again when you
+   click *Run*.
 4. *Run* writes each model to ``<folder>/<model>.zarr`` with a progress bar
    (chunks, megabytes, time left) and *Cancel*, which keeps what was written.
    The run goes on while you move around the viewer or use the other tabs,

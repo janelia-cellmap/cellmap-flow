@@ -7,8 +7,8 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  carriedLayer, datasetUrlFromState, depthAxisFromLayout, displayDimensionsOf, layerShaderOf, layersOf, type NgState, pointerNm, positionNm, replaceLayers, sourceUrl,
-  sourceUrls, viewDepthAxisOf, withoutLayer,
+  carriedLayer, coordsFromNm, datasetUrlFromState, depthAxisFromLayout, displayDimensionsOf, layerShaderOf, layersOf, type NgState, pointerNm, positionNm,
+  replaceLayers, sourceUrl, sourceUrls, viewDepthAxisOf, withoutLayer,
 } from "../../src/viewer/state";
 
 const raw = { type: "image", name: "data", source: "zarr://https://x/dataset.zarr/recon-1/em/fibsem-uint8", shader: "void main(){}" };
@@ -162,6 +162,18 @@ describe("positionNm", () => {
     expect(positionNm({ dimensions: state.dimensions, position: [1, 2] })).toBeNull();
     expect(positionNm({ dimensions: { z: [1, ""], y: [8e-9, "m"], x: [8e-9, "m"] }, position: [1, 2, 3] })).toBeNull();
     expect(positionNm(null)).toBeNull();
+  });
+});
+
+describe("coordsFromNm (pointerNm backwards)", () => {
+  it("gives the coordinates of a point in nm, matched to z, y, x by name, other dimensions 0", () => {
+    const space = { "c^": [1, ""], x: [8e-9, "m"], y: [4e-9, "m"], z: [1e-6, "m"] } as Record<string, [number, string]>;
+    expect(coordsFromNm([2000, 400, 80], space)).toEqual([0, 10, 100, 2]);
+    expect(pointerNm(coordsFromNm([2000, 400, 80], space), space)).toEqual([2000, 400, 80]);
+  });
+  it("is null for a space it cannot place the point in", () => {
+    expect(coordsFromNm([1, 2, 3], { y: [1e-9, "m"], x: [1e-9, "m"] })).toBeNull();
+    expect(coordsFromNm([1, 2, 3], { z: [1, "s"], y: [1e-9, "m"], x: [1e-9, "m"] })).toBeNull();
   });
 });
 

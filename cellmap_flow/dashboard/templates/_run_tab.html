@@ -49,7 +49,9 @@
   <div class="small text-warning mt-1" id="runRegionWarning" role="alert" hidden></div>
 </div>
 
-<div class="mb-3">
+{# A folder dropped anywhere on this block is chosen as the picker's would be
+   (run-region/panel.ts acceptDroppedFolder). #}
+<div class="mb-3" id="runFolderDrop">
   <div class="form-label fw-bold mb-1">Output folder</div>
   <div class="d-flex align-items-center gap-2 flex-wrap">
     <button type="button" class="btn btn-sm btn-outline-secondary" id="runChooseFolderBtn"

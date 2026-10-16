@@ -183,6 +183,26 @@ export function pointerNm(coords: ArrayLike<number> | null | undefined, dimensio
   return nm.length === 3 ? nm : null;
 }
 
+/** pointerNm backwards: a point in nm (z, y, x) as coordinates of
+ * `dimensions`, matched to z, y, x by name as pointerNm matches them; a
+ * dimension of `dimensions` that is not one of them is 0. null when the
+ * space has fewer than three dimensions, or one of the three is not a
+ * length. */
+export function coordsFromNm(nm: readonly number[], dimensions: Record<string, [number, string]>): number[] | null {
+  const names = Object.keys(dimensions);
+  if (names.length < 3 || nm.length !== 3) return null;
+  const coords = names.map(() => 0);
+  for (const [fallback, axis] of ["z", "y", "x"].entries()) {
+    const i = names.includes(axis) ? names.indexOf(axis) : fallback;
+    const [scale, unit] = dimensions[names[i]];
+    const perUnit = NM_PER_UNIT[unit];
+    if (perUnit === undefined) return null;
+    // Rounded as pointerNm rounds: to a millionth of the coordinate.
+    coords[i] = Math.round((nm[fallback] / (scale * perUnit)) * 1e6) / 1e6;
+  }
+  return coords;
+}
+
 // ---------------------------------------------------------------------------
 // The plane the viewer shows: cellmap_flow/ai_annotate/geometry.py's
 // depth_axis_from_layout and depth_axis_for_view, for the state's JSON.
