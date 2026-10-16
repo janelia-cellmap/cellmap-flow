@@ -10,15 +10,21 @@
   from its type's ``default_env``, when the type sets one
   (``serving.launch.server_argv_for``): a zoo model from pixi's
   ``bioimageio`` environment, a Cellpose one from ``cellpose4``.
+- ``loaded_models()`` / ``remove_model()``: the Models tab's *Loaded
+  models* list, every model running or starting with where it came from,
+  and its ✕: stop that one model and take its layer away, whatever else is
+  ticked on the tab and not submitted.
 """
 
 from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.serving.launch import server_command, server_command_for
-from cellmap_flow.jobs.launch import start_hosts
+from cellmap_flow.jobs.launch import start_hosts, starting_jobs
 from cellmap_flow.jobs.spec import JobStartError
 from cellmap_flow.viewer.raw import PREDICTION_COLORS
 from cellmap_flow.models import bioimage_catalog
-from cellmap_flow.models.models_config import BioModelConfig, CellposeModelConfig, HuggingFaceModelConfig
+from cellmap_flow.models.models_config import (
+    BioModelConfig, CellposeModelConfig, FinetuneModelConfig, HuggingFaceModelConfig,
+)
 from cellmap_flow.pipeline_spec import PipelineSpec
 from cellmap_flow.viewer.layers import prediction_layer, replace_layer
 import threading
@@ -44,19 +50,37 @@ def _start(command, name):
 
     These run in the dashboard's launch threads: an uncaught JobStartError
     (including a bsub timeout) only reached stderr, never the log panel.
+
+    A model removed from the Loaded models list while it was starting
+    (``remove_model``) is not left running: its job is killed and
+    forgotten as it comes up, and its failure to start, when the removal
+    killed it in its queue, is no error.
     """
     session = get_session()
     try:
-        return start_hosts(
+        job = start_hosts(
             command, job_name=name, queue=session.queue, charge_group=session.charge_group
         )
     except JobStartError as e:
+        if _withdrawn():
+            logger.info(f"Stopped '{name}' while it was starting: it was removed from the loaded models")
+            return None
         logger.error(f"Could not start model '{name}': {e}")
         return None
+    if _withdrawn():
+        logger.info(f"Stopping '{name}', which was removed from the loaded models while it was starting")
+        job.kill()
+        session.jobs = [j for j in session.jobs if j is not job]
+        return None
+    return job
 
 
 def _show(job, st_data):
-    """Add the started model's layer, the one Submit would give it."""
+    """Add the started model's layer, the one Submit would give it; none for
+    a model removed from the Loaded models list since its job came up
+    (``remove_model`` stopped that job)."""
+    if _withdrawn():
+        return
     session = get_session()
     names = [j.model_name for j in session.jobs]
     index = names.index(job.model_name) if job.model_name in names else 0
@@ -276,23 +300,47 @@ def _settings_changed(params) -> bool:
 # model loading). They count as running, so a second Submit in that time
 # (Resample toggled, say) does not start the same model again: two
 # "impartial_shrimp" jobs once ran side by side, one resampling and one not,
-# and the layer showed whichever came up last.
-_launching: set = set()
+# and the layer showed whichever came up last. {name: its _Launch}.
+_launching: dict = {}
 _launching_lock = threading.Lock()
+
+
+class _Launch:
+    """One launch thread's model. ``withdrawn`` once the model is removed
+    from the Loaded models list before its launch returned
+    (``remove_model``): ``_start`` then stops whatever it starts."""
+
+    def __init__(self, name):
+        self.name, self.withdrawn = name, False
+
+
+# The launch the current thread runs, for _start to ask whether it was withdrawn.
+_this_launch = threading.local()
+
+
+def _withdrawn() -> bool:
+    """Whether the launch this thread runs has been withdrawn (``remove_model``)."""
+    launch = getattr(_this_launch, "current", None)
+    return launch is not None and launch.withdrawn
 
 
 def _launch(name, target, *args, daemon=False):
     """Run ``target(*args)`` in its own thread, with ``name`` counted as
-    running (``running_names``) until it returns."""
+    running (``running_names``) until it returns, or until it is withdrawn:
+    then a Submit may start the model again, in a launch of its own."""
+    launch = _Launch(name)
     with _launching_lock:
-        _launching.add(name)
+        _launching[name] = launch
 
     def run():
+        _this_launch.current = launch
         try:
             target(*args)
         finally:
+            _this_launch.current = None
             with _launching_lock:
-                _launching.discard(name)
+                if _launching.get(name) is launch:
+                    del _launching[name]
 
     thread = threading.Thread(target=run, daemon=daemon)
     thread.start()
@@ -398,5 +446,166 @@ def update_run_models(names: List[str], hf_repos: List[str] = None, bioimage_mod
                     if not (isinstance(mc, CellposeModelConfig) and mc.name == params["name"])
                 ] + [CellposeModelConfig(**params)]
                 threads.append(_launch(params["name"], run_cellpose_model, params, st_data))
+
+        # Launch the other models ticked by name: one that Add a model
+        # started (routes/model_resolve), or that the YAML the dashboard was
+        # started with did, stopped since (unticked, or removed from the
+        # Loaded models list) and ticked again. No catalog entry names them,
+        # so ticking one again did nothing; their config starts them, as Add
+        # did. Not a finetuned model's: its server is its finetune job's.
+        in_catalog = {name for group in session.model_catalog.values() for name in group}
+        configs = {getattr(mc, "name", None): mc for mc in session.models_config}
+        for name in dict.fromkeys(names):
+            config = configs.get(name)
+            if (name in in_catalog or config is None or isinstance(config, FinetuneModelConfig)
+                    or name in running_names()):
+                continue
+            logger.info(f"To be submitted model, from its config : {name}")
+            threads.append(_launch(name, run_model_config, config, st_data))
     # for thread in threads:
     #     thread.join()
+
+
+# Where each model on the Loaded models list came from: the "source" of its
+# entry, which models-tab.js labels. The browser's backend
+# (web/src/backend/routes/models.ts) answers the same keys.
+SOURCES = ("catalog", "huggingface", "bioimage", "cellpose", "added", "finetuned")
+
+
+def _finetune_note(training):
+    """Why a finetune job's model has no ✕ while ``training`` (its
+    FinetuneJob) is alive, or what ✕ does once it has ended; and whether it
+    has ended."""
+    from cellmap_flow.finetune.job_manager.state import TERMINAL_STATUSES
+
+    if training is None:
+        return True, "Its finetune job is not known here any more: ✕ takes its layer away."
+    status = training.status.value
+    if training.status in TERMINAL_STATUSES:
+        return True, f"Its finetune job has ended ({status}), and its server with it: ✕ takes its layer away."
+    return False, (f"Served by its finetune job ({status}), which Restart trains again. Stop that job on "
+                   "the Finetune tab (Cancel) to stop serving it; ✕ then takes its layer away.")
+
+
+def _loaded_entry(name, job, config, catalog_group):
+    """One model's entry of ``loaded_models``."""
+    entry = {"name": name, "status": "running" if job is not None else "starting", "removable": True,
+             "note": None, "hf_id": None, "zoo_id": None, "cellpose": None}
+    if getattr(job, "owned_by_finetune", False) or isinstance(config, FinetuneModelConfig):
+        from cellmap_flow.dashboard.finetune_layers import training_job_of
+
+        training = training_job_of(job) if getattr(job, "owned_by_finetune", False) else None
+        base = training.model_name if training is not None else None
+        entry.update(source="finetuned", detail=f"from {base}" if base else None)
+        if getattr(job, "owned_by_finetune", False):
+            ended, note = _finetune_note(training)
+            entry.update(removable=ended, note=note, status="running" if not ended else "ended")
+    elif isinstance(config, HuggingFaceModelConfig):
+        entry.update(source="huggingface", detail=config.repo, hf_id=config.repo)
+    elif isinstance(config, BioModelConfig):
+        zoo_id = bioimage_catalog.entry_model_id(config)
+        entry.update(source="bioimage", detail=zoo_id, zoo_id=zoo_id)
+    elif isinstance(config, CellposeModelConfig):
+        output = config.output + (", 3D" if config.do_3d else "")
+        entry.update(source="cellpose", detail=f"{config.pretrained_model}, {output}")
+        # Its row in the Cellpose panel, to untick: only a model the panel
+        # lists as its own, named as its rows name their jobs
+        # (index_page.cellpose_panel_names), not a YAML's of another name.
+        if config.pretrained_model in CELLPOSE_MODELS and name == cellpose_job_name(
+                config.pretrained_model, config.output, config.do_3d):
+            entry["cellpose"] = {"model": config.pretrained_model, "output": config.output, "do_3d": config.do_3d}
+    elif catalog_group is not None:
+        entry.update(source="catalog", detail=catalog_group)
+    else:
+        from cellmap_flow.models.registry import cli_name_of
+
+        entry.update(source="added", detail=cli_name_of(type(config)) if config is not None else None)
+    return entry
+
+
+def loaded_models() -> list:
+    """The models running and starting, for the Models tab's Loaded models
+    list: the session's jobs in order, then the launches not returned yet.
+
+    Each is ``{"name", "source"`` (one of SOURCES), ``"detail"`` (the
+    catalog group, the repo, the zoo id, the Cellpose model and output, the
+    model type, or the base a finetune started from), ``"status"``
+    ("running", "starting", or "ended" for a finetune job's model whose job
+    has), ``"removable"``, ``"note"`` (why it cannot be removed, or what ✕
+    does), and what the tab's rows know it by, to untick them: ``"hf_id"``
+    (the Hugging Face row's repo), ``"zoo_id"`` (the zoo row's id) and
+    ``"cellpose"`` ({model, output, do_3d} of its Cellpose panel row)``}``.
+    """
+    session = get_session()
+    configs = {getattr(mc, "name", None): mc for mc in session.models_config}
+    groups = {name: group for group, models in session.model_catalog.items() for name in models}
+    jobs = list(session.jobs)
+    with _launching_lock:
+        launching = list(_launching)  # a withdrawn launch is no longer among them
+    loaded, seen = [], set()
+    for name, job in [(j.model_name, j) for j in jobs] + [(name, None) for name in launching]:
+        if name in seen:
+            continue
+        seen.add(name)
+        loaded.append(_loaded_entry(name, job, configs.get(name), groups.get(name)))
+    return loaded
+
+
+class NotRemovable(Exception):
+    """A model whose ✕ is disabled: a finetune job's, while the job is alive."""
+
+
+def remove_model(name: str) -> list:
+    """Stop the one model ``name`` and take its layer away; every other
+    model, and anything ticked on the Models tab and not submitted, stays as
+    it is. Returns the Loaded models list as it is then.
+
+    A running model's job is killed and forgotten, as Submit does for one
+    unticked. A model still starting is withdrawn: a job of it waiting in a
+    queue is killed now, and whatever its launch still starts is stopped
+    as it comes up (``_start``), so a Submit may start it again at once. A
+    finetune job's model is that job's server: while the job is alive it
+    is the Finetune tab's to stop (NotRemovable); once the job has ended,
+    its server has too, and only its layer and its entry among the jobs are
+    left to take away. Its config stays among the session's models, as
+    every stopped model's does, for the pipeline builder.
+
+    Raises LookupError when no model of that name is running or starting.
+    """
+    session = get_session()
+    jobs = [j for j in session.jobs if j.model_name == name]
+    with _launching_lock:
+        launch = _launching.get(name)
+    if not jobs and launch is None:
+        raise LookupError(f"No model named {name} is running")
+    for job in jobs:
+        if getattr(job, "owned_by_finetune", False):
+            from cellmap_flow.dashboard.finetune_layers import training_job_of
+
+            ended, note = _finetune_note(training_job_of(job))
+            if not ended:
+                raise NotRemovable(f"{name}: {note}")
+
+    if launch is not None:
+        with _launching_lock:
+            launch.withdrawn = True
+            if _launching.get(name) is launch:
+                del _launching[name]
+        for job in starting_jobs():
+            if getattr(job, "model_name", None) == name:
+                logger.info(f"Killing '{name}', removed from the loaded models while it was starting")
+                job.kill()
+    if jobs:
+        owned = [j for j in jobs if getattr(j, "owned_by_finetune", False)]
+        killed = [j for j in jobs if j not in owned]
+        if session.viewer is not None:
+            with session.viewer.txn() as s:
+                kill_n_remove_from_neuroglancer(killed, s)
+                if owned and name in s.layers:
+                    del s.layers[name]
+        else:
+            for job in killed:
+                job.kill()
+        session.jobs = [j for j in session.jobs if j not in jobs]
+    logger.info(f"Removed model {name}")
+    return loaded_models()

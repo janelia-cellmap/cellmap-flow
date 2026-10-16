@@ -113,6 +113,20 @@ export async function serveModels(ctx: AppContext, entries: ModelEntry[], chain:
   return result;
 }
 
+/** Stop serving the one model named `name`, the Loaded models list's ✕:
+ * its views are disposed of, its layer removed and it leaves the session's
+ * models, and nothing else changes. The other models stay served and their
+ * layers are not redrawn (serveModels would draw them all again, coloured
+ * by their new positions). A finetuned model's bytes and record stay in the
+ * catalog, so it is listed and can be served again. In server mode this is
+ * services/launch.py's remove_model. */
+export async function unserveModel(ctx: AppContext, name: string): Promise<void> {
+  await ctx.session.update({ models: ctx.session.state.models.filter((m) => m.name !== name) });
+  for (const served of ctx.infer.served().filter((s) => s.entry.name === name)) await served.dispose();
+  ctx.viewer.removeLayer(name);
+  ctx.log(`Stopped serving ${name}`);
+}
+
 /** Put one prediction layer per served model in the viewer, coloured by its
  * position as the Python dashboard colours them, keeping the shader the user
  * set unless the postprocessing changed. Then the shader is dropped (its

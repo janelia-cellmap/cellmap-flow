@@ -190,7 +190,10 @@ has the details under "In the browser".
 
 The paint and the finetuned models stay in the browser (IndexedDB): *Resume
 Existing Volume* lists the volumes painted here, newest first, and the
-Models tab lists the finetuned models under the Hugging Face ones. *Download
+Models tab lists the finetuned models under the Hugging Face ones. *Loaded
+models*, at the top of the Models tab, lists the models served in the page,
+finetuned ones among them; the ✕ beside one stops serving it and takes its
+layer away, and a finetuned model stays kept, to tick and serve again. *Download
 paint* saves the volume as a zarr (zipped, the server's layout, so a server
 session can train on it) and *Download finetuned model* the ``.onnx``, with
 its manifest (voxel sizes, block, channels, input normalization) written into

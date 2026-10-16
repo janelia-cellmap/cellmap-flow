@@ -188,7 +188,8 @@ In the dashboard, the same ``REF`` goes in the Models tab's *Add a model* box.
 *Resolve* (``POST /api/models/resolve``) shows what it was taken to be and
 where it runs, with a box for each value it still needs; *Run*
 (``POST /api/models/add``) starts it, and it joins the models with a ticked
-box, stopped when unticked like any other. A config YAML (one with
+box, stopped when unticked like any other or by its ✕ under *Loaded models*
+at the top of the tab; ticked again, it is started again. A config YAML (one with
 ``models:``) is refused with how to run it: it is a whole run, for
 ``cellmap_flow yaml``.
 

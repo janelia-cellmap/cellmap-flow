@@ -5,7 +5,8 @@
 //
 //   routes/data.ts      POST /api/set-data
 //   routes/pipeline.ts  PUT /api/pipeline
-//   routes/models.ts    the Models tab: lists, Submit, add by reference, advice
+//   routes/models.ts    the Models tab: lists, Submit, add by reference, the
+//                       loaded models and one of them stopped, advice
 //   routes/config.ts    server config and GPU queues (none here), job logs,
 //                       the exported YAML, the finetune tab's preferences
 //   routes/finetune.ts  the Finetune tab: the models to annotate for, a paint
@@ -119,5 +120,15 @@ export async function restoreSession(ctx: AppContext): Promise<void> {
     ctx.log(`Serving ${models.map((m) => m.name).join(", ")} again`);
   } catch (e) {
     ctx.log(`Could not serve the session's models again: ${message(e)}`);
+  }
+  // A model removed from the Loaded models list while this served it (the
+  // list says "starting" until then) is not left served: it has left the
+  // session's models since this read them. Only those: a model a Submit
+  // serves meanwhile joins the session's models after it is served.
+  const wanted = new Set(ctx.session.state.models.map((m) => m.id));
+  for (const served of ctx.infer.served()) {
+    if (wanted.has(served.entry.id) || !models.some((m) => m.id === served.entry.id)) continue;
+    await served.dispose();
+    ctx.viewer.removeLayer(served.entry.name);
   }
 }

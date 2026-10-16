@@ -196,6 +196,13 @@ class SubmitModels(BaseModel):
     resample: Optional[bool] = None
 
 
+class RemoveModel(BaseModel):
+    """The ✕ of a model on the Models tab's Loaded models list: the one
+    model to stop (services.launch.remove_model), by its name."""
+
+    name: Annotated[str, _required("name", strip=True)] = Field(None, validate_default=True)
+
+
 class Equivalences(BaseModel):
     """A merging postprocessor's merged ids, from its inference server, for
     the segmentation layer whose source ends in ``dataset``: each list is a

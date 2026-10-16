@@ -369,7 +369,7 @@ web/
     backend/                 the /api/* router and routes, the SW relay (page side)
       index.ts  createBackend(ctx), restoreSession(ctx), the catch-all for server-only routes
       relay.ts  registerServiceWorker(), listenForApiRequests(backend) on chunkmirage's route(); Ask/Reply/Later are chunkmirage's types
-      router.ts, sse.ts, yaml.ts (the export), serving.ts (serve and re-serve the session's models)
+      router.ts, sse.ts, yaml.ts (the export), serving.ts (serve and re-serve the session's models, and stop serving one)
       finetune-jobs.ts (a finetune run as the dashboard's job), ai-annotate-job.ts (one AI annotation, staged for review)
       routes/{data,pipeline,models,config,finetune,good-regions,view-labels,ai-annotate}.ts
     state/                   openSession(): SessionStore (sessionStorage: the tab is the server's process lifetime); db.ts + local-store.ts

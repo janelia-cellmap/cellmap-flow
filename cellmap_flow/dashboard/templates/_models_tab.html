@@ -1,4 +1,14 @@
 <form id="modelSelectionForm">
+    <!-- Loaded models: every model running or starting, wherever it was
+         picked, with a ✕ that stops that one (models-tab.js; GET
+         /api/models/loaded and POST /api/models/remove, which the browser
+         mode answers too). Filled in by the script. -->
+    <section class="loaded-models mb-3" id="loadedModels" aria-labelledby="loadedModelsTitle">
+      <h5 id="loadedModelsTitle">Loaded models <span class="loaded-models-count" id="loadedModelsCount"></span></h5>
+      <ul class="loaded-model-list list-unstyled mb-0" id="loadedModelsList" aria-live="polite"></ul>
+      <p class="loaded-models-empty mb-0" id="loadedModelsEmpty">None yet: tick models below and press Submit Models.</p>
+    </section>
+
     <!-- Add any model by reference (models/resolve.py) -->
     <div class="add-model mb-3">
       <label class="form-label fw-bold mb-1" for="addModelRef">Add a model</label>

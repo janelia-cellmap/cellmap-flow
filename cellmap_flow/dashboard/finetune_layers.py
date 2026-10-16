@@ -11,6 +11,10 @@ views of the model:
 - ``register_finetuned_model()``: its FinetuneModelConfig among the
   session's models, so the pipeline builder offers it.
 
+``training_job_of()`` goes the other way, from such a server's job to its
+finetune job: the Models tab's Loaded models list asks whether that job is
+still alive before it lets the model be removed (services.launch).
+
 ``follow_jobs(manager)`` has the listener told of a manager's jobs; the
 routes that put jobs into the manager (submit, and finding the jobs of an
 earlier dashboard) call it first.
@@ -35,6 +39,29 @@ logger = logging.getLogger(__name__)
 def _is_finetuned_from(model_name, base_model_name):
     """Whether ``model_name`` is an iteration of a model finetuned from ``base_model_name``."""
     return bool(model_name) and model_name.startswith(f"{base_model_name}_finetuned")
+
+
+def training_job_of(inference_job):
+    """The finetune job (job_manager.FinetuneJob) whose server is
+    ``inference_job``, one add_finetuned_layer made; None when the session's
+    job manager has none.
+
+    The newest job whose latest model is the one served, else the newest
+    finetuned from its base whose LSF job it runs in (a local run's job id is
+    "local", which says nothing).
+    """
+    name = getattr(inference_job, "model_name", None)
+    lsf_id = getattr(inference_job, "job_id", None)
+    jobs = sorted(list(get_session().finetune_job_manager.jobs.values()),
+                  key=lambda j: j.created_at, reverse=True)
+    for training in jobs:
+        if training.finetuned_model_name == name:
+            return training
+    for training in jobs:
+        if (lsf_id not in (None, "local") and _is_finetuned_from(name, training.model_name)
+                and getattr(training.lsf_job, "job_id", None) == lsf_id):
+            return training
+    return None
 
 
 def add_finetuned_layer(job, model_name):
