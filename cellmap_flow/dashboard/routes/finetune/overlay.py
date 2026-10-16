@@ -19,6 +19,7 @@ from cellmap_flow.dashboard.routes.finetune.blueprint import finetune_bp
 from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.finetune.session.volume import volume_corner_nm
 from cellmap_flow.io.geometry import list_populated_chunks
+from cellmap_flow.viewer.layers import replace_layer
 
 logger = logging.getLogger(__name__)
 
@@ -120,7 +121,8 @@ def add_annotation_layer(viewer, layer_name, annotation_url, *, keep_existing=Fa
             logger.warning(f"Could not pre-bind annotation tools: {e}")
         # The tab's id in the neuroglancer build that has the voxel tools.
         layer.tab = "Draw"
-        s.layers[layer_name] = layer
+        # Keeping what the user set on a layer of this name already.
+        replace_layer(s.layers, layer_name, layer)
         s.selected_layer.layer = layer_name
         s.selected_layer.visible = True
     return True
@@ -396,27 +398,17 @@ def refresh_annotated_regions_layer(corrections_path=None):
             # Keep whatever visibility the layer already has, and start hidden
             # when creating it: the boxes are an occasional orientation aid,
             # not something to draw over the data by default.
-            was_visible = None
-            if layer_name in s.layers:
-                try:
-                    was_visible = bool(s.layers[layer_name].visible)
-                except Exception:
-                    was_visible = None
-
-            s.layers[layer_name] = neuroglancer.LocalAnnotationLayer(
+            new = layer_name not in s.layers
+            replace_layer(s.layers, layer_name, neuroglancer.LocalAnnotationLayer(
                 dimensions=neuroglancer.CoordinateSpace(
                     names=axes_names,
                     units="nm",
                     scales=[1, 1, 1],
                 ),
                 annotations=annotations,
-            )
-            try:
-                s.layers[layer_name].visible = (
-                    False if was_visible is None else was_visible
-                )
-            except Exception:
-                pass
+            ))
+            if new:
+                s.layers[layer_name].visible = False
     except Exception as e:
         logger.warning(f"Could not update annotated_regions layer: {e}")
         return 0

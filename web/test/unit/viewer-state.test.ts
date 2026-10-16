@@ -1,13 +1,14 @@
 // The pure functions over a Neuroglancer state's JSON (src/viewer/state.ts):
-// replacing layers as the Python dashboard's _replace_layer does, the
+// replacing layers as the Python dashboard's replace_layer does, keeping the
+// user's settings on them (carriedLayer), the
 // position (and the pointer's) in nm, the data axis the layout looks along
 // (cellmap_flow/ai_annotate/geometry.py's depth_axis_from_layout), a
 // layer's kept shader, the dataset a state shows.
 import { describe, expect, it } from "vitest";
 
 import {
-  datasetUrlFromState, depthAxisFromLayout, layerShaderOf, layersOf, type NgState, pointerNm, positionNm, replaceLayers, sourceUrl,
-  viewDepthAxisOf, withoutLayer,
+  carriedLayer, datasetUrlFromState, depthAxisFromLayout, layerShaderOf, layersOf, type NgState, pointerNm, positionNm, replaceLayers, sourceUrl,
+  sourceUrls, viewDepthAxisOf, withoutLayer,
 } from "../../src/viewer/state";
 
 const raw = { type: "image", name: "data", source: "zarr://https://x/dataset.zarr/recon-1/em/fibsem-uint8", shader: "void main(){}" };
@@ -28,7 +29,7 @@ describe("layersOf", () => {
   });
 });
 
-describe("replaceLayers (_replace_layer)", () => {
+describe("replaceLayers (replace_layer)", () => {
   it("replaces a layer in place and keeps it hidden where it was hidden", () => {
     const next = replaceLayers(state, { model: { type: "image", source: "zarr3://http://h/m2/", shader: "new" } });
     expect(next.layers).toEqual([raw, { type: "image", name: "model", source: "zarr3://http://h/m2/", shader: "new", visible: false }]);
@@ -48,6 +49,88 @@ describe("replaceLayers (_replace_layer)", () => {
   it("names each layer by its key, whatever name the spec carried", () => {
     const next = replaceLayers({ layers: [] }, { mine: { type: "image", name: "other", source: "zarr3://a" } });
     expect(layersOf(next)).toEqual([{ type: "image", name: "mine", source: "zarr3://a" }]);
+  });
+});
+
+describe("carriedLayer: what the user set on a layer survives its redraw", () => {
+  // A model layer as the user left it: additive, half opaque, finer
+  // resolution, channel 2 shown, its contrast moved.
+  const shown = {
+    type: "image", name: "mito", source: "zarr3://http://h/mito__CFLOW_ARGS__a__CFLOW_ARGS__/", shader: "user's", shaderControls: { normalized: { range: [0, 9] } },
+    blend: "additive", opacity: 0.5, crossSectionRenderScale: 0.5, localDimensions: { "c^": [1, ""] }, localPosition: [2.5], tab: "rendering",
+  };
+
+  it("keeps every setting the new spec does not make, as when another model is added and this one is drawn again", () => {
+    const next = carriedLayer(shown, { type: "image", source: shown.source, shader: "user's" }, "mito");
+    expect(next).toEqual(shown);
+  });
+
+  it("lets the new spec's own properties win", () => {
+    const next = carriedLayer(shown, { type: "image", source: shown.source, shader: "the app's", opacity: 1 }, "mito");
+    expect(next).toMatchObject({ shader: "the app's", opacity: 1, blend: "additive", crossSectionRenderScale: 0.5 });
+  });
+
+  it("drops what belonged to the old source's data when the source is another (a new chain)", () => {
+    const next = carriedLayer(shown, { type: "image", source: "zarr3://http://h/mito__CFLOW_ARGS__b__CFLOW_ARGS__/", shader: "new range" }, "mito");
+    expect(next).toEqual({
+      type: "image", name: "mito", source: "zarr3://http://h/mito__CFLOW_ARGS__b__CFLOW_ARGS__/", shader: "new range",
+      blend: "additive", opacity: 0.5, crossSectionRenderScale: 0.5, tab: "rendering",
+    });
+  });
+
+  it("keeps a segmentation's colouring, and its segments and equivalences only while the source is the same", () => {
+    const seg = { type: "segmentation", name: "m", source: "zarr3://http://h/a/", selectedAlpha: 0.8, colorSeed: 7, segments: ["5"], equivalences: [["5", "6"]] };
+    expect(carriedLayer(seg, { type: "segmentation", source: "zarr3://http://h/a/" }, "m")).toEqual(seg);
+    expect(carriedLayer(seg, { type: "segmentation", source: "zarr3://http://h/b/" }, "m")).toEqual({
+      type: "segmentation", name: "m", source: "zarr3://http://h/b/", selectedAlpha: 0.8, colorSeed: 7,
+    });
+  });
+
+  it("compares sources by their URLs, whatever form Neuroglancer wrote them back in", () => {
+    const written = { ...shown, source: [{ url: shown.source, transform: { outputDimensions: {} } }] };
+    expect(carriedLayer(written, { type: "image", source: shown.source, shader: "user's" }, "mito")).toMatchObject({ localPosition: [2.5] });
+  });
+
+  it("keeps only being hidden across a change of type (an image layer become a segmentation)", () => {
+    const hidden = { ...shown, visible: false };
+    expect(carriedLayer(hidden, { type: "segmentation", source: "zarr3://http://h/labels/" }, "mito")).toEqual({
+      type: "segmentation", name: "mito", source: "zarr3://http://h/labels/", visible: false,
+    });
+  });
+
+  it("is the spec, named, when there was no layer", () => {
+    expect(carriedLayer(undefined, { type: "image", source: "zarr3://a", name: "x" }, "mine")).toEqual({ type: "image", source: "zarr3://a", name: "mine" });
+  });
+});
+
+describe("replaceLayers with a layer handed over", () => {
+  const ft1 = { type: "image", name: "m-ft1", source: "zarr3://http://h/m-ft1/", shader: "s", blend: "additive" };
+  const base = { type: "image", name: "m", source: "zarr3://http://h/m/", shader: "s" };
+
+  it("puts the new layer in the old one's place, with its settings, and drops the old one", () => {
+    const next = replaceLayers({ layers: [raw, base, ft1, model] }, { "m-ft2": { type: "image", source: "zarr3://http://h/m-ft2/", shader: "s" } }, { "m-ft2": "m-ft1" });
+    expect(layersOf(next).map((l) => l.name)).toEqual(["data", "m", "m-ft2", "model"]);
+    expect(layersOf(next)[2]).toEqual({ type: "image", name: "m-ft2", source: "zarr3://http://h/m-ft2/", shader: "s", blend: "additive" });
+  });
+
+  it("keeps the new layer's own settings when it is there already, and still drops the old one", () => {
+    const ft2 = { type: "image", name: "m-ft2", source: "zarr3://http://h/m-ft2/", shader: "s", opacity: 0.2 };
+    const next = replaceLayers({ layers: [ft1, ft2] }, { "m-ft2": { type: "image", source: ft2.source, shader: "s" } }, { "m-ft2": "m-ft1" });
+    expect(layersOf(next)).toEqual([ft2]);
+  });
+
+  it("appends the new layer when the one it replaces is not there", () => {
+    const next = replaceLayers({ layers: [base] }, { "m-ft2": { type: "image", source: "zarr3://x" } }, { "m-ft2": "m-ft1" });
+    expect(layersOf(next).map((l) => l.name)).toEqual(["m", "m-ft2"]);
+  });
+});
+
+describe("sourceUrls", () => {
+  it("lists every URL of a string, a {url} and a list of them", () => {
+    expect(sourceUrls("zarr://a")).toEqual(["zarr://a"]);
+    expect(sourceUrls({ url: "zarr://a", transform: {} })).toEqual(["zarr://a"]);
+    expect(sourceUrls([{ url: "zarr://a" }, "zarr://b"])).toEqual(["zarr://a", "zarr://b"]);
+    expect(sourceUrls(undefined)).toEqual([]);
   });
 });
 

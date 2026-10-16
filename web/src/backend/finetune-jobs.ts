@@ -422,8 +422,9 @@ export class FinetuneJobs {
   /** The run's result as a finetuned model: a catalog entry named after the
    * base (nextFinetunedName) with the result's bytes, recorded with where it
    * came from; then, with Auto-serve, served in the session beside its base
-   * (in place of this job's previous model, on a restart), and the job left
-   * WAITING_FOR_RESTART, its model ready; without, COMPLETED. */
+   * (in place of this job's previous model, on a restart, which is then
+   * removed from the catalog: a job keeps its latest model only), and the
+   * job left WAITING_FOR_RESTART, its model ready; without, COMPLETED. */
   private async keep(job: FinetuneJob, result: Finetuned): Promise<void> {
     const { ctx, entry, volume, autoServe } = job.args;
     const name = nextFinetunedName(entry, await ctx.catalog.finetuned());
@@ -464,11 +465,30 @@ export class FinetuneJobs {
       at = base === -1 ? models.length : base + 1;
     }
     models.splice(at, 0, fentry);
-    await serveModels(ctx, models, ctx.session.state.chain);
+    // The previous model's layer is handed to the new one, so what the user
+    // set on it (additive blending, say) stays on the layer they look at.
+    const previousName = previous === null ? undefined : current.find((m) => m.id === previous)?.name;
+    await serveModels(ctx, models, ctx.session.state.chain, previousName ? { replacing: { [name]: previousName } } : {});
     await ctx.session.update({ models });
     if (job.isFinal()) return;
     job.servedEntryId = fentry.id;
     job.inferenceServerReady = true;
+    // A restart's model is the job's model from now on: the iteration it
+    // replaces is forgotten, its record and bytes (3.9 to 43 MB), so the
+    // Models tab lists one model per job, the latest, as the server serves
+    // only a job's latest iteration (keeping the earlier ones' files on
+    // disk, the run's record). It went out of serving and out of the viewer
+    // above, its layer handed to this one. Only this job's own model is
+    // ever removed (servedEntryId is set nowhere else), never its base.
+    if (previous !== null && previous !== fentry.id) {
+      const was = previousName ?? previous;
+      try {
+        await ctx.catalog.removeFinetuned(previous);
+        job.log(`${name} replaces ${was}, which is removed from this browser.`);
+      } catch (error) {
+        job.log(`${was} could not be removed from this browser (${error instanceof Error ? error.message : String(error)}); it stays on the Models tab, beside ${name}.`);
+      }
+    }
     job.log(`Serving ${name} beside ${entry.name}. WAITING_FOR_RESTART: paint where it is still wrong and Restart to train again from this head.`);
     job.setStatus("WAITING_FOR_RESTART");
   }

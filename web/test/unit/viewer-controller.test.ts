@@ -481,6 +481,44 @@ describe("the reach into a live viewer for AI-assisted annotation", () => {
     expect(lines.some((l) => l.includes("could not take the re-read annotation_v layer") && l.includes("opening it again"))).toBe(true);
   });
 
+  it("marks the mouse off the viewer while a state goes in, so Neuroglancer's hover tracking skips the half-made layers", async () => {
+    const doc = liveDocument(live);
+    const viewer = createViewer({ session: fakeSession(), log: () => {} });
+    await viewer.openDataset("https://example.org/em.zarr", { type: "image", source: "zarr://https://example.org/em.zarr" });
+    doc.load();
+    // The pointer over a panel, as when a finetune's new model comes in while the user paints.
+    const mouse = doc.stub.viewer.mouseState as { active: boolean; setActive?(active: boolean): void };
+    mouse.active = true;
+    const told: boolean[] = [];
+    mouse.setActive = (active) => { told.push(active); mouse.active = active; };
+    let activeDuringRestore: boolean | null = null;
+    const restore = doc.stub.viewer.state.restoreState;
+    doc.stub.viewer.state.restoreState = (next: NgState) => { activeDuringRestore = mouse.active; restore(next); };
+    viewer.setLayers({ "mito-ft2": { type: "image", source: "zarr3://http://h/mito-ft2/" } });
+    expect(activeDuringRestore).toBe(false);
+    expect(told).toEqual([false]);
+    expect((doc.stub.viewer.state.toJSON().layers as { name: string }[]).map((l) => l.name)).toContain("mito-ft2");
+  });
+
+  it("opens the viewer again on the new layers when Neuroglancer throws taking them, instead of throwing to the caller", async () => {
+    const lines: string[] = [];
+    const doc = liveDocument(live);
+    const viewer = createViewer({ session: fakeSession(), log: (l) => lines.push(l) });
+    await viewer.openDataset("https://example.org/em.zarr", { type: "image", source: "zarr://https://example.org/em.zarr" });
+    doc.load();
+    doc.stub.viewer.state.restoreState = () => {
+      throw new TypeError("Cannot set properties of undefined (setting 'localPositionValid')");
+    };
+    expect(() => viewer.setLayers({ "mito-ft2": { type: "image", source: "zarr3://http://h/mito-ft2/" } })).not.toThrow();
+    const fresh = doc.frame.replacedBy as { src: string } | null;
+    expect(fresh).not.toBeNull();
+    const reopened = decodeState(fresh!.src.replace(/^[^#]*/, ""));
+    expect((reopened?.layers as { name: string }[]).map((l) => l.name)).toEqual(["data", "annotation_v", "mito-ft2"]);
+    expect(lines.some((l) => l.includes("could not take the layer mito-ft2") && l.includes("opening it again"))).toBe(true);
+    // Taking a layer out goes the same way.
+    expect(() => viewer.removeLayer("annotation_v")).not.toThrow();
+  });
+
   it("refreshLayer keeps a hidden paint layer hidden", async () => {
     const hidden: NgState = { ...live, layers: [{ name: "annotation_v", ...paint, visible: false }] };
     const { doc, viewer } = await mounted(hidden);

@@ -701,11 +701,33 @@ describe("cancel, stop early, restart", () => {
     const s = await status(h, job_id);
     expect(s).toMatchObject({ status: "WAITING_FOR_RESTART", current_epoch: 2, total_epochs: 2, loss_epoch: 2, finetuned_model_name: `${NAME_54}-ft2`, inference_server_ready: true });
     expect(s.params).toMatchObject({ model_name: NAME_54, num_epochs: 2, learning_rate: 0.001, output_type: "affinities" });
-    // ft2 took ft1's place beside the base; both are kept
+    // ft2 took ft1's place beside the base, which stays served
     expect(ctx.session.state.models.map((m) => m.name)).toEqual([NAME_54, `${NAME_54}-ft2`, NAME_56]);
     expect(ctx.infer.served().map((x) => x.entry.name).sort()).toEqual([NAME_54, `${NAME_54}-ft2`, NAME_56].sort());
-    expect(ctx.catalog.finetunedRecords.map((r) => r.name)).toEqual([`${NAME_54}-ft2`, `${NAME_54}-ft1`]);
+    // ft1 is forgotten, record and bytes: the job keeps its latest model only.
+    expect(ctx.catalog.finetunedRecords.map((r) => r.name)).toEqual([`${NAME_54}-ft2`]);
+    expect([...ctx.catalog.finetunedBytes.keys()].some((url) => url.includes(`${NAME_54}-ft1`))).toBe(false);
+    expect(job.lines.some((line) => line.includes(`${NAME_54}-ft2 replaces ${NAME_54}-ft1, which is removed from this browser.`))).toBe(true);
+    // ft1's layer was handed to ft2 (its place and the user's settings on
+    // it), not removed and a new one appended.
+    expect(ctx.viewer.replacings.at(-1)).toEqual({ [`${NAME_54}-ft2`]: `${NAME_54}-ft1` });
+    expect(ctx.viewer.removed).not.toContain(`${NAME_54}-ft1`);
+    expect(Object.keys(ctx.viewer.layers)).not.toContain(`${NAME_54}-ft1`);
     expect(results[1].weight).toEqual(results[0].weight.map((w) => w + 1));
+  });
+
+  it("keeps an earlier job's model when a new job is submitted: only a restart replaces its own job's model", async () => {
+    const baton = new Baton();
+    const { ctx, h } = await ready({ baton });
+    const first = body(await h.handle(request("POST", "/api/finetune/submit", submitBody()))).job_id;
+    await letRun(baton, h.jobs.get(first)!);
+    expect((await h.handle(request("POST", `/api/finetune/job/${first}/cancel`))).status).toBe(200);
+    const second = body(await h.handle(request("POST", "/api/finetune/submit", submitBody()))).job_id;
+    const job = h.jobs.get(second)!;
+    await letRun(baton, job);
+    expect(job.status).toBe("WAITING_FOR_RESTART");
+    expect(ctx.catalog.finetunedRecords.map((r) => r.name).sort()).toEqual([`${NAME_54}-ft1`, `${NAME_54}-ft2`]);
+    expect(job.lines.some((line) => line.includes("removed from this browser"))).toBe(false);
   });
 
   it("refuses a restart of a job not waiting for one, in the Python route's words, and a loss that needs a server", async () => {
