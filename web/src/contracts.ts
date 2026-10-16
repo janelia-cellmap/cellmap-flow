@@ -460,6 +460,12 @@ export interface Inference {
    * skipped. For Run on a region (src/run-region). The box must lie within
    * the level. */
   materialize(view: string, store: RegionStore, options: RegionWrite): Promise<RegionWritten>;
+  /** What materialize would hold over that box, before anything is
+   * computed (chunkmirage's Engine.materializePlan): the most bytes of the
+   * saved array's chunks held at once while they are stitched from the
+   * model's, and the axes the box's corner is off the model's chunk edges
+   * along (z 0, y 1, x 2), the ones putting it on an edge shrinks that. */
+  materializePlan?(view: string, box: { lo: number[]; hi: number[] }): Promise<RegionPlan>;
 }
 
 /** Where materialize writes a zarr's files, by their path within it
@@ -496,6 +502,12 @@ export interface RegionWrite {
   attributes?: Record<string, unknown>;
   signal?: AbortSignal;
   onProgress?: (progress: RegionProgress) => void;
+}
+
+/** What a materialize would hold (Inference.materializePlan). */
+export interface RegionPlan {
+  peakBytes: number;
+  split: number[];
 }
 
 /** What a materialize did: the box's chunks, those written and skipped

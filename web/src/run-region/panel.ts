@@ -36,7 +36,7 @@ import {
 } from "./output";
 import {
   describePlan, formatBytes, formatDuration, isPlan, largeRunWarning, latestBox, type ModelPlan, planModel, type RegionNm, regionError,
-  roundedOut, RUN_REGION_LAYER, runRegionLayer, sameRegion, wholeVolumeNm, withBox,
+  roundedOut, RUN_REGION_LAYER, runRegionLayer, sameRegion, snappedRegion, wholeVolumeNm, withBox,
 } from "./region";
 import { describeProgress, provenance, type RunOutcome, type RunProgress, runRegion, type RunTarget } from "./run";
 
@@ -58,6 +58,7 @@ export const IDS = {
   sizeX: "runSizeX",
   summary: "runRegionSummary",
   warning: "runRegionWarning",
+  peakWarning: "runPeakWarning",
   chooseFolder: "runChooseFolderBtn",
   folderDrop: "runFolderDrop",
   folderName: "runFolderName",
@@ -89,6 +90,11 @@ export const NO_FOLDER_NOTE = `Saving to a folder needs Chrome or Edge (the File
  * state, which is not worth doing at every key. */
 export const TYPED_BOX_DELAY_MS = 400;
 
+/** Above this, the Run tab says how much of a model's stitched chunks a
+ * run holds at once, and offers to snap the box onto a chunk edge: a tab
+ * has a few GB at most. */
+export const PEAK_WARN_BYTES = 512e6;
+
 /** The picker as Chromium has it (not in lib.dom, so `window` is read as this). */
 interface PickerWindow {
   showDirectoryPicker?(options?: { id?: string; mode?: "read" | "readwrite"; startIn?: "desktop" | "documents" | "downloads" }): Promise<OutputFolder>;
@@ -118,7 +124,7 @@ export function installRunRegionUi(ctx: AppContext, opts: { folders?: FolderStor
     drawBox: byId<HTMLButtonElement>(IDS.drawBox)!,
     offset: [IDS.offsetZ, IDS.offsetY, IDS.offsetX].map((id) => byId<HTMLInputElement>(id)!),
     size: [IDS.sizeZ, IDS.sizeY, IDS.sizeX].map((id) => byId<HTMLInputElement>(id)!),
-    summary: byId(IDS.summary)!, warning: byId(IDS.warning)!,
+    summary: byId(IDS.summary)!, warning: byId(IDS.warning)!, peakWarning: byId(IDS.peakWarning)!,
     chooseFolder: byId<HTMLButtonElement>(IDS.chooseFolder)!, folderDrop: byId(IDS.folderDrop)!, folderName: byId(IDS.folderName)!,
     folderNote: byId(IDS.folderNote)!,
     start: byId<HTMLButtonElement>(IDS.start)!, cancel: byId<HTMLButtonElement>(IDS.cancel)!, status: byId(IDS.status)!,
@@ -244,6 +250,62 @@ export function installRunRegionUi(ctx: AppContext, opts: { folders?: FolderStor
     const text = warnings.filter((w): w is string => w !== null).join(" ");
     el.warning.textContent = text;
     el.warning.hidden = !text;
+    void checkPeak(planned.plans);
+  }
+
+  /** The latest checkPeak, so an answer for fields since changed is dropped. */
+  let peakAsked = 0;
+
+  /** Say so when saving a model's box would hold more than PEAK_WARN_BYTES
+   * of its stitched chunks at once (a box whose corner is off the model's
+   * chunk edges along several axes), with a button that moves the corner
+   * onto the chunk edge along the axis that shrinks it most. Asked of the
+   * engine (Inference.materializePlan), which computes nothing for it. */
+  async function checkPeak(plans: ModelPlan[]): Promise<void> {
+    const ask = ++peakAsked;
+    el.peakWarning.hidden = true;
+    const planOf = ctx.infer.materializePlan?.bind(ctx.infer);
+    if (!planOf || !el.modeBox.checked) return;
+    try {
+      for (const p of plans) {
+        const peak = await planOf(p.served.view, { lo: p.lo, hi: p.hi });
+        if (ask !== peakAsked) return;
+        if (peak.peakBytes <= PEAK_WARN_BYTES) continue;
+        let best: { axis: number; bytes: number } | null = null;
+        for (const axis of peak.split) {
+          const lo = [...p.lo];
+          lo[axis] = Math.floor(lo[axis] / p.chunk[axis]) * p.chunk[axis];
+          const snapped = await planOf(p.served.view, { lo, hi: p.hi });
+          if (!best || snapped.peakBytes < best.bytes) best = { axis, bytes: snapped.peakBytes };
+        }
+        if (ask !== peakAsked) return;
+        const line = Object.assign(document.createElement("span"), {
+          textContent: `Saving ${p.name} holds up to ${formatBytes(peak.peakBytes)} of its chunks in this browser at once, as the box's corner is inside the model's chunks.`
+            + (best ? ` Starting the box on a chunk edge along ${"zyx"[best.axis]} holds ${formatBytes(best.bytes)}. ` : " "),
+        });
+        el.peakWarning.replaceChildren(line);
+        if (best) {
+          const axis = best.axis;
+          const snap = Object.assign(document.createElement("button"), {
+            type: "button", className: "btn btn-sm btn-outline-warning py-0", textContent: `Snap ${"zyx"[axis]}`,
+            title: "Moves the box's corner back to the start of the model chunk it is in along this axis; its far side stays.",
+          });
+          snap.addEventListener("click", () => {
+            const region = readRegion();
+            if (!region) return;
+            fillRegion(snappedRegion(region, p, axis));
+            summarize();
+            showTypedBox();
+          });
+          el.peakWarning.append(snap);
+        }
+        el.peakWarning.hidden = false;
+        return;
+      }
+    } catch (e) {
+      // Only a hint: a plan that cannot be made says nothing, and Run says why.
+      log(`the memory check could not be made: ${message(e)}`);
+    }
   }
 
   function zipTooLarge(bytes: number): string {

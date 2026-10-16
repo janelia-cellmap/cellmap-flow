@@ -30,7 +30,7 @@ import { Engine } from "../../chunkmirage/web/src/engine";
 import { Onnx, type OnnxModel } from "../../chunkmirage/web/src/onnx";
 import type { Stage } from "../../chunkmirage/web/src/stages";
 import type { ViewInfo } from "../../chunkmirage/web/src/types";
-import type { Chain, DatasetInfo, GpuLimits, Inference, InferenceStats, ModelEntry, RegionStore, RegionWrite, RegionWritten, ServedModel, SessionStore } from "../contracts";
+import type { Chain, DatasetInfo, GpuLimits, Inference, InferenceStats, ModelEntry, RegionPlan, RegionStore, RegionWrite, RegionWritten, ServedModel, SessionStore } from "../contracts";
 import { viewName } from "../shared/args";
 import { modelInfo } from "../shared/model-info";
 import { chooseRawLevel, datasetInfoFrom, effectiveOutputVoxelSize, geometryOf, outputLevel, outputShape } from "./geometry";
@@ -269,6 +269,16 @@ export class InferenceEngine implements Inference {
       level: 0, lo, hi, extent: "box", format: "zarr2", compression: options.compression === undefined ? "gzip" : options.compression, skipEmpty: true,
       attributes: options.attributes, signal: options.signal, onProgress: options.onProgress,
     });
+  }
+
+  /** What materialize would hold over the same box (contracts.ts): the
+   * engine's materializePlan, asked as materialize asks, so its peak is the
+   * run's. Nothing is computed. */
+  async materializePlan(view: string, box: { lo: number[]; hi: number[] }): Promise<RegionPlan> {
+    const engine = this.engine;
+    if (!engine || !this.outputs.get(view)) throw new Error(`${view.split("__CFLOW_ARGS__")[0]} is not served`);
+    const p = await engine.materializePlan(view, { level: 0, lo: box.lo, hi: box.hi, extent: "box", format: "zarr2" });
+    return { peakBytes: p.peakBytes, split: p.split };
   }
 
   /** The served model `view`'s own output over voxels [lo, hi) of its level
