@@ -67,6 +67,15 @@ AI_ANNOTATE_BROWSER_ONLY = [
     "aiAnnotateModelName",
 ]
 KEPT += AI_ANNOTATE_BROWSER_ONLY
+# The Run tab (_run_tab.html, included by _dashboard.html in browser mode
+# only): the served models run over a region and saved to a folder on this
+# machine. web/src/run-region/panel.ts finds its elements by the ids in its
+# IDS table, which test_the_run_tab_has_every_element_its_script_looks_up
+# reads; these are the main ones. On the browser page, never on the Flask
+# page.
+RUN_TAB = ["run-tab", "run", "runModels", "runRegionBox", "runRegionWhole", "runDrawBoxBtn", "runChooseFolderBtn", "runStartBtn", "runCancelBtn", "runLog"]
+KEPT += RUN_TAB
+RUN_PANEL_TS = Path(__file__).resolve().parents[2] / "web" / "src" / "run-region" / "panel.ts"
 
 
 @pytest.fixture(scope="module")
@@ -242,6 +251,21 @@ def test_the_browser_page_labels_the_patch_from_the_models_it_serves(page):
     assert "whichever has a server running" not in page
 
 
+def test_the_run_tab_has_every_element_its_script_looks_up(page):
+    """The Run tab's script is TypeScript (web/src/run-region/panel.ts), not
+    a dashboard module, so tests/utils/test_dashboard_tab_scripts.py does not
+    see it: its IDS table must name elements of the browser page, each one
+    once, or a button does nothing. The tab opens on a box drawn in the
+    viewer, its Cancel and progress waiting for a run."""
+    ids = re.findall(r'^\s+\w+: "([\w-]+)",$', re.search(r"export const IDS = \{(.*?)\} as const;", RUN_PANEL_TS.read_text(), re.S).group(1), re.M)
+    assert set(RUN_TAB) <= set(ids)
+    counts = {i: len(re.findall(rf'\bid="{re.escape(i)}"', page)) for i in ids}
+    assert {i: n for i, n in counts.items() if n != 1} == {}
+    assert re.search(r'<input type="radio"[^>]*id="runRegionBox"[^>]*\bchecked\b', page)
+    assert re.search(r'<button[^>]*id="runCancelBtn"[^>]*\bdisabled\b', page)
+    assert re.search(r'<div class="progress[^"]*" id="runProgress"[^>]*\bhidden\b', page)
+
+
 def test_the_browser_page_renders_an_empty_catalog(page):
     assert 'id="cellpose-data">{"models": [], "running": []}</script>' in page
     assert "chk_" not in page, "no Local Catalog rows"
@@ -290,6 +314,9 @@ def test_the_flask_dashboard_is_unchanged_by_the_markers(dashboard):
     assert _select_options(html, "lossType") == [("margin", True), ("mse", False), ("bce", False), ("dice", False), ("combined", False)]
     for browser_only in ("downloadVolumeBtn", "deleteVolumeBtn", "downloadFinetunedBtn", "existingVolumesNote", "batchPixels", *AI_ANNOTATE_BROWSER_ONLY):
         assert browser_only not in html, browser_only
+    # Nor the Run tab: no button for it, no pane.
+    assert [i for i in RUN_TAB if f'id="{i}"' in html] == []
+    assert "Run on a region" not in html
     # The AI panel and its review are on the Flask page as before, with the
     # server's words on the pickers and without the browser's additions.
     assert "aiAnnotatePanel" in classes and "aiAnnotateReviewModal" in classes

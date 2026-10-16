@@ -135,3 +135,26 @@
 .link-notice-close:hover {
   color: var(--text-primary);
 }
+
+/* Run on a region (the browser-only Run tab, templates/_run_tab.html, driven
+   by src/run-region/panel.ts): the region's offset and size in nm as a grid,
+   a row each, a column per axis (z, y, x) under a header row, narrow enough
+   for the dashboard's column on a phone; and the models' checkboxes, one a
+   line. */
+.run-region-fields {
+  display: grid;
+  grid-template-columns: max-content repeat(3, minmax(0, 1fr));
+  align-items: center;
+  gap: 4px 8px;
+  max-width: 440px;
+  font-size: 0.85rem;
+}
+
+.run-region-axis {
+  text-align: center;
+  color: var(--text-muted);
+}
+
+#runModels .form-check {
+  margin-bottom: 2px;
+}

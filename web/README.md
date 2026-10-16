@@ -24,7 +24,9 @@ routes, with the same request and response JSON. The controls only a server
 can serve (LSF settings, Job Logs, the Local Catalog of cluster paths, the
 Review tab, and the Finetune tab's crops import) are hidden;
 everything else is the dashboard you know, finetuning, the patch tools and
-AI-assisted annotation included ([below](#finetuning-in-the-browser)).
+AI-assisted annotation included ([below](#finetuning-in-the-browser)), with
+one tab of the browser's own, *Run*, which saves the models' predictions over
+a region to a folder ([below](#running-the-models-over-a-region)).
 `ARCHITECTURE.md` describes how the parts fit together.
 
 ## Running it locally
@@ -138,6 +140,49 @@ comes back. Choosing "Allow on every visit" in Chrome's prompt skips this.
 Firefox and Safari have no directory picker, so the button is not shown
 there, and a link to the page with a local folder open works only in the
 browser that picked the folder.
+
+## Running the models over a region
+
+The viewer computes only the chunks it shows, and keeps none of them. The
+**Run** tab (browser mode only, `src/run-region/`) computes the served models
+over a region and saves the predictions in a folder on your machine:
+
+1. Tick the models (all, by default); each is written through the Input and
+   Postprocess steps it is served with.
+2. *Draw a box* adds a `run_region` annotation layer to the viewer, its
+   bounding-box tool as its tool: hold Ctrl and click two
+   opposite corners (scroll between the clicks to give the box depth; a flat
+   box is one chunk deep). The latest box drawn fills the offset and size
+   fields (nm, z y x), which can be edited. Or *Whole volume*. The tab says
+   each model's box in voxels and chunks of the level it is served at (a
+   chunk is one model output block), and warns past 2,000 chunks.
+3. *Choose folder…* picks the folder, with write access; it is remembered
+   (IndexedDB), and after a reload the browser asks again when you click
+   *Run*.
+4. *Run* writes each model to `<folder>/<model>.zarr`, one model after the
+   other, with progress (chunks, megabytes, time left) and *Cancel*; it goes
+   on while you browse, and a reload asks first. A `<model>.zarr` already in
+   the folder is replaced only once you confirm, and deleted first: empty
+   chunks are not written, so old ones would stay and mix with the new.
+5. *Show the saved predictions in the viewer* adds each zarr as a
+   `<model> (saved)` layer, read back from the folder through the service
+   worker's `local/` route, over the model's live layer.
+
+What is written is the model's own view as the viewer shows it, its
+postprocessing applied: chunkmirage's `Engine.materialize` walks the box's
+chunks through the same stages, caches and demand queue (behind every chunk
+the viewer waits for, so browsing stays quick, and nothing the viewer has
+computed is computed again) and writes zarr v2 with OME-Zarr 0.4 metadata,
+gzip-compressed (or not: the tab's *Compression*, *None* for Fiji, which
+reads no gzip), empty chunks left out: the served level's scale and
+translation and its whole shape, only the box's chunks, so the zarr opens in
+place in Neuroglancer, zarr-python or the server mode. The group's
+attributes hold `cellmap_flow`: the model (name, id, repository, folder,
+variant, file), its normalizers and postprocessors, the dataset, the region
+in nm and the box in voxels, the voxel size, the time and the page's
+address. Firefox and Safari have no folder access, so there a run of up to
+256 MB of predictions (before compression) is kept in memory and offered as
+a zip of the `.zarr` folders.
 
 ## Finetuning in the browser
 

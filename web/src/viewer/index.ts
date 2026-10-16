@@ -566,6 +566,15 @@ export function createViewer(opts: { session: SessionStore; log: (line: string) 
       return viewDepthAxisOf(currentState());
     },
 
+    layer(name) {
+      // From the live viewer's state when it is up, which holds what the
+      // user did since the page last set a state (a box drawn); else from
+      // the state last given to the iframe, or the layers queued for it.
+      const found = layersOf(currentState()).find((candidate) => candidate.name === name);
+      if (found) return { ...found };
+      return queued[name] ? { ...queued[name], name } : null;
+    },
+
     bindKey(key, action, handler) {
       const binding: KeyBinding = { key, action, handler, active: true, appliedTo: new WeakSet() };
       bindings.push(binding);

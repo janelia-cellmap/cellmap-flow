@@ -15,7 +15,7 @@ import type { SessionState, SessionStore } from "../../src/contracts";
 import type { DatasetInfo } from "../../src/contracts";
 import { createViewer, EXAMPLE_DATASET_URL, liveEquivalences, NG_PAGE, withSelectedLayer } from "../../src/viewer/index";
 import { decodeState, TAB_STATE_KEY } from "../../src/viewer/share";
-import type { NgState } from "../../src/viewer/state";
+import type { NgLayer, NgState } from "../../src/viewer/state";
 
 function fakeSession(state: Partial<SessionState> = {}): SessionStore {
   const current: SessionState = {
@@ -543,5 +543,33 @@ describe("the reach into a live viewer for AI-assisted annotation", () => {
     expect(viewer.refreshLayer("annotation_v")).toBe(true);
     const layer = (shown().layers as Record<string, unknown>[]).find((l) => l.name === "annotation_v")!;
     expect((layer.source as { url: string }).url).toBe("s3+http://localhost/paint/v~1/annotation");
+  });
+});
+
+describe("layer: a layer as the viewer has it, for Run on a region's box", () => {
+  afterEach(() => vi.unstubAllGlobals());
+  const box = { type: "axis_aligned_bounding_box", id: "1", pointA: [0, 0, 0], pointB: [80, 160, 240] };
+  const region = { type: "annotation", source: [{ url: "local://annotations" }], annotations: [] as unknown[] };
+
+  it("is the layer in the live viewer's state, with what the user drew in it since the page set it", async () => {
+    const doc = liveDocument(live);
+    const viewer = createViewer({ session: fakeSession(), log: () => {} });
+    await viewer.openDataset("https://example.org/em.zarr", { type: "image", source: "zarr://https://example.org/em.zarr" });
+    // Drawn in Neuroglancer: its own state has the box, no state the page set does.
+    doc.stub.viewer.state.restoreState({ ...live, layers: [...(live.layers as NgLayer[]), { name: "run_region", ...region, annotations: [box] }] });
+    expect(viewer.layer("run_region")).toEqual({ name: "run_region", ...region, annotations: [box] });
+    expect(viewer.layer("gone")).toBeNull();
+  });
+
+  it("is the layer queued before there is an iframe, and the one in the iframe's hash while Neuroglancer loads", async () => {
+    const early = createViewer({ session: fakeSession(), log: () => {} });
+    early.setLayers({ run_region: region });
+    expect(early.layer("run_region")).toEqual({ ...region, name: "run_region" });
+    expect(early.layer("data")).toBeNull();
+    stubDocument();
+    const loading = createViewer({ session: fakeSession(), log: () => {} });
+    loading.setLayers({ run_region: { ...region, annotations: [box] } });
+    await loading.openDataset("https://example.org/em.zarr", { type: "image", source: "zarr://https://example.org/em.zarr" });
+    expect(loading.layer("run_region")).toEqual({ name: "run_region", ...region, annotations: [box] });
   });
 });
