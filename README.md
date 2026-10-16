@@ -73,7 +73,11 @@ starts fresh.
   hover and press Shift+G, and the plane on screen goes to a Gemini image
   model asked to paint the structure, for review before it is written; the
   page calls Google with a key or token you paste, kept in the page's memory
-  only, so a reload asks for it again.
+  only, so a reload asks for it again. The patch tools beside it work as on the
+  server: *Seed from Prediction* fills the patch on screen from a model's
+  prediction for you to correct, with *All Background*, *Split Objects* and
+  one *Undo*, and *Mark as Good* keeps the model's output where it is already
+  right; the head trains with the server's losses and distillation.
 
 What the server mode below adds is what a browser cannot do: models that are
 not ONNX exports (PyTorch, TensorFlow, DaCapo, BioImage.io, Cellpose), a

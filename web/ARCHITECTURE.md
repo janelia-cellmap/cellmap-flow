@@ -231,7 +231,12 @@ port) so Neuroglancer makes a new source and re-reads it; here the paint
 route's volume segment takes an optional `~<n>` suffix
 (`paint/<volume>~1/annotation/...`), which `state/paint-route.ts` strips
 before the store, and `refreshLayer` toggles it on the layer's source URL
-through the viewer state, keeping the layer's tool, brush and paint value.
+through the viewer state, keeping the layer's tool, brush and paint value. A
+state Neuroglancer throws on part way through taking it (seen restoring the
+layout after a seed) opens the viewer again on that state, in a new iframe in
+the old one's place, so the labels written are shown and the write is not
+reported failed; an iframe reload would have gone back to the state the viewer
+was first given, without the layers added since.
 
 ## Label it (src/label-it/)
 
