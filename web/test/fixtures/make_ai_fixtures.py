@@ -31,7 +31,8 @@ flat in C order (``make_fixtures.array_record``). The sections of
 ``ai_annotate.json``:
 
 ``screen``
-    ``to_screen``/``from_screen``/``screen_shape`` of a small plane per depth axis.
+    ``to_screen``/``from_screen``/``screen_shape`` of a small plane per depth axis,
+    for a viewer that sets no display dimensions and for cellmap-flow's x, y, z.
 ``plan_plane``
     ``plan_plane`` cases (volumes, shapes, points, depth axes, crop sizes,
     data boxes): the plan ``to_dict`` wrote with its ``click_px``,
@@ -106,20 +107,25 @@ CENTRE = (50 * 8 + 1, 100 * 8 + 3, 150 * 8 + 6)  # in voxel (50, 100, 150), off 
 
 # --- screen layout --------------------------------------------------------------
 
+# A viewer that sets no display dimensions (z, y, x) and cellmap-flow's own.
+DISPLAYS = (None, ("x", "y", "z"))
+
 
 def make_screen() -> list:
     plane = np.arange(6, dtype=np.int32).reshape(2, 3)  # rows 2, cols 3, in z, y, x order
     image = np.arange(12, dtype=np.int32).reshape(3, 4)  # as a panel would draw it
     cases = []
-    for depth_axis in (0, 1, 2):
-        cases.append({
-            "depth_axis": depth_axis,
-            "plane": array_record(plane),
-            "to_screen": array_record(geometry.to_screen(plane, depth_axis)),
-            "screen_shape": list(geometry.screen_shape(plane.shape, depth_axis)),
-            "image": array_record(image),
-            "from_screen": array_record(geometry.from_screen(image, depth_axis)),
-        })
+    for display in DISPLAYS:
+        for depth_axis in (0, 1, 2):
+            cases.append({
+                "depth_axis": depth_axis,
+                "display_dimensions": list(display) if display else None,
+                "plane": array_record(plane),
+                "to_screen": array_record(geometry.to_screen(plane, depth_axis, display)),
+                "screen_shape": list(geometry.screen_shape(plane.shape, depth_axis, display)),
+                "image": array_record(image),
+                "from_screen": array_record(geometry.from_screen(image, depth_axis, display)),
+            })
     return cases
 
 
@@ -184,16 +190,25 @@ RAW_BOX_CASES = [
 ]
 
 
+# The cases planned again for a viewer showing x, y, z, as cellmap-flow's do:
+# the same boxes, the image laid out as that viewer's panels draw it.
+SHOWN_XYZ = ("centred_z", "centred_y", "centred_x", "aniso_xz")
+
+
 def make_plans() -> tuple[list, dict]:
     cases, plans = [], {}
-    for case_id, volume, shape, point, depth_axis, crop, data_box in PLAN_CASES:
+    shown = [(f"{c[0]}_shown_xyz", *c[1:], ("x", "y", "z")) for c in PLAN_CASES if c[0] in SHOWN_XYZ]
+    for case_id, volume, shape, point, depth_axis, crop, data_box, *display in [*PLAN_CASES, *shown]:
+        display = display[0] if display else None
         case = {
             "id": case_id, "volume": volume, "volume_shape": list(shape), "point_nm": [float(p) for p in point],
             "depth_axis": depth_axis, "crop_size_px": crop,
             "data_box_nm": [[float(v) for v in side] for side in data_box] if data_box else None,
+            "display_dimensions": list(display) if display else None,
         }
         try:
-            plan = geometry.plan_plane(volume, shape, point, depth_axis, crop, data_box_nm=data_box)
+            plan = geometry.plan_plane(volume, shape, point, depth_axis, crop, data_box_nm=data_box,
+                                       display_dimensions=display)
         except AIAnnotateError as e:
             case["error"] = _error(e)
         else:

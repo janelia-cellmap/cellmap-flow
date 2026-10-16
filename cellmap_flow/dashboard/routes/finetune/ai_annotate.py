@@ -280,7 +280,8 @@ def _start_from_key(coordinates, viewer_state):
         if coordinates is None:
             raise _Refused("Hover the mouse over the data, then press Shift+G.", 400)
         point_nm = _zyx_nm(coordinates, viewer_state.dimensions)
-        _begin_run(point_nm, geometry.depth_axis_for_view(viewer_state))
+        _begin_run(point_nm, geometry.depth_axis_for_view(viewer_state),
+                   geometry.display_dimensions_for_view(viewer_state))
     except Exception as e:
         needs_volume = False
         if isinstance(e, _Refused):
@@ -335,8 +336,11 @@ def _check_limit(config):
         )
 
 
-def _begin_run(point_nm, depth_axis):
+def _begin_run(point_nm, depth_axis, display_dimensions=None):
     """Check everything a run needs, then start its job; returns its annotate_id.
+
+    ``display_dimensions`` are the viewer's (``geometry.display_dimensions_for_view``):
+    the image is laid out as its panel draws the plane.
 
     The checks, in order: the feature is on, the session has settings, there
     is an annotation volume, the model is allowed, the provider's
@@ -379,6 +383,7 @@ def _begin_run(point_nm, depth_axis):
             "model": settings["model"], "label_name": label_name, "depth_axis": depth_axis,
             "point_nm": point_nm,
             # What the worker and the decisions need, not answered.
+            "display_dimensions": geometry.display_names(display_dimensions),
             "volume_id": volume_id, "corrections_dir": volume["corrections_dir"], "dataset": dataset,
             "profile": profile, "override": override, "plan": None, "request": None,
         }
@@ -413,7 +418,8 @@ def _run_job(ai, job, config, volume):
         _stage(ai, job, viewer, "fetching_crop")
         shape = zarr.open_array(f"{volume['zarr_path']}/annotation/s0", mode="r").shape
         plan = geometry.plan_plane(volume, shape, job["point_nm"], job["depth_axis"], config.crop_size_px,
-                                   data_box_nm=pipeline.raw_extent_nm(volume))
+                                   data_box_nm=pipeline.raw_extent_nm(volume),
+                                   display_dimensions=job["display_dimensions"])
         _set(ai, job, plan=plan, write_box={"lo": [int(v) for v in plan.write_lo],
                                             "hi": [int(v) for v in plan.write_hi]})
         plane = pipeline.read_plane(volume, plan)
@@ -610,8 +616,11 @@ def ai_annotate_run():
         return refused
     try:
         point_nm, depth_axis = body.point_nm, body.depth_axis
+        viewer = get_session().viewer
+        # The image is laid out as the viewer's panel draws the plane, so its
+        # display dimensions are wanted even when both are given.
+        display = geometry.display_dimensions_for_view(viewer.state) if viewer is not None else None
         if point_nm is None or depth_axis is None:
-            viewer = get_session().viewer
             if viewer is None:
                 raise _Refused("Open a dataset in the viewer first.", 400)
             state = viewer.state
@@ -622,7 +631,7 @@ def ai_annotate_run():
                 if position is None:
                     raise _Refused("The viewer has no position.", 400)
                 point_nm = _zyx_nm(position, state.dimensions)
-        annotate_id = _begin_run(point_nm, depth_axis)
+        annotate_id = _begin_run(point_nm, depth_axis, display)
         return jsonify({"success": True, "annotate_id": annotate_id, "status": "running"})
     except Exception as e:
         return _answer_error(e)

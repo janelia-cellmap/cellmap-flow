@@ -27,6 +27,17 @@ def test_a_viewer_takes_its_dimensions_from_the_finest_raw_level(monkeypatch, om
     assert viewer.state.dimensions.to_json() == {axis: [8e-9, "m"] for axis in "zyx"}
 
 
+def test_a_viewer_shows_x_y_z_so_its_main_panel_is_the_xy_plane(monkeypatch, raw_zarr):
+    # Its dimensions stay z, y, x; neuroglancer's "xy" panel shows the first
+    # two display dimensions, which would be z across and y down.
+    monkeypatch.setattr(neuroglancer, "Viewer", ViewerBase)
+    viewer = bootstrap.new_viewer(raw_zarr(np.zeros((16, 16, 16), np.uint8)))
+    assert list(viewer.state.dimensions.names) == ["z", "y", "x"]
+    assert list(viewer.state.display_dimensions) == ["x", "y", "z"]
+    # Without all three of x, y and z, neuroglancer's default.
+    assert bootstrap.display_dimensions(["c^", "y", "x"]) is None
+
+
 def test_an_unreadable_dataset_leaves_the_viewers_dimensions_to_neuroglancer(tmp_path):
     assert bootstrap.raw_dimensions(str(tmp_path / "missing.zarr")) is None
 

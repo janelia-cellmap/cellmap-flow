@@ -31,7 +31,10 @@ export const PLANE_NAMES: readonly ["XY", "XZ", "YZ"] = ["XY", "XZ", "YZ"];
  * `raw_shape_nm` are the world box the raw is read over; `image_shape` the
  * (rows, cols) of the image sent, laid out as on screen; `resolution_nm` its
  * pixel size (square pixels); `write_lo`/`write_hi` the annotation voxels
- * written, [lo, hi), one voxel thick along `depth_axis`. */
+ * written, [lo, hi), one voxel thick along `depth_axis`;
+ * `display_dimensions` the viewer's, which say how its panel draws the
+ * plane (geometry.ts screenAxes), absent (z, y, x) in a plan saved before
+ * plans kept them. */
 export interface PlanePlan {
   depth_axis: DepthAxis;
   point_nm: number[];
@@ -42,6 +45,7 @@ export interface PlanePlan {
   write_lo: number[];
   write_hi: number[];
   resolution_nm: number;
+  display_dimensions?: string[];
 }
 
 /** The longest side of an image sent to a model (geometry.py MAX_IMAGE_SIDE):
