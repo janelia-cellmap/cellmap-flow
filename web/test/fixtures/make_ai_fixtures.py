@@ -74,7 +74,7 @@ import zarr
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
-from make_fixtures import ROOT, array_record, differences  # noqa: E402  (puts the worktree's package first on sys.path)
+from make_fixtures import ROOT, array_record, differences, fixture_text  # noqa: E402  (puts the worktree's package first on sys.path)
 
 from cellmap_flow.ai_annotate import geometry, mask_extraction, organelles, pipeline, prompts  # noqa: E402
 from cellmap_flow.ai_annotate.errors import AIAnnotateError  # noqa: E402
@@ -618,7 +618,7 @@ MAKERS = {"ai_annotate.json": make_ai_annotate}
 def write_fixtures(out_dir: Path) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
     for name, make in MAKERS.items():
-        text = json.dumps(make(), indent=2, ensure_ascii=False) + "\n"
+        text = fixture_text(make())
         (out_dir / name).write_text(text, encoding="utf-8")
         size = len(text.encode("utf-8"))
         assert size < 600_000, f"{name} is {size} bytes; keep fixtures small enough to commit"

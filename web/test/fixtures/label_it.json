@@ -328,11 +328,7 @@
       "block": "aff_unit",
       "output_class": "unit",
       "channels": [0, 1, 2],
-      "offsets": [
-        [1, 0, 0],
-        [0, 1, 0],
-        [0, 0, 1]
-      ],
+      "offsets": [[1, 0, 0], [0, 1, 0], [0, 0, 1]],
       "threshold": 0.5,
       "min_size": 0,
       "connectivity": 1,
@@ -350,11 +346,7 @@
       "block": "aff_unit",
       "output_class": "unit",
       "channels": [0, 1, 2],
-      "offsets": [
-        [1, 0, 0],
-        [0, 1, 0],
-        [0, 0, 1]
-      ],
+      "offsets": [[1, 0, 0], [0, 1, 0], [0, 0, 1]],
       "threshold": 0.3,
       "min_size": 0,
       "connectivity": 1,
@@ -372,11 +364,7 @@
       "block": "aff_unit",
       "output_class": "unit",
       "channels": [0, 1, 2],
-      "offsets": [
-        [1, 0, 0],
-        [0, 1, 0],
-        [0, 0, 1]
-      ],
+      "offsets": [[1, 0, 0], [0, 1, 0], [0, 0, 1]],
       "threshold": 0.7,
       "min_size": 4,
       "connectivity": 1,
@@ -394,11 +382,7 @@
       "block": "aff_unit",
       "output_class": null,
       "channels": [0, 1, 2],
-      "offsets": [
-        [1, 0, 0],
-        [0, 1, 0],
-        [0, 0, 1]
-      ],
+      "offsets": [[1, 0, 0], [0, 1, 0], [0, 0, 1]],
       "threshold": 0.5,
       "min_size": 3,
       "connectivity": 1,
@@ -416,11 +400,7 @@
       "block": "aff_small",
       "output_class": "unbounded",
       "channels": [0, 1, 2],
-      "offsets": [
-        [1, 0, 0],
-        [0, 1, 0],
-        [0, 0, 1]
-      ],
+      "offsets": [[1, 0, 0], [0, 1, 0], [0, 0, 1]],
       "threshold": 0.5,
       "min_size": 0,
       "connectivity": 1,
@@ -438,11 +418,7 @@
       "block": "aff_small",
       "output_class": null,
       "channels": [0, 1, 2],
-      "offsets": [
-        [1, 0, 0],
-        [0, 1, 0],
-        [0, 0, 1]
-      ],
+      "offsets": [[1, 0, 0], [0, 1, 0], [0, 0, 1]],
       "threshold": 0.4,
       "min_size": 2,
       "connectivity": 1,
@@ -728,14 +704,8 @@
       },
       "restore": {
         "stroke": [
-          [
-            [3, 3, 2],
-            1
-          ],
-          [
-            [3, 3, 6],
-            7
-          ]
+          [[3, 3, 2], 1],
+          [[3, 3, 6], 7]
         ],
         "restored": 71,
         "final": {
@@ -811,10 +781,7 @@
       },
       "restore": {
         "stroke": [
-          [
-            [4, 2, 2],
-            3
-          ]
+          [[4, 2, 2], 3]
         ],
         "restored": 71,
         "final": {
@@ -863,10 +830,7 @@
       },
       "restore": {
         "stroke": [
-          [
-            [2, 2, 5],
-            1
-          ]
+          [[2, 2, 5], 1]
         ],
         "restored": 71,
         "final": {
