@@ -9,7 +9,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   base64ToBytes, bytesToBase64, createGeminiProvider, endpoint, type FetchLike, GEMINI_API_BASE, GEMINI_DESTINATION, type GeminiType,
-  MAX_ATTEMPTS, MISSING_KEY_MESSAGE, MISSING_VERTEX_MESSAGE, plain, RETRY_WAITS_MS, VERTEX_BASE, VERTEX_DESTINATION,
+  looksLikeAccessToken, MAX_ATTEMPTS, MISSING_KEY_MESSAGE, MISSING_VERTEX_MESSAGE, plain, RETRY_WAITS_MS, TOKEN_AS_KEY_MESSAGE, VERTEX_BASE, VERTEX_DESTINATION,
 } from "../../src/ai-annotate/gemini";
 import { jsCodec, PNG_SIGNATURE } from "../../src/ai-annotate/images";
 import { createProviders, DEFAULT_PROVIDER } from "../../src/ai-annotate/providers";
@@ -359,10 +359,31 @@ describe("retries", () => {
   });
 });
 
+describe("an access token pasted as the Gemini API key", () => {
+  it("is refused before any call, saying it belongs to the vertex provider, when segmenting and when listing", async () => {
+    const fake = new FakeFetch([]);
+    const p = provider("gemini_api", fake);
+    for (const call of [() => p.segment(request(), "m", { api_key: ` ${TOKEN} ` }), () => p.listModels!({ api_key: TOKEN })]) {
+      const error = await failure(call());
+      expect([error.category, error.httpStatus, error.userMessage]).toEqual(["config", 400, TOKEN_AS_KEY_MESSAGE]);
+      expectNoSecrets(error);
+    }
+    expect(fake.calls).toHaveLength(0);
+    expect(looksLikeAccessToken("ya29.a0Ae")).toBe(true);
+    expect(looksLikeAccessToken(KEY)).toBe(false);
+  });
+});
+
 describe("failures that are not retried", () => {
   const cases: [string, GeminiType, () => Promise<Response>, string, number, string | RegExp][] = [
     ["400", "gemini_api", async () => apiError(400, "INVALID_ARGUMENT"), "bad_response", 502, "The Gemini API rejected the request (HTTP 400)."],
-    ["400 API_KEY_INVALID", "gemini_api", async () => apiError(400, "INVALID_ARGUMENT", ["API_KEY_INVALID"]), "auth", 502, "The Gemini API refused the credentials: check the API key."],
+    ["400 API_KEY_INVALID", "gemini_api", async () => apiError(400, "INVALID_ARGUMENT", ["API_KEY_INVALID"]), "auth", 502,
+      "The Gemini API refused the credentials: Google says the API key is not valid (API_KEY_INVALID): check it was copied whole, from aistudio.google.com/apikey."],
+    ["403 referrer blocked", "gemini_api", async () => apiError(403, "PERMISSION_DENIED", ["API_KEY_HTTP_REFERRER_BLOCKED"]), "auth", 502,
+      /do not allow this page's address \(API_KEY_HTTP_REFERRER_BLOCKED\): add it, port included/],
+    ["403 service disabled", "gemini_api", async () => apiError(403, "PERMISSION_DENIED", ["SERVICE_DISABLED"]), "auth", 502, /not enabled in the credentials' project \(SERVICE_DISABLED\)/],
+    ["403 with a reason not known here", "gemini_api", async () => apiError(403, "PERMISSION_DENIED", ["SOMETHING_NEW"]), "auth", 502,
+      "The Gemini API refused the credentials: check the API key. (Google: SOMETHING_NEW)"],
     ["401", "gemini_api", async () => apiError(401, "UNAUTHENTICATED"), "auth", 502, "The Gemini API refused the credentials: check the API key."],
     ["403", "gemini_api", async () => apiError(403, "PERMISSION_DENIED"), "auth", 502, /refused the credentials: check the API key/],
     ["404", "gemini_api", async () => apiError(404, "NOT_FOUND"), "config", 500, "The Gemini API has no model gemini-3-pro-image."],
@@ -471,7 +492,7 @@ describe("listModels", () => {
   it("fails as the call would, without retrying, and needs the key", async () => {
     const sleeps: number[] = [];
     const bad = await failure(provider("gemini_api", new FakeFetch([async () => apiError(400, "INVALID_ARGUMENT", ["API_KEY_INVALID"])]), sleeps).listModels!(GEMINI_CREDENTIALS));
-    expect([bad.category, bad.userMessage]).toEqual(["auth", "The Gemini API refused the credentials: check the API key."]);
+    expect([bad.category, bad.userMessage]).toEqual(["auth", "The Gemini API refused the credentials: Google says the API key is not valid (API_KEY_INVALID): check it was copied whole, from aistudio.google.com/apikey."]);
     expectNoSecrets(bad);
     const busy = await failure(provider("gemini_api", new FakeFetch([async () => apiError(429, "RESOURCE_EXHAUSTED")]), sleeps).listModels!(GEMINI_CREDENTIALS));
     expect(busy.category).toBe("quota");

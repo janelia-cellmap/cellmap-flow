@@ -169,11 +169,25 @@ const VERTEX: ServiceNames = { Sentence: "Vertex AI", inline: "Vertex AI" };
  * AIAnnotateError("config", 400) when the credentials the provider needs
  * are not there. The model id is path-encoded; a leading "models/" (the
  * listing's spelling, which a user may paste into *Other…*) is dropped. */
+/** Said when what was pasted as a Gemini API key is a Google Cloud access
+ * token: `gcloud auth print-access-token` prints those (ya29.…), and they are
+ * Vertex AI's credential, not the Gemini API's, which takes an AI Studio key
+ * (AIza…). Google answers such a "key" with a bare refusal. */
+export const TOKEN_AS_KEY_MESSAGE =
+  "That is a Google Cloud access token (it starts with ya29.), not a Gemini API key: pick the vertex provider and paste it " +
+  "there with the project, or paste an AI Studio key (it starts with AIza) here.";
+
+/** Whether `key` is an OAuth access token rather than an API key. */
+export function looksLikeAccessToken(key: string): boolean {
+  return /^ya29\./.test(key.trim());
+}
+
 export function endpoint(type: GeminiType, model: string, credentials: Credentials): { url: string; headers: Record<string, string>; location: string | null } {
   const modelPath = encodeURIComponent(model.replace(/^models\//, ""));
   if (type === "gemini_api") {
     const key = (credentials.api_key ?? "").trim();
     if (!key) throw new AIAnnotateError("config", MISSING_KEY_MESSAGE, 400);
+    if (looksLikeAccessToken(key)) throw new AIAnnotateError("config", TOKEN_AS_KEY_MESSAGE, 400);
     return { url: `${GEMINI_API_BASE}/models/${modelPath}:generateContent`, headers: { "x-goog-api-key": key }, location: null };
   }
   const project = (credentials.project ?? "").trim(), token = (credentials.access_token ?? "").trim();
@@ -302,10 +316,13 @@ function userError(outcome: Extract<Outcome, { kind: "http" }>, context: ErrorCo
   const { code, status, reasons } = outcome;
   const authFailure = code === 401 || code === 403 || status === "UNAUTHENTICATED" || status === "PERMISSION_DENIED" || reasons.includes("API_KEY_INVALID");
   if (authFailure) {
-    return new AIAnnotateError("auth", service === GEMINI_API
+    const why = refusalReason(reasons);
+    if (why) return new AIAnnotateError("auth", `${service.Sentence} refused the credentials: ${why}`);
+    return new AIAnnotateError("auth", (service === GEMINI_API
       ? "The Gemini API refused the credentials: check the API key."
       : "Vertex AI refused the credentials: check the access token (it expires after about an hour: run gcloud auth " +
-        "print-access-token again), the project, that the Vertex AI API is enabled and that you have the Vertex AI User role.");
+        "print-access-token again), the project, that the Vertex AI API is enabled and that you have the Vertex AI User role.") +
+      reasonSuffix(reasons));
   }
   if (code === 404 && model !== null) {
     return new AIAnnotateError("config", service === GEMINI_API
@@ -319,6 +336,24 @@ function userError(outcome: Extract<Outcome, { kind: "http" }>, context: ErrorCo
     return new AIAnnotateError("unavailable", `${service.Sentence} is unavailable (HTTP ${code}); try again later.`);
   }
   return new AIAnnotateError("bad_response", `${service.Sentence} rejected the request (HTTP ${code}).`);
+}
+
+/** What to do about a refusal whose ErrorInfo reason Google gives (an
+ * enumeration, safe to show: never the message, which may echo the
+ * request), or null for one not known here. */
+function refusalReason(reasons: string[]): string | null {
+  if (reasons.includes("API_KEY_INVALID")) return "Google says the API key is not valid (API_KEY_INVALID): check it was copied whole, from aistudio.google.com/apikey.";
+  if (reasons.includes("API_KEY_HTTP_REFERRER_BLOCKED")) return "the key's website restrictions do not allow this page's address (API_KEY_HTTP_REFERRER_BLOCKED): add it, port included (e.g. http://localhost:5174/*), in the Google Cloud console.";
+  if (reasons.includes("API_KEY_SERVICE_BLOCKED")) return "the key's API restrictions do not allow the Gemini API (API_KEY_SERVICE_BLOCKED): allow the Generative Language API for it in the Google Cloud console.";
+  if (reasons.includes("SERVICE_DISABLED")) return "the API is not enabled in the credentials' project (SERVICE_DISABLED): enable it in the Google Cloud console, wait a minute and try again.";
+  if (reasons.includes("ACCESS_TOKEN_EXPIRED") || reasons.includes("ACCESS_TOKEN_TYPE_UNSUPPORTED")) return "the access token has expired or is not one it takes: run gcloud auth print-access-token again and paste the new token.";
+  if (reasons.includes("IAM_PERMISSION_DENIED")) return "your account lacks the permission in this project (IAM_PERMISSION_DENIED): ask its owner for the Vertex AI User role.";
+  return null;
+}
+
+/** Google's reason codes, as " (Google: A, B)", for a refusal not explained above; empty without any. */
+function reasonSuffix(reasons: string[]): string {
+  return reasons.length ? ` (Google: ${reasons.join(", ")})` : "";
 }
 
 // ---------------------------------------------------------------------------
