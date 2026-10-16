@@ -6,7 +6,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  datasetUrlFromState, depthAxisFromLayout, layerShaderOf, layersOf, type NgState, pointerNm, positionNm, replaceLayers, sourceUrl,
+  datasetUrlFromState, depthAxisFromLayout, displayDimensionsOf, layerShaderOf, layersOf, type NgState, pointerNm, positionNm, replaceLayers, sourceUrl,
   viewDepthAxisOf, withoutLayer,
 } from "../../src/viewer/state";
 
@@ -148,6 +148,11 @@ describe("viewDepthAxisOf (geometry.depth_axis_for_view)", () => {
   it("prefers the display dimensions the user set", () => {
     expect(viewDepthAxisOf({ ...state, layout: "xy", displayDimensions: ["x", "y", "z"] })).toBe(0);
     expect(viewDepthAxisOf({ ...state, layout: "xy", displayDimensions: [] })).toBe(2);  // none set: the dimensions' order
+  });
+  it("displayDimensionsOf: those the state sets, else the first three dimensions, else none", () => {
+    expect(displayDimensionsOf({ ...state, displayDimensions: ["x", "y", "z"] })).toEqual(["x", "y", "z"]);
+    expect(displayDimensionsOf(state)).toEqual(Object.keys(state.dimensions!).slice(0, 3));
+    expect(displayDimensionsOf(null)).toEqual([]);
   });
   it("takes the first three of more dimensions, in the viewer's order", () => {
     const withChannel: NgState = { dimensions: { x: [8e-9, "m"], y: [8e-9, "m"], z: [8e-9, "m"], "c^": [1, ""] }, layout: "xy" };

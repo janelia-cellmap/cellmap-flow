@@ -282,6 +282,10 @@ export interface ViewerController {
    * XY plane, 1 y: XZ, 2 x: YZ), the first panel's (XY) in a multi-panel
    * layout, as geometry.depth_axis_for_view reads the Python viewer's. */
   viewDepthAxis(): 0 | 1 | 2;
+  /** The viewer's display dimensions (geometry.display_dimensions_for_view):
+   * those its state sets, else the first three of its coordinate space;
+   * empty when it has neither. They say how a panel draws its plane. */
+  viewDisplayDimensions(): string[];
   /** Bind `key` (Neuroglancer's spelling, "shift+keyg") to `action` in the
    * viewer, `handler` run when it is pressed, now and in every viewer
    * mounted after (a new dataset is a new page of Neuroglancer); returns

@@ -96,7 +96,7 @@ export async function readPlane(infer: Pick<Inference, "readRaw">, dataset: Data
       plane[r * cols + c] = Number(value);
     }
   }
-  const onScreen = toScreen(plane, rows, cols, plan.depth_axis);
+  const onScreen = toScreen(plane, rows, cols, plan.depth_axis, plan.display_dimensions);
   const [imageRows, imageCols] = plan.image_shape;
   const resized = onScreen.rows !== imageRows || onScreen.cols !== imageCols;
   const image = resized ? resizePlane(onScreen, imageRows, imageCols) : onScreen;
@@ -246,7 +246,7 @@ export function buildRequest(plane: RawPlane, plan: PlanePlan, profile: Organell
 export function maskToWriteShape(mask: Uint8Array, plan: PlanePlan): Uint8Array {
   const [imageRows, imageCols] = plan.image_shape;
   if (mask.length !== imageRows * imageCols) throw new Error(`the mask has ${mask.length} pixels, the plan's image ${imageRows}×${imageCols}`);
-  const [rows, cols] = screenShape(writeShape(plan), plan.depth_axis);
+  const [rows, cols] = screenShape(writeShape(plan), plan.depth_axis, plan.display_dimensions);
   let onScreen = mask;
   if (rows !== imageRows || cols !== imageCols) {
     const rowOf = nearestIndices(imageRows, rows), colOf = nearestIndices(imageCols, cols);
@@ -256,7 +256,7 @@ export function maskToWriteShape(mask: Uint8Array, plan: PlanePlan): Uint8Array 
     onScreen = new Uint8Array(mask.length);
     for (let i = 0; i < mask.length; i++) onScreen[i] = mask[i] ? 1 : 0;
   }
-  return fromScreen(onScreen, rows, cols, plan.depth_axis).data;
+  return fromScreen(onScreen, rows, cols, plan.depth_axis, plan.display_dimensions).data;
 }
 
 /** The labels for the write box [writeLo, writeHi): an id per object of

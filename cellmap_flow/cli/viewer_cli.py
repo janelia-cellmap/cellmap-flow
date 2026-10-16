@@ -52,7 +52,7 @@ def main(dataset, project, resample):
     from cellmap_flow.dashboard.state import get_session
     from cellmap_flow.jobs.launch import install_cleanup_handlers
     from cellmap_flow.jobs.settings import launcher_settings
-    from cellmap_flow.viewer.bootstrap import apply_viewer_defaults, viewer_url
+    from cellmap_flow.viewer.bootstrap import apply_viewer_defaults, display_dimensions, viewer_url
     from cellmap_flow.viewer.raw import get_raw_layer
 
     # Models picked in the dashboard are jobs too; kill them on the way out.
@@ -90,6 +90,7 @@ def main(dataset, project, resample):
             units="nm",
             scales=[8, 8, 8],
         )
+        s.display_dimensions = display_dimensions(s.dimensions.names)
 
         # Add data layer
         s.layers["data"] = get_raw_layer(dataset)

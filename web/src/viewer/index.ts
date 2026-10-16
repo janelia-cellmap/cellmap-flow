@@ -31,7 +31,7 @@ import type { DatasetInfo, LayerSpec, SessionStore, ViewerController } from "../
 import { initialState, RAW_LAYER_NAME, rawLayer, respelledPaintSource, stateWithoutInfo } from "./layers";
 import { withEquivalences } from "./equivalences";
 import { decodeState, encodeState, isStateHash, mirrorFrameHash, rememberedState, rememberState, withHash } from "./share";
-import { datasetUrlFromState, layerShaderOf, layersOf, type NgState, pointerNm, positionNm, replaceLayers, viewDepthAxisOf, withoutLayer } from "./state";
+import { datasetUrlFromState, displayDimensionsOf, layerShaderOf, layersOf, type NgState, pointerNm, positionNm, replaceLayers, viewDepthAxisOf, withoutLayer } from "./state";
 
 /** Neuroglancer's page, built beside this one (vite.config.ts serves ./ng/). */
 export const NG_PAGE = "./ng/index.html";
@@ -73,7 +73,16 @@ interface NgViewer {
   mouseState?: { position?: ArrayLike<number>; active?: boolean };
   inputEventBindings?: { global?: { set(key: string, action: string): void; delete?(key: string): void } };
   bindAction?(action: string, handler: (event: Event) => void): void;
+  /** The global coordinate space (its dimensions' names, and a signal when
+   * they change) and the display dimensions' own trackable, which
+   * keepDisplayDimensions puts them back with. */
+  coordinateSpace?: { value: { names: readonly string[] }; changed: { add(callback: () => void): () => void } };
+  navigationState?: { pose?: { displayDimensions?: { restoreState(names: string[]): void } } };
 }
+
+/** How long keepDisplayDimensions waits for the coordinate space to name the
+ * display dimensions again; in Chromium it took a frame or so. */
+export const DISPLAY_DIMENSIONS_WAIT_MS = 30_000;
 
 /** A key binding the page asked for (bindKey): put on every viewer as it
  * appears, `appliedTo` the viewers that have it so that none gets it twice
@@ -226,6 +235,43 @@ export function createViewer(opts: { session: SessionStore; log: (line: string) 
     return decodeState(hash) ?? pending;
   }
 
+  /** The display dimensions keepDisplayDimensions is waiting to put back,
+   * and how to stop waiting, while it waits. */
+  let keeping: { wanted: readonly string[]; stop: () => void } | null = null;
+
+  /** Neuroglancer restores a state's displayDimensions against its
+   * coordinate space as it is at that moment, and restoreState has just
+   * emptied that space while the layers come back: the display dimensions
+   * fall back to the default (the first three dimensions, z, y, x), and the
+   * x–y panel turns back to z–y. They are put back once the space names them
+   * again (checked in Chromium: a frame or so later). A state made while the
+   * last ones were still on their way back has none of its own, and those
+   * are still the ones wanted: Draw a box adds its layer, then selects it,
+   * two changes in a row. */
+  function keepDisplayDimensions(live: NgViewer, shown: readonly string[] | undefined): void {
+    const wanted = shown?.length ? shown : keeping?.wanted;
+    keeping?.stop();
+    const space = live.coordinateSpace, target = live.navigationState?.pose?.displayDimensions;
+    if (!wanted?.length || !space || !target) return;
+    const put = (): boolean => {
+      if (!wanted.every((name) => space.value.names.includes(name))) return false;
+      const shown = live.state.toJSON().displayDimensions;
+      if (JSON.stringify(shown) !== JSON.stringify(wanted)) target.restoreState([...wanted]);
+      return true;
+    };
+    if (put()) return;
+    const stop = () => {
+      remove();
+      clearTimeout(timer);
+      if (keeping?.stop === stop) keeping = null;
+    };
+    const remove = space.changed.add(() => {
+      if (put()) stop();
+    });
+    const timer = setTimeout(stop, DISPLAY_DIMENSIONS_WAIT_MS);
+    keeping = { wanted, stop };
+  }
+
   /** Put `state` in the viewer: through the live viewer when there is one,
    * else through the iframe's hash (a reset to that state when Neuroglancer
    * reads it). Either way the page's hash follows. */
@@ -233,6 +279,7 @@ export function createViewer(opts: { session: SessionStore; log: (line: string) 
     const live = liveViewer();
     if (live) {
       live.state.restoreState(state);
+      keepDisplayDimensions(live, state.displayDimensions);
       // Neuroglancer rewrites its own hash from the new state a moment
       // later; the mirror picks it up on its next poll.
       return;
@@ -525,6 +572,10 @@ export function createViewer(opts: { session: SessionStore; log: (line: string) 
 
     viewDepthAxis() {
       return viewDepthAxisOf(currentState());
+    },
+
+    viewDisplayDimensions() {
+      return displayDimensionsOf(currentState());
     },
 
     bindKey(key, action, handler) {

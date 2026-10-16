@@ -32,6 +32,21 @@ def apply_viewer_defaults(state):
     state.gpu_memory_limit = GPU_MEMORY_LIMIT
 
 
+def display_dimensions(names):
+    """The display dimensions for a viewer whose dimensions are ``names``:
+    x, y, z when it has all three, else None (neuroglancer's default).
+
+    Neuroglancer's "xy" panel shows the first two display dimensions, which
+    are the first three of the coordinate space unless set. cellmap-flow
+    names its dimensions z, y, x, so that panel showed z across and y down,
+    and a model that computes one z-slice at a time was asked for a block
+    for every z position on screen. With x, y, z it is the XY plane, x
+    across and y down, looking along z, and the positions stay z, y, x.
+    """
+    names = list(names or [])
+    return ["x", "y", "z"] if all(axis in names for axis in ("x", "y", "z")) else None
+
+
 def raw_dimensions(dataset_path):
     """The viewer's dimensions for ``dataset_path``: the axes and voxel size
     of the finest level of its pyramid (of the array itself, if it is none).
@@ -63,7 +78,7 @@ def new_viewer(dataset_path, *, scales=None, raw=None, raw_name="data", layers=N
 
     - ``scales``: the viewer's dimensions, z, y, x in nm. None takes them from
       the raw (raw_dimensions), or leaves them to neuroglancer if it cannot
-      be read.
+      be read. Its display dimensions are x, y, z (display_dimensions).
     - ``raw``: the raw data's layer, if the caller built it (raw_layer);
       shown as ``raw_name``.
     - ``layers``: ``{name: layer}``, added after the raw in their order.
@@ -81,6 +96,7 @@ def new_viewer(dataset_path, *, scales=None, raw=None, raw_name="data", layers=N
         apply_viewer_defaults(s)
         if dimensions is not None:
             s.dimensions = dimensions
+            s.display_dimensions = display_dimensions(dimensions.names)
         s.layers[raw_name] = raw_layer(dataset_path) if raw is None else raw
         for name, layer in (layers or {}).items():
             s.layers[name] = layer

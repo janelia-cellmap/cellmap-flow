@@ -17,8 +17,11 @@ from cellmap_flow.ai_annotate.geometry import (
     PlanePlan,
     depth_axis_for_view,
     depth_axis_from_layout,
+    display_dimensions_for_view,
+    from_screen,
     plan_plane,
     raw_box,
+    to_screen,
 )
 
 
@@ -77,8 +80,28 @@ def test_depth_axis_for_a_viewer_state():
     assert depth_axis_for_view(state) == 0
     state.layout = "xy-3d"
     assert depth_axis_for_view(state) == 2
+    assert display_dimensions_for_view(state) == ("z", "y", "x")
     state.display_dimensions = ["x", "y", "z"]
     assert depth_axis_for_view(state) == 0
+    assert display_dimensions_for_view(state) == ("x", "y", "z")
+    assert display_dimensions_for_view(neuroglancer.ViewerState()) == ()
+
+
+def test_the_image_is_laid_out_as_the_viewers_panel_draws_the_plane():
+    plane = np.arange(6).reshape(2, 3)  # its two axes in z, y, x order
+    xyz = ("x", "y", "z")
+    # cellmap-flow's viewers show x, y, z: XY is y down and x across, XZ z
+    # down and x across, as in z, y, x order; YZ is y down and z across,
+    # increasing to the left.
+    assert to_screen(plane, 0, xyz).tolist() == plane.tolist()
+    assert to_screen(plane, 1, xyz).tolist() == plane.tolist()
+    assert to_screen(plane, 2, xyz).tolist() == plane.T[:, ::-1].tolist()
+    # A viewer that sets none shows z, y, x: XY mirrored, YZ transposed.
+    assert to_screen(plane, 0).tolist() == plane[:, ::-1].tolist()
+    assert to_screen(plane, 2).tolist() == plane.T.tolist()
+    for depth_axis in (0, 1, 2):
+        for display in (None, xyz):
+            assert from_screen(to_screen(plane, depth_axis, display), depth_axis, display).tolist() == plane.tolist()
 
 
 # --- the plane --------------------------------------------------------------------
@@ -240,3 +263,23 @@ def test_the_raw_box_reads_the_plane_on_the_raws_grid():
 def test_a_plan_survives_json():
     plan = plan_plane(_volume(output=(16, 8, 8), input=(8, 4, 4)), SHAPE, (808, 804, 1204), 1, 64)
     assert PlanePlan.from_dict(json.loads(json.dumps(plan.to_dict()))) == plan
+    shown = plan_plane(_volume(), SHAPE, (404, 804, 1204), 2, 64, display_dimensions=["x", "y", "z"])
+    assert shown.display_dimensions == ("x", "y", "z")
+    assert PlanePlan.from_dict(json.loads(json.dumps(shown.to_dict()))) == shown
+
+
+def test_a_plan_saved_before_plans_kept_display_dimensions_is_laid_out_z_y_x():
+    plan = plan_plane(_volume(), SHAPE, (404, 804, 1204), 2, 64, display_dimensions=["x", "y", "z"])
+    saved = plan.to_dict()
+    del saved["display_dimensions"]
+    assert PlanePlan.from_dict(saved).display_dimensions == ("z", "y", "x")
+    # The YZ plane, clipped at the volume's z edge so it is not square: y
+    # down and z across in both viewers (the "yz" panel of one showing
+    # x, y, z, the "xy" panel of one showing z, y, x), z increasing to the
+    # left only in the first, so the point is at the mirrored column.
+    near_edge = (780, 804, 1204)
+    shown = plan_plane(_volume(), SHAPE, near_edge, 2, 64, display_dimensions=["x", "y", "z"])
+    old = plan_plane(_volume(), SHAPE, near_edge, 2, 64)
+    assert shown.image_shape == old.image_shape == (128, 70)
+    row, col = old.click_px
+    assert shown.click_px == (row, old.image_shape[1] - 1 - col)
