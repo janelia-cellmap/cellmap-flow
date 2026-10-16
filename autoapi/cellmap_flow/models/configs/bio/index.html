@@ -1,0 +1,447 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>cellmap_flow.models.configs.bio &mdash; CellMap Flow  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../../_static/graphviz.css?v=4ae1632d" />
+      <link rel="stylesheet" type="text/css" href="../../../../../_static/css/custom.css" />
+
+  
+    <link rel="shortcut icon" href="../../../../../_static/favicon.ico"/>
+      <script src="../../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../../../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../search.html" />
+    <link rel="next" title="cellmap_flow.models.configs.cellmap" href="../cellmap/index.html" />
+    <link rel="prev" title="cellmap_flow.models.configs.base" href="../base/index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../../index.html" class="icon icon-home">
+            CellMap Flow
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">CellMap-Flow API:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../../../../../install.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../browser.html">In the browser</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../cli.html">Command line</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../scripts.html">Python Scripts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../yaml_config.html">YAML Configuration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../data_paths.html">Data paths</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../huggingface.html">HuggingFace Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../bioimage.html">BioImage Model Zoo</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../custom_script.html">Custom Model</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../post.html">PostProcessors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../plugins.html">Plugins</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../review.html">Reviewing instances</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../viewer_api.html">Viewer layer API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../architecture.html">Architecture</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../../../../index.html">API Reference</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="../../../index.html">cellmap_flow</a><ul class="current">
+<li class="toctree-l3 current"><a class="reference internal" href="../../../index.html#submodules">Submodules</a><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="../../../ai_annotate/index.html">cellmap_flow.ai_annotate</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../blockwise/index.html">cellmap_flow.blockwise</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../cli/index.html">cellmap_flow.cli</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../config/index.html">cellmap_flow.config</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../dashboard/index.html">cellmap_flow.dashboard</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../finetune/index.html">cellmap_flow.finetune</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../globals/index.html">cellmap_flow.globals</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../image_data_interface/index.html">cellmap_flow.image_data_interface</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../inference/index.html">cellmap_flow.inference</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../inferencer/index.html">cellmap_flow.inferencer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../io/index.html">cellmap_flow.io</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../jobs/index.html">cellmap_flow.jobs</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../logging_setup/index.html">cellmap_flow.logging_setup</a></li>
+<li class="toctree-l4 current"><a class="reference internal" href="../../index.html">cellmap_flow.models</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../norm/index.html">cellmap_flow.norm</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../pipeline_spec/index.html">cellmap_flow.pipeline_spec</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../plugins/index.html">cellmap_flow.plugins</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../post/index.html">cellmap_flow.post</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../process_chain/index.html">cellmap_flow.process_chain</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../review/index.html">cellmap_flow.review</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../review_index/index.html">cellmap_flow.review_index</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../serving/index.html">cellmap_flow.serving</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../utils/index.html">cellmap_flow.utils</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../viewer/index.html">cellmap_flow.viewer</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../../index.html">CellMap Flow</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../../index.html">API Reference</a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">cellmap_flow</a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">cellmap_flow.models</a></li>
+          <li class="breadcrumb-item"><a href="../index.html">cellmap_flow.models.configs</a></li>
+      <li class="breadcrumb-item active">cellmap_flow.models.configs.bio</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../../../../../_sources/autoapi/cellmap_flow/models/configs/bio/index.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-cellmap_flow.models.configs.bio">
+<span id="cellmap-flow-models-configs-bio"></span><h1>cellmap_flow.models.configs.bio<a class="headerlink" href="#module-cellmap_flow.models.configs.bio" title="Link to this heading"></a></h1>
+<p><code class="docutils literal notranslate"><span class="pre">BioModelConfig</span></code>: a BioImage Model Zoo model, run through <code class="docutils literal notranslate"><span class="pre">bioimageio.core</span></code>.</p>
+<p><code class="docutils literal notranslate"><span class="pre">model</span></code> is any source <code class="docutils literal notranslate"><span class="pre">bioimageio.core</span></code> loads: a zoo id or nickname
+(“conscientious-dromedary”), a DOI or URL, or the path of a model’s
+<code class="docutils literal notranslate"><span class="pre">rdf.yaml</span></code> (<code class="docutils literal notranslate"><span class="pre">bioimageio.yaml</span></code>) or packaged <code class="docutils literal notranslate"><span class="pre">.zip</span></code>. Its description (the
+RDF, read as format 0.5; a 0.4 one is converted) gives the rest:</p>
+<ul class="simple">
+<li><p>What a chunk is. A 3D model (space axes z, y, x) is given one tile a
+chunk. A 2D model (y, x) is given <code class="docutils literal notranslate"><span class="pre">slices_per_chunk</span></code> z slices a chunk, each
+segmented on its own: in one call when its batch axis takes any size, a
+call a slice when the RDF fixes the batch at 1 or has no batch axis.</p></li>
+<li><p>The tile’s size. An axis of fixed size keeps it; a parameterized one
+(<code class="docutils literal notranslate"><span class="pre">min</span> <span class="pre">+</span> <span class="pre">n</span> <span class="pre">*</span> <span class="pre">step</span></code>) gets the smallest size it takes of at least
+<code class="docutils literal notranslate"><span class="pre">input_size</span></code>: 256 a side for a 2D model and 128 for a 3D one by default.</p></li>
+<li><p>The context: the halo of the model’s output, cut off on each side so that
+chunks meet where the model saw both sides of the seam. <code class="docutils literal notranslate"><span class="pre">context</span></code> sets
+it; the zoo’s EM U-Nets give none.</p></li>
+<li><p>The voxel size: the input’s space axes’ <code class="docutils literal notranslate"><span class="pre">scale</span></code> and <code class="docutils literal notranslate"><span class="pre">unit</span></code>, in nm,
+unless <code class="docutils literal notranslate"><span class="pre">voxel_size</span></code> is given. No zoo model gives a unit, so the zoo’s EM
+models read at the voxel size they were trained at, from cellmap-flow’s
+own table (<code class="docutils literal notranslate"><span class="pre">bioimage_voxel_sizes.yaml</span></code>); any other needs <code class="docutils literal notranslate"><span class="pre">voxel_size</span></code>.</p></li>
+<li><p>The output: every output tensor’s channels, one tensor after another, as
+the model’s own postprocessing leaves them (a sigmoid, if it has one;
+nothing clipped or rescaled), served as float32 unless the RDF says the
+output is integers (labels), which keep an integer type.</p></li>
+<li><p>The weights: whichever <code class="docutils literal notranslate"><span class="pre">bioimageio.core</span></code> prefers of those the model has,
+or <code class="docutils literal notranslate"><span class="pre">weight_format</span></code>.</p></li>
+</ul>
+<p>The model’s preprocessing (normalization) and postprocessing run in
+<code class="docutils literal notranslate"><span class="pre">bioimageio.core</span></code>’s prediction pipeline, which is built with the config,
+once, and reused for every chunk.</p>
+<p>What it cannot run: a model with more than one required input, an input with
+more than one channel (RGB), or an output that is not a map over the input’s
+space, such as micro-SAM’s, whose masks have an object axis of data-dependent
+size and need prompts.</p>
+<p>It can be finetuned (<code class="docutils literal notranslate"><span class="pre">trainable_model</span></code>) when it has torch weights (a
+state dict, which takes LoRA too, or TorchScript): the network is rebuilt
+from them, with the input’s normalization and the output’s sigmoid around
+it, and once trained serves through the inferencer’s forward instead of
+the pipeline.</p>
+<p><code class="docutils literal notranslate"><span class="pre">bioimageio</span></code> is imported only when the model is built: the CLIs and the
+dashboard’s model form import every type. The server runs in pixi.toml’s
+<code class="docutils literal notranslate"><span class="pre">bioimageio</span></code> environment unless the entry names another <code class="docutils literal notranslate"><span class="pre">env</span></code>.</p>
+<section id="attributes">
+<h2>Attributes<a class="headerlink" href="#attributes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.models.configs.bio.logger" title="cellmap_flow.models.configs.bio.logger"><code class="xref py py-obj docutils literal notranslate"><span class="pre">logger</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.models.configs.bio.WEIGHT_FORMATS" title="cellmap_flow.models.configs.bio.WEIGHT_FORMATS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">WEIGHT_FORMATS</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.models.configs.bio.TRAINABLE_WEIGHT_FORMATS" title="cellmap_flow.models.configs.bio.TRAINABLE_WEIGHT_FORMATS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">TRAINABLE_WEIGHT_FORMATS</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.models.configs.bio.DEFAULT_INPUT_SIZE" title="cellmap_flow.models.configs.bio.DEFAULT_INPUT_SIZE"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DEFAULT_INPUT_SIZE</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.models.configs.bio.DEFAULT_SLICES_PER_CHUNK" title="cellmap_flow.models.configs.bio.DEFAULT_SLICES_PER_CHUNK"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DEFAULT_SLICES_PER_CHUNK</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.models.configs.bio.NM_PER_UNIT" title="cellmap_flow.models.configs.bio.NM_PER_UNIT"><code class="xref py py-obj docutils literal notranslate"><span class="pre">NM_PER_UNIT</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="classes">
+<h2>Classes<a class="headerlink" href="#classes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.models.configs.bio.BioModelConfig" title="cellmap_flow.models.configs.bio.BioModelConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">BioModelConfig</span></code></a></p></td>
+<td><p>A BioImage Model Zoo model, run through bioimageio.core.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="functions">
+<h2>Functions<a class="headerlink" href="#functions" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.models.configs.bio.served_dtype" title="cellmap_flow.models.configs.bio.served_dtype"><code class="xref py py-obj docutils literal notranslate"><span class="pre">served_dtype</span></code></a>(→ numpy.dtype)</p></td>
+<td><p>What chunks of <code class="docutils literal notranslate"><span class="pre">outputs</span></code> (output tensor descriptions) are served as.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="module-contents">
+<h2>Module Contents<a class="headerlink" href="#module-contents" title="Link to this heading"></a></h2>
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.bio.logger">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.configs.bio.</span></span><span class="sig-name descname"><span class="pre">logger</span></span><a class="headerlink" href="#cellmap_flow.models.configs.bio.logger" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.bio.WEIGHT_FORMATS">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.configs.bio.</span></span><span class="sig-name descname"><span class="pre">WEIGHT_FORMATS</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">('pytorch_state_dict',</span> <span class="pre">'torchscript',</span> <span class="pre">'onnx',</span> <span class="pre">'tensorflow_saved_model_bundle',</span> <span class="pre">'keras_hdf5',</span> <span class="pre">'keras_v3')</span></span><a class="headerlink" href="#cellmap_flow.models.configs.bio.WEIGHT_FORMATS" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.bio.TRAINABLE_WEIGHT_FORMATS">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.configs.bio.</span></span><span class="sig-name descname"><span class="pre">TRAINABLE_WEIGHT_FORMATS</span></span><a class="headerlink" href="#cellmap_flow.models.configs.bio.TRAINABLE_WEIGHT_FORMATS" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.bio.DEFAULT_INPUT_SIZE">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.configs.bio.</span></span><span class="sig-name descname"><span class="pre">DEFAULT_INPUT_SIZE</span></span><a class="headerlink" href="#cellmap_flow.models.configs.bio.DEFAULT_INPUT_SIZE" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.bio.DEFAULT_SLICES_PER_CHUNK">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.configs.bio.</span></span><span class="sig-name descname"><span class="pre">DEFAULT_SLICES_PER_CHUNK</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">8</span></span><a class="headerlink" href="#cellmap_flow.models.configs.bio.DEFAULT_SLICES_PER_CHUNK" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.bio.NM_PER_UNIT">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.configs.bio.</span></span><span class="sig-name descname"><span class="pre">NM_PER_UNIT</span></span><a class="headerlink" href="#cellmap_flow.models.configs.bio.NM_PER_UNIT" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.bio.served_dtype">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.configs.bio.</span></span><span class="sig-name descname"><span class="pre">served_dtype</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">outputs</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">numpy.dtype</span></span></span><a class="headerlink" href="#cellmap_flow.models.configs.bio.served_dtype" title="Link to this definition"></a></dt>
+<dd><p>What chunks of <code class="docutils literal notranslate"><span class="pre">outputs</span></code> (output tensor descriptions) are served as.</p>
+<p>float32 unless every output is declared as integers: the model’s own
+postprocessing (a sigmoid, labels from a watershed) has run by then, so
+the RDF’s dtype is what the values are. bool is served as uint8 and
+int64 as uint64, which neuroglancer shows; integer outputs are ids or
+classes, which are not negative.</p>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.bio.BioModelConfig">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.configs.bio.</span></span><span class="sig-name descname"><span class="pre">BioModelConfig</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">voxel_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">input_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">context</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">slices_per_chunk</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">weight_format</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scale</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.models.configs.bio.BioModelConfig" title="Link to this definition"></a></dt>
+<dd><p>A BioImage Model Zoo model, run through bioimageio.core.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>model</strong> – a zoo id or nickname (“conscientious-dromedary”), a DOI or
+URL, or the path of a model’s rdf.yaml (bioimageio.yaml) or
+packaged .zip.</p></li>
+<li><p><strong>voxel_size</strong> – nm per input voxel (one number, or z, y, x): the level
+the model reads. By default the RDF’s, from its input’s space
+axes’ scale and unit; for a model whose RDF gives no unit (all of
+the zoo’s), the one it was trained at when cellmap-flow’s table
+knows it (<code class="docutils literal notranslate"><span class="pre">bioimage_catalog.trained_at</span></code>: the zoo’s EM models);
+else it is needed. A 2D model’s z is the spacing of its slices,
+its y by default.</p></li>
+<li><p><strong>input_size</strong> – voxels a side of the tile the model is given, one number
+or one per space axis of the model (z, y, x; y, x for a 2D
+model). An axis the RDF fixes keeps its size; a parameterized
+one gets the smallest size it takes of at least this. By default
+256 for a 2D model and 128 for a 3D one.</p></li>
+<li><p><strong>context</strong> – voxels cut off each side of the model’s output (one number,
+or one per space axis of the model), so chunks meet where the
+model saw both sides of the seam; the input is read that much
+larger. By default the RDF’s halo, 0 where it gives none.</p></li>
+<li><p><strong>slices_per_chunk</strong> – z slices in a chunk of a 2D model; 8 by default. A
+3D model ignores it.</p></li>
+<li><p><strong>weight_format</strong> – the weights to run (“torchscript”,
+“pytorch_state_dict”, “onnx”, …); by default bioimageio.core’s
+pick of those the model has.</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.bio.BioModelConfig.cli_name">
+<span class="sig-name descname"><span class="pre">cli_name</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'bioimage'</span></span><a class="headerlink" href="#cellmap_flow.models.configs.bio.BioModelConfig.cli_name" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.bio.BioModelConfig.default_env">
+<span class="sig-name descname"><span class="pre">default_env</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'bioimageio'</span></span><a class="headerlink" href="#cellmap_flow.models.configs.bio.BioModelConfig.default_env" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.bio.BioModelConfig.finetunable">
+<span class="sig-name descname"><span class="pre">finetunable</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">True</span></span><a class="headerlink" href="#cellmap_flow.models.configs.bio.BioModelConfig.finetunable" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.bio.BioModelConfig.normalizes_input">
+<span class="sig-name descname"><span class="pre">normalizes_input</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">True</span></span><a class="headerlink" href="#cellmap_flow.models.configs.bio.BioModelConfig.normalizes_input" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.bio.BioModelConfig.model">
+<span class="sig-name descname"><span class="pre">model</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">''</span></span><a class="headerlink" href="#cellmap_flow.models.configs.bio.BioModelConfig.model" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.bio.BioModelConfig.voxel_size">
+<span class="sig-name descname"><span class="pre">voxel_size</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.models.configs.bio.BioModelConfig.voxel_size" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.bio.BioModelConfig.input_size">
+<span class="sig-name descname"><span class="pre">input_size</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.models.configs.bio.BioModelConfig.input_size" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.bio.BioModelConfig.context">
+<span class="sig-name descname"><span class="pre">context</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.models.configs.bio.BioModelConfig.context" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.bio.BioModelConfig.slices_per_chunk">
+<span class="sig-name descname"><span class="pre">slices_per_chunk</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.models.configs.bio.BioModelConfig.slices_per_chunk" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.bio.BioModelConfig.weight_format">
+<span class="sig-name descname"><span class="pre">weight_format</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.models.configs.bio.BioModelConfig.weight_format" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.bio.BioModelConfig.name">
+<span class="sig-name descname"><span class="pre">name</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.models.configs.bio.BioModelConfig.name" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.bio.BioModelConfig.scale">
+<span class="sig-name descname"><span class="pre">scale</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.models.configs.bio.BioModelConfig.scale" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.bio.BioModelConfig.process_chunk">
+<span class="sig-name descname"><span class="pre">process_chunk</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">idi</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../../../image_data_interface/index.html#cellmap_flow.image_data_interface.ImageDataInterface" title="cellmap_flow.image_data_interface.ImageDataInterface"><span class="pre">cellmap_flow.image_data_interface.ImageDataInterface</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_roi</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.models.configs.bio.BioModelConfig.process_chunk" title="Link to this definition"></a></dt>
+<dd><p><code class="docutils literal notranslate"><span class="pre">output_roi</span></code> predicted: <code class="docutils literal notranslate"><span class="pre">(channels,</span> <span class="pre">z,</span> <span class="pre">y,</span> <span class="pre">x)</span></code>, in <code class="docutils literal notranslate"><span class="pre">output_dtype</span></code>.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.bio.BioModelConfig.trainable_model">
+<span class="sig-name descname"><span class="pre">trainable_model</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.models.configs.bio.BioModelConfig.trainable_model" title="Link to this definition"></a></dt>
+<dd><p>The model as one torch module, for the finetune trainer: (B, 1, Z, Y, X) of the read
+shape in, (B, channels, Z’, Y’, X’) of the write shape out, as process_chunk serves it.</p>
+<p>Built from the model’s description, the way bioimageio.core runs it:
+the input’s preprocessing (its normalization), the network from its
+torch weights (a 2D one on each z slice, the slices in one call when
+its batch axis takes any size), each output’s postprocessing (a
+sigmoid) and the same crop, the outputs’ channels one after another.
+Statistics are taken per patch, over the axes the RDF names, so a
+patch is normalized as a chunk is; an RDF that names none asks
+bioimageio.core for statistics of all it has seen, which a patch
+cannot reproduce, and gets the patch’s own.</p>
+<p>Refuses, with a ValueError saying why, a model whose weights are not
+torch (ONNX, TensorFlow, Keras: no torch module to train), or whose
+output goes through something no gradient passes (labels, a
+threshold, Stardist or Cellpose instances). On the device the server
+uses, in float32 and in eval mode.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.bio.BioModelConfig.serve_trained">
+<span class="sig-name descname"><span class="pre">serve_trained</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">module</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.models.configs.bio.BioModelConfig.serve_trained" title="Link to this definition"></a></dt>
+<dd><p>Serve <code class="docutils literal notranslate"><span class="pre">module</span></code> (the trained <code class="docutils literal notranslate"><span class="pre">trainable_model()</span></code>) through the inferencer’s own forward.</p>
+<p>process_chunk runs the pipeline’s weights, as loaded from the zoo, so
+it is switched off: the module does all process_chunk did (the
+normalization, each slice of a 2D model, the sigmoid, the crop),
+given (1, 1, Z, Y, X) of the read shape, and gives float32.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.bio.BioModelConfig.finetune_modes">
+<span class="sig-name descname"><span class="pre">finetune_modes</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.models.configs.bio.BioModelConfig.finetune_modes" title="Link to this definition"></a></dt>
+<dd><p>How the dashboard can finetune this model: (“lora”, “full”), (“full”,) or ().</p>
+<p>From its weight formats only, without bioimageio or torch: the
+catalog’s cached entry, else a local rdf.yaml or .zip read as YAML,
+else (where bioimageio.core is) its description. Torch weights
+decide, as <code class="docutils literal notranslate"><span class="pre">trainable_model</span></code> picks them: a state dict takes LoRA
+and a full finetune, TorchScript a full one only, and a model
+without either, or whose weights cannot be told, none.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.bio.BioModelConfig.to_dict">
+<span class="sig-name descname"><span class="pre">to_dict</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.models.configs.bio.BioModelConfig.to_dict" title="Link to this definition"></a></dt>
+<dd><p>This config as a model entry, which <code class="docutils literal notranslate"><span class="pre">registry.build_model</span></code> rebuilds.</p>
+<p>What the model’s description decides unless told otherwise (its
+voxel size, tile and context) is written only when it was given, so
+that an exported entry keeps following the model.</p>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../base/index.html" class="btn btn-neutral float-left" title="cellmap_flow.models.configs.base" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../cellmap/index.html" class="btn btn-neutral float-right" title="cellmap_flow.models.configs.cellmap" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, David Ackerman,  Marwan Zouinkhi, Jeff Rhoades, Larissa Heinrich, Aubrey Weigel.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

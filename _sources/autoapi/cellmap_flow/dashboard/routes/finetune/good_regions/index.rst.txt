@@ -1,0 +1,93 @@
+cellmap_flow.dashboard.routes.finetune.good_regions
+===================================================
+
+.. py:module:: cellmap_flow.dashboard.routes.finetune.good_regions
+
+.. autoapi-nested-parse::
+
+   Regions the user has looked at and judged the model already handles well.
+
+   These are the counterweight to corrections. Painted scribbles say "you got
+   this wrong, here"; a good region says "you got this right, here, and I
+   checked". Training samples patches from both: the scribbles supply the
+   supervised signal, and the good regions supply rehearsal -- patches with no
+   annotation at all, which the trainer already treats correctly (an empty mask
+   zeroes the supervised term and hands the whole patch to the distillation
+   term against the frozen teacher).
+
+   Kept deliberately separate from ``imported_crops``: those carry real labels,
+   these carry only a human's assertion that the model's own output is
+   acceptable there. Both are evidence, but not the same kind.
+
+   Routes: GET ``/api/finetune/good-regions`` (the session's regions), POST
+   ``/api/finetune/good-regions/mark-view`` (a box where the viewer looks) and
+   POST ``/api/finetune/good-regions/delete`` (one region by ``id``, or all).
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.routes.finetune.good_regions.logger
+   cellmap_flow.dashboard.routes.finetune.good_regions.GOOD_REGIONS_LAYER
+   cellmap_flow.dashboard.routes.finetune.good_regions.DEFAULT_REGION_SIZE_NM
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.routes.finetune.good_regions.load_good_regions
+   cellmap_flow.dashboard.routes.finetune.good_regions.save_good_regions
+   cellmap_flow.dashboard.routes.finetune.good_regions.view_box_nm
+   cellmap_flow.dashboard.routes.finetune.good_regions.mark_current_view_good
+   cellmap_flow.dashboard.routes.finetune.good_regions.list_good_regions
+   cellmap_flow.dashboard.routes.finetune.good_regions.delete_good_region
+   cellmap_flow.dashboard.routes.finetune.good_regions.refresh_good_regions_layer
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:data:: GOOD_REGIONS_LAYER
+   :value: 'good_regions'
+
+
+.. py:data:: DEFAULT_REGION_SIZE_NM
+   :value: 896.0
+
+
+.. py:function:: load_good_regions()
+
+.. py:function:: save_good_regions(regions)
+
+.. py:function:: view_box_nm(size_nm=None)
+
+   ``(centre_nm, size_nm)`` of the box centred where the viewer looks.
+
+   ``size_nm`` defaults to one model output patch (see
+   DEFAULT_REGION_SIZE_NM); one number is the same along every axis.
+   The labelling buttons beside "Mark This View as Good" use the same box,
+   so what they label is what a mark would cover. ValueError when there
+   is no viewer position or the size is not positive.
+
+
+.. py:function:: mark_current_view_good()
+
+   Record a box centred on wherever the viewer is looking right now.
+
+
+.. py:function:: list_good_regions()
+
+.. py:function:: delete_good_region()
+
+.. py:function:: refresh_good_regions_layer(regions=None)
+
+   Draw the good regions in the viewer so you can see what you marked.
+
+

@@ -1,0 +1,365 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../../../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>cellmap_flow.dashboard.routes.finetune.ai_annotate &mdash; CellMap Flow  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../../../_static/graphviz.css?v=4ae1632d" />
+      <link rel="stylesheet" type="text/css" href="../../../../../../_static/css/custom.css" />
+
+  
+    <link rel="shortcut icon" href="../../../../../../_static/favicon.ico"/>
+      <script src="../../../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../../../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../../../../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../../search.html" />
+    <link rel="next" title="cellmap_flow.dashboard.routes.finetune.annotation_core" href="../annotation_core/index.html" />
+    <link rel="prev" title="cellmap_flow.dashboard.routes.finetune" href="../index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../../../index.html" class="icon icon-home">
+            CellMap Flow
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">CellMap-Flow API:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../../../../../../install.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../../browser.html">In the browser</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../../cli.html">Command line</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../../scripts.html">Python Scripts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../../yaml_config.html">YAML Configuration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../../data_paths.html">Data paths</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../../huggingface.html">HuggingFace Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../../bioimage.html">BioImage Model Zoo</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../../custom_script.html">Custom Model</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../../post.html">PostProcessors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../../plugins.html">Plugins</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../../review.html">Reviewing instances</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../../viewer_api.html">Viewer layer API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../../architecture.html">Architecture</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../../../../../index.html">API Reference</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="../../../../index.html">cellmap_flow</a><ul class="current">
+<li class="toctree-l3 current"><a class="reference internal" href="../../../../index.html#submodules">Submodules</a><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="../../../../ai_annotate/index.html">cellmap_flow.ai_annotate</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../blockwise/index.html">cellmap_flow.blockwise</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../cli/index.html">cellmap_flow.cli</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../config/index.html">cellmap_flow.config</a></li>
+<li class="toctree-l4 current"><a class="reference internal" href="../../../index.html">cellmap_flow.dashboard</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../finetune/index.html">cellmap_flow.finetune</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../globals/index.html">cellmap_flow.globals</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../image_data_interface/index.html">cellmap_flow.image_data_interface</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../inference/index.html">cellmap_flow.inference</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../inferencer/index.html">cellmap_flow.inferencer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../io/index.html">cellmap_flow.io</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../jobs/index.html">cellmap_flow.jobs</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../logging_setup/index.html">cellmap_flow.logging_setup</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../models/index.html">cellmap_flow.models</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../norm/index.html">cellmap_flow.norm</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../pipeline_spec/index.html">cellmap_flow.pipeline_spec</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../plugins/index.html">cellmap_flow.plugins</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../post/index.html">cellmap_flow.post</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../process_chain/index.html">cellmap_flow.process_chain</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../review/index.html">cellmap_flow.review</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../review_index/index.html">cellmap_flow.review_index</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../serving/index.html">cellmap_flow.serving</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../utils/index.html">cellmap_flow.utils</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../viewer/index.html">cellmap_flow.viewer</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../../../index.html">CellMap Flow</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../../../index.html">API Reference</a></li>
+          <li class="breadcrumb-item"><a href="../../../../index.html">cellmap_flow</a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">cellmap_flow.dashboard</a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">cellmap_flow.dashboard.routes</a></li>
+          <li class="breadcrumb-item"><a href="../index.html">cellmap_flow.dashboard.routes.finetune</a></li>
+      <li class="breadcrumb-item active">cellmap_flow.dashboard.routes.finetune.ai_annotate</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../../../../../../_sources/autoapi/cellmap_flow/dashboard/routes/finetune/ai_annotate/index.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-cellmap_flow.dashboard.routes.finetune.ai_annotate">
+<span id="cellmap-flow-dashboard-routes-finetune-ai-annotate"></span><h1>cellmap_flow.dashboard.routes.finetune.ai_annotate<a class="headerlink" href="#module-cellmap_flow.dashboard.routes.finetune.ai_annotate" title="Link to this heading"></a></h1>
+<p>AI-assisted annotation: a hosted model’s first guess at one plane, for the user to review.</p>
+<p>The user hovers a point in the viewer and presses Shift+G (or clicks
+“Annotate at view centre”). A background job reads one 2D plane of raw EM
+around the point, in the plane the user is looking at (XY, XZ or YZ), asks
+the configured model to paint the target structure in a colour, turns the
+image it returns into a mask and stages it beside the session’s corrections
+(<code class="docutils literal notranslate"><span class="pre">ai_annotate.staging</span></code>). Nothing is written to the annotation volume until
+the user accepts the preview.</p>
+<ul class="simple">
+<li><p>GET <code class="docutils literal notranslate"><span class="pre">/api/finetune/ai-annotate/config</span></code>: whether the feature is on (and
+if not, why and how to turn it on), the providers and models the server’s
+config allows with where each sends the data, the day’s calls against
+the limit, the organelle catalog with each one’s editable prompt, and the
+session’s settings and acknowledgements.</p></li>
+<li><p>POST <code class="docutils literal notranslate"><span class="pre">/api/finetune/ai-annotate/settings</span></code>: the provider, model, target
+and prompt to use; <code class="docutils literal notranslate"><span class="pre">acknowledge:</span> <span class="pre">true</span></code> records that the user accepts
+that the selected provider’s destination receives this dataset’s images.
+Also binds Shift+G in the viewer.</p></li>
+<li><p>POST <code class="docutils literal notranslate"><span class="pre">/api/finetune/ai-annotate/run</span></code>: start a job at a point (by default
+the view centre, in the layout’s plane).</p></li>
+<li><p>GET <code class="docutils literal notranslate"><span class="pre">/api/finetune/ai-annotate/status</span></code>: the job’s stage, or its preview
+(input | model output | overlay) once it is ready.</p></li>
+<li><p>POST <code class="docutils literal notranslate"><span class="pre">/api/finetune/ai-annotate/resend</span></code>: ask the model again about the
+same staged plane, with an edited prompt.</p></li>
+<li><p>POST <code class="docutils literal notranslate"><span class="pre">/api/finetune/ai-annotate/accept</span></code>: write the staged mask into the
+annotation volume, over unannotated voxels only unless <code class="docutils literal notranslate"><span class="pre">overwrite</span></code> says
+otherwise. The existing Undo (<code class="docutils literal notranslate"><span class="pre">/api/finetune/view-labels/undo</span></code>) takes
+it back, as it takes back a seed.</p></li>
+<li><p>POST <code class="docutils literal notranslate"><span class="pre">/api/finetune/ai-annotate/reject</span></code>: throw the staged mask away.</p></li>
+</ul>
+<p>The feature is off unless the server’s config file turns it on, and the
+browser only ever picks a provider and a model that the file lists: it
+never sends an endpoint or a credential. A run is refused until the session
+has acknowledged the provider’s destination for the dataset, and once the
+day’s call limit is reached. Error answers carry an <code class="docutils literal notranslate"><span class="pre">AIAnnotateError</span></code>’s
+short <code class="docutils literal notranslate"><span class="pre">user_message</span></code>, never an SDK’s own text, which may echo a request;
+anything unexpected is “AI annotation failed; see the server log”, with the
+detail logged after redaction. Every request, staging, failure, resend and
+decision is appended to the volume’s audit log (<code class="docutils literal notranslate"><span class="pre">ai_annotate.audit</span></code>).</p>
+<p>One job runs per dashboard session, and a staged result must be accepted or
+rejected before the next run: two previews of overlapping planes would be
+confusing to review and could be accepted out of order.</p>
+<section id="attributes">
+<h2>Attributes<a class="headerlink" href="#attributes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.ai_annotate.logger" title="cellmap_flow.dashboard.routes.finetune.ai_annotate.logger"><code class="xref py py-obj docutils literal notranslate"><span class="pre">logger</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.ai_annotate.ACTION" title="cellmap_flow.dashboard.routes.finetune.ai_annotate.ACTION"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ACTION</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.ai_annotate.KEY" title="cellmap_flow.dashboard.routes.finetune.ai_annotate.KEY"><code class="xref py py-obj docutils literal notranslate"><span class="pre">KEY</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.ai_annotate.KEYBINDING" title="cellmap_flow.dashboard.routes.finetune.ai_annotate.KEYBINDING"><code class="xref py py-obj docutils literal notranslate"><span class="pre">KEYBINDING</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.ai_annotate.STATUS_KEY" title="cellmap_flow.dashboard.routes.finetune.ai_annotate.STATUS_KEY"><code class="xref py py-obj docutils literal notranslate"><span class="pre">STATUS_KEY</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.ai_annotate.GENERIC_FAILURE" title="cellmap_flow.dashboard.routes.finetune.ai_annotate.GENERIC_FAILURE"><code class="xref py py-obj docutils literal notranslate"><span class="pre">GENERIC_FAILURE</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.ai_annotate.NOT_SENT" title="cellmap_flow.dashboard.routes.finetune.ai_annotate.NOT_SENT"><code class="xref py py-obj docutils literal notranslate"><span class="pre">NOT_SENT</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.ai_annotate.STAGE_LABELS" title="cellmap_flow.dashboard.routes.finetune.ai_annotate.STAGE_LABELS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">STAGE_LABELS</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="functions">
+<h2>Functions<a class="headerlink" href="#functions" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.ai_annotate.ai_annotate_config" title="cellmap_flow.dashboard.routes.finetune.ai_annotate.ai_annotate_config"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ai_annotate_config</span></code></a>()</p></td>
+<td><p>What the page needs to show the AI-annotate panel; see the module docstring.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.ai_annotate.ai_annotate_settings" title="cellmap_flow.dashboard.routes.finetune.ai_annotate.ai_annotate_settings"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ai_annotate_settings</span></code></a>()</p></td>
+<td><p>Set the provider, model, target and prompt; optionally acknowledge the provider's destination.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.ai_annotate.ai_annotate_run" title="cellmap_flow.dashboard.routes.finetune.ai_annotate.ai_annotate_run"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ai_annotate_run</span></code></a>()</p></td>
+<td><p>Start a job: at <code class="docutils literal notranslate"><span class="pre">point_nm</span></code> (z, y, x) in the plane normal to <code class="docutils literal notranslate"><span class="pre">depth_axis</span></code>.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.ai_annotate.ai_annotate_status" title="cellmap_flow.dashboard.routes.finetune.ai_annotate.ai_annotate_status"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ai_annotate_status</span></code></a>()</p></td>
+<td><p>The session's job: its status and stage, its error, or (<code class="docutils literal notranslate"><span class="pre">?preview=1</span></code>) its preview once ready.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.ai_annotate.ai_annotate_resend" title="cellmap_flow.dashboard.routes.finetune.ai_annotate.ai_annotate_resend"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ai_annotate_resend</span></code></a>()</p></td>
+<td><p>Ask the model again about the staged plane, with <code class="docutils literal notranslate"><span class="pre">prompt</span></code> (the editable text).</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.ai_annotate.ai_annotate_accept" title="cellmap_flow.dashboard.routes.finetune.ai_annotate.ai_annotate_accept"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ai_annotate_accept</span></code></a>()</p></td>
+<td><p>Write the staged mask into the annotation volume: each object an id of its own, the rest background.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.ai_annotate.ai_annotate_reject" title="cellmap_flow.dashboard.routes.finetune.ai_annotate.ai_annotate_reject"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ai_annotate_reject</span></code></a>()</p></td>
+<td><p>Throw the staged mask away. JSON body: <code class="docutils literal notranslate"><span class="pre">annotate_id</span></code>.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="module-contents">
+<h2>Module Contents<a class="headerlink" href="#module-contents" title="Link to this heading"></a></h2>
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.ai_annotate.logger">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.ai_annotate.</span></span><span class="sig-name descname"><span class="pre">logger</span></span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.ai_annotate.logger" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.ai_annotate.ACTION">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.ai_annotate.</span></span><span class="sig-name descname"><span class="pre">ACTION</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'ai-annotate'</span></span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.ai_annotate.ACTION" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.ai_annotate.KEY">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.ai_annotate.</span></span><span class="sig-name descname"><span class="pre">KEY</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'shift+keyg'</span></span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.ai_annotate.KEY" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.ai_annotate.KEYBINDING">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.ai_annotate.</span></span><span class="sig-name descname"><span class="pre">KEYBINDING</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'Shift+G'</span></span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.ai_annotate.KEYBINDING" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.ai_annotate.STATUS_KEY">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.ai_annotate.</span></span><span class="sig-name descname"><span class="pre">STATUS_KEY</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'ai_annotate'</span></span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.ai_annotate.STATUS_KEY" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.ai_annotate.GENERIC_FAILURE">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.ai_annotate.</span></span><span class="sig-name descname"><span class="pre">GENERIC_FAILURE</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'AI</span> <span class="pre">annotation</span> <span class="pre">failed;</span> <span class="pre">see</span> <span class="pre">the</span> <span class="pre">server</span> <span class="pre">log.'</span></span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.ai_annotate.GENERIC_FAILURE" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.ai_annotate.NOT_SENT">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.ai_annotate.</span></span><span class="sig-name descname"><span class="pre">NOT_SENT</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">('auth',</span> <span class="pre">'config')</span></span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.ai_annotate.NOT_SENT" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.ai_annotate.STAGE_LABELS">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.ai_annotate.</span></span><span class="sig-name descname"><span class="pre">STAGE_LABELS</span></span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.ai_annotate.STAGE_LABELS" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.ai_annotate.ai_annotate_config">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.ai_annotate.</span></span><span class="sig-name descname"><span class="pre">ai_annotate_config</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.ai_annotate.ai_annotate_config" title="Link to this definition"></a></dt>
+<dd><p>What the page needs to show the AI-annotate panel; see the module docstring.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.ai_annotate.ai_annotate_settings">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.ai_annotate.</span></span><span class="sig-name descname"><span class="pre">ai_annotate_settings</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.ai_annotate.ai_annotate_settings" title="Link to this definition"></a></dt>
+<dd><p>Set the provider, model, target and prompt; optionally acknowledge the provider’s destination.</p>
+<p>JSON body: <code class="docutils literal notranslate"><span class="pre">provider</span></code> and <code class="docutils literal notranslate"><span class="pre">model</span></code> (ones the config allows),
+<code class="docutils literal notranslate"><span class="pre">label_key</span></code> (an organelle catalog key) and/or <code class="docutils literal notranslate"><span class="pre">label_name</span></code> (what
+to call the target, by default the catalog’s name), <code class="docutils literal notranslate"><span class="pre">prompt</span></code> (the
+editable prompt; null or the catalog’s own text uses the catalog’s) and
+<code class="docutils literal notranslate"><span class="pre">acknowledge</span></code>.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.ai_annotate.ai_annotate_run">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.ai_annotate.</span></span><span class="sig-name descname"><span class="pre">ai_annotate_run</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.ai_annotate.ai_annotate_run" title="Link to this definition"></a></dt>
+<dd><p>Start a job: at <code class="docutils literal notranslate"><span class="pre">point_nm</span></code> (z, y, x) in the plane normal to <code class="docutils literal notranslate"><span class="pre">depth_axis</span></code>.</p>
+<p>Both optional: the view centre, and the plane of the viewer’s layout
+(XY in a multi-panel layout, where which panel is meant is not known).</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.ai_annotate.ai_annotate_status">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.ai_annotate.</span></span><span class="sig-name descname"><span class="pre">ai_annotate_status</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.ai_annotate.ai_annotate_status" title="Link to this definition"></a></dt>
+<dd><p>The session’s job: its status and stage, its error, or (<code class="docutils literal notranslate"><span class="pre">?preview=1</span></code>) its preview once ready.</p>
+<p>The preview is three PNGs of up to 1024 pixels a side, so it comes only
+when asked for: the page asks once when a result becomes ready, not on
+every poll while it waits for review. A result being written by Accept
+is reported as ready, its last state the page can show.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.ai_annotate.ai_annotate_resend">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.ai_annotate.</span></span><span class="sig-name descname"><span class="pre">ai_annotate_resend</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.ai_annotate.ai_annotate_resend" title="Link to this definition"></a></dt>
+<dd><p>Ask the model again about the staged plane, with <code class="docutils literal notranslate"><span class="pre">prompt</span></code> (the editable text).</p>
+<p>The plane is not read again: the same image goes with the new prompt,
+and the preview is replaced under the same annotate_id.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.ai_annotate.ai_annotate_accept">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.ai_annotate.</span></span><span class="sig-name descname"><span class="pre">ai_annotate_accept</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.ai_annotate.ai_annotate_accept" title="Link to this definition"></a></dt>
+<dd><p>Write the staged mask into the annotation volume: each object an id of its own, the rest background.</p>
+<p>JSON body: <code class="docutils literal notranslate"><span class="pre">annotate_id</span></code> and <code class="docutils literal notranslate"><span class="pre">overwrite</span></code>. Without <code class="docutils literal notranslate"><span class="pre">overwrite</span></code> only
+unannotated voxels are written, as a seed writes them; with it, the
+staged labels replace what the plane held. Either way Undo takes it back.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.ai_annotate.ai_annotate_reject">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.ai_annotate.</span></span><span class="sig-name descname"><span class="pre">ai_annotate_reject</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.ai_annotate.ai_annotate_reject" title="Link to this definition"></a></dt>
+<dd><p>Throw the staged mask away. JSON body: <code class="docutils literal notranslate"><span class="pre">annotate_id</span></code>.</p>
+</dd></dl>
+
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../index.html" class="btn btn-neutral float-left" title="cellmap_flow.dashboard.routes.finetune" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../annotation_core/index.html" class="btn btn-neutral float-right" title="cellmap_flow.dashboard.routes.finetune.annotation_core" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, David Ackerman,  Marwan Zouinkhi, Jeff Rhoades, Larissa Heinrich, Aubrey Weigel.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

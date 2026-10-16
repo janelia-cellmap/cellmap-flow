@@ -1,0 +1,73 @@
+cellmap_flow.ai_annotate.errors
+===============================
+
+.. py:module:: cellmap_flow.ai_annotate.errors
+
+.. autoapi-nested-parse::
+
+   The one error type AI-assisted annotation raises, and what the user is shown.
+
+   A hosted model's SDK raises exceptions whose text can hold request details,
+   response bodies or, for a key-based provider, the key itself. The dashboard
+   shows errors in the browser, so it must never show ``str(e)`` from an SDK.
+   Everything in this package raises ``AIAnnotateError`` instead: a category the
+   routes turn into an HTTP status, and a short ``user_message`` written here,
+   safe to show. The SDK's own detail goes to the server log only, where the
+   redacting filter (``secrets``) has already removed registered secrets.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.ai_annotate.errors.CATEGORIES
+   cellmap_flow.ai_annotate.errors.INSTALL_HINT
+
+
+Exceptions
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.ai_annotate.errors.AIAnnotateError
+
+
+Module Contents
+---------------
+
+.. py:data:: CATEGORIES
+   :value: ('config', 'auth', 'quota', 'timeout', 'bad_response', 'unavailable', 'refused', 'limit')
+
+
+.. py:data:: INSTALL_HINT
+   :value: "The google-genai package is not installed in the dashboard's environment: run `pixi install -e...
+
+
+.. py:exception:: AIAnnotateError(category, user_message, *, http_status=None)
+
+
+
+   A failure the user can be told about, as a category and a safe message.
+
+   ``str()`` of it is the user message too, so a caller that logs or returns
+   ``str(e)`` by habit still shows nothing unvetted. ``http_status``
+   overrides the category's default, e.g. 400 for a request naming a model
+   the config does not allow.
+
+
+   .. py:attribute:: CATEGORIES
+      :value: ('config', 'auth', 'quota', 'timeout', 'bad_response', 'unavailable', 'refused', 'limit')
+
+
+
+   .. py:attribute:: category
+
+
+   .. py:attribute:: user_message
+
+
+   .. py:attribute:: http_status
+
+

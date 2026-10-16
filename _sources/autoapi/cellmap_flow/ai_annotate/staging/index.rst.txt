@@ -1,0 +1,133 @@
+cellmap_flow.ai_annotate.staging
+================================
+
+.. py:module:: cellmap_flow.ai_annotate.staging
+
+.. autoapi-nested-parse::
+
+   Where an AI annotation waits for review: a staging directory per annotation.
+
+   A model's result is not written into the annotation volume until the user
+   accepts it. Until then it lives in ``<corrections_dir>/.ai_annotate/<id>/``:
+   the image sent (``input.png``), the image the model returned
+   (``model.png``, when it returned one), the mask on the write box's voxels
+   (``mask_write.npy``) and ``meta.json`` (the plan, the prompt, the model, the
+   label name). Accepting writes the mask and discards the directory, as
+   rejecting does. Nothing secret is staged: the prompt and ids are the user's
+   own, and no provider credential ever reaches these functions.
+
+   The id is the server's (``new_annotate_id``) and is checked against
+   ``ANNOTATE_ID_RE`` before it is joined into any path, so an id from a
+   request can only ever name a directory under ``.ai_annotate``.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.ai_annotate.staging.ANNOTATE_ID_RE
+   cellmap_flow.ai_annotate.staging.STAGING_DIRNAME
+   cellmap_flow.ai_annotate.staging.INPUT_PNG
+   cellmap_flow.ai_annotate.staging.MODEL_PNG
+   cellmap_flow.ai_annotate.staging.MASK_NPY
+   cellmap_flow.ai_annotate.staging.META_JSON
+   cellmap_flow.ai_annotate.staging.OVERLAY_ALPHA
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.ai_annotate.staging.new_annotate_id
+   cellmap_flow.ai_annotate.staging.staging_dir
+   cellmap_flow.ai_annotate.staging.stage
+   cellmap_flow.ai_annotate.staging.load
+   cellmap_flow.ai_annotate.staging.overlay
+   cellmap_flow.ai_annotate.staging.preview
+   cellmap_flow.ai_annotate.staging.discard
+
+
+Module Contents
+---------------
+
+.. py:data:: ANNOTATE_ID_RE
+
+.. py:data:: STAGING_DIRNAME
+   :value: '.ai_annotate'
+
+
+.. py:data:: INPUT_PNG
+   :value: 'input.png'
+
+
+.. py:data:: MODEL_PNG
+   :value: 'model.png'
+
+
+.. py:data:: MASK_NPY
+   :value: 'mask_write.npy'
+
+
+.. py:data:: META_JSON
+   :value: 'meta.json'
+
+
+.. py:data:: OVERLAY_ALPHA
+   :value: 0.5
+
+
+.. py:function:: new_annotate_id() -> str
+
+   A fresh annotation id: 32 lowercase hex characters.
+
+
+.. py:function:: staging_dir(corrections_dir, annotate_id) -> pathlib.Path
+
+   ``<corrections_dir>/.ai_annotate/<annotate_id>``; the id is validated first.
+
+
+.. py:function:: stage(corrections_dir, annotate_id, *, plan, request, result, mask_write, provider_id, model, label_name, volume_id=None) -> dict
+
+   Stage a model's result for review; returns the meta written to meta.json.
+
+   ``plan`` is the ``PlanePlan``, ``request`` and ``result`` the backend's
+   ``SegmentRequest`` and ``SegmentResult``, ``mask_write`` the mask on the
+   write box (``pipeline.mask_to_write_shape``). Staging the same id again
+   (a resend) replaces what was there; meta.json is written last, so a
+   staging with one is complete.
+
+
+.. py:function:: load(corrections_dir, annotate_id)
+
+   ``(meta, mask_write, input_image)`` of a staging.
+
+   Raises AIAnnotateError ("refused", 404) when there is none, as after an
+   accept, a reject or a restart that cleared it.
+
+
+.. py:function:: overlay(input_image: PIL.Image.Image, mask_write: numpy.ndarray, target_rgb) -> PIL.Image.Image
+
+   ``input_image`` with the voxels the mask labels tinted ``target_rgb``.
+
+   The mask is the write box's, laid out as the image is (``to_screen``)
+   and scaled to it by nearest neighbour, so the overlay shows what
+   accepting writes, not the model's own image.
+
+
+.. py:function:: preview(corrections_dir, annotate_id) -> dict
+
+   The review panel's images, base64 PNG: ``input_png``, ``model_png`` (None
+   when the model returned no image) and ``overlay_png``.
+
+   Every image is re-encoded here, so nothing the model sent reaches the
+   browser as it came.
+
+
+.. py:function:: discard(corrections_dir, annotate_id) -> None
+
+   Delete a staging; nothing happens when there is none.
+
+

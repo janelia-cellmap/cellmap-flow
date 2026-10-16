@@ -1,0 +1,43 @@
+cellmap_flow.serving.engine
+===========================
+
+.. py:module:: cellmap_flow.serving.engine
+
+.. autoapi-nested-parse::
+
+   Building the inference server a process runs, and the chunk that checks it.
+
+   Every place that starts a server (``cellmap_flow serve``, ``infer
+   --server-check`` and the finetune loop) builds it with ``make_server``, so
+   they agree on what a server is: ``serving.chunkmirage_server.ChunkmirageServer``.
+
+   A model may run in an environment of its own (its ``env``: a pixi
+   environment, an alias or a path). That environment needs chunkmirage, as
+   every environment cellmap-flow is installed in has; one without it is told
+   so instead of serving.
+
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.serving.engine.make_server
+   cellmap_flow.serving.engine.check_server
+
+
+Module Contents
+---------------
+
+.. py:function:: make_server(dataset_name, model_config, **kwargs)
+
+   The server for ``model_config`` over ``dataset_name``; ``kwargs`` are
+   ChunkmirageServer's (restart_callback, restart_token, resample).
+
+
+.. py:function:: check_server(server)
+
+   Compute one chunk the way a request would: ``infer --server-check``.
+
+

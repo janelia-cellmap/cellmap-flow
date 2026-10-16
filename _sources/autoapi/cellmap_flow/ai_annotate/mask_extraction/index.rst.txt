@@ -1,0 +1,60 @@
+cellmap_flow.ai_annotate.mask_extraction
+========================================
+
+.. py:module:: cellmap_flow.ai_annotate.mask_extraction
+
+.. autoapi-nested-parse::
+
+   From an EM plane to the RGB image a model is sent, and from its reply to a mask.
+
+   Adapted from ask-to-mask (``_normalize_to_uint8``/``_slice_to_rgb`` and
+   ``extract_mask``'s colour-difference mode): the model is asked to paint the
+   structure one colour and everything else black, and the mask is the pixels
+   that came back that colour.
+
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.ai_annotate.mask_extraction.normalize_to_uint8
+   cellmap_flow.ai_annotate.mask_extraction.slice_to_rgb
+   cellmap_flow.ai_annotate.mask_extraction.extract_mask
+
+
+Module Contents
+---------------
+
+.. py:function:: normalize_to_uint8(data: numpy.ndarray) -> numpy.ndarray
+
+   A 2D array as uint8 grey levels.
+
+   uint8 passes through unchanged. Anything else is clipped to its 1st-99th
+   percentile over the plane and stretched to 0-255, as raw EM is not always
+   8-bit and a few saturated pixels should not flatten the contrast.
+
+
+.. py:function:: slice_to_rgb(data_2d: numpy.ndarray) -> PIL.Image.Image
+
+   A 2D plane as a grey RGB image, the form image models take.
+
+
+.. py:function:: extract_mask(output_image: PIL.Image.Image, target_rgb: tuple[int, int, int], threshold: float = 200.0) -> numpy.ndarray
+
+   The pixels of the model's reply painted ``target_rgb``, as a bool (H, W) mask.
+
+   Each pixel scores how strongly it shows the target colour: its weakest
+   channel among those the target has at full strength, minus its strongest
+   deviation elsewhere -- a channel the target has off (0) being on, or a
+   channel the target has at part strength being away from that strength.
+   For red (255, 0, 0) that is ``R - max(G, B)``: red that dominates. A
+   pixel counts when its score reaches ``threshold``.
+
+   The part-strength term is what lets orange (255, 128, 0) or purple
+   (128, 0, 255) be found at all: counting their half channel as "on" would
+   cap the score at 128, under the threshold, and counting it as "off"
+   would reject the colour itself.
+
+

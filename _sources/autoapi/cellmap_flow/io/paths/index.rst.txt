@@ -1,0 +1,146 @@
+cellmap_flow.io.paths
+=====================
+
+.. py:module:: cellmap_flow.io.paths
+
+.. autoapi-nested-parse::
+
+   Dataset paths: where a container ends, how to join onto a path, what is there.
+
+   A dataset path is a local directory or an http(s), s3 or gs URL, and may run
+   on past its container into the group or array inside it
+   (``/data/x.zarr/recon-1/em/s0``). A ``precomputed://`` path, and a ``gs://``
+   path with no ``.zarr``/``.n5`` in it, is a neuroglancer precomputed volume:
+   ``precomputed://`` is followed by a local directory or, as neuroglancer
+   writes it, a URL (``precomputed://gs://bucket/volume``).
+
+   What is at a path is probed through ``io.store`` (for ``.zgroup``,
+   ``.zarray``, ``zarr.json``) only where a path has no ``.zarr``/``.n5``
+   suffix to split it at; the local v3 checks look at the filesystem.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.io.paths.ZARR_JSON
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.io.paths.is_remote
+   cellmap_flow.io.paths.is_precomputed
+   cellmap_flow.io.paths.normalize_path
+   cellmap_flow.io.paths.join
+   cellmap_flow.io.paths.parent
+   cellmap_flow.io.paths.is_v3_container
+   cellmap_flow.io.paths.find_v3_container
+   cellmap_flow.io.paths.is_zarr_container
+   cellmap_flow.io.paths.suffix_format
+   cellmap_flow.io.paths.split_container
+   cellmap_flow.io.paths.precomputed_scale
+   cellmap_flow.io.paths.precomputed_volume
+
+
+Module Contents
+---------------
+
+.. py:data:: ZARR_JSON
+   :value: 'zarr.json'
+
+
+.. py:function:: is_remote(path: str) -> bool
+
+   An http(s), s3 or gs URL.
+
+
+.. py:function:: is_precomputed(path: str) -> bool
+
+   A ``precomputed://`` path, or a ``gs://`` one that names no zarr or
+   N5 container (neuroglancer's cloud volumes are precomputed).
+
+
+.. py:function:: normalize_path(path: str) -> str
+
+   Remove shell-escape backslashes from a filesystem path.
+
+   Users often copy-paste paths from a terminal where spaces are escaped
+   (e.g. ``/path/to/file\ name.zarr``).  YAML preserves the literal
+   backslashes, but the filesystem expects plain spaces.
+
+   A URL -- http(s), s3, gs, or one after ``precomputed://`` -- is returned
+   as it is: it is not a filesystem path.
+
+
+.. py:function:: join(base: str, *parts: str) -> str
+
+   Join path components; a URL is joined with "/" whatever the OS.
+
+
+.. py:function:: parent(path: str) -> str
+
+   The directory above ``path``, a URL's as a local path's; a URL's root
+   (``s3://bucket``) is its own.
+
+
+.. py:function:: is_v3_container(path: str) -> bool
+
+   True if ``path`` is a directory with a ``zarr.json`` at its root.
+
+
+.. py:function:: find_v3_container(path: str) -> Optional[str]
+
+   The nearest directory at or above ``path`` holding a ``zarr.json``.
+
+   None if there is none (a v2 store), ``path`` is a URL (zarr v3 is read
+   from the local filesystem only), or ``path`` does not exist: a missing
+   level is not the group above it, whose zarr.json would otherwise answer
+   for it.
+
+
+.. py:function:: is_zarr_container(path: str) -> bool
+
+   A local zarr (v2 or v3) group or array, with or without a .zarr suffix.
+
+
+.. py:function:: suffix_format(path: str) -> Optional[str]
+
+   "zarr" or "n5": the suffix of the last component of ``path`` that ends
+   in .zarr or .n5; else None.
+
+
+.. py:function:: split_container(path: str) -> Tuple[str, str]
+
+   ``(container, path inside it)``.
+
+   The container ends at the last component of ``path`` ending in
+   ``.zarr``/``.n5``; without one it is the nearest directory up from ``path`` with a
+   ``.zgroup`` (or, failing that, the first with a ``.zarray``), on disk or
+   at a URL alike.
+   ``/data/x.zarr/em/s0`` is ``("/data/x.zarr", "em/s0")``.
+
+
+.. py:function:: precomputed_scale(path: str) -> Tuple[str, Optional[int]]
+
+   ``(volume, scale index)`` for a precomputed path: a last component
+   ``s<N>`` names scale N of the volume above it; a path without one is
+   the volume itself, with index None.
+
+
+.. py:function:: precomputed_volume(path: str) -> Tuple[str, int]
+
+   ``(volume location, scale index)`` for a precomputed path: the volume's
+   local directory or URL, which ``io.store`` reads, and the scale a trailing
+   ``/s<N>`` names (``precomputed_scale``), else 0.
+
+   ``precomputed://`` followed by a URL -- neuroglancer's way of writing a
+   cloud source, ``precomputed://gs://bucket/volume`` or
+   ``precomputed://https://host/volume`` -- is that URL, as is a bare
+   ``gs://`` path. Any other ``precomputed://`` path is a local directory.
+
+

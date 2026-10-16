@@ -1,0 +1,29 @@
+cellmap_flow.viewer
+===================
+
+.. py:module:: cellmap_flow.viewer
+
+.. autoapi-nested-parse::
+
+   The neuroglancer viewer: making one, and the layers it shows.
+
+   - ``bootstrap``: ``new_viewer()``, the one place a viewer is made.
+   - ``layers``: a model's prediction layer and the raw data's layer, built the
+     same way by every path that shows one.
+
+   Nothing here reads the dashboard's state or starts the dashboard; callers
+   pass in what a layer needs.
+
+
+
+Submodules
+----------
+
+.. toctree::
+   :maxdepth: 1
+
+   /autoapi/cellmap_flow/viewer/bootstrap/index
+   /autoapi/cellmap_flow/viewer/layers/index
+   /autoapi/cellmap_flow/viewer/raw/index
+
+

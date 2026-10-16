@@ -1,0 +1,47 @@
+cellmap_flow.cli.aliases
+========================
+
+.. py:module:: cellmap_flow.cli.aliases
+
+.. autoapi-nested-parse::
+
+   The console scripts before 0.3.0, each now a ``cellmap_flow`` subcommand.
+
+   Each one says, on stderr, which subcommand replaces it, and runs that with
+   the arguments it was given. They go in the release after 0.3.0, with their
+   ``[project.scripts]`` entries.
+
+   
+     cellmap_flow_yaml                cellmap_flow yaml
+     cellmap_flow_view                cellmap_flow view
+     cellmap_flow_blockwise           cellmap_flow blockwise
+     cellmap_flow_blockwise_multiple  cellmap_flow blockwise (it takes several YAMLs)
+     cellmap_flow_app                 cellmap_flow dashboard
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.cli.aliases.yaml
+   cellmap_flow.cli.aliases.view
+   cellmap_flow.cli.aliases.blockwise
+   cellmap_flow.cli.aliases.blockwise_multiple
+   cellmap_flow.cli.aliases.app
+
+
+Module Contents
+---------------
+
+.. py:data:: yaml
+
+.. py:data:: view
+
+.. py:data:: blockwise
+
+.. py:data:: blockwise_multiple
+
+.. py:data:: app
+

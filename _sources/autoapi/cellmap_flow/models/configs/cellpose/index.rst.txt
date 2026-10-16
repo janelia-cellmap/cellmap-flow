@@ -1,0 +1,403 @@
+cellmap_flow.models.configs.cellpose
+====================================
+
+.. py:module:: cellmap_flow.models.configs.cellpose
+
+.. autoapi-nested-parse::
+
+   ``CellposeModelConfig``: Cellpose 4 (Cellpose-SAM and its successors), in 2D or 3D.
+
+   By default each z slice of a chunk is segmented in 2D by
+   ``cellpose.models.CellposeModel``, read with ``context`` voxels of margin in
+   y and x that are cut off again, so that objects at the chunk's edge are seen
+   whole. With ``do_3d`` the chunk is segmented in 3D, as Cellpose's
+   ``do_3D``: its 2D network runs on every YX, ZY and ZX plane of the chunk,
+   their flows are summed into 3D flows (flow_z, flow_y, flow_x) and their
+   cell probabilities likewise, and masks follow the 3D flows, so an object
+   is one id through z. The chunk is then a cube with context on all six
+   sides (``chunk_voxels``), its planes about one tile each, and costs about
+   three times what the same voxels do slice by slice. What the layer shows is
+   ``output``:
+
+   - ``"flows"`` (the default): all of what Cellpose's network predicts, three
+     float32 channels named flow_y, flow_x and cell: the flows towards each
+     object's centre (Cellpose's ``dP``, about -5 to 5) and the cell
+     probability, 0 to 1, the sigmoid of its logit; in 3D a flow_z channel
+     comes first, and the logit is the sum of the three planes' (Cellpose's
+     own, which its 3D thresholds are on). The layer colours each
+     voxel by its flow's direction, dimmed by the cell probability
+     (``display_channel``; viewer.layers.flow_channels); the
+     CellposeMasksPostprocessor makes masks of them on the server, with
+     thresholds changeable from the dashboard; a seed reads the probability.
+     Computed per voxel, so it joins up across chunks.
+   - ``"probability"``: the cell probability alone, one channel.
+   - ``"masks"``: Cellpose's instance masks (uint64), ids unique within a
+     chunk. Masks are made per chunk: an object that crosses a chunk's edge is
+     cut there, with another id on each side. Objects are joined from slice to
+     slice only with ``stitch_threshold`` (Cellpose's own: a mask takes the id
+     of the one in the slice before that it overlaps by at least that IoU),
+     and only within a chunk. The ``MortonSegmentationRelabeling``
+     postprocessor makes the ids unique across chunks and shows the layer as a
+     segmentation; it is not applied here (see ``_masks``). In 3D the masks
+     are Cellpose's 3D objects, one id through the chunk's z.
+
+   Cellpose 4 cannot share cellmap-flow's default environment, whose cellpose 3
+   pins an older numpy, so this type runs in the ``cellpose4`` pixi
+   environment unless its entry names another (``default_env``).
+
+   It can be finetuned, with LoRA or in full, on painted instances
+   (``trainable_model``): the network learns Cellpose's own outputs, the flows
+   towards each instance's centre and the cell probability, from flow targets
+   (``finetune.instance_flows``), and is served afterwards as before, through
+   Cellpose's eval, which runs the network training changed in place.
+
+   ``cellpose`` is imported only when the model is built, as every type imports
+   its framework: the CLIs, ``--help`` and the dashboard's model form import
+   every type, and none of them has (or needs) Cellpose 4.
+
+   Licence: the Cellpose-SAM weights were trained on data that includes
+   datasets licensed CC-BY-NC, so they are for non-commercial use.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.models.configs.cellpose.logger
+   cellmap_flow.models.configs.cellpose.PRETRAINED_MODELS
+   cellmap_flow.models.configs.cellpose.OUTPUTS
+   cellmap_flow.models.configs.cellpose.OUTPUT_CHANNELS
+   cellmap_flow.models.configs.cellpose.OUTPUT_CHANNELS_3D
+   cellmap_flow.models.configs.cellpose.SAM_TILE_SIZE
+   cellmap_flow.models.configs.cellpose.DINO_TILE_SIZE
+   cellmap_flow.models.configs.cellpose.TILE_OVERLAP
+   cellmap_flow.models.configs.cellpose.CELLPOSE_DIAMETER
+   cellmap_flow.models.configs.cellpose.DEFAULT_BATCH_SIZE
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.models.configs.cellpose.CellposeModelConfig
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.models.configs.cellpose.tile_size
+   cellmap_flow.models.configs.cellpose.tiles_per_slice
+   cellmap_flow.models.configs.cellpose.tiles_per_volume
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:data:: PRETRAINED_MODELS
+   :value: ('cpsam_v2', 'cpsam', 'cpdino', 'cpdino-vitb')
+
+
+.. py:data:: OUTPUTS
+   :value: ('probability', 'flows', 'masks')
+
+
+.. py:data:: OUTPUT_CHANNELS
+
+.. py:data:: OUTPUT_CHANNELS_3D
+
+.. py:data:: SAM_TILE_SIZE
+   :value: 256
+
+
+.. py:data:: DINO_TILE_SIZE
+   :value: 384
+
+
+.. py:data:: TILE_OVERLAP
+   :value: 0.1
+
+
+.. py:data:: CELLPOSE_DIAMETER
+   :value: 30.0
+
+
+.. py:data:: DEFAULT_BATCH_SIZE
+   :value: 16
+
+
+.. py:function:: tile_size(backbone: str) -> int
+
+   The tile edge, in pixels, Cellpose runs ``backbone`` on (``CellposeModel._run_net``).
+
+
+.. py:function:: tiles_per_slice(length: int, tile: int, rescale: float = 1.0) -> int
+
+   How many tiles Cellpose cuts a ``length`` x ``length`` slice into.
+
+
+.. py:function:: tiles_per_volume(shape, tile: int, rescale: float = 1.0, anisotropy: float = 1.0) -> int
+
+   How many tiles Cellpose's ``do_3D`` runs on a (z, y, x) volume of ``shape``.
+
+   ``CellposeModel._run_net`` resizes the volume by ``rescale`` (and z by
+   ``anisotropy`` too), then ``core.run_3D`` runs the network on each of its
+   YX, ZY and ZX planes.
+
+
+.. py:class:: CellposeModelConfig(voxel_size, pretrained_model: str = 'cpsam_v2', output: str = 'flows', do_3d: bool = False, slices_per_chunk: int = 8, slice_size: int = None, context: int = None, batch_size: int = DEFAULT_BATCH_SIZE, diameter: float = None, flow_threshold: float = 0.4, cellprob_threshold: float = 0.0, stitch_threshold: float = 0.0, flow3d_smooth: float = 0.0, name=None, scale=None)
+
+
+
+   Cellpose 4 run on each z slice of a chunk, or on the chunk in 3D.
+
+   :param voxel_size: nm per voxel, input and output (one number or one per
+                      axis). Cellpose-SAM sees objects best about 30 voxels across, so
+                      pick the scale at which yours are roughly that, or give
+                      ``diameter``.
+   :param pretrained_model: "cpsam_v2" (default), "cpsam", "cpdino",
+                            "cpdino-vitb", or the path of finetuned Cellpose weights.
+   :param output: "flows" (the default; float32: flow_y, flow_x and the cell
+                  probability, with flow_z first in 3D), "probability" (float32,
+                  0 to 1, one channel) or "masks" (uint64, ids unique within a
+                  chunk).
+   :param do_3d: segment each chunk in 3D (Cellpose's ``do_3D``) rather than
+                 slice by slice.
+   :param slices_per_chunk: z slices in a chunk (2D only; a 3D chunk's z
+                            follows from ``slice_size``, ``chunk_voxels``).
+   :param slice_size: voxels a side, in y and x, of each chunk's slices; None
+                      is 512 in 2D, 192 in 3D (``DEFAULT_SLICE_SIZE``).
+   :param context: voxels read on each side in y and x beyond those, and cut
+                   off, and in z too in 3D; None is 32 in 2D, 24 in 3D.
+   :param batch_size: tiles per GPU pass (``DEFAULT_BATCH_SIZE``; None, as a
+                      blank form field sends it, is that too).
+   :param diameter: object diameter in input voxels; None keeps the model's
+                    own scale (about 30). Cellpose resizes each slice by
+                    30 / diameter.
+   :param flow_threshold: Cellpose's mask thresholds (masks
+                          only).
+   :param cellprob_threshold: Cellpose's mask thresholds (masks
+                              only).
+   :param stitch_threshold: Cellpose's own slice linking (masks only, 2D
+                            only): a mask takes the id of the mask in the slice before that
+                            it overlaps by at least this IoU, within a chunk. 0, the
+                            default, leaves each slice's masks apart.
+   :param flow3d_smooth: in 3D, the sigma, in voxels, of a Gaussian Cellpose
+                         smooths the 3D flows with before following them (its
+                         ``flow3D_smooth``), against objects broken up along z; 0, the
+                         default, is none.
+
+
+   .. py:attribute:: cli_name
+      :value: 'cellpose'
+
+
+
+   .. py:attribute:: default_env
+      :value: 'cellpose4'
+
+
+
+   .. py:attribute:: finetunable
+      :value: True
+
+
+
+   .. py:attribute:: normalizes_input
+      :value: True
+
+
+
+   .. py:attribute:: finetune_output_type
+      :value: 'flows'
+
+
+
+   .. py:property:: channels
+
+      The names of the channels ``output`` serves, in 2D or 3D.
+
+
+   .. py:property:: display_channel
+
+      The cell probability's channel when the output has several (flows):
+      the layer's flow colours are dimmed by it, and its range is the
+      layer's.
+
+
+   .. py:attribute:: voxel_size
+
+
+   .. py:attribute:: pretrained_model
+      :value: ''
+
+
+
+   .. py:attribute:: output
+      :value: 'flows'
+
+
+
+   .. py:attribute:: do_3d
+      :value: False
+
+
+
+   .. py:attribute:: slices_per_chunk
+      :value: 8
+
+
+
+   .. py:attribute:: slice_size
+      :value: 0
+
+
+
+   .. py:attribute:: context
+      :value: 0
+
+
+
+   .. py:attribute:: batch_size
+      :value: 16
+
+
+
+   .. py:attribute:: diameter
+      :value: None
+
+
+
+   .. py:attribute:: flow_threshold
+
+
+   .. py:attribute:: cellprob_threshold
+
+
+   .. py:attribute:: stitch_threshold
+
+
+   .. py:attribute:: flow3d_smooth
+
+
+   .. py:attribute:: name
+      :value: None
+
+
+
+   .. py:attribute:: scale
+      :value: None
+
+
+
+   .. py:property:: read_size
+      :type: int
+
+
+      Voxels a side, in y and x, of each slice Cellpose is given.
+
+
+   .. py:property:: anisotropy
+      :type: float
+
+
+      how much Cellpose stretches z in 3D (its
+      ``anisotropy``) so that its planes are square in nm.
+
+      :type: z's voxel size over y's
+
+
+   .. py:method:: chunk_voxels()
+
+      ``(chunk, context)``: a chunk's (z, y, x) voxels, and those read
+      beyond it on each side.
+
+      In 2D, ``slices_per_chunk`` slices of ``slice_size`` squared, with
+      context in y and x only: each slice is segmented on its own. In 3D a
+      cube in nm: ``slice_size`` and ``context`` in y and x, and as many
+      nm in z, so that once Cellpose stretches z by ``anisotropy`` every
+      plane is as wide as a YX one, about one tile.
+
+
+
+   .. py:method:: process_chunk(idi, output_roi)
+
+      ``output_roi`` segmented: ``(channels, z, y, x)``, the ``output``'s channels.
+
+
+
+   .. py:method:: finetune_modes()
+
+      ("lora", "full"), without building the network: every Cellpose 4
+      network is a ViT whose Linear and Conv layers take adapters.
+
+
+
+   .. py:method:: training_patch_voxels()
+
+      The patch the trainer reads, (input, output) in voxels: one slice of one tile.
+
+      Not the serving geometry. Cellpose-SAM's ViT adds a fixed 32 x 32
+      grid of position embeddings to its 8-pixel tokens, so it takes
+      256 x 256 images and nothing else; Cellpose serves a slice by
+      cutting it into such tiles, and trains on random tiles of that size
+      too. The trainer does the same: it reads tiles, and supervises the
+      whole of each, as Cellpose does (an instance cut by its edge is left
+      out of the flow loss, ``instance_flows``). One slice: the network is
+      2D and sees each slice alone, so more slices would cost a network
+      pass each and add nothing, and a one-slice patch centred on a
+      painted voxel always lands on paint. The slice is cut in the plane
+      its paint was drawn in where the voxels are cubes, and turned to face
+      the network, else it is always a YX one (``finetune.data.dataset``).
+      A 3D model's network is the same 2D one, run on the chunk's planes in
+      all three orientations, so paint in its side views trains it there.
+
+
+
+   .. py:method:: trainable_model()
+
+      Cellpose's network as the trainer trains it: (B, 1, Z, Y, X) -> (B, 3, Z, Y, X).
+
+      Each slice normalized as Cellpose's eval does (1st to 99th
+      percentile), then through the network, which gives flowY, flowX and
+      the cell probability logit (``instance_flows``' channels). The
+      network is the one ``config.model`` segments with, so what
+      is trained is what is served; it is put in float32 (Cellpose loads
+      it in bfloat16), which serving then uses too. Its patch embedding is
+      kept out of LoRA (``lora_exclude_patterns``): Cellpose's forward
+      reads that layer's weight tensor directly, so an adapter on it would
+      never be used.
+
+
+
+   .. py:method:: serve_trained(config, module)
+
+      Serve ``module`` (the trained ``trainable_model()``) through Cellpose's eval.
+
+      Training changed the network in place, LoRA adapters and all, and
+      Cellpose's eval runs that network, so the chunks are segmented as
+      before. ``config`` is this model's own config (the trainer's live
+      server) or a finetuned model's new one with this geometry, which
+      gets what segmenting needs.
+
+      ``config.model`` stays Cellpose's model object, as it is for the
+      base model, so the inferencer neither moves nor forwards it. Were it
+      the module, the warmup and the shape check would forward it, and a
+      3-channel tile network fails the 1-channel serving geometry: as a
+      hard error whenever the read slice happens to be one tile. The
+      module is kept as ``config.trained_module``.
+
+
+
+   .. py:method:: to_dict()
+
+      This config as a model entry, which ``registry.build_model`` rebuilds.
+
+
+

@@ -1,0 +1,227 @@
+cellmap_flow.jobs.lsf
+=====================
+
+.. py:module:: cellmap_flow.jobs.lsf
+
+.. autoapi-nested-parse::
+
+   Submitting jobs to LSF, and asking it about them.
+
+   ``bsub_argv`` is the one place a bsub command line is built, and ``submit``
+   the one place one is run: for inference servers, finetune runs, blockwise
+   workers and the blockwise master alike.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.jobs.lsf.logger
+   cellmap_flow.jobs.lsf.BSUB_TIMEOUT_SECONDS
+
+
+Exceptions
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.jobs.lsf.BsubTimeoutError
+   cellmap_flow.jobs.lsf.JobIdMissingError
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.jobs.lsf.LSFJob
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.jobs.lsf.available
+   cellmap_flow.jobs.lsf.walltime_arg
+   cellmap_flow.jobs.lsf.parse_job_id
+   cellmap_flow.jobs.lsf.job_ids_named
+   cellmap_flow.jobs.lsf.log_pattern
+   cellmap_flow.jobs.lsf.bsub_argv
+   cellmap_flow.jobs.lsf.submit
+   cellmap_flow.jobs.lsf.statuses
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:data:: BSUB_TIMEOUT_SECONDS
+   :value: 30
+
+
+.. py:exception:: BsubTimeoutError
+
+
+
+   bsub did not answer in time, and the job it may yet create is unknown.
+
+   LSF does not cancel a submission when the bsub client is killed, so the
+   job can still appear minutes later. Submitting again would leave two.
+
+
+.. py:exception:: JobIdMissingError(output: str)
+
+
+
+   bsub exited 0, but its output has no job id in it.
+
+
+   .. py:attribute:: output
+
+
+.. py:class:: LSFJob(job_id: str, model_name: Optional[str] = None, log_file: Optional[pathlib.Path] = None, ready_file: Optional[pathlib.Path] = None)
+
+
+
+   Job submitted to LSF cluster via bsub.
+
+   ``ready_file`` is where the job was asked to write its address (see
+   jobs/ready.py); wait_for_host looks there before asking LSF.
+
+
+   .. py:attribute:: job_id
+
+
+   .. py:attribute:: log_file
+      :value: None
+
+
+
+   .. py:attribute:: ready_file
+
+
+   .. py:method:: kill() -> None
+
+      Terminate the LSF job using bkill.
+
+
+
+   .. py:method:: peek(max_chars: int = 4000) -> Optional[str]
+
+      The job's own output, so nobody has to ssh in and run bpeek.
+
+      A running job's output has not been flushed to the ``-o`` file yet --
+      LSF writes that at the end -- so bpeek is the only way to see it live.
+      Once the job is gone bpeek has nothing, and the file is the only
+      record. Try them in that order.
+
+
+
+   .. py:method:: observed_status() -> Optional[cellmap_flow.jobs.spec.JobStatus]
+
+      The status bjobs actually reported, or None if it could not say.
+
+      get_status() falls back to self.status, which starts out RUNNING. That
+      is fine for display but wrong for decisions: a job that never started
+      reads as RUNNING the moment bjobs is unreadable, so a caller asking
+      "did this actually leave the queue?" would be told yes. Callers that
+      need the difference use this instead.
+
+
+
+   .. py:method:: get_status() -> cellmap_flow.jobs.spec.JobStatus
+
+      Query LSF for job status using bjobs.
+
+
+
+   .. py:method:: wait_for_host(timeout: int = 300) -> Optional[str]
+
+      Wait for the job to report its address: from its ready file when it
+      writes one, otherwise from its output through bpeek.
+
+      ``timeout`` is wall-clock time, including however long bjobs and
+      bpeek take to answer.
+
+      :param timeout: Maximum time to wait in seconds
+
+      :returns: Host URL if found, None otherwise
+
+
+
+.. py:function:: available() -> bool
+
+   Check if bsub command is available in the system PATH.
+
+
+.. py:function:: walltime_arg(walltime) -> List[str]
+
+   ``["-W", value]`` for bsub, or ``[]`` when there is nothing to set.
+
+   LSF accepts ``[hour:]minute``, so both "08:00" and "480" are valid and
+   mean the same thing. Anything else would make bsub reject the whole
+   submission, so an unparseable value is dropped with a warning rather than
+   taking the job down with it -- the queue default still applies.
+
+
+.. py:function:: parse_job_id(output: Optional[str]) -> Optional[str]
+
+   The id in bsub's "Job <12345> is submitted to queue <q>." line, or None.
+
+   Searched for rather than taken by position: an esub can print its own
+   notice first.
+
+
+.. py:function:: job_ids_named(job_name: str) -> Optional[set]
+
+   Ids of this user's jobs called ``job_name``, in any state.
+
+   None when bjobs could not say, which is different from "there are none".
+
+
+.. py:function:: log_pattern(spec: cellmap_flow.jobs.spec.JobSpec) -> pathlib.Path
+
+   The ``-o`` path for this job; LSF puts the job id in place of ``%J``.
+
+
+.. py:function:: bsub_argv(spec: cellmap_flow.jobs.spec.JobSpec) -> List[str]
+
+   The bsub command line that submits ``spec``. Builds it; runs nothing.
+
+
+.. py:function:: submit(spec: cellmap_flow.jobs.spec.JobSpec, *, bsub_timeout: Optional[float] = BSUB_TIMEOUT_SECONDS) -> LSFJob
+
+   Submit ``spec`` to LSF with bsub.
+
+   :param spec: What to run; its ``log_dir`` gets the job's
+                <name>_<jobid>.log (stdout and stderr)
+   :param bsub_timeout: Seconds to wait for bsub to answer, or None to wait as
+                        long as it takes (an over-ratio request is held for minutes
+                        before bsub returns)
+
+   :returns: LSFJob object for the submitted job
+
+   :raises subprocess.CalledProcessError: If job submission fails
+   :raises BsubTimeoutError: bsub did not answer and no new job with this name
+       can be found. The caller must not simply submit again.
+   :raises JobIdMissingError: bsub said it succeeded but gave no job id.
+
+
+.. py:function:: statuses(job_ids) -> dict
+
+   What LSF says about each of ``job_ids``, from a single bjobs call.
+
+   Maps each id bjobs reports to its JobStatus, and each id bjobs says it
+   does not know ("Job <id> is not found": it ended long enough ago that
+   LSF has forgotten it) to None. An id bjobs said nothing about is left
+   out, as is every id when bjobs could not be run at all: that is "could
+   not ask", which is not the same as "not found".
+
+   A state with no JobStatus of its own (suspended, say) reads as RUNNING,
+   the same as LSFJob.get_status reads it for a new job: alive.
+
+

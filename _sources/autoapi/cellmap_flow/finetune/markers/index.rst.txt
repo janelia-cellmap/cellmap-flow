@@ -1,0 +1,102 @@
+cellmap_flow.finetune.markers
+=============================
+
+.. py:module:: cellmap_flow.finetune.markers
+
+.. autoapi-nested-parse::
+
+   The lines the trainer prints for the job manager to find in its log.
+
+   The training job's loop (session_loop) and lora_trainer print these to
+   stdout, which tee copies into training_log.txt; the job manager reads them
+   back from there to follow the job, and the finetune tab reads the log it
+   streams. The two sides can be different versions -- a training job
+   outlives a dashboard upgrade -- so these only ever change compatibly.
+
+   The patterns are the ones the job manager has always used, unchanged.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.markers.FINETUNED_MODEL_YAML
+   cellmap_flow.finetune.markers.TRAINING_ITERATION_COMPLETE
+   cellmap_flow.finetune.markers.RESTART_FAILED
+   cellmap_flow.finetune.markers.INFERENCE_SERVER_FAILED
+   cellmap_flow.finetune.markers.RESTART_STATUS
+   cellmap_flow.finetune.markers.TRAINING_DIVERGED
+   cellmap_flow.finetune.markers.RESTARTING_TRAINING
+   cellmap_flow.finetune.markers.WAITING_FOR_RESTART
+   cellmap_flow.finetune.markers.EPOCH_START_RE
+   cellmap_flow.finetune.markers.EPOCH_SUMMARY_RE
+   cellmap_flow.finetune.markers.ITERATION_COMPLETE_RE
+   cellmap_flow.finetune.markers.MODEL_YAML_RE
+   cellmap_flow.finetune.markers.STATUS_MARKER_RE
+   cellmap_flow.finetune.markers.SERVER_URL_RE
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.markers.emit
+
+
+Module Contents
+---------------
+
+.. py:data:: FINETUNED_MODEL_YAML
+   :value: 'FINETUNED_MODEL_YAML:'
+
+
+.. py:data:: TRAINING_ITERATION_COMPLETE
+   :value: 'TRAINING_ITERATION_COMPLETE:'
+
+
+.. py:data:: RESTART_FAILED
+   :value: 'RESTART_FAILED:'
+
+
+.. py:data:: INFERENCE_SERVER_FAILED
+   :value: 'INFERENCE_SERVER_FAILED:'
+
+
+.. py:data:: RESTART_STATUS
+   :value: 'RESTART_STATUS:'
+
+
+.. py:data:: TRAINING_DIVERGED
+   :value: 'TRAINING_DIVERGED'
+
+
+.. py:data:: RESTARTING_TRAINING
+   :value: 'RESTARTING_TRAINING'
+
+
+.. py:data:: WAITING_FOR_RESTART
+   :value: 'WAITING_FOR_RESTART'
+
+
+.. py:data:: EPOCH_START_RE
+
+.. py:data:: EPOCH_SUMMARY_RE
+
+.. py:data:: ITERATION_COMPLETE_RE
+
+.. py:data:: MODEL_YAML_RE
+
+.. py:data:: STATUS_MARKER_RE
+
+.. py:data:: SERVER_URL_RE
+
+.. py:function:: emit(marker: str, value=None) -> None
+
+   Print ``marker`` (and its value) as a line of its own, at once.
+
+   Flushed, because the job manager is reading the log while the job runs.
+
+

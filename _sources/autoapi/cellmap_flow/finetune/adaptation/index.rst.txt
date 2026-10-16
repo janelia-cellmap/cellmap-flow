@@ -1,0 +1,401 @@
+cellmap_flow.finetune.adaptation
+================================
+
+.. py:module:: cellmap_flow.finetune.adaptation
+
+.. autoapi-nested-parse::
+
+   How a finetune adapts the model: a LoRA adapter, or every weight.
+
+   Everything that differs between the two lives here, behind one interface:
+
+   - ``prepare``: make the model trainable -- wrap it in a fresh adapter, or
+     unfreeze every weight -- folding in any adapter it already carries;
+   - ``train_mode``: train mode, less what stays frozen;
+   - ``teacher``: the model as it was before this run, for distillation;
+   - ``initial_state`` / ``reset``: put the model back where training started,
+     in place (the trainer's retry after a NaN);
+   - ``restart``: the model the next iteration of a job trains (the CLI's
+     restart, which for LoRA re-makes the adapter so its rank can change);
+   - ``trainable_state`` / ``checkpoint``: what a checkpoint keeps;
+   - ``export``: what is written for serving, under ``export_name``;
+   - ``merge``: the finetune folded into plain weights (export_merged).
+
+   The request decides the strategy once, when the model is prepared
+   (``--lora-r``, 0 for full). After that the model does (``strategy_for``): a
+   restart can change ``args.lora_r`` but not the model.
+
+   The adapter's names depend on the module tree it was trained on --
+   ``BatchLoopWrapper``'s ``model.`` prefix included -- so the wrappers stay in
+   lora_wrapper, and this module only calls them. peft is imported lazily, as
+   everywhere: a full finetune never needs it.
+
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.adaptation.AdaptationStrategy
+   cellmap_flow.finetune.adaptation.LoraStrategy
+   cellmap_flow.finetune.adaptation.FullStrategy
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.adaptation.is_peft_model
+   cellmap_flow.finetune.adaptation.cpu_state_copy
+   cellmap_flow.finetune.adaptation.frozen_teacher_copy
+   cellmap_flow.finetune.adaptation.strategy_for
+
+
+Module Contents
+---------------
+
+.. py:function:: is_peft_model(model) -> bool
+
+   Whether ``model`` carries a LoRA adapter (is a PeftModel); False without peft.
+
+
+.. py:function:: cpu_state_copy(model: torch.nn.Module) -> Dict[str, torch.Tensor]
+
+   A CPU copy of ``model``'s state dict, to reset a full finetune to.
+
+
+.. py:function:: frozen_teacher_copy(model: torch.nn.Module) -> torch.nn.Module
+
+   A frozen, eval-mode copy of ``model``: the distillation teacher of a full finetune.
+
+
+.. py:class:: AdaptationStrategy
+
+
+
+   Base class for protocol classes.
+
+   Protocol classes are defined as::
+
+       class Proto(Protocol):
+           def meth(self) -> int:
+               ...
+
+   Such classes are primarily used with static type checkers that recognize
+   structural subtyping (static duck-typing).
+
+   For example::
+
+       class C:
+           def meth(self) -> int:
+               return 0
+
+       def func(x: Proto) -> int:
+           return x.meth()
+
+       func(C())  # Passes static type check
+
+   See PEP 544 for details. Protocol classes decorated with
+   @typing.runtime_checkable act as simple-minded runtime protocols that check
+   only the presence of given attributes, ignoring their type signatures.
+   Protocol classes can be generic, they are defined as::
+
+       class GenProto(Protocol[T]):
+           def meth(self) -> T:
+               ...
+
+
+   .. py:attribute:: kind
+      :type:  Literal['lora', 'full']
+
+
+   .. py:attribute:: export_name
+      :type:  str
+
+
+   .. py:attribute:: r
+      :type:  int
+
+
+   .. py:attribute:: teacher_model
+      :type:  Optional[torch.nn.Module]
+
+
+   .. py:method:: prepare(model: torch.nn.Module) -> torch.nn.Module
+
+
+   .. py:method:: train_mode(model: torch.nn.Module) -> None
+
+
+   .. py:method:: teacher(model: torch.nn.Module) -> ContextManager[torch.nn.Module]
+
+
+   .. py:method:: initial_state(model: torch.nn.Module) -> Optional[dict]
+
+
+   .. py:method:: reset(model: torch.nn.Module, initial_state) -> torch.nn.Module
+
+
+   .. py:method:: restart(model: torch.nn.Module, initial_state) -> torch.nn.Module
+
+
+   .. py:method:: trainable_state(model: torch.nn.Module) -> dict
+
+
+   .. py:method:: checkpoint(model: torch.nn.Module, optimizer, scaler, is_best: bool) -> Optional[dict]
+
+
+   .. py:method:: export(model: torch.nn.Module, export_dir: pathlib.Path, path=None) -> pathlib.Path
+
+
+   .. py:method:: merge(model: torch.nn.Module) -> torch.nn.Module
+
+
+.. py:class:: LoraStrategy(r: int, alpha: float, dropout: float, min_channels=None, target_modules=None)
+
+   Train a LoRA adapter on the frozen model; export only the adapter.
+
+
+   .. py:attribute:: kind
+      :value: 'lora'
+
+
+
+   .. py:attribute:: export_name
+      :value: 'lora_adapter'
+
+
+
+   .. py:attribute:: teacher_model
+      :value: None
+
+
+
+   .. py:attribute:: r
+
+
+   .. py:attribute:: alpha
+
+
+   .. py:attribute:: dropout
+
+
+   .. py:attribute:: min_channels
+      :value: None
+
+
+
+   .. py:attribute:: target_modules
+      :value: None
+
+
+
+   .. py:method:: prepare(model)
+
+      ``model`` in a fresh adapter; one it already carries is folded into its weights first.
+
+
+
+   .. py:method:: train_mode(model)
+
+      Train mode, except for the frozen base's norm layers.
+
+      LoRA freezes the base, but model.train() would also put its
+      BatchNorm layers in train mode: they would normalize by each (tiny)
+      batch and keep updating running statistics that are not part of the
+      adapter, so the model served in this process would drift from
+      adapter + fresh base, and the base would not be frozen after all.
+      They stay in eval mode, as they are served.
+
+
+
+   .. py:method:: teacher(model)
+
+      The model as it was before this run: itself, adapter off. Costs nothing.
+
+
+
+   .. py:method:: initial_state(model)
+
+      None: LoRA resets by re-initialising its adapter, not by reloading weights.
+
+
+
+   .. py:method:: reset(model, initial_state=None)
+
+      Re-initialise the adapter in place: B to zero, so it adds nothing, and A as peft does.
+
+
+
+   .. py:method:: restart(model, initial_state=None)
+
+      A fresh adapter, with this strategy's rank, on the base the old one was trained on.
+
+      The old adapter is unloaded, not merged: the next iteration starts
+      from the model the job started from.
+
+
+
+   .. py:method:: trainable_state(model)
+
+      The adapter's weights: the parameters that train.
+
+
+
+   .. py:method:: checkpoint(model, optimizer, scaler, is_best)
+
+      The adapter's weights, with the optimizer and scaler states, so a run can resume.
+
+      Only the trainable parameters: writing the full 800M+ param base to
+      disk at every checkpoint is what this avoids.
+
+
+
+   .. py:method:: export(model, export_dir, path=None)
+
+      ``save_pretrained`` into ``export_dir``/lora_adapter (or ``path``, the adapter's own directory).
+
+
+
+   .. py:method:: merge(model)
+      :staticmethod:
+
+
+      The adapter folded into the base weights: a plain module, no peft needed to serve it.
+
+      peft merges most layers itself. For a 1x1x1 Conv3d (an affinity
+      head) lora_wrapper computes the delta instead, since peft's shortcut
+      for 1x1 kernels is conv2d-only and fails on it.
+
+
+
+.. py:class:: FullStrategy(teacher_model: Optional[torch.nn.Module] = None)
+
+   Train every weight; export the whole state dict.
+
+   Measured against LoRA r=64 on mito-aff-unet-setup-16 (2026-09-23): faster
+   per step (0.50 vs 0.90 s), lower memory (31 vs 50 GB at batch 8), and
+   lower training loss at every checkpoint -- the adapter's savings are in
+   parameters, which is not where this model's cost is. The export is a full
+   state dict under full_finetune/, served via
+   FinetuneModelConfig(weights_path=...).
+
+
+   .. py:attribute:: kind
+      :value: 'full'
+
+
+
+   .. py:attribute:: export_name
+      :value: 'full_finetune'
+
+
+
+   .. py:attribute:: r
+      :value: 0
+
+
+
+   .. py:attribute:: teacher_model
+      :value: None
+
+
+
+   .. py:method:: prepare(model)
+
+      Every weight trainable; an adapter the model carries (a finetuned base) is folded into them first.
+
+
+
+   .. py:method:: train_mode(model)
+
+      Train mode throughout: a full finetune trains its norm layers too.
+
+
+
+   .. py:method:: teacher(model)
+
+      A frozen copy of the weights training starts from.
+
+      Made at the first call -- the trainer's, before any step -- and kept:
+      the CLI hands it to the next iteration's trainer, so a restart
+      neither copies the model again nor distils toward weights an earlier
+      iteration already changed. It costs one extra set of parameters on
+      the device, and no activations, since the teacher runs under
+      no_grad.
+
+
+
+   .. py:method:: initial_state(model)
+
+      The weights training starts from, on the CPU: what resetting it means.
+
+
+
+   .. py:method:: reset(model, initial_state)
+
+      Load the starting weights back, in place.
+
+
+
+   .. py:method:: restart(model, initial_state)
+
+      The same model, back at the weights the job started from (``initial_state``).
+
+      Every iteration starts from them, as a LoRA restart starts from the
+      base: nothing an earlier iteration learned, or diverged into, carries
+      over.
+
+
+
+   .. py:method:: trainable_state(model)
+
+      Every weight.
+
+
+
+   .. py:method:: checkpoint(model, optimizer, scaler, is_best)
+
+      Only the best epoch's weights, without optimizer state (so no resume); None otherwise.
+
+      Every parameter is trainable, so a LoRA-style checkpoint would be the
+      whole model plus two Adam moments -- ~9.5 GB for an 800M-param UNet,
+      at every periodic checkpoint. The best weights are what the export
+      writes: the trainer's save_adapter loads them first.
+
+
+
+   .. py:method:: export(model, export_dir, path=None)
+
+      The whole state dict, to ``export_dir``/full_finetune/model_state_dict.pt.
+
+      There FinetuneModelConfig(weights_path=...) expects it. ``path`` (an
+      adapter's own directory) does not apply.
+
+
+
+   .. py:method:: merge(model)
+      :staticmethod:
+
+
+      ``model`` itself: its weights are the finetune.
+
+
+
+.. py:function:: strategy_for(model: torch.nn.Module, lora_r: Optional[int] = None, *, alpha=None, dropout=None, min_channels=None, target_modules=None, teacher_model: Optional[torch.nn.Module] = None) -> AdaptationStrategy
+
+   The strategy ``model`` is trained with: LoRA if it carries an adapter, else full.
+
+   The model decides, not the request. A restart can ask for another rank,
+   or for none, but the model -- which the inference server shares -- is
+   built once, so a job never switches between the two.
+
+   For a LoRA model, ``lora_r`` (when positive), ``alpha``, ``dropout``,
+   ``min_channels`` and ``target_modules`` set the adapter ``restart``
+   makes; what is not given is the active adapter's own (rank, alpha,
+   dropout) or the default. ``teacher_model`` is a full finetune's existing
+   teacher, to reuse.
+
+

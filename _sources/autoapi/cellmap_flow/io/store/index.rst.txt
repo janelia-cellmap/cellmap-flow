@@ -1,0 +1,105 @@
+cellmap_flow.io.store
+=====================
+
+.. py:module:: cellmap_flow.io.store
+
+.. autoapi-nested-parse::
+
+   Where a dataset's files are, and reading them: one tensorstore kvstore.
+
+   A location is a local directory or an ``http(s)://``, ``s3://`` or ``gs://``
+   URL. ``io.metadata`` reads the JSON documents there (``.zarray``,
+   ``attributes.json``, ``zarr.json``, a precomputed ``info``) with
+   ``read_json``, and ``io.source`` opens the arrays on the same kvstores
+   (``with_access``), so the metadata and the voxels come from the same place by
+   the same route, and a URL is read the way the same files on disk are.
+
+   Credentials (docs/source/data_paths.rst) are tried only when a public read is
+   refused:
+
+   - ``s3://``: anonymously first, so a public bucket is read whatever AWS
+     credentials are configured (S3 refuses even a public read signed with a
+     stale or foreign key); then with the AWS default chain (environment,
+     ``~/.aws``, instance metadata). ``AWS_ENDPOINT_URL_S3`` or
+     ``AWS_ENDPOINT_URL`` names an S3-compatible endpoint, and ``AWS_REGION``
+     or ``AWS_DEFAULT_REGION`` its region.
+   - ``gs://``: Google application-default credentials if there are any, else
+     anonymous (tensorstore's own rule); then the bucket's public https URL,
+     for when those credentials are broken. ``TENSORSTORE_GCS_HTTP_URL``, which
+     tensorstore reads for another endpoint, moves that URL with it.
+   - ``http(s)://`` and local paths: no credentials.
+
+   Which way worked is remembered per bucket, so only the first read of a
+   private bucket is refused.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.io.store.logger
+   cellmap_flow.io.store.URL_SCHEMES
+   cellmap_flow.io.store.GCS_PUBLIC_URL
+   cellmap_flow.io.store.T
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.io.store.is_url
+   cellmap_flow.io.store.kvstores
+   cellmap_flow.io.store.with_access
+   cellmap_flow.io.store.read
+   cellmap_flow.io.store.read_json
+   cellmap_flow.io.store.exists
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:data:: URL_SCHEMES
+   :value: ('http://', 'https://', 's3://', 'gs://')
+
+
+.. py:data:: GCS_PUBLIC_URL
+   :value: 'https://storage.googleapis.com'
+
+
+.. py:data:: T
+
+.. py:function:: is_url(location: str) -> bool
+
+.. py:function:: kvstores(location: str) -> List[dict]
+
+   The tensorstore kvstore specs that read ``location``, a directory, in
+   the order to try them (see the module docstring). Each spec's path ends
+   in "/", so a key read from it is a file in that directory.
+
+
+.. py:function:: with_access(location: str, attempt: Callable[[dict], T]) -> T
+
+   ``attempt(spec)`` with ``location``'s kvstore specs in turn, moving on
+   only while access is refused; the one let in is tried first next time.
+   Any other error, and the last refusal, is raised.
+
+
+.. py:function:: read(location: str, key: str) -> Optional[bytes]
+
+   The file ``key`` in the directory ``location``; None when it is not
+   there.
+
+
+.. py:function:: read_json(location: str, key: str) -> Optional[dict]
+
+   The JSON document ``key`` in the directory ``location``; None when it
+   is not there.
+
+
+.. py:function:: exists(location: str, key: str) -> bool
+

@@ -1,0 +1,64 @@
+cellmap_flow.ai_annotate.prompts
+================================
+
+.. py:module:: cellmap_flow.ai_annotate.prompts
+
+.. autoapi-nested-parse::
+
+   The prompt that asks an image model to paint one structure in an EM plane.
+
+   Adapted from ask-to-mask's detailed prompt: what the image is, its
+   resolution, how the structure looks in EM (when the catalog knows it), and
+   the instruction to paint it one colour on black. The user may replace the
+   description and instruction with their own text; the resolution and the
+   instance-separation sentence are added either way, since the first depends
+   on the plane actually sent and the second on how the mask is used.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.ai_annotate.prompts.MAX_PROMPT_CHARS
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.ai_annotate.prompts.editable_prompt
+   cellmap_flow.ai_annotate.prompts.build_recolor_prompt
+
+
+Module Contents
+---------------
+
+.. py:data:: MAX_PROMPT_CHARS
+   :value: 4000
+
+
+.. py:function:: editable_prompt(profile: cellmap_flow.ai_annotate.organelles.OrganelleProfile) -> str
+
+   The part of the prompt the user may edit, as the catalog writes it.
+
+   This is what the dashboard prefills the prompt box with. Sending it back
+   unedited as ``prompt_override`` gives exactly the prompt no override
+   gives, so prefilling never changes what the model is asked.
+
+
+.. py:function:: build_recolor_prompt(profile: cellmap_flow.ai_annotate.organelles.OrganelleProfile, resolution_nm: float | None = None, prompt_override: str | None = None) -> str
+
+   The recolor prompt for one EM plane.
+
+   The resolution sentence (``resolution_nm`` is the in-plane size of a
+   pixel of the image actually sent), then the editable part, then the
+   instance-separation sentence. The editable part is ``prompt_override``
+   when it has text (a user's dataset-specific wording), else the catalog's
+   ``editable_prompt``. An override longer than ``MAX_PROMPT_CHARS`` is
+   refused (400); the sentences added around it are short and fixed, so the
+   cap is on the part the user writes.
+
+

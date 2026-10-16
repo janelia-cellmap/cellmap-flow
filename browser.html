@@ -1,0 +1,282 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>In the browser &mdash; CellMap Flow  documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="_static/graphviz.css?v=4ae1632d" />
+      <link rel="stylesheet" type="text/css" href="_static/css/custom.css" />
+
+  
+    <link rel="shortcut icon" href="_static/favicon.ico"/>
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Command line" href="cli.html" />
+    <link rel="prev" title="Installation" href="install.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            CellMap Flow
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">CellMap-Flow API:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="install.html">Installation</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">In the browser</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#how-it-works">How it works</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#opening-a-volume">Opening a volume</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#finetuning-in-the-browser">Finetuning in the browser</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#browsers-and-devices">Browsers and devices</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#running-it-locally">Running it locally</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="cli.html">Command line</a></li>
+<li class="toctree-l1"><a class="reference internal" href="scripts.html">Python Scripts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="yaml_config.html">YAML Configuration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="data_paths.html">Data paths</a></li>
+<li class="toctree-l1"><a class="reference internal" href="huggingface.html">HuggingFace Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="bioimage.html">BioImage Model Zoo</a></li>
+<li class="toctree-l1"><a class="reference internal" href="custom_script.html">Custom Model</a></li>
+<li class="toctree-l1"><a class="reference internal" href="post.html">PostProcessors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plugins.html">Plugins</a></li>
+<li class="toctree-l1"><a class="reference internal" href="review.html">Reviewing instances</a></li>
+<li class="toctree-l1"><a class="reference internal" href="viewer_api.html">Viewer layer API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="architecture.html">Architecture</a></li>
+<li class="toctree-l1"><a class="reference internal" href="autoapi/index.html">API Reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">CellMap Flow</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">In the browser</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/browser.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="in-the-browser">
+<h1>In the browser<a class="headerlink" href="#in-the-browser" title="Link to this heading"></a></h1>
+<p><a class="reference external" href="https://janelia-cellmap.github.io/cellmap-flow/app/">janelia-cellmap.github.io/cellmap-flow/app</a>
+is cellmap-flow with nothing to install: the dashboard as a web page, with the
+models running in your browser. Open a volume, tick a model, and look at its
+predictions in Neuroglancer as you move around. It is the main place to try
+cellmap-flow, and the first place to test a change: every push to <code class="docutils literal notranslate"><span class="pre">main</span></code>
+deploys it (GitHub Pages, from <code class="docutils literal notranslate"><span class="pre">.github/workflows/pages.yml</span></code>).</p>
+<p><a class="reference external" href="https://janelia-cellmap.github.io/cellmap-flow/app/?dataset=https://janelia-cosem-datasets.s3.amazonaws.com/jrc_mus-liver/jrc_mus-liver.zarr/recon-1/em/fibsem-uint8&amp;model=setup_53">Open this example</a> to start from something running: an
+OpenOrganelle mouse-liver volume with the mitochondria model <code class="docutils literal notranslate"><span class="pre">setup_53</span></code> on
+it. A link’s query names the volume and the models, so any such pair can be
+shared:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>https://janelia-cellmap.github.io/cellmap-flow/app/?dataset=&lt;url&gt;&amp;model=&lt;name&gt;&amp;model=&lt;name&gt;
+</pre></div>
+</div>
+<p>A model is named as the Models tab lists it (<code class="docutils literal notranslate"><span class="pre">setup_53</span></code>) or by its
+repository path (<code class="docutils literal notranslate"><span class="pre">cellmap/onnx-web-models/setup_53</span></code>). <em>Share</em> in the header
+copies such a link to what you have open, with the view (position, zoom,
+each layer as shown) and the Input and Postprocess settings the models run
+with, for someone else to open. The address bar itself stays bare, so a new
+tab starts fresh.</p>
+<section id="how-it-works">
+<h2>How it works<a class="headerlink" href="#how-it-works" title="Link to this heading"></a></h2>
+<p>The page reads the raw volume straight from its URL, runs the model with
+<a class="reference external" href="https://onnxruntime.ai/">onnxruntime-web</a> on your machine’s GPU through
+WebGPU (or on its CPU through WebAssembly when there is none), and serves the
+predictions to Neuroglancer as a zarr array through a service worker, chunk by
+chunk, as the viewer asks for them. The models are ONNX exports of cellmap’s
+networks from <a class="reference external" href="https://huggingface.co/cellmap/onnx-web-models">cellmap/onnx-web-models</a>
+on Hugging Face, cached in the browser after the first download.</p>
+<p>It is the same dashboard as the server’s: the same Models, Input and
+Postprocess tabs, the same normalizers and postprocessing steps, and a
+Finetune tab that paints and trains in the browser (below). What is missing
+is what a browser cannot do: models that are not ONNX exports (PyTorch,
+TensorFlow, DaCapo, BioImage.io, Cellpose), a finetune of a whole network,
+crops imported from disk, the Pipeline Builder and blockwise runs on the
+cluster. Those are the server mode’s (<a class="reference internal" href="cli.html"><span class="doc">Command line</span></a>).</p>
+</section>
+<section id="opening-a-volume">
+<h2>Opening a volume<a class="headerlink" href="#opening-a-volume" title="Link to this heading"></a></h2>
+<p><strong>A URL.</strong> Paste the URL of an OME-Zarr group or array served with CORS
+(<code class="docutils literal notranslate"><span class="pre">Access-Control-Allow-Origin</span></code>). Public S3 and GCS buckets are, such as
+<a class="reference external" href="https://openorganelle.janelia.org">OpenOrganelle</a>’s; the connect panel’s
+placeholder is one of them.</p>
+<p><strong>A folder on your machine.</strong> In Chrome or Edge, <em>Browse local folder…</em> on the
+connect panel opens a directory picker, and the panel takes an OME-Zarr, zarr
+or N5 folder dropped on it from the file manager. Nothing is uploaded: the
+page reads the files itself. The browser asks once to allow reading the
+folder, and again after a reload. Firefox and Safari have no directory picker.</p>
+<p><strong>A volume on your institution’s network.</strong> A host with a private address
+(<code class="docutils literal notranslate"><span class="pre">10.x</span></code>, <code class="docutils literal notranslate"><span class="pre">192.168.x</span></code>, a <code class="docutils literal notranslate"><span class="pre">.local</span></code> name) opens as it does in
+Neuroglancer. To Chrome such a host is on your <em>local network</em>, which a
+public site such as this one may use only with your permission; if Chrome
+asks (“wants to look for and connect to devices on your local network”),
+allow it. Until it is allowed, connecting fails with <em>Failed to fetch</em>, and
+the connect panel says so; the setting is under <em>Local network access</em> in
+the site-information panel beside the address bar (or at
+<code class="docutils literal notranslate"><span class="pre">chrome://settings/content/localNetworkAccess</span></code>). Running the app locally
+on <code class="docutils literal notranslate"><span class="pre">http://localhost</span></code> (below) is not gated.</p>
+</section>
+<section id="finetuning-in-the-browser">
+<h2>Finetuning in the browser<a class="headerlink" href="#finetuning-in-the-browser" title="Link to this heading"></a></h2>
+<p>With a model running, the Finetune tab’s <em>New Volume</em> adds a paint layer to
+the viewer, selected, on its Draw tab: paint background (value 1) and the
+objects (2 and up) on a few slices with the brush (<code class="docutils literal notranslate"><span class="pre">A</span></code>) and flood fill
+(<code class="docutils literal notranslate"><span class="pre">F</span></code>), as on the server (<span class="xref std std-doc">finetuning</span>). On the tab’s Training panel,
+<em>Start Finetuning</em> trains in the tab: the model’s last layer, its output
+convolution, is fitted on the voxels you painted, from the model’s own
+weights, in seconds on any machine; the job card and the loss plot follow it.
+With <em>Auto-serve</em> on, the finetuned model takes the layer over as soon as it
+is trained. Paint where it is still wrong and train again (<em>Restart</em> goes on
+from the trained layer, with the form’s values as they are then).</p>
+<p>The training panel’s controls are the server’s where they mean something for
+one layer: the epochs, the learning rate, the loss (BCE by default, MSE or
+margin; Dice scores whole patches and needs the server), label smoothing,
+class balance, and <em>Distillation Weight</em> and <em>Scope</em>, which keep the layer
+close to the model’s own output where you painted nothing: the loss adds the
+weight times the mean squared distance of the layer’s logits from the
+original’s, on the unpainted voxels of the painted chunks (or all of their
+voxels), up to 32,768 of them. 0.01, the default, is a light hold; 0.1 to 1
+holds firmly. <em>Voxels per Step</em> is the browser’s own batch: how many painted
+voxels each step of the training averages over. <em>Mark as Good</em>, under <em>Patch
+on screen</em>, marks the output block where the viewer looks as one the model
+already gets right; it shows as the <code class="docutils literal notranslate"><span class="pre">good_regions</span></code> box layer and is kept
+with the volume. Once there are good regions, distillation holds the model to
+its own output inside them, wherever you have not painted, instead of over
+the scope, as on the server; <em>clear</em> removes them.</p>
+<p>What this can and cannot fix. The rest of the network stays as exported, so
+the finetune learns what the model mislabels where its features already tell
+the two apart (a membrane it calls mitochondrion, a texture it misses), not
+new shapes; that is a finetune of the whole network, which the server mode
+runs on the cluster, and whose result the browser can serve as any other
+model.</p>
+<p>The <em>Patch on screen</em> tools label the box centred where the viewer looks, as
+on the server (<span class="xref std std-doc">finetuning</span>): <em>Seed from Prediction</em> copies a model’s
+prediction into the unpainted voxels, an id per object and background 1, for
+you to fix with the brush; <em>All Background</em> labels them background; <em>Split
+Objects</em> gives each connected object an id of its own (paint a background wall
+through a merge first); <em>Undo</em> takes back the last of these, or of an accepted
+AI annotation, up to 10. <em>Prediction from</em> lists the models served on the
+Models tab, the ones finetuned here among them (default: the volume model’s
+latest finetune), and the seed reads the prediction the page has already
+computed for the viewer. Its methods are <em>Threshold + components</em> for any
+model and <em>Mutex watershed</em> for an affinity model; the server’s <em>Distance
+watershed</em> and <em>Model’s instances</em> fit outputs no browser model has.</p>
+<p>AI-assisted annotation is in the tab too, under <em>Patch on screen</em>: hover over
+a structure and press <code class="docutils literal notranslate"><span class="pre">Shift+G</span></code> (or click <em>Annotate at View Centre</em>), and
+one plane of raw EM goes to a Gemini image model asked to paint it; the
+review opens over the page, <em>Accept</em> writes the mask into the paint volume as
+an object per piece, and the tools’ <em>Undo</em> takes it back. The page calls Google itself, with
+credentials you give it in the panel: a Gemini API key, or a Google Cloud
+project and an access token for Vertex AI (<code class="docutils literal notranslate"><span class="pre">gcloud</span> <span class="pre">auth</span> <span class="pre">print-access-token</span></code>,
+good for about an hour). They stay in this browser and go to Google alone,
+with each plane, and are kept in the page’s memory only, never in the
+browser’s storage, so a reload asks for them again. On the Gemini API’s free tier Google may use what is
+sent to improve its products, on its paid tier and on Vertex AI it does not;
+the server mode uses Vertex AI for that reason. A <em>fake</em> provider paints in
+the page, for trying the panel without a key. The server’s guide,
+<a class="reference external" href="https://github.com/janelia-cellmap/cellmap-flow/blob/main/docs/ai_annotate.md">docs/ai_annotate.md</a>,
+has the details under “In the browser”.</p>
+<p>The paint and the finetuned models stay in the browser (IndexedDB): <em>Resume
+Existing Volume</em> lists the volumes painted here, newest first, and the
+Models tab lists the finetuned models under the Hugging Face ones. <em>Download
+paint</em> saves the volume as a zarr (zipped, the server’s layout, so a server
+session can train on it) and <em>Download finetuned model</em> the <code class="docutils literal notranslate"><span class="pre">.onnx</span></code>.
+Nothing leaves your machine unless you download and share it.</p>
+</section>
+<section id="browsers-and-devices">
+<h2>Browsers and devices<a class="headerlink" href="#browsers-and-devices" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p><strong>WebGPU.</strong> Chrome or Edge (any current version), or Safari 26 and later.
+Without WebGPU the page still works, on the CPU: tens of seconds per chunk
+instead of well under one.</p></li>
+<li><p><strong>Phones.</strong> The viewer fills the screen and the <em>Dashboard</em> button in the
+header opens the controls over it.</p></li>
+<li><p><strong>Memory.</strong> Model files are 11–43 MB each, kept in IndexedDB; the page
+picks a smaller variant (fp16, int8 weights) when the GPU’s limits call for
+it.</p></li>
+</ul>
+</section>
+<section id="running-it-locally">
+<h2>Running it locally<a class="headerlink" href="#running-it-locally" title="Link to this heading"></a></h2>
+<p>The browser mode lives in the repository’s <code class="docutils literal notranslate"><span class="pre">web/</span></code> directory; its
+<a class="reference external" href="https://github.com/janelia-cellmap/cellmap-flow/blob/main/web/README.md">README</a>
+says how to build and run it (<code class="docutils literal notranslate"><span class="pre">npm</span> <span class="pre">run</span> <span class="pre">dev</span></code>, then <code class="docutils literal notranslate"><span class="pre">http://localhost:5173/</span></code>:
+the address must be <code class="docutils literal notranslate"><span class="pre">localhost</span></code> or <code class="docutils literal notranslate"><span class="pre">https://</span></code> for WebGPU) and how its
+parts fit together. The in-browser engine is
+<a class="reference external" href="https://github.com/JaneliaSciComp/chunkmirage">chunkmirage</a>’s, and the
+browser mode itself is a port of Marwan Zouinkhi’s serverless prototype of
+cellmap-flow.</p>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="install.html" class="btn btn-neutral float-left" title="Installation" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="cli.html" class="btn btn-neutral float-right" title="Command line" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, David Ackerman,  Marwan Zouinkhi, Jeff Rhoades, Larissa Heinrich, Aubrey Weigel.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

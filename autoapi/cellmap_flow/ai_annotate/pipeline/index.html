@@ -1,0 +1,255 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>cellmap_flow.ai_annotate.pipeline &mdash; CellMap Flow  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=4ae1632d" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css" />
+
+  
+    <link rel="shortcut icon" href="../../../../_static/favicon.ico"/>
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link rel="next" title="cellmap_flow.ai_annotate.prompts" href="../prompts/index.html" />
+    <link rel="prev" title="cellmap_flow.ai_annotate.organelles" href="../organelles/index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            CellMap Flow
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">CellMap-Flow API:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../../../../install.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../browser.html">In the browser</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../cli.html">Command line</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../scripts.html">Python Scripts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../yaml_config.html">YAML Configuration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../data_paths.html">Data paths</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../huggingface.html">HuggingFace Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../bioimage.html">BioImage Model Zoo</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../custom_script.html">Custom Model</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../post.html">PostProcessors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../plugins.html">Plugins</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../review.html">Reviewing instances</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../viewer_api.html">Viewer layer API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../architecture.html">Architecture</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../../../index.html">API Reference</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="../../index.html">cellmap_flow</a><ul class="current">
+<li class="toctree-l3 current"><a class="reference internal" href="../../index.html#submodules">Submodules</a><ul class="current">
+<li class="toctree-l4 current"><a class="reference internal" href="../index.html">cellmap_flow.ai_annotate</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../blockwise/index.html">cellmap_flow.blockwise</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../cli/index.html">cellmap_flow.cli</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../config/index.html">cellmap_flow.config</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../dashboard/index.html">cellmap_flow.dashboard</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../finetune/index.html">cellmap_flow.finetune</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../globals/index.html">cellmap_flow.globals</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../image_data_interface/index.html">cellmap_flow.image_data_interface</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../inference/index.html">cellmap_flow.inference</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../inferencer/index.html">cellmap_flow.inferencer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../io/index.html">cellmap_flow.io</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../jobs/index.html">cellmap_flow.jobs</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../logging_setup/index.html">cellmap_flow.logging_setup</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../models/index.html">cellmap_flow.models</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../norm/index.html">cellmap_flow.norm</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../pipeline_spec/index.html">cellmap_flow.pipeline_spec</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../plugins/index.html">cellmap_flow.plugins</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../post/index.html">cellmap_flow.post</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../process_chain/index.html">cellmap_flow.process_chain</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../review/index.html">cellmap_flow.review</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../review_index/index.html">cellmap_flow.review_index</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../serving/index.html">cellmap_flow.serving</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../utils/index.html">cellmap_flow.utils</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../viewer/index.html">cellmap_flow.viewer</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">CellMap Flow</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">API Reference</a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">cellmap_flow</a></li>
+          <li class="breadcrumb-item"><a href="../index.html">cellmap_flow.ai_annotate</a></li>
+      <li class="breadcrumb-item active">cellmap_flow.ai_annotate.pipeline</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../../../../_sources/autoapi/cellmap_flow/ai_annotate/pipeline/index.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-cellmap_flow.ai_annotate.pipeline">
+<span id="cellmap-flow-ai-annotate-pipeline"></span><h1>cellmap_flow.ai_annotate.pipeline<a class="headerlink" href="#module-cellmap_flow.ai_annotate.pipeline" title="Link to this heading"></a></h1>
+<p>From a planned plane to labels: read the raw, ask the model, label the box.</p>
+<p><code class="docutils literal notranslate"><span class="pre">read_plane</span></code> reads the plane <code class="docutils literal notranslate"><span class="pre">geometry.plan_plane</span></code> planned, on the image
+grid it planned and laid out as on screen; <code class="docutils literal notranslate"><span class="pre">build_request</span></code> makes it the
+request a backend sends; <code class="docutils literal notranslate"><span class="pre">mask_to_write_shape</span></code> puts the mask the backend
+returns onto the write box’s voxels, and <code class="docutils literal notranslate"><span class="pre">labels_for_box</span></code> turns that into
+the labels
+<code class="docutils literal notranslate"><span class="pre">fill.paint_box</span></code> writes: one id per connected object, background
+elsewhere, as a seed from a model’s prediction is labelled.</p>
+<section id="functions">
+<h2>Functions<a class="headerlink" href="#functions" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.ai_annotate.pipeline.raw_extent_nm" title="cellmap_flow.ai_annotate.pipeline.raw_extent_nm"><code class="xref py py-obj docutils literal notranslate"><span class="pre">raw_extent_nm</span></code></a>(volume)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">(lo,</span> <span class="pre">hi)</span></code>, world nm z, y, x: where the volume's raw data is, read at</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.ai_annotate.pipeline.read_plane" title="cellmap_flow.ai_annotate.pipeline.read_plane"><code class="xref py py-obj docutils literal notranslate"><span class="pre">read_plane</span></code></a>(→ numpy.ndarray)</p></td>
+<td><p>The raw plane <code class="docutils literal notranslate"><span class="pre">plan</span></code> reads, as a 2D array of <code class="docutils literal notranslate"><span class="pre">plan.image_shape</span></code>,</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.ai_annotate.pipeline.build_request" title="cellmap_flow.ai_annotate.pipeline.build_request"><code class="xref py py-obj docutils literal notranslate"><span class="pre">build_request</span></code></a>(plane, plan, profile[, prompt_override])</p></td>
+<td><p>The <code class="docutils literal notranslate"><span class="pre">SegmentRequest</span></code> for <code class="docutils literal notranslate"><span class="pre">plane</span></code>: its RGB image, the prompt and the colour.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.ai_annotate.pipeline.mask_to_write_shape" title="cellmap_flow.ai_annotate.pipeline.mask_to_write_shape"><code class="xref py py-obj docutils literal notranslate"><span class="pre">mask_to_write_shape</span></code></a>(→ numpy.ndarray)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">mask</span></code> (the image's shape, as on screen) on the write box's in-plane</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.ai_annotate.pipeline.labels_for_box" title="cellmap_flow.ai_annotate.pipeline.labels_for_box"><code class="xref py py-obj docutils literal notranslate"><span class="pre">labels_for_box</span></code></a>(→ numpy.ndarray)</p></td>
+<td><p>The labels for the write box: an id per object of <code class="docutils literal notranslate"><span class="pre">mask_write</span></code>, 1 elsewhere.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="module-contents">
+<h2>Module Contents<a class="headerlink" href="#module-contents" title="Link to this heading"></a></h2>
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.ai_annotate.pipeline.raw_extent_nm">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.ai_annotate.pipeline.</span></span><span class="sig-name descname"><span class="pre">raw_extent_nm</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">volume</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.ai_annotate.pipeline.raw_extent_nm" title="Link to this definition"></a></dt>
+<dd><p><code class="docutils literal notranslate"><span class="pre">(lo,</span> <span class="pre">hi)</span></code>, world nm z, y, x: where the volume’s raw data is, read at
+its input voxel size (<code class="docutils literal notranslate"><span class="pre">plan_plane</span></code>’s <code class="docutils literal notranslate"><span class="pre">data_box_nm</span></code>).</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.ai_annotate.pipeline.read_plane">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.ai_annotate.pipeline.</span></span><span class="sig-name descname"><span class="pre">read_plane</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">volume</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">plan</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../geometry/index.html#cellmap_flow.ai_annotate.geometry.PlanePlan" title="cellmap_flow.ai_annotate.geometry.PlanePlan"><span class="pre">cellmap_flow.ai_annotate.geometry.PlanePlan</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">numpy.ndarray</span></span></span><a class="headerlink" href="#cellmap_flow.ai_annotate.pipeline.read_plane" title="Link to this definition"></a></dt>
+<dd><p>The raw plane <code class="docutils literal notranslate"><span class="pre">plan</span></code> reads, as a 2D array of <code class="docutils literal notranslate"><span class="pre">plan.image_shape</span></code>,
+laid out as on screen (<code class="docutils literal notranslate"><span class="pre">PlanePlan.to_screen</span></code>).</p>
+<p>Read as stored (no input normalization: the image is scaled to 8 bits
+for the model on its own) at the plan’s input voxel size, from the level
+of the volume’s raw dataset for it, resampled when the volume was made
+with Resample on, as its trainer reads it. Outside the raw the read is
+padded with 0. The raw’s dtype is kept unless the plane had to be
+resized to the image’s grid, when it is float32.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.ai_annotate.pipeline.build_request">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.ai_annotate.pipeline.</span></span><span class="sig-name descname"><span class="pre">build_request</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">plane</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">numpy.ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">plan</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../geometry/index.html#cellmap_flow.ai_annotate.geometry.PlanePlan" title="cellmap_flow.ai_annotate.geometry.PlanePlan"><span class="pre">cellmap_flow.ai_annotate.geometry.PlanePlan</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">profile</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">prompt_override</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.ai_annotate.pipeline.build_request" title="Link to this definition"></a></dt>
+<dd><p>The <code class="docutils literal notranslate"><span class="pre">SegmentRequest</span></code> for <code class="docutils literal notranslate"><span class="pre">plane</span></code>: its RGB image, the prompt and the colour.</p>
+<p>The prompt states <code class="docutils literal notranslate"><span class="pre">plan.resolution_nm</span></code>, the pixel size of the image
+actually sent. <code class="docutils literal notranslate"><span class="pre">prompt_override</span></code> replaces the catalog’s description
+(<code class="docutils literal notranslate"><span class="pre">prompts.build_recolor_prompt</span></code>).</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.ai_annotate.pipeline.mask_to_write_shape">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.ai_annotate.pipeline.</span></span><span class="sig-name descname"><span class="pre">mask_to_write_shape</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mask</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">numpy.ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">plan</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../geometry/index.html#cellmap_flow.ai_annotate.geometry.PlanePlan" title="cellmap_flow.ai_annotate.geometry.PlanePlan"><span class="pre">cellmap_flow.ai_annotate.geometry.PlanePlan</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">numpy.ndarray</span></span></span><a class="headerlink" href="#cellmap_flow.ai_annotate.pipeline.mask_to_write_shape" title="Link to this definition"></a></dt>
+<dd><p><code class="docutils literal notranslate"><span class="pre">mask</span></code> (the image’s shape, as on screen) on the write box’s in-plane
+voxels, as bool, in z, y, x order (<code class="docutils literal notranslate"><span class="pre">PlanePlan.write_shape</span></code>).</p>
+<p>Nearest neighbour, pixel centre to voxel centre: each annotation voxel
+takes the pixel at its centre, so the mask keeps hard edges and lands
+where it was drawn whatever the two sizes are.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.ai_annotate.pipeline.labels_for_box">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.ai_annotate.pipeline.</span></span><span class="sig-name descname"><span class="pre">labels_for_box</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mask_write</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">numpy.ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">existing</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">numpy.ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">depth_axis</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">count_up</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">beside</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">numpy.ndarray</span></span></span><a class="headerlink" href="#cellmap_flow.ai_annotate.pipeline.labels_for_box" title="Link to this definition"></a></dt>
+<dd><p>The labels for the write box: an id per object of <code class="docutils literal notranslate"><span class="pre">mask_write</span></code>, 1 elsewhere.</p>
+<p><code class="docutils literal notranslate"><span class="pre">mask_write</span></code> is the in-plane mask (<code class="docutils literal notranslate"><span class="pre">mask_to_write_shape</span></code>),
+<code class="docutils literal notranslate"><span class="pre">existing</span></code> the one-voxel-thick box as the volume holds it. Objects are
+the mask’s 4-connected pieces in the plane (scipy’s default, so pieces
+touching only at a corner stay apart, as the model was asked to leave
+them), labelled by <code class="docutils literal notranslate"><span class="pre">fill.seed_labels</span></code>: an object the user has already
+painted part of keeps that id, the rest get fresh ones, counting up for
+an instance target’s <code class="docutils literal notranslate"><span class="pre">count_up</span></code>.</p>
+<p><code class="docutils literal notranslate"><span class="pre">beside</span></code> is the planes on either side of the box along the depth axis,
+as the volume holds them (each shaped like <code class="docutils literal notranslate"><span class="pre">existing</span></code>, or None at the
+volume’s edge). Planes are annotated one at a time, so an object usually
+continues one in the plane next to it: where this plane is unpainted,
+the ids beside it count as painted here, and an object takes the id it
+overlaps most, rather than a fresh one that an instance target would
+read as a boundary between the two planes. Fresh ids skip those planes’
+ids too, so a new object does not take the id of a different object
+right next to it, which an instance target would read as one object.</p>
+</dd></dl>
+
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../organelles/index.html" class="btn btn-neutral float-left" title="cellmap_flow.ai_annotate.organelles" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../prompts/index.html" class="btn btn-neutral float-right" title="cellmap_flow.ai_annotate.prompts" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, David Ackerman,  Marwan Zouinkhi, Jeff Rhoades, Larissa Heinrich, Aubrey Weigel.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

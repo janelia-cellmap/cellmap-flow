@@ -1,0 +1,290 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>cellmap_flow.finetune.session.instance &mdash; CellMap Flow  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../../_static/graphviz.css?v=4ae1632d" />
+      <link rel="stylesheet" type="text/css" href="../../../../../_static/css/custom.css" />
+
+  
+    <link rel="shortcut icon" href="../../../../../_static/favicon.ico"/>
+      <script src="../../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../../../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../search.html" />
+    <link rel="next" title="cellmap_flow.finetune.session.manifest" href="../manifest/index.html" />
+    <link rel="prev" title="cellmap_flow.finetune.session.fill" href="../fill/index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../../index.html" class="icon icon-home">
+            CellMap Flow
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">CellMap-Flow API:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../../../../../install.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../browser.html">In the browser</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../cli.html">Command line</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../scripts.html">Python Scripts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../yaml_config.html">YAML Configuration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../data_paths.html">Data paths</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../huggingface.html">HuggingFace Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../bioimage.html">BioImage Model Zoo</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../custom_script.html">Custom Model</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../post.html">PostProcessors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../plugins.html">Plugins</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../review.html">Reviewing instances</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../viewer_api.html">Viewer layer API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../architecture.html">Architecture</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../../../../index.html">API Reference</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="../../../index.html">cellmap_flow</a><ul class="current">
+<li class="toctree-l3 current"><a class="reference internal" href="../../../index.html#submodules">Submodules</a><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="../../../ai_annotate/index.html">cellmap_flow.ai_annotate</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../blockwise/index.html">cellmap_flow.blockwise</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../cli/index.html">cellmap_flow.cli</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../config/index.html">cellmap_flow.config</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../dashboard/index.html">cellmap_flow.dashboard</a></li>
+<li class="toctree-l4 current"><a class="reference internal" href="../../index.html">cellmap_flow.finetune</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../globals/index.html">cellmap_flow.globals</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../image_data_interface/index.html">cellmap_flow.image_data_interface</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../inference/index.html">cellmap_flow.inference</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../inferencer/index.html">cellmap_flow.inferencer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../io/index.html">cellmap_flow.io</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../jobs/index.html">cellmap_flow.jobs</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../logging_setup/index.html">cellmap_flow.logging_setup</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../models/index.html">cellmap_flow.models</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../norm/index.html">cellmap_flow.norm</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../pipeline_spec/index.html">cellmap_flow.pipeline_spec</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../plugins/index.html">cellmap_flow.plugins</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../post/index.html">cellmap_flow.post</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../process_chain/index.html">cellmap_flow.process_chain</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../review/index.html">cellmap_flow.review</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../review_index/index.html">cellmap_flow.review_index</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../serving/index.html">cellmap_flow.serving</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../utils/index.html">cellmap_flow.utils</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../viewer/index.html">cellmap_flow.viewer</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../../index.html">CellMap Flow</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../../index.html">API Reference</a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">cellmap_flow</a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">cellmap_flow.finetune</a></li>
+          <li class="breadcrumb-item"><a href="../index.html">cellmap_flow.finetune.session</a></li>
+      <li class="breadcrumb-item active">cellmap_flow.finetune.session.instance</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../../../../../_sources/autoapi/cellmap_flow/finetune/session/instance/index.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-cellmap_flow.finetune.session.instance">
+<span id="cellmap-flow-finetune-session-instance"></span><h1>cellmap_flow.finetune.session.instance<a class="headerlink" href="#module-cellmap_flow.finetune.session.instance" title="Link to this heading"></a></h1>
+<p>Instance corrections: annotation volumes seeded from an instance segmentation.</p>
+<p>They are ordinary annotation volumes, only with instance-id labels (uint16
+or uint32) in the <code class="docutils literal notranslate"><span class="pre">AffinityTargetTransform</span></code> scheme: 0 unannotated, 1 the
+background shell around each instance, and instance id + 1 for each
+instance. So the periodic sync, the pull before a mirror, session listing
+and the overlay treat them like any other.</p>
+<p>The routes in <code class="docutils literal notranslate"><span class="pre">dashboard/routes/finetune/instance_correction</span></code> document the
+workflow; the functions here do the work for them and return
+<code class="docutils literal notranslate"><span class="pre">(success,</span> <span class="pre">info</span> <span class="pre">or</span> <span class="pre">error)</span></code>.</p>
+<section id="attributes">
+<h2>Attributes<a class="headerlink" href="#attributes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.session.instance.logger" title="cellmap_flow.finetune.session.instance.logger"><code class="xref py py-obj docutils literal notranslate"><span class="pre">logger</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="functions">
+<h2>Functions<a class="headerlink" href="#functions" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.session.instance.seed_instance_volume" title="cellmap_flow.finetune.session.instance.seed_instance_volume"><code class="xref py py-obj docutils literal notranslate"><span class="pre">seed_instance_volume</span></code></a>(output_zarr_path, ...[, ...])</p></td>
+<td><p>Seed a paintable annotation volume at <code class="docutils literal notranslate"><span class="pre">output_zarr_path</span></code> from an instance zarr.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.finetune.session.instance.populated_backing_store" title="cellmap_flow.finetune.session.instance.populated_backing_store"><code class="xref py py-obj docutils literal notranslate"><span class="pre">populated_backing_store</span></code></a>(state, output_dir, zarr_name)</p></td>
+<td><p>Where MinIO's data directory holds painted chunks of <code class="docutils literal notranslate"><span class="pre">zarr_name</span></code>, or None.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.session.instance.bucket_key" title="cellmap_flow.finetune.session.instance.bucket_key"><code class="xref py py-obj docutils literal notranslate"><span class="pre">bucket_key</span></code></a>(volumes, zarr_path)</p></td>
+<td><p>The MinIO key the volume at <code class="docutils literal notranslate"><span class="pre">zarr_path</span></code> is served under.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.finetune.session.instance.snapshot_from_minio" title="cellmap_flow.finetune.session.instance.snapshot_from_minio"><code class="xref py py-obj docutils literal notranslate"><span class="pre">snapshot_from_minio</span></code></a>(state, volumes, zarr_path[, dst_path])</p></td>
+<td><p>Copy the MinIO state of a paintable instance-correction zarr to disk.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.session.instance.cc3d_relabel" title="cellmap_flow.finetune.session.instance.cc3d_relabel"><code class="xref py py-obj docutils literal notranslate"><span class="pre">cc3d_relabel</span></code></a>(state, volumes, zarr_path, target_label)</p></td>
+<td><p>Split one label of a paintable instance correction into its connected components.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="module-contents">
+<h2>Module Contents<a class="headerlink" href="#module-contents" title="Link to this heading"></a></h2>
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.session.instance.logger">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.session.instance.</span></span><span class="sig-name descname"><span class="pre">logger</span></span><a class="headerlink" href="#cellmap_flow.finetune.session.instance.logger" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.session.instance.seed_instance_volume">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.session.instance.</span></span><span class="sig-name descname"><span class="pre">seed_instance_volume</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">output_zarr_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">instance_zarr_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dataset_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">input_size</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">input_voxel_size</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dilation_radius_voxels</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">5</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">chunk_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">annotation_dtype</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'uint16'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">claimed_input_voxel_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">claimed_output_voxel_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">input_norm_config</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">postprocess_config</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.finetune.session.instance.seed_instance_volume" title="Link to this definition"></a></dt>
+<dd><p>Seed a paintable annotation volume at <code class="docutils literal notranslate"><span class="pre">output_zarr_path</span></code> from an instance zarr.</p>
+<p><code class="docutils literal notranslate"><span class="pre">instance_zarr_path</span></code> is a zarr group whose <code class="docutils literal notranslate"><span class="pre">s0</span></code> holds the instance
+ids, with OME multiscales or <code class="docutils literal notranslate"><span class="pre">resolution</span></code>/<code class="docutils literal notranslate"><span class="pre">offset</span></code> attributes. The
+volume lies on that array’s grid (shape, voxel size and position), so
+neuroglancer draws it over the segmentation it came from.</p>
+<p>Each instance gets a background shell <code class="docutils literal notranslate"><span class="pre">dilation_radius_voxels</span></code> thick,
+in the instance array’s voxels (5 at 16 nm is an 80 nm shell).
+<code class="docutils literal notranslate"><span class="pre">chunk_size</span></code> defaults to the instance array’s chunks; the dashboard
+passes the model’s output shape, since each chunk is one training
+sample. <code class="docutils literal notranslate"><span class="pre">annotation_dtype</span></code> is “uint16” (up to 65534 instances) or
+“uint32”. The model geometry (<code class="docutils literal notranslate"><span class="pre">input_size</span></code> in voxels,
+<code class="docutils literal notranslate"><span class="pre">input_voxel_size</span></code> in nm, the claimed voxel sizes) and the chains are
+recorded in the root attrs, as for any volume.</p>
+<p>Returns <code class="docutils literal notranslate"><span class="pre">(success,</span> <span class="pre">zarr</span> <span class="pre">path</span> <span class="pre">or</span> <span class="pre">error)</span></code>.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.session.instance.populated_backing_store">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.session.instance.</span></span><span class="sig-name descname"><span class="pre">populated_backing_store</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">state</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_dir</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">zarr_name</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.finetune.session.instance.populated_backing_store" title="Link to this definition"></a></dt>
+<dd><p>Where MinIO’s data directory holds painted chunks of <code class="docutils literal notranslate"><span class="pre">zarr_name</span></code>, or None.</p>
+<p>The clobber guard of a fresh seed: re-seeding a zarr whose MinIO copy
+may hold edits not yet pulled would overwrite them with the seed on the
+first mirror. It looks at the files rather than asking MinIO because the
+decision comes before MinIO is started. A running MinIO keeps its data
+where it was first started, which need not be <code class="docutils literal notranslate"><span class="pre">output_dir</span></code>, so the
+path is returned for the refusal to name.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.session.instance.bucket_key">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.session.instance.</span></span><span class="sig-name descname"><span class="pre">bucket_key</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">volumes</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">zarr_path</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.finetune.session.instance.bucket_key" title="Link to this definition"></a></dt>
+<dd><p>The MinIO key the volume at <code class="docutils literal notranslate"><span class="pre">zarr_path</span></code> is served under.</p>
+<p>Create serves every attach of a ROI under <code class="docutils literal notranslate"><span class="pre">&lt;roi_name&gt;_annotation.zarr</span></code>,
+whatever the zarr on disk is called, and answers with the zarr’s own
+path: a dated snapshot (<code class="docutils literal notranslate"><span class="pre">roi3_annotation_&lt;ts&gt;.zarr</span></code>) when one was
+reattached. So the key is that of the registered volume whose zarr this
+is (its id plus “.zarr”), and the basename only when none is.
+<code class="docutils literal notranslate"><span class="pre">volumes</span></code> is the volume registry, id -&gt; record.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.session.instance.snapshot_from_minio">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.session.instance.</span></span><span class="sig-name descname"><span class="pre">snapshot_from_minio</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">state</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">volumes</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">zarr_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dst_path</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.finetune.session.instance.snapshot_from_minio" title="Link to this definition"></a></dt>
+<dd><p>Copy the MinIO state of a paintable instance-correction zarr to disk.</p>
+<p>Unlike <code class="docutils literal notranslate"><span class="pre">sync.sync_volume</span></code>, which pulls changed chunks into the served
+volume, this copies the whole MinIO object, metadata included, so it can
+make a new zarr: a dated snapshot for rollback or audit, or a copy to
+train from.</p>
+<p><code class="docutils literal notranslate"><span class="pre">zarr_path</span></code> names the MinIO bucket key (see <a class="reference internal" href="#cellmap_flow.finetune.session.instance.bucket_key" title="cellmap_flow.finetune.session.instance.bucket_key"><code class="xref py py-func docutils literal notranslate"><span class="pre">bucket_key()</span></code></a>; the
+registry <code class="docutils literal notranslate"><span class="pre">volumes</span></code> is read for it); the zarr itself is not opened.
+<code class="docutils literal notranslate"><span class="pre">dst_path</span></code> defaults to <code class="docutils literal notranslate"><span class="pre">zarr_path</span></code>, but a fresh dated path
+(<code class="docutils literal notranslate"><span class="pre">.../roi3_annotation_&lt;ts&gt;.zarr</span></code>) is better: the volume stays as it
+was, a point to roll back to. Either way each chunk is written to a
+temp file and renamed into place (zarr’s DirectoryStore), so a
+hardlinked copy of the files (a <code class="docutils literal notranslate"><span class="pre">cp</span> <span class="pre">-rl</span></code> seed) keeps its contents.</p>
+<p>Returns <code class="docutils literal notranslate"><span class="pre">(True,</span> <span class="pre">{zarr_path,</span> <span class="pre">dst_path,</span> <span class="pre">keys_copied,</span> <span class="pre">keys_skipped,</span>
+<span class="pre">bytes_copied})</span></code> or <code class="docutils literal notranslate"><span class="pre">(False,</span> <span class="pre">error)</span></code>.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.session.instance.cc3d_relabel">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.session.instance.</span></span><span class="sig-name descname"><span class="pre">cc3d_relabel</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">state</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">volumes</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">zarr_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">target_label</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">snapshot_dir</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.finetune.session.instance.cc3d_relabel" title="Link to this definition"></a></dt>
+<dd><p>Split one label of a paintable instance correction into its connected components.</p>
+<p>cc3d finds the 26-connected components of <code class="docutils literal notranslate"><span class="pre">target_label</span></code>’s voxels; the
+largest keeps the label, and every other one gets a fresh id from
+<code class="docutils literal notranslate"><span class="pre">max(existing)</span> <span class="pre">+</span> <span class="pre">1</span></code>. <code class="docutils literal notranslate"><span class="pre">target_label</span></code> must be 2 or more: 0 is
+unannotated and 1 is background.</p>
+<p>The zarr is read and written in MinIO, which holds the in-progress brush
+edits; <code class="docutils literal notranslate"><span class="pre">zarr_path</span></code> only names the bucket key (see <a class="reference internal" href="#cellmap_flow.finetune.session.instance.bucket_key" title="cellmap_flow.finetune.session.instance.bucket_key"><code class="xref py py-func docutils literal notranslate"><span class="pre">bucket_key()</span></code></a>)
+and where the rollback snapshot goes. That snapshot of MinIO’s state is taken
+before anything is written, to <code class="docutils literal notranslate"><span class="pre">snapshot_dir</span></code> (default
+<code class="docutils literal notranslate"><span class="pre">&lt;zarr</span> <span class="pre">dir&gt;/snapshots</span></code>).</p>
+<p>Returns <code class="docutils literal notranslate"><span class="pre">(True,</span> <span class="pre">{zarr_path,</span> <span class="pre">target_label,</span> <span class="pre">n_components,</span> <span class="pre">kept_voxels,</span>
+<span class="pre">splits:</span> <span class="pre">[{new_label,</span> <span class="pre">voxels}],</span> <span class="pre">snapshot_path})</span></code> or <code class="docutils literal notranslate"><span class="pre">(False,</span> <span class="pre">error)</span></code>.</p>
+</dd></dl>
+
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../fill/index.html" class="btn btn-neutral float-left" title="cellmap_flow.finetune.session.fill" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../manifest/index.html" class="btn btn-neutral float-right" title="cellmap_flow.finetune.session.manifest" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, David Ackerman,  Marwan Zouinkhi, Jeff Rhoades, Larissa Heinrich, Aubrey Weigel.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

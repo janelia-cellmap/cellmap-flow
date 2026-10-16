@@ -1,0 +1,32 @@
+cellmap_flow.io
+===============
+
+.. py:module:: cellmap_flow.io
+
+.. autoapi-nested-parse::
+
+   Reading datasets: paths, metadata, multiscale levels and OME attributes.
+
+   The submodules import nothing from the rest of cellmap_flow -- in
+   particular not ``cellmap_flow.globals`` -- so they can be used without
+   configuring logging, loading a Flow or importing flask/neuroglancer/torch.
+   Import the submodule you need; this package imports none of them itself.
+
+
+
+Submodules
+----------
+
+.. toctree::
+   :maxdepth: 1
+
+   /autoapi/cellmap_flow/io/geometry/index
+   /autoapi/cellmap_flow/io/metadata/index
+   /autoapi/cellmap_flow/io/multiscale/index
+   /autoapi/cellmap_flow/io/ome/index
+   /autoapi/cellmap_flow/io/paths/index
+   /autoapi/cellmap_flow/io/resample/index
+   /autoapi/cellmap_flow/io/source/index
+   /autoapi/cellmap_flow/io/store/index
+
+

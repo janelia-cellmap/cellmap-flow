@@ -1,0 +1,150 @@
+cellmap_flow.finetune.trainable
+===============================
+
+.. py:module:: cellmap_flow.finetune.trainable
+
+.. autoapi-nested-parse::
+
+   Building blocks for handing the finetune trainer a model's network.
+
+   The trainer trains a torch module that takes the normalized patch
+   (B, C, Z, Y, X) and gives the model's output (B, C', Z', Y', X'). Many
+   networks are not quite that: a 2D network wants (N, C, Y, X), a model
+   normalizes its own input, crops a halo off its output or ends in a
+   sigmoid its serving applies. A model type's ``trainable_model()`` wraps
+   its network in these, composed with ``torch.nn.Sequential``, rather than
+   writing its own wrapper; they hold no parameters of their own, so what is
+   trained is the network's.
+
+   ``finetune_modes`` says what a module can be finetuned with: LoRA attaches
+   adapters beside a network's Conv and Linear layers, which needs a Python
+   module tree, while a full finetune trains every parameter, which a
+   compiled TorchScript module has too.
+
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.trainable.SliceWise
+   cellmap_flow.finetune.trainable.Crop
+   cellmap_flow.finetune.trainable.ZeroMeanUnitVariance
+   cellmap_flow.finetune.trainable.FixedZeroMeanUnitVariance
+   cellmap_flow.finetune.trainable.ScaleRange
+   cellmap_flow.finetune.trainable.ScaleLinear
+   cellmap_flow.finetune.trainable.Clip
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.trainable.finetune_modes
+
+
+Module Contents
+---------------
+
+.. py:function:: finetune_modes(module: torch.nn.Module) -> Tuple[str, ...]
+
+   What ``module`` can be finetuned with: ("lora", "full"), ("full",) or ().
+
+   A TorchScript module trains in full but takes no adapters (its layers
+   are compiled, so PEFT cannot wrap them); a module without parameters
+   cannot be trained at all; any other with Conv or Linear layers takes
+   both.
+
+
+.. py:class:: SliceWise(net: torch.nn.Module)
+
+
+
+   Run a 2D network on each z slice of (B, C, Z, Y, X).
+
+   The slices go through ``net`` as one batch of B * Z images and come back
+   as (B, C', Z, Y', X'): a 2D model served slice by slice is trained the
+   way it is served.
+
+
+   .. py:attribute:: net
+
+
+   .. py:method:: forward(x)
+
+
+.. py:class:: Crop(crop: Sequence[int])
+
+
+
+   Cut ``crop`` voxels off each side of the spatial axes (the last
+   ``len(crop)``): a model's halo, which its serving cuts off too.
+
+
+   .. py:attribute:: crop
+
+
+   .. py:method:: forward(x)
+
+
+.. py:class:: ZeroMeanUnitVariance(dims: Optional[Sequence[int]] = None, eps: float = 1e-06)
+
+
+
+   (x - mean) / (std + eps), mean and std over ``dims`` of each sample
+   (all but the batch by default): bioimage.io's ``zero_mean_unit_variance``.
+
+
+   .. py:method:: forward(x)
+
+
+.. py:class:: FixedZeroMeanUnitVariance(mean, std, eps: float = 1e-06, channel_dim: int = 1)
+
+
+
+   (x - mean) / (std + eps) with a given mean and std (one number, or one
+   per channel): bioimage.io's ``fixed_zero_mean_unit_variance``.
+
+
+   .. py:method:: forward(x)
+
+
+.. py:class:: ScaleRange(min_percentile: float = 0.0, max_percentile: float = 100.0, dims: Optional[Sequence[int]] = None, eps: float = 1e-06)
+
+
+
+   (x - lo) / (hi - lo + eps), lo and hi the ``min_percentile`` and
+   ``max_percentile`` (0-100) over ``dims`` of each sample: bioimage.io's
+   ``scale_range``, and Cellpose's 1-99% normalization.
+
+
+   .. py:method:: forward(x)
+
+
+.. py:class:: ScaleLinear(gain=1.0, offset=0.0, channel_dim: int = 1)
+
+
+
+   x * gain + offset (one number, or one per channel): bioimage.io's ``scale_linear``.
+
+
+   .. py:attribute:: channel_dim
+      :value: 1
+
+
+
+   .. py:method:: forward(x)
+
+
+.. py:class:: Clip(min: Optional[float] = None, max: Optional[float] = None)
+
+
+
+   x clamped to [min, max] (either may be None): bioimage.io's ``clip``.
+
+
+   .. py:method:: forward(x)
+
+

@@ -1,0 +1,46 @@
+cellmap_flow.finetune.finetune_cli
+==================================
+
+.. py:module:: cellmap_flow.finetune.finetune_cli
+
+.. autoapi-nested-parse::
+
+   Command-line interface for LoRA finetuning.
+
+   Usage:
+       python -m cellmap_flow.finetune.finetune_cli         --model-checkpoint /path/to/checkpoint         --corrections corrections.zarr         --output-dir output/fly_organelles_v1.1
+
+       # With custom settings
+       python -m cellmap_flow.finetune.finetune_cli         --model-checkpoint /path/to/checkpoint         --corrections corrections.zarr         --output-dir output/fly_organelles_v1.1         --lora-r 8         --batch-size 8         --num-epochs 20         --learning-rate 2e-4
+
+   The job manager launches this module path, and a running job outlives a
+   dashboard upgrade, so the path, its flags and what it prints only change
+   compatibly. The flags are finetune.cli's, the job's loop is
+   finetune.session_loop.TrainingSession, what each iteration writes is
+   finetune.run_outputs', and its stdout markers are finetune.markers'.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.finetune_cli.logger
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.finetune_cli.main
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:function:: main()
+

@@ -1,0 +1,138 @@
+cellmap_flow.finetune.job_manager.persistence
+=============================================
+
+.. py:module:: cellmap_flow.finetune.job_manager.persistence
+
+.. autoapi-nested-parse::
+
+   A run's directory, as the job manager writes it and reads it back.
+
+   A job runs in ``<session>/runs/<model>_<YYYYmmdd_HHMMSS>/``. Beside what the
+   trainer writes there (its log, iterations and exports; finetune.run_outputs),
+   the manager keeps its record of the job in ``metadata.json``:
+   - written at submit (``submission_metadata``, ``write_metadata``), then
+     given the job's ``lsf_job_id`` and ``status``;
+   - updated as the job's status changes, with its ``inference_server_url``,
+     and when it ends, with its ``finetuned_model_name`` and
+     ``model_yaml_path`` (``update_metadata``);
+   - completed when it succeeds (``record_completion``).
+   Each write replaces the file whole (``write_json_atomically``).
+   The trainer writes a restart's settings into its ``params``. The dashboard
+   reads back the ``model_entry`` the trainer was given
+   (``recorded_model_entry``).
+
+   A dashboard started later, perhaps newer than the one that submitted the
+   jobs, finds a session's jobs again from these records (``rehydrate``), so
+   they are a format. It reads ``job_id``, ``lsf_job_id``, ``status``,
+   ``model_name``, ``params``, ``created_at`` and ``corrections_path``, and
+   records a job LSF says has ended as final, with a ``status_detail`` when
+   LSF no longer knows the job.
+
+   ``finetune_export_kwargs`` and ``check_export`` say which export a finished
+   run left: a LoRA run's ``lora_adapter/``, a full finetune's
+   ``full_finetune/model_state_dict.pt``.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.job_manager.persistence.logger
+   cellmap_flow.finetune.job_manager.persistence.METADATA_FILE
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.job_manager.persistence.submission_metadata
+   cellmap_flow.finetune.job_manager.persistence.write_metadata
+   cellmap_flow.finetune.job_manager.persistence.update_metadata
+   cellmap_flow.finetune.job_manager.persistence.recorded_model_entry
+   cellmap_flow.finetune.job_manager.persistence.record_completion
+   cellmap_flow.finetune.job_manager.persistence.rehydrate
+   cellmap_flow.finetune.job_manager.persistence.finetune_export_kwargs
+   cellmap_flow.finetune.job_manager.persistence.check_export
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:data:: METADATA_FILE
+   :value: 'metadata.json'
+
+
+.. py:function:: submission_metadata(*, model_config, model_type: str, checkpoint_path: Optional[pathlib.Path], corrections_path: pathlib.Path, num_corrections: int, output_dir: pathlib.Path, lora_r: int, num_epochs: int, batch_size: int, learning_rate: float, loss_type: str, label_smoothing: float, distillation_lambda: Optional[float], distillation_scope: str, margin: float, balance_classes: bool, augment: bool, channels: List[str], input_voxel_size: List[int], output_voxel_size: List[int], output_type: str, queue: str, charge_group: str, command: str) -> dict
+
+   Build metadata persisted for a submitted finetuning job.
+
+
+.. py:function:: write_metadata(output_dir, metadata: dict) -> None
+
+   Write a new run's metadata.json (write_json_atomically).
+
+
+.. py:function:: update_metadata(output_dir, **fields) -> None
+
+   Merge ``fields`` into the run's metadata.json, replacing it atomically
+   (write_json_atomically).
+
+   A missing record is started with ``fields``; one that cannot be read is
+   left as it is, with a warning.
+
+
+.. py:function:: recorded_model_entry(output_dir) -> Optional[dict]
+
+   The model entry the run's trainer was given (submit.model_entry), as its
+   metadata.json records it. None for a model that went by its own flags, and
+   for a record that is missing or cannot be read.
+
+
+.. py:function:: record_completion(finetune_job: cellmap_flow.finetune.job_manager.state.FinetuneJob) -> None
+
+   Record in metadata.json that the job completed, with its model and last epoch.
+
+   Through update_metadata, so the record is replaced whole or not at all.
+   A record that cannot be read is left as it is, with a warning, and the
+   job is still COMPLETED: its export was found (check_export), and the
+   record is only the dashboard's note of the job, which a later dashboard
+   skips when it cannot read it.
+
+
+.. py:function:: rehydrate(session_path, known) -> List[cellmap_flow.finetune.job_manager.state.FinetuneJob]
+
+   The jobs of a session still alive on the cluster, rebuilt from their records.
+
+   A run is rebuilt when its recorded status is not final, its job id is
+   not in ``known`` (the jobs already followed), and bjobs still reports
+   it as pending or running; its status is then LSF's, and what only its
+   log says (its server, its model, its epoch) is left for the monitor to
+   read. Local runs (a PID, not an LSF job) are not reattached.
+
+   All the session's candidates are asked about in one bjobs call, and
+   whatever bjobs says has ended -- including a job it no longer knows
+   at all -- is recorded as final, so it is not asked about again. This
+   runs on every load of the finetune tab.
+
+
+.. py:function:: finetune_export_kwargs(output_dir, params=None) -> dict
+
+   Which artifact a finished run produced, as FinetuneModelConfig kwargs.
+
+   A LoRA run exports lora_adapter/; a full finetune (--lora-r 0) exports
+   full_finetune/model_state_dict.pt. Decided by what is on disk first --
+   the job's own record of lora_r is the fallback for a run that has not
+   written its export yet -- so the dashboard never points a viewer at an
+   adapter directory that a rank-0 run never made.
+
+
+.. py:function:: check_export(output_dir, params) -> None
+
+   Raise RuntimeError unless the run's export (finetune_export_kwargs) is all on disk.
+
+

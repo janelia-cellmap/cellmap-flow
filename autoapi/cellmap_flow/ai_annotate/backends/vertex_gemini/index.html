@@ -1,0 +1,285 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>cellmap_flow.ai_annotate.backends.vertex_gemini &mdash; CellMap Flow  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../../_static/graphviz.css?v=4ae1632d" />
+      <link rel="stylesheet" type="text/css" href="../../../../../_static/css/custom.css" />
+
+  
+    <link rel="shortcut icon" href="../../../../../_static/favicon.ico"/>
+      <script src="../../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../../../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../search.html" />
+    <link rel="next" title="cellmap_flow.ai_annotate.config" href="../../config/index.html" />
+    <link rel="prev" title="cellmap_flow.ai_annotate.backends.fake" href="../fake/index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../../index.html" class="icon icon-home">
+            CellMap Flow
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">CellMap-Flow API:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../../../../../install.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../browser.html">In the browser</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../cli.html">Command line</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../scripts.html">Python Scripts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../yaml_config.html">YAML Configuration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../data_paths.html">Data paths</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../huggingface.html">HuggingFace Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../bioimage.html">BioImage Model Zoo</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../custom_script.html">Custom Model</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../post.html">PostProcessors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../plugins.html">Plugins</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../review.html">Reviewing instances</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../viewer_api.html">Viewer layer API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../architecture.html">Architecture</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../../../../index.html">API Reference</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="../../../index.html">cellmap_flow</a><ul class="current">
+<li class="toctree-l3 current"><a class="reference internal" href="../../../index.html#submodules">Submodules</a><ul class="current">
+<li class="toctree-l4 current"><a class="reference internal" href="../../index.html">cellmap_flow.ai_annotate</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../blockwise/index.html">cellmap_flow.blockwise</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../cli/index.html">cellmap_flow.cli</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../config/index.html">cellmap_flow.config</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../dashboard/index.html">cellmap_flow.dashboard</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../finetune/index.html">cellmap_flow.finetune</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../globals/index.html">cellmap_flow.globals</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../image_data_interface/index.html">cellmap_flow.image_data_interface</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../inference/index.html">cellmap_flow.inference</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../inferencer/index.html">cellmap_flow.inferencer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../io/index.html">cellmap_flow.io</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../jobs/index.html">cellmap_flow.jobs</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../logging_setup/index.html">cellmap_flow.logging_setup</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../models/index.html">cellmap_flow.models</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../norm/index.html">cellmap_flow.norm</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../pipeline_spec/index.html">cellmap_flow.pipeline_spec</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../plugins/index.html">cellmap_flow.plugins</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../post/index.html">cellmap_flow.post</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../process_chain/index.html">cellmap_flow.process_chain</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../review/index.html">cellmap_flow.review</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../review_index/index.html">cellmap_flow.review_index</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../serving/index.html">cellmap_flow.serving</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../utils/index.html">cellmap_flow.utils</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../viewer/index.html">cellmap_flow.viewer</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../../index.html">CellMap Flow</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../../index.html">API Reference</a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">cellmap_flow</a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">cellmap_flow.ai_annotate</a></li>
+          <li class="breadcrumb-item"><a href="../index.html">cellmap_flow.ai_annotate.backends</a></li>
+      <li class="breadcrumb-item active">cellmap_flow.ai_annotate.backends.vertex_gemini</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../../../../../_sources/autoapi/cellmap_flow/ai_annotate/backends/vertex_gemini/index.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-cellmap_flow.ai_annotate.backends.vertex_gemini">
+<span id="cellmap-flow-ai-annotate-backends-vertex-gemini"></span><h1>cellmap_flow.ai_annotate.backends.vertex_gemini<a class="headerlink" href="#module-cellmap_flow.ai_annotate.backends.vertex_gemini" title="Link to this heading"></a></h1>
+<p>Gemini image models on Google Cloud Vertex AI, asked to paint the structure.</p>
+<p>The plane is sent as a PNG at its own size (padded to a square when it is
+not one, see <code class="docutils literal notranslate"><span class="pre">_square</span></code>) with the recolor prompt; the
+model answers with an image in which the structure is painted the prompt’s
+colour on black, and the mask is the pixels of that colour. The plane is
+not upsampled first: gemini-3-pro-image charges the same ~560 tokens for an
+image whatever its size, so more pixels buy nothing, and the resolution the
+prompt states must be the one sent.</p>
+<p>Authentication is Application Default Credentials (<code class="docutils literal notranslate"><span class="pre">gcloud</span> <span class="pre">auth</span>
+<span class="pre">application-default</span> <span class="pre">login</span></code>, or a service account on a cloud host), found
+by the SDK, or the credentials file the config names (<code class="docutils literal notranslate"><span class="pre">credentials_file</span></code>,
+read by <code class="docutils literal notranslate"><span class="pre">secrets.load_google_credentials</span></code>), so this backend holds no key. The google-genai SDK is
+imported only when the first call is made, so the dashboard runs without it
+when the feature is off.</p>
+<p>Every call has a timeout. Only “try again later” answers (429, 503) are
+retried, at most <code class="docutils literal notranslate"><span class="pre">MAX_ATTEMPTS</span></code> times in all with bounded waits; anything
+else fails at once. Failures become <code class="docutils literal notranslate"><span class="pre">AIAnnotateError</span></code> with a message
+written here: the SDK’s text goes to the server log, not the browser.</p>
+<section id="attributes">
+<h2>Attributes<a class="headerlink" href="#attributes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.ai_annotate.backends.vertex_gemini.logger" title="cellmap_flow.ai_annotate.backends.vertex_gemini.logger"><code class="xref py py-obj docutils literal notranslate"><span class="pre">logger</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.ai_annotate.backends.vertex_gemini.MAX_ATTEMPTS" title="cellmap_flow.ai_annotate.backends.vertex_gemini.MAX_ATTEMPTS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MAX_ATTEMPTS</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.ai_annotate.backends.vertex_gemini.RETRY_WAITS_S" title="cellmap_flow.ai_annotate.backends.vertex_gemini.RETRY_WAITS_S"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RETRY_WAITS_S</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.ai_annotate.backends.vertex_gemini.RETRY_CODES" title="cellmap_flow.ai_annotate.backends.vertex_gemini.RETRY_CODES"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RETRY_CODES</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.ai_annotate.backends.vertex_gemini.RETRY_STATUSES" title="cellmap_flow.ai_annotate.backends.vertex_gemini.RETRY_STATUSES"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RETRY_STATUSES</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.ai_annotate.backends.vertex_gemini.MAX_REPLY_CHARS" title="cellmap_flow.ai_annotate.backends.vertex_gemini.MAX_REPLY_CHARS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MAX_REPLY_CHARS</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="classes">
+<h2>Classes<a class="headerlink" href="#classes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.ai_annotate.backends.vertex_gemini.VertexGeminiBackend" title="cellmap_flow.ai_annotate.backends.vertex_gemini.VertexGeminiBackend"><code class="xref py py-obj docutils literal notranslate"><span class="pre">VertexGeminiBackend</span></code></a></p></td>
+<td><p>Recolor-and-threshold segmentation through Vertex AI.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="module-contents">
+<h2>Module Contents<a class="headerlink" href="#module-contents" title="Link to this heading"></a></h2>
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.ai_annotate.backends.vertex_gemini.logger">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.ai_annotate.backends.vertex_gemini.</span></span><span class="sig-name descname"><span class="pre">logger</span></span><a class="headerlink" href="#cellmap_flow.ai_annotate.backends.vertex_gemini.logger" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.ai_annotate.backends.vertex_gemini.MAX_ATTEMPTS">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.ai_annotate.backends.vertex_gemini.</span></span><span class="sig-name descname"><span class="pre">MAX_ATTEMPTS</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">3</span></span><a class="headerlink" href="#cellmap_flow.ai_annotate.backends.vertex_gemini.MAX_ATTEMPTS" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.ai_annotate.backends.vertex_gemini.RETRY_WAITS_S">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.ai_annotate.backends.vertex_gemini.</span></span><span class="sig-name descname"><span class="pre">RETRY_WAITS_S</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">(10.0,</span> <span class="pre">30.0)</span></span><a class="headerlink" href="#cellmap_flow.ai_annotate.backends.vertex_gemini.RETRY_WAITS_S" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.ai_annotate.backends.vertex_gemini.RETRY_CODES">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.ai_annotate.backends.vertex_gemini.</span></span><span class="sig-name descname"><span class="pre">RETRY_CODES</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">(429,</span> <span class="pre">503)</span></span><a class="headerlink" href="#cellmap_flow.ai_annotate.backends.vertex_gemini.RETRY_CODES" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.ai_annotate.backends.vertex_gemini.RETRY_STATUSES">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.ai_annotate.backends.vertex_gemini.</span></span><span class="sig-name descname"><span class="pre">RETRY_STATUSES</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">('UNAVAILABLE',</span> <span class="pre">'RESOURCE_EXHAUSTED')</span></span><a class="headerlink" href="#cellmap_flow.ai_annotate.backends.vertex_gemini.RETRY_STATUSES" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.ai_annotate.backends.vertex_gemini.MAX_REPLY_CHARS">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.ai_annotate.backends.vertex_gemini.</span></span><span class="sig-name descname"><span class="pre">MAX_REPLY_CHARS</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">200</span></span><a class="headerlink" href="#cellmap_flow.ai_annotate.backends.vertex_gemini.MAX_REPLY_CHARS" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="cellmap_flow.ai_annotate.backends.vertex_gemini.VertexGeminiBackend">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.ai_annotate.backends.vertex_gemini.</span></span><span class="sig-name descname"><span class="pre">VertexGeminiBackend</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">project</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">location</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">timeout_s</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sleep</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">time.sleep</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">client_factory</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">credentials_file</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.ai_annotate.backends.vertex_gemini.VertexGeminiBackend" title="Link to this definition"></a></dt>
+<dd><p>Recolor-and-threshold segmentation through Vertex AI.</p>
+<p><code class="docutils literal notranslate"><span class="pre">project</span></code> may be None, in which case the SDK takes it from
+<code class="docutils literal notranslate"><span class="pre">GOOGLE_CLOUD_PROJECT</span></code> or the credentials. <code class="docutils literal notranslate"><span class="pre">credentials_file</span></code> may be
+None, in which case the SDK finds Application Default Credentials
+itself. <code class="docutils literal notranslate"><span class="pre">sleep</span></code> is how retries
+wait and <code class="docutils literal notranslate"><span class="pre">client_factory</span></code> (no arguments, returns an object with
+<code class="docutils literal notranslate"><span class="pre">.models.generate_content</span></code>) replaces the SDK client; both are for tests.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.ai_annotate.backends.vertex_gemini.VertexGeminiBackend.project">
+<span class="sig-name descname"><span class="pre">project</span></span><a class="headerlink" href="#cellmap_flow.ai_annotate.backends.vertex_gemini.VertexGeminiBackend.project" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.ai_annotate.backends.vertex_gemini.VertexGeminiBackend.credentials_file">
+<span class="sig-name descname"><span class="pre">credentials_file</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.ai_annotate.backends.vertex_gemini.VertexGeminiBackend.credentials_file" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.ai_annotate.backends.vertex_gemini.VertexGeminiBackend.location">
+<span class="sig-name descname"><span class="pre">location</span></span><a class="headerlink" href="#cellmap_flow.ai_annotate.backends.vertex_gemini.VertexGeminiBackend.location" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.ai_annotate.backends.vertex_gemini.VertexGeminiBackend.timeout_s">
+<span class="sig-name descname"><span class="pre">timeout_s</span></span><a class="headerlink" href="#cellmap_flow.ai_annotate.backends.vertex_gemini.VertexGeminiBackend.timeout_s" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.ai_annotate.backends.vertex_gemini.VertexGeminiBackend.segment">
+<span class="sig-name descname"><span class="pre">segment</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">request</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../base/index.html#cellmap_flow.ai_annotate.backends.base.SegmentRequest" title="cellmap_flow.ai_annotate.backends.base.SegmentRequest"><span class="pre">cellmap_flow.ai_annotate.backends.base.SegmentRequest</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">model</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="../base/index.html#cellmap_flow.ai_annotate.backends.base.SegmentResult" title="cellmap_flow.ai_annotate.backends.base.SegmentResult"><span class="pre">cellmap_flow.ai_annotate.backends.base.SegmentResult</span></a></span></span><a class="headerlink" href="#cellmap_flow.ai_annotate.backends.vertex_gemini.VertexGeminiBackend.segment" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../fake/index.html" class="btn btn-neutral float-left" title="cellmap_flow.ai_annotate.backends.fake" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../../config/index.html" class="btn btn-neutral float-right" title="cellmap_flow.ai_annotate.config" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, David Ackerman,  Marwan Zouinkhi, Jeff Rhoades, Larissa Heinrich, Aubrey Weigel.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

@@ -1,0 +1,263 @@
+cellmap_flow.ai_annotate.geometry
+=================================
+
+.. py:module:: cellmap_flow.ai_annotate.geometry
+
+.. autoapi-nested-parse::
+
+   Which plane of the data an AI annotation reads, and which voxels it writes.
+
+   A click (or the view centre) picks a point in world nm and the plane the
+   user is looking at picks the depth axis. ``plan_plane`` turns those into a
+   ``PlanePlan``: a square field of view around the point, snapped to the
+   annotation volume's voxels and clipped to the volume (the write box, one
+   annotation voxel thick along the depth axis), and the raw read that covers
+   the same physical area at the model's input voxel size (one input voxel
+   thick, at the point's depth). So whatever the model paints on the image
+   lands on the annotation voxels under it.
+
+   Annotation voxels are placed as ``finetune.session.volume`` places them:
+   the volume's ``dataset_offset_nm`` is voxel 0's *centre*, and a voxel is in
+   a box when its centre is (``fill.box_voxels``). The raw is read on its own
+   grid (``io.geometry``), from the voxel that holds the first pixel's centre.
+
+   Axes are z, y, x throughout, as everywhere in cellmap-flow, except in the
+   image sent: that is laid out as the viewer's panel shows the plane
+   (``to_screen``), so the model, and the user reviewing its answer, see what
+   was on screen. The XZ and YZ planes are transposed from z, y, x order, and the
+   XY plane runs x leftwards, as neuroglancer draws it.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.ai_annotate.geometry.AXIS_NAMES
+   cellmap_flow.ai_annotate.geometry.MAX_IMAGE_SIDE
+   cellmap_flow.ai_annotate.geometry.PLANE_NAMES
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.ai_annotate.geometry.PlanePlan
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.ai_annotate.geometry.screen_shape
+   cellmap_flow.ai_annotate.geometry.to_screen
+   cellmap_flow.ai_annotate.geometry.from_screen
+   cellmap_flow.ai_annotate.geometry.depth_axis_from_layout
+   cellmap_flow.ai_annotate.geometry.depth_axis_for_view
+   cellmap_flow.ai_annotate.geometry.plan_plane
+   cellmap_flow.ai_annotate.geometry.raw_box
+
+
+Module Contents
+---------------
+
+.. py:data:: AXIS_NAMES
+   :value: ('z', 'y', 'x')
+
+
+.. py:data:: MAX_IMAGE_SIDE
+   :value: 1024
+
+
+.. py:data:: PLANE_NAMES
+   :value: ('XY', 'XZ', 'YZ')
+
+
+.. py:function:: screen_shape(shape, depth_axis) -> tuple
+
+   A plane's ``(rows, cols)`` in z, y, x order, as the panel draws it.
+
+
+.. py:function:: to_screen(plane, depth_axis) -> numpy.ndarray
+
+   ``plane`` (rows and columns its two axes in z, y, x order) as the panel
+   looking along ``depth_axis`` draws it.
+
+
+.. py:function:: from_screen(image, depth_axis) -> numpy.ndarray
+
+   ``to_screen`` undone: an image as the panel draws it, in z, y, x order.
+
+
+.. py:function:: depth_axis_from_layout(layout, display_dimensions=None) -> int
+
+   The data axis (0 z, 1 y, 2 x) the panel named by ``layout`` looks along.
+
+   ``layout`` is neuroglancer's layout as a string ("xy", "xz-3d"...), a
+   dict with a "type", or the state's layout object. ``display_dimensions``
+   are the names of the viewer's display dimensions in order (z, y, x when
+   None, as cellmap-flow's viewers have them); see ``_LAYOUT_DEPTH_SLOT``
+   for why they matter. Only a single-plane layout says which plane the
+   user is looking at: neuroglancer keeps one layout for the whole viewer,
+   so in "4panel" or "3d" the panel a click landed in is not known. Those
+   (and anything unrecognised) get the "xy" panel's axis, the panel
+   neuroglancer puts first. A rotated cross-section is not followed.
+
+
+.. py:function:: depth_axis_for_view(viewer_state) -> int
+
+   ``depth_axis_from_layout`` for a neuroglancer ``ViewerState``.
+
+   Takes the display dimensions the state sets, else the first three of
+   its coordinate space, as neuroglancer does.
+
+
+.. py:class:: PlanePlan
+
+   One plane to annotate: what is read, what is sent and what is written.
+
+   All three-element tuples are z, y, x. ``raw_offset_nm`` and
+   ``raw_shape_nm`` are the world box the raw is read over (lower corner
+   and size): in plane, the write box's extent; along the depth axis, one
+   input voxel centred on the point. ``image_shape`` is the (rows, cols)
+   of the image sent, laid out as on screen (``to_screen``),
+   ``resolution_nm`` its pixel size in nm (square
+   pixels, which a model needs to see shapes as they are). ``write_lo`` and
+   ``write_hi`` are the annotation voxels written, ``[lo, hi)``, clipped to
+   the volume and one voxel thick along the depth axis.
+
+
+   .. py:attribute:: depth_axis
+      :type:  int
+
+
+   .. py:attribute:: point_nm
+      :type:  tuple
+
+
+   .. py:attribute:: raw_offset_nm
+      :type:  tuple
+
+
+   .. py:attribute:: raw_shape_nm
+      :type:  tuple
+
+
+   .. py:attribute:: image_shape
+      :type:  tuple
+
+
+   .. py:attribute:: input_voxel_size
+      :type:  tuple
+
+
+   .. py:attribute:: write_lo
+      :type:  tuple
+
+
+   .. py:attribute:: write_hi
+      :type:  tuple
+
+
+   .. py:attribute:: resolution_nm
+      :type:  float
+
+
+   .. py:property:: plane_axes
+      :type: tuple
+
+
+      The two in-plane axes, in z, y, x order.
+
+
+   .. py:property:: plane_name
+      :type: str
+
+
+      the data axes the plane shows.
+
+      :type: "XY", "XZ" or "YZ"
+
+
+   .. py:property:: write_shape
+      :type: tuple
+
+
+      The write box's in-plane shape in annotation voxels, its ``plane_axes`` in z, y, x order.
+
+
+   .. py:property:: click_px
+      :type: tuple
+
+
+      ``(row, col)`` of the point in the image sent.
+
+
+   .. py:method:: to_screen(plane) -> numpy.ndarray
+
+      ``to_screen`` for this plan's plane.
+
+
+
+   .. py:method:: from_screen(image) -> numpy.ndarray
+
+      ``from_screen`` for this plan's plane.
+
+
+
+   .. py:method:: to_dict() -> dict
+
+      The plan as JSON-safe lists, for a staging's meta.json.
+
+
+
+   .. py:method:: from_dict(data: dict) -> PlanePlan
+      :classmethod:
+
+
+      The plan ``to_dict`` wrote.
+
+
+
+.. py:function:: plan_plane(volume: dict, volume_shape, point_nm, depth_axis: int, crop_size_px: int, data_box_nm=None) -> PlanePlan
+
+   The plane through ``point_nm`` (world nm, z, y, x) across ``depth_axis``.
+
+   ``volume`` is the annotation volume's record (``output_voxel_size``,
+   ``input_voxel_size``, ``dataset_offset_nm``), ``volume_shape`` its
+   ``annotation/s0`` shape. The field of view is square in nm,
+   ``crop_size_px`` annotation voxels along the finer in-plane axis (both,
+   for isotropic voxels), centred on the point; its write box is the
+   annotation voxels whose centres lie in it, clipped to the volume, in the
+   annotation voxel that holds the point along the depth axis.
+
+   ``data_box_nm`` is the raw data's extent, ``(lo, hi)`` world nm z, y, x:
+   the field is clipped to it too. The volume is the data rounded up to
+   whole chunks of the model's output, which for Cellpose at 64 nm is up to
+   33 um past the data's edge, and there the plane is only the read's
+   zero padding: an image of it was labelled as background, and the cells
+   beside it smeared into it.
+
+   The raw is read over the clipped box's extent, so the image and the box
+   cover the same physical area. The image's pixels are the finer in-plane
+   input voxel size, square; when that makes a side longer than
+   ``MAX_IMAGE_SIDE`` the pixels are made larger to fit.
+
+   Raises AIAnnotateError ("refused") when the point is outside the volume
+   or the data: a field clipped to an edge it does not reach is not what
+   was aimed at.
+
+
+.. py:function:: raw_box(plan: PlanePlan, voxel_size, corner) -> cellmap_flow.io.geometry.Box
+
+   The raw voxels to read for ``plan``, on a raw grid of ``voxel_size`` from ``corner``.
+
+   Each axis starts at the voxel that holds the first sample's centre (half
+   a voxel in from the box's corner) and runs for as many voxels as fit in
+   the box, at least one: so a box on the grid reads exactly its voxels,
+   and the depth axis reads the voxel that holds the point.
+
+

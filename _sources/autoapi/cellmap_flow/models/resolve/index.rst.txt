@@ -1,0 +1,219 @@
+cellmap_flow.models.resolve
+===========================
+
+.. py:module:: cellmap_flow.models.resolve
+
+.. autoapi-nested-parse::
+
+   A model from whatever reference a user has in hand, without knowing the model types.
+
+   ``resolve(ref)`` turns a path, a URL, a Hugging Face repo, a zoo nickname or
+   a Cellpose model name into a ``Resolved``: the model type, its constructor
+   arguments, a name, and what the user must still give. ``Resolved.entry()``
+   is the model entry that ``registry.build_model`` (and so a YAML's
+   ``models:``) takes. The dashboard's ``POST /api/models/resolve`` and
+   ``cellmap_flow add`` answer with it.
+
+   The checks, in this order; the first that matches wins. Each is cheap: a
+   stat, a file name, a regex, or (only when ``online``) one request.
+
+   1. A local file or folder (``~`` expanded; the entry gets its absolute path):
+
+      - a ``.py`` file: ``script``;
+      - a folder with ``metadata.json``: ``cellmap`` (a cellmap-models export,
+        which is served from its ``model.ts``);
+      - a folder with ``rdf.yaml`` or ``bioimageio.yaml``, such a file itself
+        (``*.rdf.yaml`` too), or a ``.zip`` with one inside: ``bioimage``;
+      - ``model_checkpoint_<n>``, a ``.ts`` or a ``model.pt``: ``fly``, which
+        reads the channels and voxel sizes from the files beside it; what it
+        cannot find is reported in ``needs``;
+      - a folder with ``adapter_config.json`` (a PEFT LoRA adapter), or a full
+        finetune's ``model_state_dict.pt``: ``finetune``, which needs its
+        ``base_model``;
+      - Cellpose-SAM weights (Cellpose 4 saves a torch state dict without an
+        extension; its keys say what it is): ``cellpose``.
+
+   2. A prefix, to say outright what a reference is: ``hf:org/repo[@revision]``,
+      ``bioimageio:<id, nickname, URL or path>``, ``cellpose:<name or path>``,
+      ``fly:<path>``, ``dacapo:<run>@<iteration>``, ``script:<path>``. The
+      type's own name works as its prefix too (``huggingface:``,
+      ``bioimage:``). Nothing after a prefix is looked up online.
+
+   3. A Cellpose model name (``cpsam_v2``, ``cpsam``, ``cpdino``,
+      ``cpdino-vitb``): ``cellpose``.
+
+   4. A URL: a bioimage.io model page, a Zenodo record, a DOI link, a Hypha
+      artifact or the URL of an ``rdf.yaml`` or zip: ``bioimage``;
+      ``huggingface.co/<org>/<repo>`` (``/tree/<revision>`` too): as 5.
+
+   5. ``org/repo`` (``@revision`` optional; not a DOI, which is 6's): a Hugging
+      Face repo. Online, its file list is read: with ``metadata.json`` and
+      ``model.ts`` it is a cellmap-models export, ``huggingface``; anything
+      else is refused with what to do instead. Offline, or when the Hub cannot
+      be reached, it is taken to be one, with a note.
+
+   6. A BioImage Model Zoo id or nickname (``affable-shark``,
+      ``10.5281/zenodo.5764892``): ``bioimage``. Online, it is looked up in
+      the zoo's model list; offline, a nickname- or DOI-shaped one is taken to be
+      one, with a note.
+
+   Anything else is a ValueError that says what was tried.
+
+   Importing this module imports only the standard library. Resolving imports
+   the model config classes (numpy and funlib, as the registry does), and the
+   online checks huggingface_hub; nothing imports torch or a model's framework,
+   and ``Resolved.entry()`` is a plain dict.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.models.resolve.ONLINE_TIMEOUT
+   cellmap_flow.models.resolve.ADAPTER_CONFIG
+   cellmap_flow.models.resolve.FULL_FINETUNE_WEIGHTS
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.models.resolve.Resolved
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.models.resolve.resolve
+   cellmap_flow.models.resolve.bioimage_params
+
+
+Module Contents
+---------------
+
+.. py:data:: ONLINE_TIMEOUT
+   :value: 20
+
+
+.. py:data:: ADAPTER_CONFIG
+   :value: 'adapter_config.json'
+
+
+.. py:data:: FULL_FINETUNE_WEIGHTS
+   :value: 'model_state_dict.pt'
+
+
+.. py:class:: Resolved
+
+   What a reference resolved to.
+
+   .. attribute:: type
+
+      the model type's name (``registry.model_types``).
+
+   .. attribute:: params
+
+      its constructor arguments, as a YAML entry gives them.
+
+   .. attribute:: name
+
+      the model's name: the one asked for, else one from the reference.
+
+   .. attribute:: env
+
+      the type's default environment for this model (``default_env``),
+      for display; None runs it in cellmap-flow's own. Not in ``entry()``.
+
+   .. attribute:: how
+
+      one line saying what the reference was taken to be.
+
+   .. attribute:: needs
+
+      constructor arguments the user must still give (a key of
+      ``params`` once given), e.g. ``voxel_size`` for Cellpose.
+
+   .. attribute:: notes
+
+      anything else worth saying: what was assumed, or ignored.
+
+
+   .. py:attribute:: type
+      :type:  str
+
+
+   .. py:attribute:: params
+      :type:  Dict[str, Any]
+
+
+   .. py:attribute:: name
+      :type:  str
+
+
+   .. py:attribute:: env
+      :type:  Optional[str]
+
+
+   .. py:attribute:: how
+      :type:  str
+
+
+   .. py:attribute:: needs
+      :type:  List[str]
+      :value: []
+
+
+
+   .. py:attribute:: notes
+      :type:  List[str]
+      :value: []
+
+
+
+   .. py:method:: entry() -> Dict[str, Any]
+
+      The model entry ``registry.build_model`` takes: type, params and name.
+
+      While ``needs`` is not empty, building it fails on what is missing.
+
+
+
+   .. py:method:: to_json() -> Dict[str, Any]
+
+      Every field, as the dashboard's route answers with them.
+
+
+
+.. py:function:: resolve(ref: str, *, name: str = None, voxel_size=None, online: bool = True) -> Resolved
+
+   The model ``ref`` refers to (see the module docstring for the checks, in order).
+
+   :param ref: what the user pasted.
+   :param name: the model's name; by default one is made from ``ref``.
+   :param voxel_size: nm per voxel (one number, one per axis, or "8,8,8"), for
+                      the types that do not read it from the model: given to Cellpose
+                      and bioimage.io models as ``voxel_size`` and to a fly model as
+                      ``input_voxel_size``, and ignored, with a note, by the others.
+   :param online: whether a Hugging Face repo or zoo id may be checked online.
+
+   :raises ValueError: ``ref`` is none of the things checked, or is one that
+       cellmap-flow cannot serve; the message says which and why.
+
+
+.. py:function:: bioimage_params(model: str, voxel_size=None, cls=None) -> Tuple[Dict[str, Any], List[str]]
+
+   ``BioModelConfig``'s arguments for ``model``, and the ones still needed, from its signature.
+
+   Its model argument is ``model`` or (before) ``model_name``, and its
+   ``voxel_size`` may be required or not; whichever it is, the entry names
+   it as the constructor does. ``voxel_size`` goes in when given and taken,
+   and is needed when not given and required.
+
+   :raises ValueError: the constructor takes neither ``model`` nor ``model_name``.
+
+

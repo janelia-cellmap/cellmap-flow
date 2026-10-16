@@ -1,0 +1,221 @@
+cellmap_flow.finetune.target_transforms
+=======================================
+
+.. py:module:: cellmap_flow.finetune.target_transforms
+
+.. autoapi-nested-parse::
+
+   Target transforms for converting user annotations to training targets.
+
+   Each transform takes a raw annotation tensor (B, 1, Z, Y, X) with values:
+     0 = unannotated (ignored in loss)
+     1 = background
+     2 = first foreground object
+     3 = second foreground object, etc.
+
+   And produces:
+     target: (B, C, Z, Y, X) — training target matching model output channels
+     mask: (B, C, Z, Y, X) or (B, 1, Z, Y, X) — valid loss mask
+
+   except IntervalTargetTransform, whose "target" is a lower and an upper bound
+   on a distance model's output, for losses.IntervalLoss.
+
+   A flow model's target (Cellpose's: flows towards each instance's centre and
+   a foreground channel, with a mask per channel) is made by
+   ``instance_flows.FlowTargetTransform``, beside the loss it goes with.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.target_transforms.logger
+   cellmap_flow.finetune.target_transforms.SATURATION_SIGMAS
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.target_transforms.TargetTransform
+   cellmap_flow.finetune.target_transforms.BinaryTargetTransform
+   cellmap_flow.finetune.target_transforms.BroadcastBinaryTargetTransform
+   cellmap_flow.finetune.target_transforms.AffinityTargetTransform
+   cellmap_flow.finetune.target_transforms.DistanceTargetTransform
+   cellmap_flow.finetune.target_transforms.IntervalTargetTransform
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.target_transforms.read_offsets_from_script
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:function:: read_offsets_from_script(script_path) -> Optional[list]
+
+   The ``offsets`` a model script assigns, read by parsing it (not running it); None if none.
+
+   An affinity model's script names its neighbour offsets, which the
+   affinity target needs. The dashboard reads them too, to tell an affinity
+   model when a session is set up.
+
+
+.. py:class:: TargetTransform
+
+   Base class for target transforms.
+
+
+.. py:class:: BinaryTargetTransform
+
+
+
+   Standard binary segmentation transform (current default behavior).
+
+   Produces single-channel binary target: bg=0, fg=1.
+   Mask marks annotated regions.
+
+
+.. py:class:: BroadcastBinaryTargetTransform(num_channels: int)
+
+
+
+   Binary target broadcast to N channels.
+
+   All output channels receive the same fg/bg target.
+   Useful for treating multi-channel models (affinities, distances)
+   as simple binary segmentation.
+
+
+   .. py:attribute:: num_channels
+
+
+.. py:class:: AffinityTargetTransform(offsets: List[List[int]], num_channels: int = None)
+
+
+
+   Compute affinity targets from instance labels.
+
+   For each offset, affinity is:
+     1 if both voxels belong to the same foreground object (same label > 1)
+     0 if different objects, or either is background
+
+   The loss mask requires both voxels in each pair to be annotated (label > 0),
+   producing a per-channel mask since each offset shifts differently.
+
+   :param offsets: List of [dz, dy, dx] offset tuples defining neighbor relationships.
+   :param num_channels: Total number of model output channels. If greater than
+                        len(offsets), extra channels (e.g. LSDs) are masked out
+                        (mask=0) so they receive no gradient. If None, defaults
+                        to len(offsets).
+
+
+   .. py:attribute:: offsets
+
+
+   .. py:attribute:: num_channels
+
+
+.. py:class:: DistanceTargetTransform(sigma_voxels: float = 6.0, num_channels: int = 1)
+
+
+
+   Soft signed-distance target for models trained the fly_organelles way.
+
+   The target is ``(tanh((edt(fg) - edt(not fg)) / sigma) + 1) / 2`` with
+   distances in voxels: 0.5 on the object boundary, rising to 1 inside and
+   falling to 0 outside, saturating a few sigma away. That is exactly what
+   ``fly_organelles.utils.Distance`` fed the cellmap distance models (the
+   nuc/mito "*_distance_*" HuggingFace repos use sigma=6), so sigmoid(model
+   output) is comparable to this target voxel for voxel. Use it with a
+   BCE-with-logits loss, which accepts soft targets; margin and dice do not.
+
+   Masking: an EDT computed inside a patch only sees boundaries inside the
+   patch. For an annotated voxel the computed |d| is an upper bound on the
+   truth -- the real nearest boundary may sit just past the patch edge or
+   inside an unannotated pocket. A voxel is supervised only when its
+   computed |d| is no larger than its distance to the nearest unannotated
+   voxel or patch edge (so no unseen boundary can be closer), or when that
+   distance is already past 3*sigma, where tanh has saturated and the exact
+   value no longer matters.
+
+   :param sigma_voxels: tanh scale in output voxels (6 for the cellmap
+                        distance models).
+   :param num_channels: model output channels; the target is broadcast to all
+                        of them, as BroadcastBinaryTargetTransform does.
+
+
+   .. py:attribute:: sigma
+
+
+   .. py:attribute:: num_channels
+      :value: 1
+
+
+
+.. py:data:: SATURATION_SIGMAS
+   :value: 3.0
+
+
+.. py:class:: IntervalTargetTransform(sigma_voxels: float = 6.0, voxel_size_nm=None)
+
+
+
+   Bounds on a distance model's output at each painted voxel, for scribbles.
+
+   A distance target needs every voxel's distance to the object boundary,
+   and a stroke does not say where the boundary is. It does bound it:
+
+   - upper, U: the nearest voxel painted as the other class. The boundary
+     lies between the two, so |d| <= U.
+   - lower, L: the nearest voxel not painted as the voxel's own class --
+     the other class, unpainted (it may be either), or past the patch edge.
+     Every voxel closer is known to be its own class, so |d| >= L.
+
+   Where the paint is dense, the nearest voxel not of its own class is of
+   the other, and L == U: the exact distance DistanceTargetTransform would
+   give, with the same convention (edt to the nearest voxel of the other
+   class, so 1 voxel on either side of a boundary). On a stroke the two
+   bracket the truth. Both are computed in the patch the trainer gets, which
+   keeps them valid: a closer other-class voxel outside the patch would only
+   lower the true |d|, which U already exceeds or meets, and the patch edge
+   counts as "not its own class", which can only lower L. Reading context
+   around the patch would tighten bounds near its edges, but the dataset
+   hands the trainer the patch alone (augmented with it), so they are left
+   as loose as the patch makes them.
+
+   Distances are Euclidean in nm (``voxel_size_nm``, so an anisotropic
+   grid is measured as it is), and sigma, which is in output voxels as for
+   the distance target, is taken in the finest axis's voxels. The bounds
+   are returned in the model's logit space, where the distance target
+   (tanh(d/sigma) + 1)/2 = sigmoid(2d/sigma) is the line z = 2d/sigma, with
+   the sign of the painted class. Past SATURATION_SIGMAS a lower bound is
+   capped there and an upper bound dropped (+-inf).
+
+   Returns ``(bounds, mask)``: bounds (B, 2, Z, Y, X), the lower and upper
+   bound on the logit (0 off the paint), and mask (B, 1, Z, Y, X), the
+   painted voxels. Both have one channel per bound whatever the model's
+   channels: losses.IntervalLoss broadcasts them over its output.
+
+
+   .. py:attribute:: voxel_size_nm
+
+
+   .. py:attribute:: sigma_nm
+
+
+   .. py:method:: distance_bounds(ann)
+
+      (L, U) in nm for each voxel of a (Z, Y, X) annotation; 0 off the paint, U inf with no other class.
+
+
+

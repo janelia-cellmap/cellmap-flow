@@ -1,0 +1,60 @@
+cellmap_flow.models.hf_catalog
+==============================
+
+.. py:module:: cellmap_flow.models.hf_catalog
+
+.. autoapi-nested-parse::
+
+   The cellmap models published on the Hugging Face Hub, for the dashboard's picker.
+
+   ``list_huggingface_models`` answers from a cache file under
+   ``~/.cellmap_flow`` once there is one, so opening the dashboard does not
+   query the Hub each time; ``refresh_huggingface_models`` rebuilds it. Each
+   model is keyed by its repo id, with the ``metadata.json`` it publishes.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.models.hf_catalog.HUGGING_FACE_ORGS_NAME
+   cellmap_flow.models.hf_catalog.HF_CACHE_DIR
+   cellmap_flow.models.hf_catalog.HF_CACHE_FILE
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.models.hf_catalog.list_huggingface_models
+   cellmap_flow.models.hf_catalog.refresh_huggingface_models
+
+
+Module Contents
+---------------
+
+.. py:data:: HUGGING_FACE_ORGS_NAME
+   :value: 'cellmap'
+
+
+.. py:data:: HF_CACHE_DIR
+
+.. py:data:: HF_CACHE_FILE
+
+.. py:function:: list_huggingface_models(org_name: str = HUGGING_FACE_ORGS_NAME) -> Dict[str, Any]
+
+   List available Hugging Face models, using cache if available.
+
+   :param org_name: Hugging Face organization name to filter models (default: "cellmap")
+
+   :returns: A dict mapping model IDs to their metadata
+
+
+.. py:function:: refresh_huggingface_models(org_name: str = HUGGING_FACE_ORGS_NAME) -> Dict[str, Any]
+
+   Force refresh the Hugging Face models cache.
+
+
