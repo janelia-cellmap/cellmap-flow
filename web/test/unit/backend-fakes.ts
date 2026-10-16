@@ -269,8 +269,13 @@ export class FakeViewer implements ViewerController {
     return "http://localhost/ng/#!state";
   }
 
-  setLayers(layers: Record<string, LayerSpec>): void {
+  /** What each setLayers call's `replacing` named, in order. */
+  replacings: Record<string, string>[] = [];
+
+  setLayers(layers: Record<string, LayerSpec>, replacing: Record<string, string> = {}): void {
     this.setLayersCalls++;
+    this.replacings.push(replacing);
+    for (const old of Object.values(replacing)) delete this.layers[old];
     Object.assign(this.layers, layers);
   }
 

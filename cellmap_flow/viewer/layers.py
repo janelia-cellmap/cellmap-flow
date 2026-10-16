@@ -13,6 +13,8 @@ they all place and shade it the same way:
 - ``prediction_layer()``: the layer itself, a segmentation when the chain
   ends in labels and an image otherwise.
 - ``raw_layer()``: the raw data, with the user's shader put back.
+- ``replace_layer()``: a layer drawn again in place of one of the same name,
+  keeping what the user set on that one (``carried_layer_json()``).
 
 A model's ``info`` is its server's ``model_info`` (serving.client). A
 caller that already asked for it passes it in, so building a layer asks the
@@ -225,3 +227,102 @@ def raw_layer(dataset_path, *, wrap_raw=True, shader=None, shader_controls=None,
     if shader_controls:
         layer.shaderControls = shader_controls
     return layer
+
+
+# A layer's properties that belong to the data its source serves rather than
+# to how the user shows it: a layer drawn again keeps them from the one it
+# replaces only while the source is the same (carried_layer_json). The
+# segments shown, the merger's equivalences and the segment query and colours
+# name segments of that data; the channel shown (local dimensions, position,
+# channel dimensions) counts that data's channels; the shader and its
+# controls are over its range (the dashboard sets its own for a new chain);
+# annotations and a legacy top-level transform are the source's own. The same
+# list as web/src/viewer/state.ts's SOURCE_BOUND_LAYER_KEYS
+# (tests/web/test_layer_carry.py holds them equal).
+SOURCE_BOUND_LAYER_KEYS = frozenset({
+    "annotations",
+    "channelDimensions",
+    "equivalences",
+    "localDimensions",
+    "localPosition",
+    "segmentColors",
+    "segmentQuery",
+    "segments",
+    "shader",
+    "shaderControls",
+    "transform",
+})
+
+
+def _source_urls(source):
+    """Every URL a layer's JSON source names, in order: a string, a
+    ``{"url": ...}``, or a list of either."""
+    if isinstance(source, (list, tuple)):
+        return [url for item in source for url in _source_urls(item)]
+    if isinstance(source, str):
+        return [source]
+    if isinstance(source, dict) and isinstance(source.get("url"), str):
+        return [source["url"]]
+    return []
+
+
+def carried_layer_json(old, new):
+    """``new``, a layer's JSON, as it takes the place of ``old`` (or None),
+    keeping what the user set on ``old``.
+
+    A redraw (Submit, a model coming up, a mark drawn) builds each layer
+    anew, and neuroglancer shows the new one as built: the user's blending
+    (additive), opacity, resolution, volume rendering, segment colouring or
+    tab were back at their defaults, and a layer they had switched off came
+    back on. So the result is ``new`` with every property of ``old`` that
+    ``new`` does not set: the dashboard's own properties (the source, a new
+    chain's shader, the annotations drawn) win, the user's other settings
+    stay. When the source is another one, the properties tied to its data
+    (SOURCE_BOUND_LAYER_KEYS) are not kept. A layer of another type (an image
+    layer become a segmentation when the chain now ends in labels) has no
+    settings this one would read, and keeps only being hidden. The browser's
+    viewer does the same (web/src/viewer/state.ts's carriedLayer).
+    """
+    merged = dict(new)
+    if old is None:
+        return merged
+    if old.get("type") != new.get("type"):
+        if old.get("visible") is False:
+            merged["visible"] = False
+        return merged
+    same_source = _source_urls(old.get("source")) == _source_urls(new.get("source"))
+    for key, value in old.items():
+        if merged.get(key) is not None or key == "name":
+            continue
+        if not same_source and key in SOURCE_BOUND_LAYER_KEYS:
+            continue
+        merged[key] = value
+    return merged
+
+
+def replace_layer(layers, name, layer, replacing=None):
+    """Put ``layer`` in ``layers`` (a viewer state's) as ``name``, keeping what
+    the user set on the layer it replaces (carried_layer_json).
+
+    That is the layer ``name``, or, when there is none, the layer
+    ``replacing`` names (a finetuned model's previous iteration, whose
+    successor takes its place in the list and its settings); that one is
+    removed either way. Being hidden is the managed layer's, not the layer's,
+    so it is set on the managed layer after the layer is in place.
+    """
+    old = None
+    if name in layers:
+        old = layers[name].to_json()
+    if replacing and replacing != name and replacing in layers:
+        if old is None:
+            old = layers[replacing].to_json()
+            # Renamed in place, so the new layer lands where the old one was.
+            layers[replacing].name = name
+        else:
+            del layers[replacing]
+    merged = carried_layer_json(old, layer.to_json())
+    hidden = merged.pop("visible", True) is False
+    merged.pop("name", None)
+    layers[name] = neuroglancer.viewer_state.make_layer(merged)
+    if hidden:
+        layers[name].visible = False

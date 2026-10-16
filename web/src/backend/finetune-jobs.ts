@@ -464,7 +464,10 @@ export class FinetuneJobs {
       at = base === -1 ? models.length : base + 1;
     }
     models.splice(at, 0, fentry);
-    await serveModels(ctx, models, ctx.session.state.chain);
+    // The previous model's layer is handed to the new one, so what the user
+    // set on it (additive blending, say) stays on the layer they look at.
+    const previousName = previous === null ? undefined : current.find((m) => m.id === previous)?.name;
+    await serveModels(ctx, models, ctx.session.state.chain, previousName ? { replacing: { [name]: previousName } } : {});
     await ctx.session.update({ models });
     if (job.isFinal()) return;
     job.servedEntryId = fentry.id;

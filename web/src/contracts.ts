@@ -245,8 +245,12 @@ export interface ViewerController {
    * server's route builds its viewer without showing it either); returns the
    * viewer's URL for that state. */
   prepareDataset(url: string, raw: LayerSpec, info?: DatasetInfo): string;
-  /** Replace the named layers, keeping a layer's visibility if it was hidden. */
-  setLayers(layers: Record<string, LayerSpec>): void;
+  /** Replace the named layers, each keeping what the user set on the one it
+   * replaces (viewer/state.ts's carriedLayer: blending, opacity, being
+   * hidden...). `replacing` names, for a new layer, the layer it takes over
+   * from, whose place and settings it gets (a finetuned model's next
+   * iteration); that one is removed. */
+  setLayers(layers: Record<string, LayerSpec>, replacing?: Record<string, string>): void;
   removeLayer(name: string): void;
   /** The viewer's position, in nm (z, y, x), or null without a viewer. */
   position(): number[] | null;

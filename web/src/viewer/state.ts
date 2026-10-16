@@ -47,18 +47,91 @@ export function layersOf(state: NgState | null | undefined): NgLayer[] {
   return Object.entries(layers).map(([name, layer]) => ({ ...layer, name }));
 }
 
-/** `state` with each of `layers` in place of the layer of the same name, or
- * appended when there was none (routes/pipeline.py's _replace_layer). A
- * redraw replaces each layer with a new one, which Neuroglancer shows, so a
- * layer the user had switched off would come back on with every Submit:
- * the new layer stays hidden where the old one was. */
-export function replaceLayers(state: NgState, layers: Record<string, LayerSpec>): NgState {
+/** A layer's properties that belong to the data its source serves rather
+ * than to how the user shows it: a layer drawn again keeps them from the one
+ * it replaces only while the source is the same (carriedLayer). The
+ * segments shown, the merger's equivalences and the segment query and
+ * colours name segments of that data; the channel shown (local dimensions,
+ * position, channel dimensions) counts that data's channels; the shader and
+ * its controls are over its range (the app sets its own for a new chain);
+ * annotations and a legacy top-level transform are the source's own. The
+ * same list as cellmap_flow/viewer/layers.py's SOURCE_BOUND_LAYER_KEYS
+ * (tests/web/test_layer_carry.py holds them equal). */
+export const SOURCE_BOUND_LAYER_KEYS: readonly string[] = [
+  "annotations",
+  "channelDimensions",
+  "equivalences",
+  "localDimensions",
+  "localPosition",
+  "segmentColors",
+  "segmentQuery",
+  "segments",
+  "shader",
+  "shaderControls",
+  "transform",
+];
+const SOURCE_BOUND = new Set(SOURCE_BOUND_LAYER_KEYS);
+
+/** Every URL a layer's source names, in order: a string, a {url, ...}, or
+ * a list of either (sourceUrl gives the first). */
+export function sourceUrls(source: unknown): string[] {
+  if (Array.isArray(source)) return source.flatMap(sourceUrls);
+  const url = sourceUrl(source);
+  return url === null ? [] : [url];
+}
+
+/** `spec` as the layer `name` that takes the place of `old`, keeping what the
+ * user set on `old` (routes/pipeline.py's replace_layer, through
+ * cellmap_flow/viewer/layers.py). A redraw (Submit, a model added, a mark
+ * drawn) builds each layer anew, and Neuroglancer shows the new one as
+ * built: the user's blending (additive), opacity, resolution, volume
+ * rendering, segment colouring or tab were back at their defaults, and a
+ * layer they had switched off came back on. So the new layer is `spec`
+ * with every property of `old` that `spec` does not set: the app's own
+ * properties (the source, a new chain's shader, the annotations drawn) win,
+ * the user's other settings stay. When the source is another one, the
+ * properties tied to its data (SOURCE_BOUND_LAYER_KEYS) are not kept. A
+ * layer of another type (an image layer become a segmentation when the
+ * chain now ends in labels) has no settings this one would read, and keeps
+ * only being hidden. */
+export function carriedLayer(old: NgLayer | undefined, spec: LayerSpec, name: string): NgLayer {
+  const next: NgLayer = { ...spec, name };
+  if (!old) return next;
+  if (old.type !== spec.type) {
+    if (old.visible === false) next.visible = false;
+    return next;
+  }
+  const sameSource = JSON.stringify(sourceUrls(old.source)) === JSON.stringify(sourceUrls(spec.source));
+  for (const [key, value] of Object.entries(old)) {
+    if (next[key] !== undefined || key === "name") continue;
+    if (!sameSource && SOURCE_BOUND.has(key)) continue;
+    next[key] = value;
+  }
+  return next;
+}
+
+/** `state` with each of `layers` in place of the layer of the same name,
+ * keeping what the user set on it (carriedLayer), or appended when there was
+ * none. `replacing` names, for a layer of `layers` that is new, the layer it
+ * takes over from (a finetuned model's next iteration, `x-ft2` for `x-ft1`):
+ * that one's place in the list and its settings go to the new layer, and it
+ * is gone. */
+export function replaceLayers(state: NgState, layers: Record<string, LayerSpec>, replacing: Record<string, string> = {}): NgState {
   const current = layersOf(state).map((layer) => ({ ...layer }));
   for (const [name, spec] of Object.entries(layers)) {
-    const index = current.findIndex((layer) => layer.name === name);
-    const hidden = index >= 0 && current[index].visible === false;
-    const replacement: NgLayer = { ...spec, name };
-    if (hidden) replacement.visible = false;
+    let index = current.findIndex((layer) => layer.name === name);
+    const previous = replacing[name];
+    const at = previous === undefined || previous === name ? -1 : current.findIndex((layer) => layer.name === previous);
+    if (at !== -1) {
+      if (index === -1) {
+        index = at;  // in the old one's place, with its settings
+      } else {
+        // Both there already: the new one keeps its own, the old one goes.
+        current.splice(at, 1);
+        index = current.findIndex((layer) => layer.name === name);
+      }
+    }
+    const replacement = carriedLayer(index >= 0 ? current[index] : undefined, spec, name);
     if (index >= 0) current[index] = replacement;
     else current.push(replacement);
   }
