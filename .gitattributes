@@ -1,0 +1,7 @@
+# Files written by tools, not people: GitHub collapses them in pull request
+# diffs and leaves them out of the repository's language statistics. Nothing
+# else reads these attributes: git, the builds and CI behave the same.
+pixi.lock linguist-generated=true
+web/package-lock.json linguist-generated=true
+web/test/fixtures/*.json linguist-generated=true
+cellmap_flow/dashboard/static/js/vendor/** linguist-vendored=true
