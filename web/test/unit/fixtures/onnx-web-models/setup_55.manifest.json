@@ -175,5 +175,41 @@
       "flip_frac": 0.0,
       "ort_cpu_s": 0.72
     }
-  ]
+  ],
+  "source_repo": "cellmap/nuc-unetiso-setup-55",
+  "torch_version": "2.9.1",
+  "exporter": "torch.onnx.export (TorchScript, dynamo=False)",
+  "opset": 18,
+  "finetune": {
+    "head": {
+      "final_layer": "final_conv.convs.0",
+      "onnx_node": "/final_conv/convs.0/Conv",
+      "features": "/final_conv/Slice_output_0",
+      "weight": "final_conv.convs.0.weight",
+      "bias": "final_conv.convs.0.bias",
+      "in_channels": 32,
+      "out_channels": 1,
+      "activation": "none (logits)",
+      "files": [
+        "setup_55_nuc_128nm_in124_fp16.onnx",
+        "setup_55_nuc_128nm_in124_fp32.onnx",
+        "setup_55_nuc_128nm_in140_fp16.onnx",
+        "setup_55_nuc_128nm_in140_fp32.onnx",
+        "setup_55_nuc_128nm_in172_fp16.onnx",
+        "setup_55_nuc_128nm_in172_fp32.onnx"
+      ],
+      "initializers": "finetune/initializers.json",
+      "loss": "masked BCE on logits",
+      "note": "train the final 1x1 conv on frozen features",
+      "torch_weight": {
+        "torch": "final_conv.weight",
+        "transform": "[:, :, 0]"
+      },
+      "torch_bias": {
+        "torch": "final_conv.bias",
+        "transform": "identity"
+      },
+      "weight_map": "finetune/weight_map.json"
+    }
+  }
 }

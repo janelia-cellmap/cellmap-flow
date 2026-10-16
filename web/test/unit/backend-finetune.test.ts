@@ -433,8 +433,8 @@ describe("a job's life", () => {
     expect(run.paint).toBe(ctx.paint);
     expect(run.infer).toBe(ctx.infer);
     expect(run.options).toEqual({
-      epochs: 3, learningRate: 0.01, lossType: "bce", margin: 0.3, balanceClasses: true, labelSmoothing: 0, batchPixels: 4096,
-      distillationLambda: 0.01, distillationScope: "unlabeled", seed: 0,
+      mode: "head", epochs: 3, learningRate: 0.01, lossType: "bce", margin: 0.3, balanceClasses: true, labelSmoothing: 0, batchPixels: 4096,
+      distillationLambda: 0.01, distillationScope: "unlabeled", seed: 0, batchPatches: 1, tileSize: null,
     });
     expect(run.goodRegions).toBeUndefined();
     expect(run.initialHead).toBeUndefined();
@@ -718,7 +718,7 @@ describe("cancel, stop early, restart", () => {
     expect(ctx.viewer.replacings.at(-1)).toEqual({ [`${NAME_54}-ft2`]: `${NAME_54}-ft1` });
     expect(ctx.viewer.removed).not.toContain(`${NAME_54}-ft1`);
     expect(Object.keys(ctx.viewer.layers)).not.toContain(`${NAME_54}-ft1`);
-    expect(results[1].weight).toEqual(results[0].weight.map((w) => w + 1));
+    expect(results[1].weight).toEqual(results[0].weight!.map((w) => w + 1));
   });
 
   it("keeps an earlier job's model when a new job is submitted: only a restart replaces its own job's model", async () => {

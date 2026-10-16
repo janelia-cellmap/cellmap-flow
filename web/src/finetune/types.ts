@@ -18,7 +18,11 @@
 //                   head (unpainted, all, or inside good regions), sampled;
 //   good-regions.ts the regions the user marked as already right, kept
 //                   with the volume, and where they fall on its grid;
-//   run.ts          all of it, one run: runFinetune.
+//   run.ts          all of it, one run: runFinetune;
+//   modes.ts        the ways a model can be trained, from its manifest;
+//   full/           the other way, the whole network of a 2D model trained
+//                   with TensorFlow.js (full/run-full.ts), when the
+//                   manifest offers it.
 //
 // Why the head. The browser runs the models with onnxruntime-web, which
 // trains nothing on the GPU, so the network's body stays as exported and
@@ -31,7 +35,15 @@
 // as any other model. Everything the trainer sees goes through the same
 // normalizers and the same ONNX session as inference, so what it fits is
 // what the layer shows.
+//
+// Since 2026-10-16 the 2D students' manifests also offer the whole network
+// ("full"): Marwan Zouinkhi exported each with a training graph that
+// TensorFlow.js builds and trains on WebGPU (its gradients are TF.js's, not
+// onnxruntime's), and the weights trained are written back into the .onnx,
+// which serves as before. The tab offers what the manifest declares
+// (modes.ts) and FinetuneOptions.mode says which a run is.
 import type { Chain, DatasetInfo, Inference, ModelEntry, PaintStore, PaintVolume } from "../contracts";
+import type { FinetuneMode } from "./modes";
 
 /** The labels of a painted chunk of an annotation volume: its grid index
  * (z, y, x, as the chunk key names it) and its voxels, the whole chunk in
@@ -109,6 +121,10 @@ export type DistillationScope = "unlabeled" | "all";
 /** The training parameters, as the Finetune tab's form sends them to
  * /api/finetune/submit and the routes read them. */
 export interface FinetuneOptions {
+  /** What trains: the head, or the whole network (full/run-full.ts), which
+   * reads the epochs, the learning rate, the seed and its two fields below
+   * and none of the head's (its loss is masked BCE on the paint alone). */
+  mode: FinetuneMode;
   epochs: number;
   learningRate: number;
   /** The supervised loss on the painted voxels (HeadLoss). */
@@ -130,6 +146,11 @@ export interface FinetuneOptions {
   distillationLambda: number;
   distillationScope: DistillationScope;
   seed: number;
+  /** The whole network's batch: tiles per optimizer step (the server's Batch Size). */
+  batchPatches: number;
+  /** The whole network's tile side, in pixels of the input; null for the
+   * default (full/graph.ts DEFAULT_TILE, the side the graph takes nearest it). */
+  tileSize: number | null;
 }
 
 /** How a run speaks to the job that follows it: its log lines, in the words
@@ -141,12 +162,16 @@ export interface RunReporter {
 }
 
 /** What a run made: the finetuned model's bytes (the base's graph with the
- * trained head written into its initializers) and how it went. */
+ * trained head, or every trained weight, written into its initializers)
+ * and how it went. */
 export interface Finetuned {
   bytes: ArrayBuffer;
-  head: Head;
-  weight: Float32Array;
-  bias: Float32Array;
+  /** The head trained and its weights, after a head run (a restart starts
+   * from them); absent after a whole-network run, whose weights are all in
+   * `bytes` (a restart starts from those). */
+  head?: Head;
+  weight?: Float32Array;
+  bias?: Float32Array;
   epochs: number;
   /** Each epoch's loss as its log line gives it: the supervised term plus
    * λ × the distillation term when distillation was on. */
@@ -160,6 +185,15 @@ export interface Finetuned {
   chunks: number;
   /** The voxels the distillation term held to the starting head; 0 without distillation. */
   distilled: number;
+  /** The tiles a whole-network run trained on (full/tiles.ts). */
+  tiles?: number;
+}
+
+/** What a head run made: a Finetuned with the head and its trained weights. */
+export interface HeadFinetuned extends Finetuned {
+  head: Head;
+  weight: Float32Array;
+  bias: Float32Array;
 }
 
 /** A region the user marked as one the model already gets right (Mark as
@@ -192,10 +226,18 @@ export interface FinetuneRun {
   options: FinetuneOptions;
   report: RunReporter;
   initialHead?: { weight: Float32Array; bias: Float32Array };
+  /** A whole-network run's start: the last run's model, for a restart
+   * (`baseBytes` otherwise). */
+  initialBytes?: ArrayBuffer;
   goodRegions?: readonly unknown[];
 }
 
 export type RunFinetune = (run: FinetuneRun) => Promise<Finetuned>;
+
+/** The whole network's learning rate where the tab sends none: Adam's
+ * 1e-4, at which Marwan measured the steps, and the server's LoRA default.
+ * The head's 1e-2 would move two million weights a hundred times as far. */
+export const FULL_LEARNING_RATE = 1e-4;
 
 /** The defaults of the form's parameters where the tab does not send one.
  *
@@ -209,8 +251,15 @@ export type RunFinetune = (run: FinetuneRun) => Promise<Finetuned>;
  * where before it cost nothing. The server's own reason for keeping it
  * small, that LoRA cannot move the model far, does not carry over: a head
  * moves freely at its learning rate, so a heavier λ (0.1 to 1) holds it
- * firmly; the form offers those. */
+ * firmly; the form offers those.
+ *
+ * The whole network's batch is one tile, where the server's is 8 patches:
+ * a step's time and memory grow with the batch (one 300² tile of
+ * setup_54_2d already takes 908 MB), BatchNorm's statistics are frozen, so
+ * one tile is as well defined a batch as eight, and a session's few painted
+ * slices make few tiles, which a batch of one turns into as many steps. */
 export const DEFAULT_OPTIONS: FinetuneOptions = {
+  mode: "head",
   epochs: 20,
   learningRate: 0.01,
   lossType: "bce",
@@ -221,4 +270,6 @@ export const DEFAULT_OPTIONS: FinetuneOptions = {
   distillationLambda: 0.01,
   distillationScope: "unlabeled",
   seed: 0,
+  batchPatches: 1,
+  tileSize: null,
 };

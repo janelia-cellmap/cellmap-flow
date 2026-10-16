@@ -11,8 +11,15 @@
 //     can name its feeds and fetches without parsing prose.
 // A manifest that already uses the wide forms is taken as it is, so a future
 // export can switch without a change here.
+//
+// Since 2026-10-16 the manifests also say what the browser can train
+// (`finetune`: the head, and for the 2D students the whole network) and
+// where the export came from (source_repo, distilled_from_repo,
+// torch_version, exporter, opset); both are kept (parseFinetune). A
+// finetune entry that is not what it should be is left out rather than
+// failing the manifest: the model still runs, without that way to train it.
 import { FINETUNED_REPO } from "../contracts";
-import type { ModelEntry, ModelManifest, ModelVariant, Step, VariantName } from "../contracts";
+import type { FinetuneSpec, FullFinetuneSpec, HeadFinetuneSpec, ModelEntry, ModelManifest, ModelVariant, Step, VariantName } from "../contracts";
 
 import { HF_REPO, resolveUrl } from "./hf";
 
@@ -69,8 +76,74 @@ export function parseManifest(raw: unknown, where = "manifest.json"): ModelManif
     input_norm: steps(m.input_norm, where),
     io: parseIo(m.io),
     variants: sortVariants(variants),
+    ...provenance(m),
+    ...finetuneOf(m),
   };
 }
+
+function finetuneOf(m: Record<string, unknown>): Pick<ModelManifest, "finetune"> {
+  const finetune = parseFinetune(m.finetune);
+  return finetune ? { finetune } : {};
+}
+
+// The export's provenance, the fields that are there.
+function provenance(m: Record<string, unknown>): Pick<ModelManifest, "source_repo" | "distilled_from_repo" | "torch_version" | "exporter" | "opset"> {
+  const out: Pick<ModelManifest, "source_repo" | "distilled_from_repo" | "torch_version" | "exporter" | "opset"> = {};
+  for (const key of ["source_repo", "distilled_from_repo", "torch_version", "exporter"] as const) {
+    const value = optionalString(m, key);
+    if (value) out[key] = value;
+  }
+  if (typeof m.opset === "number" && Number.isInteger(m.opset)) out.opset = m.opset;
+  return out;
+}
+
+/** The manifest's `finetune` block: its `head` and `full` entries that have
+ * what training needs, each as given (its notes and numbers kept); null
+ * when there is none, or nothing in it the browser can use. */
+export function parseFinetune(value: unknown): FinetuneSpec | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const block = value as Record<string, unknown>;
+  const spec: FinetuneSpec = {};
+  const head = record(block.head);
+  if (head && isString(head.weight) && isString(head.features) && (head.bias === null || head.bias === undefined || isString(head.bias)) && isStrings(head.files)) {
+    spec.head = { ...head, bias: head.bias ?? null } as unknown as HeadFinetuneSpec;
+  }
+  const full = record(block.full);
+  if (full && isString(full.library) && isStrings(full.files) && isString(full.initializers) && isStrings(full.write_back)) {
+    const fullSpec = {
+      ...full,
+      weight_map: isString(full.weight_map) ? full.weight_map : "identity",
+      frozen: isStrings(full.frozen) ? full.frozen : [],
+    } as unknown as FullFinetuneSpec;
+    const spike = spikeOf(full.spike);
+    if (spike) fullSpec.spike = spike;
+    else delete fullSpec.spike;
+    spec.full = fullSpec;
+  }
+  return spec.head || spec.full ? spec : null;
+}
+
+// The spike's per-side numbers (`full: {"300": {step_ms, peak_mb}}`), the
+// sides with both numbers; the rest of the spike (its setup, its other
+// measurements) as given.
+function spikeOf(value: unknown): FullFinetuneSpec["spike"] | null {
+  const spike = record(value);
+  const sides = record(spike?.full);
+  if (!spike || !sides) return null;
+  const full: Record<string, { step_ms: number; peak_mb: number }> = {};
+  for (const [side, numbers] of Object.entries(sides)) {
+    const n = record(numbers);
+    if (n && typeof n.step_ms === "number" && typeof n.peak_mb === "number" && /^\d+$/.test(side)) full[side] = { step_ms: n.step_ms, peak_mb: n.peak_mb };
+  }
+  return { ...spike, full } as FullFinetuneSpec["spike"];
+}
+
+function record(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
+}
+
+const isString = (value: unknown): value is string => typeof value === "string" && value.length > 0;
+const isStrings = (value: unknown): value is string[] => Array.isArray(value) && value.every((v) => typeof v === "string");
 
 // A variant row; null when its precision is not one we know how to choose
 // between (the caller leaves it out rather than guess at its memory use).

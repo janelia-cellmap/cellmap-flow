@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import { resolveUrl } from "../../src/models/hf";
 import { entryFor, entryName, FALLBACK_FOLDERS, ManifestError, modelFolders, parseManifest, voxelLabel } from "../../src/models/manifest";
+import { finetuneModes } from "../../src/finetune/modes";
 import { FOLDERS, rawManifest, treeListing } from "./models-helpers";
 
 describe("parseManifest on the repo's manifests", () => {
@@ -80,6 +81,27 @@ describe("parseManifest on the repo's manifests", () => {
       expect(m.variants).toHaveLength(folder.endsWith("_2d") ? 6 : 12);
       expect(m.channels.length).toBeGreaterThan(0);
     }
+  });
+
+  it("keeps the finetune block and the export's provenance, and offers the modes it declares", () => {
+    const m = parseManifest(rawManifest("setup_53_2d"));
+    expect(m).toMatchObject({ source_repo: "cellmap/mito-aff-unetiso-setup-53-2d", distilled_from_repo: "cellmap/mito-aff-unetiso-setup-53", torch_version: "2.9.1", opset: 18 });
+    expect(m.finetune?.head).toMatchObject({ weight: "final_conv.c.weight", bias: "final_conv.c.bias", features: "/final_conv/Gather_output_0" });
+    expect(m.finetune?.full).toMatchObject({ library: "tfjs", weight_map: "identity", initializers: "finetune/initializers.json" });
+    expect(m.finetune?.full?.frozen).toHaveLength(28);
+    expect(m.finetune?.full?.spike?.full).toEqual({ 300: { step_ms: 294, peak_mb: 320 }, 556: { step_ms: 1178, peak_mb: 1307 } });
+    // The modes follow the file served: a 3D model's int8w file has no
+    // writable weights; a manifest without the block keeps the head.
+    const modes = (folder: string, variant: string, raw = rawManifest(folder)) => {
+      const manifest = parseManifest(raw);
+      return finetuneModes(entryFor(folder, manifest, manifest.variants.find((v) => v.variant === variant)!));
+    };
+    expect(modes("setup_53_2d", "fp16")).toEqual(["head", "full"]);
+    expect(modes("setup_54", "fp32")).toEqual(["head"]);
+    expect(modes("setup_54", "int8w")).toEqual([]);
+    const before = { ...(rawManifest("setup_54") as Record<string, unknown>) };
+    delete before.finetune;
+    expect(modes("setup_54", "int8w", before)).toEqual(["head"]);
   });
 
   it("takes block sizes already given per axis", () => {

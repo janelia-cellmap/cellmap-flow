@@ -90,7 +90,7 @@ last view and a new tab came back with it.
 
 A model finetuned in the browser is kept in that browser alone, so its name
 would mean nothing elsewhere; the link carries what rebuilds it instead.
-Browser finetuning trains only the model's last 1×1 convolution, so the
+A last-layer finetune changes only the model's last 1×1 convolution, so the
 model is its base's file with other numbers in that layer, and its `model`
 value is
 
@@ -112,7 +112,11 @@ replaced: one with exactly the link's numbers is served as it is (so opening
 a link twice keeps one model), and otherwise the link's takes the next name
 of its series (`-ft2`), its layer renamed in the view. A ref that cannot be
 read or rebuilt (its base unknown, its download failed, its head another
-shape than the base's) is logged and left out; the rest run.
+shape than the base's) is logged and left out; the rest run. A model whose
+whole network was trained (a 2D model's *Whole network*, below), or one
+finetuned from such a model, has millions of numbers changed, not a head's
+few dozen: it is named by its folder, which opens only in this browser, and
+the notice says so; its *Download finetuned model* is the way to send it.
 
 Paint does not travel: an annotation volume is its chunks in the browser's
 paint store, too much for a link. Share still copies the link, and a notice
@@ -257,9 +261,34 @@ route (`ctx.viewer.bindKey`), sends the page `cellmap-flow:restart-finetune`,
 and the tab's `job-monitor.js` restarts the job as its Restart does, without
 the confirm, or says why not; the server's key, in its Python process,
 counts the press in the job's status for the tab's poll instead. Why the
-head and not the network: onnxruntime-web trains nothing on the GPU; a WebGPU
-autograd library would have to rebuild the network, which is a later step
-behind the same `RunFinetune` seam (`src/finetune/types.ts`).
+head: onnxruntime-web trains nothing on the GPU, so the network itself has to
+be rebuilt in a library that does, which the 2D models now are (below).
+
+What a model can be trained as comes from its manifest's `finetune` block
+(`src/models/manifest.ts` `parseFinetune`, `src/finetune/modes.ts`), and
+`GET /api/finetune/models` answers it as `finetune_modes`, as the server's
+`finetune_modes()` does: `head` when the served file is one of the head's
+`files` (fp32 and fp16; an int8w file's weights are DequantizeLinear inputs),
+`full` when the library is `tfjs` and the file is one of `write_back`. A
+manifest without the block keeps the head the graph is found to end in. The
+tab's *Training* field (browser-only, shown when both are offered) picks one.
+*Whole network* (`src/finetune/full/`) trains a 2D model with TensorFlow.js
+4.22.0 on WebGPU (its CPU backend without WebGPU), loaded only when such a
+run starts (`tfjs.ts`: six chunks, 0.68 MB, 0.19 MB gzipped): the folder's
+`finetune/train_graph.json` and `finetune/initializers.json` are fetched from
+the Hub (`files.ts`), the paint is cut into tiles in the plane it was drawn in
+(`tiles.ts`, the server's `paint_depth_axes` and `slice_axes`), the network is
+built from the weights in the served `.onnx` and trained with masked BCE and
+Adam by Marwan Zouinkhi's reference runtime (`cellmap-tfjs-train.ts`, his
+`finetune/cellmap_tfjs_train.js` ported to TypeScript), BatchNorm's running
+statistics held (`frozen`), and the trained weights are written back at their
+offsets, checked against the file first (`run-full.ts`). The batch is the
+server's *Batch Size*, in tiles; *Tile Size* offers the sides the graph takes
+(`graph.ts` walks its shapes: 92 + 8k for both graphs) near 172, 300, 428 and
+556, with the manifest's measured step time and memory, scaled by area for
+the sides not measured. A restart goes on from the last run's model; a switch
+between the two needs a new job. A model whose whole network was trained is
+not put in a Share link (millions of weights where a link carries a head's).
 
 AI-assisted annotation (`src/ai-annotate/`, the port of
 `cellmap_flow/ai_annotate/`) is in the tab too. Shift+G or *Annotate at View

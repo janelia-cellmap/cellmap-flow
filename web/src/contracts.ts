@@ -116,6 +116,12 @@ export interface ModelVariant {
   mean_abs?: number;
   flip_frac?: number;
   ort_cpu_s?: number;
+  /** A model finetuned in this browser: the Hugging Face file its bytes
+   * were made from (FINETUNED_REPO entries only, since 2026-10-16). Its
+   * graph is that file's, byte for byte but for the weights trained, so
+   * the base's finetune block (ModelManifest.finetune) describes it by
+   * that file's name, and its finetune files are in that folder. */
+  source?: { repo: string; folder: string; file: string };
 }
 
 export interface ModelManifest {
@@ -133,6 +139,59 @@ export interface ModelManifest {
   input_norm: Step[];
   io: { input: string; output: string; [k: string]: unknown };
   variants: ModelVariant[];
+  /** Where the export came from, as Marwan's manifests say since
+   * 2026-10-16: the PyTorch model's Hugging Face repo, the 3D model's a 2D
+   * student was distilled from, and how it was exported. */
+  source_repo?: string;
+  distilled_from_repo?: string;
+  torch_version?: string;
+  exporter?: string;
+  opset?: number;
+  /** What the browser can train of the model, as the export declares it.
+   * Absent from a manifest written before 2026-10-16, whose head the
+   * browser finds in the graph itself (finetune/modes.ts). */
+  finetune?: FinetuneSpec;
+}
+
+/** A manifest's `finetune` block: one entry per way to train the model,
+ * named as the Finetune tab's modes are (finetune/modes.ts). A mode the
+ * browser does not know is left out when the manifest is read. */
+export interface FinetuneSpec {
+  head?: HeadFinetuneSpec;
+  full?: FullFinetuneSpec;
+}
+
+/** The model's last layer, a 1×1 convolution, trained on frozen features. */
+export interface HeadFinetuneSpec {
+  /** The ONNX initializers of its weight and bias, and the tensor it reads. */
+  weight: string;
+  bias: string | null;
+  features: string;
+  onnx_node?: string;
+  in_channels?: number;
+  out_channels?: number;
+  /** The files whose head can be written: fp32 and fp16. An int8w file's
+   * weights feed a DequantizeLinear and are not plain initializers. */
+  files: string[];
+  initializers?: string;
+}
+
+/** The whole network, trained in the browser by `library`'s runtime. */
+export interface FullFinetuneSpec {
+  /** "tfjs": TensorFlow.js, from `files` (the graph, Marwan's runtime). */
+  library: string;
+  files: string[];
+  /** "identity": the graph's params are named as the ONNX initializers. */
+  weight_map: string;
+  /** The folder's initializers.json: each file's initializers' offsets. */
+  initializers: string;
+  /** The files the trained weights can be written back into. */
+  write_back: string[];
+  /** Params that never train (BatchNorm's running statistics). */
+  frozen: string[];
+  /** What a training step cost where Marwan measured it: per tile side,
+   * one step of one tile, and how. */
+  spike?: { setup?: string; date?: string; full: Record<string, { step_ms: number; peak_mb: number }> };
 }
 
 /** A model as the dashboard serves it: one manifest, one chosen variant. */
