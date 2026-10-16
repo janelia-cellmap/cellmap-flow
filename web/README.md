@@ -132,7 +132,7 @@ BCE-with-logits (`head-trainer.ts`; the targets are `targets.ts`, the port of
 `target_transforms.py`, checked against the Python classes). The trained
 weights are written back into a copy of the model's initializers, and the
 result is an ordinary model entry (`src/models/finetuned.ts`, repo
-`finetuned`, kept in IndexedDB with its bytes): served in place of the base
+`finetuned`, kept in IndexedDB with its bytes): served beside the base
 when *Auto-serve* is on, listed on the Models tab, downloadable as `.onnx`.
 The job routes answer as the server's do (`src/backend/routes/finetune.ts`,
 `finetune-jobs.ts`), so the tab's own job card, loss plot and log stream

@@ -468,12 +468,12 @@ describe("a job's life", () => {
     expect(logs.logs).toContain("Epoch 1/3 - Loss: 0.500000\n");
     expect(logs.logs).toContain("Epoch 3/3 - Loss: 0.166667\n");
     expect(logs.logs).toMatch(new RegExp(`Finetuned model ${NAME_54}-ft1 kept in this browser`));
-    expect(logs.logs).toMatch(new RegExp(`Serving ${NAME_54}-ft1 in place of ${NAME_54}`));
+    expect(logs.logs).toMatch(new RegExp(`Serving ${NAME_54}-ft1 beside ${NAME_54}`));
     expect(logs.offset).toBe(encoder.encode(logs.logs).byteLength);
     expect(results).toHaveLength(1);
   });
 
-  it("keeps the result as a finetuned model and, with Auto-serve, serves it in the base's place in the session", async () => {
+  it("keeps the result as a finetuned model and, with Auto-serve, serves it beside the base in the session", async () => {
     const { ctx, h, id, results } = await ready();
     const { job_id } = body(await h.handle(request("POST", "/api/finetune/submit", submitBody())));
     await h.jobs.get(job_id)!.settled();
@@ -491,11 +491,10 @@ describe("a job's life", () => {
     expect(record.final_loss).toBeCloseTo(0.5 / 3, 6);
     expect(record.params.output_type).toBe("affinities");
     expect(ctx.catalog.finetunedBytes.get(record.entry.onnxUrl)).toBe(results[0].bytes);
-    // served in the base's place, the other model untouched
-    expect(ctx.session.state.models.map((m) => m.name)).toEqual([name, NAME_56]);
-    expect(ctx.infer.served().map((s) => s.entry.name).sort()).toEqual([name, NAME_56].sort());
-    expect(ctx.infer.disposed.some((v) => v.startsWith(NAME_54))).toBe(true);
-    expect(ctx.viewer.removed).toContain(NAME_54);
+    // served right after the base, which stays, the other model untouched
+    expect(ctx.session.state.models.map((m) => m.name)).toEqual([NAME_54, name, NAME_56]);
+    expect(ctx.infer.served().map((s) => s.entry.name).sort()).toEqual([NAME_54, name, NAME_56].sort());
+    expect(ctx.viewer.removed).not.toContain(NAME_54);
     expect(Object.keys(ctx.viewer.layers)).toContain(name);
     expect(ctx.logged.join("\n")).toMatch(new RegExp(`Finetuned model ${name} kept`));
   });
@@ -657,7 +656,7 @@ describe("cancel, stop early, restart", () => {
     const s = await status(h, job_id);
     expect(s).toMatchObject({ status: "WAITING_FOR_RESTART", current_epoch: 2, total_epochs: 5, inference_server_ready: true, finetuned_model_name: `${NAME_54}-ft1` });
     expect(ctx.catalog.finetunedRecords[0].epochs).toBe(2);
-    expect(ctx.session.state.models.map((m) => m.name)).toEqual([`${NAME_54}-ft1`, NAME_56]);
+    expect(ctx.session.state.models.map((m) => m.name)).toEqual([NAME_54, `${NAME_54}-ft1`, NAME_56]);
     const logs = body(await h.handle(request("GET", `/api/finetune/job/${job_id}/logs`))).logs as string;
     expect(logs).toContain("Stop requested: training ends after epoch 2");
     expect(logs).toContain("Stopped early after epoch 2");
@@ -691,9 +690,9 @@ describe("cancel, stop early, restart", () => {
     const s = await status(h, job_id);
     expect(s).toMatchObject({ status: "WAITING_FOR_RESTART", current_epoch: 2, total_epochs: 2, loss_epoch: 2, finetuned_model_name: `${NAME_54}-ft2`, inference_server_ready: true });
     expect(s.params).toMatchObject({ model_name: NAME_54, num_epochs: 2, learning_rate: 0.001, output_type: "affinities" });
-    // ft2 took ft1's place; both are kept
-    expect(ctx.session.state.models.map((m) => m.name)).toEqual([`${NAME_54}-ft2`, NAME_56]);
-    expect(ctx.infer.served().map((x) => x.entry.name).sort()).toEqual([`${NAME_54}-ft2`, NAME_56].sort());
+    // ft2 took ft1's place beside the base; both are kept
+    expect(ctx.session.state.models.map((m) => m.name)).toEqual([NAME_54, `${NAME_54}-ft2`, NAME_56]);
+    expect(ctx.infer.served().map((x) => x.entry.name).sort()).toEqual([NAME_54, `${NAME_54}-ft2`, NAME_56].sort());
     expect(ctx.catalog.finetunedRecords.map((r) => r.name)).toEqual([`${NAME_54}-ft2`, `${NAME_54}-ft1`]);
     expect(results[1].weight).toEqual(results[0].weight.map((w) => w + 1));
   });

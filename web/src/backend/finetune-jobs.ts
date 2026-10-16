@@ -4,7 +4,7 @@
 // of the Finetune tab's Start Finetuning: it runs the model's head training
 // (src/finetune/run.ts, through the `run` seam) on the paint of its volume,
 // keeps the result as a finetuned model in the catalog, and, with
-// Auto-serve, serves it in place of the model it came from; then it waits,
+// Auto-serve, serves it beside the model it came from; then it waits,
 // as the server's trainer does, for a Restart, which runs again from the
 // trained head with the form's new parameters under the same job id.
 //
@@ -416,8 +416,8 @@ export class FinetuneJobs {
 
   /** The run's result as a finetuned model: a catalog entry named after the
    * base (nextFinetunedName) with the result's bytes, recorded with where it
-   * came from; then, with Auto-serve, served in the session in place of its
-   * base (or of this job's previous model, on a restart), and the job left
+   * came from; then, with Auto-serve, served in the session beside its base
+   * (in place of this job's previous model, on a restart), and the job left
    * WAITING_FOR_RESTART, its model ready; without, COMPLETED. */
   private async keep(job: FinetuneJob, result: Finetuned): Promise<void> {
     const { ctx, entry, volume, autoServe } = job.args;
@@ -445,20 +445,26 @@ export class FinetuneJobs {
       job.setStatus("COMPLETED");
       return;
     }
-    // The session's models with the base, or the model this job served
-    // before, replaced in place by the new one (so the layer keeps its
-    // colour); appended when neither is served any more.
-    const replaced = new Set([entry.id, job.servedEntryId].filter((id): id is string => id !== null));
+    // The session's models with the new one added: in the place of the
+    // model this job served before (a restart's, so its layer keeps its
+    // colour), else right after the base, else at the end. The base stays
+    // served, so the two can be compared side by side and a new job can
+    // start from it again.
     const current = ctx.session.state.models;
-    const at = current.findIndex((m) => replaced.has(m.id));
-    const models = current.filter((m) => !replaced.has(m.id));
-    models.splice(at === -1 ? models.length : at, 0, fentry);
+    const previous = job.servedEntryId;
+    const models = current.filter((m) => m.id !== previous);
+    let at = previous === null ? -1 : current.findIndex((m) => m.id === previous);
+    if (at === -1) {
+      const base = models.findIndex((m) => m.id === entry.id);
+      at = base === -1 ? models.length : base + 1;
+    }
+    models.splice(at, 0, fentry);
     await serveModels(ctx, models, ctx.session.state.chain);
     await ctx.session.update({ models });
     if (job.isFinal()) return;
     job.servedEntryId = fentry.id;
     job.inferenceServerReady = true;
-    job.log(`Serving ${name} in place of ${entry.name}. WAITING_FOR_RESTART: paint where it is still wrong and Restart to train again from this head.`);
+    job.log(`Serving ${name} beside ${entry.name}. WAITING_FOR_RESTART: paint where it is still wrong and Restart to train again from this head.`);
     job.setStatus("WAITING_FOR_RESTART");
   }
 }
