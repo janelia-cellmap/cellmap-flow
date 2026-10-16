@@ -183,7 +183,6 @@ describe("GET /api/finetune/ai-annotate/config", () => {
     expect(d.acknowledged).toEqual([]);
     // The words the page puts in the brackets after "0 of 200 calls used today", where the server names its config file.
     expect(d.usage_note).toBe(`the browser's own cap of ${DAILY_CALL_LIMIT} a day`);
-    expect(d.providers.map((p: any) => p.remembered)).toEqual([false, false, false]);
   });
 
   it("falls back to the first provider as the default when gemini is not among them", async () => {
@@ -212,17 +211,20 @@ describe("POST /api/finetune/ai-annotate/credentials", () => {
     expect((await h.handle(request("POST", `${BASE}/credentials`, { provider: "gemini", api_key: 42 }))).status).toBe(400);
   });
 
-  it("keeps the key in the page only (not remembered), lists the models it reaches, and never shows or logs it", async () => {
+  it("keeps the key in the page's memory only, lists the models it reaches, and never shows, stores or logs it", async () => {
     const ctx = fakeContext();
     const gemini = new TestProvider();
     const h = harness(ctx, { providers: providers(gemini) });
     const res = await h.handle(request("POST", `${BASE}/credentials`, { provider: "gemini", api_key: ` ${SECRET} ` }));
     expect(res.status).toBe(200);
-    expect(body(res)).toEqual({ success: true, configured: true, remembered: false, models: ["gemini-3-pro-image", "listed-image-model"] });
+    expect(body(res)).toEqual({ success: true, configured: true, models: ["gemini-3-pro-image", "listed-image-model"] });
     expect(gemini.listed).toEqual([{ api_key: SECRET }]); // trimmed
     expect(h.storage!.getItem(CREDENTIALS_KEY)).toBeNull();
     expect(h.ai.credentials.get("gemini")).toEqual({ api_key: SECRET });
-    expect(h.ai.credentials.remembered("gemini")).toBe(false);
+    // Nothing of it in storage, under any key, even when the page asks to remember it.
+    await h.handle(request("POST", `${BASE}/credentials`, { provider: "gemini", api_key: SECRET, remember: true }));
+    const stored = h.storage as MemoryKeyValueStore;
+    for (const key of ["cellmap-flow:ai-annotate:usage", CREDENTIALS_KEY]) expect(stored.getItem(key) ?? "").not.toContain(SECRET);
     expect(JSON.stringify(body(res))).not.toContain(SECRET);
     expect(ctx.logged.join("\n")).not.toContain(SECRET);
     // The config now says configured, and lists the defaults plus what was listed.
@@ -231,24 +233,11 @@ describe("POST /api/finetune/ai-annotate/credentials", () => {
     expect(JSON.stringify(config)).not.toContain(SECRET);
   });
 
-  it("remembers the key in this browser's storage when asked, so a new page has it; forget clears both", async () => {
-    const storage = new MemoryKeyValueStore();
-    const h = harness(fakeContext(), { storage });
-    expect(body(await h.handle(request("POST", `${BASE}/credentials`, { provider: "gemini", api_key: SECRET, remember: true }))).configured).toBe(true);
-    expect(storage.getItem(CREDENTIALS_KEY)).toContain(SECRET);
-    expect(createCredentialStore(storage).get("gemini")).toEqual({ api_key: SECRET });
-    expect(h.ai.credentials.remembered("gemini")).toBe(true);
-    // The config says so, for the panel's Remember box.
-    expect(body(await h.handle(request("GET", `${BASE}/config`))).providers[0].remembered).toBe(true);
-    // Set again without remember: no longer kept in storage.
-    await h.handle(request("POST", `${BASE}/credentials`, { provider: "gemini", api_key: SECRET }));
-    expect(storage.getItem(CREDENTIALS_KEY)).toBeNull();
-    expect(h.ai.credentials.get("gemini")).toEqual({ api_key: SECRET });
-    await h.handle(request("POST", `${BASE}/credentials`, { provider: "gemini", api_key: SECRET, remember: true }));
+  it("takes the key out with forget, and gives the picker the provider's default models back", async () => {
+    const h = harness(fakeContext());
+    expect(body(await h.handle(request("POST", `${BASE}/credentials`, { provider: "gemini", api_key: SECRET }))).configured).toBe(true);
     const forgotten = body(await h.handle(request("POST", `${BASE}/credentials`, { provider: "gemini", forget: true })));
-    // The picker gets the provider's default models back: the live list went with the key.
-    expect(forgotten).toEqual({ success: true, configured: false, remembered: false, models: DEFAULT_GEMINI_MODELS });
-    expect(storage.getItem(CREDENTIALS_KEY)).toBeNull();
+    expect(forgotten).toEqual({ success: true, configured: false, models: DEFAULT_GEMINI_MODELS });
     expect(h.ai.credentials.get("gemini")).toBeNull();
     expect(body(await h.handle(request("GET", `${BASE}/config`))).providers[0].models).toEqual(DEFAULT_GEMINI_MODELS); // the live list went with the key
   });
@@ -263,24 +252,33 @@ describe("POST /api/finetune/ai-annotate/credentials", () => {
     expect(res.models).toBeUndefined();
     expect(res.warning).toBe("Could not list the models these credentials reach: The API key was not accepted.");
     gemini.models = null;
-    expect(body(await h.handle(request("POST", `${BASE}/credentials`, { provider: "gemini", api_key: SECRET })))).toEqual({ success: true, configured: true, remembered: false });
+    expect(body(await h.handle(request("POST", `${BASE}/credentials`, { provider: "gemini", api_key: SECRET })))).toEqual({ success: true, configured: true });
     // Vertex lists nothing and needs both fields.
-    expect(body(await h.handle(request("POST", `${BASE}/credentials`, { provider: "vertex", project: "my-project", access_token: "ya29.token" })))).toEqual({ success: true, configured: true, remembered: false });
+    expect(body(await h.handle(request("POST", `${BASE}/credentials`, { provider: "vertex", project: "my-project", access_token: "ya29.token" })))).toEqual({ success: true, configured: true });
   });
 });
 
 describe("the credential store", () => {
-  it("loads what storage remembers, drops what is not a credential, and works in memory when storage throws", () => {
-    const storage = new MemoryKeyValueStore();
-    storage.setItem(CREDENTIALS_KEY, JSON.stringify({ v: 1, providers: { gemini: { api_key: " k ", bogus: "x" }, vertex: { project: "" } } }));
-    const store = createCredentialStore(storage);
+  it("keeps credentials in memory only, dropping what is not a credential", () => {
+    const store = createCredentialStore();
+    store.set("gemini", { api_key: " k ", bogus: "x" } as never);
     expect(store.get("gemini")).toEqual({ api_key: "k" });
-    expect(store.get("vertex")).toBeNull();
     expect(store.configured("gemini", ["api_key"])).toBe(true);
+    store.set("vertex", { project: "p" });
     expect(store.configured("vertex", ["project", "access_token"])).toBe(false);
     expect(store.configured("fake", [])).toBe(true);
     expect(store.configured("fake")).toBe(false);
+    store.forget("gemini");
+    expect(store.get("gemini")).toBeNull();
+  });
 
+  it("deletes what an earlier build remembered in storage, and reads nothing from it", () => {
+    const storage = new MemoryKeyValueStore();
+    storage.setItem(CREDENTIALS_KEY, JSON.stringify({ v: 1, providers: { gemini: { api_key: "old-key" } } }));
+    const store = createCredentialStore(storage);
+    expect(storage.getItem(CREDENTIALS_KEY)).toBeNull();
+    expect(store.get("gemini")).toBeNull();
+    // A storage that refuses is left alone; the store still works.
     const broken: KeyValueStore = {
       getItem: () => {
         throw new Error("blocked");
@@ -293,11 +291,8 @@ describe("the credential store", () => {
       },
     };
     const inMemory = createCredentialStore(broken);
-    inMemory.set("gemini", { api_key: "k" }, true);
+    inMemory.set("gemini", { api_key: "k" });
     expect(inMemory.get("gemini")).toEqual({ api_key: "k" });
-    inMemory.forget("gemini");
-    expect(inMemory.get("gemini")).toBeNull();
-    expect(createCredentialStore(null).get("gemini")).toBeNull();
   });
 });
 
@@ -402,11 +397,11 @@ describe("POST /api/finetune/ai-annotate/run: the refusals, in _begin_run's orde
     await h.handle(request("POST", `${BASE}/settings`, { provider: "gemini", model: "gemini-3-pro-image", label_key: "mito", acknowledge: true, destination: "Test destination (a service, with your key)" }));
     const noKey = await h.handle(request("POST", `${BASE}/run`, {}));
     expect(noKey.status).toBe(400);
-    expect(body(noKey).error).toMatch(/^Enter the API key for gemini first/);
+    expect(body(noKey).error).toMatch(/^Paste the API key for gemini into the AI annotation panel first/);
 
     await h.handle(request("POST", `${BASE}/settings`, { provider: "vertex", model: "gemini-3-pro-image", label_key: "mito", acknowledge: true, destination: providers().get("vertex")!.info.destination }));
     await h.handle(request("POST", `${BASE}/credentials`, { provider: "vertex", project: "p" }));
-    expect(body(await h.handle(request("POST", `${BASE}/run`, {}))).error).toMatch(/^Enter the Google Cloud project and access token for vertex first/);
+    expect(body(await h.handle(request("POST", `${BASE}/run`, {}))).error).toMatch(/^Paste the Google Cloud project and access token for vertex into the AI annotation panel first/);
     expect(h.ai.job).toBeNull();
   });
 

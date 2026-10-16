@@ -213,11 +213,12 @@ again when a new viewer is mounted) and refreshLayer.
 
 Two things are the browser's own. Credentials: the page calls Google itself,
 so the panel takes an API key, or a project and an access token
-(`POST .../credentials`), kept in the page and, when the user ticks
-*Remember in this browser*, in
-`localStorage["cellmap-flow:ai-annotate:credentials"]`; never in the session
-state (which share links and the state store carry), never in a log line,
-and in no answer beyond `configured: true/false` per provider. The layer
+(`POST .../credentials`, posted by the panel as they are pasted), kept in
+the page's memory only: not in localStorage, where a key would sit
+unencrypted for any script on the site (an earlier build's remembered copy,
+`cellmap-flow:ai-annotate:credentials`, is deleted on load), never in the
+session state (which share links and the state store carry), never in a log
+line, and in no answer beyond `configured: true/false` per provider. The layer
 refresh: the server respells the paint layer's URL (a leading zero on the
 port) so Neuroglancer makes a new source and re-reads it; here the paint
 route's volume segment takes an optional `~<n>` suffix
@@ -234,9 +235,8 @@ each, keyed by URL and ETag: the page asks Hugging Face for a file's ETag
 before serving its cached copy, so a model re-exported under the same name
 is downloaded again; Hugging Face rate-limits anonymous downloads) and the finetuned
 models' records and bytes (`models/`). localStorage holds the AI
-annotation's daily call count and, only when the user ticks *Remember in
-this browser*, its credentials (`ai-annotate/usage.ts`, `credentials.ts`);
-the session state never does, since share links carry it.
+annotation's daily call count (`ai-annotate/usage.ts`); its credentials are
+in no storage at all (`credentials.ts`).
 
 ## Layout
 

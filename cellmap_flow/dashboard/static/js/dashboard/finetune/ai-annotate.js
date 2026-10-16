@@ -90,8 +90,6 @@ export function initAiAnnotate({ log }) {
   const credentials = document.getElementById("aiAnnotateCredentials");
   const credsState = document.getElementById("aiAnnotateCredsState");
   const credsHint = document.getElementById("aiAnnotateCredsHint");
-  const rememberBox = document.getElementById("aiAnnotateRememberCreds");
-  const saveCredsBtn = document.getElementById("aiAnnotateSaveCredsBtn");
   const forgetCredsBtn = document.getElementById("aiAnnotateForgetCredsBtn");
   const credentialInputs = {
     api_key: document.getElementById("aiAnnotateApiKey"),
@@ -349,19 +347,28 @@ export function initAiAnnotate({ log }) {
 
   // ---- Credentials (browser mode) ----------------------------------------
   //
-  // The page calls the provider itself, so the user gives it the key here.
-  // Save posts it to the credentials route, which keeps it in the page (and
-  // in this browser's localStorage when Remember is ticked) and answers only
-  // whether the provider is configured; nothing here reads a key back, logs
-  // it or puts it in a message. Forget clears both.
+  // The page calls the provider itself, so the user pastes the key here, and
+  // it is used as it is typed: a moment after the fields stop changing they
+  // go to the credentials route, which keeps them in the page's memory only
+  // (never in storage: web/src/ai-annotate/credentials.ts says why), so a
+  // reload asks for them again. Fields cleared take them out. Nothing here
+  // reads a key back, logs it or puts it in a message.
 
   const CREDENTIAL_HINTS = {
-    gemini_api: "The key stays in this browser and goes only to Google (generativelanguage.googleapis.com), with each plane. " +
-      "On the Gemini API's free tier Google may use what is sent to improve its products; on the paid tier it does not.",
-    vertex_gemini: "The project and token stay in this browser and go only to Google (aiplatform.googleapis.com), with each plane; " +
-      "Vertex AI does not use what is sent to train its models. The token is the output of gcloud auth print-access-token " +
-      "and lasts about an hour: paste a new one when a call fails asking you to sign in.",
+    gemini_api: "Used as soon as it is pasted, kept in this page only (paste it again after a reload), and sent only to Google " +
+      "(generativelanguage.googleapis.com) with each plane. On the Gemini API's free tier Google may use what is sent to improve " +
+      "its products; on the paid tier it does not.",
+    vertex_gemini: "Used as soon as they are pasted, kept in this page only (paste them again after a reload), and sent only to Google " +
+      "(aiplatform.googleapis.com) with each plane; Vertex AI does not use what is sent to train its models. The token is the " +
+      "output of gcloud auth print-access-token and lasts about an hour: paste a new one when a call fails asking you to sign in.",
   };
+  // How long after the last keystroke the fields are handed over.
+  const CREDENTIALS_DELAY_MS = 500;
+  let credentialsTimer = null;
+  // The hand-over under way, which a run waits for; and what was last handed
+  // over per provider, so the same values are not posted again.
+  let credentialsPending = null;
+  const handedOver = {};
 
   // What the selected provider needs, as its ProviderInfo lists them.
   function credentialFields() {
@@ -385,99 +392,97 @@ export function initAiAnnotate({ log }) {
     for (const el of credentials.querySelectorAll("[data-credential]")) el.hidden = !fields.includes(el.dataset.credential);
     const provider = providers[providerSelect.value];
     credsHint.textContent = (provider && CREDENTIAL_HINTS[provider.type]) ||
-      "They stay in this browser and go only to the provider, with each plane.";
+      "Kept in this page only and sent only to the provider, with each plane.";
     credsState.textContent = fields.length === 0 ? ""
-      : configured() ? "configured"
-      : fields.includes("api_key") ? "no key yet" : "no token yet";
-    // Ticked when storage keeps this provider's credentials, so saving a new
-    // token over remembered ones keeps them remembered unless unticked.
-    rememberBox.checked = Boolean(provider && provider.remembered);
+      : configured() ? "in use"
+      : fields.includes("api_key") ? "paste a key" : "paste the project and a token";
   }
 
-  function saveCredentials() {
-    const fields = credentialFields();
-    const body = { provider: providerSelect.value, remember: rememberBox.checked };
-    for (const field of fields) {
+  // The fields' values for the selected provider: all of them, or null when one is blank.
+  function fieldValues() {
+    const values = {};
+    for (const field of credentialFields()) {
       const value = credentialInputs[field].value.trim();
-      if (!value) {
-        showError(fields.includes("api_key") ? "Enter the API key first." : "Enter the project and an access token first.");
-        credentialInputs[field].focus();
-        return Promise.resolve(null);
-      }
-      body[field] = value;
+      if (!value) return null;
+      values[field] = value;
     }
-    setBusy(saveCredsBtn, true);
-    return postAnswer(`${BASE}/credentials`, body)
-      .then((d) => {
-        if (!d.success) {
-          showError(`Could not save the credentials: ${d.error}`);
-          return null;
-        }
-        showError("");
-        const provider = providers[providerSelect.value];
-        if (provider) {
-          provider.configured = d.configured !== false;
-          provider.remembered = d.remembered === true;
-          // The Gemini API lists the key's image models: they replace the
-          // picker's defaults, the chosen one kept when it is among them.
-          if (Array.isArray(d.models) && d.models.length) {
-            provider.models = d.models;
-            fillModels(chosenModel());
-            saveSoon();
-          }
-        }
-        showCredentials();
-        // A listing that failed is not an error: the route says why.
-        if (d.warning) credsState.textContent = `${credsState.textContent}; ${d.warning}`;
-        log.add(`AI annotation: credentials saved for ${providerSelect.value}` +
-                (rememberBox.checked ? " and remembered in this browser" : ""));
-        log.showEnd();
-        return d;
-      })
-      .catch((e) => {
-        showError(`Could not save the credentials: ${e}`);
-        return null;
-      })
-      .finally(() => setBusy(saveCredsBtn, false));
+    return values;
   }
 
-  function forgetCredentials() {
-    setBusy(forgetCredsBtn, true);
-    return postAnswer(`${BASE}/credentials`, { provider: providerSelect.value, forget: true })
+  // Hand the fields over now: complete, they become the provider's
+  // credentials; blank after being handed over, they are taken out. Resolves
+  // when the route has answered (or at once when there is nothing to do).
+  function handOver() {
+    clearTimeout(credentialsTimer);
+    credentialsTimer = null;
+    const id = providerSelect.value;
+    const fields = credentialFields();
+    if (!fields.length) return Promise.resolve();
+    const values = fieldValues();
+    const signature = values ? JSON.stringify(values) : null;
+    if (signature === (handedOver[id] ?? null)) return credentialsPending || Promise.resolve();
+    handedOver[id] = signature;
+    const body = values ? { provider: id, ...values } : { provider: id, forget: true };
+    const sent = postAnswer(`${BASE}/credentials`, body)
       .then((d) => {
         if (!d.success) {
-          showError(`Could not forget the credentials: ${d.error}`);
+          handedOver[id] = null;
+          showError(`Could not use the credentials: ${d.error}`);
           return;
         }
         showError("");
-        for (const input of Object.values(credentialInputs)) input.value = "";
-        const provider = providers[providerSelect.value];
+        const provider = providers[id];
         if (provider) {
           provider.configured = d.configured === true;
-          provider.remembered = false;
-          // The models the forgotten key listed go with it: the defaults again.
-          if (Array.isArray(d.models)) {
+          // The Gemini API lists the key's image models (or, with the key
+          // taken out, the defaults again): they replace the picker's, the
+          // chosen one kept when it is among them.
+          if (Array.isArray(d.models) && d.models.length) {
             provider.models = d.models;
-            fillModels(chosenModel());
+            if (providerSelect.value === id) {
+              fillModels(chosenModel());
+              saveSoon();
+            }
           }
         }
-        showCredentials();
-        log.add(`AI annotation: credentials forgotten for ${providerSelect.value}`);
-        log.showEnd();
+        if (providerSelect.value === id) {
+          showCredentials();
+          // A listing that failed is not an error: the route says why.
+          if (d.warning) credsState.textContent = `${credsState.textContent}; ${d.warning}`;
+        }
       })
-      .catch((e) => showError(`Could not forget the credentials: ${e}`))
-      .finally(() => setBusy(forgetCredsBtn, false));
+      .catch((e) => {
+        handedOver[id] = null;
+        showError(`Could not use the credentials: ${e}`);
+      })
+      .finally(() => {
+        if (credentialsPending === sent) credentialsPending = null;
+      });
+    credentialsPending = sent;
+    return sent;
+  }
+
+  function handOverSoon() {
+    clearTimeout(credentialsTimer);
+    credentialsTimer = setTimeout(handOver, CREDENTIALS_DELAY_MS);
+  }
+
+  // Clear: the fields emptied, and the credentials taken out of the page.
+  function clearCredentials() {
+    for (const input of Object.values(credentialInputs)) input.value = "";
+    return handOver();
   }
 
   if (credentials) {
-    saveCredsBtn.addEventListener("click", saveCredentials);
-    forgetCredsBtn.addEventListener("click", forgetCredentials);
-    // Enter in a field saves, as a form would (the tab's form has no submit).
+    forgetCredsBtn.addEventListener("click", clearCredentials);
     for (const input of Object.values(credentialInputs)) {
+      input.addEventListener("input", handOverSoon);
+      // Leaving the field, or Enter in it, hands it over at once.
+      input.addEventListener("change", handOver);
       input.addEventListener("keydown", (event) => {
         if (event.key !== "Enter") return;
         event.preventDefault();
-        saveCredentials();
+        handOver();
       });
     }
   }
@@ -639,9 +644,11 @@ export function initAiAnnotate({ log }) {
         ackBox.focus();
         return;
       }
-      // Browser mode: the route refuses too, but says it here, at the fields.
+      // Browser mode: a key pasted a moment ago is handed over first; without
+      // one, the route refuses too, but it is said here, at the fields.
+      if (credentials) await handOver();
       if (!configured()) {
-        showError("Enter the provider's credentials above and click Save first.");
+        showError(credentialFields().includes("api_key") ? "Paste the API key above first." : "Paste the project and an access token above first.");
         panel.open = true;
         const first = credentialInputs[credentialFields()[0]];
         if (first) first.focus();

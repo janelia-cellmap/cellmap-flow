@@ -95,8 +95,8 @@ an object per piece, *Undo* takes it back. The page calls Google itself, with
 credentials you give it in the panel: a Gemini API key, or a Google Cloud
 project and an access token for Vertex AI (``gcloud auth print-access-token``,
 good for about an hour). They stay in this browser and go to Google alone,
-with each plane; *Remember in this browser* keeps them across reloads,
-*Forget* removes them. On the Gemini API's free tier Google may use what is
+with each plane, and are kept in the page's memory only, never in the
+browser's storage, so a reload asks for them again. On the Gemini API's free tier Google may use what is
 sent to improve its products, on its paid tier and on Vertex AI it does not;
 the server mode uses Vertex AI for that reason. A *fake* provider paints in
 the page, for trying the panel without a key. The server's guide,

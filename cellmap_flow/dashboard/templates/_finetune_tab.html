@@ -212,16 +212,19 @@
                     title="Sent to the model with the plane. The default suits most datasets; EM looks different from one dataset to the next, so describing this one can help. Keep the colour it asks for: the mask is read from that colour."></textarea>
 
           {# Browser mode only: the page calls the provider itself, so the user
-             gives it the credentials here. They stay in the page (and in this
-             browser's localStorage when Remember is ticked), go only to the
-             provider, and are never in the session state, a share link or a
-             log line; the route answers only configured: true/false.
-             ai-annotate.js shows the fields the chosen provider's credentials
-             list names (API key for the Gemini API; project and access token
-             for Vertex AI; none for the fake provider, which hides the block)
-             and writes the hint for its type. The secrets are password fields,
-             so they are not shown; autocomplete is off, which a browser may
-             still overrule by offering to save them. #}
+             pastes the credentials here, and they are used as they are typed
+             (no Save). They are kept in the page's memory only, never in its
+             storage: a browser has no secret place for a key, and one written
+             to localStorage would sit there unencrypted for any script on the
+             site to read. So they are gone on a reload, and pasted again. They
+             go only to the provider, and are never in the session state, a
+             share link or a log line; the route answers only configured:
+             true/false. ai-annotate.js shows the fields the chosen provider's
+             credentials list names (API key for the Gemini API; project and
+             access token for Vertex AI; none for the fake provider, which
+             hides the block) and writes the hint for its type. The secrets are
+             password fields, so they are not shown; autocomplete is off, which
+             a browser may still overrule by offering to save them. #}
           {% if mode == "browser" %}
           <div class="mt-2" id="aiAnnotateCredentials" hidden>
             <div class="d-flex align-items-baseline justify-content-between">
@@ -232,7 +235,7 @@
               <label for="aiAnnotateApiKey" data-credential="api_key">API key</label>
               <input type="password" class="form-control form-control-sm" id="aiAnnotateApiKey" autocomplete="off" spellcheck="false" data-credential="api_key"
                      placeholder="From Google AI Studio"
-                     title="A Gemini API key (aistudio.google.com/apikey). Sent to Google with each plane and kept nowhere else.">
+                     title="A Gemini API key (aistudio.google.com/apikey). Used as soon as it is pasted, sent to Google with each plane, kept in this page only: paste it again after a reload.">
               <label for="aiAnnotateProject" data-credential="project">Project</label>
               <input type="text" class="form-control form-control-sm" id="aiAnnotateProject" autocomplete="off" spellcheck="false" data-credential="project"
                      placeholder="my-gcp-project"
@@ -242,18 +245,11 @@
                      placeholder="gcloud auth print-access-token"
                      title="The output of gcloud auth print-access-token, run where you are signed in to Google Cloud. It lasts about an hour; paste a new one when a call fails asking you to sign in.">
             </div>
-            <div class="d-flex align-items-center gap-2 flex-wrap mt-2">
-              <button type="button" class="btn btn-outline-secondary btn-sm" id="aiAnnotateSaveCredsBtn"
-                      title="Keeps the credentials in this page for the calls, and in this browser's storage when Remember is ticked.">Save</button>
-              <button type="button" class="btn btn-link btn-sm p-0" id="aiAnnotateForgetCredsBtn"
-                      title="Removes the credentials from the page and from this browser's storage.">Forget</button>
-              <div class="form-check mb-0 ms-auto">
-                <input class="form-check-input" type="checkbox" id="aiAnnotateRememberCreds">
-                <label class="form-check-label small" for="aiAnnotateRememberCreds"
-                       title="Kept in this browser's local storage, so they are still here after a reload. Off: kept until the page is closed or reloaded.">Remember in this browser</label>
-              </div>
+            <div class="d-flex align-items-baseline gap-2 mt-1">
+              <small class="text-muted" id="aiAnnotateCredsHint"></small>
+              <button type="button" class="btn btn-link btn-sm p-0 ms-auto" id="aiAnnotateForgetCredsBtn"
+                      title="Removes the credentials from this page.">Clear</button>
             </div>
-            <small class="text-muted d-block mt-1" id="aiAnnotateCredsHint"></small>
           </div>
           {% endif %}
 

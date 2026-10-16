@@ -152,17 +152,10 @@ export function aiAnnotateRoutes(router: Router, deps: Partial<AiAnnotateDeps> =
 
   /** The provider as the page sees it: its info, with the models it offers now and whether its credentials are entered. */
   /** A provider as the page sees it: its info with the models it offers now
-   * (modelsOf), whether it can be called (`configured`), and whether its
-   * credentials are the ones this browser's storage keeps (`remembered`), so
-   * the panel's Remember box shows it and a new token saved over a
-   * remembered one is not dropped from storage unasked. */
-  function providerInfo(p: Provider): ProviderInfo & { configured: boolean; remembered: boolean } {
-    return {
-      ...p.info,
-      models: modelsOf(p),
-      configured: ai.credentials.configured(p.info.id, p.info.credentials),
-      remembered: ai.credentials.remembered(p.info.id),
-    };
+   * (modelsOf), and whether it can be called (`configured`): its credentials
+   * are in the page. */
+  function providerInfo(p: Provider): ProviderInfo & { configured: boolean } {
+    return { ...p.info, models: modelsOf(p), configured: ai.credentials.configured(p.info.id, p.info.credentials) };
   }
 
   function defaultProvider(): string | null {
@@ -214,7 +207,7 @@ export function aiAnnotateRoutes(router: Router, deps: Partial<AiAnnotateDeps> =
   function checkCredentials(p: Provider): void {
     if (ai.credentials.configured(p.info.id, p.info.credentials)) return;
     const words = p.info.credentials.map((field) => FIELD_WORDS[field]);
-    throw new Refused(`Enter the ${words.length ? joinWords(words) : "credentials"} for ${p.info.id} first (the AI annotation panel's credentials block).`, 400);
+    throw new Refused(`Paste the ${words.length ? joinWords(words) : "credentials"} for ${p.info.id} into the AI annotation panel first (they are kept in the page only, so a reload asks for them again).`, 400);
   }
 
   /** _check_limit: refuse (429) a run once the day's calls are used up. The
@@ -360,7 +353,7 @@ export function aiAnnotateRoutes(router: Router, deps: Partial<AiAnnotateDeps> =
   // ------------------------------------------------------------- routes
 
   // GET .../config: what the page needs to show the panel. Always enabled
-  // here; `providers` carry `configured` and `remembered`, and `usage_note`
+  // here; `providers` carry `configured`, and `usage_note`
   // says where the day's cap is kept, which the page shows in the brackets
   // after the count in place of the server's "the daily_call_limit in
   // ai_annotate.yaml".
@@ -388,12 +381,12 @@ export function aiAnnotateRoutes(router: Router, deps: Partial<AiAnnotateDeps> =
   });
 
   // POST .../credentials {provider, api_key?, project?, access_token?,
-  // remember?, forget?}: the provider's credentials into the page (and this
-  // browser's storage when `remember`), or out of both with `forget`. The
-  // answer says only whether the provider is configured, and lists the
-  // models the credentials can reach when the provider can list them (the
-  // Gemini API); a listing that fails is not an error: `warning` says why
-  // and the picker keeps its defaults.
+  // forget?}: the provider's credentials into the page's memory (the panel
+  // posts them as they are pasted), or out of it with `forget`; never into
+  // any storage (credentials.ts says why). The answer says only whether the
+  // provider is configured, and lists the models the credentials can reach
+  // when the provider can list them (the Gemini API); a listing that fails is
+  // not an error: `warning` says why and the picker keeps its defaults.
   router.post(`${BASE}/credentials`, async (req, _params, ctx) => {
     const body = objectBody(req);
     if (!body) return badRequest("expected a JSON object");
@@ -406,7 +399,7 @@ export function aiAnnotateRoutes(router: Router, deps: Partial<AiAnnotateDeps> =
         ctx.log(`AI annotate: the credentials for ${id} were forgotten`);
         // The models the forgotten credentials listed go with them: the
         // provider's defaults again, for the page's picker.
-        return json(200, { success: true, configured: ai.credentials.configured(id, p.info.credentials), remembered: false, models: modelsOf(p) });
+        return json(200, { success: true, configured: ai.credentials.configured(id, p.info.credentials), models: modelsOf(p) });
       }
       const credentials: Credentials = {};
       for (const field of ["api_key", "project", "access_token"] as const) {
@@ -416,10 +409,9 @@ export function aiAnnotateRoutes(router: Router, deps: Partial<AiAnnotateDeps> =
       if (!p.info.credentials.some((field) => credentials[field])) {
         throw new Refused(`Enter the ${joinWords(p.info.credentials.map((f) => FIELD_WORDS[f]))} for ${id}.`, 400);
       }
-      const remember = body.remember === true;
-      ai.credentials.set(id, credentials, remember);
-      ctx.log(`AI annotate: credentials for ${id} entered${remember ? " and remembered in this browser" : ""}`);
-      const answer: Record<string, unknown> = { success: true, configured: ai.credentials.configured(id, p.info.credentials), remembered: ai.credentials.remembered(id) };
+      ai.credentials.set(id, credentials);
+      ctx.log(`AI annotate: credentials for ${id} entered (kept in this page only)`);
+      const answer: Record<string, unknown> = { success: true, configured: ai.credentials.configured(id, p.info.credentials) };
       if (p.listModels) {
         try {
           const models = await p.listModels(ai.credentials.get(id) ?? {}, { signal: AbortSignal.timeout(30_000) });

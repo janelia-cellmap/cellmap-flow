@@ -152,9 +152,9 @@ writes it into the paint store as an object per connected piece (`labels.ts`,
 `fill.ts`), with *Undo* in the panel. The routes
 (`src/backend/routes/ai-annotate.ts`, `src/backend/ai-annotate-job.ts`) answer
 the Python routes' JSON, so the dashboard's `ai-annotate.js` drives both
-modes; the credentials the panel takes (`credentials.ts`) stay in the page,
-and in localStorage when *Remember in this browser* is ticked, and reach the
-provider alone. The daily cap of 200 calls (`usage.ts`) and the audit log
+modes; the credentials pasted into the panel (`credentials.ts`) are used as
+they are typed, kept in the page's memory only (never in storage, where a key
+would be unencrypted), and reach the provider alone. The daily cap of 200 calls (`usage.ts`) and the audit log
 (`audit.ts`: `ai_annotate_log.jsonl` in the volume, so it is in the paint's
 zip) are the server's. `docs/ai_annotate.md` ("In the browser") says what the
 user sees, and why the Gemini API's free tier is offered with a caveat.

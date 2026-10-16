@@ -55,7 +55,7 @@ KEPT = [
 # browser page, never on the Flask page.
 AI_ANNOTATE_BROWSER_ONLY = [
     "aiAnnotateCredentials", "aiAnnotateCredsState", "aiAnnotateApiKey", "aiAnnotateProject", "aiAnnotateAccessToken",
-    "aiAnnotateRememberCreds", "aiAnnotateSaveCredsBtn", "aiAnnotateForgetCredsBtn", "aiAnnotateCredsHint",
+    "aiAnnotateForgetCredsBtn", "aiAnnotateCredsHint",
     "aiAnnotateUndoBtn", "aiAnnotateModelName",
 ]
 KEPT += AI_ANNOTATE_BROWSER_ONLY
@@ -203,6 +203,8 @@ def test_the_browser_page_takes_the_ai_annotation_credentials(page):
     assert re.search(r'<input type="text"[^>]*id="aiAnnotateProject"[^>]*autocomplete="off"', page)
     assert re.search(r'<input type="text"[^>]*id="aiAnnotateModelName"[^>]*\bhidden\b', page)
     assert re.search(r'<button[^>]*id="aiAnnotateUndoBtn"[^>]*\bdisabled\b', page)
+    # Pasted credentials are used as they are typed and kept in the page only: no Save, no Remember.
+    assert "aiAnnotateSaveCredsBtn" not in page and "aiAnnotateRememberCreds" not in page
     # The pickers' titles are the browser's, not the server's configuration's.
     assert "Only the providers in the server's AI-annotate configuration are listed." not in page
     assert "Other… takes a model id that is not listed" in page
