@@ -219,11 +219,15 @@ like the exports' tails that `test/fixtures/make_onnx_fixture.py` writes.
 
 The end-to-end tests run headless Chromium through Playwright (`npx playwright
 install chromium` once; `CHROME_PATH=/path/to/chrome` uses a Chromium of your
-own). Headless Chromium has no WebGPU, so they run on the WASM provider: about
-half a minute for the smoke test's first chunk, and some minutes for the
-finetune test (`test/e2e/finetune.spec.ts`), which drives the Finetune tab's
-routes as the tab does: a volume, a chunk painted through the worker's paint
-route, a training job, the finetuned model served and downloaded.
+own). By default they run on the WASM provider, since headless Chromium on
+Linux leaves WebGPU off: about half a minute for the smoke test's first chunk,
+and some minutes for the finetune test (`test/e2e/finetune.spec.ts`), which
+drives the Finetune tab's routes as the tab does: a volume, a chunk painted
+through the worker's paint route, a training job, the finetuned model served
+and downloaded. On a Linux machine with a GPU and its Vulkan driver,
+`E2E_WEBGPU=1` launches Chromium with the flags that give the page the GPU
+(`WEBGPU_ARGS` in `playwright.config.ts`); without a Vulkan driver the page
+gets SwiftShader, a CPU emulation, and the tests run no faster.
 
 ## Credits
 
