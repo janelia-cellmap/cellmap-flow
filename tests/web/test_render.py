@@ -20,10 +20,12 @@ SERVER_ONLY = [
     "zooModelAccordion", "cellposeModelAccordion",
     "serverConfigAccordion", "jobLogsBtn", "jobLogsArea",
     # The Finetune tab's parts that need a server: a path on its file system,
-    # crops from its disks, the patch tools (which write the volume through
-    # its routes), MinIO, and the cluster trainer's parameters.
+    # crops from its disks, the patch tools that write the volume through its
+    # routes (seeds from a model's server, good regions), MinIO, and the
+    # cluster trainer's parameters. AI-assisted annotation is not among them:
+    # the browser answers its routes itself (KEPT below).
     "outputPath", "openLoadCropsBtn", "loadCropsModal",
-    "labelItSection", "aiAnnotatePanel", "aiAnnotateReviewModal", "goodRegionsSection",
+    "labelItSection", "goodRegionsSection",
     "saveAnnotationsBtn", "minioStatus", "existingBrowseRoot",
     "checkpointPath", "loraRank", "batchSize", "patchesPerEpoch", "rehearsalFraction",
     "lossType", "marginGroup", "distillationLambda", "distillationScope", "augment", "gpuQueue",
@@ -44,7 +46,19 @@ KEPT = [
     "trainingStatusCard", "lossPlotCanvas", "trainingLogs",
     # Its browser-only controls: the paint out as a zarr or deleted, the finetuned model out as .onnx.
     "downloadVolumeBtn", "deleteVolumeBtn", "downloadFinetunedBtn",
+    # AI-assisted annotation, in both modes: the browser calls the provider itself.
+    "aiAnnotatePanel", "aiAnnotateReviewModal",
 ]
+# The AI panel's browser-only parts (the template's browser-mode blocks): the
+# credentials block, the AI section's own Undo (the server's sits in the
+# server-only Label it grid), and the model id typed under Other…. On the
+# browser page, never on the Flask page.
+AI_ANNOTATE_BROWSER_ONLY = [
+    "aiAnnotateCredentials", "aiAnnotateCredsState", "aiAnnotateApiKey", "aiAnnotateProject", "aiAnnotateAccessToken",
+    "aiAnnotateRememberCreds", "aiAnnotateSaveCredsBtn", "aiAnnotateForgetCredsBtn", "aiAnnotateCredsHint",
+    "aiAnnotateUndoBtn", "aiAnnotateModelName",
+]
+KEPT += AI_ANNOTATE_BROWSER_ONLY
 
 
 @pytest.fixture(scope="module")
@@ -178,6 +192,22 @@ def test_the_browser_page_finetunes_the_last_layer(page):
     assert re.search(r'<a class="[^"]*" id="downloadFinetunedBtn"[^>]*\bdownload\b[^>]*style="display: none;"', page)
 
 
+def test_the_browser_page_takes_the_ai_annotation_credentials(page):
+    """The AI panel's credentials block: hidden until the config names a
+    provider that needs one, the secrets password fields the browser must not
+    autofill, the project a plain field, and Undo disabled until there is
+    something to take back."""
+    assert re.search(r'<div class="[^"]*" id="aiAnnotateCredentials" hidden>', page)
+    for secret in ("aiAnnotateApiKey", "aiAnnotateAccessToken"):
+        assert re.search(rf'<input type="password"[^>]*id="{secret}"[^>]*autocomplete="off"', page), secret
+    assert re.search(r'<input type="text"[^>]*id="aiAnnotateProject"[^>]*autocomplete="off"', page)
+    assert re.search(r'<input type="text"[^>]*id="aiAnnotateModelName"[^>]*\bhidden\b', page)
+    assert re.search(r'<button[^>]*id="aiAnnotateUndoBtn"[^>]*\bdisabled\b', page)
+    # The pickers' titles are the browser's, not the server's configuration's.
+    assert "Only the providers in the server's AI-annotate configuration are listed." not in page
+    assert "Other… takes a model id that is not listed" in page
+
+
 def test_the_browser_page_renders_an_empty_catalog(page):
     assert 'id="cellpose-data">{"models": [], "running": []}</script>' in page
     assert "chk_" not in page, "no Local Catalog rows"
@@ -222,8 +252,13 @@ def test_the_flask_dashboard_is_unchanged_by_the_markers(dashboard):
     assert "train the model's last layer in this tab" not in html
     assert "trains the model's last layer (its output convolution)" not in html
     assert _select_options(html, "learningRate")[3] == ("0.0001", True) and "0.003" not in html
-    for browser_only in ("downloadVolumeBtn", "deleteVolumeBtn", "downloadFinetunedBtn", "existingVolumesNote"):
+    for browser_only in ("downloadVolumeBtn", "deleteVolumeBtn", "downloadFinetunedBtn", "existingVolumesNote", *AI_ANNOTATE_BROWSER_ONLY):
         assert browser_only not in html, browser_only
+    # The AI panel and its review are on the Flask page as before, with the
+    # server's words on the pickers and without the browser's additions.
+    assert "aiAnnotatePanel" in classes and "aiAnnotateReviewModal" in classes
+    assert "Only the providers in the server's AI-annotate configuration are listed." in html
+    assert "The provider's models that the server's configuration allows." in html
 
 
 def test_both_pages_lay_out_for_a_phone(page, dashboard):

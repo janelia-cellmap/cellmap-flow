@@ -1,7 +1,8 @@
 {# This tab serves two pages (web/build/render.py renders it with mode ==
    "browser" for the browser mode; Flask passes no mode). What needs a server
    -- an output path on its file system, MinIO, crops from its disks, the
-   patch tools, LoRA's parameters, the GPU queue -- is marked server-only,
+   patch tools' seeds and good regions, LoRA's parameters, the GPU queue --
+   is marked server-only,
    which web/src/browser.css hides under data-mode="browser" and the Flask
    page ignores; what only the browser has is inside {% if mode == "browser" %}
    blocks, so Flask's page does not carry it. The tab's scripts
@@ -96,14 +97,18 @@
     <small class="form-text text-muted d-block mt-1">Draws a box in the viewer around each region annotated so far. Only when you click, and not while painting: it drops the selected draw tool.</small>
   </div>
 
-  <!-- The patch on screen: one-click labels, and good regions (rehearsal anchors).
-       server-only, the whole box: every section in it (Label it, AI-assisted
-       annotation, Good regions) writes the volume through the server's routes,
-       and the browser mode does not start their scripts (finetune/index.js). -->
-  <div class="patch-tools mb-3 server-only">
+  <!-- The patch on screen: one-click labels, AI-assisted annotation, and good
+       regions (rehearsal anchors). Label it and Good regions are server-only:
+       they write the volume through the server's routes (seeds from a running
+       model's server, the session's good regions), and the browser mode does
+       not start their script (finetune/index.js). AI-assisted annotation is
+       not: the browser mode answers its routes in the page
+       (web/src/ai-annotate), and what only the browser's panel has (the
+       credentials, its own Undo, a typed model id) is in browser-only blocks. -->
+  <div class="patch-tools mb-3">
     <div class="patch-tools-title">Patch on screen</div>
 
-    <details class="patch-tools-group patch-tools-section" id="labelItSection" open>
+    <details class="patch-tools-group patch-tools-section server-only" id="labelItSection" open>
       <summary><span class="patch-tools-label">Label it</span></summary>
       <div class="d-flex align-items-center gap-2 mb-2">
         <label class="text-muted mb-0 text-nowrap" for="seedModel" style="font-size: 0.85rem;">Prediction from</label>
@@ -161,7 +166,10 @@
       </details>
     </details>
 
-    <!-- AI-assisted annotation: a hosted model labels one plane, reviewed before it is written (ai-annotate.js) -->
+    <!-- AI-assisted annotation: a hosted model labels one plane, reviewed before
+         it is written (ai-annotate.js). In both modes: the browser mode answers
+         its routes in the page (web/src/ai-annotate); the credentials block, the
+         Undo button and the typed model id below are its alone. -->
     <details class="patch-tools-group patch-tools-section ai-annotate" id="aiAnnotatePanel">
         <summary>
           <span class="patch-tools-label">AI-assisted annotation</span>
@@ -178,10 +186,17 @@
           <div class="patch-tools-fields ai-annotate-fields">
             <label for="aiAnnotateProvider">Provider</label>
             <select class="form-select form-select-sm" id="aiAnnotateProvider"
-                    title="Where the plane is sent. Only the providers in the server's AI-annotate configuration are listed."></select>
+                    title="{% if mode == "browser" %}Where the plane is sent: Google's Gemini API with an API key, Vertex AI with a project and an access token, or the fake provider, which runs in this browser and sends nothing.{% else %}Where the plane is sent. Only the providers in the server's AI-annotate configuration are listed.{% endif %}"></select>
             <label for="aiAnnotateModel">Model</label>
             <select class="form-select form-select-sm" id="aiAnnotateModel"
-                    title="The provider's models that the server's configuration allows."></select>
+                    title="{% if mode == "browser" %}The provider's image models. The Gemini API's are listed once a key is saved; Other… takes a model id that is not listed.{% else %}The provider's models that the server's configuration allows.{% endif %}"></select>
+            {# Browser mode only: the model id typed under Other…, a row of the
+               grid to itself. ai-annotate.js adds the Other… entry and shows this. #}
+            {% if mode == "browser" %}
+            <input type="text" class="form-control form-control-sm" id="aiAnnotateModelName" maxlength="200" autocomplete="off" spellcheck="false"
+                   placeholder="Model id, e.g. gemini-3-pro-image" style="grid-column: 1 / -1;" hidden
+                   title="The id of a model the list does not have, as Google names it (without models/).">
+            {% endif %}
             <label for="aiAnnotateLabel">Label</label>
             <select class="form-select form-select-sm" id="aiAnnotateLabel"
                     title="The structure the model is asked to paint. Its prompt is filled in below."></select>
@@ -195,6 +210,52 @@
           </div>
           <textarea class="form-control form-control-sm" id="aiAnnotatePrompt" rows="3" maxlength="4000"
                     title="Sent to the model with the plane. The default suits most datasets; EM looks different from one dataset to the next, so describing this one can help. Keep the colour it asks for: the mask is read from that colour."></textarea>
+
+          {# Browser mode only: the page calls the provider itself, so the user
+             gives it the credentials here. They stay in the page (and in this
+             browser's localStorage when Remember is ticked), go only to the
+             provider, and are never in the session state, a share link or a
+             log line; the route answers only configured: true/false.
+             ai-annotate.js shows the fields the chosen provider's credentials
+             list names (API key for the Gemini API; project and access token
+             for Vertex AI; none for the fake provider, which hides the block)
+             and writes the hint for its type. The secrets are password fields,
+             so they are not shown; autocomplete is off, which a browser may
+             still overrule by offering to save them. #}
+          {% if mode == "browser" %}
+          <div class="mt-2" id="aiAnnotateCredentials" hidden>
+            <div class="d-flex align-items-baseline justify-content-between">
+              <span class="text-muted" style="font-size: 0.85rem;">Credentials</span>
+              <span class="text-muted" style="font-size: 0.85rem;" id="aiAnnotateCredsState"></span>
+            </div>
+            <div class="patch-tools-fields ai-annotate-fields">
+              <label for="aiAnnotateApiKey" data-credential="api_key">API key</label>
+              <input type="password" class="form-control form-control-sm" id="aiAnnotateApiKey" autocomplete="off" spellcheck="false" data-credential="api_key"
+                     placeholder="From Google AI Studio"
+                     title="A Gemini API key (aistudio.google.com/apikey). Sent to Google with each plane and kept nowhere else.">
+              <label for="aiAnnotateProject" data-credential="project">Project</label>
+              <input type="text" class="form-control form-control-sm" id="aiAnnotateProject" autocomplete="off" spellcheck="false" data-credential="project"
+                     placeholder="my-gcp-project"
+                     title="The Google Cloud project that is billed; the Vertex AI API must be enabled in it.">
+              <label for="aiAnnotateAccessToken" data-credential="access_token">Access token</label>
+              <input type="password" class="form-control form-control-sm" id="aiAnnotateAccessToken" autocomplete="off" spellcheck="false" data-credential="access_token"
+                     placeholder="gcloud auth print-access-token"
+                     title="The output of gcloud auth print-access-token, run where you are signed in to Google Cloud. It lasts about an hour; paste a new one when a call fails asking you to sign in.">
+            </div>
+            <div class="d-flex align-items-center gap-2 flex-wrap mt-2">
+              <button type="button" class="btn btn-outline-secondary btn-sm" id="aiAnnotateSaveCredsBtn"
+                      title="Keeps the credentials in this page for the calls, and in this browser's storage when Remember is ticked.">Save</button>
+              <button type="button" class="btn btn-link btn-sm p-0" id="aiAnnotateForgetCredsBtn"
+                      title="Removes the credentials from the page and from this browser's storage.">Forget</button>
+              <div class="form-check mb-0 ms-auto">
+                <input class="form-check-input" type="checkbox" id="aiAnnotateRememberCreds">
+                <label class="form-check-label small" for="aiAnnotateRememberCreds"
+                       title="Kept in this browser's local storage, so they are still here after a reload. Off: kept until the page is closed or reloaded.">Remember in this browser</label>
+              </div>
+            </div>
+            <small class="text-muted d-block mt-1" id="aiAnnotateCredsHint"></small>
+          </div>
+          {% endif %}
 
           <div class="form-check mt-2">
             <input class="form-check-input" type="checkbox" id="aiAnnotateAck">
@@ -210,6 +271,15 @@
               Annotate at View Centre
             </button>
             <span class="text-muted" style="font-size: 0.85rem;" id="aiAnnotateKeyHint">or hover over the viewer and press Shift+G</span>
+            {# Browser mode only: the server's Undo (undoViewLabelsBtn) sits in
+               the server-only Label it grid, so the browser's accepted
+               annotations are taken back from here, through the same route. #}
+            {% if mode == "browser" %}
+            <button type="button" class="btn btn-outline-secondary btn-sm ms-auto" id="aiAnnotateUndoBtn" disabled
+                    title="Takes back the last accepted AI annotation (up to 10): the patch goes back to what it held before. Voxels you have painted since are kept.">
+              Undo
+            </button>
+            {% endif %}
           </div>
           <small class="text-muted d-block mt-1" id="aiAnnotateUsage"></small>
           <div class="small text-muted mt-1" id="aiAnnotateStatus" role="status" aria-live="polite"></div>
@@ -227,7 +297,7 @@
         </div>
     </details>
 
-    <details class="patch-tools-group patch-tools-section" id="goodRegionsSection" open>
+    <details class="patch-tools-group patch-tools-section server-only" id="goodRegionsSection" open>
       <summary><span class="patch-tools-label">Good regions</span></summary>
       <div class="d-flex align-items-center gap-2 flex-wrap">
         <button type="button" class="btn btn-outline-secondary btn-sm" id="markGoodRegionBtn"
@@ -273,9 +343,9 @@
 
   <!-- AI-assisted annotation's review, over the page: the plane sent, the
        model's answer and the mask over the plane, large enough to judge
-       (ai-annotate.js). Opens by itself when a result is ready. server-only,
-       with its panel above. -->
-  <div class="modal fade server-only" id="aiAnnotateReviewModal" tabindex="-1" aria-labelledby="aiAnnotateReviewTitle" aria-hidden="true">
+       (ai-annotate.js). Opens by itself when a result is ready. In both
+       modes, as its panel above. -->
+  <div class="modal fade" id="aiAnnotateReviewModal" tabindex="-1" aria-labelledby="aiAnnotateReviewTitle" aria-hidden="true">
     <div class="modal-dialog modal-xl modal-dialog-scrollable ai-annotate-review-dialog">
       <div class="modal-content">
         <div class="modal-header">

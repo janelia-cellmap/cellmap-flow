@@ -11,12 +11,23 @@
 // it is offered. Everything the server or the model says is shown as text,
 // never parsed as markup, and the previews are only ever the server's base64
 // PNGs.
+//
+// The browser mode (web/) has the same panel: its in-page routes
+// (web/src/backend/routes/ai-annotate.ts) answer the same JSON, and the page
+// itself calls the provider, so there the panel also takes the provider's
+// credentials (an API key, or a project and an access token) and has an Undo
+// of its own. The credentials go to the credentials route and nowhere else:
+// never into a log line, an error or the page's text. Everything browser-only
+// here is behind lib/page-data's isBrowserMode and the template's browser-only
+// elements (null on the Flask page); in server mode the panel behaves as it did.
 import { setBusy } from "../../lib/dom.js";
+import { isBrowserMode } from "../../lib/page-data.js";
 import { poll } from "../../lib/poll.js";
 import { getAnswer, offerNewVolume, postAnswer } from "./requests.js";
 
 const BASE = "/api/finetune/ai-annotate";
-// The label picker's entry for a structure that is not in the catalog.
+// The label picker's entry for a structure that is not in the catalog, and,
+// in browser mode, the model picker's for a model id that is not listed.
 const OTHER = "__other__";
 // A job runs for tens of seconds: its stage is worth following closely. Idle,
 // the poll still runs, since Shift+G starts a job on the server, not here.
@@ -70,7 +81,29 @@ export function initAiAnnotate({ log }) {
   const resendBtn = document.getElementById("aiAnnotateResendBtn");
   const rejectBtn = document.getElementById("aiAnnotateRejectBtn");
   const acceptBtn = document.getElementById("aiAnnotateAcceptBtn");
-  const undoViewLabelsBtn = document.getElementById("undoViewLabelsBtn");
+  // Browser mode only (lib/page-data's isBrowserMode): the template renders
+  // these in its browser-only blocks, so on the Flask page they are null and
+  // nothing below touches them. The credentials block, its fields by the
+  // credential they hold, the AI section's own Undo, and the model id typed
+  // under the model picker's Other… entry.
+  const browser = isBrowserMode();
+  const credentials = document.getElementById("aiAnnotateCredentials");
+  const credsState = document.getElementById("aiAnnotateCredsState");
+  const credsHint = document.getElementById("aiAnnotateCredsHint");
+  const rememberBox = document.getElementById("aiAnnotateRememberCreds");
+  const saveCredsBtn = document.getElementById("aiAnnotateSaveCredsBtn");
+  const forgetCredsBtn = document.getElementById("aiAnnotateForgetCredsBtn");
+  const credentialInputs = {
+    api_key: document.getElementById("aiAnnotateApiKey"),
+    project: document.getElementById("aiAnnotateProject"),
+    access_token: document.getElementById("aiAnnotateAccessToken"),
+  };
+  const aiUndoBtn = document.getElementById("aiAnnotateUndoBtn");
+  const modelName = document.getElementById("aiAnnotateModelName");
+  // Whichever Undo the page shows: the AI section's in browser mode (the
+  // server's sits in the server-only Label it grid), else the server's, whose
+  // clicks good-regions.js handles. Accept's answer says whether it can.
+  const undoBtn = aiUndoBtn || document.getElementById("undoViewLabelsBtn");
   const previews = [
     [document.getElementById("aiAnnotateInputImg"), "input_png"],
     [document.getElementById("aiAnnotateModelImg"), "model_png"],
@@ -83,6 +116,11 @@ export function initAiAnnotate({ log }) {
   // The providers acknowledged for the current dataset (the server's list).
   let acknowledged = [];
   let dailyLimit = null;
+  // Browser mode: where its daily cap is kept, said in place of the server's config file.
+  let usageNote = null;
+  // Browser mode: whether Undo has something to take back, put back after a
+  // click's busy state (setBusy re-enables the button).
+  let canUndo = false;
   // The last status seen, to tell when a job starts, finishes or changes.
   let last = { status: null, annotate_id: null };
   let poller = null;
@@ -128,11 +166,12 @@ export function initAiAnnotate({ log }) {
   });
 
   // The limit is the server's own cap (daily_call_limit in its AI-annotate
-  // config), not the provider's quota; the text says so.
+  // config), not the provider's quota; the text says so. The browser mode's
+  // config answer says where its cap is kept instead (usage_note).
   function showUsage(callsToday) {
     if (callsToday === undefined || callsToday === null) return;
     usage.textContent = dailyLimit
-      ? `${callsToday} of ${dailyLimit} calls used today (the daily_call_limit in ai_annotate.yaml)`
+      ? `${callsToday} of ${dailyLimit} calls used today (${usageNote || "the daily_call_limit in ai_annotate.yaml"})`
       : `${callsToday} model calls today`;
   }
 
@@ -156,11 +195,35 @@ export function initAiAnnotate({ log }) {
     promptReset.hidden = !promptEdited();
   }
 
+  // The provider's models, `chosen` selected when it is among them. In
+  // browser mode an Other… entry takes a model id the list does not have
+  // (Vertex AI lists none; the Gemini API's list is the key's), typed into
+  // the field under the picker, where a chosen id that is not listed goes.
   function fillModels(chosen) {
     const provider = providers[providerSelect.value];
     const models = provider ? provider.models || [] : [];
     modelSelect.replaceChildren(...models.map((m) => new Option(m, m)));
+    if (browser) {
+      modelSelect.append(new Option("Other…", OTHER));
+      if (chosen && !models.includes(chosen)) {
+        modelSelect.value = OTHER;
+        modelName.value = chosen;
+      } else {
+        modelSelect.value = models.includes(chosen) ? chosen : models[0] || OTHER;
+      }
+      showModelName();
+      return;
+    }
     modelSelect.value = models.includes(chosen) ? chosen : models[0] || "";
+  }
+
+  function showModelName() {
+    if (modelName) modelName.hidden = modelSelect.value !== OTHER;
+  }
+
+  // The model the settings name: the picker's, or the id typed under Other….
+  function chosenModel() {
+    return browser && modelSelect.value === OTHER ? modelName.value.trim() : modelSelect.value;
   }
 
   // Where the selected provider sends the plane, and whether the user has
@@ -182,7 +245,7 @@ export function initAiAnnotate({ log }) {
   }
 
   function settingsBody(acknowledge) {
-    const body = { provider: providerSelect.value, model: modelSelect.value };
+    const body = { provider: providerSelect.value, model: chosenModel() };
     if (labelSelect.value === OTHER) body.label_name = labelName.value.trim();
     else body.label_key = labelSelect.value;
     body.prompt = promptEdited() ? promptBox.value : null;
@@ -206,6 +269,10 @@ export function initAiAnnotate({ log }) {
     saveTimer = null;
     if (labelSelect.value === OTHER && !labelName.value.trim()) {
       showError("Name the structure to annotate.");
+      return Promise.resolve(null);
+    }
+    if (browser && modelSelect.value === OTHER && !modelName.value.trim()) {
+      showError("Name the model to use, or pick one from the list.");
       return Promise.resolve(null);
     }
     return postAnswer(`${BASE}/settings`, settingsBody(acknowledge))
@@ -233,9 +300,20 @@ export function initAiAnnotate({ log }) {
   providerSelect.addEventListener("change", () => {
     fillModels(null);
     showAcknowledgement();
+    showCredentials();
     saveSoon();
   });
-  modelSelect.addEventListener("change", saveSoon);
+  modelSelect.addEventListener("change", () => {
+    showModelName();
+    // Other… with nothing typed yet: the typed id saves itself (below), and
+    // saving now would only say "Name the model" before there was a chance to.
+    if (browser && modelSelect.value === OTHER && !modelName.value.trim()) {
+      modelName.focus();
+      return;
+    }
+    saveSoon();
+  });
+  if (modelName) modelName.addEventListener("input", saveSoon);
   // A prompt edited for one structure asks for the wrong one (and the wrong
   // colour) for another, so a new label starts from its own default.
   labelSelect.addEventListener("change", () => {
@@ -268,6 +346,141 @@ export function initAiAnnotate({ log }) {
       log.showEnd();
     });
   });
+
+  // ---- Credentials (browser mode) ----------------------------------------
+  //
+  // The page calls the provider itself, so the user gives it the key here.
+  // Save posts it to the credentials route, which keeps it in the page (and
+  // in this browser's localStorage when Remember is ticked) and answers only
+  // whether the provider is configured; nothing here reads a key back, logs
+  // it or puts it in a message. Forget clears both.
+
+  const CREDENTIAL_HINTS = {
+    gemini_api: "The key stays in this browser and goes only to Google (generativelanguage.googleapis.com), with each plane. " +
+      "On the Gemini API's free tier Google may use what is sent to improve its products; on the paid tier it does not.",
+    vertex_gemini: "The project and token stay in this browser and go only to Google (aiplatform.googleapis.com), with each plane; " +
+      "Vertex AI does not use what is sent to train its models. The token is the output of gcloud auth print-access-token " +
+      "and lasts about an hour: paste a new one when a call fails asking you to sign in.",
+  };
+
+  // What the selected provider needs, as its ProviderInfo lists them.
+  function credentialFields() {
+    const provider = providers[providerSelect.value];
+    return provider && Array.isArray(provider.credentials) ? provider.credentials : [];
+  }
+
+  // Whether the selected provider can be called. The server's providers say
+  // nothing about it (their credentials are the server's): configured.
+  function configured() {
+    const provider = providers[providerSelect.value];
+    return !provider || provider.configured !== false;
+  }
+
+  // The fields the provider needs, the hint for its type, and its state. A
+  // provider that needs none (the fake one) has no block.
+  function showCredentials() {
+    if (!credentials) return;
+    const fields = credentialFields();
+    credentials.hidden = fields.length === 0;
+    for (const el of credentials.querySelectorAll("[data-credential]")) el.hidden = !fields.includes(el.dataset.credential);
+    const provider = providers[providerSelect.value];
+    credsHint.textContent = (provider && CREDENTIAL_HINTS[provider.type]) ||
+      "They stay in this browser and go only to the provider, with each plane.";
+    credsState.textContent = fields.length === 0 ? ""
+      : configured() ? "configured"
+      : fields.includes("api_key") ? "no key yet" : "no token yet";
+    // Ticked when storage keeps this provider's credentials, so saving a new
+    // token over remembered ones keeps them remembered unless unticked.
+    rememberBox.checked = Boolean(provider && provider.remembered);
+  }
+
+  function saveCredentials() {
+    const fields = credentialFields();
+    const body = { provider: providerSelect.value, remember: rememberBox.checked };
+    for (const field of fields) {
+      const value = credentialInputs[field].value.trim();
+      if (!value) {
+        showError(fields.includes("api_key") ? "Enter the API key first." : "Enter the project and an access token first.");
+        credentialInputs[field].focus();
+        return Promise.resolve(null);
+      }
+      body[field] = value;
+    }
+    setBusy(saveCredsBtn, true);
+    return postAnswer(`${BASE}/credentials`, body)
+      .then((d) => {
+        if (!d.success) {
+          showError(`Could not save the credentials: ${d.error}`);
+          return null;
+        }
+        showError("");
+        const provider = providers[providerSelect.value];
+        if (provider) {
+          provider.configured = d.configured !== false;
+          provider.remembered = d.remembered === true;
+          // The Gemini API lists the key's image models: they replace the
+          // picker's defaults, the chosen one kept when it is among them.
+          if (Array.isArray(d.models) && d.models.length) {
+            provider.models = d.models;
+            fillModels(chosenModel());
+            saveSoon();
+          }
+        }
+        showCredentials();
+        // A listing that failed is not an error: the route says why.
+        if (d.warning) credsState.textContent = `${credsState.textContent}; ${d.warning}`;
+        log.add(`AI annotation: credentials saved for ${providerSelect.value}` +
+                (rememberBox.checked ? " and remembered in this browser" : ""));
+        log.showEnd();
+        return d;
+      })
+      .catch((e) => {
+        showError(`Could not save the credentials: ${e}`);
+        return null;
+      })
+      .finally(() => setBusy(saveCredsBtn, false));
+  }
+
+  function forgetCredentials() {
+    setBusy(forgetCredsBtn, true);
+    return postAnswer(`${BASE}/credentials`, { provider: providerSelect.value, forget: true })
+      .then((d) => {
+        if (!d.success) {
+          showError(`Could not forget the credentials: ${d.error}`);
+          return;
+        }
+        showError("");
+        for (const input of Object.values(credentialInputs)) input.value = "";
+        const provider = providers[providerSelect.value];
+        if (provider) {
+          provider.configured = d.configured === true;
+          provider.remembered = false;
+          // The models the forgotten key listed go with it: the defaults again.
+          if (Array.isArray(d.models)) {
+            provider.models = d.models;
+            fillModels(chosenModel());
+          }
+        }
+        showCredentials();
+        log.add(`AI annotation: credentials forgotten for ${providerSelect.value}`);
+        log.showEnd();
+      })
+      .catch((e) => showError(`Could not forget the credentials: ${e}`))
+      .finally(() => setBusy(forgetCredsBtn, false));
+  }
+
+  if (credentials) {
+    saveCredsBtn.addEventListener("click", saveCredentials);
+    forgetCredsBtn.addEventListener("click", forgetCredentials);
+    // Enter in a field saves, as a form would (the tab's form has no submit).
+    for (const input of Object.values(credentialInputs)) {
+      input.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter") return;
+        event.preventDefault();
+        saveCredentials();
+      });
+    }
+  }
 
   // ---- The job ---------------------------------------------------------
 
@@ -426,6 +639,14 @@ export function initAiAnnotate({ log }) {
         ackBox.focus();
         return;
       }
+      // Browser mode: the route refuses too, but says it here, at the fields.
+      if (!configured()) {
+        showError("Enter the provider's credentials above and click Save first.");
+        panel.open = true;
+        const first = credentialInputs[credentialFields()[0]];
+        if (first) first.focus();
+        return;
+      }
       const d = await postAnswer(`${BASE}/run`, {});
       if (d.needs_acknowledgement) {
         acknowledged = acknowledged.filter((id) => id !== providerSelect.value);
@@ -490,7 +711,10 @@ export function initAiAnnotate({ log }) {
         if (d.needs_confirmation && !confirmed) {
           return confirm(d.error) ? accept(true) : undefined;
         }
-        if (d.can_undo !== undefined) undoViewLabelsBtn.disabled = !d.can_undo;
+        if (d.can_undo !== undefined) {
+          canUndo = d.can_undo;
+          undoBtn.disabled = !d.can_undo;
+        }
         if (!d.success) {
           showError(`Could not accept: ${d.error}`);
           log.add(`Could not accept the AI annotation: ${d.error}`);
@@ -527,6 +751,35 @@ export function initAiAnnotate({ log }) {
       .finally(() => setBusy(rejectBtn, false));
   });
 
+  // Browser mode: the AI section's Undo (the server's is good-regions.js's,
+  // which does not run there). The same route, the same words.
+  if (aiUndoBtn) {
+    aiUndoBtn.addEventListener("click", () => {
+      setBusy(aiUndoBtn, true);
+      postAnswer("/api/finetune/view-labels/undo", {})
+        .then((d) => {
+          if (d.can_undo !== undefined) canUndo = d.can_undo;
+          if (!d.success) {
+            showError(`Could not undo: ${d.error}`);
+            log.add(`Could not undo: ${d.error}`);
+          } else if (d.reload_viewer) {
+            showError("");
+            log.add(`Undid the last label action: ${d.restored} voxels restored` + (d.layer_refreshed ? "" : "; reloading the viewer"));
+            if (!d.layer_refreshed) reloadViewer();
+          } else {
+            showError("");
+            log.add("Undid the last label action: every voxel it changed has been painted since");
+          }
+          log.showEnd();
+        })
+        .catch((e) => showError(`Could not undo: ${e}`))
+        .finally(() => {
+          setBusy(aiUndoBtn, false);
+          aiUndoBtn.disabled = !canUndo;
+        });
+    });
+  }
+
   // ---- Start -------------------------------------------------------------
 
   function showDisabled(reason) {
@@ -543,6 +796,7 @@ export function initAiAnnotate({ log }) {
     organelles = Object.fromEntries((d.organelles || []).map((o) => [o.key, o]));
     acknowledged = Array.isArray(d.acknowledged) ? d.acknowledged : [];
     dailyLimit = d.daily_call_limit || null;
+    usageNote = typeof d.usage_note === "string" && d.usage_note ? d.usage_note : null;
     const settings = d.settings || {};
 
     providerSelect.replaceChildren(...Object.keys(providers).map((id) => new Option(id, id)));
@@ -562,6 +816,7 @@ export function initAiAnnotate({ log }) {
     showLabelName();
     showPromptReset();
     showAcknowledgement();
+    showCredentials();
     showUsage(d.calls_today);
     if (d.keybinding) keyHint.textContent = `or hover over the viewer and press ${d.keybinding}`;
 

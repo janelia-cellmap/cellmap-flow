@@ -1,6 +1,6 @@
 # AI-Assisted Annotation
 
-This guide covers the **AI annotate** panel in the dashboard's Finetune tab. It sends one 2D plane of your EM data to a hosted image model, which paints the structure you ask for. You review what it painted, and if you accept it, it is written into your annotation volume as labels. It is a quicker start than painting from nothing, in the same way as **Seed from Prediction** (see [the finetuning guide](finetuning.md#label-the-patch-on-screen-in-one-click)).
+This guide covers the **AI annotate** panel in the dashboard's Finetune tab. It sends one 2D plane of your EM data to a hosted image model, which paints the structure you ask for. You review what it painted, and if you accept it, it is written into your annotation volume as labels. It is a quicker start than painting from nothing, in the same way as **Seed from Prediction** (see [the finetuning guide](finetuning.md#label-the-patch-on-screen-in-one-click)). The browser mode has the same panel, with your own credentials in place of a config file: see [In the browser](#in-the-browser).
 
 The feature is **off until you turn it on** with a config file (see [Turning it on](#turning-it-on)), because using it sends image data off the cluster to an outside company. Read [What data leaves the cluster](#what-data-leaves-the-cluster-and-where) before you turn it on.
 
@@ -206,6 +206,28 @@ The Fileglancer app runs the same dashboard as a job on the cluster, as you, fro
 - **Each user sets up their own.** The config and the credentials are per user, and a credentials file that others can read is refused, so a lab cannot share one login through a group-readable file. Each person who turns the feature on uses their own login or key, billed to the project it belongs to.
 - **The job must reach Google**: the cluster node calls `aiplatform.googleapis.com` and `oauth2.googleapis.com` over HTTPS. If calls fail with "Could not reach Vertex AI", the node has no route out; ask Scientific Computing.
 
+## In the browser
+
+The browser mode ([janelia-cellmap.github.io/cellmap-flow/app](https://janelia-cellmap.github.io/cellmap-flow/app/); the docs' *In the browser* page) has the same panel, under **Patch on screen** in its Finetune tab, once an annotation volume is open. There is no server and no config file: the page itself reads the plane from the raw volume, sends it to the model, turns the answer into a mask, and writes an accepted mask into the paint volume the browser keeps. Hover and **Shift+G**, **Annotate at View Centre**, the review with its three images, **Resend**, **Accept** with **Overwrite existing labels**, **Reject** and the acknowledgement are as above; **Undo** is a button in the panel itself (up to 10 accepted annotations per volume, kept while the page is open).
+
+Three providers, picked in the panel:
+
+| Provider | Sends the plane to | Credentials |
+|---|---|---|
+| `gemini` | Google's Gemini API (`generativelanguage.googleapis.com`) | an API key, from [Google AI Studio](https://aistudio.google.com/apikey) |
+| `vertex` | Google Cloud Vertex AI, location `global` (`aiplatform.googleapis.com`) | a Google Cloud project and an access token |
+| `fake` | nowhere: it runs in the browser | none |
+
+**Credentials.** The panel's **Credentials** block, above the acknowledgement, takes what the chosen provider needs; **Save** keeps it in the page for the calls. The key or token goes from your browser straight to Google with each plane, and nowhere else: not to Janelia, not into the paint volume or its audit log, never into a log line, a share link or the session the page keeps across reloads. With **Remember in this browser** ticked it is also kept in the browser's local storage, so it is still there after a reload; **Forget** removes it from both. The block says *configured* or *no key yet* for the chosen provider, and a run is refused until one is saved.
+
+**The Gemini API's data use.** The server mode refuses the Gemini API and uses Vertex AI because on the Gemini API's **free tier** Google may use what is sent (the plane and the prompt) to improve its products; on its **paid tier** (a key from a project with billing enabled) it does not, as on Vertex AI. The browser offers the key path because it is the one most people can set up in a minute, and says this beside the key field. Do not send unpublished data, or data under an agreement, on a free-tier key. Vertex AI's terms are the same in the browser as on the server, `location: global` included.
+
+**Vertex AI from the browser.** A browser cannot run `gcloud`, so the Vertex provider takes a project and an access token: run `gcloud auth print-access-token` where you are signed in to Google Cloud (`gcloud auth login`; the project needs the Vertex AI API enabled and your account the *Vertex AI User* role, as in [Vertex AI setup](#vertex-ai-setup)) and paste its output. A token lasts about an hour; when a call fails asking you to sign in, paste a new one and **Save**. *Remember* keeps the project and the token, but the token still expires.
+
+**Models.** When a Gemini API key is saved, the page lists the key's image models and the picker shows them; Vertex AI lists none, so the picker shows the image models Google's docs name (`gemini-3-pro-image`, `gemini-3.1-flash-image`, `gemini-2.5-flash-image`), and **Other…** takes any model id.
+
+**Limits, retries and the log.** The daily cap is 200 calls per browser and calendar day, kept in the browser's local storage, counted before the call and given back when the call fails signing in or on a configuration error, as on the server; the panel says how many are used. Retries, the timeout and the error messages are the server's. The audit log, `ai_annotate_log.jsonl`, one JSON line per request as on the server with `browser` as the user, is written into the paint volume and travels with it in **Download paint**'s zip; a result waiting for review is held in memory, not in a staging folder. The fake provider is for trying the panel without a key: it paints the darker pixels in a disc around the point, in the page, as the server's does.
+
 ## What data leaves the cluster and where
 
 Each call (each Shift+G, button click or Resend) sends:
@@ -217,7 +239,7 @@ Nothing else is sent: not the rest of the dataset, not its path or name, not you
 
 **Where it goes.** With the `vertex_gemini` provider the plane goes to Google Cloud's Vertex AI, in the project from the config:
 
-- Google's terms for Vertex AI say it does not use customer data to train its models. That is why this feature uses Vertex AI and not the free Gemini API from Google AI Studio, which is **not supported**: on its free tier, Google may use what you send to improve its products.
+- Google's terms for Vertex AI say it does not use customer data to train its models. That is why the server uses Vertex AI and not the Gemini API from Google AI Studio, which it does **not support**: on its free tier, Google may use what you send to improve its products. (The browser mode offers the Gemini API with your own key and says this beside the key field; see [In the browser](#in-the-browser).)
 - `location: global` means Google may process the request in **any region** where it runs the model, not one country you choose. If your data may not leave a particular jurisdiction, do not use this provider.
 - Your data still leaves Janelia's cluster and is handled by an outside company. If the dataset is unpublished, under a data use agreement, or from human tissue, check that sending it is allowed before you turn the feature on.
 
@@ -313,5 +335,7 @@ Both live in the session's `corrections` folder, `<Output Path>/<session>/correc
 | The dataset is not allowed | `allowed_dataset_prefixes` does not include this dataset | Add its prefix, if sending it is allowed. |
 | The model answered but nothing was painted | The model returned no image, or did not use the requested colour | The panel shows the model's reply, if any. Resend, or edit the prompt. |
 | Shift+G does nothing | No settings chosen yet, or no annotation volume open | Pick a structure and model in the panel first; open a volume. |
+| In the browser: "Enter ... first", or the Credentials block says *no key yet* | The provider's credentials have not been saved in the panel | Enter the API key (or the project and an access token) in the **Credentials** block and click **Save**. |
+| In the browser, Vertex AI: a call fails asking you to sign in | The pasted access token has expired (they last about an hour) | Run `gcloud auth print-access-token` again, paste the new token and click **Save**. |
 
 The dashboard's server log (the log panel) has more detail about every failure, with keys removed.
