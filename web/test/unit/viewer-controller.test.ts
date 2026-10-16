@@ -362,6 +362,35 @@ describe("the reach into a live viewer for AI-assisted annotation", () => {
     expect(viewer.viewDepthAxis()).toBe(0);
   });
 
+  it("puts back the display dimensions Neuroglancer's restoreState drops while its coordinate space is empty", async () => {
+    const { doc, viewer } = await mounted({ ...live, displayDimensions: ["x", "y", "z"] });
+    // Neuroglancer as Chromium showed it: restoreState empties the space,
+    // so the display dimensions it restores fall back to the default; the
+    // space names its dimensions again a frame later.
+    const ng = doc.stub.viewer as unknown as Record<string, unknown>;
+    let current: NgState = { ...live, displayDimensions: ["x", "y", "z"] };
+    let names: string[] = ["z", "y", "x"];
+    const listeners = new Set<() => void>();
+    ng.state = {
+      toJSON: () => current,
+      restoreState: (next: NgState) => {
+        const { displayDimensions: _dropped, ...rest } = next;
+        current = rest;
+        names = [];
+      },
+    };
+    ng.coordinateSpace = { get value() { return { names }; }, changed: { add: (fn: () => void) => (listeners.add(fn), () => listeners.delete(fn)) } };
+    ng.navigationState = { pose: { displayDimensions: { restoreState: (next: string[]) => (current = { ...current, displayDimensions: next }) } } };
+    viewer.setLayers({ boxes: { type: "annotation", source: "local://annotations" } });
+    expect(current.displayDimensions).toBeUndefined();
+    expect(listeners.size).toBe(1);
+    names = ["z", "y", "x"];
+    [...listeners].forEach((fn) => fn());
+    expect(current.displayDimensions).toEqual(["x", "y", "z"]);
+    expect(viewer.viewDisplayDimensions()).toEqual(["x", "y", "z"]);
+    expect(listeners.size).toBe(0);
+  });
+
   it("viewDepthAxis reads the state in the iframe's hash while Neuroglancer is still loading", async () => {
     const { shown } = stubDocument();
     const viewer = createViewer({ session: fakeSession(), log: () => {} });
