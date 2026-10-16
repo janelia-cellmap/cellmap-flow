@@ -89,6 +89,38 @@ TRUNCATION_MARGIN = 1e-4
 THRESHOLD_MARGIN = 1e-5
 
 
+def fixture_text(value) -> str:
+    """A fixture as it is committed: JSON laid out as json.dumps(indent=2)
+    lays it out, except that a list of plain values (numbers, strings,
+    booleans, null), or of such lists, is written on one line. The arrays
+    are most of every fixture, and a line per value made files of tens of
+    thousands of lines that nobody reads line by line; the JSON reads the
+    same either way, and --check compares the values, not the text."""
+    return _layout(value, 0) + "\n"
+
+
+def _plain(value) -> bool:
+    return not isinstance(value, (dict, list))
+
+
+def _one_line(value: list) -> bool:
+    return all(_plain(v) or (isinstance(v, list) and all(_plain(w) for w in v)) for v in value)
+
+
+def _layout(value, level: int) -> str:
+    pad, inner = "  " * level, "  " * (level + 1)
+    if isinstance(value, dict):
+        if not value:
+            return "{}"
+        items = [f"{inner}{json.dumps(str(k), ensure_ascii=False)}: {_layout(v, level + 1)}" for k, v in value.items()]
+        return "{\n" + ",\n".join(items) + "\n" + pad + "}"
+    if isinstance(value, list):
+        if _one_line(value):
+            return json.dumps(value, ensure_ascii=False)
+        return "[\n" + ",\n".join(inner + _layout(v, level + 1) for v in value) + "\n" + pad + "]"
+    return json.dumps(value, ensure_ascii=False)
+
+
 def array_record(arr: np.ndarray) -> dict:
     """``{"dtype", "shape", "data"}``; ``data`` flat, C order, plain Python numbers."""
     arr = np.ascontiguousarray(arr)
@@ -747,7 +779,7 @@ MAKERS = {"norms.json": make_norms, "post.json": make_post, "args.json": make_ar
 def write_fixtures(out_dir: Path) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
     for name, make in MAKERS.items():
-        text = json.dumps(make(), indent=2, ensure_ascii=False) + "\n"
+        text = fixture_text(make())
         (out_dir / name).write_text(text, encoding="utf-8")
         size = len(text.encode("utf-8"))
         assert size < 200_000, f"{name} is {size} bytes; keep fixtures small enough to commit"

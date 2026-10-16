@@ -68,7 +68,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
 import sys
 import tempfile
 from pathlib import Path
@@ -80,7 +79,7 @@ import zarr
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
-from make_fixtures import ROOT, affinity_case_is_safe, affinity_edge_weights, array_record, differences  # noqa: E402  (puts the worktree's package first on sys.path)
+from make_fixtures import ROOT, affinity_case_is_safe, affinity_edge_weights, array_record, differences, fixture_text  # noqa: E402  (puts the worktree's package first on sys.path)
 
 from cellmap_flow.dashboard.routes.finetune import view_labels  # noqa: E402
 from cellmap_flow.finetune.session import fill  # noqa: E402
@@ -442,20 +441,10 @@ def make_label_it() -> dict:
 MAKERS = {"label_it.json": make_label_it}
 
 
-# A list of numbers as json.dumps(indent=2) writes it, one per line.
-_NUMBER_LIST = re.compile(r"\[\n\s+(-?[0-9][0-9.e+-]*(?:,\n\s+-?[0-9][0-9.e+-]*)*)\n\s+\]")
-
-
-def _compact(text: str) -> str:
-    """Lists of numbers on one line: the arrays are most of the file, and a
-    line per value tripled its size. The JSON reads the same."""
-    return _NUMBER_LIST.sub(lambda m: "[" + ", ".join(v.strip() for v in m.group(1).split(",")) + "]", text)
-
-
 def write_fixtures(out_dir: Path) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
     for name, make in MAKERS.items():
-        text = _compact(json.dumps(make(), indent=2, ensure_ascii=False)) + "\n"
+        text = fixture_text(make())
         (out_dir / name).write_text(text, encoding="utf-8")
         size = len(text.encode("utf-8"))
         assert size < 600_000, f"{name} is {size} bytes; keep fixtures small enough to commit"
