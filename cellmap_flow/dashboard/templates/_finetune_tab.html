@@ -824,6 +824,12 @@
         🚀 Start Finetuning
       </button>
     </div>
+    {# job-monitor.js's restartFromKey; the server's routes/finetune/restart_key.py
+       and the browser's web/src/backend/routes/finetune.ts bind the key over the viewer. #}
+    <small class="text-muted d-block mt-2">
+      Once a job waits for a restart, Shift+R over the viewer restarts it with these settings,
+      as Restart Training does, without asking first.
+    </small>
   </div>
 </div>
 
@@ -832,7 +838,8 @@
   <div class="card-header d-flex justify-content-between align-items-center">
     <h5>Training Status</h5>
     <div>
-      <button type="button" class="btn btn-warning btn-sm me-2" id="restartJobBtn" style="display: none;">
+      <button type="button" class="btn btn-warning btn-sm me-2" id="restartJobBtn" style="display: none;"
+              title="Train this job again, on the paint as it is now, with the Training Configuration's current settings. Shift+R over the viewer does the same without asking first.">
         🔄 Restart Training
       </button>
       <button type="button" class="btn btn-secondary btn-sm me-2" id="stopEarlyBtn" disabled title="Exit the training loop after the current epoch. Only available while training is actively running.">

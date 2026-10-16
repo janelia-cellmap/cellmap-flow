@@ -27,6 +27,16 @@
 // (static/js/dashboard/finetune/*.js) reads them unchanged: a refusal is
 // {success: false, error} at the Python's status, with `needs_volume` where
 // requests.js's offerNewVolume keys on it.
+//
+// Shift+R over the viewer restarts the job the Training Status card shows,
+// as its Restart does without the confirm (the server's
+// routes/finetune/restart_key.py). The server's key runs in its Python
+// process, so it counts the press in the job's status answer
+// (`restart_requests`) for the tab to act on at its next poll; here the key
+// runs in the page, so it tells the tab at once (RESTART_EVENT), and the
+// status answers carry no count. job-monitor.js decides from its card
+// whether the job can take the restart, and says why not in the tab's logs:
+// this Neuroglancer's status bar is not reachable from the page.
 import type { AppContext, LayerSpec, PaintVolume } from "../../contracts";
 import { PAINT_ROUTE } from "../../contracts";
 import { runFinetune } from "../../finetune/run";
@@ -43,12 +53,21 @@ import { pageBase } from "../serving";
 import { done, eventStream, requestedOffset, type SseEvent } from "../sse";
 
 /** The seams the routes run through, so they can be tested with a fake run
- * (run.ts needs onnxruntime) and a volume plan of a known shape. */
+ * (run.ts needs onnxruntime), a volume plan of a known shape, and where
+ * Shift+R's event goes (the page's document, which job-monitor.js listens
+ * on; null where there is none, as in the other routes' tests). */
 export interface FinetuneDeps {
   run: RunFinetune;
   plan: typeof planVolume;
   now: () => Date;
+  page: () => EventTarget | null;
 }
+
+/** Shift+R over the viewer (restart_key.py's KEY and ACTION), and the event
+ * it sends the page, which job-monitor.js's RESTART_EVENT names too. */
+export const RESTART_KEY = "shift+keyr";
+export const RESTART_ACTION = "finetune-restart";
+export const RESTART_EVENT = "cellmap-flow:restart-finetune";
 
 const NO_DATASET = "No dataset is open. Enter its URL in the viewer panel first; the volume is painted on it.";
 
@@ -59,8 +78,25 @@ const MAX_BATCH_PIXELS = 1 << 20;
 
 /** Register the routes; returns the jobs, which live as long as the router (the page). */
 export function finetuneRoutes(router: Router, deps: Partial<FinetuneDeps> = {}): FinetuneJobs {
-  const d: FinetuneDeps = { run: runFinetune, plan: planVolume, now: () => new Date(), ...deps };
+  const d: FinetuneDeps = {
+    run: runFinetune,
+    plan: planVolume,
+    now: () => new Date(),
+    page: () => (typeof document === "undefined" ? null : document),
+    ...deps,
+  };
   const jobs = new FinetuneJobs({ run: d.run, now: d.now });
+
+  /** restart_key.ensure_binding: bind Shift+R in the viewer, once per
+   * router; the viewer binds it again in every viewer it mounts after. The
+   * press only tells the page: the form's values, and the card that says
+   * whether the job can take a restart, are job-monitor.js's. */
+  let restartKeyBound = false;
+  function ensureRestartKey(ctx: AppContext): void {
+    if (restartKeyBound) return;
+    restartKeyBound = true;
+    ctx.viewer.bindKey(RESTART_KEY, RESTART_ACTION, () => d.page()?.dispatchEvent(new Event(RESTART_EVENT)));
+  }
 
   // GET /api/finetune/models: the served models, with the geometry the tab
   // shows (write_shape in nm, the voxel size, the channels), from the
@@ -267,7 +303,13 @@ export function finetuneRoutes(router: Router, deps: Partial<FinetuneDeps> = {})
     });
   });
 
-  router.get("/api/finetune/jobs", () => json(200, { success: true, jobs: jobs.list().map((job) => job.statusRecord()) }));
+  // The tab asks for the jobs on every page load (job-monitor.js's
+  // restoreActiveJob), which is where Shift+R is bound, as the server binds
+  // it: before there is a job, so that it can say there is none.
+  router.get("/api/finetune/jobs", (_req, _params, ctx) => {
+    ensureRestartKey(ctx);
+    return json(200, { success: true, jobs: jobs.list().map((job) => job.statusRecord()) });
+  });
 
   router.get("/api/finetune/job/:id/status", (_req, params) => {
     const job = jobs.get(params.id);
