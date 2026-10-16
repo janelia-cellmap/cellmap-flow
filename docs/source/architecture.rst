@@ -511,8 +511,8 @@ A blockwise run
 #. The pipeline builder's blockwise steps post to ``/api/blockwise/validate``,
    ``/generate``, ``/precheck`` and ``/submit`` (``dashboard/routes/blockwise.py``).
    Each answers 200, with ``valid`` or ``success`` false and an ``error`` when
-   it cannot go on. Generate writes the task YAML (one per box when each box
-   gets its own zarr) under ``blockwise_tasks_dir``; precheck is
+   it cannot go on. Generate writes the task YAML under
+   ``blockwise_tasks_dir``; precheck is
    ``blockwise_processor.precheck``, which loads no model and writes
    nothing. Submit sends the master to LSF as a CPU job:
    ``python -m cellmap_flow.blockwise.multiple_cli <task YAMLs>``. From a
@@ -522,9 +522,13 @@ A blockwise run
    ``resolve_data_path``), builds no ``Inferencer`` (it needs the geometry
    only), and creates the output arrays, with OME attributes from
    ``io.ome.singlescale_attrs``, on a grid that starts at the corner of the
-   raw level the model reads.
+   raw level the model reads. An output covers the raw extent, or only the
+   bounding boxes: their bounding box, or each box in its own
+   ``<output_path>/box_<n>`` with ``separate_bounding_boxes_zarrs``.
 #. ``run()`` makes one daisy task per region (the whole extent, or each
-   bounding box), with the id ``predict_<model>_<task>``. Daisy spawns the
+   bounding box), with the id ``predict_<model>_<task>`` (``_roi<n>`` after
+   it for each of several boxes), its blocks laid from its output's corner
+   and the last ones cut at the region's end. Daisy spawns the
    workers through ``spawn_worker``: each is an LSF job, submitted with
    ``jobs.launch.submit_bsub_job``, that runs
    ``cellmap_flow blockwise <task.yaml> --client``, with a walltime and its

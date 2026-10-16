@@ -21,6 +21,7 @@ from cellmap_flow.blockwise.blockwise_processor import (
     precheck,
     spawn_worker,
 )
+from cellmap_flow.image_data_interface import ImageDataInterface
 from cellmap_flow.models.models_config import ModelConfig, ScriptModelConfig
 from cellmap_flow.jobs.settings import launcher_settings
 from cellmap_flow.post.postprocessors import MortonSegmentationRelabeling, ThresholdPostprocessor
@@ -192,6 +193,195 @@ def test_a_block_gets_the_same_label_ids_served_or_blockwise(ome_pyramid, poolin
         assert np.all(written == served) and np.all(served == 1 + 64 * index), index
 
 
+# --- bounding boxes ---------------------------------------------------------------
+#
+# The raw is ome_pyramid's: 16^3 voxels of 8 nm from 0, each holding its z index
+# + 1, which the pooling model (8 nm in and out, no chain) writes as it is, so an
+# output voxel at z nm holds z / 8 + 1 and a voxel left unwritten holds 0. Its
+# blocks are 32 nm (4 voxels) a side, with no context.
+
+
+def run_in_process(path, monkeypatch):
+    """Create the outputs of the task YAML at ``path`` and run it, daisy's
+    serial server handing every block to a worker's process_fn in this
+    process instead of to LSF workers. The master, and each block's task id
+    and write ROI."""
+    master = CellMapFlowBlockwiseProcessor(path, create=True)
+    worker = CellMapFlowBlockwiseProcessor(path, create=False)
+    blocks = []
+
+    def process(block):
+        blocks.append((block.task_id, block.write_roi))
+        worker.process_fn(block)
+
+    monkeypatch.setattr(blockwise_processor, "spawn_worker", lambda *a, **k: process)
+    monkeypatch.setattr(blockwise_processor.daisy, "Server", lambda stop_event: daisy.SerialServer())
+    assert master.run()
+    return master, blocks
+
+
+def written(output, channel="a"):
+    """Output ``channel`` of the zarr at ``output``: s0 as stored, its funlib
+    offset and its OME translation."""
+    s0 = zarr.open(str(output / channel / "s0"), mode="r")
+    (multiscales,) = zarr.open_group(str(output / channel), mode="r").attrs["multiscales"]
+    translation = multiscales["datasets"][0]["coordinateTransformations"][1]["translation"]
+    return s0, s0.attrs["offset"], translation
+
+
+def raw_at(roi):
+    """What the model writes over ``roi`` (nm, z, y, x): each voxel's raw z index + 1."""
+    shape = np.array(roi.shape) // 8
+    z = np.arange(roi.offset[0] // 8, roi.offset[0] // 8 + shape[0]) + 1
+    return np.broadcast_to(z[:, None, None], tuple(shape)).astype(np.float32)
+
+
+def box(offset, shape):
+    return {"offset": list(offset), "shape": list(shape)}
+
+
+def test_a_box_runs_output_is_the_box(ome_pyramid, pooling_model, task_yaml, monkeypatch):
+    """The output was an array the size of the whole volume, with the box's
+    blocks written into it, the last ones up to a block past its end. Now it
+    is the box, snapped out to every 8 nm output voxel it touches: (12, 20,
+    4) + (50, 30, 70) nm is (8, 16, 0) + (56, 40, 80), 7 x 5 x 10 voxels,
+    not whole 4-voxel chunks. Its blocks start at its corner, and the last
+    along each axis are cut at its end."""
+    path = task_yaml(ome_pyramid(((8, 4),)) + "/s0", pooling_model(), bounding_boxes=[box((12, 20, 4), (50, 30, 70))])
+    master, blocks = run_in_process(path, monkeypatch)
+
+    s0, offset, translation = written(master.output_path)
+    the_box = daisy.Roi((8, 16, 0), (56, 40, 80))
+    assert (s0.shape, s0.chunks, offset, translation) == ((7, 5, 10), (4, 4, 4), [8, 16, 0], [12.0, 20.0, 4.0])
+    assert master.output_arrays[0].roi == the_box
+    np.testing.assert_array_equal(s0[:], raw_at(the_box))
+    # 2 x 2 x 3 blocks from the box's corner, 32 nm apart; those at its end overhang it.
+    begins = sorted(roi.offset for _, roi in blocks)
+    assert begins == sorted(Coordinate(z, y, x) for z in (8, 40) for y in (16, 48) for x in (0, 32, 64))
+    assert {roi.shape for _, roi in blocks} == {Coordinate(32, 32, 32)}
+    # Readers place it at the box: by the group's OME translation, or by s0's funlib offset.
+    for read in (master.output_path / "a", master.output_path / "a" / "s0"):
+        assert tuple(ImageDataInterface(str(read)).offset) == (8, 16, 0), read
+
+
+def test_a_box_is_cut_to_the_data(ome_pyramid, pooling_model, task_yaml):
+    """Past the raw data there is nothing to compute an output from."""
+    raw, model = ome_pyramid(((8, 4),)) + "/s0", pooling_model()
+    master = CellMapFlowBlockwiseProcessor(task_yaml(raw, model, bounding_boxes=[box((96, -20, 0), (64, 50, 16))]),
+                                           create=True)
+    assert master.output_arrays[0].roi == daisy.Roi((96, 0, 0), (32, 32, 16))
+
+    outside = task_yaml(raw, model, bounding_boxes=[box((200, 0, 0), (8, 8, 8))])
+    with pytest.raises(ConfigError, match="bounding box 1 .* is outside the data"):
+        CellMapFlowBlockwiseProcessor(outside, create=True)
+
+
+# Two boxes: the second one starts off the first one's block grid.
+FIRST, SECOND = box((8, 16, 8), (24, 24, 24)), box((72, 64, 40), (40, 32, 48))
+FIRST_ROI, SECOND_ROI = daisy.Roi((8, 16, 8), (24, 24, 24)), daisy.Roi((72, 64, 40), (40, 32, 48))
+
+
+def test_several_boxes_share_one_output_over_their_bounding_box(ome_pyramid, pooling_model, task_yaml, monkeypatch):
+    """One output from the lowest corner to the highest far end; each box's
+    blocks run, on the output's block grid from its corner (the second box's
+    from y = 48, not its own 64, so two blocks cover its 32 nm in y), and
+    write only inside their box: between the boxes the output stays 0."""
+    path = task_yaml(ome_pyramid(((8, 4),)) + "/s0", pooling_model(), bounding_boxes=[FIRST, SECOND])
+    master, blocks = run_in_process(path, monkeypatch)
+
+    s0, offset, translation = written(master.output_path)
+    union = daisy.Roi((8, 16, 8), (104, 80, 80))
+    assert (s0.shape, offset, translation) == ((13, 10, 10), [8, 16, 8], [12.0, 20.0, 12.0])
+    expected = np.zeros(s0.shape, np.float32)
+    for roi in (FIRST_ROI, SECOND_ROI):
+        inside = tuple(slice(b, e) for b, e in zip((roi.begin - union.begin) // 8, (roi.end - union.begin) // 8))
+        expected[inside] = raw_at(roi)
+    np.testing.assert_array_equal(s0[:], expected)
+    assert sorted(roi.offset for task, roi in blocks if task == "predict_m_t_roi2") == sorted(
+        Coordinate(z, y, x) for z in (72, 104) for y in (48, 80) for x in (40, 72))
+    assert [roi.offset for task, roi in blocks if task == "predict_m_t_roi1"] == [Coordinate(8, 16, 8)]
+
+
+def test_separate_bounding_boxes_zarrs_gives_each_box_its_own_output(ome_pyramid, pooling_model, task_yaml,
+                                                                      monkeypatch):
+    """It took one box; the dashboard wrote a task per box to get each its own
+    zarr. Each is <output_path>/box_<n>, the size of its box, a group of the
+    output zarr, written by its box's task."""
+    path = task_yaml(ome_pyramid(((8, 4),)) + "/s0", pooling_model(), bounding_boxes=[FIRST, SECOND],
+                     separate_bounding_boxes_zarrs=True)
+    master, blocks = run_in_process(path, monkeypatch)
+
+    for n, roi in ((1, FIRST_ROI), (2, SECOND_ROI)):
+        s0, offset, translation = written(master.output_path / f"box_{n}")
+        assert (offset, translation) == (list(roi.offset), [o + 4.0 for o in roi.offset]), n
+        np.testing.assert_array_equal(s0[:], raw_at(roi))
+    assert sorted(zarr.open_group(str(master.output_path), mode="r").group_keys()) == ["box_1", "box_2"]
+    assert sorted(roi.offset for task, roi in blocks if task == "predict_m_t_roi2") == sorted(
+        Coordinate(z, 64, x) for z in (72, 104) for x in (40, 72))
+
+
+def test_a_block_of_another_task_is_refused(ome_pyramid, pooling_model, task_yaml):
+    """With several boxes a worker finds a block's box by its task id."""
+    path = task_yaml(ome_pyramid(((8, 4),)) + "/s0", pooling_model(), bounding_boxes=[FIRST, SECOND],
+                     separate_bounding_boxes_zarrs=True)
+    CellMapFlowBlockwiseProcessor(path, create=True)
+    worker = CellMapFlowBlockwiseProcessor(path, create=False)
+    roi = daisy.Roi((8, 16, 8), (32, 32, 32))
+    with pytest.raises(ValueError, match="none of this run's"):
+        worker.process_fn(daisy.Block(roi, roi, roi, task_id="predict_m_other"))
+
+
+MORTON = [ThresholdPostprocessor(threshold=0.5), MortonSegmentationRelabeling()]
+
+
+def test_a_boxs_blocks_get_label_ids_of_their_own(ome_pyramid, pooling_model, task_yaml, monkeypatch):
+    """A block's ids are keyed to its index on the volume's grid, floored for
+    a box's blocks, which start at the box's corner, 8 nm off that grid: the
+    three blocks along z, the last cut at the box's end, still get an id each
+    (one object a block), 1 + 64 x Morton(index)."""
+    json_data = {"input_norm": [], "postprocess": [p.to_dict() for p in MORTON]}
+    path = task_yaml(ome_pyramid(((8, 4),)) + "/s0", pooling_model(), json_data=json_data,
+                     bounding_boxes=[box((8, 8, 8), (72, 32, 32))])
+    master, blocks = run_in_process(path, monkeypatch)
+
+    s0, _, _ = written(master.output_path)
+    ids = [np.unique(s0[z:z + 4]).tolist() for z in (0, 4, 8)]  # each block's voxels, along z
+    assert ids == [[1], [1 + 64 * 1], [1 + 64 * 8]]  # Morton of (0, 0, 0), (1, 0, 0), (2, 0, 0)
+
+
+def test_a_box_on_the_volumes_grid_gets_the_ids_the_server_does(ome_pyramid, pooling_model, task_yaml, monkeypatch):
+    """Where the blocks are the server's chunks, as for a box on the volume's
+    block grid, the ids are the same as served."""
+    raw, model = ome_pyramid(((8, 4),)) + "/s0", pooling_model()
+    json_data = {"input_norm": [], "postprocess": [p.to_dict() for p in MORTON]}
+    path = task_yaml(raw, model, json_data=json_data, bounding_boxes=[box((32, 0, 32), (64, 32, 32))])
+    master, _ = run_in_process(path, monkeypatch)
+
+    s0, _, _ = written(master.output_path)
+    client = TestClient(ChunkmirageServer(raw, ScriptModelConfig(script_path=model)).app)
+    for n, index in enumerate(((1, 0, 1), (2, 0, 1))):
+        served = read_chunk(client, layer(posts=MORTON), index)[0]
+        assert np.all(s0[4 * n:4 * n + 4] == served), index
+
+
+@pytest.mark.parametrize("first, then", [
+    pytest.param({"bounding_boxes": [box((0, 0, 0), (32, 32, 32))]}, {"bounding_boxes": [box((32, 0, 0), (32, 32, 32))]},
+                 id="another-box-of-the-same-shape"),
+    pytest.param({}, {"bounding_boxes": [box((0, 0, 0), (32, 32, 32))]}, id="a-box-into-a-whole-volume-output"),
+])
+def test_resuming_into_an_output_over_another_region_is_refused(ome_pyramid, pooling_model, task_yaml, first, then):
+    """Said so: funlib's prepare_ds takes an array of the same shape
+    elsewhere, keeping its offset, and the OME check after it blamed the
+    other translation on an older cellmap-flow's half-voxel placement; one
+    of another shape it refused as "not compatible". An output of a box run
+    by an older cellmap-flow is the whole volume's."""
+    raw, model = ome_pyramid(((8, 4),)) + "/s0", pooling_model()
+    CellMapFlowBlockwiseProcessor(task_yaml(raw, model, **first), create=True)
+    CellMapFlowBlockwiseProcessor(task_yaml(raw, model, **first), create=True)  # the same region resumes
+    with pytest.raises(ConfigError, match="already holds an output covering"):
+        CellMapFlowBlockwiseProcessor(task_yaml(raw, model, **then), create=True)
+
+
 @pytest.mark.parametrize("failing", [pytest.param(True, id="blocks-failed"), pytest.param(False, id="clean-run")])
 def test_a_run_succeeds_only_if_every_block_did(raw_zarr, pooling_model, task_yaml, monkeypatch, caplog, failing):
     """daisy.run_blockwise counts failed blocks as done, so the master said
@@ -281,12 +471,22 @@ def no_model_loading(monkeypatch):
     pytest.param({"output_channels": ["a", "a"]}, "duplicated", id="duplicated-channels"),
     pytest.param({"json_data": {"input_norm": {}}}, "json_data", id="json-data-without-postprocess"),
     pytest.param({"data_path": "/nope.zarr/raw"}, "does not exist", id="missing-data"),
+    pytest.param({"bounding_boxes": [{"offset": [0, 0, 0], "shape": [8, 8]}]}, "shape should be three numbers",
+                 id="a-box-of-two-sides"),
+    pytest.param({"bounding_boxes": [{"offset": [0, 0, 0], "shape": [8, 0, 8]}]}, "above 0", id="an-empty-box"),
+    pytest.param({"bounding_boxes": [{"offset": [0, 0, 0]}]}, "offset, shape", id="a-box-without-a-shape"),
 ])
 def test_the_precheck_reports_a_bad_setting(raw_zarr, pooling_model, task_yaml, no_model_loading, overrides, message):
     overrides = dict(overrides)
     data = overrides.pop("data_path", None) or raw_zarr()
     with pytest.raises(ConfigError, match=message):
         precheck(task_yaml(data, pooling_model(), **overrides))
+
+
+def test_the_precheck_takes_several_boxes_each_in_its_own_output(raw_zarr, pooling_model, task_yaml, no_model_loading):
+    """separate_bounding_boxes_zarrs was refused with more than one box."""
+    boxes = [{"offset": [0, 0, 0], "shape": [32, 32, 32]}, {"offset": [64, 0, 0], "shape": [32, 32, 32]}]
+    precheck(task_yaml(raw_zarr(), pooling_model(), bounding_boxes=boxes, separate_bounding_boxes_zarrs=True))
 
 
 def test_the_processor_refuses_the_same_settings(raw_zarr, pooling_model, task_yaml):

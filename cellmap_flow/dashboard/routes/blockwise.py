@@ -154,7 +154,7 @@ def _write_task(tasks_dir, task):
 
 
 def _generate(pipeline, job_name):
-    """Write the task YAML(s) for ``pipeline`` (a requests.BlockwisePipeline);
+    """Write the task YAML for ``pipeline`` (a requests.BlockwisePipeline);
     generate's answer. A task named after ``job_name`` and the time."""
     settings = pipeline.blockwise_config[0].params
     input_params = pipeline.inputs[0].params
@@ -204,24 +204,13 @@ def _generate(pipeline, job_name):
     if output_channels and isinstance(output_channels, list):
         task["output_channels"] = output_channels
 
-    tasks_dir = get_session().tasks_dir()
-    if separate_zarrs and bounding_boxes:
-        # One task per box, each writing its own box_<n> zarr in the output.
-        task_paths = [
-            _write_task(tasks_dir, {
-                **task,
-                "bounding_boxes": [bbox],
-                "output_path": os.path.join(output_path, f"box_{n}"),
-                "task_name": f"{task_name}_box{n}",
-            })
-            for n, bbox in enumerate(bounding_boxes, start=1)
-        ]
-    else:
-        task_paths = [_write_task(tasks_dir, task)]
+    # One task, whatever the boxes: with separate_bounding_boxes_zarrs the
+    # blockwise run writes each box to its own <output>/box_<n>. (It took
+    # one box, so this wrote a task per box, each with its own output path.)
+    task_paths = [_write_task(get_session().tasks_dir(), task)]
 
     return {
         "success": True,
-        # The task before it is split per box, for the builder's console.
         "task_yaml": _task_text(task),
         "task_config": task,
         "task_paths": task_paths,
@@ -232,8 +221,7 @@ def _generate(pipeline, job_name):
 
 @blockwise_bp.route("/api/blockwise/generate", methods=["POST"])
 def generate_blockwise_task():
-    """Write the task YAML the blockwise CLI runs, for the builder's pipeline;
-    one per bounding box when each box gets its own zarr.
+    """Write the task YAML the blockwise CLI runs, for the builder's pipeline.
 
     {"success": True, "task_paths", "task_name", "task_yaml", "task_config",
     "message"}, or {"success": False, "error"}.

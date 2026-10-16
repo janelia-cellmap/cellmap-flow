@@ -6,11 +6,13 @@ logger = logging.getLogger(__name__)
 
 import os
 from pathlib import Path
+from typing import NamedTuple
 import zarr
 import daisy
 import numpy as np
 from funlib.geometry.coordinate import Coordinate
 from funlib.persistence import Array, open_ds, prepare_ds
+from funlib.persistence.arrays.datasets import ArrayNotFoundError
 from zarr.storage import NestedDirectoryStore
 from zarr.hierarchy import open_group
 from functools import partial
@@ -50,15 +52,8 @@ def _validate_settings(config):
         raise ConfigError(
             "Missing required field in YAML: tmp_dir, it is mandatory to track progress"
         )
-    bounding_boxes = config.get("bounding_boxes", None)
-    if (
-        bounding_boxes
-        and config.get("separate_bounding_boxes_zarrs", False)
-        and len(bounding_boxes) > 1
-    ):
-        raise ConfigError(
-            "separate_bounding_boxes_zarrs can only be used with one bounding box"
-        )
+    if config.get("bounding_boxes"):
+        _check_bounding_boxes(config["bounding_boxes"])
     try:
         get_model_merger(str(config.get("model_mode", "AND")).upper())
     except ValueError as e:
@@ -75,6 +70,48 @@ def _validate_settings(config):
             raise ConfigError(
                 f"output_channels has duplicated channel names. channels: {names}"
             )
+
+
+def _check_bounding_boxes(boxes):
+    """Refuse ``bounding_boxes`` that are not a list of ``{offset, shape}``.
+
+    Each is three numbers, nm, z, y, x: ``offset`` the box's lower corner
+    (0, 0, 0 when left out) and ``shape`` its size, every side above 0.
+    """
+    if not isinstance(boxes, list):
+        raise ConfigError(f"bounding_boxes should be a list of {{offset, shape}}, got {boxes!r}")
+    for n, box in enumerate(boxes, start=1):
+        if not isinstance(box, dict) or "shape" not in box:
+            raise ConfigError(f"bounding box {n} should be {{offset, shape}} in nm, got {box!r}")
+        for key, value in (("offset", box.get("offset", [0, 0, 0])), ("shape", box["shape"])):
+            numbers = isinstance(value, (list, tuple)) and len(value) == 3 and all(
+                isinstance(v, (int, float)) and not isinstance(v, bool) for v in value
+            )
+            if not numbers:
+                raise ConfigError(
+                    f"bounding box {n}: {key} should be three numbers, nm, z, y, x; got {value!r}"
+                )
+        if any(v <= 0 for v in box["shape"]):
+            raise ConfigError(f"bounding box {n}: every side of its shape should be above 0, got {box['shape']}")
+
+
+class _Output:
+    """One zarr a run writes, ``<path>/<output channel>/s0``: ``roi`` (nm,
+    z, y, x) is where it lies, and ``arrays`` its arrays, one per output
+    channel, once created or opened."""
+
+    def __init__(self, path, roi):
+        self.path, self.roi, self.arrays = Path(path), roi, []
+
+
+class _Region(NamedTuple):
+    """One daisy task of a run: ``name`` is its task id, and its blocks
+    write ``roi`` (nm, z, y, x; a box, or the whole volume) into
+    ``outputs[output]``."""
+
+    name: str
+    roi: daisy.Roi
+    output: int
 
 
 def _load_task(yaml_config) -> dict:
@@ -312,7 +349,6 @@ class CellMapFlowBlockwiseProcessor:
             voxel_size=self.input_voxel_size,
             on_voxel_size_mismatch="resample" if self.config.get("resample", True) else "relabel",
         )
-        self.output_arrays = []
 
         # The output grid starts at the corner of the raw level the model
         # reads (whole nanometers), so every output voxel sits exactly on the
@@ -330,70 +366,113 @@ class CellMapFlowBlockwiseProcessor:
 
         self.bounding_boxes = self.config.get("bounding_boxes", None)
         self.separate_zarrs = self.config.get("separate_bounding_boxes_zarrs", False)
+        # What the run writes (self.outputs) and the daisy tasks that write
+        # it (self.regions); a worker works them out as the master does, to
+        # open the outputs and to know which a block of which task fills.
+        self.outputs, self.regions = self._plan()
 
-        if self.bounding_boxes and self.separate_zarrs:
-            bounding_box = self.bounding_boxes[0]
-            offset = tuple(bounding_box.get("offset", [0, 0, 0]))
-            shape = tuple(bounding_box.get("shape", [0, 0, 0]))
-            roi = daisy.Roi(offset, shape)
-            roi2 = self._snap_to_output_grid(roi)
-            if roi2 != roi:
-                logger.warning(f"Bounding box ROI {roi} was not aligned to output voxel size grid {self.output_voxel_size}, it has been adjusted to {roi2} to avoid misalignment issues.")
-            roi = roi2
-            output_shape = (np.array(roi.shape)
-                        / np.array(self.output_voxel_size)
-                        ).astype(int)
-            offset = (np.array(roi.offset)
-                    #   /np.array(self.output_voxel_size)
-                      ).astype(int)
-        else:
-            # Cover the raw data where it actually is: its offset (a corner)
-            # and extent, snapped inward to the output voxel grid. The whole-
-            # volume task in run() uses the same ROI, so its blocks start on
-            # the output's chunk grid instead of straddling chunks.
-            output_shape = (
-                np.array(self.full_output_roi.shape) / np.array(self.output_voxel_size)
-            ).astype(int)
-            offset = tuple(int(o) for o in self.full_output_roi.offset)
-
-        logger.info(f"output_shape: {output_shape}")
         logger.info(f"type: {self.dtype}")
-        logger.info(f"output_path: {self.output_path}")
+        for output in self.outputs:
+            logger.info(f"output: {output.path}, {output.roi} nm, {output.roi.shape / self.output_voxel_size} voxels")
 
         # _validate_settings checks a task's own output_channels; the model's
         # channel names, used when it gives none, can repeat too.
         if len(self.output_channels) != len(set(self.output_channels)):
             raise Exception(f"output_channels has duplicated channel names. channels: {self.output_channels}")
 
-        for channel in self.output_channels:
-            if create:
-                array = self._create_output(channel, tuple(output_shape), tuple(offset))
-            else:
-                # A worker opens what the master created.
-                try:
-                    array = open_ds(
-                        NestedDirectoryStore(self.output_path / channel / "s0"),
-                        "a",
-                    )
-                except Exception as e:
-                    raise Exception(f"Failed to open {self.output_path/channel}\n{e}")
-            self.output_arrays.append(array)
+        for output in self.outputs:
+            if create and output.path != Path(z_con):
+                # A group, with the groups between it and the zarr, so that
+                # listing the zarr finds it (box_1, box_2, ...).
+                zarr.open_group(z_con, mode="a", path=str(output.path.relative_to(z_con)))
+            for channel in self.output_channels:
+                if create:
+                    array = self._create_output(output, channel)
+                else:
+                    # A worker opens what the master created.
+                    try:
+                        array = open_ds(NestedDirectoryStore(output.path / channel / "s0"), "a")
+                    except Exception as e:
+                        raise Exception(f"Failed to open {output.path / channel}\n{e}")
+                output.arrays.append(array)
+        # The first output's arrays: with separate_bounding_boxes_zarrs and
+        # several boxes, the first box's; otherwise the only output's.
+        self.output_arrays = self.outputs[0].arrays
 
     def _channel_indices(self, name):
         """The model channels a dict of output_channels gives output ``name``, as a list."""
         indices = self.output_channel_indices[name]
         return [indices] if isinstance(indices, int) else indices
 
-    def _create_output(self, channel, shape, offset):
-        """Create output ``channel``: its array s0, and its group's OME attributes.
+    def _plan(self):
+        """The outputs this run writes, and the daisy tasks that write them.
 
-        ``shape`` (voxels) and ``offset`` (nm, voxel 0's corner) are the
-        spatial ones, z, y, x. An output that a dict of output_channels gives
-        several model channels stacks them on a leading axis "c", with voxel
-        size 1 and offset 0, and each chunk holds all of them; any other
-        output holds one channel and is 3-D. Resuming into an output whose
-        attributes differ is refused.
+        Without bounding_boxes, one output over the raw data's extent and
+        one task over it. With them, each box is snapped out to every output
+        voxel it touches and cut to the raw data's extent, a task per box;
+        the boxes share one output over their bounding box, or with
+        separate_bounding_boxes_zarrs each has its own,
+        ``<output_path>/box_<n>`` counting from 1 in the list's order. Either
+        way an output covers only what its boxes need, and its corner (the
+        funlib offset; OME's translation is half a voxel in) is where they
+        start.
         """
+        name = f"predict_{self.model_config.name}_{self.task_name}"
+        boxes = [self._box_roi(n, box) for n, box in enumerate(self.bounding_boxes or [], start=1)]
+        if not boxes:
+            outputs = [_Output(self.output_path, self.full_output_roi)]
+            regions = [(self.full_output_roi, 0)]
+        elif self.separate_zarrs:
+            outputs = [_Output(self.output_path / f"box_{n}", box) for n, box in enumerate(boxes, start=1)]
+            regions = [(box, n) for n, box in enumerate(boxes)]
+        else:
+            union = boxes[0]
+            for box in boxes[1:]:
+                union = union.union(box)
+            outputs = [_Output(self.output_path, union)]
+            regions = [(box, 0) for box in boxes]
+        names = [name] if len(regions) == 1 else [f"{name}_roi{n}" for n in range(1, len(regions) + 1)]
+        return outputs, [_Region(task, roi, output) for task, (roi, output) in zip(names, regions)]
+
+    def _box_roi(self, n, box):
+        """Bounding box ``n``'s ROI: every output voxel it touches, inside the data.
+
+        Its corners are snapped outward onto the output voxel grid (anchored
+        at the raw data's corner), so a box drawn across a voxel keeps it,
+        and the result is cut to the raw data's extent, where every output
+        voxel has data to be computed from.
+        """
+        offset = np.array(box.get("offset", [0, 0, 0]), dtype=float)
+        begin = np.floor(offset).astype(int)
+        end = np.ceil(offset + np.array(box["shape"], dtype=float)).astype(int)
+        given = daisy.Roi(Coordinate(begin), Coordinate(end - begin))
+        snapped = self._snap_to_output_grid(given, mode="grow")
+        inside = snapped.intersect(self.full_output_roi)
+        if inside.empty:
+            raise ConfigError(
+                f"bounding box {n} ({given} nm) is outside the data, which covers {self.full_output_roi} nm"
+            )
+        if inside != snapped:
+            logger.warning(f"Bounding box {n} ({given} nm) reaches past the data; cut to {inside}")
+        elif snapped != given:
+            logger.info(f"Bounding box {n} ({given} nm) snapped out to whole output voxels: {snapped}")
+        return inside
+
+    def _create_output(self, output, channel):
+        """Create ``output``'s output ``channel``: its array s0, and its group's OME attributes.
+
+        Spatially, z, y, x, the array is ``output.roi`` in output voxels,
+        voxel 0's corner at its offset. An output that a dict of
+        output_channels gives several model channels stacks them on a
+        leading axis "c", with voxel size 1 and offset 0, and each chunk
+        holds all of them; any other output holds one channel and is 3-D.
+        Resuming into an output that covers another region, or whose
+        attributes differ, is refused.
+        """
+        path = output.path / channel / "s0"
+        shape = tuple(int(s) for s in output.roi.shape / self.output_voxel_size)
+        offset = tuple(int(o) for o in output.roi.offset)
+        _refuse_another_region(path, output.roi)
         chunk_shape, voxel_size = tuple(self.block_shape), tuple(self.output_voxel_size)
         axes, units = ["z", "y", "x"], ["nanometer"] * 3
         if self.output_channels_is_dict and self.output_channel_indices:
@@ -404,7 +483,7 @@ class CellMapFlowBlockwiseProcessor:
                 axes, units = ["c", *axes], ["", *units]
         try:
             array = prepare_ds(
-                NestedDirectoryStore(self.output_path / channel / "s0"),
+                NestedDirectoryStore(path),
                 shape,
                 dtype=self.dtype,
                 chunk_shape=chunk_shape,
@@ -415,10 +494,10 @@ class CellMapFlowBlockwiseProcessor:
             )
         except Exception as e:
             raise Exception(
-                f"Failed to prepare {self.output_path/channel/'s0'} \n try deleting it manually and run again ! {e}"
+                f"Failed to prepare {path} \n try deleting it manually and run again ! {e}"
             )
         try:
-            z_store = NestedDirectoryStore(self.output_path / channel)
+            z_store = NestedDirectoryStore(output.path / channel)
             zg = open_group(store=z_store, mode="a")
             zattrs = singlescale_attrs(
                 arr_name="s0",
@@ -442,24 +521,62 @@ class CellMapFlowBlockwiseProcessor:
             zg.attrs["multiscales"] = zattrs["multiscales"]
         except Exception as e:
             raise Exception(
-                f"Failed to prepare ome-ngff metadata for {self.output_path/channel/'s0'}, {e}"
+                f"Failed to prepare ome-ngff metadata for {path}, {e}"
             )
         return array
 
-    def _snap_to_output_grid(self, roi):
-        """``roi`` shrunk onto the output voxel grid anchored at grid_origin."""
+    def _snap_to_output_grid(self, roi, mode="shrink"):
+        """``roi`` snapped onto the output voxel grid anchored at grid_origin:
+        shrunk to the voxels it holds whole, or with ``mode="grow"`` grown to
+        every voxel it touches."""
         shifted = daisy.Roi(roi.offset - self.grid_origin, roi.shape)
-        snapped = shifted.snap_to_grid(self.output_voxel_size, mode="shrink")
+        snapped = shifted.snap_to_grid(self.output_voxel_size, mode=mode)
         return daisy.Roi(snapped.offset + self.grid_origin, snapped.shape)
+
+    def _region_of(self, block):
+        """The region (the daisy task) ``block`` is of, by its task id; the
+        only one when there is one."""
+        if len(self.regions) == 1:
+            return self.regions[0]
+        for region in self.regions:
+            if region.name == block.task_id:
+                return region
+        raise ValueError(
+            f"A block of task {block.task_id!r}, which is none of this run's: {[r.name for r in self.regions]}"
+        )
+
+    def _blocks_roi(self, region, block_shape):
+        """The total write ROI of ``region``'s task, whose blocks are
+        ``block_shape`` (nm).
+
+        daisy lays a task's blocks from the corner of this ROI, so it starts
+        on its output's block grid, anchored at the output's corner: at the
+        box itself for a box with an output of its own, at or before it for
+        one of several boxes sharing one. It ends where the region does;
+        the last blocks overhang that end (fit="overhang"), and process_fn
+        writes only what they hold inside the region.
+
+        A block's label ids (Morton, Affinity) are keyed to its index on
+        the volume's grid (Inferencer._chunk_index, from the raw data's
+        corner), floored when the block is off that grid. Two blocks of one
+        output share this grid, so the floored indices differ, and so do
+        their ids; a box on the volume's grid gets the ids the server does.
+        """
+        corner = np.array(self.outputs[region.output].roi.offset)
+        shape = np.array(block_shape)
+        begin = corner + (np.array(region.roi.offset) - corner) // shape * shape
+        return daisy.Roi(Coordinate(begin), region.roi.end - Coordinate(begin))
 
     def process_fn(self, block):
         if not self.inferencers:
             raise RuntimeError("Only a blockwise worker (--client) builds the models' inferencers")
 
-        # Every output covers the same z, y, x (a stacked one has its channel
-        # axis in front): a block overhanging them writes only what is inside.
-        outputs = self.output_arrays[0].roi
-        write_roi = block.write_roi.intersect(daisy.Roi(outputs.offset[-3:], outputs.shape[-3:]))
+        # A block writes only what is inside its region, the box or the
+        # whole volume: the last blocks along each axis overhang its end, and
+        # are cut there.
+        region = self._region_of(block)
+        arrays = self.outputs[region.output].arrays
+        write_roi = block.write_roi.intersect(region.roi)
         if write_roi.empty:
             logger.warning(f"empty write roi: {write_roi}")
             return
@@ -497,7 +614,7 @@ class CellMapFlowBlockwiseProcessor:
 
         chunk_data = chunk_data.astype(self.dtype)
 
-        for channel, array in zip(self.output_channels, self.output_arrays):
+        for channel, array in zip(self.output_channels, arrays):
             prediction = Array(
                 self._output_data(chunk_data, channel), block.write_roi.offset, self.output_voxel_size
             )
@@ -553,43 +670,24 @@ class CellMapFlowBlockwiseProcessor:
         read_roi = daisy.Roi((0, 0, 0), Coordinate(geometry.read_shape))
         write_roi = read_roi.grow(-context, -context)
 
-        # Check if bounding boxes are specified
-        bounding_boxes = self.config.get("bounding_boxes", None)
-
-        conflicts = False
-        
-        if bounding_boxes and len(bounding_boxes) > 0:
-            # Process specific ROIs from bounding boxes
-            logger.info(f"Processing {len(bounding_boxes)} bounding box(es)")
-            rois_to_process = []
-            # If there is ROI the ROI can be different than the block order which can cause read-write conflicts
-            # best way is to align the ROI with the block shape, but for now we will just warn the user about potential conflicts
-            if not self.separate_zarrs:
-                conflicts = True
-            
-            for i, bbox in enumerate(bounding_boxes):
-                offset = tuple(bbox.get("offset", [0, 0, 0]))
-                shape = tuple(bbox.get("shape", [0, 0, 0]))
-                roi = daisy.Roi(offset, shape)
-                roi = self._snap_to_output_grid(roi)
-                rois_to_process.append(roi)
-                logger.info(f"Bounding box {i+1}: offset={offset}, shape={shape}")
+        if self.bounding_boxes:
+            logger.info(f"Processing {len(self.bounding_boxes)} bounding box(es)")
         else:
-            # Process entire dataset: the extent of the output array.
-            total_write_roi = self.full_output_roi
-            rois_to_process = [total_write_roi]
-            logger.info(f"Processing entire dataset: {total_write_roi}")
+            logger.info(f"Processing entire dataset: {self.full_output_roi}")
 
         # Process each ROI
         failures = []
-        for roi_idx, total_write_roi in enumerate(rois_to_process):
+        for roi_idx, region in enumerate(self.regions):
+            total_write_roi = self._blocks_roi(region, write_roi.shape)
             total_read_roi = total_write_roi.grow(context, context)
-            
-            # The daisy task id, and so each worker's LSF job name and log.
-            name = f"predict_{self.model_config.name}_{self.task_name}"
-            if len(rois_to_process) > 1:
-                name = f"{name}_roi{roi_idx+1}"
+            logger.info(f"ROI {roi_idx+1}/{len(self.regions)}: {region.roi}, blocks from {total_write_roi.offset}")
 
+            # The daisy task id, and so each worker's LSF job name and log.
+            name = region.name
+
+            # Its blocks start on the output's chunk grid, so each writes
+            # chunks of its own and reads only the raw data: none waits on
+            # another (read_write_conflict).
             task = daisy.Task(
                 name,
                 total_roi=total_read_roi,
@@ -604,7 +702,7 @@ class CellMapFlowBlockwiseProcessor:
                     walltime=self.walltime,
                 ),
                 check_function=partial(check_block, self.tmp_dir) if self.track_progress else None,
-                read_write_conflict=conflicts,
+                read_write_conflict=False,
                 fit="overhang",
                 max_retries=0,
                 timeout=None,
@@ -612,7 +710,7 @@ class CellMapFlowBlockwiseProcessor:
             )
 
             task_state = _run_blockwise([task]).get(task.task_id)
-            logger.info(f"ROI {roi_idx+1}/{len(rois_to_process)} - Task state: {task_state}")
+            logger.info(f"ROI {roi_idx+1}/{len(self.regions)} - Task state: {task_state}")
             unfinished = _blocks_not_done(task_state)
             if unfinished:
                 failures.append(f"{name}: {unfinished}")
@@ -625,6 +723,28 @@ class CellMapFlowBlockwiseProcessor:
             )
             return False
         return True
+
+
+def _refuse_another_region(path, roi):
+    """Raise ConfigError if an array at ``path`` covers anything but ``roi`` (nm, z, y, x).
+
+    Resuming writes into what is there, block by block, so it must be the
+    same region. funlib's prepare_ds refuses another shape saying only that
+    the dataset is not compatible, and takes another offset with the same
+    shape, keeping the old one, which the OME check after it then blamed on
+    an older cellmap-flow's half-voxel placement.
+    """
+    try:
+        existing = open_ds(NestedDirectoryStore(path), "r")
+    except ArrayNotFoundError:
+        return
+    there = daisy.Roi(existing.roi.offset[-3:], existing.roi.shape[-3:])
+    if there != roi:
+        raise ConfigError(
+            f"{path} already holds an output covering {there} nm, and this task's covers {roi} nm: "
+            "write to a new output path, or delete it. (A run over bounding_boxes by an older "
+            "cellmap-flow wrote an array the size of the whole volume; it now covers only the boxes.)"
+        )
 
 
 def _run_blockwise(tasks, server_factory=None):
