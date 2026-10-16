@@ -92,9 +92,16 @@ function configure(): void {
   ort.env.wasm.wasmPaths = new URL("ort/", document.baseURI).href;
 }
 
-/** A tensor's values as float32: as they are, or converted from the float16 bits ORT hands back as a Uint16Array. */
-function asFloat32(tensor: ort.Tensor, name: string): Float32Array {
+/** A tensor's values as float32: as they are, or converted from float16.
+ * ORT hands float16 back in a Float16Array where the runtime has one
+ * (globalThis.Float16Array: Chrome 135+, Safari 18.2+, Firefox 129+), whose
+ * elements are the values, and as their bits in a Uint16Array where it has
+ * not (Node 22). Reading a Float16Array's values as bits turns them all to
+ * about zero, and the head then trains on nothing. */
+export function asFloat32(tensor: Pick<ort.Tensor, "type" | "data">, name: string): Float32Array {
   if (tensor.type === "float32") return tensor.data as Float32Array;
-  if (tensor.type === "float16") return float16ArrayToFloat32(tensor.data as Uint16Array);
+  if (tensor.type === "float16") {
+    return tensor.data instanceof Uint16Array ? float16ArrayToFloat32(tensor.data) : Float32Array.from(tensor.data as ArrayLike<number>);
+  }
   throw new Error(`${name} is ${tensor.type}, not float32 or float16`);
 }

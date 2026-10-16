@@ -15,7 +15,7 @@ import { resolve } from "node:path";
 import * as ort from "onnxruntime-web";
 import { describe, expect, it, vi } from "vitest";
 
-import { createFeatureRunner } from "../../src/finetune/features";
+import { asFloat32, createFeatureRunner } from "../../src/finetune/features";
 import { mulberry32 } from "../../src/finetune/head-trainer";
 import { float16ArrayToFloat32, float16ToFloat32, float32ArrayToFloat16, float32ToFloat16, headOf, withFeatureOutput, withHead } from "../../src/finetune/onnx-head";
 import { concatBytes, encodeFields, encodeLengthDelimited, encodeVarint, encodeVarintField, parseFields, readGraph, readModel, readVarint, withGraphOutput } from "../../src/finetune/onnx-proto";
@@ -321,5 +321,26 @@ describe("float16 by hand", () => {
   it("round-trips every finite float16 bit pattern through float32", () => {
     const bits = Uint16Array.from({ length: 65536 }, (_, i) => i).filter((b) => (b & 0x7c00) !== 0x7c00 || (b & 0x3ff) === 0);  // not NaN
     expect(float32ArrayToFloat16(float16ArrayToFloat32(bits))).toEqual(bits);
+  });
+});
+
+describe("asFloat32", () => {
+  const values = [0.37, -1.5, 3.75, 0];
+
+  it("decodes float16 bits handed back in a Uint16Array (a runtime without Float16Array, Node 22)", () => {
+    const bits = float32ArrayToFloat16(values);
+    expect(Array.from(asFloat32({ type: "float16", data: bits }, "f"))).toEqual(Array.from(float16ArrayToFloat32(bits)));
+  });
+
+  it("takes float16 values handed back in a Float16Array as they are, not as bits", () => {
+    // Node 22 has no Float16Array; any typed array of the values stands in
+    // for one, since what matters is that it is not a Uint16Array of bits.
+    const F16 = (globalThis as { Float16Array?: new (v: number[]) => ArrayLike<number> }).Float16Array ?? Float64Array;
+    const out = asFloat32({ type: "float16", data: new F16(values) as unknown as ort.Tensor["data"] }, "f");
+    for (let i = 0; i < values.length; i++) expect(out[i]).toBeCloseTo(values[i], 2);
+  });
+
+  it("refuses another type", () => {
+    expect(() => asFloat32({ type: "int32", data: new Int32Array(1) }, "f")).toThrow(/f is int32/);
   });
 });
