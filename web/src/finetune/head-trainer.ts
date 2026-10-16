@@ -8,9 +8,9 @@
 // map per voxel, so the whole network the trainer sees is `logits = W x + b`
 // on a row of features, and its gradient is a matrix product: plain
 // TypedArray arithmetic on the main thread, milliseconds per epoch for the
-// tens of thousands of painted voxels a session has, with a yield to the
-// event loop after every batch so the page keeps drawing and a cancel gets
-// through. Everything is deterministic for a seed: the shuffle is
+// tens of thousands of painted voxels a session has, handing the event loop
+// back every SLICE_MS (yieldEvery) so the page keeps drawing, the log
+// stream reaches the job card as the epochs end, and a cancel gets through. Everything is deterministic for a seed: the shuffle is
 // mulberry32's, the arithmetic doubles in one order.
 import type { FinetuneOptions, Head, ModelFeatures, RunReporter, Targets } from "./types";
 
@@ -179,6 +179,7 @@ export async function trainHead(pixels: PixelSet, head: Head, options: FinetuneO
   const random = mulberry32(options.seed);
   const losses: number[] = [];
   const result = () => ({ weight: Float32Array.from(w), bias: Float32Array.from(b), losses });
+  const breathe = yieldEvery(SLICE_MS);
 
   for (let epoch = 1; epoch <= options.epochs; epoch++) {
     if (report.cancelled()) return result();
@@ -223,7 +224,7 @@ export async function trainHead(pixels: PixelSet, head: Head, options: FinetuneO
       adam(b, gb, mb, vb, lr, beta1, beta2, eps, correction1, correction2);
       epochLoss += loss;
       batches++;
-      await macrotask();
+      await breathe();
       if (report.cancelled()) return result();
     }
     const mean = epochLoss / batches;
@@ -242,13 +243,24 @@ function adam(p: Float64Array, g: Float64Array, m: Float64Array, v: Float64Array
   }
 }
 
-/** A turn of the event loop: the page paints and handles its events (a
- * cancel click among them) before the next batch. scheduler.yield where the
- * browser has it (it resumes ahead of other work, unclamped); a timer
- * elsewhere, which browsers clamp to 4 ms when nested, the price of staying
- * responsive on them. */
-function macrotask(): Promise<void> {
-  const scheduler = (globalThis as { scheduler?: { yield?: () => Promise<void> } }).scheduler;
-  if (scheduler?.yield) return scheduler.yield();
-  return new Promise((resolve) => setTimeout(resolve, 0));
+/** How long the trainer computes before it hands the event loop back. */
+export const SLICE_MS = 16;
+
+/** A function to call between steps: it gives the event loop a turn once
+ * `ms` have gone by since the last one, and says whether it did.
+ *
+ * The turn is a timer task, not scheduler.yield: Chrome runs a yield's
+ * continuation ahead of every other task waiting, so a loop that yields
+ * after each batch keeps the page's other work (the log stream's events, the
+ * job card's polls) waiting until it ends, which showed every epoch's line
+ * at once, after the last. A timer waits its turn with the rest; browsers
+ * clamp it to 4 ms when nested, which a 16 ms slice keeps to a fifth. */
+export function yieldEvery(ms: number, now: () => number = () => performance.now()): () => Promise<boolean> {
+  let since = now();
+  return async () => {
+    if (now() - since < ms) return false;
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    since = now();
+    return true;
+  };
 }

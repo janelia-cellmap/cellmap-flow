@@ -9,7 +9,7 @@
 // head, and the epoch line is the one the dashboard's loss plot parses.
 import { describe, expect, it } from "vitest";
 
-import { batchLoss, concatPixels, gatherPixels, mulberry32, type PixelSet, trainHead } from "../../src/finetune/head-trainer";
+import { batchLoss, concatPixels, gatherPixels, mulberry32, type PixelSet, trainHead, yieldEvery } from "../../src/finetune/head-trainer";
 import { DEFAULT_OPTIONS, type FinetuneOptions, type Head, type ModelFeatures, type RunReporter, type Targets } from "../../src/finetune/types";
 
 // The dashboard's parser (cellmap_flow/dashboard/static/js/dashboard/finetune/loss-plot.js EPOCH_LOSS).
@@ -271,5 +271,22 @@ describe("trainHead", () => {
     await expect(trainHead(pixels, head(3, 1), options({ learningRate: 0 }), reporter())).rejects.toThrow(/learning rate/);
     await expect(trainHead(pixels, head(3, 1), options({ labelSmoothing: 1 }), reporter())).rejects.toThrow(/smoothing/);
     await expect(trainHead(pixels, head(2, 1), options(), reporter())).rejects.toThrow(/initial weights of 2 and 1 values for a 1 × 3 head/);
+  });
+});
+
+describe("yieldEvery", () => {
+  it("gives the event loop a turn only once the slice has gone by, and lets a timer queued meanwhile run", async () => {
+    let clock = 0;
+    const breathe = yieldEvery(16, () => clock);
+    clock = 10;
+    expect(await breathe()).toBe(false);
+    let timerRan = false;
+    setTimeout(() => { timerRan = true; }, 0);
+    clock = 20;
+    expect(await breathe()).toBe(true);
+    expect(timerRan).toBe(true);
+    // the slice starts again from the turn
+    clock = 30;
+    expect(await breathe()).toBe(false);
   });
 });
