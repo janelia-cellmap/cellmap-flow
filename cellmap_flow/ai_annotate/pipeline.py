@@ -2,11 +2,11 @@
 
 ``read_plane`` reads the plane ``geometry.plan_plane`` planned, on the image
 grid it planned and laid out as on screen; ``build_request`` makes it the
-request a backend sends; ``mask_to_write_shape`` puts the mask the backend
-returns onto the write box's voxels, and ``labels_for_box`` turns that into
-the labels
-``fill.paint_box`` writes: one id per connected object, background
-elsewhere, as a seed from a model's prediction is labelled.
+request a backend sends; ``mask_to_write_shape`` cuts the mask the backend
+returns into its connected objects and puts them onto the write box's
+voxels, and ``labels_for_box`` turns those into the labels ``fill.paint_box``
+writes: one id per object, background elsewhere, as a seed from a model's
+prediction is labelled.
 """
 
 import numpy as np
@@ -92,33 +92,49 @@ def build_request(plane: np.ndarray, plan: PlanePlan, profile, prompt_override=N
 
 
 def mask_to_write_shape(mask: np.ndarray, plan: PlanePlan) -> np.ndarray:
-    """``mask`` (the image's shape, as on screen) on the write box's in-plane
-    voxels, as bool, in z, y, x order (``PlanePlan.write_shape``).
+    """The objects of ``mask`` (the image's shape, as on screen) on the write
+    box's in-plane voxels, in z, y, x order (``PlanePlan.write_shape``):
+    int32, 0 for background and 1..n for the objects, numbered in the box's
+    raster order as ``scipy.ndimage.label`` numbers a mask.
 
-    Nearest neighbour, pixel centre to voxel centre: each annotation voxel
-    takes the pixel at its centre, so the mask keeps hard edges and lands
-    where it was drawn whatever the two sizes are.
+    Objects are the mask's 4-connected pieces (scipy's default, so pieces
+    touching only at a corner stay apart, as the model was asked to leave
+    them), found at the image's own resolution, where the model drew the
+    lines between them: on voxels coarser than the pixels a line can fall
+    between the pixels the voxels take, and the objects either side of it
+    still keep ids of their own. Then nearest neighbour, pixel centre to
+    voxel centre: each annotation voxel takes the object of the pixel at
+    its centre, so the mask keeps hard edges and lands where it was drawn
+    whatever the two sizes are. An object no voxel centre falls in is lost.
     """
+    from scipy.ndimage import label
+
     mask = np.asarray(mask, dtype=bool)
     if mask.ndim != 2:
         raise ValueError(f"The mask must be 2D, got shape {mask.shape}")
+    objects, _ = label(mask)
     rows, cols = screen_shape(plan.write_shape, plan.depth_axis, plan.display_dimensions)
-    if mask.shape != (rows, cols):
-        mask = np.asarray(Image.fromarray(mask.astype(np.uint8) * 255).resize((cols, rows), Image.NEAREST)) > 127
-    return np.ascontiguousarray(plan.from_screen(mask))
+    if objects.shape != (rows, cols):
+        objects = np.asarray(Image.fromarray(objects.astype(np.int32)).resize((cols, rows), Image.NEAREST))
+    objects = plan.from_screen(objects)
+    # Renumbered by first voxel, so fresh ids go to the objects in the order
+    # labelling the box itself would give them, whatever the screen layout.
+    ids, first = np.unique(objects, return_index=True)
+    order = ids[ids > 0][np.argsort(first[ids > 0])]
+    number = np.zeros(int(objects.max(initial=0)) + 1, dtype=np.int32)
+    number[order] = np.arange(1, order.size + 1)
+    return number[objects]
 
 
-def labels_for_box(mask_write: np.ndarray, existing: np.ndarray, depth_axis: int, count_up: bool,
+def labels_for_box(objects: np.ndarray, existing: np.ndarray, depth_axis: int, count_up: bool,
                    beside=None) -> np.ndarray:
-    """The labels for the write box: an id per object of ``mask_write``, 1 elsewhere.
+    """The labels for the write box: an id per object of ``objects``, 1 elsewhere.
 
-    ``mask_write`` is the in-plane mask (``mask_to_write_shape``),
-    ``existing`` the one-voxel-thick box as the volume holds it. Objects are
-    the mask's 4-connected pieces in the plane (scipy's default, so pieces
-    touching only at a corner stay apart, as the model was asked to leave
-    them), labelled by ``fill.seed_labels``: an object the user has already
-    painted part of keeps that id, the rest get fresh ones, counting up for
-    an instance target's ``count_up``.
+    ``objects`` is the in-plane objects (``mask_to_write_shape``), 0 for
+    background, ``existing`` the one-voxel-thick box as the volume holds
+    it. The objects are labelled by ``fill.seed_labels``: an object the user
+    has already painted part of keeps that id, the rest get fresh ones,
+    counting up for an instance target's ``count_up``.
 
     ``beside`` is the planes on either side of the box along the depth axis,
     as the volume holds them (each shaped like ``existing``, or None at the
@@ -130,12 +146,9 @@ def labels_for_box(mask_write: np.ndarray, existing: np.ndarray, depth_axis: int
     ids too, so a new object does not take the id of a different object
     right next to it, which an instance target would read as one object.
     """
-    from scipy.ndimage import label
-
     from cellmap_flow.finetune.session.fill import seed_labels
 
-    objects, _ = label(np.asarray(mask_write, dtype=bool))
-    objects = np.expand_dims(objects, depth_axis)
+    objects = np.expand_dims(np.asarray(objects), depth_axis)
     if objects.shape != existing.shape:
         raise ValueError(f"The mask makes a box of {objects.shape}; the box holds {existing.shape}")
     planes = [np.asarray(p, dtype=existing.dtype) for p in (beside or ()) if p is not None]

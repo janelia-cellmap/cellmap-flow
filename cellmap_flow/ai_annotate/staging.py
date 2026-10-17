@@ -3,11 +3,11 @@
 A model's result is not written into the annotation volume until the user
 accepts it. Until then it lives in ``<corrections_dir>/.ai_annotate/<id>/``:
 the image sent (``input.png``), the image the model returned
-(``model.png``, when it returned one), the mask on the write box's voxels
-(``mask_write.npy``) and ``meta.json`` (the plan, the prompt, the model, the
-label name). Accepting writes the mask and discards the directory, as
-rejecting does. Nothing secret is staged: the prompt and ids are the user's
-own, and no provider credential ever reaches these functions.
+(``model.png``, when it returned one), the mask's objects on the write box's
+voxels (``mask_write.npy``) and ``meta.json`` (the plan, the prompt, the
+model, the label name). Accepting writes the objects and discards the
+directory, as rejecting does. Nothing secret is staged: the prompt and ids
+are the user's own, and no provider credential ever reaches these functions.
 
 The id is the server's (``new_annotate_id``) and is checked against
 ``ANNOTATE_ID_RE`` before it is joined into any path, so an id from a
@@ -78,14 +78,14 @@ def stage(
     """Stage a model's result for review; returns the meta written to meta.json.
 
     ``plan`` is the ``PlanePlan``, ``request`` and ``result`` the backend's
-    ``SegmentRequest`` and ``SegmentResult``, ``mask_write`` the mask on the
-    write box (``pipeline.mask_to_write_shape``). Staging the same id again
-    (a resend) replaces what was there; meta.json is written last, so a
-    staging with one is complete.
+    ``SegmentRequest`` and ``SegmentResult``, ``mask_write`` the mask's
+    objects on the write box (``pipeline.mask_to_write_shape``). Staging the
+    same id again (a resend) replaces what was there; meta.json is written
+    last, so a staging with one is complete.
     """
     directory = staging_dir(corrections_dir, annotate_id)
     directory.mkdir(parents=True, exist_ok=True)
-    mask_write = np.asarray(mask_write, dtype=bool)
+    mask_write = np.asarray(mask_write)
     if mask_write.shape != tuple(plan.write_shape):
         raise ValueError(f"The mask is {mask_write.shape}, the plan's write box {tuple(plan.write_shape)}")
 
@@ -110,7 +110,7 @@ def stage(
         "provider_id": provider_id,
         "model": model,
         "label_name": label_name,
-        "mask_fraction": float(mask_write.mean()) if mask_write.size else 0.0,
+        "mask_fraction": float((mask_write > 0).mean()) if mask_write.size else 0.0,
         "usage": dict(result.usage or {}),
         "created_at": datetime.now().astimezone().isoformat(timespec="seconds"),
     }
@@ -172,7 +172,7 @@ def preview(corrections_dir, annotate_id) -> dict:
         "input_png": png_base64(input_image),
         "model_png": model_png,
         "overlay_png": png_base64(
-            overlay(input_image, to_screen(mask_write, meta["plan"]["depth_axis"],
+            overlay(input_image, to_screen(mask_write > 0, meta["plan"]["depth_axis"],
                                            meta["plan"].get("display_dimensions")), meta["target_rgb"])
         ),
     }

@@ -48,7 +48,8 @@ flat in C order (``make_fixtures.array_record``). The sections of
     ``pipeline._resize`` (PIL BOX when shrinking, BILINEAR otherwise) of
     small float32 planes, float32 results.
 ``mask_to_write_shape``
-    random masks of a plan's image put on its write box.
+    random masks of a plan's image cut into objects on its write box, and
+    two objects parted by a one-pixel line on voxels coarser than the pixels.
 ``box_voxels``, ``fresh_ids``, ``seed_labels``, ``labels_for_box``
     the box arithmetic and the ids, incl. refusals' messages.
 ``paint_box``
@@ -71,6 +72,7 @@ from pathlib import Path
 
 import numpy as np
 import zarr
+from scipy.ndimage import label
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -284,12 +286,16 @@ def make_resize(rng: np.random.Generator) -> list:
 
 
 def make_mask_to_write_shape(rng: np.random.Generator, plans: dict) -> list:
+    masks = [(plan_id, plan_id, rng.random(tuple(plans[plan_id].image_shape)) < 0.5) for plan_id in MASK_PLAN_IDS]
+    # 32 px on 16 voxels: each voxel takes an odd pixel column, none the
+    # line in column 16 between the two objects.
+    line = np.ones(tuple(plans["small_z"].image_shape), dtype=bool)
+    line[:, 16] = False
+    masks.append(("small_z_line", "small_z", line))
     cases = []
-    for plan_id in MASK_PLAN_IDS:
-        plan = plans[plan_id]
-        mask = rng.random(tuple(plan.image_shape)) < 0.5
-        out = pipeline.mask_to_write_shape(mask, plan)
-        cases.append({"plan": plan_id, "mask": array_record(mask.astype(np.uint8)), "write": array_record(out.astype(np.uint8))})
+    for case_id, plan_id, mask in masks:
+        out = pipeline.mask_to_write_shape(mask, plans[plan_id])
+        cases.append({"id": case_id, "plan": plan_id, "mask": array_record(mask.astype(np.uint8)), "write": array_record(out)})
     return cases
 
 
@@ -431,9 +437,10 @@ def make_labels_for_box() -> list:
 
     out = []
     for case_id, mask, existing, depth_axis, count_up, beside in cases:
-        labels = pipeline.labels_for_box(mask, existing, depth_axis, count_up=count_up, beside=beside)
+        objects, _ = label(mask)
+        labels = pipeline.labels_for_box(objects, existing, depth_axis, count_up=count_up, beside=beside)
         out.append({
-            "id": f"{case_id}_axis{depth_axis}", "mask": array_record(mask.astype(np.uint8)), "existing": array_record(existing),
+            "id": f"{case_id}_axis{depth_axis}", "objects": array_record(objects), "existing": array_record(existing),
             "depth_axis": depth_axis, "count_up": count_up,
             "beside": None if beside is None else [None if p is None else array_record(p) for p in beside],
             "labels": array_record(labels),

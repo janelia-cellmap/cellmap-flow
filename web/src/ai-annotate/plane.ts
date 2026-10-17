@@ -30,7 +30,7 @@
 // (membranes fade rather than alias), bilinear when it grows (the coarse
 // axis of an anisotropic plane), each pass accumulated in double and stored
 // as float32 as PIL stores its "F" images; nearest neighbour, pixel centre
-// to voxel centre, for the mask.
+// to voxel centre, for the mask's objects.
 import type { DatasetInfo, Inference, PaintVolume } from "../contracts";
 import { padded } from "../../chunkmirage/web/src/stages";
 import { chooseRawLevel, clipBox, type Level } from "../infer/geometry";
@@ -240,39 +240,55 @@ export function buildRequest(plane: RawPlane, plan: PlanePlan, profile: Organell
   };
 }
 
-/** `mask` (one byte per pixel of the plan's image, rows first, as on
- * screen) on the write box's in-plane voxels, 0 or 1, in z, y, x order
- * (writeShape; pipeline.mask_to_write_shape). Nearest neighbour, pixel
- * centre to voxel centre: each annotation voxel takes the pixel at its
- * centre, so the mask keeps hard edges and lands where it was drawn whatever
- * the two sizes are. */
-export function maskToWriteShape(mask: Uint8Array, plan: PlanePlan): Uint8Array {
+/** The objects of `mask` (one byte per pixel of the plan's image, rows
+ * first, as on screen, nonzero = set) on the write box's in-plane voxels, in
+ * z, y, x order (writeShape; pipeline.mask_to_write_shape): 0 for
+ * background and 1..n for the objects, numbered in the box's raster order
+ * as label2d numbers a mask.
+ *
+ * Objects are the mask's 4-connected pieces (label2d, so pieces touching
+ * only at a corner stay apart, as the model was asked to leave them), found
+ * at the image's own resolution, where the model drew the lines between
+ * them: on voxels coarser than the pixels a line can fall between the
+ * pixels the voxels take, and the objects either side of it still keep ids
+ * of their own. Then nearest neighbour, pixel centre to voxel centre: each
+ * annotation voxel takes the object of the pixel at its centre, so the mask
+ * keeps hard edges and lands where it was drawn whatever the two sizes
+ * are. An object no voxel centre falls in is lost. */
+export function maskToWriteShape(mask: Uint8Array, plan: PlanePlan): Int32Array {
   const [imageRows, imageCols] = plan.image_shape;
   if (mask.length !== imageRows * imageCols) throw new Error(`the mask has ${mask.length} pixels, the plan's image ${imageRows}×${imageCols}`);
+  const { objects, count } = label2d(mask, imageRows, imageCols);
   const [rows, cols] = screenShape(writeShape(plan), plan.depth_axis, plan.display_dimensions);
-  let onScreen = mask;
+  let onScreen = objects;
   if (rows !== imageRows || cols !== imageCols) {
     const rowOf = nearestIndices(imageRows, rows), colOf = nearestIndices(imageCols, cols);
-    onScreen = new Uint8Array(rows * cols);
-    for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) onScreen[r * cols + c] = mask[rowOf[r] * imageCols + colOf[c]] ? 1 : 0;
-  } else {
-    onScreen = new Uint8Array(mask.length);
-    for (let i = 0; i < mask.length; i++) onScreen[i] = mask[i] ? 1 : 0;
+    onScreen = new Int32Array(rows * cols);
+    for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) onScreen[r * cols + c] = objects[rowOf[r] * imageCols + colOf[c]];
   }
-  return fromScreen(onScreen, rows, cols, plan.depth_axis, plan.display_dimensions).data;
+  const write = fromScreen(onScreen, rows, cols, plan.depth_axis, plan.display_dimensions).data;
+  // Renumbered by first voxel, so fresh ids go to the objects in the order
+  // labelling the box itself would give them, whatever the screen layout.
+  const number = new Int32Array(count + 1);
+  let next = 0;
+  for (let i = 0; i < write.length; i++) {
+    const o = write[i];
+    if (o === 0) continue;
+    if (number[o] === 0) number[o] = ++next;
+    write[i] = number[o];
+  }
+  return write;
 }
 
 /** The labels for the write box [writeLo, writeHi): an id per object of
- * `maskWrite`, 1 elsewhere (pipeline.labels_for_box).
+ * `objects`, 1 elsewhere (pipeline.labels_for_box).
  *
- * `maskWrite` is the in-plane mask (maskToWriteShape), `existing` the
- * one-voxel-thick box as the volume holds it (fill.readBox, C order), which
- * for a box one voxel thick along `depthAxis` is laid out exactly as the
- * plane is. Objects are the mask's 4-connected pieces in the plane (scipy's
- * default, so pieces touching only at a corner stay apart, as the model was
- * asked to leave them), labelled by seedLabels: an object the user has
- * already painted part of keeps that id, the rest get fresh ones, counting
- * up for an instance target's `countUp`.
+ * `objects` is the in-plane objects (maskToWriteShape), 0 for background,
+ * `existing` the one-voxel-thick box as the volume holds it (fill.readBox,
+ * C order), which for a box one voxel thick along `depthAxis` is laid out
+ * exactly as the plane is. The objects are labelled by seedLabels: an
+ * object the user has already painted part of keeps that id, the rest get
+ * fresh ones, counting up for an instance target's `countUp`.
  *
  * `beside` is the planes on either side of the box along the depth axis, as
  * the volume holds them (each laid out like `existing`, or null at the
@@ -285,7 +301,7 @@ export function maskToWriteShape(mask: Uint8Array, plan: PlanePlan): Uint8Array 
  * too, so a new object does not take the id of a different object right
  * next to it, which an instance target would read as one object. */
 export function labelsForBox(
-  maskWrite: Uint8Array,
+  objects: ArrayLike<number>,
   existing: Labels,
   writeLo: readonly number[],
   writeHi: readonly number[],
@@ -296,9 +312,8 @@ export function labelsForBox(
   const [rowAxis, colAxis] = planeAxes({ depth_axis: depthAxis });
   const rows = writeHi[rowAxis] - writeLo[rowAxis], cols = writeHi[colAxis] - writeLo[colAxis];
   if (writeHi[depthAxis] - writeLo[depthAxis] !== 1) throw new Error(`The box ${writeLo.join(",")}..${writeHi.join(",")} is not one voxel thick along axis ${depthAxis}`);
-  if (maskWrite.length !== rows * cols) throw new Error(`The mask makes a box of ${rows * cols} voxels; the box holds ${maskWrite.length}`);
+  if (objects.length !== rows * cols) throw new Error(`The mask makes a box of ${rows * cols} voxels; the box holds ${objects.length}`);
   if (existing.length !== rows * cols) throw new Error(`The mask makes a box of ${rows * cols} voxels; the box holds ${existing.length}`);
-  const { objects } = label2d(maskWrite, rows, cols);
   const planes = beside.filter((p): p is Labels => p !== null);
   if (planes.some((p) => p.length !== existing.length)) throw new Error(`The planes beside the box must hold ${existing.length} voxels`);
   if (!planes.length) return seedLabels(objects, existing, countUp);

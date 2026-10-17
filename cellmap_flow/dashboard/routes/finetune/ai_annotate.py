@@ -432,7 +432,7 @@ def _ask_and_stage(ai, job, viewer, config, segment_request):
         volume_id=job["volume_id"],
     )
     preview = staging.preview(job["corrections_dir"], job["annotate_id"])
-    mask_fraction = float(meta.get("mask_fraction", np.mean(mask_write)))
+    mask_fraction = float(meta.get("mask_fraction", np.mean(mask_write > 0)))
     _set(ai, job, status="ready", stage=None, error=None, mask_fraction=mask_fraction, preview=preview)
     _audit(
         job["corrections_dir"], "staged", annotate_id=job["annotate_id"], volume_id=job["volume_id"],
