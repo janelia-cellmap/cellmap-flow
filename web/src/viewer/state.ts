@@ -80,6 +80,28 @@ export function sourceUrls(source: unknown): string[] {
   return url === null ? [] : [url];
 }
 
+/** `source` with the URLs it names (sourceUrls') replaced by `fn`, in the
+ * form it is in: a string, a {url, ...} with its other keys kept, or a list
+ * of either. `fn` gives a URL's replacement, or null to keep it; an entry
+ * whose URL is kept, or that names none, stays as it is. null when `fn`
+ * keeps every URL. */
+export function mapSourceUrls(source: unknown, fn: (url: string) => string | null): unknown | null {
+  if (Array.isArray(source)) {
+    let replaced = false;
+    const entries = source.map((entry) => {
+      const next = mapSourceUrls(entry, fn);
+      if (next === null) return entry;
+      replaced = true;
+      return next;
+    });
+    return replaced ? entries : null;
+  }
+  const url = sourceUrl(source);
+  const next = url === null ? null : fn(url);
+  if (next === null) return null;
+  return typeof source === "string" ? next : { ...(source as Record<string, unknown>), url: next };
+}
+
 /** `spec` as the layer `name` that takes the place of `old`, keeping what the
  * user set on `old` (routes/pipeline.py's replace_layer, through
  * cellmap_flow/viewer/layers.py). A redraw (Submit, a model added, a mark

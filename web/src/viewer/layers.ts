@@ -16,7 +16,7 @@ import { PAINT_ROUTE } from "../contracts";
 import type { Chain, DatasetInfo, LayerSpec, ModelInfo, PaintVolume, ServedModel, Step } from "../contracts";
 import { isSegmentation, outputChannels, outputDtype } from "../infer/post";
 import { outputDisplayRange, PREDICTION_COLORS, predictionShader, rawShader } from "./display";
-import type { NgState } from "./state";
+import { mapSourceUrls, type NgState, sourceUrls } from "./state";
 
 export { PREDICTION_COLORS };
 
@@ -377,19 +377,13 @@ export function respelledPaintUrl(url: string): string | null {
  * source respelled and the others kept); null when no paint-route URL is
  * in it. */
 export function respelledPaintSource(source: unknown): unknown | null {
-  if (typeof source === "string") return respelledPaintUrl(source);
-  if (Array.isArray(source)) {
-    for (let i = 0; i < source.length; i++) {
-      const respelled = respelledPaintSource(source[i]);
-      if (respelled !== null) return source.map((entry, j) => (j === i ? respelled : entry));
-    }
-    return null;
-  }
-  if (source && typeof source === "object" && typeof (source as { url?: unknown }).url === "string") {
-    const url = respelledPaintUrl((source as { url: string }).url);
-    return url === null ? null : { ...(source as Record<string, unknown>), url };
-  }
-  return null;
+  let respelled = false;
+  return mapSourceUrls(source, (url) => {
+    if (respelled) return null;  // the first paint source only
+    const next = respelledPaintUrl(url);
+    respelled = next !== null;
+    return next;
+  });
 }
 
 /** The paint volume a layer's `source` paints into: the volume segment of
@@ -401,16 +395,8 @@ export function respelledPaintSource(source: unknown): unknown | null {
  * the paint store of the browser that painted it, so a link's paint layer
  * opens only where its volume is (link.ts linkedView). */
 export function paintVolumeOf(source: unknown): string | null {
-  if (Array.isArray(source)) {
-    for (const entry of source) {
-      const volume = paintVolumeOf(entry);
-      if (volume !== null) return volume;
-    }
-    return null;
-  }
-  const url = typeof source === "string" ? source : source && typeof source === "object" ? (source as { url?: unknown }).url : null;
-  if (typeof url !== "string" || !url.startsWith("s3+")) return null;
-  return PAINT_VOLUME_SEGMENT.exec(url)?.[2] ?? null;
+  const volumes = sourceUrls(source).map((url) => (url.startsWith("s3+") ? (PAINT_VOLUME_SEGMENT.exec(url)?.[2] ?? null) : null));
+  return volumes.find((volume) => volume !== null) ?? null;
 }
 
 /** The writable segmentation layer on `url` for `volume`, as
