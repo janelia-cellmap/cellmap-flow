@@ -23,6 +23,7 @@
 // the browser that painted it. A link's `#!` view is opened without the
 // layers this browser cannot show (linkedView), the page saying which and
 // why (linkNotes), rather than with layers whose sources never answer.
+import { message } from "./backend/router";
 import { ARGS_KEY, type Catalog, type Chain, type ModelEntry, type PaintStore } from "./contracts";
 import { headOf, withHead } from "./finetune/onnx-head";
 import type { Head } from "./finetune/types";
@@ -449,8 +450,4 @@ function layerNote(layer: DroppedLayer): string {
   return layer.why === "paint"
     ? `Layer ${layer.name} is left out of the view: its paint (${layer.volume}) is kept in the browser the link was made in, and this browser has no copy of it.`
     : `Layer ${layer.name} is left out of the view: its model is not served here.`;
-}
-
-function message(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }

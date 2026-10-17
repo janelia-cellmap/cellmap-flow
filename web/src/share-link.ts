@@ -19,6 +19,7 @@
 // beside the button, with the Finetune tab's download that gives the paint
 // as a file. The page that opens the link leaves out what it cannot show
 // and says so in the same notice (showLinkNotice, called by main.ts).
+import { message } from "./backend/router";
 import { type Catalog, FINETUNED_REPO, type FinetunedRecord, type ModelEntry, type SessionStore, type ViewerController } from "./contracts";
 import { headOf } from "./finetune/onnx-head";
 import { DATASET_PARAM, finetunedRef, MODEL_PARAM, paintVolumesIn } from "./link";
@@ -95,7 +96,7 @@ export async function linkRefs(models: readonly ModelEntry[], catalog: Pick<Cata
       linked.rebuilt.push({ name: model.name, base: root.name });
     } catch (e) {
       linked.refs.push(model.folder);
-      linked.unlinked.push({ name: model.name, why: e instanceof Error ? e.message : String(e) });
+      linked.unlinked.push({ name: model.name, why: message(e) });
     }
   }
   return linked;

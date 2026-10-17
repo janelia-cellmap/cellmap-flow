@@ -498,7 +498,7 @@ export class FinetuneJobs {
         await ctx.catalog.removeFinetuned(previous);
         job.log(`${name} replaces ${was}, which is removed from this browser.`);
       } catch (error) {
-        job.log(`${was} could not be removed from this browser (${error instanceof Error ? error.message : String(error)}); it stays on the Models tab, beside ${name}.`);
+        job.log(`${was} could not be removed from this browser (${message(error)}); it stays on the Models tab, beside ${name}.`);
       }
     }
     job.log(`Serving ${name} beside ${entry.name}. WAITING_FOR_RESTART: paint where it is still wrong and Restart to train again from this ${MODE_NOUN[job.args.options.mode]}.`);
