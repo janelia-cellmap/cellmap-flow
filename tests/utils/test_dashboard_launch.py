@@ -397,6 +397,26 @@ def test_a_finetune_jobs_model_is_removed_only_once_its_job_has_ended(viewer, da
     assert killed == [] and get_session().jobs == [] and "mito_finetuned_1" not in viewer.state.layers
 
 
+@pytest.mark.parametrize("finetuned", [pytest.param(False, id="a running model"),
+                                       pytest.param(True, id="an ended finetune job's model")])
+def test_a_removed_models_shader_is_forgotten_so_a_later_layer_of_its_name_starts_fresh(viewer, dashboard,
+                                                                                       monkeypatch, finetuned):
+    """As /api/viewer/remove-layer forgets it: the ✕ left it behind, an ended finetune job's model's too."""
+    from cellmap_flow.finetune.job_manager.state import JobStatus
+
+    session = get_session()
+    if finetuned:
+        name = "mito_finetuned_1"
+        _finetune_jobs_model(monkeypatch, JobStatus.CANCELLED)
+    else:
+        name = "mito"
+        session.jobs = [_Job(name)]
+    session.shaders[name], session.shader_controls[name] = "void main() {}", {"contrast": {"range": [0, 1]}}
+
+    assert dashboard.post("/api/models/remove", json={"name": name}).status_code == 200
+    assert name not in session.shaders and name not in session.shader_controls
+
+
 def test_a_model_removed_while_starting_is_stopped_as_it_comes_up_and_can_be_submitted_again(viewer, dashboard,
                                                                                            monkeypatch):
     """Its job waiting in a queue is killed at once; what its launch still

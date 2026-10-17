@@ -13,8 +13,9 @@ when the name is absent; rename-layer answers 409 rather than overwrite
 another layer.
 
 The layer's per-name bookkeeping -- the session's ``shaders``,
-``shader_controls`` and ``extra_layers`` (dashboard.state) -- follows a
-remove or a rename, so a later layer of the same name starts fresh.
+``shader_controls`` and ``extra_layers`` (dashboard.state's
+LAYER_BOOKKEEPING) -- follows a remove or a rename, so a later layer of the
+same name starts fresh.
 
 ``path`` is opened as ``/api/set-data`` opens a dataset: any zarr, n5 or
 precomputed store the dashboard's user can read.
@@ -25,12 +26,10 @@ import logging
 from flask import jsonify, request
 
 from cellmap_flow.dashboard.routes.finetune.blueprint import finetune_bp
-from cellmap_flow.dashboard.state import get_session
+from cellmap_flow.dashboard.state import LAYER_BOOKKEEPING, get_session
 from cellmap_flow.viewer.layers import replace_layer
 
 logger = logging.getLogger(__name__)
-
-_BOOKKEEPING = ("shaders", "shader_controls", "extra_layers")
 
 
 def _error(message, status=400):
@@ -136,8 +135,7 @@ def remove_layer_from_viewer():
             with session.viewer.txn() as s:
                 if name in s.layers:
                     del s.layers[name]
-        for attr in _BOOKKEEPING:
-            getattr(session, attr).pop(name, None)
+        session.forget_layer(name)
 
         logger.info(f"Removed layer: {name} (was_present={removed})")
         return jsonify(
@@ -191,7 +189,7 @@ def rename_layer_in_viewer():
         with session.viewer.txn() as s:
             s.layers[old_name].name = new_name
 
-        for attr in _BOOKKEEPING:
+        for attr in LAYER_BOOKKEEPING:
             bookkeeping = getattr(session, attr)
             if old_name in bookkeeping:
                 bookkeeping[new_name] = bookkeeping.pop(old_name)

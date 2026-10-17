@@ -69,8 +69,9 @@ def _start(command, name):
         return None
     if _withdrawn():
         logger.info(f"Stopping '{name}', which was removed from the loaded models while it was starting")
-        job.kill()
-        session.jobs = [j for j in session.jobs if j is not job]
+        # It has no layer yet; the layer of its name, if there is one, is
+        # that of the launch a Submit started since, and stays.
+        _stop_jobs([job], drop_layers=False)
         return None
     return job
 
@@ -355,12 +356,48 @@ def running_names() -> set:
     return {job.model_name for job in get_session().jobs} | launching
 
 
-def kill_n_remove_from_neuroglancer(jobs, s):
-    """Kill ``jobs`` and drop their layers from the viewer state ``s``."""
+def _owned_by_finetune(job) -> bool:
+    """Whether ``job`` is a finetune job's server (finetune_layers marks it):
+    the Finetune tab's to stop, never the Models tab's."""
+    return getattr(job, "owned_by_finetune", False)
+
+
+def _stop_jobs(jobs, *, drop_layers=True):
+    """Stop ``jobs`` and forget them: how Submit stops a model unticked,
+    the Loaded models list's ✕ the model removed, and ``_start`` a model
+    removed while it was starting.
+
+    Each job's layer goes from the viewer, when there is one, and with it
+    what the session keeps to build a layer of that name with
+    (Session.forget_layer), as /api/viewer/remove-layer does: a later layer
+    of the name starts fresh. Its server is killed, unless a finetune job
+    owns it: that job stops its own server, and ``remove_model`` passes one
+    only once the job has ended. Then the job goes from the session's jobs,
+    by identity (another job of its name stays): a killed job left there
+    still counted as running, so selecting that model again did nothing,
+    and each PUT /api/pipeline rebuilt a layer pointing at its dead host.
+
+    ``drop_layers=False`` leaves the layers and the bookkeeping alone, for
+    a job that never had a layer of its own.
+    """
+    jobs = list(jobs)
+    if not jobs:
+        return
+    session = get_session()
+    if drop_layers:
+        names = list(dict.fromkeys(job.model_name for job in jobs))
+        if session.viewer is not None:
+            with session.viewer.txn() as s:
+                for name in names:
+                    if name in s.layers:
+                        del s.layers[name]
+        for name in names:
+            session.forget_layer(name)
     for job in jobs:
-        if job.model_name in s.layers:
-            del s.layers[job.model_name]
-        job.kill()
+        if not _owned_by_finetune(job):
+            job.kill()
+    stopped = {id(job) for job in jobs}
+    session.jobs = [j for j in session.jobs if id(j) not in stopped]
 
 
 def update_run_models(names: List[str], hf_repos: List[str] = None, bioimage_models: List[dict] = None,
@@ -390,78 +427,71 @@ def update_run_models(names: List[str], hf_repos: List[str] = None, bioimage_mod
     # Not a finetune job's server (finetune_layers marks it): it is the
     # training job itself, and its name, new with each iteration, has no
     # box on a Models tab rendered before it, so every Submit bkilled it.
-    to_be_killed = [
-        j for j in session.jobs if j.model_name not in all_names and not getattr(j, "owned_by_finetune", False)
-    ]
+    to_be_killed = [j for j in session.jobs if j.model_name not in all_names and not _owned_by_finetune(j)]
     names_running = running_names() - {j.model_name for j in to_be_killed}
 
     threads = []
     st_data = PipelineSpec.from_steps(session.input_norms, session.postprocess).to_url_blob()
 
     print(f"Current catalog: {session.model_catalog}")
-    with session.viewer.txn() as s:
-        kill_n_remove_from_neuroglancer(to_be_killed, s)
-        # Forget them too: a killed job left in the jobs still counts as
-        # running, so selecting that model again did nothing, and each
-        # PUT /api/pipeline rebuilt a layer pointing at its dead host.
-        session.jobs = [j for j in session.jobs if j not in to_be_killed]
-        # Launch local catalog models
-        for _, group in session.model_catalog.items():
-            for name, model_path in group.items():
-                if name in names and name not in names_running:
-                    logger.info(f"To be submitted model : {model_path}")
-                    threads.append(_launch(name, run_model, model_path, name, st_data))
+    _stop_jobs(to_be_killed)
+    # Launch local catalog models
+    for _, group in session.model_catalog.items():
+        for name, model_path in group.items():
+            if name in names and name not in names_running:
+                logger.info(f"To be submitted model : {model_path}")
+                threads.append(_launch(name, run_model, model_path, name, st_data))
 
-        # Launch Hugging Face models
-        for repo in hf_repos:
-            hf_name = _sanitize_job_name(repo.split("/")[-1])
-            if hf_name not in names_running:
-                logger.info(f"To be submitted HF model : {repo}")
-                # Create and store HuggingFaceModelConfig for pipeline builder
-                hf_config = HuggingFaceModelConfig(repo=repo, name=hf_name)
-                existing_names = [getattr(mc, 'name', None) for mc in session.models_config]
-                if hf_name not in existing_names:
-                    session.models_config.append(hf_config)
-                threads.append(_launch(hf_name, run_hf_model, repo, hf_name, st_data))
+    # Launch Hugging Face models
+    for repo in hf_repos:
+        hf_name = _sanitize_job_name(repo.split("/")[-1])
+        if hf_name not in names_running:
+            logger.info(f"To be submitted HF model : {repo}")
+            # Create and store HuggingFaceModelConfig for pipeline builder
+            hf_config = HuggingFaceModelConfig(repo=repo, name=hf_name)
+            existing_names = [getattr(mc, 'name', None) for mc in session.models_config]
+            if hf_name not in existing_names:
+                session.models_config.append(hf_config)
+            threads.append(_launch(hf_name, run_hf_model, repo, hf_name, st_data))
 
-        # Launch BioImage Model Zoo models. Their config is kept, as a
-        # Hugging Face model's is, for the pipeline builder and for the
-        # Models tab to tick them on its next render (index_page). One left
-        # from an earlier run is replaced: its voxel size may be another.
-        for params in bioimage_params:
-            if params["name"] not in names_running:
-                logger.info(f"To be submitted bioimage model : {params}")
-                session.models_config = [
-                    mc for mc in session.models_config
-                    if not (isinstance(mc, BioModelConfig) and mc.name == params["name"])
-                ] + [BioModelConfig(**params)]
-                threads.append(_launch(params["name"], run_bioimage_model, params, st_data))
+    # Launch BioImage Model Zoo models. Their config is kept, as a
+    # Hugging Face model's is, for the pipeline builder and for the
+    # Models tab to tick them on its next render (index_page). One left
+    # from an earlier run is replaced: its voxel size may be another.
+    for params in bioimage_params:
+        if params["name"] not in names_running:
+            logger.info(f"To be submitted bioimage model : {params}")
+            session.models_config = [
+                mc for mc in session.models_config
+                if not (isinstance(mc, BioModelConfig) and mc.name == params["name"])
+            ] + [BioModelConfig(**params)]
+            threads.append(_launch(params["name"], run_bioimage_model, params, st_data))
 
-        # Launch Cellpose models, keeping their config as a zoo model's is.
-        for params in cellpose_params:
-            if params["name"] not in names_running:
-                logger.info(f"To be submitted cellpose model : {params}")
-                session.models_config = [
-                    mc for mc in session.models_config
-                    if not (isinstance(mc, CellposeModelConfig) and mc.name == params["name"])
-                ] + [CellposeModelConfig(**params)]
-                threads.append(_launch(params["name"], run_cellpose_model, params, st_data))
+    # Launch Cellpose models, keeping their config as a zoo model's is.
+    for params in cellpose_params:
+        if params["name"] not in names_running:
+            logger.info(f"To be submitted cellpose model : {params}")
+            session.models_config = [
+                mc for mc in session.models_config
+                if not (isinstance(mc, CellposeModelConfig) and mc.name == params["name"])
+            ] + [CellposeModelConfig(**params)]
+            threads.append(_launch(params["name"], run_cellpose_model, params, st_data))
 
-        # Launch the other models ticked by name: one that Add a model
-        # started (routes/model_resolve), or that the YAML the dashboard was
-        # started with did, stopped since (unticked, or removed from the
-        # Loaded models list) and ticked again. No catalog entry names them,
-        # so ticking one again did nothing; their config starts them, as Add
-        # did. Not a finetuned model's: its server is its finetune job's.
-        in_catalog = {name for group in session.model_catalog.values() for name in group}
-        configs = {getattr(mc, "name", None): mc for mc in session.models_config}
-        for name in dict.fromkeys(names):
-            config = configs.get(name)
-            if (name in in_catalog or config is None or isinstance(config, FinetuneModelConfig)
-                    or name in running_names()):
-                continue
-            logger.info(f"To be submitted model, from its config : {name}")
-            threads.append(_launch(name, run_model_config, config, st_data))
+    # Launch the other models ticked by name: one that Add a model
+    # started (routes/model_resolve), or that the YAML the dashboard was
+    # started with did, stopped since (unticked, or removed from the
+    # Loaded models list) and ticked again. No catalog entry names them,
+    # so ticking one again did nothing; their config starts them, as Add
+    # did. Not a finetuned model's: its server is its finetune job's.
+    in_catalog = {name for group in session.model_catalog.values() for name in group}
+    configs = {getattr(mc, "name", None): mc for mc in session.models_config}
+    for name in dict.fromkeys(names):
+        config = configs.get(name)
+        if (name in in_catalog or config is None or isinstance(config, FinetuneModelConfig)
+                or name in running_names()):
+            continue
+        logger.info(f"To be submitted model, from its config : {name}")
+        threads.append(_launch(name, run_model_config, config, st_data))
     # for thread in threads:
     #     thread.join()
 
@@ -491,13 +521,13 @@ def _loaded_entry(name, job, config, catalog_group):
     """One model's entry of ``loaded_models``."""
     entry = {"name": name, "status": "running" if job is not None else "starting", "removable": True,
              "note": None, "hf_id": None, "zoo_id": None, "cellpose": None}
-    if getattr(job, "owned_by_finetune", False) or isinstance(config, FinetuneModelConfig):
+    if _owned_by_finetune(job) or isinstance(config, FinetuneModelConfig):
         from cellmap_flow.dashboard.finetune_layers import training_job_of
 
-        training = training_job_of(job) if getattr(job, "owned_by_finetune", False) else None
+        training = training_job_of(job) if _owned_by_finetune(job) else None
         base = training.model_name if training is not None else None
         entry.update(source="finetuned", detail=f"from {base}" if base else None)
-        if getattr(job, "owned_by_finetune", False):
+        if _owned_by_finetune(job):
             ended, note = _finetune_note(training)
             entry.update(removable=ended, note=note, status="running" if not ended else "ended")
     elif isinstance(config, HuggingFaceModelConfig):
@@ -560,15 +590,17 @@ def remove_model(name: str) -> list:
     model, and anything ticked on the Models tab and not submitted, stays as
     it is. Returns the Loaded models list as it is then.
 
-    A running model's job is killed and forgotten, as Submit does for one
-    unticked. A model still starting is withdrawn: a job of it waiting in a
-    queue is killed now, and whatever its launch still starts is stopped
-    as it comes up (``_start``), so a Submit may start it again at once. A
-    finetune job's model is that job's server: while the job is alive it
-    is the Finetune tab's to stop (NotRemovable); once the job has ended,
-    its server has too, and only its layer and its entry among the jobs are
-    left to take away. Its config stays among the session's models, as
-    every stopped model's does, for the pipeline builder.
+    A running model's job is killed and forgotten, and its layer taken away
+    with what the session keeps to build one of its name with
+    (``_stop_jobs``), as Submit does for one unticked. A model still
+    starting is withdrawn: a job of it waiting in a queue is killed now, and
+    whatever its launch still starts is stopped as it comes up (``_start``),
+    so a Submit may start it again at once. A finetune job's model is that
+    job's server: while the job is alive it is the Finetune tab's to stop
+    (NotRemovable); once the job has ended, its server has too, and only its
+    layer, with that bookkeeping, and its entry among the jobs are left to
+    take away. Its config stays among the session's models, as every stopped
+    model's does, for the pipeline builder.
 
     Raises LookupError when no model of that name is running or starting.
     """
@@ -579,7 +611,7 @@ def remove_model(name: str) -> list:
     if not jobs and launch is None:
         raise LookupError(f"No model named {name} is running")
     for job in jobs:
-        if getattr(job, "owned_by_finetune", False):
+        if _owned_by_finetune(job):
             from cellmap_flow.dashboard.finetune_layers import training_job_of
 
             ended, note = _finetune_note(training_job_of(job))
@@ -595,17 +627,6 @@ def remove_model(name: str) -> list:
             if getattr(job, "model_name", None) == name:
                 logger.info(f"Killing '{name}', removed from the loaded models while it was starting")
                 job.kill()
-    if jobs:
-        owned = [j for j in jobs if getattr(j, "owned_by_finetune", False)]
-        killed = [j for j in jobs if j not in owned]
-        if session.viewer is not None:
-            with session.viewer.txn() as s:
-                kill_n_remove_from_neuroglancer(killed, s)
-                if owned and name in s.layers:
-                    del s.layers[name]
-        else:
-            for job in killed:
-                job.kill()
-        session.jobs = [j for j in session.jobs if j not in jobs]
+    _stop_jobs(jobs)
     logger.info(f"Removed model {name}")
     return loaded_models()

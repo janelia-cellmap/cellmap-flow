@@ -26,7 +26,8 @@ rather than being stored beside the real one:
 
 - The data and the viewer: ``dataset_path``, ``resample``, ``viewer``,
   ``raw``, ``neuroglancer_url``, ``shaders``, ``shader_controls``,
-  ``extra_layers``.
+  ``extra_layers``; ``forget_layer()`` drops the last three's entries for
+  a layer taken out of the viewer.
 - The models: ``models_config``, ``model_catalog``.
 - The pipeline builder's last apply: ``builder_state``,
   ``builder_model_configs``.
@@ -56,6 +57,11 @@ from cellmap_flow.process_chain import process_chain
 
 # The builder's node lists, as /api/pipeline/apply stores them.
 _BUILDER_KEYS = ("inputs", "outputs", "edges", "normalizers", "models", "postprocessors")
+
+# What the session keeps by layer name, to build a layer of that name with:
+# its shader, its shaderControls, and a YAML's extra layer of that name.
+# Session.forget_layer drops a name's, so a later layer of it starts fresh.
+LAYER_BOOKKEEPING = ("shaders", "shader_controls", "extra_layers")
 
 
 class Session:
@@ -182,6 +188,18 @@ class Session:
             "viewer_url": None,
             "viewer_state": None,
         }
+
+    # The data and the viewer
+    def forget_layer(self, name):
+        """Drop what the session keeps to build a layer named ``name`` with
+        (LAYER_BOOKKEEPING), so a later layer of that name starts fresh.
+
+        For a layer taken out of the viewer: by /api/viewer/remove-layer
+        (routes/finetune/layers.py), or with its model stopped
+        (services/launch.py).
+        """
+        for attr in LAYER_BOOKKEEPING:
+            getattr(self, attr).pop(name, None)
 
     # The models
     @property
