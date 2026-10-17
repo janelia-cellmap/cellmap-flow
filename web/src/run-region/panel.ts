@@ -96,7 +96,6 @@ export const TYPED_BOX_DELAY_MS = 400;
  * has a few GB at most. */
 export const PEAK_WARN_BYTES = 512e6;
 
-/** What the Output folder row says of a drop that is not one folder. */
 const OUTPUT_DROP: DropWording = {
   notOne: "Drop one folder: the one the predictions go to.",
   noHandle: "This browser gives no handle for a dropped folder: use Choose folder… in Chrome or Edge.",
@@ -123,8 +122,6 @@ export function installRunRegionUi(ctx: AppContext, opts: { folders?: HandleStor
     progress: byId(IDS.progress)!, progressBar: byId(IDS.progressBar)!, progressText: byId(IDS.progressText)!,
     results: byId(IDS.results)!, log: byId<HTMLTextAreaElement>(IDS.log)!,
   };
-  // The IndexedDB store of picked handles, which the service worker reads
-  // the local/ route's folders from.
   const folders = opts.folders ?? indexedDbHandles<OutputFolder>();
   const supported = opts.supported ?? supportsLocalFolders();
 

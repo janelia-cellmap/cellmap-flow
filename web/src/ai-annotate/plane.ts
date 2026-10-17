@@ -55,9 +55,6 @@ export function levelCornerNm(level: Pick<Level, "origin" | "voxel">): number[] 
   return level.origin.map((o, a) => o - level.voxel[a] / 2);
 }
 
-/** Where a level's voxels are, in world nm z, y, x: from the lower corner
- * of its voxel 0 (levelCornerNm), `offset`, over `size`, its shape times
- * its voxel size. */
 export function levelExtentNm(level: Pick<Level, "origin" | "voxel" | "shape">): { offset: number[]; size: number[] } {
   return { offset: levelCornerNm(level), size: level.shape.map((n, a) => n * level.voxel[a]) };
 }

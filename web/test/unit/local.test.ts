@@ -6,7 +6,6 @@ import { describe, expect, it } from "vitest";
 
 import type { SessionStore } from "../../src/contracts";
 import {
-  ensurePermission,
   folderNameOf,
   type HandleStore,
   installLocalFolderUi,
@@ -273,6 +272,7 @@ describe("openLocalFolder", () => {
     expect(handles.stored.size).toBe(1);
     const [key, stored] = [...handles.stored.entries()][0];
     expect(stored).toBe(handle);
+    expect(handle.asked).toBe(0);
     expect(key).toMatch(/^[a-z0-9]{6}-volume\.zarr$/);
     expect(panel.connected).toEqual([`http://localhost:5173/local/${key}/`]);
     expect(localKeyOf(panel.connected[0], ROOT_PAGE)).toBe(key);
@@ -302,18 +302,6 @@ describe("openLocalFolder", () => {
     await openLocalFolder(fakeHandle("volume.zarr", "granted"), { log: () => {}, panel, handles: fakeHandles({}, "IndexedDB refused"), base: ROOT_PAGE });
     expect(panel.connected).toEqual([]);
     expect(panel.statuses).toEqual([{ message: "Could not open volume.zarr: IndexedDB refused", tone: "error" }]);
-  });
-});
-
-describe("ensurePermission", () => {
-  it("asks only when the permission is not granted yet, and gives the browser's answer", async () => {
-    const granted = fakeHandle("a.zarr", "granted");
-    expect(await ensurePermission(granted, "readwrite")).toBe("granted");
-    expect(granted.asked).toBe(0);
-    const prompt = fakeHandle("b.zarr", "prompt", ["granted"]);
-    expect(await ensurePermission(prompt, "readwrite")).toBe("granted");
-    expect(prompt.asked).toBe(1);
-    expect(await ensurePermission(fakeHandle("c.zarr", "prompt", ["denied"]), "read")).toBe("denied");
   });
 });
 

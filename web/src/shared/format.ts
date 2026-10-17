@@ -1,6 +1,3 @@
-// Numbers, sizes, durations and times as the page writes them for a person:
-// on a status line, in a log line, in a file name.
-
 /** `n` bytes in a unit a person reads: B, kB, MB or GB, decimal (as file
  * managers count them), one decimal place below 10. */
 export function formatBytes(n: number): string {
@@ -23,15 +20,11 @@ export function formatDuration(ms: number): string {
   return `${Math.floor(m / 60)} h ${m % 60} min`;
 }
 
-/** `n` with its thousands grouped by commas ("12,345"), whatever the
- * browser's locale, so the page reads the same everywhere. */
 export function count(n: number): string {
   return n.toLocaleString("en-US");
 }
 
-/** `date` as `YYYYmmdd-HHMMSS` in local time: how the server stamps its
- * volume ids and run directories, and the page the files it names after a
- * moment (a zip of predictions), so they sort by time. */
+/** `YYYYmmdd-HHMMSS`, local time, as the server stamps volume ids and run directories. */
 export function stamp(date: Date): string {
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}-${pad(date.getHours())}${pad(date.getMinutes())}${pad(date.getSeconds())}`;

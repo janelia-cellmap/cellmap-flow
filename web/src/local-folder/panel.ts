@@ -3,9 +3,8 @@
 // template gives them (templates/index.html; the Browse button and the drop
 // hint are in its browser-only block), the one-click permission prompt put
 // on the panel after a reload, and the panel as a drop target for a folder
-// from the file manager (dropDirectory, which the Run tab's Output folder
-// row is too). Behind the LocalPanel interface so the flows run on a fake in
-// the tests; nothing here is tested without a browser.
+// from the file manager. Behind the LocalPanel interface so the flows run on
+// a fake in the tests; nothing here is tested without a browser.
 //
 // The dashboard's own connect.js owns the Connect button and the status line
 // and is not changed: this fills the dataset field and clicks Connect, and
@@ -75,33 +74,17 @@ function carriesFiles(transfer: DataTransfer | null): transfer is DataTransfer {
 /** The drop's handle method as Chromium has it (not in lib.dom). */
 type HandleItem = DataTransferItem & { getAsFileSystemHandle?: () => Promise<FileSystemHandle | null> };
 
-/** What dropDirectory says of a drop it cannot take, in the words of the
- * place it is dropped on. */
+/** What dropDirectory says of a drop it cannot take; `notFolder` gets null
+ * when the browser gave no handle for it. */
 export interface DropWording {
-  /** Several things were dropped, or none the browser counts as a file. */
   notOne: string;
-  /** The browser gives no handle for a dropped item (it is not Chromium). */
   noHandle: string;
-  /** What was dropped is not a folder: `name` is its name, or null when the
-   * browser gave no handle for it. */
   notFolder(name: string | null): string;
-  /** The handle could not be had; `reason` is the error's message. */
   failed(reason: string): string;
 }
 
-/** `zone` as the drop target for one folder from the file manager: marked
- * with DROP_CLASS while a drag of files is over it, and the dropped folder's
- * handle given to `onHandle`, as the picker's would be (taken for a `T`, as
- * a real FileSystemDirectoryHandle is one). Anything else dropped (a file,
- * several things, a browser without handles for drops) is said through
- * `status`, in `wording`'s words. A drag that carries no files (the
- * dashboard's own, a chain's rows) is left alone. */
-export function dropDirectory<T extends PickedDirectory = PickedDirectory>(
-  zone: HTMLElement,
-  onHandle: (handle: T) => void,
-  status: (text: string) => void,
-  wording: DropWording,
-): void {
+/** `zone` as the drop target for one folder from the file manager. */
+export function dropDirectory<T extends PickedDirectory = PickedDirectory>(zone: HTMLElement, onHandle: (handle: T) => void, status: (text: string) => void, wording: DropWording): void {
   zone.addEventListener("dragover", (event) => {
     if (!carriesFiles(event.dataTransfer)) return;
     event.preventDefault();
@@ -131,7 +114,6 @@ export function dropDirectory<T extends PickedDirectory = PickedDirectory>(
   });
 }
 
-/** What the connect panel says of a drop that is not one volume's folder. */
 const VOLUME_DROP: DropWording = {
   notOne: "Drop one folder: the volume's .zarr or .n5 directory.",
   noHandle: "This browser gives no handle for a dropped folder; use Chrome or Edge.",

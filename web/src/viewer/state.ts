@@ -81,21 +81,12 @@ export function sourceUrls(source: unknown): string[] {
   return url === null ? [] : [url];
 }
 
-/** `source` with the URLs it names (sourceUrls') replaced by `fn`, in the
- * form it is in: a string, a {url, ...} with its other keys kept, or a list
- * of either. `fn` gives a URL's replacement, or null to keep it; an entry
- * whose URL is kept, or that names none, stays as it is. null when `fn`
- * keeps every URL. */
+/** `source` in its own form with each URL replaced by `fn`'s answer, a null
+ * answer keeping the URL; null when every answer is null. */
 export function mapSourceUrls(source: unknown, fn: (url: string) => string | null): unknown | null {
   if (Array.isArray(source)) {
-    let replaced = false;
-    const entries = source.map((entry) => {
-      const next = mapSourceUrls(entry, fn);
-      if (next === null) return entry;
-      replaced = true;
-      return next;
-    });
-    return replaced ? entries : null;
+    const entries = source.map((entry) => mapSourceUrls(entry, fn));
+    return entries.some((entry) => entry !== null) ? entries.map((entry, i) => entry ?? source[i]) : null;
   }
   const url = sourceUrl(source);
   const next = url === null ? null : fn(url);
@@ -224,19 +215,13 @@ export function coordsFromNm(nm: readonly number[], dimensions: Record<string, [
   return coords;
 }
 
-/** Where z, y and x are among a coordinate space's dimension `names`, in
- * that order: each found by its name, or, when it is not among them, at
- * its own place in z, y, x (the first three dimensions in order), as
- * pointerNm and coordsFromNm match them. */
 function zyxIndices(names: readonly string[]): number[] {
   return AXIS_NAMES.map((axis, fallback) => (names.includes(axis) ? names.indexOf(axis) : fallback));
 }
 
 // ---------------------------------------------------------------------------
 // The plane the viewer shows: cellmap_flow/ai_annotate/geometry.py's
-// depth_axis_from_layout and depth_axis_for_view, for the state's JSON. The
-// axis names and the panels' slots are ai-annotate/geometry.ts's, the port
-// of the rest of that module.
+// depth_axis_from_layout and depth_axis_for_view, for the state's JSON.
 // ---------------------------------------------------------------------------
 
 /** The panel name of a Neuroglancer layout (geometry._layout_type): the
@@ -255,8 +240,8 @@ function layoutType(layout: unknown): string | null {
  *
  * `displayDimensions` are the names of the viewer's display dimensions in
  * order (z, y, x when not given, as a viewer that sets none over z, y, x
- * shows them); see ai-annotate/geometry.ts LAYOUT_DEPTH_SLOT for why they
- * matter. Only a single-plane layout says
+ * shows them); see
+ * LAYOUT_DEPTH_SLOT for why they matter. Only a single-plane layout says
  * which plane the user is looking at: Neuroglancer keeps one layout for the
  * whole viewer, so in "4panel" or "3d" the panel the pointer is in is not
  * known. Those (and anything unrecognised) get the "xy" panel's axis, the

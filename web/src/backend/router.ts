@@ -134,5 +134,5 @@ export function objectBody(req: ApiRequest): Record<string, unknown> | null {
   return body && typeof body === "object" && !Array.isArray(body) ? (body as Record<string, unknown>) : null;
 }
 
-/** An error's message, for an answer's `error` (shared/message.ts, here for the routes). */
+/** An error's message, for an answer's `error`. */
 export { message } from "../shared/message";

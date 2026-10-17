@@ -15,7 +15,7 @@
 // voxel 0's centre (infer/geometry.ts outputLevel; label-it/prediction.ts
 // places a seed on the same grid), so voxel v of a level spans
 // [corner + v * voxel, corner + (v + 1) * voxel) with the corner half a
-// voxel before the origin (ai-annotate/plane.ts levelCornerNm). The level is the one infer/engine.ts serves the
+// voxel before the origin. The level is the one infer/engine.ts serves the
 // model's view at (servedLevel: the raw level chosen for the model's input
 // voxel size, read as if it were at that size), in nm whatever the source's
 // unit, as the viewer's coordinates are; voxel indices need no unit.
@@ -53,8 +53,6 @@ export function wholeVolumeNm(dataset: Pick<DatasetInfo, "levels">): RegionNm {
   return levelExtentNm(dataset.levels[0]);
 }
 
-/** The first voxel of the chunk that voxel `v` is in, on a grid chunked by
- * `chunk` voxels from voxel 0. */
 export function chunkStart(v: number, chunk: number): number {
   return Math.floor(v / chunk) * chunk;
 }
@@ -117,11 +115,10 @@ export function chunkGrid(lo: readonly number[], hi: readonly number[], chunk: r
   return { grid, count: grid.reduce((n, g) => n * g, 1) };
 }
 
-/** The chain a served model's view runs, from the blob in its name
- * (backend/serving.ts blobOf): the served view is named by the chain it was
- * served through, which the session's own chain may have moved past (a
- * Submit All that has not yet served the models again). Empty when the name
- * carries no blob. */
+/** The chain a served model's view runs, from the blob in its name: the
+ * served view is named by the chain it was served through, which the
+ * session's own chain may have moved past (a Submit All that has not yet
+ * served the models again). Empty when the name carries no blob. */
 export function chainOf(served: ServedModel): Chain {
   const blob = blobOf(served);
   return blob ? decodeArgs(blob).chain : { input_norm: [], postprocess: [] };

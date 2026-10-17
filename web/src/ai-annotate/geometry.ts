@@ -2,8 +2,8 @@
 // writes: the port of cellmap_flow/ai_annotate/geometry.py (screen_shape,
 // to_screen, from_screen, PlanePlan's properties, plan_plane, raw_box) for
 // the browser. The viewer side of that module, depth_axis_from_layout and
-// depth_axis_for_view, is viewer/state.ts's (depthAxisFromLayout, over
-// LAYOUT_DEPTH_SLOT here), which reads the page's Neuroglancer; the `volume` here is a PaintVolume record
+// depth_axis_for_view, is viewer/state.ts's (depthAxisFromLayout), which
+// reads the page's Neuroglancer; the `volume` here is a PaintVolume record
 // (finetune/volume.ts) and the raw grid readPlane (plane.ts) passes rawBox is
 // a DatasetInfo level's.
 //
@@ -117,7 +117,7 @@ function stripZeros(text: string): string {
  * panel is the XY plane, looking along z. A viewer that sets none (a link
  * made before they were set) shows z, y, x: its "xy" panel is a z-y slice
  * looking along x, and the XY plane is its "yz" panel (geometry.py
- * _LAYOUT_DEPTH_SLOT; viewer/state.ts depthAxisFromLayout reads it). */
+ * _LAYOUT_DEPTH_SLOT). */
 export const LAYOUT_DEPTH_SLOT: Readonly<Record<string, number>> = { xy: 2, xz: 1, yz: 0 };
 
 /** How Neuroglancer's panels draw their plane, by the display-dimension
@@ -143,9 +143,7 @@ export function displayNames(displayDimensions?: readonly string[] | null): stri
   return same ? names : [...AXIS_NAMES];
 }
 
-/** The data axis (0 z, 1 y, 2 x) that display dimension `slot` of `names`
- * is, or -1 when there is no such slot or its dimension is not z, y or x
- * (a channel axis shown as a display dimension). */
+/** The data axis (0 z, 1 y, 2 x) display slot `slot` shows, or -1 when it shows none of them. */
 export function slotAxis(names: readonly string[], slot: number): number {
   return slot < names.length ? (AXIS_NAMES as readonly string[]).indexOf(names[slot]) : -1;
 }

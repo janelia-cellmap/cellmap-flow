@@ -108,10 +108,7 @@ export function parseViewName(view: string): { name: string; blob: string | null
   return { name: decodeSegment(parts[0]), blob: parts[1] };
 }
 
-/** The model name a view name starts with, for a message about the view:
- * what comes before its first marker, as written (parseViewName also
- * percent-decodes it), and never an error, even for a name parseViewName
- * would refuse. */
+/** For a message: unlike parseViewName, never throws, and does not percent-decode. */
 export function viewModelName(view: string): string {
   return view.split(ARGS_KEY)[0];
 }
