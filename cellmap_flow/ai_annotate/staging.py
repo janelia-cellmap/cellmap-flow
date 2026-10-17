@@ -172,7 +172,8 @@ def preview(corrections_dir, annotate_id) -> dict:
         "input_png": png_base64(input_image),
         "model_png": model_png,
         "overlay_png": png_base64(
-            overlay(input_image, to_screen(mask_write, meta["plan"]["depth_axis"]), meta["target_rgb"])
+            overlay(input_image, to_screen(mask_write, meta["plan"]["depth_axis"],
+                                           meta["plan"].get("display_dimensions")), meta["target_rgb"])
         ),
     }
 

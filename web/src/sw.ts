@@ -3,8 +3,9 @@
 // (web/chunkmirage/web/src/relay.ts), as chunkmirage's own sw.ts is, with a
 // route of its own beside it. For requests from pages on this origin:
 //
-// - /api/*: the dashboard's own requests (fetch, EventSource, the Export
-//   Config download link), and
+// - /api/*: the dashboard's own requests (fetch, EventSource, and the
+//   fetches src/rebase.ts makes for its download links, whose own requests
+//   Chrome sends past this worker), and
 // - /virtual/*: Neuroglancer's chunk requests for the model layers,
 //   are both relayed to the page: `relay` posts the request to the pages it
 //   is told to ask, over a MessageChannel, and builds the Response from the

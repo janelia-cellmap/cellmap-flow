@@ -250,7 +250,7 @@ export function aiAnnotateRoutes(router: Router, deps: Partial<AiAnnotateDeps> =
       try {
         const pointer = ctx.viewer.pointerPosition();
         if (!pointer) throw new Refused("Hover the mouse over the data, then press Shift+G.", 400);
-        await beginRun(ctx, pointer, ctx.viewer.viewDepthAxis());
+        await beginRun(ctx, pointer, ctx.viewer.viewDepthAxis(), ctx.viewer.viewDisplayDimensions());
       } catch (e) {
         let text: string;
         let needsVolume = false;
@@ -280,7 +280,7 @@ export function aiAnnotateRoutes(router: Router, deps: Partial<AiAnnotateDeps> =
    * destination is acknowledged for the volume's dataset, nothing is
    * running, waiting for review or being written, the day's limit is not
    * reached, and the provider's credentials are entered. */
-  async function beginRun(ctx: AppContext, pointNm: number[], depthAxis: DepthAxis): Promise<string> {
+  async function beginRun(ctx: AppContext, pointNm: number[], depthAxis: DepthAxis, displayDimensions: string[]): Promise<string> {
     const settings = ai.settings;
     if (!settings) throw new Refused("Choose a provider, model and target for AI annotation first.", 400);
     const volume = await sessionVolume(ctx);
@@ -310,7 +310,7 @@ export function aiAnnotateRoutes(router: Router, deps: Partial<AiAnnotateDeps> =
     checkCredentials(p);
     const job = new AiAnnotateJob(jobDeps(ctx), {
       annotateId: newAnnotateId(), provider: p, providerId: settings.provider, model: settings.model, labelName,
-      depthAxis, pointNm, volume, dataset, profile, override,
+      depthAxis, displayDimensions, pointNm, volume, dataset, profile, override,
     });
     ai.job = job;
     ctx.log(`AI annotation ${job.annotateId}: ${labelName} in the ${["XY", "XZ", "YZ"][depthAxis]} plane at (${pointNm.map((v) => fmt(v)).join(", ")}) nm, ${settings.provider}/${settings.model}`);
@@ -511,7 +511,9 @@ export function aiAnnotateRoutes(router: Router, deps: Partial<AiAnnotateDeps> =
           if (!pointNm) throw new Refused("The viewer has no position.", 400);
         }
       }
-      const annotateId = await beginRun(ctx, pointNm, depthAxis);
+      // The image is laid out as the viewer's panel draws the plane, so its
+      // display dimensions are wanted even when both are given.
+      const annotateId = await beginRun(ctx, pointNm, depthAxis, ctx.viewer.viewDisplayDimensions());
       return json(200, { success: true, annotate_id: annotateId, status: "running" });
     } catch (e) {
       return answerError(ctx, e);

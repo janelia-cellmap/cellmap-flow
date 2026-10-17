@@ -4,7 +4,8 @@
 // (none: the browser's log is the console), the exported YAML config, and
 // the finetune tab's user preferences (routes/finetune/annotation_core.py),
 // kept in the session.
-import type { AppContext, Step } from "../../contracts";
+import type { AppContext, ModelEntry, Step } from "../../contracts";
+import { FINETUNED_REPO } from "../../contracts";
 import type { Router } from "../router";
 import { badRequest, json, objectBody, text } from "../router";
 import { toYaml, type YamlValue } from "../yaml";
@@ -60,30 +61,31 @@ export function configRoutes(router: Router): void {
 /** The exported configuration, as finetuned_model_templates
  * .generate_current_config_yaml writes it where there is no cluster: the
  * data path, resample, the chain as json_data (when there is one), and the
- * models as entries `cellmap_flow yaml` can rebuild. A browser model is a
- * Hugging Face repo's ONNX folder; the entry names it so, and the header
- * says what a server needs to run the same model. */
+ * models as entries `cellmap_flow yaml` can run (serverEntry): the server's
+ * onnx type serves the same ONNX files with ONNX Runtime. The header says
+ * what else a server needs, and a finetuned model's entry, on its path line,
+ * where its file goes. */
 export function exportYaml(ctx: AppContext): string {
   const { datasetUrl, chain, models, resample } = ctx.session.state;
   const hasChain = chain.input_norm.length > 0 || chain.postprocess.length > 0;
   const config: Record<string, YamlValue> = { data_path: datasetUrl ?? "", resample: Boolean(resample) };
   if (hasChain) config.json_data = { input_norm: chain.input_norm.map(stepValue), postprocess: chain.postprocess.map(stepValue) };
-  config.models = models.map((m) => ({
-    type: "huggingface",
-    repo: m.repo,
-    name: m.name,
-    folder: m.folder,
-    onnx: m.variant.file,
-  }));
+  // The session keeps each entry as the catalog gave it (its default
+  // variant); the one this page runs is the served entry's, tuned for its
+  // GPU (serving.ts), which is the file a server should run to see the same.
+  const served = ctx.infer.served();
+  config.models = models.map((m) => serverEntry(served.find((s) => s.entry.id === m.id)?.entry ?? m));
   let header =
     "# CellMap-Flow exported configuration\n" +
     "# Reload with: cellmap_flow yaml <this file>\n" +
     "#\n" +
-    "# Exported from the browser mode: its models are the ONNX exports in the\n" +
-    "# Hugging Face repository named by each entry (folder, onnx), run on this\n" +
-    "# machine's GPU. To run the same models on the cluster, point each entry\n" +
-    "# at the PyTorch model (a repo with metadata.json, or a folder_path) and\n" +
-    "# add charge_group: and queue:.\n" +
+    "# Exported from the browser mode. Each model is an ONNX export, which the\n" +
+    "# server serves with ONNX Runtime (type: onnx, in pixi.toml's onnx\n" +
+    "# environment): a Hugging Face model by its repo, folder and file, the\n" +
+    "# variant this browser ran; a model finetuned here by the .onnx that the\n" +
+    "# Finetune tab's Download finetuned model saves, which carries its\n" +
+    "# manifest. A relative path is taken from this file's folder. On the\n" +
+    "# cluster, add charge_group: and queue:.\n" +
     "#\n";
   if (!hasChain) {
     header +=
@@ -92,7 +94,36 @@ export function exportYaml(ctx: AppContext): string {
       "# need one (e.g. logit outputs need a SigmoidPostprocessor).\n" +
       "#\n";
   }
-  return header + toYaml(config);
+  let yaml = toYaml(config);
+  // The emitter writes no comments, so the finetuned models' path lines get
+  // theirs here: the line is the emitter's own rendering of the entry's path.
+  for (const m of models) {
+    if (m.repo !== FINETUNED_REPO) continue;
+    const line = `  ${toYaml({ path: finetunedFile(m) }).trimEnd()}\n`;
+    yaml = yaml.replace(line, `${line.trimEnd()}  # the file Download finetuned model saves: put it beside this YAML\n`);
+  }
+  return header + yaml;
+}
+
+/** A served model as the server's model entry, `type: onnx`
+ * (cellmap_flow/models/configs/onnx.py), with serverParams. */
+export function serverEntry(m: ModelEntry): Record<string, YamlValue> {
+  return { type: "onnx", name: m.name, ...serverParams(m, true) };
+}
+
+/** The server's onnx type's arguments for a model: a Hugging Face export by
+ * repo and folder, and with `withFile` its variant's file (for a served
+ * entry, the variant chosen for this GPU), so the server runs the same one;
+ * a model finetuned here by `path`, the file its download saves under its
+ * name, beside the YAML. */
+export function serverParams(m: ModelEntry, withFile: boolean): Record<string, YamlValue> {
+  if (m.repo === FINETUNED_REPO) return { path: finetunedFile(m) };
+  return { repo: m.repo, folder: m.folder, ...(withFile ? { file: m.variant.file } : {}) };
+}
+
+/** The file name a finetuned model downloads as (routes/finetune.ts). */
+function finetunedFile(m: ModelEntry): string {
+  return `${m.name}.onnx`;
 }
 
 function stepValue(step: Step): YamlValue {

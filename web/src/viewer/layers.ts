@@ -242,6 +242,18 @@ export function dimensionsOf(info: DatasetInfo): NgDimensions {
   return dimensions;
 }
 
+/** The display dimensions for a viewer whose dimensions are `names`
+ * (bootstrap.display_dimensions): x, y, z when it has all three, else
+ * undefined (Neuroglancer's default, the first three in order). The "xy"
+ * panel shows the first two: cellmap-flow names its dimensions z, y, x, so
+ * that panel showed z across and y down, and a 2D model, which computes one
+ * z-slice at a time, was asked for a block for every z position on screen.
+ * With x, y, z it is the XY plane, x across and y down, looking along z,
+ * and the positions stay z, y, x. */
+export function displayDimensionsFor(names: readonly string[]): string[] | undefined {
+  return ["x", "y", "z"].every((axis) => names.includes(axis)) ? ["x", "y", "z"] : undefined;
+}
+
 /** The volume's centre as a viewer position: in voxels of dimensionsOf, the
  * finest level's, measured from the coordinate origin (the level's origin,
  * nm, is the corner of its voxel 0, so it is part of the position). */
@@ -258,13 +270,17 @@ export function layerList(layers: Record<string, LayerSpec>): NgState["layers"] 
 }
 
 /** A new viewer's state on the raw data `info` describes (bootstrap.new_viewer):
- * the raw's dimensions, the position at the volume's centre, one voxel per
- * screen pixel (crossSectionScale 1, Neuroglancer's default, which the Python
- * viewer leaves), `layers` in their order, the raw first, and the layout. */
+ * the raw's dimensions, shown x, y, z (displayDimensionsFor), the position at
+ * the volume's centre, one voxel per screen pixel (crossSectionScale 1,
+ * Neuroglancer's default, which the Python viewer leaves), `layers` in their
+ * order, the raw first, and the layout. */
 export function initialState(info: DatasetInfo, layers: Record<string, LayerSpec>, options: { layout?: string } = {}): NgState {
+  const dimensions = dimensionsOf(info);
+  const displayDimensions = displayDimensionsFor(Object.keys(dimensions));
   return {
     gpuMemoryLimit: GPU_MEMORY_LIMIT,
-    dimensions: dimensionsOf(info),
+    dimensions,
+    ...(displayDimensions ? { displayDimensions } : {}),
     position: centrePosition(info),
     crossSectionScale: 1,
     layers: layerList(layers),
@@ -374,6 +390,27 @@ export function respelledPaintSource(source: unknown): unknown | null {
     return url === null ? null : { ...(source as Record<string, unknown>), url };
   }
   return null;
+}
+
+/** The paint volume a layer's `source` paints into: the volume segment of
+ * its paint-route URL, the refresh suffix dropped, whichever of
+ * Neuroglancer's forms the source is in (the first paint source of an
+ * array); null for any other layer. Only the fork's `s3+` scheme counts, the
+ * one paintLayerUrl writes, so a raw volume whose path happens to hold a
+ * `paint` folder is not taken for one. For a shared link: the paint is in
+ * the paint store of the browser that painted it, so a link's paint layer
+ * opens only where its volume is (link.ts linkedView). */
+export function paintVolumeOf(source: unknown): string | null {
+  if (Array.isArray(source)) {
+    for (const entry of source) {
+      const volume = paintVolumeOf(entry);
+      if (volume !== null) return volume;
+    }
+    return null;
+  }
+  const url = typeof source === "string" ? source : source && typeof source === "object" ? (source as { url?: unknown }).url : null;
+  if (typeof url !== "string" || !url.startsWith("s3+")) return null;
+  return PAINT_VOLUME_SEGMENT.exec(url)?.[2] ?? null;
 }
 
 /** The writable segmentation layer on `url` for `volume`, as

@@ -102,7 +102,7 @@ def mask_to_write_shape(mask: np.ndarray, plan: PlanePlan) -> np.ndarray:
     mask = np.asarray(mask, dtype=bool)
     if mask.ndim != 2:
         raise ValueError(f"The mask must be 2D, got shape {mask.shape}")
-    rows, cols = screen_shape(plan.write_shape, plan.depth_axis)
+    rows, cols = screen_shape(plan.write_shape, plan.depth_axis, plan.display_dimensions)
     if mask.shape != (rows, cols):
         mask = np.asarray(Image.fromarray(mask.astype(np.uint8) * 255).resize((cols, rows), Image.NEAREST)) > 127
     return np.ascontiguousarray(plan.from_screen(mask))

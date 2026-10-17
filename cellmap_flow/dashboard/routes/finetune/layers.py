@@ -26,6 +26,7 @@ from flask import jsonify, request
 
 from cellmap_flow.dashboard.routes.finetune.blueprint import finetune_bp
 from cellmap_flow.dashboard.state import get_session
+from cellmap_flow.viewer.layers import replace_layer
 
 logger = logging.getLogger(__name__)
 
@@ -40,8 +41,8 @@ def _add_layer(name, layer, layer_type, path):
     with get_session().viewer.txn() as s:
         if name in s.layers:
             logger.info(f"Replacing existing layer {name}")
-            del s.layers[name]
-        s.layers[name] = layer
+        # Keeping what the user set on the one it replaces.
+        replace_layer(s.layers, name, layer)
     logger.info(f"Added {layer_type} layer: {name} -> {path}")
     return jsonify(
         {

@@ -49,6 +49,11 @@ export function createJobCard(lossPlot) {
   let restartEpochResetPending = false;  // a restart began; its epochs start over
   let isServingReady = false;
   let stopRequested = false;
+  // The status the badge shows, and whether Restart is offered: what
+  // Shift+R (job-monitor.js) goes by, so that the key restarts exactly when
+  // the button is there to click.
+  let shownStatus = null;
+  let offersRestart = false;
 
   function shouldAcceptEpochProgress(current, total) {
     if (isServingReady && !restartEpochResetPending) {
@@ -100,7 +105,13 @@ export function createJobCard(lossPlot) {
   }
 
   function showRestart(job) {
-    restartBtn.style.display = restartable(job) ? "inline-block" : "none";
+    offersRestart = restartable(job);
+    restartBtn.style.display = offersRestart ? "inline-block" : "none";
+  }
+
+  function hideRestart() {
+    offersRestart = false;
+    restartBtn.style.display = "none";
   }
 
   function resetProgressBarToWaiting() {
@@ -128,6 +139,12 @@ export function createJobCard(lossPlot) {
     if (!params || !params.loss_type) return;
     const interval = params.loss_type === "interval";
     const parts = [interval ? "distance bounds from the paint" : `${params.loss_type} loss`];
+    // The browser's whole network (finetune_mode "full"): its tiles and batch.
+    if (params.finetune_mode === "full") {
+      parts.unshift("whole network");
+      if (params.tile_size != null) parts.push(`${params.tile_size}² tiles`);
+      if (params.batch_size != null) parts.push(`batch ${params.batch_size}`);
+    }
     if (params.loss_type === "margin" && params.margin != null) parts.push(`margin ${params.margin}`);
     if (params.distillation_lambda != null) parts.push(`distillation ${params.distillation_lambda}`);
     const line = $("jobTraining");
@@ -139,6 +156,7 @@ export function createJobCard(lossPlot) {
   }
 
   function showStatus(status) {
+    shownStatus = status;
     const badge = $("jobStatus");
     badge.textContent = status;
     badge.className = "badge bg-" + (STATUS_COLORS[status] || "secondary");
@@ -189,6 +207,10 @@ export function createJobCard(lossPlot) {
   return {
     // The job's id as the card shows it, or "-" when it shows none.
     jobId: () => $("jobId").textContent,
+    // The status the card shows (SUBMITTED until the first answer), and
+    // whether it offers Restart (the job can take one: restartable).
+    status: () => shownStatus,
+    offersRestart: () => offersRestart,
 
     // A job just submitted, before its first status answer.
     submitted(jobId, modelName, outputType) {
@@ -202,7 +224,7 @@ export function createJobCard(lossPlot) {
       resetProgressBarToWaiting();
       lossPlot.reset();
       serverStatus.style.display = "none";
-      restartBtn.style.display = "none";
+      hideRestart();
     },
 
     // A job found again after a page reload, from its entry in the job
@@ -308,11 +330,15 @@ export function createJobCard(lossPlot) {
       }
     },
 
-    // A restart the job has accepted.
+    // A restart the job has accepted. Accepting it made the job RUNNING
+    // (state.start_iteration, and the browser's FinetuneJob.startIteration),
+    // which the badge says at once rather than at the next poll: until
+    // then it said the job still waited, which Shift+R would have repeated.
     restarted() {
       restarting();
       resetStopEarly();
-      restartBtn.style.display = "none";
+      showStatus("RUNNING");
+      hideRestart();
     },
 
     // Stop Early clicked: disabled, saying so, until the stop is refused or

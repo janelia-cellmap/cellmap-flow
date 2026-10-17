@@ -99,6 +99,9 @@ export interface JobArgs {
   model: string;
   labelName: string;
   depthAxis: DepthAxis;
+  /** The viewer's display dimensions (viewer.viewDisplayDimensions): the
+   * image is laid out as its panel draws the plane. */
+  displayDimensions?: string[] | null;
   pointNm: number[];
   volume: PaintVolume;
   dataset: string | null;
@@ -232,7 +235,7 @@ export class AiAnnotateJob {
       this.setStage("fetching_crop");
       const dataset = ctx.infer.dataset();
       if (!dataset) throw new Refused("No dataset is open in the viewer.", 400);
-      const plan = planPlane(args.volume, args.volume.dataset_shape_voxels, args.pointNm, args.depthAxis, this.deps.cropSizePx, rawExtentNm(dataset, args.volume));
+      const plan = planPlane(args.volume, args.volume.dataset_shape_voxels, args.pointNm, args.depthAxis, this.deps.cropSizePx, rawExtentNm(dataset, args.volume), args.displayDimensions ?? null);
       this.plan = plan;
       this.writeBox = { lo: plan.write_lo.map((v) => Math.trunc(v)), hi: plan.write_hi.map((v) => Math.trunc(v)) };
       const plane = await readPlane(ctx.infer, dataset, args.volume, plan);
@@ -445,8 +448,8 @@ export async function planesBeside(store: PaintStore, volume: PaintVolume, lo: n
  * here, so nothing the model sent reaches the page as it came. */
 export async function buildPreview(codec: ImageCodec, request: SegmentRequest, result: SegmentResult, maskWrite: Uint8Array, plan: PlanePlan): Promise<Preview> {
   const [a, b] = writeShape(plan);
-  const [rows, cols] = screenShape([a, b], plan.depth_axis);
-  const screen = toScreen(maskWrite, a, b, plan.depth_axis).data;
+  const [rows, cols] = screenShape([a, b], plan.depth_axis, plan.display_dimensions);
+  const screen = toScreen(maskWrite, a, b, plan.depth_axis, plan.display_dimensions).data;
   const scaled = nearestResize(screen, rows, cols, request.image.height, request.image.width);
   const [inputPng, modelPng, overlayPng] = await Promise.all([
     codec.encodePng(request.image),

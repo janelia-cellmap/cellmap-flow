@@ -47,18 +47,91 @@ export function layersOf(state: NgState | null | undefined): NgLayer[] {
   return Object.entries(layers).map(([name, layer]) => ({ ...layer, name }));
 }
 
-/** `state` with each of `layers` in place of the layer of the same name, or
- * appended when there was none (routes/pipeline.py's _replace_layer). A
- * redraw replaces each layer with a new one, which Neuroglancer shows, so a
- * layer the user had switched off would come back on with every Submit:
- * the new layer stays hidden where the old one was. */
-export function replaceLayers(state: NgState, layers: Record<string, LayerSpec>): NgState {
+/** A layer's properties that belong to the data its source serves rather
+ * than to how the user shows it: a layer drawn again keeps them from the one
+ * it replaces only while the source is the same (carriedLayer). The
+ * segments shown, the merger's equivalences and the segment query and
+ * colours name segments of that data; the channel shown (local dimensions,
+ * position, channel dimensions) counts that data's channels; the shader and
+ * its controls are over its range (the app sets its own for a new chain);
+ * annotations and a legacy top-level transform are the source's own. The
+ * same list as cellmap_flow/viewer/layers.py's SOURCE_BOUND_LAYER_KEYS
+ * (tests/web/test_layer_carry.py holds them equal). */
+export const SOURCE_BOUND_LAYER_KEYS: readonly string[] = [
+  "annotations",
+  "channelDimensions",
+  "equivalences",
+  "localDimensions",
+  "localPosition",
+  "segmentColors",
+  "segmentQuery",
+  "segments",
+  "shader",
+  "shaderControls",
+  "transform",
+];
+const SOURCE_BOUND = new Set(SOURCE_BOUND_LAYER_KEYS);
+
+/** Every URL a layer's source names, in order: a string, a {url, ...}, or
+ * a list of either (sourceUrl gives the first). */
+export function sourceUrls(source: unknown): string[] {
+  if (Array.isArray(source)) return source.flatMap(sourceUrls);
+  const url = sourceUrl(source);
+  return url === null ? [] : [url];
+}
+
+/** `spec` as the layer `name` that takes the place of `old`, keeping what the
+ * user set on `old` (routes/pipeline.py's replace_layer, through
+ * cellmap_flow/viewer/layers.py). A redraw (Submit, a model added, a mark
+ * drawn) builds each layer anew, and Neuroglancer shows the new one as
+ * built: the user's blending (additive), opacity, resolution, volume
+ * rendering, segment colouring or tab were back at their defaults, and a
+ * layer they had switched off came back on. So the new layer is `spec`
+ * with every property of `old` that `spec` does not set: the app's own
+ * properties (the source, a new chain's shader, the annotations drawn) win,
+ * the user's other settings stay. When the source is another one, the
+ * properties tied to its data (SOURCE_BOUND_LAYER_KEYS) are not kept. A
+ * layer of another type (an image layer become a segmentation when the
+ * chain now ends in labels) has no settings this one would read, and keeps
+ * only being hidden. */
+export function carriedLayer(old: NgLayer | undefined, spec: LayerSpec, name: string): NgLayer {
+  const next: NgLayer = { ...spec, name };
+  if (!old) return next;
+  if (old.type !== spec.type) {
+    if (old.visible === false) next.visible = false;
+    return next;
+  }
+  const sameSource = JSON.stringify(sourceUrls(old.source)) === JSON.stringify(sourceUrls(spec.source));
+  for (const [key, value] of Object.entries(old)) {
+    if (next[key] !== undefined || key === "name") continue;
+    if (!sameSource && SOURCE_BOUND.has(key)) continue;
+    next[key] = value;
+  }
+  return next;
+}
+
+/** `state` with each of `layers` in place of the layer of the same name,
+ * keeping what the user set on it (carriedLayer), or appended when there was
+ * none. `replacing` names, for a layer of `layers` that is new, the layer it
+ * takes over from (a finetuned model's next iteration, `x-ft2` for `x-ft1`):
+ * that one's place in the list and its settings go to the new layer, and it
+ * is gone. */
+export function replaceLayers(state: NgState, layers: Record<string, LayerSpec>, replacing: Record<string, string> = {}): NgState {
   const current = layersOf(state).map((layer) => ({ ...layer }));
   for (const [name, spec] of Object.entries(layers)) {
-    const index = current.findIndex((layer) => layer.name === name);
-    const hidden = index >= 0 && current[index].visible === false;
-    const replacement: NgLayer = { ...spec, name };
-    if (hidden) replacement.visible = false;
+    let index = current.findIndex((layer) => layer.name === name);
+    const previous = replacing[name];
+    const at = previous === undefined || previous === name ? -1 : current.findIndex((layer) => layer.name === previous);
+    if (at !== -1) {
+      if (index === -1) {
+        index = at;  // in the old one's place, with its settings
+      } else {
+        // Both there already: the new one keeps its own, the old one goes.
+        current.splice(at, 1);
+        index = current.findIndex((layer) => layer.name === name);
+      }
+    }
+    const replacement = carriedLayer(index >= 0 ? current[index] : undefined, spec, name);
     if (index >= 0) current[index] = replacement;
     else current.push(replacement);
   }
@@ -110,6 +183,26 @@ export function pointerNm(coords: ArrayLike<number> | null | undefined, dimensio
   return nm.length === 3 ? nm : null;
 }
 
+/** pointerNm backwards: a point in nm (z, y, x) as coordinates of
+ * `dimensions`, matched to z, y, x by name as pointerNm matches them; a
+ * dimension of `dimensions` that is not one of them is 0. null when the
+ * space has fewer than three dimensions, or one of the three is not a
+ * length. */
+export function coordsFromNm(nm: readonly number[], dimensions: Record<string, [number, string]>): number[] | null {
+  const names = Object.keys(dimensions);
+  if (names.length < 3 || nm.length !== 3) return null;
+  const coords = names.map(() => 0);
+  for (const [fallback, axis] of ["z", "y", "x"].entries()) {
+    const i = names.includes(axis) ? names.indexOf(axis) : fallback;
+    const [scale, unit] = dimensions[names[i]];
+    const perUnit = NM_PER_UNIT[unit];
+    if (perUnit === undefined) return null;
+    // Rounded as pointerNm rounds: to a millionth of the coordinate.
+    coords[i] = Math.round((nm[fallback] / (scale * perUnit)) * 1e6) / 1e6;
+  }
+  return coords;
+}
+
 // ---------------------------------------------------------------------------
 // The plane the viewer shows: cellmap_flow/ai_annotate/geometry.py's
 // depth_axis_from_layout and depth_axis_for_view, for the state's JSON.
@@ -123,10 +216,13 @@ const AXIS_NAMES = ["z", "y", "x"] as const;
  * dimensions 0 and 1 and looks along 2, "xz" (rotated about the first)
  * looks along 1, "yz" (rotated about the second) along 0
  * (data_panel_layout.ts's AXES_RELATIVE_ORIENTATION). The display dimensions
- * are the first three of the viewer's coordinate space unless set, and
- * cellmap-flow's viewers name theirs z, y, x in that order, so the "xy"
- * panel is a z-y slice looking along x, and the plane cellmap-flow calls XY
- * is Neuroglancer's "yz" panel (geometry._LAYOUT_DEPTH_SLOT). */
+ * are the first three of the viewer's coordinate space unless set.
+ * cellmap-flow's viewers name their dimensions z, y, x and set the display
+ * dimensions to x, y, z (layers.ts displayDimensionsFor), so the "xy" panel
+ * is the XY plane, looking along z. A viewer that sets none (a link made
+ * before they were set) shows z, y, x: its "xy" panel is a z-y slice
+ * looking along x, and the XY plane is its "yz" panel
+ * (geometry._LAYOUT_DEPTH_SLOT). */
 const LAYOUT_DEPTH_SLOT: Record<string, number> = { xy: 2, xz: 1, yz: 0 };
 
 /** The panel name of a Neuroglancer layout (geometry._layout_type): the
@@ -144,7 +240,8 @@ function layoutType(layout: unknown): string | null {
  * (geometry.depth_axis_from_layout).
  *
  * `displayDimensions` are the names of the viewer's display dimensions in
- * order (z, y, x when not given, as cellmap-flow's viewers have them); see
+ * order (z, y, x when not given, as a viewer that sets none over z, y, x
+ * shows them); see
  * LAYOUT_DEPTH_SLOT for why they matter. Only a single-plane layout says
  * which plane the user is looking at: Neuroglancer keeps one layout for the
  * whole viewer, so in "4panel" or "3d" the panel the pointer is in is not
@@ -159,13 +256,19 @@ export function depthAxisFromLayout(layout: unknown, displayDimensions?: readonl
   return axis === 1 || axis === 2 ? axis : 0;
 }
 
-/** depthAxisFromLayout for a viewer state's JSON (geometry.depth_axis_for_view):
- * the display dimensions it sets, else the first three of its coordinate
- * space, as Neuroglancer takes them. Without a state (no viewer yet) the
- * default viewer's: the "xy" panel over z, y, x. */
-export function viewDepthAxisOf(state: NgState | null | undefined): 0 | 1 | 2 {
+/** A viewer state's display dimensions (geometry.display_dimensions_for_view):
+ * those it sets, else the first three of its coordinate space, as
+ * Neuroglancer takes them; empty when it has neither. */
+export function displayDimensionsOf(state: NgState | null | undefined): string[] {
   const set = state?.displayDimensions;
-  const display = Array.isArray(set) && set.length ? set.filter((name): name is string => typeof name === "string") : Object.keys(state?.dimensions ?? {}).slice(0, 3);
+  return Array.isArray(set) && set.length ? set.filter((name): name is string => typeof name === "string") : Object.keys(state?.dimensions ?? {}).slice(0, 3);
+}
+
+/** depthAxisFromLayout for a viewer state's JSON (geometry.depth_axis_for_view),
+ * over its display dimensions (displayDimensionsOf). Without a state (no
+ * viewer yet) the default viewer's: the "xy" panel over z, y, x. */
+export function viewDepthAxisOf(state: NgState | null | undefined): 0 | 1 | 2 {
+  const display = displayDimensionsOf(state);
   return depthAxisFromLayout(state?.layout, display.length ? display : null);
 }
 

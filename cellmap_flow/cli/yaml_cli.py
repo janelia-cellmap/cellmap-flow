@@ -6,6 +6,7 @@ This dynamically discovers ModelConfig subclasses just like cellmap_flow,
 making it easy to add new model types without modifying this file.
 """
 
+import os
 import sys
 import logging
 import click
@@ -311,7 +312,11 @@ def main(ctx, config_path: str, list_types: bool, validate_only: bool):
         from cellmap_flow.models.registry import build_models
 
         try:
-            session.models_config = build_models(config["models"])
+            # A relative path an entry gives (an onnx model's downloaded
+            # file) is the YAML's folder's, not the working directory's.
+            session.models_config = build_models(
+                config["models"], base_dir=os.path.dirname(os.path.abspath(config_path))
+            )
         except ConfigError as e:
             raise click.ClickException(str(e))
     else:

@@ -8,8 +8,8 @@ import { describe, expect, it } from "vitest";
 import type { Chain, DatasetInfo, ModelEntry, ModelInfo, PaintVolume, ServedModel } from "../../src/contracts";
 import { predictionShader, rawShader } from "../../src/viewer/display";
 import {
-  centrePosition, DEFAULT_LAYOUT, dimensionsOf, displayChannel, GPU_MEMORY_LIMIT, initialState, layerList, PAINT_LAYER_PREFIX, PAINT_TAB,
-  PAINT_TOOL_BINDINGS, paintLayer, paintLayerName, paintLayerUrl, PREDICTION_COLORS, predictionLayer, predictionSource, predictionVoxelOverride,
+  centrePosition, DEFAULT_LAYOUT, dimensionsOf, displayChannel, displayDimensionsFor, GPU_MEMORY_LIMIT, initialState, layerList, PAINT_LAYER_PREFIX, PAINT_TAB,
+  PAINT_TOOL_BINDINGS, paintLayer, paintLayerName, paintLayerUrl, paintVolumeOf, PREDICTION_COLORS, predictionLayer, predictionSource, predictionVoxelOverride,
   RAW_LAYER_NAME, rawLayer, rawSource, respelledPaintSource, respelledPaintUrl, stateWithoutInfo,
 } from "../../src/viewer/layers";
 
@@ -225,19 +225,27 @@ describe("dimensionsOf and centrePosition (bootstrap.raw_dimensions)", () => {
 });
 
 describe("initialState (bootstrap.new_viewer)", () => {
-  it("is the raw's dimensions, the centre, one voxel per pixel, the layers in order, one panel", () => {
+  it("is the raw's dimensions shown x, y, z, the centre, one voxel per pixel, the layers in order, one panel", () => {
     const raw = rawLayer(DATASET, info);
     const model = predictionLayer(served("mito"), chain(sigmoid), "red");
     const state = initialState(info, { data: raw, mito: model });
     expect(state).toEqual({
       gpuMemoryLimit: GPU_MEMORY_LIMIT,
       dimensions: { z: [8e-9, "m"], y: [8e-9, "m"], x: [8e-9, "m"] },
+      displayDimensions: ["x", "y", "z"],
       position: [250, 500, 1000],
       crossSectionScale: 1,
       layers: [{ ...raw, name: "data" }, { ...model, name: "mito" }],
       layout: "xy",
     });
     expect(GPU_MEMORY_LIMIT).toBe(2_000_000_000); // bootstrap.GPU_MEMORY_LIMIT
+  });
+
+  it("shows x, y, z only when the dimensions have all three (bootstrap.display_dimensions)", () => {
+    // The "xy" panel shows the first two display dimensions: unset, z across and y down.
+    expect(displayDimensionsFor(["z", "y", "x"])).toEqual(["x", "y", "z"]);
+    expect(displayDimensionsFor(["c^", "z", "y", "x"])).toEqual(["x", "y", "z"]);
+    expect(displayDimensionsFor(["y", "x"])).toBeUndefined();
     expect(DEFAULT_LAYOUT).toBe("xy");
   });
   it("names the layers by their keys, as Neuroglancer's array of layers wants", () => {
@@ -352,5 +360,25 @@ describe("respelledPaintUrl and respelledPaintSource (overlay.refresh_annotation
     expect(respelledPaintSource([])).toBeNull();
     expect(respelledPaintSource(undefined)).toBeNull();
     expect(respelledPaintSource({ nope: 1 })).toBeNull();
+  });
+});
+
+describe("paintVolumeOf (which paint volume a shared link's layer needs)", () => {
+  const volume = "vol-0badcafe-20261015-130405";
+  const url = paintLayerUrl(volume, "https://janelia-cellmap.github.io/cellmap-flow/app/");
+
+  it("reads the volume from a paint source in each of Neuroglancer's forms, respelled or not", () => {
+    expect(paintVolumeOf(url)).toBe(volume);
+    expect(paintVolumeOf(respelledPaintUrl(respelledPaintUrl(url)!))).toBe(volume);
+    expect(paintVolumeOf({ url, subsources: { default: { writingEnabled: true } } })).toBe(volume);
+    expect(paintVolumeOf([{ url: "zarr://other" }, { url }])).toBe(volume);
+  });
+
+  it("is null for every other layer, a raw volume under a paint folder among them", () => {
+    expect(paintVolumeOf("zarr://https://bucket.s3.amazonaws.com/paint/raw.zarr/s0")).toBeNull();
+    expect(paintVolumeOf("zarr3://https://h/app/virtual/a30d4ff4/setup_53__CFLOW_ARGS__e30__CFLOW_ARGS__/")).toBeNull();
+    expect(paintVolumeOf([{ url: "local://annotations" }])).toBeNull();
+    expect(paintVolumeOf(undefined)).toBeNull();
+    expect(paintVolumeOf({ nope: 1 })).toBeNull();
   });
 });

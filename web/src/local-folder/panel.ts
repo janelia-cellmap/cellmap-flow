@@ -21,7 +21,7 @@ const STATUS_ID = "setDataStatus";
 const BROWSE_ID = "browseLocalBtn";
 const HINT_ID = "localFolderHint";
 /** On the panel while a folder from the file manager is over it (browser.css). */
-const DROP_CLASS = "local-drop-target";
+export const DROP_CLASS = "local-drop-target";
 
 /** The colours connect.js gives the status line, and the panel's own muted one. */
 const STATUS_COLOR = { info: "var(--text-muted)", error: "#f87171" };
@@ -66,12 +66,12 @@ function button(className: string, label: string): HTMLButtonElement {
 }
 
 /** Whether a drag carries files (a folder is one to the drag data). */
-function carriesFiles(transfer: DataTransfer | null): transfer is DataTransfer {
+export function carriesFiles(transfer: DataTransfer | null): transfer is DataTransfer {
   return !!transfer && Array.from(transfer.types).includes("Files");
 }
 
 /** The drop's handle method as Chromium has it (not in lib.dom). */
-type HandleItem = DataTransferItem & { getAsFileSystemHandle?: () => Promise<FileSystemHandle | null> };
+export type HandleItem = DataTransferItem & { getAsFileSystemHandle?: () => Promise<FileSystemHandle | null> };
 
 export function connectPanel(): LocalPanel {
   const status: LocalPanel["status"] = (message, tone) => {

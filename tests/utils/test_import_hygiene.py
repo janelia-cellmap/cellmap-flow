@@ -65,7 +65,7 @@ check(["cellmap_flow.models.registry", "cellmap_flow.config.yaml", "cellmap_flow
                "torch", "huggingface_hub", "peft"])
 from cellmap_flow.models.registry import describe_types
 assert {"BioModelConfig", "DaCapoModelConfig"} <= set(describe_types())
-check([], LIGHT + ["bioimageio", "dacapo", "cellmap_models", "fly_organelles", "cellpose", "torch", "huggingface_hub", "peft"])
+check([], LIGHT + ["bioimageio", "dacapo", "cellmap_models", "fly_organelles", "cellpose", "onnxruntime", "torch", "huggingface_hub", "peft"])
 """,
     # The dashboard resolves what is pasted into its model form; resolving
     # reads names and files, and loads no model's framework.
@@ -74,7 +74,9 @@ check(["cellmap_flow.models.resolve"], LIGHT + ["cellmap_flow.models.models_conf
 from cellmap_flow.models.resolve import resolve
 resolve("cpsam", voxel_size=8, online=False)
 resolve("cellmap/mito", online=False)
-check([], LIGHT + ["torch", "huggingface_hub", "peft", "cellpose", "bioimageio", "cellmap_models", "fly_organelles"])
+resolve("onnx:setup_54", online=False)
+check([], LIGHT + ["torch", "huggingface_hub", "peft", "cellpose", "bioimageio", "cellmap_models", "fly_organelles",
+                   "onnxruntime"])
 """,
     # A chain is read wherever one is listed; its steps import what they need.
     "chain": """

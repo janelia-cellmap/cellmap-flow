@@ -1,12 +1,15 @@
 // The finetune jobs of the page: what cellmap_flow/finetune/job_manager
 // (manager.py's FinetuneJobManager, state.py's FinetuneJob and JobStatus) is
 // on the server, for runs that happen in this tab. A job is one submission
-// of the Finetune tab's Start Finetuning: it runs the model's head training
-// (src/finetune/run.ts, through the `run` seam) on the paint of its volume,
+// of the Finetune tab's Start Finetuning: it runs the model's head training,
+// or its whole network's (src/finetune/run.ts and full/run-full.ts, through
+// the `run` seam, as the options' mode says) on the paint of its volume,
 // keeps the result as a finetuned model in the catalog, and, with
 // Auto-serve, serves it beside the model it came from; then it waits,
 // as the server's trainer does, for a Restart, which runs again from the
-// trained head with the form's new parameters under the same job id.
+// trained head (or network) with the form's new parameters under the same
+// job id. A job keeps its mode: switching needs a new job, as switching
+// between LoRA and a full finetune does on the server.
 //
 // The routes (routes/finetune.ts) read a job as the Python routes read
 // theirs: `toDict()` is state.py's to_dict, `statusRecord()` adds the
@@ -24,7 +27,8 @@
 // final (TERMINAL_STATUSES): nothing moves a job again once it has one.
 import type { AppContext, FinetunedRecord, ModelEntry, PaintVolume } from "../contracts";
 import { loadGoodRegions } from "../finetune/good-regions";
-import type { Finetuned, FinetuneOptions, RunFinetune, RunReporter } from "../finetune/types";
+import { MODE_WORDS } from "../finetune/modes";
+import type { Finetuned, FinetuneOptions, FinetuneRun, RunFinetune, RunReporter } from "../finetune/types";
 import { finetunedEntry, nextFinetunedName } from "../models/finetuned";
 import { message } from "./router";
 import { serveModels } from "./serving";
@@ -119,7 +123,7 @@ export class FinetuneJob {
    * definition), and what GET …/logs answers as `offset`. */
   readonly lines: string[] = [];
   readonly offsets: number[] = [];
-  /** What the last run made: a restart continues from its head. */
+  /** What the last run made: a restart continues from its head, or from its bytes after a whole-network run. */
   last: Finetuned | null = null;
   /** The finetuned entry the session serves for this job, which the next run's replaces. */
   servedEntryId: string | null = null;
@@ -304,7 +308,7 @@ export class FinetuneJobs {
     const now = this.now();
     const job = new FinetuneJob(`ft-${this.jobs.size + 1}-${timestamp(now)}`, now.toISOString(), args);
     this.jobs.set(job.id, job);
-    job.log(`Job ${job.id}: ${args.entry.name} on the paint of ${args.volume.id}, ${args.options.epochs} epoch(s) in this browser${args.autoServe ? ", served when done" : ""}`);
+    job.log(`Job ${job.id}: ${args.entry.name}${args.options.mode === "full" ? "'s whole network" : ""} on the paint of ${args.volume.id}, ${args.options.epochs} epoch(s) in this browser${args.autoServe ? ", served when done" : ""}`);
     job.start(this.run(job));
     return job;
   }
@@ -336,7 +340,7 @@ export class FinetuneJobs {
     if (job.status !== "RUNNING" || job.inferenceServerReady) return { ok: false, status: 400, error: `Job ${id} is not training (its status is ${job.status})` };
     if (job.stopAfterEpoch === null) {
       job.stopAfterEpoch = (job.latestLossEpoch ?? 0) + 1;
-      job.log(`Stop requested: training ends after epoch ${job.stopAfterEpoch}, and the head trained by then is kept${job.args.autoServe ? " and served" : ""}.`);
+      job.log(`Stop requested: training ends after epoch ${job.stopAfterEpoch}, and ${trained(job)} by then is kept${job.args.autoServe ? " and served" : ""}.`);
     }
     return { ok: true, afterEpoch: job.stopAfterEpoch };
   }
@@ -355,14 +359,24 @@ export class FinetuneJobs {
         error: `Job ${id} is in state ${job.status} - can only restart a job that is waiting for a restart (its training iteration has finished or diverged)`,
       };
     }
+    const mode = job.args.options.mode;
+    if (options.mode !== mode) {
+      return {
+        ok: false,
+        status: 409,
+        error: `Job ${id} trains ${MODE_WORDS[mode]}; switching to ${MODE_WORDS[options.mode]} needs a new job, not a restart (Start Finetuning, with the Training field as it is now)`,
+      };
+    }
     job.args = { ...job.args, options, params: { ...job.params, ...params } };
-    const head = job.last ? { weight: job.last.weight, bias: job.last.bias } : undefined;
+    // Where the new run starts: the last run's head, or its whole model.
+    const last = job.last;
+    const from: StartFrom = !last ? {} : mode === "full" ? { initialBytes: last.bytes } : last.weight && last.bias ? { initialHead: { weight: last.weight, bias: last.bias } } : {};
     // The marker first (job-card.js resets the card and the loss plot on
     // it), then the progress from zero, so the first status poll after it
     // already shows the new run.
-    job.log(`${RESTARTING_MARKER}: a new run from the trained head, ${options.epochs} epoch(s) with the form's parameters`);
+    job.log(`${RESTARTING_MARKER}: a new run from the trained ${mode === "full" ? "network" : "head"}, ${options.epochs} epoch(s) with the form's parameters`);
     job.startIteration(options.epochs);
-    job.start(this.run(job, head));
+    job.start(this.run(job, from));
     return { ok: true, job };
   }
 
@@ -373,7 +387,7 @@ export class FinetuneJobs {
    * the job CANCELLED and the result unkept; any failure is logged into
    * the job and makes it FAILED, never thrown (a job's end is read from its
    * status, as a cluster job's is). */
-  private async run(job: FinetuneJob, initialHead?: { weight: Float32Array; bias: Float32Array }): Promise<void> {
+  private async run(job: FinetuneJob, from: StartFrom = {}): Promise<void> {
     const { ctx, entry, volume, options } = job.args;
     job.setStatus("RUNNING");
     let result: Finetuned;
@@ -392,7 +406,7 @@ export class FinetuneJobs {
         paint: ctx.paint,
         options,
         report: job.reporter(),
-        ...(initialHead ? { initialHead } : {}),
+        ...from,
         ...(goodRegions.length ? { goodRegions } : {}),
       });
     } catch (e) {
@@ -409,7 +423,7 @@ export class FinetuneJobs {
       return;
     }
     job.last = result;
-    if (job.stopAfterEpoch !== null) job.log(`Stopped early after epoch ${result.epochs}: the head trained so far is kept.`);
+    if (job.stopAfterEpoch !== null) job.log(`Stopped early after epoch ${result.epochs}: ${trained(job)} so far is kept.`);
     try {
       await this.keep(job, result);
     } catch (e) {
@@ -422,8 +436,9 @@ export class FinetuneJobs {
   /** The run's result as a finetuned model: a catalog entry named after the
    * base (nextFinetunedName) with the result's bytes, recorded with where it
    * came from; then, with Auto-serve, served in the session beside its base
-   * (in place of this job's previous model, on a restart), and the job left
-   * WAITING_FOR_RESTART, its model ready; without, COMPLETED. */
+   * (in place of this job's previous model, on a restart, which is then
+   * removed from the catalog: a job keeps its latest model only), and the
+   * job left WAITING_FOR_RESTART, its model ready; without, COMPLETED. */
   private async keep(job: FinetuneJob, result: Finetuned): Promise<void> {
     const { ctx, entry, volume, autoServe } = job.args;
     const name = nextFinetunedName(entry, await ctx.catalog.finetuned());
@@ -441,7 +456,8 @@ export class FinetuneJobs {
     };
     await ctx.catalog.addFinetuned(record, result.bytes);
     const loss = result.finalLoss === null ? "" : `, final loss ${result.finalLoss.toFixed(6)}`;
-    const kept = `Finetuned model ${name} kept in this browser (${fentry.variant.file_mb} MB): ${result.epochs} epoch(s) on ${result.pixels} painted voxels of ${result.chunks} chunk(s)${loss}.`;
+    const on = result.tiles === undefined ? `of ${result.chunks} chunk(s)` : `in ${result.tiles} tile(s)`;
+    const kept = `Finetuned model ${name} kept in this browser (${fentry.variant.file_mb} MB): ${result.epochs} epoch(s) on ${result.pixels} painted voxels ${on}${loss}.`;
     job.log(`${kept} The Models tab lists it; Download gives the .onnx.`);
     ctx.log(kept);
     job.finetunedModelName = name;
@@ -464,14 +480,41 @@ export class FinetuneJobs {
       at = base === -1 ? models.length : base + 1;
     }
     models.splice(at, 0, fentry);
-    await serveModels(ctx, models, ctx.session.state.chain);
+    // The previous model's layer is handed to the new one, so what the user
+    // set on it (additive blending, say) stays on the layer they look at.
+    const previousName = previous === null ? undefined : current.find((m) => m.id === previous)?.name;
+    await serveModels(ctx, models, ctx.session.state.chain, previousName ? { replacing: { [name]: previousName } } : {});
     await ctx.session.update({ models });
     if (job.isFinal()) return;
     job.servedEntryId = fentry.id;
     job.inferenceServerReady = true;
-    job.log(`Serving ${name} beside ${entry.name}. WAITING_FOR_RESTART: paint where it is still wrong and Restart to train again from this head.`);
+    // A restart's model is the job's model from now on: the iteration it
+    // replaces is forgotten, its record and bytes (3.9 to 43 MB), so the
+    // Models tab lists one model per job, the latest, as the server serves
+    // only a job's latest iteration (keeping the earlier ones' files on
+    // disk, the run's record). It went out of serving and out of the viewer
+    // above, its layer handed to this one. Only this job's own model is
+    // ever removed (servedEntryId is set nowhere else), never its base.
+    if (previous !== null && previous !== fentry.id) {
+      const was = previousName ?? previous;
+      try {
+        await ctx.catalog.removeFinetuned(previous);
+        job.log(`${name} replaces ${was}, which is removed from this browser.`);
+      } catch (error) {
+        job.log(`${was} could not be removed from this browser (${error instanceof Error ? error.message : String(error)}); it stays on the Models tab, beside ${name}.`);
+      }
+    }
+    job.log(`Serving ${name} beside ${entry.name}. WAITING_FOR_RESTART: paint where it is still wrong and Restart to train again from ${job.args.options.mode === "full" ? "this network" : "this head"}.`);
     job.setStatus("WAITING_FOR_RESTART");
   }
+}
+
+/** Where a run starts besides the base: a restart's last head, or its last whole model. */
+type StartFrom = Pick<FinetuneRun, "initialHead" | "initialBytes">;
+
+/** What a job's run trains, in a log line's words: "the head trained", "the network trained". */
+function trained(job: FinetuneJob): string {
+  return job.args.options.mode === "full" ? "the network trained" : "the head trained";
 }
 
 /** `YYYYmmdd-HHMMSS`, as the volume ids and the server's run directories are stamped. */

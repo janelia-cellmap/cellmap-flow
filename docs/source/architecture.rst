@@ -86,7 +86,7 @@ Models
      - One module per model type. ``base`` has ``ModelConfig`` (its
        ``config``, ``geometry``, ``to_dict()`` and ``command``) and
        ``Config``; then ``script``, ``dacapo``, ``fly``, ``bio``,
-       ``cellmap``, ``finetune`` and ``huggingface``.
+       ``cellmap``, ``finetune``, ``huggingface``, ``cellpose`` and ``onnx``.
    * - ``models/models_config.py``
      - The classes' public import path, which the docs and plugins use, and
        ``Config``.
@@ -588,7 +588,12 @@ A finetune job
    ``X-Restart-Token``, or writes them to ``restart_signal.json`` when the
    server can't be reached. A dashboard started later finds a session's jobs
    again from their ``metadata.json`` and one bjobs call
-   (``persistence.rehydrate``).
+   (``persistence.rehydrate``). Shift+R over the viewer
+   (``routes/finetune/restart_key.py``) counts a press against the job the
+   tab polls, if it can take a restart, and the status answer carries the
+   count (``restart_requests``): the tab sends the restart with its form's
+   values when the count goes up, and the restart route says in the
+   viewer's status bar how it answered.
 
 Annotation volumes and MinIO sync
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

@@ -71,8 +71,12 @@ describe("finetunedEntry", () => {
     expect(entry.manifest.checkpoint).toBe("finetuned in the browser from model_checkpoint_260000");
     expect(entry.manifest.variants).toHaveLength(1);
     expect(entry.manifest.variants[0]).toBe(entry.variant);
-    // The base's block and precision, the file named after the model, the size from the bytes; no fidelity numbers.
-    expect(entry.variant).toEqual({ variant: "fp32", input_size: [132, 132, 132], output_size: [44, 44, 44], file: "mito_aff_setup54_16nm-ft1.onnx", file_mb: 21.56 });
+    // The base's block and precision, the file named after the model, the
+    // size from the bytes, the file it was made from; no fidelity numbers.
+    expect(entry.variant).toEqual({
+      variant: "fp32", input_size: [132, 132, 132], output_size: [44, 44, 44], file: "mito_aff_setup54_16nm-ft1.onnx", file_mb: 21.56,
+      source: { repo: "cellmap/onnx-web-models", folder: "setup_54", file: "setup_54_mito_affinities_16nm_in132_fp32.onnx" },
+    });
     // The rest is the base's.
     for (const key of ["task", "architecture", "params", "channels", "input_voxel_size_nm", "output_voxel_size_nm", "output", "input_norm", "io"] as const) {
       expect(entry.manifest[key], key).toEqual(base.manifest[key]);
@@ -130,6 +134,12 @@ describe("nextFinetunedName", () => {
     expect(nextFinetunedName(ft1.entry, [ft1])).toBe("mito_aff_setup54_16nm-ft2");
     const ft3 = recordFor(base, "mito_aff_setup54_16nm-ft3");
     expect(nextFinetunedName(ft1.entry, [ft1, ft3])).toBe("mito_aff_setup54_16nm-ft4");
+  });
+
+  it("passes over the names it is told are taken besides the records' (a shared link's other models)", () => {
+    const ft1 = recordFor(base, "mito_aff_setup54_16nm-ft1");
+    expect(nextFinetunedName(base, [ft1], ["mito_aff_setup54_16nm-ft1", "mito_aff_setup54_16nm-ft4"])).toBe("mito_aff_setup54_16nm-ft5");
+    expect(nextFinetunedName(base, [ft1], ["mito_aff_setup53_16nm-ft9", "my-model-ft7"])).toBe("mito_aff_setup54_16nm-ft2");
   });
 
   it("is a URL path segment and a layer name", () => {

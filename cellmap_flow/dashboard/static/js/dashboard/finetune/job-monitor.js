@@ -5,6 +5,14 @@
 // In the browser mode (lib/page-data isBrowserMode) the job runs in the page
 // (web/src/finetune) and answers the same routes: no corrections path is
 // asked for, and the finetuned model a status names can be downloaded.
+//
+// Shift+R restarts the card's job as Restart does, without its confirm
+// (restartFromKey). It arrives three ways: pressed over the viewer in server
+// mode, where routes/finetune/restart_key.py counts the press and the job's
+// status answer carries the count (restart_requests), so it acts within one
+// poll; pressed over the viewer in browser mode, where
+// web/src/backend/routes/finetune.ts binds it in the page and sends
+// RESTART_EVENT; and pressed on this page itself.
 import { setBusy } from "../../lib/dom.js";
 import { isBrowserMode } from "../../lib/page-data.js";
 import { poll } from "../../lib/poll.js";
@@ -12,6 +20,56 @@ import { TERMINAL, createJobCard } from "./job-card.js";
 import { createJobLog } from "./log-stream.js";
 import { createLossPlot } from "./loss-plot.js";
 import { getAnswer, getAnswerIfFound, postAnswer } from "./requests.js";
+
+// The event the browser mode's Shift+R over the viewer sends this page
+// (web/src/backend/routes/finetune.ts's RESTART_EVENT).
+const RESTART_EVENT = "cellmap-flow:restart-finetune";
+
+// Shift+R on this page, as Neuroglancer reads it over the viewer
+// ("shift+keyr": the key, whatever the keyboard layout types with it):
+// without another modifier, not held down, and not in a field, where it
+// types an R.
+function isRestartKey(event) {
+  if (event.code !== "KeyR" || !event.shiftKey || event.ctrlKey || event.altKey || event.metaKey) return false;
+  if (event.repeat || event.isComposing || event.defaultPrevented) return false;
+  const target = event.target;
+  if (!(target instanceof Element)) return true;
+  return !(target.closest("input, textarea, select") || target.isContentEditable);
+}
+
+// The confirm Restart asks, to check the form's values first. The browser's
+// run reads only the head's parameters (the rest of the form is hidden
+// there), so its summary lists only those, or the whole network's.
+function restartSummary(requestBody, browser) {
+  if (browser && requestBody.finetune_mode === "full") {
+    return `Restart training with current form values?\n\n` +
+      `  training:       whole network\n` +
+      `  learning_rate:  ${requestBody.learning_rate}\n` +
+      `  epochs:         ${requestBody.num_epochs}\n` +
+      `  batch_size:     ${requestBody.batch_size}\n` +
+      `  tile_size:      ${requestBody.tile_size !== undefined ? requestBody.tile_size : 'default'}\n`;
+  }
+  return browser
+    ? `Restart training with current form values?\n\n` +
+      `  loss:           ${requestBody.loss_type}\n` +
+      `  learning_rate:  ${requestBody.learning_rate}\n` +
+      `  epochs:         ${requestBody.num_epochs}\n` +
+      `  label_smoothing:${requestBody.label_smoothing}\n` +
+      `  balance_classes:${requestBody.balance_classes}\n`
+    : `Restart training with current form values?\n\n` +
+      `  loss:           ${requestBody.loss_type}` +
+      (requestBody.margin !== undefined ? ` (margin=${requestBody.margin})` : '') + '\n' +
+      `  learning_rate:  ${requestBody.learning_rate}\n` +
+      `  lora_r:         ${requestBody.lora_r}\n` +
+      `  epochs:         ${requestBody.num_epochs}\n` +
+      `  batch_size:     ${requestBody.batch_size}\n` +
+      `  patches/epoch:  ${requestBody.patches_per_epoch !== undefined ? requestBody.patches_per_epoch : 'manifest'}\n` +
+      `  rehearsal:      ${requestBody.rehearsal_fraction !== undefined ? requestBody.rehearsal_fraction : 'manifest'}\n` +
+      `  distillation:   ${requestBody.distillation_lambda} (${requestBody.distillation_scope})\n` +
+      `  label_smoothing:${requestBody.label_smoothing}\n` +
+      `  balance_classes:${requestBody.balance_classes}\n` +
+      `  augment:${requestBody.augment}\n`;
+}
 
 function showNotification(title, message) {
   // Browser notification
@@ -23,8 +81,9 @@ function showNotification(title, message) {
   alert(`${title}\n\n${message}`);
 }
 
-// picker: the model picker; form: the training form.
-export function initJobMonitor({ picker, form }) {
+// picker: the model picker; form: the training form; log: the Annotation
+// Crops panel's log, where Shift+R says what it did.
+export function initJobMonitor({ picker, form, log }) {
   let statusPoller = null;
   const browser = isBrowserMode();
   const lossPlot = createLossPlot(
@@ -32,14 +91,43 @@ export function initJobMonitor({ picker, form }) {
   const card = createJobCard(lossPlot);
   const jobLog = createJobLog({ onLine: card.logLine });
   const appendLog = jobLog.append;
+  // A restart request on its way, from the button or the key: the button is
+  // disabled meanwhile, and Shift+R is ignored, saying so.
+  let restartInFlight = false;
+  // The Shift+R presses over the viewer that server mode counted, by job,
+  // as the last answer gave them (keyPressed).
+  const keyPresses = new Map();
+
+  // What Shift+R has to say: in the Annotation Crops panel's log, where the
+  // patch tools (Shift+G among them) report, and in the Training Logs. The
+  // key is pressed over the viewer, with either of the tab's panels showing.
+  function say(text) {
+    log.add(text);
+    log.showEnd();
+    appendLog(text);
+  }
+
+  // Whether an answer's count of Shift+R presses for the job (server mode:
+  // restart_requests) says it was pressed since the last answer. The first
+  // count seen for a job is where it starts, so a press made before this
+  // page followed the job (before a reload, or for another tab) is not acted
+  // on now. The browser mode's answers carry no count: its key sends
+  // RESTART_EVENT instead.
+  function keyPressed(jobId, count) {
+    if (typeof count !== "number") return false;
+    const seen = keyPresses.get(jobId);
+    keyPresses.set(jobId, count);
+    return seen !== undefined && count > seen;
+  }
 
   // Browser mode: the Training Status card's Download finetuned model link
   // (the template's browser-only anchor), pointed at the model a job's status
   // says is served (inference_server_ready with finetuned_model_name) and
   // shown then; hidden on any other status, and for a job just submitted or
-  // restarted, whose model is not made yet. The GET is relayed by the service
-  // worker to the in-page backend, like the Export Config link. Nothing on
-  // the Flask page: it has no such anchor.
+  // restarted, whose model is not made yet. The page fetches the link on a
+  // click (web/src/rebase.ts), like the Export Config link, and the service
+  // worker relays the GET to the in-page backend. Nothing on the Flask page:
+  // it has no such anchor.
   function showFinetunedDownload(job) {
     if (!browser) return;
     const link = document.getElementById("downloadFinetunedBtn");
@@ -105,6 +193,7 @@ export function initJobMonitor({ picker, form }) {
       const result = await postAnswer("/api/finetune/submit", params);
 
       if (result.success) {
+        keyPresses.set(result.job_id, 0);  // a new job: no presses yet
         card.submitted(result.job_id, params.model_name, result.output_type || "binary");
         showFinetunedDownload(null);
         jobLog.clear();
@@ -178,6 +267,9 @@ export function initJobMonitor({ picker, form }) {
         card.polled(data);
         showFinetunedDownload(data);
         if (data.log_file) jobLog.setLogFile(data.log_file);
+        // Server mode's Shift+R over the viewer: the card has just taken
+        // this answer, so the key goes by the state the press was counted in.
+        if (keyPressed(jobId, data.restart_requests)) restartFromKey();
 
         if (TERMINAL.includes(data.status)) {
           // The stream normally ends itself with "done"; see jobLog.closeSoon.
@@ -253,47 +345,30 @@ export function initJobMonitor({ picker, form }) {
 
   // Restart uses whatever's currently in the main training form as the source
   // of truth — no separate modal. User edits the form to change params, hits
-  // Restart, confirms.
+  // Restart, confirms. The button's work, which Shift+R shares without the
+  // confirm (restartFromKey), so the two cannot drift. report(text) says why
+  // nothing was restarted: the button alerts; the key writes to the logs,
+  // since the viewer may have the focus. onSend(jobId), if given, runs as
+  // the request goes, once the form has been read. Resolves to the route's
+  // answer once the job has taken the restart, else null.
   const restartJobBtn = document.getElementById('restartJobBtn');
-  restartJobBtn.addEventListener('click', async () => {
+  async function restartWithForm({ confirmFirst, report, onSend }) {
     const jobId = card.jobId();
     if (!jobId || jobId === "-") {
-      alert("No job to restart.");
-      return;
+      report("No job to restart.");
+      return null;
     }
     let requestBody;
     try {
       requestBody = form.trainingParams();
     } catch (error) {
-      alert(error.message);
-      return;
+      report(error.message);
+      return null;
     }
+    if (confirmFirst && !confirm(restartSummary(requestBody, browser))) return null;
+    if (onSend) onSend(jobId);
 
-    // Build a short summary so user can sanity-check before confirming. The
-    // browser's run reads only the head's parameters (the rest of the form is
-    // hidden there), so its summary lists only those.
-    const summary = browser
-      ? `Restart training with current form values?\n\n` +
-        `  loss:           ${requestBody.loss_type}\n` +
-        `  learning_rate:  ${requestBody.learning_rate}\n` +
-        `  epochs:         ${requestBody.num_epochs}\n` +
-        `  label_smoothing:${requestBody.label_smoothing}\n` +
-        `  balance_classes:${requestBody.balance_classes}\n`
-      : `Restart training with current form values?\n\n` +
-        `  loss:           ${requestBody.loss_type}` +
-        (requestBody.margin !== undefined ? ` (margin=${requestBody.margin})` : '') + '\n' +
-        `  learning_rate:  ${requestBody.learning_rate}\n` +
-        `  lora_r:         ${requestBody.lora_r}\n` +
-        `  epochs:         ${requestBody.num_epochs}\n` +
-        `  batch_size:     ${requestBody.batch_size}\n` +
-        `  patches/epoch:  ${requestBody.patches_per_epoch !== undefined ? requestBody.patches_per_epoch : 'manifest'}\n` +
-        `  rehearsal:      ${requestBody.rehearsal_fraction !== undefined ? requestBody.rehearsal_fraction : 'manifest'}\n` +
-        `  distillation:   ${requestBody.distillation_lambda} (${requestBody.distillation_scope})\n` +
-        `  label_smoothing:${requestBody.label_smoothing}\n` +
-        `  balance_classes:${requestBody.balance_classes}\n` +
-        `  augment:${requestBody.augment}\n`;
-    if (!confirm(summary)) return;
-
+    restartInFlight = true;
     setBusy(restartJobBtn, true);
     restartJobBtn.textContent = 'Restarting...';
 
@@ -311,15 +386,52 @@ export function initJobMonitor({ picker, form }) {
         // Likewise the log: reopen it where it stopped if it is not
         // streaming, so the restarted run's lines show up.
         jobLog.resume(jobId);
-      } else {
-        alert('Failed to restart training: ' + data.error);
+        return data;
       }
+      report('Failed to restart training: ' + data.error);
     } catch (error) {
       console.error('Error restarting training:', error);
-      alert('Failed to restart training');
+      report('Failed to restart training');
     } finally {
+      restartInFlight = false;
       setBusy(restartJobBtn, false);
     }
+    return null;
+  }
+  restartJobBtn.addEventListener('click', () => restartWithForm({ confirmFirst: true, report: (text) => alert(text) }));
+
+  // Shift+R, however it arrived: what Restart does, with the form's values
+  // and without its confirm (the key is a deliberate act), and only while
+  // the card offers Restart, the job waiting for one; otherwise it says why
+  // not. A press while a restart is on its way is ignored, saying so, as
+  // the button is disabled then. It never starts a new job.
+  function restartFromKey() {
+    const jobId = card.jobId();
+    if (!jobId || jobId === "-") {
+      say("Shift+R: no job to restart. Start one on the Finetune tab.");
+      return;
+    }
+    if (restartInFlight) {
+      say(`Shift+R: the restart of ${jobId} is already on its way; this press is ignored.`);
+      return;
+    }
+    if (!card.offersRestart()) {
+      say(`Shift+R restarts a job that is waiting for a restart; ${jobId} is ${card.status()}.`);
+      return;
+    }
+    restartWithForm({
+      confirmFirst: false,
+      report: (text) => say(`Shift+R: ${text}`),
+      onSend: () => say(`Shift+R: restarting ${jobId} with the Finetune tab's settings...`),
+    }).then((data) => {
+      if (data) say(`Shift+R: ${data.message || `${jobId} restarted.`}`);
+    });
+  }
+  document.addEventListener(RESTART_EVENT, restartFromKey);
+  document.addEventListener("keydown", (event) => {
+    if (!isRestartKey(event)) return;
+    event.preventDefault();
+    restartFromKey();
   });
 
   // After a page reload, the most recent live job's card, log and plot, and
@@ -341,6 +453,7 @@ export function initJobMonitor({ picker, form }) {
       if (!activeJob) return;
 
       const jobId = activeJob.job_id;
+      keyPressed(jobId, activeJob.restart_requests);  // where its count starts
       card.restored(activeJob);
       showFinetunedDownload(activeJob);
       jobLog.setLogFile(activeJob.log_file || null);
