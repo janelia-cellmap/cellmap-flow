@@ -48,7 +48,7 @@ import { goodRegionRoutes } from "./routes/good-regions";
 import { modelRoutes } from "./routes/models";
 import { pipelineRoutes } from "./routes/pipeline";
 import { viewLabelsRoutes } from "./routes/view-labels";
-import { serveModels } from "./serving";
+import { serveModels, stopServing } from "./serving";
 
 export interface BackendOptions {
   /** The finetune routes' seams (a fake run, a fixed volume plan or clock), for tests. */
@@ -128,7 +128,6 @@ export async function restoreSession(ctx: AppContext): Promise<void> {
   const wanted = new Set(ctx.session.state.models.map((m) => m.id));
   for (const served of ctx.infer.served()) {
     if (wanted.has(served.entry.id) || !models.some((m) => m.id === served.entry.id)) continue;
-    await served.dispose();
-    ctx.viewer.removeLayer(served.entry.name);
+    await stopServing(ctx, served.entry.name, [served]);
   }
 }
