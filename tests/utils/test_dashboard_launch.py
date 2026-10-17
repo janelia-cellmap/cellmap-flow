@@ -6,7 +6,6 @@ layers in test_layer_sources_snapshot."""
 import logging
 import threading
 import time
-from datetime import datetime
 from types import SimpleNamespace
 
 import neuroglancer
@@ -119,8 +118,9 @@ def test_submit_on_the_models_tab_leaves_a_finetune_jobs_server_running(viewer, 
                         lambda *a, **k: neuroglancer.ImageLayer(source="zarr://http://gpu1:9000/x"))
     killed = []
     monkeypatch.setattr(LSFJob, "kill", lambda self: killed.append(self.job_id))
-    training = SimpleNamespace(inference_server_url="http://gpu1:9000", lsf_job=SimpleNamespace(job_id="4242"),
-                               model_name="mito", finetuned_model_name=None, params={})
+    training = SimpleNamespace(job_id="ft-1", inference_server_url="http://gpu1:9000",
+                               lsf_job=SimpleNamespace(job_id="4242"), model_name="mito", finetuned_model_name=None,
+                               params={})
     finetune_layers.add_finetuned_layer(training, "mito_finetuned_1")
     monkeypatch.setattr(launch, "run_model", lambda path, name, st: None)
     monkeypatch.setattr(launch.threading, "Thread", _InlineThread)
@@ -273,9 +273,9 @@ def _finetune_jobs_model(monkeypatch, status):
     monkeypatch.setattr(finetune_layers, "fetch_model_info", lambda url: {})
     monkeypatch.setattr(finetune_layers, "prediction_layer",
                         lambda *a, **k: neuroglancer.ImageLayer(source="zarr://http://gpu1:9000/x"))
-    training = SimpleNamespace(inference_server_url="http://gpu1:9000", lsf_job=SimpleNamespace(job_id="4242"),
-                               model_name="mito", finetuned_model_name=None, params={}, status=status,
-                               created_at=datetime(2026, 10, 16, 12))
+    training = SimpleNamespace(job_id="ft-1", inference_server_url="http://gpu1:9000",
+                               lsf_job=SimpleNamespace(job_id="4242"), model_name="mito", finetuned_model_name=None,
+                               params={}, status=status)
     finetune_layers.add_finetuned_layer(training, "mito_finetuned_1")
     training.finetuned_model_name = "mito_finetuned_1"
     get_session().finetune_job_manager = SimpleNamespace(jobs={"ft-1": training})
