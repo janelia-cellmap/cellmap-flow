@@ -285,6 +285,10 @@ def test_a_hub_folders_variant_is_chosen_by_file_or_precision_and_block(hub, ort
     assert hub[-1] == ("me/exports", f"setup_54/{file}", "v2")
 
 
+def test_an_onnx_model_is_not_offered_for_finetuning():
+    assert OnnxModelConfig.finetunable is False and OnnxModelConfig(folder="setup_54").finetune_modes() == ()
+
+
 def test_a_variant_the_manifest_lacks_is_refused_with_the_ones_it_has():
     manifest = parse_manifest(SETUP_54)
     with pytest.raises(ValueError, match=r"no fp16 with an input of 100 variant; it has setup_54_in148_fp32.onnx"):
