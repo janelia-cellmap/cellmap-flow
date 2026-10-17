@@ -15,6 +15,7 @@ import pytest
 
 from cellmap_flow.dashboard.routes.finetune import restart_key
 from cellmap_flow.dashboard.state import get_session
+from cellmap_flow.viewer import keys
 
 
 @pytest.fixture
@@ -35,8 +36,13 @@ def keyed(dashboard, viewer, make_job, tmp_path, monkeypatch):
     monkeypatch.setattr(training, "sync_all_annotations_from_minio", lambda force=True: 0)
     monkeypatch.setattr(manager, "restart_finetuning_job", lambda job_id, updated_params: job)
     world = SimpleNamespace(job=job, timers=[], dashboard=dashboard)
-    monkeypatch.setattr(restart_key, "_later", lambda seconds, function, *args: world.timers.append(
-        (seconds, function, args)))
+
+    def later(seconds, function, *args):
+        world.timers.append((seconds, function, args))
+
+    # restart_key's own timers, and those that clear what it said (viewer.keys.say_for).
+    monkeypatch.setattr(restart_key, "_later", later)
+    monkeypatch.setattr(keys, "_later", later)
 
     def message():
         return get_session().viewer.config_state.state.status_messages.get(restart_key.STATUS_KEY)
@@ -82,7 +88,7 @@ def test_the_job_list_binds_shift_r_once_per_viewer(keyed):
     second = get_session().viewer = ViewerBase()
     keyed.status()  # a viewer made while the tab polls is bound by the poll
     assert second.config_state.state.input_event_bindings.viewer["shift+keyr"] == restart_key.ACTION
-    assert get_session().restart_key["bound_for"] is second
+    assert second.actions._action_handlers[restart_key.ACTION] == {restart_key._on_restart_key}
 
 
 @pytest.mark.parametrize("serving", [

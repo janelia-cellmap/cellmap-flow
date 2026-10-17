@@ -141,30 +141,29 @@ class Session:
         # the provider, model, target and prompt the user chose (None until
         # they do); {dataset path: {provider id: the destination the user
         # acknowledged its images go to}}; the one job, running or staged
-        # for review (None when there is none); the lock its worker thread
-        # and the routes change the job under; and the viewer Shift+G is
-        # bound in. Never a key or other secret: those are read when a call
-        # is made.
+        # for review (None when there is none); and the lock its worker
+        # thread and the routes change the job under. Never a key or other
+        # secret: those are read when a call is made. (viewer.keys remembers
+        # the viewers Shift+G is bound in.)
         self.ai_annotate = {
             "settings": None,
             "acknowledged": {},
             "job": None,
             "lock": threading.Lock(),
-            "binding_registered_for": None,
         }
         self._finetune_job_manager = None
         # Shift+R over the viewer (routes/finetune/restart_key.py): the job
         # the Finetune tab follows, the last whose status it asked for; {job
         # id: the presses that asked for its restart}, which its status
         # answer carries for the tab to act on; {job id: when the last press
-        # that no restart has answered yet was made}; the viewer the key is
-        # bound in; and the lock the key's action, on neuroglancer's event
-        # loop, and the routes, in Flask's threads, change these under.
+        # that no restart has answered yet was made}; and the lock the key's
+        # action, on neuroglancer's event loop, and the routes, in Flask's
+        # threads, change these under. (viewer.keys remembers the viewers
+        # the key is bound in.)
         self.restart_key = {
             "followed": None,
             "requests": {},
             "asked": {},
-            "bound_for": None,
             "lock": threading.Lock(),
         }
 

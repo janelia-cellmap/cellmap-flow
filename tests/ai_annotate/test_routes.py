@@ -132,7 +132,7 @@ def test_settings_bind_shift_g_in_the_viewer(dashboard, ai_config, ai_volume, vi
     _settings(dashboard)  # once is enough; again changes nothing
 
     assert viewer.config_state.state.input_event_bindings.viewer["shift+keyg"] == routes.ACTION
-    assert get_session().ai_annotate["binding_registered_for"] is viewer
+    assert viewer.actions._action_handlers[routes.ACTION] == {routes._on_annotate_key}
 
 
 def test_an_unedited_prompt_is_stored_as_no_override(dashboard, ai_config, ai_volume):

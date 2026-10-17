@@ -39,6 +39,7 @@ from cellmap_flow.review import (
     resolve_db_path,
     undo_verdict,
 )
+from cellmap_flow.viewer import keys
 
 logger = logging.getLogger(__name__)
 
@@ -160,8 +161,7 @@ def _on_review_pick(action_state) -> None:
     shared with every HTTP-request dispatch (including subvolume chunk
     fetches). Keep this handler O(1) — no DB I/O, nothing that can yield.
 
-    One module-level function: neuroglancer keeps a set of handlers per
-    action, so registering it again on every /open adds nothing.
+    Bound by /api/review/open (viewer.keys.bind_key), once per viewer.
     """
     session = get_session().review
     if session is None or not session.segmentation_layer:
@@ -188,13 +188,6 @@ def _on_review_pick(action_state) -> None:
     logger.debug(
         f"PICK_HANDLER_ENTRY seq={seq} label={label_id} t_mono={time.monotonic():.3f}"
     )
-
-
-def _register_pick_action(viewer) -> None:
-    """Bind the t key in ``viewer`` to the 'review-pick' action."""
-    viewer.actions.add(_REVIEW_PICK_ACTION, _on_review_pick)
-    with viewer.config_state.txn() as cs:
-        cs.input_event_bindings.viewer[_REVIEW_PICK_KEYBINDING] = _REVIEW_PICK_ACTION
 
 
 def _navigate_viewer(instance: dict) -> bool:
@@ -298,7 +291,8 @@ def review_open():
         previous.picks.close()
     if seg_layer is not None and get_session().viewer is not None:
         try:
-            _register_pick_action(get_session().viewer)
+            # Once per viewer: an index opened again in the same viewer finds the key bound.
+            keys.bind_key(get_session().viewer, _REVIEW_PICK_ACTION, _REVIEW_PICK_KEYBINDING, _on_review_pick)
             logger.info(f"review: registered 'review-pick' action on key 't' for layer {seg_layer!r}")
         except Exception as e:
             logger.warning(f"review: failed to register pick action: {e}")

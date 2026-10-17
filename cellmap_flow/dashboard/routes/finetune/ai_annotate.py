@@ -75,6 +75,7 @@ from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.finetune.session import fill
 from cellmap_flow.finetune.session.fill import paint_box
 from cellmap_flow.io.metadata import nm_per_unit
+from cellmap_flow.viewer import keys
 
 logger = logging.getLogger(__name__)
 
@@ -211,32 +212,16 @@ def _override(prompt, profile):
 
 def _say(viewer, message):
     """Show ``message`` in neuroglancer's status bar (None clears it); never raises."""
-    if viewer is None:
-        return
-    try:
-        with viewer.config_state.txn() as s:
-            if message:
-                s.status_messages[STATUS_KEY] = message
-            else:
-                s.status_messages.pop(STATUS_KEY, None)
-    except Exception as e:
-        logger.debug(f"Could not set the viewer's status message: {e}")
+    keys.say(viewer, STATUS_KEY, message)
 
 
-def _ensure_binding(ai):
+def _ensure_binding():
     """Bind Shift+G to the AI-annotate action in the session's viewer, once per viewer.
 
-    A new dataset makes a new viewer, so the viewer bound is remembered
-    rather than a flag. neuroglancer keeps a set of handlers per action, so
-    binding the one module-level handler again adds nothing.
+    A new dataset makes a new viewer, which viewer.keys.bind_key binds the
+    first time this is called after it: the settings route, and a run.
     """
-    viewer = get_session().viewer
-    if viewer is None or ai["binding_registered_for"] is viewer:
-        return
-    viewer.actions.add(ACTION, _on_annotate_key)
-    with viewer.config_state.txn() as cs:
-        cs.input_event_bindings.viewer[KEY] = ACTION
-    ai["binding_registered_for"] = viewer
+    keys.bind_key(get_session().viewer, ACTION, KEY, _on_annotate_key)
 
 
 def _on_annotate_key(action_state):
@@ -358,7 +343,7 @@ def _begin_run(point_nm, depth_axis, display_dimensions=None):
         raise _Refused("No annotation volume to annotate. Create or resume one first.", needs_volume=True)
     dataset = _dataset(volume)
     _check_egress(ai, config, dataset, settings["provider"], settings["model"])
-    _ensure_binding(ai)
+    _ensure_binding()
 
     point_nm = [float(v) for v in point_nm]
     depth_axis = int(depth_axis)
@@ -597,7 +582,7 @@ def ai_annotate_settings():
             ai["acknowledged"].setdefault(dataset, {})[body.provider] = current
             logger.info(f"AI annotate: images of {dataset} may be sent to {body.provider} ({current})")
         ai["settings"] = settings
-        _ensure_binding(ai)
+        _ensure_binding()
         return jsonify({"success": True, "settings": settings,
                         "acknowledged": _acknowledged(ai, config, dataset)})
     except Exception as e:

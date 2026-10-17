@@ -29,15 +29,13 @@ mode's key (web/src/backend/routes/finetune.ts binds it in the page), go
 straight to job-monitor.js, which says why not in the tab itself.
 """
 
-import logging
 import math
 import threading
 import time
 
 from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.finetune.job_manager.state import can_restart
-
-logger = logging.getLogger(__name__)
+from cellmap_flow.viewer import keys
 
 # The neuroglancer action and the key bound to it ("shift+keyr" in
 # neuroglancer's spelling; KEYBINDING is how messages name it). Neuroglancer
@@ -82,56 +80,24 @@ def _later(seconds, function, *args):
 
 def _say(viewer, message):
     """Show ``message`` in neuroglancer's status bar (None clears it); never raises."""
-    if viewer is None:
-        return
-    try:
-        with viewer.config_state.txn() as s:
-            if message:
-                s.status_messages[STATUS_KEY] = message
-            else:
-                s.status_messages.pop(STATUS_KEY, None)
-    except Exception as e:
-        logger.debug(f"Could not set the viewer's status message: {e}")
-
-
-def _clear(viewer, message):
-    """Clear the status bar's ``message``, unless another has replaced it since; never raises.
-
-    The config state is the dashboard's alone (the page never changes it),
-    so a transaction that leaves it as it was costs one push of it.
-    """
-    try:
-        with viewer.config_state.txn() as s:
-            if s.status_messages.get(STATUS_KEY) == message:
-                s.status_messages.pop(STATUS_KEY, None)
-    except Exception as e:
-        logger.debug(f"Could not clear the viewer's status message: {e}")
+    keys.say(viewer, STATUS_KEY, message)
 
 
 def _show(viewer, message):
-    """Show ``message`` in the status bar for SHOW_S."""
-    _say(viewer, message)
-    if viewer is not None:
-        _later(SHOW_S, _clear, viewer, message)
+    """Show ``message`` in the status bar for SHOW_S, unless another replaces it sooner."""
+    keys.say_for(viewer, STATUS_KEY, message, SHOW_S)
 
 
 def ensure_binding():
     """Bind Shift+R to the restart action in the session's viewer, once per viewer.
 
-    As ai_annotate._ensure_binding: a new dataset makes a new viewer, so the
-    viewer bound is remembered rather than a flag. The routes that call this
-    are the job list, which the Finetune tab asks for on every page load
-    (and connect.js reloads the page after a new dataset), and a job's
-    status, which it polls while it follows a job.
+    As ai_annotate's Shift+G (viewer.keys.bind_key): a new dataset makes a
+    new viewer, which is bound the first time one of the routes that call
+    this answers after it. They are the job list, which the Finetune tab
+    asks for on every page load (and connect.js reloads the page after a new
+    dataset), and a job's status, which it polls while it follows a job.
     """
-    state = _state()
-    viewer = get_session().viewer
-    if viewer is None or state["bound_for"] is viewer:
-        return
-    viewer.actions.add(ACTION, _on_restart_key)
-    with viewer.config_state.txn() as cs:
-        cs.input_event_bindings.viewer[KEY] = ACTION
-    state["bound_for"] = viewer
+    keys.bind_key(get_session().viewer, ACTION, KEY, _on_restart_key)
 
 
 def follow(job_id):
