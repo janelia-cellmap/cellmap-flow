@@ -20,13 +20,14 @@
 // voxel size, read as if it were at that size), in nm whatever the source's
 // unit, as the viewer's coordinates are; voxel indices need no unit.
 import { levelCornerNm, levelExtentNm } from "../ai-annotate/plane";
+import { blobOf } from "../backend/serving";
 import type { Chain, DatasetInfo, LayerSpec, ServedModel } from "../contracts";
 import { steady } from "../finetune/good-regions";
 import { TYPED } from "../infer/dtype";
 import { geometryOf, type Level, outputShape } from "../infer/geometry";
 import { outputChannels, outputDtype } from "../infer/post";
 import { servedLevel } from "../label-it/prediction";
-import { decodeArgs, parseViewName } from "../shared/args";
+import { decodeArgs } from "../shared/args";
 import { count, formatBytes, formatDuration } from "../shared/format";
 import { goodRegionsLayer } from "../viewer/layers";
 import { coordsFromNm, pointerNm } from "../viewer/state";
@@ -116,12 +117,13 @@ export function chunkGrid(lo: readonly number[], hi: readonly number[], chunk: r
   return { grid, count: grid.reduce((n, g) => n * g, 1) };
 }
 
-/** The chain a served model's view runs, from the blob in its name: the
- * served view is named by the chain it was served through, which the
- * session's own chain may have moved past (a Submit All that has not yet
- * served the models again). Empty when the name carries no blob. */
-export function chainOf(served: Pick<ServedModel, "view">): Chain {
-  const { blob } = parseViewName(served.view);
+/** The chain a served model's view runs, from the blob in its name
+ * (backend/serving.ts blobOf): the served view is named by the chain it was
+ * served through, which the session's own chain may have moved past (a
+ * Submit All that has not yet served the models again). Empty when the name
+ * carries no blob. */
+export function chainOf(served: ServedModel): Chain {
+  const blob = blobOf(served);
   return blob ? decodeArgs(blob).chain : { input_norm: [], postprocess: [] };
 }
 

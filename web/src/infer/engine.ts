@@ -31,7 +31,7 @@ import { Onnx, type OnnxModel } from "../../chunkmirage/web/src/onnx";
 import type { Stage } from "../../chunkmirage/web/src/stages";
 import type { ViewInfo } from "../../chunkmirage/web/src/types";
 import type { Chain, DatasetInfo, GpuLimits, Inference, InferenceStats, ModelEntry, RegionPlan, RegionStore, RegionWrite, RegionWritten, ServedModel, SessionStore } from "../contracts";
-import { viewName } from "../shared/args";
+import { viewModelName, viewName } from "../shared/args";
 import { modelInfo } from "../shared/model-info";
 import { chooseRawLevel, datasetInfoFrom, effectiveOutputVoxelSize, geometryOf, outputLevel, outputShape } from "./geometry";
 import { validateNormalizers } from "./norms";
@@ -260,7 +260,7 @@ export class InferenceEngine implements Inference {
    * because they are what a copy to the cluster relies on. */
   materialize(view: string, store: RegionStore, options: RegionWrite): Promise<RegionWritten> {
     const engine = this.engine, output = this.outputs.get(view);
-    if (!engine || !output) return Promise.reject(new Error(`${view.split("__CFLOW_ARGS__")[0]} is not served`));
+    if (!engine || !output) return Promise.reject(new Error(`${viewModelName(view)} is not served`));
     const { lo, hi } = options;
     if (lo.length !== 3 || hi.length !== 3 || lo.some((l, a) => !Number.isInteger(l) || !Number.isInteger(hi[a]) || l < 0 || hi[a] > output.levelShape[a] || hi[a] <= l)) {
       return Promise.reject(new Error(`the box ${lo.join(",")}..${hi.join(",")} is not within the model's ${output.levelShape.join("×")} output voxels`));
@@ -276,7 +276,7 @@ export class InferenceEngine implements Inference {
    * run's. Nothing is computed. */
   async materializePlan(view: string, box: { lo: number[]; hi: number[] }): Promise<RegionPlan> {
     const engine = this.engine;
-    if (!engine || !this.outputs.get(view)) throw new Error(`${view.split("__CFLOW_ARGS__")[0]} is not served`);
+    if (!engine || !this.outputs.get(view)) throw new Error(`${viewModelName(view)} is not served`);
     const p = await engine.materializePlan(view, { level: 0, lo: box.lo, hi: box.hi, extent: "box", format: "zarr2" });
     return { peakBytes: p.peakBytes, split: p.split };
   }
@@ -287,7 +287,7 @@ export class InferenceEngine implements Inference {
    * (output.ts). The engine's demand queue runs the ones not yet computed. */
   async readOutput(view: string, lo: number[], hi: number[]): Promise<{ data: Float32Array; shape: number[] }> {
     const engine = this.engine, output = this.outputs.get(view);
-    if (!engine || !output) throw new Error(`${view.split("__CFLOW_ARGS__")[0]} is not served`);
+    if (!engine || !output) throw new Error(`${viewModelName(view)} is not served`);
     if (lo.length !== 3 || hi.length !== 3 || lo.some((l, a) => !Number.isInteger(l) || l < 0 || hi[a] > output.levelShape[a] || hi[a] <= l)) {
       throw new Error(`the box ${lo.join(",")}..${hi.join(",")} is not within the model's ${output.levelShape.join("×")} output voxels`);
     }
@@ -376,7 +376,7 @@ export class InferenceEngine implements Inference {
     const failure = this.engine?.failure;
     if (failure && failure.message !== this.lastFailure) {
       this.lastFailure = failure.message;
-      this.opts.log(`a chunk of ${failure.view.split("__CFLOW_ARGS__")[0]} failed: ${failure.message}`);
+      this.opts.log(`a chunk of ${viewModelName(failure.view)} failed: ${failure.message}`);
     }
     this.notify();
   }
