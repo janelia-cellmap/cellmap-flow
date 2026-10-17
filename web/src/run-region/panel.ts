@@ -27,6 +27,7 @@ import { pageBase } from "../backend/serving";
 import type { AppContext, LayerSpec, ServedModel } from "../contracts";
 import { localKeyFor, localUrl, supportsLocalFolders } from "../local-folder";
 import { carriesFiles, DROP_CLASS, type HandleItem } from "../local-folder/panel";
+import { message } from "../shared/message";
 import { getHandle, putHandle } from "../state/local-store";
 import { shaderColor } from "../viewer/display";
 import { dimensionsOf, PREDICTION_COLORS } from "../viewer/layers";
@@ -107,10 +108,6 @@ const indexedDbFolders: FolderStore = {
   get: (key) => getHandle(key) as unknown as Promise<OutputFolder | undefined>,
   put: (key, folder) => putHandle(key, folder as unknown as FileSystemDirectoryHandle),
 };
-
-function message(e: unknown): string {
-  return e instanceof Error ? e.message : String(e);
-}
 
 /** The Run tab, wired: does nothing on a page without it (the Flask
  * dashboard's). Call it once the page's DOM is there; it needs nothing of

@@ -17,6 +17,7 @@
 // This is the one place the browser mode reaches into the dashboard's
 // behaviour, and it does so from outside: the dashboard's own files stay as
 // they are.
+import { message } from "./shared/message";
 
 /** The directory the page is served from, e.g. https://host/cellmap-flow/app/ . */
 export function apiBase(): URL {
@@ -132,6 +133,6 @@ async function saveDownload(url: string, name: string | null): Promise<void> {
     setTimeout(() => URL.revokeObjectURL(href), 60_000);
   } catch (e) {
     console.error("[cellmap-flow] download failed:", url, e);
-    alert(`The download failed: ${e instanceof Error ? e.message : String(e)}`);
+    alert(`The download failed: ${message(e)}`);
   }
 }

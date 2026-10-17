@@ -9,6 +9,7 @@
 // The dashboard's own connect.js owns the Connect button and the status line
 // and is not changed: this fills the dataset field and clicks Connect, and
 // writes the status line the way connect.js does (its colours too).
+import { message } from "../shared/message";
 import { forgetState, withHash } from "../viewer/share";
 import type { PickedDirectory } from "./index";
 
@@ -74,11 +75,11 @@ export function carriesFiles(transfer: DataTransfer | null): transfer is DataTra
 export type HandleItem = DataTransferItem & { getAsFileSystemHandle?: () => Promise<FileSystemHandle | null> };
 
 export function connectPanel(): LocalPanel {
-  const status: LocalPanel["status"] = (message, tone) => {
+  const status: LocalPanel["status"] = (text, tone) => {
     const el = byId(STATUS_ID);
     if (!el) return;
     el.style.color = STATUS_COLOR[tone];
-    el.textContent = message;
+    el.textContent = text;
   };
 
   return {
@@ -187,7 +188,7 @@ export function connectPanel(): LocalPanel {
             if (handle.kind !== "directory") return status(`${handle.name} is a file. Drop the volume's folder (the .zarr or .n5 directory).`, "error");
             handler(handle as unknown as PickedDirectory);
           },
-          (e: unknown) => status(`Could not read what was dropped: ${e instanceof Error ? e.message : String(e)}`, "error"),
+          (e: unknown) => status(`Could not read what was dropped: ${message(e)}`, "error"),
         );
       });
     },

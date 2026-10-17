@@ -26,6 +26,7 @@
 import type { Chain, LayerSpec, RegionStore, ServedModel } from "../contracts";
 import { type ZipEntry, zipStore } from "../finetune/zip";
 import type { PickedDirectory } from "../local-folder";
+import { message } from "../shared/message";
 import { type KeptShader, predictionLayer } from "../viewer/layers";
 
 /** What a run needs of a picked folder: its name and permission methods
@@ -113,7 +114,7 @@ export async function prepareFolder(
       return { ready: false, refused: true, reason: `Writing to ${folder.name} was not allowed, so nothing was run. Click Run to be asked again, or choose another folder.` };
     }
   } catch (e) {
-    return { ready: false, refused: false, reason: `Could not ask to write to ${folder.name}: ${e instanceof Error ? e.message : String(e)}` };
+    return { ready: false, refused: false, reason: `Could not ask to write to ${folder.name}: ${message(e)}` };
   }
   try {
     const existing = await existingOutputs(folder, models);
@@ -123,7 +124,7 @@ export async function prepareFolder(
     await clearOutputs(folder, existing);
     return { ready: true, removed: existing };
   } catch (e) {
-    return { ready: false, refused: false, reason: `Could not clear the way in ${folder.name}: ${e instanceof Error ? e.message : String(e)}` };
+    return { ready: false, refused: false, reason: `Could not clear the way in ${folder.name}: ${message(e)}` };
   }
 }
 

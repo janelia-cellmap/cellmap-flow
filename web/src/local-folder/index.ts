@@ -27,6 +27,7 @@
 // The DOM is in panel.ts behind the LocalPanel interface, so the flows here
 // run on fakes in the tests (test/unit/local.test.ts).
 import type { SessionStore } from "../contracts";
+import { message } from "../shared/message";
 import { getHandle, putHandle } from "../state/local-store";
 import { connectPanel, type LocalPanel } from "./panel";
 
@@ -123,10 +124,6 @@ const RANDOM_ALPHABET = "abcdefghijklmnopqrstuvwxyz0123456789";
 function randomChars(count: number): string {
   const bytes = crypto.getRandomValues(new Uint8Array(count));
   return Array.from(bytes, (b) => RANDOM_ALPHABET[b % RANDOM_ALPHABET.length]).join("");
-}
-
-function message(e: unknown): string {
-  return e instanceof Error ? e.message : String(e);
 }
 
 // ------------------------------------------------------------------ picking a folder

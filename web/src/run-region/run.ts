@@ -10,6 +10,7 @@
 // folder on this machine, or memory for a zip) are output.ts's, the DOM
 // panel.ts's; one run at a time is the panel's rule.
 import type { DatasetInfo, Inference, RegionStore, RegionWritten } from "../contracts";
+import { message } from "../shared/message";
 import { formatBytes, formatDuration, type ModelPlan, type RegionNm } from "./region";
 
 /** The key of cellmap-flow's own attributes in each zarr's group attributes
@@ -165,8 +166,8 @@ export async function runRegion(opts: RunOptions): Promise<RunOutcome> {
         opts.log(`${plan.name}: cancelled, ${counted(last)} to ${where}`);
         return { results, aborted: true, error: null, elapsedMs: clock() - start };
       }
-      const error = `${plan.name}: ${e instanceof Error ? e.message : String(e)}`;
-      opts.log(`${plan.name}: failed after ${counted(last)} to ${where}: ${e instanceof Error ? e.message : String(e)}`);
+      const error = `${plan.name}: ${message(e)}`;
+      opts.log(`${plan.name}: failed after ${counted(last)} to ${where}: ${message(e)}`);
       return { results, aborted: false, error, elapsedMs: clock() - start };
     }
   }
