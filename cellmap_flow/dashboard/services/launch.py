@@ -233,6 +233,15 @@ def cellpose_job_name(model: str, output: str, do_3d: bool = False) -> str:
     return re.sub(r"\W+", "_", base).strip("_")
 
 
+def is_panel_cellpose(mc) -> bool:
+    """Whether the model config ``mc`` is one the Models tab's Cellpose panel
+    lists as a row of its own: one of its models (CELLPOSE_MODELS), named as
+    a row of it names its job (``cellpose_job_name``), so that the panel's
+    Submit names it alike. Not a YAML's Cellpose model of another name."""
+    return (isinstance(mc, CellposeModelConfig) and mc.pretrained_model in CELLPOSE_MODELS
+            and mc.name == cellpose_job_name(mc.pretrained_model, mc.output, mc.do_3d))
+
+
 @_reported
 def run_cellpose_model(params, st_data):
     """Run a Cellpose model: ``params`` are its CellposeModelConfig
@@ -400,6 +409,17 @@ def _stop_jobs(jobs, *, drop_layers=True):
     session.jobs = [j for j in session.jobs if id(j) not in stopped]
 
 
+def configs_by_name() -> dict:
+    """``{name: config}`` of the session's models; the last of a name, when
+    there are two."""
+    return {getattr(mc, "name", None): mc for mc in get_session().models_config}
+
+
+def _catalog_groups() -> dict:
+    """``{model name: its group}`` of the Models tab's catalog."""
+    return {name: group for group, models in get_session().model_catalog.items() for name in models}
+
+
 def update_run_models(names: List[str], hf_repos: List[str] = None, bioimage_models: List[dict] = None,
                       cellpose_models: List[dict] = None):
     """Run ``names`` (catalog models), ``hf_repos``, ``bioimage_models``
@@ -483,8 +503,8 @@ def update_run_models(names: List[str], hf_repos: List[str] = None, bioimage_mod
     # Loaded models list) and ticked again. No catalog entry names them,
     # so ticking one again did nothing; their config starts them, as Add
     # did. Not a finetuned model's: its server is its finetune job's.
-    in_catalog = {name for group in session.model_catalog.values() for name in group}
-    configs = {getattr(mc, "name", None): mc for mc in session.models_config}
+    in_catalog = _catalog_groups()
+    configs = configs_by_name()
     for name in dict.fromkeys(names):
         config = configs.get(name)
         if (name in in_catalog or config is None or isinstance(config, FinetuneModelConfig)
@@ -539,10 +559,8 @@ def _loaded_entry(name, job, config, catalog_group):
         output = config.output + (", 3D" if config.do_3d else "")
         entry.update(source="cellpose", detail=f"{config.pretrained_model}, {output}")
         # Its row in the Cellpose panel, to untick: only a model the panel
-        # lists as its own, named as its rows name their jobs
-        # (index_page.cellpose_panel_names), not a YAML's of another name.
-        if config.pretrained_model in CELLPOSE_MODELS and name == cellpose_job_name(
-                config.pretrained_model, config.output, config.do_3d):
+        # lists as its own.
+        if is_panel_cellpose(config):
             entry["cellpose"] = {"model": config.pretrained_model, "output": config.output, "do_3d": config.do_3d}
     elif catalog_group is not None:
         entry.update(source="catalog", detail=catalog_group)
@@ -567,8 +585,7 @@ def loaded_models() -> list:
     ``"cellpose"`` ({model, output, do_3d} of its Cellpose panel row)``}``.
     """
     session = get_session()
-    configs = {getattr(mc, "name", None): mc for mc in session.models_config}
-    groups = {name: group for group, models in session.model_catalog.items() for name in models}
+    configs, groups = configs_by_name(), _catalog_groups()
     jobs = list(session.jobs)
     with _launching_lock:
         launching = list(_launching)  # a withdrawn launch is no longer among them
