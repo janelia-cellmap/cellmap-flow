@@ -12,12 +12,13 @@ import { describe, expect, it } from "vitest";
 import { serveModels } from "../../src/backend/serving";
 import type { Chain, DatasetInfo, RegionStore, RegionWrite, RegionWritten, ServedModel } from "../../src/contracts";
 import type { Level } from "../../src/infer/geometry";
+import { formatDuration } from "../../src/shared/format";
 import {
   existingOutputs, OUTPUT_FOLDER_KEY, type OutputFolder, overwriteQuestion, prepareFolder, savedLayer, savedLayerName, writable,
   zarrName, zipFileName, zipRun,
 } from "../../src/run-region/output";
 import {
-  chainOf, chunkGrid, formatDuration, isPlan, LARGE_RUN_CHUNKS, largeRunWarning,
+  chainOf, chunkGrid, isPlan, LARGE_RUN_CHUNKS, largeRunWarning,
   latestBox, levelBox, type ModelPlan, planModel, regionError, roundedOut, runRegionLayer, sameRegion, snappedRegion,
   TYPED_BOX_ID, wholeVolumeNm, withBox,
 } from "../../src/run-region/region";

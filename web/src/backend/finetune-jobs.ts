@@ -30,6 +30,7 @@ import { loadGoodRegions } from "../finetune/good-regions";
 import { MODE_WORDS } from "../finetune/modes";
 import type { Finetuned, FinetuneOptions, FinetuneRun, RunFinetune, RunReporter } from "../finetune/types";
 import { finetunedEntry, nextFinetunedName } from "../models/finetuned";
+import { stamp } from "../shared/format";
 import { message } from "./router";
 import { serveModels } from "./serving";
 
@@ -519,6 +520,5 @@ function trained(job: FinetuneJob): string {
 
 /** `YYYYmmdd-HHMMSS`, as the volume ids and the server's run directories are stamped. */
 function timestamp(date: Date): string {
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}-${pad(date.getHours())}${pad(date.getMinutes())}${pad(date.getSeconds())}`;
+  return stamp(date);
 }

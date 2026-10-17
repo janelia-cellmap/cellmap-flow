@@ -26,6 +26,7 @@
 import type { Chain, LayerSpec, RegionStore, ServedModel } from "../contracts";
 import { type ZipEntry, zipStore } from "../finetune/zip";
 import type { PickedDirectory } from "../local-folder";
+import { stamp } from "../shared/format";
 import { message } from "../shared/message";
 import { type KeptShader, predictionLayer } from "../viewer/layers";
 
@@ -157,8 +158,7 @@ export function zipRun(stores: ReadonlyMap<string, Pick<MemoryStore, "files">>, 
 /** The zip's file name: `predictions-<YYYYmmdd-HHMMSS>.zip`, local time, so
  * runs saved one after the other do not overwrite each other in Downloads. */
 export function zipFileName(now: Date): string {
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `predictions-${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}.zip`;
+  return `predictions-${stamp(now)}.zip`;
 }
 
 // ---------------------------------------------------------------------------

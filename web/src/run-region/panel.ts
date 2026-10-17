@@ -27,6 +27,7 @@ import { pageBase } from "../backend/serving";
 import type { AppContext, LayerSpec, ServedModel } from "../contracts";
 import { localKeyFor, localUrl, supportsLocalFolders } from "../local-folder";
 import { carriesFiles, DROP_CLASS, type HandleItem } from "../local-folder/panel";
+import { count, formatBytes, formatDuration } from "../shared/format";
 import { message } from "../shared/message";
 import { getHandle, putHandle } from "../state/local-store";
 import { shaderColor } from "../viewer/display";
@@ -36,7 +37,7 @@ import {
   ZIP_LIMIT_BYTES, zarrName, zipFileName, zipRun,
 } from "./output";
 import {
-  describePlan, formatBytes, formatDuration, isPlan, largeRunWarning, latestBox, type ModelPlan, planModel, type RegionNm, regionError,
+  describePlan, isPlan, largeRunWarning, latestBox, type ModelPlan, planModel, type RegionNm, regionError,
   roundedOut, RUN_REGION_LAYER, runRegionLayer, sameRegion, snappedRegion, wholeVolumeNm, withBox,
 } from "./region";
 import { describeProgress, provenance, type RunOutcome, type RunProgress, runRegion, type RunTarget } from "./run";
@@ -515,7 +516,7 @@ export function installRunRegionUi(ctx: AppContext, opts: { folders?: FolderStor
     zipHref = null;
     const now = new Date();
     const chunks = plans.reduce((n, p) => n + p.chunks, 0);
-    status(`Running ${plans.map((p) => p.name).join(", ")}: ${chunks.toLocaleString("en-US")} chunk(s). You can go on browsing.`);
+    status(`Running ${plans.map((p) => p.name).join(", ")}: ${count(chunks)} chunk(s). You can go on browsing.`);
     log(`run of ${dataset.url}, offset ${region.offset.join(", ")} nm, size ${region.size.join(", ")} nm`);
     let outcome: RunOutcome;
     try {

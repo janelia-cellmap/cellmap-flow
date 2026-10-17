@@ -25,6 +25,7 @@ import { geometryOf, type Level, outputShape } from "../infer/geometry";
 import { outputChannels, outputDtype } from "../infer/post";
 import { servedLevel } from "../label-it/prediction";
 import { decodeArgs, parseViewName } from "../shared/args";
+import { count, formatBytes, formatDuration } from "../shared/format";
 import { goodRegionsLayer } from "../viewer/layers";
 import { coordsFromNm, pointerNm } from "../viewer/state";
 
@@ -163,14 +164,14 @@ export function planModel(served: ServedModel, dataset: DatasetInfo, region: Reg
   const box = levelBox(region, level);
   if (!box) return { name, error: `${name}: the region is outside what it predicts (${level.shape.join("×")} voxels at ${level.voxel.join("×")} nm)` };
   const chunk = outputShape(geometryOf(served.entry));
-  const { grid, count } = chunkGrid(box.lo, box.hi, chunk);
+  const { grid, count: chunks } = chunkGrid(box.lo, box.hi, chunk);
   const chain = chainOf(served);
   const channels = served.info.has_channel ? outputChannels(chain.postprocess, served.info.output_channels) : 1;
   const dtype = outputDtype(chain.postprocess, "float32");
   const perValue = TYPED[dtype]?.BYTES_PER_ELEMENT ?? 4;
   const savedChunks = box.hi.reduce((n, h, a) => n * Math.ceil((h - box.lo[a]) / chunk[a]), 1);
   const bytes = savedChunks * chunk.reduce((n, c) => n * c, 1) * channels * perValue;
-  return { name, served, chain, level, chunk, lo: box.lo, hi: box.hi, grid, chunks: count, savedChunks, channels, dtype, bytes };
+  return { name, served, chain, level, chunk, lo: box.lo, hi: box.hi, grid, chunks, savedChunks, channels, dtype, bytes };
 }
 
 /** Whether `plan` is one (not a refusal). */
@@ -191,28 +192,6 @@ export function roundedOut(region: RegionNm): RegionNm {
 // The words the panel shows
 // ---------------------------------------------------------------------------
 
-/** `n` bytes in a unit a person reads: B, kB, MB or GB, decimal (as file
- * managers count them), one decimal place below 10. */
-export function formatBytes(n: number): string {
-  const units = ["B", "kB", "MB", "GB", "TB"];
-  let value = n, unit = 0;
-  while (value >= 1000 && unit < units.length - 1) {
-    value /= 1000;
-    unit++;
-  }
-  return `${unit === 0 || value >= 10 ? Math.round(value) : value.toFixed(1)} ${units[unit]}`;
-}
-
-/** `ms` as a person reads a duration: seconds under two minutes, minutes
- * under two hours, hours and minutes past that. */
-export function formatDuration(ms: number): string {
-  const s = Math.max(0, Math.round(ms / 1000));
-  if (s < 120) return `${s} s`;
-  const m = Math.round(s / 60);
-  if (m < 120) return `${m} min`;
-  return `${Math.floor(m / 60)} h ${m % 60} min`;
-}
-
 /** "a×b×c", a size's axes joined as the dashboard writes them. */
 const dims = (values: readonly number[]) => values.join("×");
 
@@ -221,7 +200,7 @@ const dims = (values: readonly number[]) => values.join("×");
  * writes. */
 export function describePlan(plan: ModelPlan): string {
   const voxels = plan.hi.map((h, a) => h - plan.lo[a]);
-  return `${plan.name}: ${dims(voxels)} voxels at ${dims(plan.level.voxel)} nm, saved as that box (at most ${formatBytes(plan.bytes)} before compression); computes ${dims(plan.grid)} = ${plan.chunks.toLocaleString("en-US")} chunk${plan.chunks === 1 ? "" : "s"} of ${dims(plan.chunk)}`;
+  return `${plan.name}: ${dims(voxels)} voxels at ${dims(plan.level.voxel)} nm, saved as that box (at most ${formatBytes(plan.bytes)} before compression); computes ${dims(plan.grid)} = ${count(plan.chunks)} chunk${plan.chunks === 1 ? "" : "s"} of ${dims(plan.chunk)}`;
 }
 
 /** What is said of a run of `chunks` chunks before it starts, when there
@@ -231,7 +210,7 @@ export function describePlan(plan: ModelPlan): string {
 export function largeRunWarning(chunks: number, msPerChunk: number | null): string | null {
   if (chunks <= LARGE_RUN_CHUNKS) return null;
   const time = msPerChunk && msPerChunk > 0 ? `, roughly ${formatDuration(chunks * msPerChunk)} at the ${Math.round(msPerChunk)} ms a chunk measured so far` : "";
-  return `This is a large run: ${chunks.toLocaleString("en-US")} chunks${time}. It keeps going while you browse; Cancel stops it, and what was written stays.`;
+  return `This is a large run: ${count(chunks)} chunks${time}. It keeps going while you browse; Cancel stops it, and what was written stays.`;
 }
 
 // ---------------------------------------------------------------------------

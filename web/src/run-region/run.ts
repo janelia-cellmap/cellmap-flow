@@ -10,8 +10,9 @@
 // folder on this machine, or memory for a zip) are output.ts's, the DOM
 // panel.ts's; one run at a time is the panel's rule.
 import type { DatasetInfo, Inference, RegionStore, RegionWritten } from "../contracts";
+import { count, formatBytes, formatDuration } from "../shared/format";
 import { message } from "../shared/message";
-import { formatBytes, formatDuration, type ModelPlan, type RegionNm } from "./region";
+import type { ModelPlan, RegionNm } from "./region";
 
 /** The key of cellmap-flow's own attributes in each zarr's group attributes
  * (`.zattrs`), beside the OME-Zarr `multiscales` the engine writes. */
@@ -111,8 +112,8 @@ export interface RunOptions {
 
 /** "12 of 18 chunks (12 written, 3.1 MB)", one model's count. */
 function counted(written: RegionWritten): string {
-  const empty = written.skipped ? `, ${written.skipped.toLocaleString("en-US")} empty and not written` : "";
-  return `${written.written.toLocaleString("en-US")} of ${written.chunks.toLocaleString("en-US")} chunks written (${formatBytes(written.bytes)}${empty})`;
+  const empty = written.skipped ? `, ${count(written.skipped)} empty and not written` : "";
+  return `${count(written.written)} of ${count(written.chunks)} chunks written (${formatBytes(written.bytes)}${empty})`;
 }
 
 /** Write each of `plans` in turn into its store, as above. A model that
@@ -129,7 +130,7 @@ export async function runRegion(opts: RunOptions): Promise<RunOutcome> {
     const plan = opts.plans[i];
     const where = opts.target.where(plan.name);
     if (opts.signal.aborted) break;
-    opts.log(`${plan.name}: computing ${plan.chunks.toLocaleString("en-US")} chunk(s) for voxels ${plan.lo.join(",")}..${plan.hi.join(",")}, saved to ${where}`);
+    opts.log(`${plan.name}: computing ${count(plan.chunks)} chunk(s) for voxels ${plan.lo.join(",")}..${plan.hi.join(",")}, saved to ${where}`);
     let last: RegionWritten = { chunks: plan.savedChunks, written: 0, skipped: 0, bytes: 0, aborted: false };
     try {
       const written = await opts.infer.materialize(plan.served.view, opts.target.store(plan.name), {
@@ -181,5 +182,5 @@ export async function runRegion(opts: RunOptions): Promise<RunOutcome> {
 export function describeProgress(p: RunProgress): string {
   const model = p.models > 1 ? `${p.name} (${p.model} of ${p.models})` : p.name;
   const left = p.remainingMs === null ? "" : `, about ${formatDuration(p.remainingMs)} left`;
-  return `${model}: ${p.done.toLocaleString("en-US")} of ${p.total.toLocaleString("en-US")} chunks computed, ${p.written.toLocaleString("en-US")} saved, ${formatBytes(p.runBytes)} in all; ${formatDuration(p.elapsedMs)} so far${left}`;
+  return `${model}: ${count(p.done)} of ${count(p.total)} chunks computed, ${count(p.written)} saved, ${formatBytes(p.runBytes)} in all; ${formatDuration(p.elapsedMs)} so far${left}`;
 }
