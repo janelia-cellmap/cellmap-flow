@@ -2,8 +2,8 @@
 // writes: the port of cellmap_flow/ai_annotate/geometry.py (screen_shape,
 // to_screen, from_screen, PlanePlan's properties, plan_plane, raw_box) for
 // the browser. The viewer side of that module, depth_axis_from_layout and
-// depth_axis_for_view, is viewer/state.ts's (depthAxisFromLayout), which
-// reads the page's Neuroglancer; the `volume` here is a PaintVolume record
+// depth_axis_for_view, is viewer/state.ts's (depthAxisFromLayout, over
+// LAYOUT_DEPTH_SLOT here), which reads the page's Neuroglancer; the `volume` here is a PaintVolume record
 // (finetune/volume.ts) and the raw grid readPlane (plane.ts) passes rawBox is
 // a DatasetInfo level's.
 //
@@ -106,6 +106,20 @@ function stripZeros(text: string): string {
 // Screen layout (geometry.py _SCREEN, screen_shape, to_screen, from_screen)
 // ---------------------------------------------------------------------------
 
+/** Neuroglancer names its cross-section panels after display-dimension
+ * *slots*, not after the dimensions' names: the "xy" panel shows display
+ * dimensions 0 and 1 and looks along 2, "xz" (rotated about the first)
+ * looks along 1, "yz" (rotated about the second) along 0
+ * (data_panel_layout.ts's AXES_RELATIVE_ORIENTATION). The display dimensions
+ * are the first three of the viewer's coordinate space unless set.
+ * cellmap-flow's viewers name their dimensions z, y, x and set the display
+ * dimensions to x, y, z (viewer/layers.ts displayDimensionsFor), so the "xy"
+ * panel is the XY plane, looking along z. A viewer that sets none (a link
+ * made before they were set) shows z, y, x: its "xy" panel is a z-y slice
+ * looking along x, and the XY plane is its "yz" panel (geometry.py
+ * _LAYOUT_DEPTH_SLOT; viewer/state.ts depthAxisFromLayout reads it). */
+export const LAYOUT_DEPTH_SLOT: Readonly<Record<string, number>> = { xy: 2, xz: 1, yz: 0 };
+
 /** How Neuroglancer's panels draw their plane, by the display-dimension
  * slot each looks along (geometry.py _PANEL_SLOTS): the slot drawn down, the
  * slot drawn across, and whether across runs backwards. The "xy" panel
@@ -129,15 +143,21 @@ export function displayNames(displayDimensions?: readonly string[] | null): stri
   return same ? names : [...AXIS_NAMES];
 }
 
+/** The data axis (0 z, 1 y, 2 x) that display dimension `slot` of `names`
+ * is, or -1 when there is no such slot or its dimension is not z, y or x
+ * (a channel axis shown as a display dimension). */
+export function slotAxis(names: readonly string[], slot: number): number {
+  return slot < names.length ? (AXIS_NAMES as readonly string[]).indexOf(names[slot]) : -1;
+}
+
 /** The data axes (0 z, 1 y, 2 x) the panel looking along `depthAxis` draws
  * down and across, and whether across runs backwards, in a viewer whose
  * display dimensions are `displayDimensions` (displayNames;
  * geometry.screen_axes). */
 export function screenAxes(depthAxis: DepthAxis, displayDimensions?: readonly string[] | null): { down: number; across: number; backwards: boolean } {
   const names = displayNames(displayDimensions);
-  const axis = (name: string) => (AXIS_NAMES as readonly string[]).indexOf(name);
   const { down, across, backwards } = PANEL_SLOTS[names.indexOf(AXIS_NAMES[checkDepthAxis(depthAxis)]) as DepthAxis];
-  return { down: axis(names[down]), across: axis(names[across]), backwards };
+  return { down: slotAxis(names, down), across: slotAxis(names, across), backwards };
 }
 
 function screen(depthAxis: DepthAxis, displayDimensions?: readonly string[] | null): { transposed: boolean; backwards: boolean } {

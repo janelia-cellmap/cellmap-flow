@@ -4,6 +4,7 @@
 // dashboard does across a redraw, reading the position (and the pointer's)
 // in nm, the data axis the layout looks along, and the user's shader of a
 // layer. No DOM here, so all of it is unit-tested.
+import { AXIS_NAMES, LAYOUT_DEPTH_SLOT, slotAxis } from "../ai-annotate/geometry";
 import type { LayerSpec } from "../contracts";
 
 /** A layer in the state: at least its name; `visible: false` when hidden
@@ -227,25 +228,10 @@ export function coordsFromNm(nm: readonly number[], dimensions: Record<string, [
 
 // ---------------------------------------------------------------------------
 // The plane the viewer shows: cellmap_flow/ai_annotate/geometry.py's
-// depth_axis_from_layout and depth_axis_for_view, for the state's JSON.
+// depth_axis_from_layout and depth_axis_for_view, for the state's JSON. The
+// axis names and the panels' slots are ai-annotate/geometry.ts's, the port
+// of the rest of that module.
 // ---------------------------------------------------------------------------
-
-/** cellmap-flow's data axes, in order (geometry.AXIS_NAMES). */
-const AXIS_NAMES = ["z", "y", "x"] as const;
-
-/** Neuroglancer names its cross-section panels after display-dimension
- * *slots*, not after the dimensions' names: the "xy" panel shows display
- * dimensions 0 and 1 and looks along 2, "xz" (rotated about the first)
- * looks along 1, "yz" (rotated about the second) along 0
- * (data_panel_layout.ts's AXES_RELATIVE_ORIENTATION). The display dimensions
- * are the first three of the viewer's coordinate space unless set.
- * cellmap-flow's viewers name their dimensions z, y, x and set the display
- * dimensions to x, y, z (layers.ts displayDimensionsFor), so the "xy" panel
- * is the XY plane, looking along z. A viewer that sets none (a link made
- * before they were set) shows z, y, x: its "xy" panel is a z-y slice
- * looking along x, and the XY plane is its "yz" panel
- * (geometry._LAYOUT_DEPTH_SLOT). */
-const LAYOUT_DEPTH_SLOT: Record<string, number> = { xy: 2, xz: 1, yz: 0 };
 
 /** The panel name of a Neuroglancer layout (geometry._layout_type): the
  * string itself or an object's `type`, lower-cased, a "-3d" suffix (the
@@ -263,8 +249,8 @@ function layoutType(layout: unknown): string | null {
  *
  * `displayDimensions` are the names of the viewer's display dimensions in
  * order (z, y, x when not given, as a viewer that sets none over z, y, x
- * shows them); see
- * LAYOUT_DEPTH_SLOT for why they matter. Only a single-plane layout says
+ * shows them); see ai-annotate/geometry.ts LAYOUT_DEPTH_SLOT for why they
+ * matter. Only a single-plane layout says
  * which plane the user is looking at: Neuroglancer keeps one layout for the
  * whole viewer, so in "4panel" or "3d" the panel the pointer is in is not
  * known. Those (and anything unrecognised) get the "xy" panel's axis, the
@@ -274,7 +260,7 @@ function layoutType(layout: unknown): string | null {
 export function depthAxisFromLayout(layout: unknown, displayDimensions?: readonly string[] | null): 0 | 1 | 2 {
   const names: readonly string[] = displayDimensions?.length ? displayDimensions : AXIS_NAMES;
   const slot = LAYOUT_DEPTH_SLOT[layoutType(layout) ?? ""] ?? LAYOUT_DEPTH_SLOT.xy;
-  const axis = slot < names.length ? (AXIS_NAMES as readonly string[]).indexOf(names[slot]) : -1;
+  const axis = slotAxis(names, slot);
   return axis === 1 || axis === 2 ? axis : 0;
 }
 
