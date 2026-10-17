@@ -132,7 +132,7 @@ def test_the_viewer_bills_models_to_the_launching_jobs_project(monkeypatch, tmp_
     from cellmap_flow.cli.main import cli
     from cellmap_flow.dashboard import app as dashboard
     from cellmap_flow.jobs import launch, settings
-    from cellmap_flow.viewer import raw
+    from cellmap_flow.viewer import layers
 
     class FakeViewer:
         def txn(self):
@@ -141,7 +141,8 @@ def test_the_viewer_bills_models_to_the_launching_jobs_project(monkeypatch, tmp_
 
     monkeypatch.setattr(neuroglancer, "Viewer", FakeViewer)
     raw_layers = []
-    monkeypatch.setattr(raw, "get_raw_layer", lambda path: raw_layers.append(path) or "raw")
+    # The raw layer new_viewer adds (viewer.layers.raw_layer).
+    monkeypatch.setattr(layers, "get_raw_layer", lambda path, **kwargs: raw_layers.append(path) or "raw")
     monkeypatch.setattr(launch, "install_cleanup_handlers", lambda: True)
     started = []
     monkeypatch.setattr(dashboard, "create_and_run_app", lambda **k: started.append(k))
