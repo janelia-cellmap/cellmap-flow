@@ -65,7 +65,12 @@ check(["cellmap_flow.models.registry", "cellmap_flow.config.yaml", "cellmap_flow
                "torch", "huggingface_hub", "peft"])
 from cellmap_flow.models.registry import describe_types
 assert {"BioModelConfig", "DaCapoModelConfig"} <= set(describe_types())
-check([], LIGHT + ["bioimageio", "dacapo", "cellmap_models", "fly_organelles", "cellpose", "onnxruntime", "torch", "huggingface_hub", "peft"])
+# An onnx entry as the CLIs and the dashboard build one: its file's metadata
+# is read without onnx or onnxruntime.
+from cellmap_flow.models.models_config import OnnxModelConfig
+entry = OnnxModelConfig(path="web/test/fixtures/head.onnx")
+entry.to_dict(), entry.declared_input_norm()
+check([], LIGHT + ["bioimageio", "dacapo", "cellmap_models", "fly_organelles", "cellpose", "onnxruntime", "onnx", "torch", "huggingface_hub", "peft"])
 """,
     # The dashboard resolves what is pasted into its model form; resolving
     # reads names and files, and loads no model's framework.

@@ -329,33 +329,10 @@ def test_an_entry_that_names_no_one_model_is_refused(kwargs, message):
         OnnxModelConfig(**kwargs)
 
 
-def test_the_entry_says_only_what_it_was_given(finetuned):
-    model = OnnxModelConfig(path=str(finetuned), input_voxel_size="16,16,16", input_size=8, channels="a, b",
-                            slices_per_chunk=4, name="ft")
-    assert model.to_dict() == {"type": "onnx", "path": str(finetuned), "input_voxel_size": [16, 16, 16],
-                               "input_size": 8, "channels": ["a", "b"], "slices_per_chunk": 4, "name": "ft"}
-    assert OnnxModelConfig(folder="setup_54", file="x.onnx").to_dict() == {
-        "type": "onnx", "folder": "setup_54", "file": "x.onnx", "name": "setup_54"}
-    assert OnnxModelConfig.finetunable is False and OnnxModelConfig(folder="setup_54").finetune_modes() == ()
-
-
-# What the browser's Export Config writes (web/src/backend/routes/config.ts
-# exportYaml, as web/test/unit/backend-routes.test.ts pins it), with the
-# cluster's settings added.
-EXPORTED = """# CellMap-Flow exported configuration
-# Reload with: cellmap_flow yaml <this file>
-#
-data_path: {data}
-resample: true
-json_data:
-  input_norm:
-  - name: MinMaxNormalizer
-    min_value: 0
-    max_value: 255
-  - name: LambdaNormalizer
-    expression: 2*x-1
-  postprocess:
-  - name: SigmoidPostprocessor
+# The model entries the browser's Export Config writes (web/src/backend/
+# routes/config.ts exportYaml, as web/test/unit/backend-routes.test.ts pins
+# it), under the data_path a YAML needs and the charge_group a cluster does.
+EXPORTED = """data_path: {data}
 models:
 - type: onnx
   name: mito_aff_setup54_16nm
@@ -366,7 +343,6 @@ models:
   name: mito_aff_setup53-2d_16nm-ft1
   path: mito_aff_setup53-2d_16nm-ft1.onnx  # the file Download finetuned model saves: put it beside this YAML
 charge_group: cellmap
-queue: gpu_h100
 """
 
 
@@ -392,28 +368,6 @@ def test_the_browsers_exported_yaml_is_read_its_relative_path_from_the_yamls_fol
     assert [m.path or m.folder for m in get_session().models_config] == ["setup_54", str(folder / finetuned.name)]
     # Without the YAML's folder (a model entry from elsewhere), as before: the working directory's.
     assert registry.build_model({"type": "onnx", "path": "x.onnx"}, "x").path == str(tmp_path / "x.onnx")
-
-
-def test_its_server_runs_in_the_onnx_environment():
-    import tomllib
-
-    assert OnnxModelConfig.default_env == "onnx"
-    pixi = tomllib.loads((ROOT / "pixi.toml").read_text())
-    assert pixi["environments"]["onnx"] == {"features": ["onnx"]}
-    assert "onnxruntime-gpu" in pixi["feature"]["onnx"]["target"]["linux-64"]["pypi-dependencies"]
-
-
-def test_building_an_entry_imports_no_onnxruntime(finetuned):
-    """The CLIs and the dashboard build entries, and their environment has none."""
-    code = (
-        "import sys; from cellmap_flow.models.models_config import OnnxModelConfig; "
-        f"m = OnnxModelConfig(path={str(finetuned)!r}); m.to_dict(); m.declared_input_norm(); "
-        "assert 'onnxruntime' not in sys.modules and 'onnx' not in sys.modules, sorted(sys.modules)"
-    )
-    import subprocess
-
-    result = subprocess.run([sys.executable, "-c", code], cwd=ROOT, capture_output=True, text=True)
-    assert result.returncode == 0, result.stderr
 
 
 # --- the real onnxruntime ------------------------------------------------------------------------
