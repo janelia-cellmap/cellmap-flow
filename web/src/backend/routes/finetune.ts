@@ -431,9 +431,10 @@ export function finetuneRoutes(router: Router, deps: Partial<FinetuneDeps> = {})
   router.post("/api/finetune/job/:id/stop-early", (_req, params) => {
     const result = jobs.stopEarly(params.id);
     if (!result.ok) return json(result.status, { success: false, error: result.error });
+    const noun = MODE_NOUN[jobs.get(params.id)!.args.options.mode];
     return json(200, {
       success: true,
-      message: `Stop requested. Training will exit after epoch ${result.afterEpoch}; the head trained by then is kept and served, so you can restart with updated parameters.`,
+      message: `Stop requested. Training will exit after epoch ${result.afterEpoch}; the ${noun} trained by then is kept and served, so you can restart with updated parameters.`,
     });
   });
 
