@@ -183,12 +183,23 @@ written): serve its fp32 or fp16 file to finetune it.
 
 The whole network trains on square tiles cut from the painted slices, in the
 plane you painted in (x–y, or z–y and z–x where the raw data's voxels are
-cubes, as the server's 2D training does), with masked BCE on the painted
-voxels and Adam. Its controls are the epochs, its own learning rates (1e-4 by
-default, a hundredth of the last layer's), the server's *Batch Size*, in tiles
-per step (1 by default), and *Tile Size*. The loss, distillation, smoothing
-and balance fields are the last layer's and are hidden; good regions are not
-used.
+cubes, as the server's 2D training does), with Adam. Its controls are the
+epochs, its own learning rates (1e-4 by default, a hundredth of the last
+layer's), the server's *Batch Size*, in tiles per step (1 by default), *Tile
+Size*, *Augmentation*, and the last layer's loss, distillation, smoothing and
+balance fields, which it reads as the last layer does. Distillation holds the
+model to the starting network's output on the voxels its scope picks in each
+tile, worked out on the same tile it trains on. Good regions are not used.
+
+*Augmentation*, off by default as on the server, gives each step's tiles a
+random brightness (×0.8 to ×1.2) and noise (1% of the raw's range) before
+normalization, then random flips and quarter turns of the image and the paint
+together, the server's augmentation. The targets, and the starting network's
+output for distillation, are made after the turn, from the turned paint and
+image, so an affinity still means its own direction. The whole network sees
+the same tiles every epoch, so over many epochs it can learn them by heart:
+augmentation is what keeps it from that. The last layer trains on features
+computed once, and takes no augmentation.
 
 *Tile Size* is the tile's side in pixels: 172, 300 (the default), 428 or 556.
 The model reads 88 pixels of context around what it predicts, so a tile's
