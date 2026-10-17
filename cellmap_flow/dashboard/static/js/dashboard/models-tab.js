@@ -2,15 +2,19 @@
 // a ✕ to stop it; the local catalog, Hugging Face, BioImage Model Zoo and
 // Cellpose models to serve, the LSF server config, the GPU queue picker,
 // and the inference jobs' own output.
+//
+// Submit, Add a model's Run and a Loaded models ✕ each tell the rest of the
+// page that the models served may have changed (lib/events.js
+// MODELS_CHANGED_EVENT); the Loaded models list hears it too, and that is
+// how it is asked again after each of them.
 import { ApiError, getJSON, postJSON } from "../lib/api.js";
-import { onModelsChanged } from "../lib/models-changed.js";
+import { announce, listen, MODELS_CHANGED_EVENT } from "../lib/events.js";
 import { pageData } from "../lib/page-data.js";
 import { poll } from "../lib/poll.js";
 import { fillQueueSelect, queueHint, subscribeGpuQueues } from "../shared/gpu-queues.js";
 import { readCount, saveServerConfig, WALLTIME_RE } from "../shared/server-config.js";
 
-// onModelsSubmitted runs after the server has taken a new model selection.
-export function initModelsTab({ onModelsSubmitted } = {}) {
+export function initModelsTab() {
   const submitBtn = document.getElementById("submitModelsBtn");
   const logArea = document.getElementById("modelSubmissionLogModels");
   // The repos of the Hugging Face models already running, ticked on load;
@@ -859,8 +863,7 @@ export function initModelsTab({ onModelsSubmitted } = {}) {
         addResult.hidden = true;
         addRef.value = "";
         logArea.value += `Added ${d.name}: starting its server\n`;
-        refreshLoaded();
-        if (onModelsSubmitted) onModelsSubmitted();
+        announce(MODELS_CHANGED_EVENT);
       })
       .catch((err) => alert("Could not add that model: " + (err instanceof ApiError ? err.message : err)));
   });
@@ -1032,9 +1035,11 @@ export function initModelsTab({ onModelsSubmitted } = {}) {
         // A finetune's model whose job has ended had no server left to stop.
         logArea.value += `Removed ${model.name}: ${model.status === "ended" ? "its" : "stopped, and its"} layer taken away\n`;
         logArea.scrollTop = logArea.scrollHeight;
+        // The answer is the list now: drawn at once. The list then asks
+        // again on hearing the announcement, and draws the same.
         loadedSeq += 1;
         renderLoaded(data.models || []);
-        if (onModelsSubmitted) onModelsSubmitted();
+        announce(MODELS_CHANGED_EVENT);
       })
       .catch((err) => {
         const message = err instanceof ApiError ? err.message : String(err);
@@ -1050,9 +1055,10 @@ export function initModelsTab({ onModelsSubmitted } = {}) {
       });
   }
 
-  // When the list may have changed without this tab doing it: a finetune's
-  // model served, replaced or ended; and each time the tab is opened.
-  onModelsChanged(refreshLoaded);
+  // Whenever the models served may have changed (lib/events.js): this
+  // tab's Submit, Run and ✕, and a finetune's model served, replaced or
+  // ended; and each time the tab is opened.
+  listen(MODELS_CHANGED_EVENT, () => refreshLoaded());
   const modelTabButton = document.getElementById("model-tab");
   if (modelTabButton) modelTabButton.addEventListener("shown.bs.tab", refreshLoaded);
   refreshLoaded();
@@ -1102,8 +1108,7 @@ export function initModelsTab({ onModelsSubmitted } = {}) {
           : "Submitted: no model selected; any running ones are stopped\n";
         logArea.scrollTop = logArea.scrollHeight;
         if (started.length) watchStartingJobs();
-        refreshLoaded();
-        if (onModelsSubmitted) onModelsSubmitted();
+        announce(MODELS_CHANGED_EVENT);
       })
       .catch((err) => {
         console.error("Error:", err);

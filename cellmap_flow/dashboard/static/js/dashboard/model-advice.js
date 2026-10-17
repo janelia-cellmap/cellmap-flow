@@ -5,6 +5,7 @@
 // currently configured. Only renders when there is something to say.
 import { getJSON } from "../lib/api.js";
 import { esc } from "../lib/dom.js";
+import { listen, MODELS_CHANGED_EVENT } from "../lib/events.js";
 import { poll } from "../lib/poll.js";
 
 // A confirmation needs no decision from anyone, so it should not sit at the
@@ -25,6 +26,13 @@ let chains = null;
 
 export function initModelAdvice({ input, postprocess }) {
   chains = { input, postprocess };
+  // Loading a model is the point at which advice is most useful, and that
+  // path never goes through Submit All: the advice is asked for again
+  // whenever the models served may have changed (lib/events.js), as on the
+  // Models tab's Submit, Add and ✕. The jobs start on background threads,
+  // so refreshModelAdvice polls rather than assuming the server is already
+  // up.
+  listen(MODELS_CHANGED_EVENT, () => refreshModelAdvice());
 }
 
 // Tick exactly the suggested steps, fill in their parameters, and move them

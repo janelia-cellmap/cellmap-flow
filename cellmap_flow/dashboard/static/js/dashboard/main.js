@@ -132,11 +132,7 @@ function initServerConfigModal() {
 }
 
 initConnect();
-// Loading a model is the point at which advice is most useful, and that
-// path never goes through Submit. The jobs start on background
-// threads, so refreshModelAdvice polls rather than assuming the server is
-// already up.
-initModelsTab({ onModelsSubmitted: refreshModelAdvice });
+initModelsTab();
 document.getElementById("toggleDashboardBtn").addEventListener("click", toggleDashboard);
 const inputChain = mountOpChain(document.getElementById("inputNormList"), { kind: "input" });
 const postChain = mountOpChain(document.getElementById("postProcessList"), { kind: "postprocess" });

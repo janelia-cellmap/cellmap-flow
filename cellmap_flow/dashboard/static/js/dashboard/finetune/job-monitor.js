@@ -12,19 +12,15 @@
 // status answer carries the count (restart_requests), so it acts within one
 // poll; pressed over the viewer in browser mode, where
 // web/src/backend/routes/finetune.ts binds it in the page and sends
-// RESTART_EVENT; and pressed on this page itself.
+// lib/events.js's RESTART_EVENT; and pressed on this page itself.
 import { setBusy } from "../../lib/dom.js";
-import { announceModelsChanged } from "../../lib/models-changed.js";
+import { announce, listen, MODELS_CHANGED_EVENT, RESTART_EVENT } from "../../lib/events.js";
 import { isBrowserMode } from "../../lib/page-data.js";
 import { poll } from "../../lib/poll.js";
 import { TERMINAL, createJobCard } from "./job-card.js";
 import { createJobLog } from "./log-stream.js";
 import { createLossPlot } from "./loss-plot.js";
 import { getAnswer, getAnswerIfFound, postAnswer } from "./requests.js";
-
-// The event the browser mode's Shift+R over the viewer sends this page
-// (web/src/backend/routes/finetune.ts's RESTART_EVENT).
-const RESTART_EVENT = "cellmap-flow:restart-finetune";
 
 // Shift+R on this page, as Neuroglancer reads it over the viewer
 // ("shift+keyr": the key, whatever the keyboard layout types with it):
@@ -142,15 +138,16 @@ export function initJobMonitor({ picker, form, log }) {
     }
   }
 
-  // The Models tab's Loaded models list is told when the job's model may
-  // have come, gone or been replaced: when its status, its server's
-  // readiness or its model's name changes from what was last seen.
+  // The rest of the page is told when the job's model may have come, gone
+  // or been replaced (lib/events.js MODELS_CHANGED_EVENT): when its status,
+  // its server's readiness or its model's name changes from what was last
+  // seen.
   let servedSeen = null;
   function noteServed(job) {
     const seen = job ? [job.status, Boolean(job.inference_server_ready), job.finetuned_model_name || ""].join("|") : null;
     if (seen === servedSeen) return;
     servedSeen = seen;
-    announceModelsChanged();
+    announce(MODELS_CHANGED_EVENT);
   }
 
   // Start Finetuning button
@@ -440,7 +437,7 @@ export function initJobMonitor({ picker, form, log }) {
       if (data) say(`Shift+R: ${data.message || `${jobId} restarted.`}`);
     });
   }
-  document.addEventListener(RESTART_EVENT, restartFromKey);
+  listen(RESTART_EVENT, restartFromKey);
   document.addEventListener("keydown", (event) => {
     if (!isRestartKey(event)) return;
     event.preventDefault();

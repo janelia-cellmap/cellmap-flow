@@ -1,6 +1,7 @@
 // The model picker at the top of the Annotation Crops panel: the served
 // models that can be finetuned (/api/finetune/models), and the one picked.
 import { esc } from "../../lib/dom.js";
+import { listen, MODELS_CHANGED_EVENT } from "../../lib/events.js";
 import { isBrowserMode } from "../../lib/page-data.js";
 import { poll } from "../../lib/poll.js";
 import { getAnswer } from "./requests.js";
@@ -10,6 +11,8 @@ import { applyModelDefaults, setBrowserTraining } from "./training-form.js";
 // on the main tab. The finetune tab is usually opened first, so a single
 // load on page load almost always finds nothing: the list is polled quietly
 // in the background instead, and polling stops as soon as models show up.
+// It starts over each time the models served may have changed
+// (lib/events.js), and on Refresh.
 const MODEL_POLL_INTERVAL_MS = 2000;
 const MODEL_POLL_MAX_ATTEMPTS = 150;  // ~5 minutes, enough for a queued job
 
@@ -75,12 +78,16 @@ export function initModelPicker({ log, savedModelName }) {
 
   let loggedNoModels = false;
   let lastLoadedCount = null;
+  // Whether the first load of the poll's current run says what it found:
+  // the page's first load does, and a Refresh's.
+  let reportFirstLoad = true;
 
   // One load of the list. The first load, and a Refresh, say what they
-  // found; the polls in between are quiet unless the number of models
-  // changes. Resolves to false once models are listed, which stops the poll.
+  // found; the polls in between, and a load because the models changed
+  // elsewhere on the page, are quiet unless the number of models changes.
+  // Resolves to false once models are listed, which stops the poll.
   function loadModels({ tick, stale }) {
-    const quiet = tick > 1;
+    const quiet = tick > 1 || !reportFirstLoad;
     return getAnswer("/api/finetune/models")
       .then(data => {
         if (stale()) return;
@@ -98,6 +105,8 @@ export function initModelPicker({ log, savedModelName }) {
             log.add("  → Submit a model from the main tab; this list updates automatically");
           }
           modelSelect.innerHTML = "";
+          // Nothing to pick: not the model picked before the last one went.
+          selectedModel = null;
           lastLoadedCount = 0;
           return;
         }
@@ -157,12 +166,25 @@ export function initModelPicker({ log, savedModelName }) {
     pauseWhenHidden: true,
   });
 
+  // Refresh: for the models this page is not told of, served from another
+  // page or the command line, or one whose server came up after the list
+  // had found others.
   document.getElementById("refreshModelsBtn").addEventListener("click", function() {
     log.add("Refreshing model list...");
     // The options are left in place so loadModels can keep the current
     // pick; it rebuilds them from the response.
     models = [];
     selectedModel = null;
+    reportFirstLoad = true;
+    modelPoll.restart();
+  });
+
+  // The models served may have changed (lib/events.js): a Submit, Run or ✕
+  // on the Models tab, or a finetune's model served, replaced or ended.
+  // Quietly, and keeping the pick meanwhile: this comes without a click, so
+  // the panel's buttons must not find no model while the list is asked for.
+  listen(MODELS_CHANGED_EVENT, () => {
+    reportFirstLoad = false;
     modelPoll.restart();
   });
 
