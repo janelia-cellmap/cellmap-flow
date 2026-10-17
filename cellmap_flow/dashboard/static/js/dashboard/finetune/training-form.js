@@ -316,17 +316,19 @@ function applyTrainingMode() {
 export function setBrowserTraining(model) {
   browserModel = model;
   const modes = (model && model.finetune_modes) || ["head"];
+  // The whole network needs a GPU (WebGPU); without one it shows, disabled, with why.
+  const noGpu = (model && model.full_training && model.full_training.unavailable) || null;
+  const usable = noGpu ? modes.filter((mode) => mode !== "full") : modes;
   const select = document.getElementById("finetuneMode");
   Array.from(select.options).forEach((option) => {
-    option.disabled = !modes.includes(option.value);
+    option.disabled = !usable.includes(option.value);
   });
-  if (modes.length && !modes.includes(select.value)) select.value = modes[0];
+  if (usable.length && !usable.includes(select.value)) select.value = usable[0];
   const both = modes.includes("head") && modes.includes("full");
   document.getElementById("finetuneModeGroup").hidden = !both;
   const note = document.getElementById("finetuneModeNote");
-  note.textContent = both
-    ? "The last layer trains in seconds; the whole network in minutes, on this machine's GPU."
-    : "";
+  note.textContent = !both ? "" : noGpu
+    || "The last layer trains in seconds; the whole network in minutes, on this machine's GPU.";
   fillTileSizes(model && model.full_training);
   applyTrainingMode();
   if (!modes.length) {

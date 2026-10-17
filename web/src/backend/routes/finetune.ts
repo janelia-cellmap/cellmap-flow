@@ -49,6 +49,7 @@ import { MANIFEST_METADATA_KEY, PAINT_ROUTE } from "../../contracts";
 import { type FetchFullFiles, fetchFullFiles } from "../../finetune/full/files";
 import { defaultTile, tileChoices } from "../../finetune/full/graph";
 import { checkTileSide } from "../../finetune/full/run-full";
+import { webgpuMissing } from "../../finetune/full/tfjs";
 import { finetuneModes, refuseMode, sourceOf } from "../../finetune/modes";
 import { withMetadata } from "../../finetune/onnx-proto";
 import { runFinetune } from "../../finetune/run";
@@ -75,6 +76,8 @@ export interface FinetuneDeps {
   page: () => EventTarget | null;
   /** A whole-network model's training graph and offsets (Hugging Face). */
   fullFiles: FetchFullFiles;
+  /** Why the whole network cannot train here (no GPU for TF.js), or null. */
+  webgpuMissing: () => Promise<string | null>;
 }
 
 /** Shift+R over the viewer (restart_key.py's KEY and ACTION), and the event
@@ -101,6 +104,7 @@ export function finetuneRoutes(router: Router, deps: Partial<FinetuneDeps> = {})
     now: () => new Date(),
     page: () => (typeof document === "undefined" ? null : document),
     fullFiles: fetchFullFiles,
+    webgpuMissing,
     ...deps,
   };
 
@@ -113,16 +117,26 @@ export function finetuneRoutes(router: Router, deps: Partial<FinetuneDeps> = {})
     try {
       const { graph } = await d.fullFiles(sourceOf(entry), spec);
       const tiles = tileChoices(graph, spec.spike?.full);
-      return { tiles, default_tile: defaultTile(tiles), context: graph.context, measured_on: spec.spike?.setup ?? null };
+      const unavailable = await refuseGpu();
+      return { tiles, default_tile: defaultTile(tiles), context: graph.context, measured_on: spec.spike?.setup ?? null, unavailable };
     } catch (e) {
       return { tiles: [], default_tile: null, context: null, measured_on: null, error: `The training graph could not be fetched: ${message(e)}` };
     }
   }
 
-  /** `training`'s tile side checked against `entry`'s graph: null when it
-   * fits (or the run is the head's), else why not. */
-  async function refuseTile(entry: ModelEntry, options: FinetuneOptions): Promise<string | null> {
+  /** Why the whole network cannot train in this browser, or null. */
+  async function refuseGpu(): Promise<string | null> {
+    const missing = await d.webgpuMissing();
+    return missing && `The whole network trains on a GPU with WebGPU, and ${missing}. Train the last layer, or open the page in Chrome or Edge on a machine with a GPU.`;
+  }
+
+  /** A whole-network run checked: a GPU to train on, and `training`'s tile
+   * side against `entry`'s graph. Null when it can run (or the run is the
+   * head's), else why not. */
+  async function refuseFull(entry: ModelEntry, options: FinetuneOptions): Promise<string | null> {
     if (options.mode !== "full") return null;
+    const gpu = await refuseGpu();
+    if (gpu) return gpu;
     try {
       const { graph } = await d.fullFiles(sourceOf(entry), entry.manifest.finetune!.full!);
       checkTileSide(graph, options.tileSize, entry.name);
@@ -342,7 +356,7 @@ export function finetuneRoutes(router: Router, deps: Partial<FinetuneDeps> = {})
     if (!ctx.infer.dataset()) return badRequest(NO_DATASET);
     const training = readTraining({ ...body, finetune_mode: mode });
     if ("error" in training) return badRequest(training.error);
-    const refusedMode = refuseMode(model.entry, training.options.mode) ?? (await refuseTile(model.entry, training.options));
+    const refusedMode = refuseMode(model.entry, training.options.mode) ?? (await refuseFull(model.entry, training.options));
     if (refusedMode) return badRequest(refusedMode);
     const autoServe = body.auto_serve !== false;
     const outputType = hasAffinityChannels(model.entry) ? "affinities" : "binary";
@@ -423,8 +437,8 @@ export function finetuneRoutes(router: Router, deps: Partial<FinetuneDeps> = {})
     }
     const training = readTraining({ ...body, finetune_mode: mode });
     if ("error" in training) return badRequest(training.error);
-    const refusedTile = job ? await refuseTile(job.args.entry, training.options) : null;
-    if (refusedTile) return badRequest(refusedTile);
+    const refusedFull = job ? await refuseFull(job.args.entry, training.options) : null;
+    if (refusedFull) return badRequest(refusedFull);
     const result = jobs.restart(params.id, training.options, training.params);
     if (!result.ok) return json(result.status, { success: false, error: result.error });
     return json(200, {

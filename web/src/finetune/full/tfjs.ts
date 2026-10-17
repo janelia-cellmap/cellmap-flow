@@ -1,15 +1,16 @@
 // TensorFlow.js for whole-network finetuning, loaded the first time a run
 // needs it: @tensorflow/tfjs-core with its WebGPU backend where the browser
-// has WebGPU, and its CPU backend otherwise (Node, a headless browser
-// without a GPU). The dynamic imports keep TF.js out of the page's bundle:
+// has a GPU, and its CPU backend otherwise (Node, where the tests train on
+// it). The dynamic imports keep TF.js out of the page's bundle:
 // Vite splits them into chunks of their own that only a whole-network run
 // fetches: six chunks, about 0.68 MB of JavaScript, 0.19 MB gzipped, once
 // Vite has shaken out the ops nothing calls (the WebGPU backend 0.28 MB of
 // it); the head's training needs none of it.
 //
-// The CPU backend is plain JavaScript: it trains, but a step at 300² takes
-// minutes where WebGPU takes a fraction of a second, so a run on it says so
-// in its log. Version 4.22.0 is the one Marwan measured with (the
+// The CPU backend is plain JavaScript on the calling thread: it trains,
+// but a step at 300² takes minutes where WebGPU takes a fraction of a
+// second, and the page answers nothing meanwhile, so the page offers the
+// whole network only where webgpuMissing finds a GPU. Version 4.22.0 is the one Marwan measured with (the
 // manifests' spike); package.json pins it.
 //
 // A run holds TF.js from loadTf to its release(). When the last run lets
@@ -70,7 +71,7 @@ async function importTf(): Promise<Tf> {
   // imports this for it): without them every step fails on its first op.
   await import("@tensorflow/tfjs-core/dist/register_all_gradients");
   await import("@tensorflow/tfjs-backend-cpu");
-  if (typeof navigator !== "undefined" && "gpu" in navigator && navigator.gpu) {
+  if ((await webgpuMissing()) === null) {
     try {
       await import("@tensorflow/tfjs-backend-webgpu");
     } catch {
@@ -80,17 +81,34 @@ async function importTf(): Promise<Tf> {
   return tf;
 }
 
+/**
+ * Why this browser cannot give TF.js a GPU, or null when it can, without
+ * loading TF.js. navigator.gpu exists in Chrome even where requestAdapter()
+ * then answers null (a headless Chromium without the GPU flags, a
+ * blocklisted driver), and TF.js's WebGPU factory throws on that null
+ * adapter rather than letting setBackend fall back, so the adapter is asked
+ * for here first. The finetune routes refuse a whole-network run without
+ * one: on the CPU backend a step takes minutes of the page's own thread,
+ * which then answers nothing else (the viewer's chunks, the tab's status).
+ */
+export async function webgpuMissing(): Promise<string | null> {
+  if (typeof navigator === "undefined" || !("gpu" in navigator) || !navigator.gpu) return "this browser has no WebGPU";
+  try {
+    return (await navigator.gpu.requestAdapter()) ? null : "this browser's WebGPU found no GPU to use";
+  } catch (e) {
+    return `this browser's WebGPU failed to find a GPU (${String((e as Error)?.message ?? e)})`;
+  }
+}
+
 async function chooseBackend(tf: Tf): Promise<{ backend: TfBackend; fallback: string | null }> {
-  let fallback: string;
-  if (typeof navigator === "undefined" || !("gpu" in navigator) || !navigator.gpu) {
-    fallback = "this browser has no WebGPU (navigator.gpu)";
-  } else if (!tf.findBackendFactory("webgpu")) {
-    fallback = "TF.js's WebGPU backend failed to load";
-  } else if (await tf.setBackend("webgpu")) {
-    await tf.ready();
-    return { backend: "webgpu", fallback: null };
-  } else {
-    fallback = "TF.js could not start its WebGPU backend (no adapter, or the device was refused)";
+  let fallback = await webgpuMissing();
+  if (!fallback && !tf.findBackendFactory("webgpu")) fallback = "TF.js's WebGPU backend failed to load";
+  if (!fallback) {
+    if (await tf.setBackend("webgpu")) {
+      await tf.ready();
+      return { backend: "webgpu", fallback: null };
+    }
+    fallback = "TF.js could not start its WebGPU backend (the device was refused)";
   }
   if (!(await tf.setBackend("cpu"))) throw new Error("TF.js could start neither its WebGPU nor its CPU backend");
   await tf.ready();

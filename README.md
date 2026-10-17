@@ -40,9 +40,10 @@ running: an OpenOrganelle mouse-liver volume with the mitochondria model
 `setup_53` on it. A link's query names the volume and the models
 (`?dataset=<url>&model=<name>`), and **Share** in the header copies such a
 link to what you have open: the volume, the models, the view and the
-settings they run with. A model you finetuned in the browser goes in the
-link as its trained last layer's weights and is rebuilt where the link
-opens; your paint stays in your browser, and Share says so (the Finetune
+settings they run with. A model whose last layer you finetuned in the
+browser goes in the link as that layer's weights and is rebuilt where the
+link opens (one whose whole network you trained is left out, and Share says
+so); your paint stays in your browser, and Share says so (the Finetune
 tab's *Download paint (zarr)* saves it as a file to send). The address bar
 itself stays bare, so a new tab starts fresh.
 
@@ -82,7 +83,8 @@ itself stays bare, so a new tab starts fresh.
   sharing; the `.onnx` carries its manifest, so the server serves it as it
   is (`type: onnx`), and *Export Config* writes a YAML `cellmap_flow yaml`
   runs, its models the ONNX files the page ran. The rest of the network
-  stays as exported: a finetune of the whole network is the server mode's.
+  stays as exported, except for the 2D models (`setup_53_2d`, `setup_54_2d`),
+  whose whole network the tab can also train on a machine with a GPU.
   AI-assisted annotation is in the tab too: hover and press Shift+G, and the
   plane on screen goes to a Gemini image model asked to paint the structure,
   for review before it is written; the

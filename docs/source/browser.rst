@@ -215,8 +215,10 @@ measured:
 300² is the default because it fits a laptop: four times faster than 556²
 and a quarter of its memory, which for setup_54_2d is more than many laptop
 GPUs give a tab. An epoch is one pass over the tiles, which cover each slice's
-paint once. A browser without WebGPU trains on the CPU, which works but takes
-minutes a step; the log says which it uses and how long a step takes.
+paint once. *Whole network* needs a GPU: where the browser finds none
+through WebGPU, the option is shown disabled with why (on the CPU a step
+would take minutes, and the page would answer nothing else meanwhile). The
+log says how long a step takes.
 
 The *Patch on screen* tools label the box centred where the viewer looks, as
 on the server (:doc:`finetuning`): *Seed from Prediction* copies a model's

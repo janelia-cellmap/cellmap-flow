@@ -273,8 +273,10 @@ What a model can be trained as comes from its manifest's `finetune` block
 manifest without the block keeps the head the graph is found to end in. The
 tab's *Training* field (browser-only, shown when both are offered) picks one.
 *Whole network* (`src/finetune/full/`) trains a 2D model with TensorFlow.js
-4.22.0 on WebGPU (its CPU backend without WebGPU), loaded only when such a
-run starts (`tfjs.ts`: six chunks, 0.68 MB, 0.19 MB gzipped): the folder's
+4.22.0 on WebGPU, loaded only when such a run starts, and only where the
+browser has a GPU (`tfjs.ts` `webgpuMissing`; without one the option is
+disabled with why and submit refuses it, since TF.js's CPU backend would
+hold the page's thread for minutes a step) (`tfjs.ts`: six chunks, 0.68 MB, 0.19 MB gzipped): the folder's
 `finetune/train_graph.json` and `finetune/initializers.json` are fetched from
 the Hub (`files.ts`), the paint is cut into tiles in the plane it was drawn in
 (`tiles.ts`, the server's `paint_depth_axes` and `slice_axes`), the network is

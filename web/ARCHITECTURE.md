@@ -217,8 +217,9 @@ trains and writes it back (`cellmap-tfjs-train.ts`, vendored). `graph.ts`
 checks the graph and walks its shapes to find the tile sides it takes;
 `tiles.ts` cuts the paint into output-sized tiles in the plane each stroke
 was drawn in and reads each tile's raw slice as the model stage would;
-`tfjs.ts` loads TF.js (WebGPU, else CPU) in chunks of its own when a run
-starts and resets its engine when the last run ends, freeing the GPU
+`tfjs.ts` loads TF.js in chunks of its own when a run starts (WebGPU in the
+page, which the routes require through `webgpuMissing`; the CPU backend in
+Node, where the tests train) and resets its engine when the last run ends, freeing the GPU
 buffers it pools; `run-full.ts` checks the offsets against the served file,
 trains with masked BCE and Adam, and writes the trained weights into a copy
 of the bytes, which then go the way a head's do. A whole-network model is

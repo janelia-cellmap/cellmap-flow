@@ -367,7 +367,8 @@ Their manifests also declare the input normalization they were trained
 behind (``input_norm``), which the dashboard offers with an *Apply* button;
 the YAML's ``json_data`` is what runs, as for every type. An ONNX model cannot
 be finetuned on the server (the trainer trains torch modules); the browser
-finetunes an export's last layer, and the result is served here.
+finetunes an export's last layer (or, for the 2D exports, its whole network),
+and the result is served here.
 ``example/onnx_web_models.yaml`` runs two exports.
 
 .. _fly:

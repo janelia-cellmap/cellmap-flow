@@ -86,14 +86,15 @@ describe("the exported training graphs", () => {
 });
 
 describe("Marwan's TF.js runtime on head.onnx", () => {
-  it("lowers the masked loss in a few steps", async () => {
+  // TF.js's CPU backend: seconds a test on a quiet machine, near a minute on a busy one.
+  it("lowers the masked loss in a few steps", { timeout: 120_000 }, async () => {
     const { tf } = await loadTf();
     const { losses, after } = trained(tf, new Uint8Array(readFileSync(resolve(FIXTURES, "head.onnx"))), 20);
     expect(after).toBeLessThan(losses[0] * 0.8);
     expect(losses.at(-1)!).toBeLessThan(losses[0]);
   });
 
-  it("writes the trained weights back where onnxruntime reads them, in fp32 and fp16", async () => {
+  it("writes the trained weights back where onnxruntime reads them, in fp32 and fp16", { timeout: 120_000 }, async () => {
     const { tf } = await loadTf();
     for (const [file, tolerance] of [["head.onnx", 1e-5], ["head_fp16.onnx", 5e-3]] as const) {
       const bytes = new Uint8Array(readFileSync(resolve(FIXTURES, file)));
