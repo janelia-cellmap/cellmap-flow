@@ -34,38 +34,51 @@ function isRestartKey(event) {
   return !(target.closest("input, textarea, select") || target.isContentEditable);
 }
 
-// The confirm Restart asks, to check the form's values first. The browser's
-// run reads only the head's parameters (the rest of the form is hidden
-// there), so its summary lists only those, or the whole network's.
+// The confirm Restart asks, to check the form's values first: one row per
+// value the run reads, as [label, the request's key, what to show when the
+// form leaves the key out]. A row whose value is more than one key, or none,
+// has a function of the request in the key's place. The browser's run reads
+// only the head's parameters (the rest of the form is hidden there), so its
+// rows are only those, or the whole network's.
+const RESTART_SUMMARY_ROWS = {
+  server: [
+    ["loss", (body) => body.loss_type + (body.margin !== undefined ? ` (margin=${body.margin})` : "")],
+    ["learning_rate", "learning_rate"],
+    ["lora_r", "lora_r"],
+    ["epochs", "num_epochs"],
+    ["batch_size", "batch_size"],
+    ["patches/epoch", "patches_per_epoch", "manifest"],
+    ["rehearsal", "rehearsal_fraction", "manifest"],
+    ["distillation", (body) => `${body.distillation_lambda} (${body.distillation_scope})`],
+    ["label_smoothing", "label_smoothing"],
+    ["balance_classes", "balance_classes"],
+    ["augment", "augment"],
+  ],
+  head: [
+    ["loss", "loss_type"],
+    ["learning_rate", "learning_rate"],
+    ["epochs", "num_epochs"],
+    ["label_smoothing", "label_smoothing"],
+    ["balance_classes", "balance_classes"],
+  ],
+  full: [
+    ["training", () => "whole network"],
+    ["learning_rate", "learning_rate"],
+    ["epochs", "num_epochs"],
+    ["batch_size", "batch_size"],
+    ["tile_size", "tile_size", "default"],
+  ],
+};
+
 function restartSummary(requestBody, browser) {
-  if (browser && requestBody.finetune_mode === "full") {
-    return `Restart training with current form values?\n\n` +
-      `  training:       whole network\n` +
-      `  learning_rate:  ${requestBody.learning_rate}\n` +
-      `  epochs:         ${requestBody.num_epochs}\n` +
-      `  batch_size:     ${requestBody.batch_size}\n` +
-      `  tile_size:      ${requestBody.tile_size !== undefined ? requestBody.tile_size : 'default'}\n`;
-  }
-  return browser
-    ? `Restart training with current form values?\n\n` +
-      `  loss:           ${requestBody.loss_type}\n` +
-      `  learning_rate:  ${requestBody.learning_rate}\n` +
-      `  epochs:         ${requestBody.num_epochs}\n` +
-      `  label_smoothing:${requestBody.label_smoothing}\n` +
-      `  balance_classes:${requestBody.balance_classes}\n`
-    : `Restart training with current form values?\n\n` +
-      `  loss:           ${requestBody.loss_type}` +
-      (requestBody.margin !== undefined ? ` (margin=${requestBody.margin})` : '') + '\n' +
-      `  learning_rate:  ${requestBody.learning_rate}\n` +
-      `  lora_r:         ${requestBody.lora_r}\n` +
-      `  epochs:         ${requestBody.num_epochs}\n` +
-      `  batch_size:     ${requestBody.batch_size}\n` +
-      `  patches/epoch:  ${requestBody.patches_per_epoch !== undefined ? requestBody.patches_per_epoch : 'manifest'}\n` +
-      `  rehearsal:      ${requestBody.rehearsal_fraction !== undefined ? requestBody.rehearsal_fraction : 'manifest'}\n` +
-      `  distillation:   ${requestBody.distillation_lambda} (${requestBody.distillation_scope})\n` +
-      `  label_smoothing:${requestBody.label_smoothing}\n` +
-      `  balance_classes:${requestBody.balance_classes}\n` +
-      `  augment:${requestBody.augment}\n`;
+  const mode = !browser ? "server" : requestBody.finetune_mode === "full" ? "full" : "head";
+  const rows = RESTART_SUMMARY_ROWS[mode].map(([label, key, fallback]) => {
+    let value;
+    if (typeof key === "function") value = key(requestBody);
+    else value = requestBody[key] !== undefined ? requestBody[key] : fallback;
+    return `  ${(label + ":").padEnd(16)}${value}\n`;
+  });
+  return "Restart training with current form values?\n\n" + rows.join("");
 }
 
 function showNotification(title, message) {

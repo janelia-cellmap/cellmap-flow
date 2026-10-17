@@ -591,23 +591,14 @@
 
     <div class="row">
       {# The browser's whole network takes this batch too, in tiles, one by default (full-also). #}
+      {% set default_batch_size = 1 if mode == "browser" else 8 %}
       <div class="col-md-6 server-only full-also">
         <div class="mb-3">
           <label for="batchSize" class="form-label">Batch Size</label>
           <select id="batchSize" class="form-select">
-            {% if mode == "browser" %}
-            <option value="1" selected>1 (Default)</option>
-            <option value="2">2</option>
-            <option value="4">4</option>
-            <option value="8">8</option>
-            {% else %}
-            <option value="1">1</option>
-            <option value="2">2</option>
-            <option value="4">4</option>
-            <option value="8" selected>8 (Default)</option>
-            {% endif %}
-            <option value="16">16</option>
-            <option value="32">32</option>
+            {% for size in [1, 2, 4, 8, 16, 32] %}
+            <option value="{{ size }}"{% if size == default_batch_size %} selected{% endif %}>{{ size }}{% if size == default_batch_size %} (Default){% endif %}</option>
+            {% endfor %}
           </select>
           {% if mode == "browser" %}
           <small class="text-muted">Tiles per step: each step's time and memory grow with it.</small>
@@ -624,8 +615,6 @@
           <small class="text-muted d-block" id="tileSizeHint"></small>
         </div>
       </div>
-      {% endif %}
-      {% if mode == "browser" %}
       <div class="col-md-6 head-only">
         <div class="mb-3">
           <label for="batchPixels" class="form-label" title="How many painted voxels each step of the head's training averages over, drawn from every painted chunk at once. Smaller batches take more steps per epoch: more movement, more noise. The epochs pass over all the paint whatever the batch.">Voxels per Step</label>
