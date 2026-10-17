@@ -241,12 +241,10 @@ def box(offset, shape):
 
 
 def test_a_box_runs_output_is_the_box(ome_pyramid, pooling_model, task_yaml, monkeypatch):
-    """The output was an array the size of the whole volume, with the box's
-    blocks written into it, the last ones up to a block past its end. Now it
-    is the box, snapped out to every 8 nm output voxel it touches: (12, 20,
-    4) + (50, 30, 70) nm is (8, 16, 0) + (56, 40, 80), 7 x 5 x 10 voxels,
-    not whole 4-voxel chunks. Its blocks start at its corner, and the last
-    along each axis are cut at its end."""
+    """The output is the box, snapped out to every 8 nm output voxel it
+    touches: (12, 20, 4) + (50, 30, 70) nm is (8, 16, 0) + (56, 40, 80),
+    7 x 5 x 10 voxels, not whole 4-voxel chunks. Its blocks start at its
+    corner, and the last along each axis are cut at its end."""
     path = task_yaml(ome_pyramid(((8, 4),)) + "/s0", pooling_model(), bounding_boxes=[box((12, 20, 4), (50, 30, 70))])
     master, blocks = run_in_process(path, monkeypatch)
 
@@ -304,9 +302,9 @@ def test_several_boxes_share_one_output_over_their_bounding_box(ome_pyramid, poo
 
 def test_separate_bounding_boxes_zarrs_gives_each_box_its_own_output(ome_pyramid, pooling_model, task_yaml,
                                                                       monkeypatch):
-    """It took one box; the dashboard wrote a task per box to get each its own
-    zarr. Each is <output_path>/box_<n>, the size of its box, a group of the
-    output zarr, written by its box's task."""
+    """Each box's output is <output_path>/box_<n>, the size of its box, a
+    group of the output zarr, written by its box's task, whose blocks start
+    at the box's own corner."""
     path = task_yaml(ome_pyramid(((8, 4),)) + "/s0", pooling_model(), bounding_boxes=[FIRST, SECOND],
                      separate_bounding_boxes_zarrs=True)
     master, blocks = run_in_process(path, monkeypatch)
@@ -334,28 +332,24 @@ def test_a_block_of_another_task_is_refused(ome_pyramid, pooling_model, task_yam
 MORTON = [ThresholdPostprocessor(threshold=0.5), MortonSegmentationRelabeling()]
 
 
-def test_a_boxs_blocks_get_label_ids_of_their_own(ome_pyramid, pooling_model, task_yaml, monkeypatch):
+def test_a_boxs_blocks_get_label_ids_of_their_own(ome_pyramid, pooling_model, task_yaml, monkeypatch, tmp_path):
     """A block's ids are keyed to its index on the volume's grid, floored for
-    a box's blocks, which start at the box's corner, 8 nm off that grid: the
+    a box's blocks, which start at the box's corner. 8 nm off that grid, the
     three blocks along z, the last cut at the box's end, still get an id each
-    (one object a block), 1 + 64 x Morton(index)."""
+    (one object a block), 1 + 64 x Morton(index). On it, the blocks are the
+    server's chunks, and their ids are the ones it serves."""
+    raw, model = ome_pyramid(((8, 4),)) + "/s0", pooling_model()
     json_data = {"input_norm": [], "postprocess": [p.to_dict() for p in MORTON]}
-    path = task_yaml(ome_pyramid(((8, 4),)) + "/s0", pooling_model(), json_data=json_data,
-                     bounding_boxes=[box((8, 8, 8), (72, 32, 32))])
-    master, blocks = run_in_process(path, monkeypatch)
+    off_grid = task_yaml(raw, model, json_data=json_data, bounding_boxes=[box((8, 8, 8), (72, 32, 32))])
+    master, _ = run_in_process(off_grid, monkeypatch)
 
     s0, _, _ = written(master.output_path)
     ids = [np.unique(s0[z:z + 4]).tolist() for z in (0, 4, 8)]  # each block's voxels, along z
     assert ids == [[1], [1 + 64 * 1], [1 + 64 * 8]]  # Morton of (0, 0, 0), (1, 0, 0), (2, 0, 0)
 
-
-def test_a_box_on_the_volumes_grid_gets_the_ids_the_server_does(ome_pyramid, pooling_model, task_yaml, monkeypatch):
-    """Where the blocks are the server's chunks, as for a box on the volume's
-    block grid, the ids are the same as served."""
-    raw, model = ome_pyramid(((8, 4),)) + "/s0", pooling_model()
-    json_data = {"input_norm": [], "postprocess": [p.to_dict() for p in MORTON]}
-    path = task_yaml(raw, model, json_data=json_data, bounding_boxes=[box((32, 0, 32), (64, 32, 32))])
-    master, _ = run_in_process(path, monkeypatch)
+    on_grid = task_yaml(raw, model, json_data=json_data, bounding_boxes=[box((32, 0, 32), (64, 32, 32))],
+                        output_path=str(tmp_path / "on_grid.zarr"))
+    master, _ = run_in_process(on_grid, monkeypatch)
 
     s0, _, _ = written(master.output_path)
     client = TestClient(ChunkmirageServer(raw, ScriptModelConfig(script_path=model)).app)
@@ -370,11 +364,10 @@ def test_a_box_on_the_volumes_grid_gets_the_ids_the_server_does(ome_pyramid, poo
     pytest.param({}, {"bounding_boxes": [box((0, 0, 0), (32, 32, 32))]}, id="a-box-into-a-whole-volume-output"),
 ])
 def test_resuming_into_an_output_over_another_region_is_refused(ome_pyramid, pooling_model, task_yaml, first, then):
-    """Said so: funlib's prepare_ds takes an array of the same shape
-    elsewhere, keeping its offset, and the OME check after it blamed the
-    other translation on an older cellmap-flow's half-voxel placement; one
-    of another shape it refused as "not compatible". An output of a box run
-    by an older cellmap-flow is the whole volume's."""
+    """A run over the region the output covers resumes it; one over another
+    region is refused, saying so: another box of the same shape, or a box
+    into a whole volume's output (which is also what an older cellmap-flow
+    wrote for a box run)."""
     raw, model = ome_pyramid(((8, 4),)) + "/s0", pooling_model()
     CellMapFlowBlockwiseProcessor(task_yaml(raw, model, **first), create=True)
     CellMapFlowBlockwiseProcessor(task_yaml(raw, model, **first), create=True)  # the same region resumes
