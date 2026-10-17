@@ -110,7 +110,7 @@ def test_the_outputs_and_the_blocks_written_are_unchanged(raw_zarr, pooling_mode
         worker.process_fn(daisy.Block(roi, roi, roi, task_id="t"))
 
     assert master.output_channels == list(outputs)
-    for (channel, expected), array in zip(outputs.items(), worker.output_arrays):
+    for (channel, expected), array in zip(outputs.items(), worker.outputs[0].arrays):
         s0 = zarr.open(str(master.output_path / channel / "s0"), mode="r")
         attrs = zarr.open_group(str(master.output_path / channel), mode="r").attrs
         corner, far = s0[..., :4, :4, :4], s0[..., 6:, :4, :4]  # 16 nm voxels
@@ -133,7 +133,7 @@ def test_the_outputs_are_named_however_the_model_names_its_channels(raw_zarr, po
     roi = daisy.Roi((0, 0, 0), (32, 32, 32))
     worker.process_fn(daisy.Block(roi, roi, roi, task_id="t"))
     assert master.output_channels == ["a", "b"]
-    assert all(array.to_ndarray(roi).any() for array in worker.output_arrays), "each output was written"
+    assert all(array.to_ndarray(roi).any() for array in worker.outputs[0].arrays), "each output was written"
 
 
 def test_a_model_naming_no_channels_needs_them_given(raw_zarr, pooling_model, task_yaml):
@@ -159,7 +159,7 @@ def test_the_whole_volume_task_covers_the_output_on_its_chunk_grid(raw_zarr, poo
     monkeypatch.setattr(blockwise_processor.daisy, "Task", task)
     with pytest.raises(Stop):
         processor.run()
-    assert scheduled == [processor.output_arrays[0].roi]
+    assert scheduled == [processor.outputs[0].arrays[0].roi]
 
 
 @pytest.mark.parametrize("corner, voxel_size, resample", [
@@ -188,7 +188,7 @@ def test_a_block_gets_the_same_label_ids_served_or_blockwise(ome_pyramid, poolin
     for index in range(2):  # along z
         roi = daisy.Roi((corner + 32 * index, corner, corner), (32, 32, 32))
         worker.process_fn(daisy.Block(roi, roi, roi, task_id="t"))
-        written = worker.output_arrays[0].to_ndarray(roi)
+        written = worker.outputs[0].arrays[0].to_ndarray(roi)
         served = read_chunk(client, layer(posts=posts), (index, 0, 0))[0]
         assert np.all(written == served) and np.all(served == 1 + 64 * index), index
 
@@ -251,7 +251,7 @@ def test_a_box_runs_output_is_the_box(ome_pyramid, pooling_model, task_yaml, mon
     s0, offset, translation = written(master.output_path)
     the_box = daisy.Roi((8, 16, 0), (56, 40, 80))
     assert (s0.shape, s0.chunks, offset, translation) == ((7, 5, 10), (4, 4, 4), [8, 16, 0], [12.0, 20.0, 4.0])
-    assert master.output_arrays[0].roi == the_box
+    assert master.outputs[0].arrays[0].roi == the_box
     np.testing.assert_array_equal(s0[:], raw_at(the_box))
     # 2 x 2 x 3 blocks from the box's corner, 32 nm apart; those at its end overhang it.
     begins = sorted(roi.offset for _, roi in blocks)
@@ -267,7 +267,7 @@ def test_a_box_is_cut_to_the_data(ome_pyramid, pooling_model, task_yaml):
     raw, model = ome_pyramid(((8, 4),)) + "/s0", pooling_model()
     master = CellMapFlowBlockwiseProcessor(task_yaml(raw, model, bounding_boxes=[box((96, -20, 0), (64, 50, 16))]),
                                            create=True)
-    assert master.output_arrays[0].roi == daisy.Roi((96, 0, 0), (32, 32, 16))
+    assert master.outputs[0].arrays[0].roi == daisy.Roi((96, 0, 0), (32, 32, 16))
 
     outside = task_yaml(raw, model, bounding_boxes=[box((200, 0, 0), (8, 8, 8))])
     with pytest.raises(ConfigError, match="bounding box 1 .* is outside the data"):
@@ -464,10 +464,11 @@ def no_model_loading(monkeypatch):
     pytest.param({"output_channels": ["a", "a"]}, "duplicated", id="duplicated-channels"),
     pytest.param({"json_data": {"input_norm": {}}}, "json_data", id="json-data-without-postprocess"),
     pytest.param({"data_path": "/nope.zarr/raw"}, "does not exist", id="missing-data"),
-    pytest.param({"bounding_boxes": [{"offset": [0, 0, 0], "shape": [8, 8]}]}, "shape should be three numbers",
+    pytest.param({"bounding_boxes": [{"offset": [0, 0, 0], "shape": [8, 8]}]}, "bounding box 1",
                  id="a-box-of-two-sides"),
-    pytest.param({"bounding_boxes": [{"offset": [0, 0, 0], "shape": [8, 0, 8]}]}, "above 0", id="an-empty-box"),
-    pytest.param({"bounding_boxes": [{"offset": [0, 0, 0]}]}, "offset, shape", id="a-box-without-a-shape"),
+    pytest.param({"bounding_boxes": [{"offset": [0, 0, 0], "shape": [8, 0, 8]}]}, "bounding box 1", id="an-empty-box"),
+    pytest.param({"bounding_boxes": [{"offset": [0, 0, 0]}]}, "bounding box 1", id="a-box-without-a-shape"),
+    pytest.param({"bounding_boxes": [{"shape": ["8", 8, 8]}]}, "bounding box 1", id="a-side-that-is-text"),
 ])
 def test_the_precheck_reports_a_bad_setting(raw_zarr, pooling_model, task_yaml, no_model_loading, overrides, message):
     overrides = dict(overrides)
@@ -539,7 +540,7 @@ def test_only_the_workers_load_the_model(raw_zarr, pooling_model, task_yaml, mon
     monkeypatch.setattr(blockwise_processor, "Inferencer", refuse)
     monkeypatch.setattr(ModelConfig, "_validate_model_shapes", refuse)
     master = CellMapFlowBlockwiseProcessor(task_yaml(raw_zarr(), pooling_model()), create=True)
-    assert master.inferencers == [] and master.output_arrays, "it still creates the outputs"
+    assert master.inferencers == [] and master.outputs[0].arrays, "it still creates the outputs"
     with pytest.raises(RuntimeError, match="worker"):
         master.process_fn(None)
 

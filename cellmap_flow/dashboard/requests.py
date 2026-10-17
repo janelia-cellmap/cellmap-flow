@@ -42,6 +42,7 @@ from pydantic import (
     model_validator,
 )
 
+from cellmap_flow.blockwise.bounding_box import BoundingBox
 from cellmap_flow.jobs.settings import SERVER_CONFIG_KEYS
 from cellmap_flow.jobs.site import current_site
 
@@ -212,20 +213,14 @@ class Equivalences(BaseModel):
     equivalences: list[list[int]]
 
 
-# A point or a size, z, y, x.
+# A point, z, y, x.
 _Triple = Annotated[list[float], Field(min_length=3, max_length=3)]
-
-
-class BoundingBox(BaseModel):
-    """A box drawn or loaded on an INPUT node: its corner and its size."""
-
-    offset: _Triple = [0, 0, 0]
-    shape: _Triple = [1, 1, 1]
 
 
 class BbxGenerator(BaseModel):
     """The box tool's viewer on ``dataset_path``, showing the boxes the
-    INPUT node has; ``num_boxes`` is how many the dialog counts up to."""
+    INPUT node has, each a blockwise task's BoundingBox; ``num_boxes`` is
+    how many the dialog counts up to."""
 
     dataset_path: Annotated[str, _required("dataset_path", message="Dataset path is required")] = Field(
         None, validate_default=True)

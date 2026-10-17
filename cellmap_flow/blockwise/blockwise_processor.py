@@ -16,6 +16,8 @@ from funlib.persistence.arrays.datasets import ArrayNotFoundError
 from zarr.storage import NestedDirectoryStore
 from zarr.hierarchy import open_group
 from functools import partial
+from pydantic import ValidationError
+from cellmap_flow.blockwise.bounding_box import BoundingBox
 from cellmap_flow.image_data_interface import ImageDataInterface
 from cellmap_flow.inferencer import Inferencer
 from cellmap_flow.pipeline_spec import PipelineSpec
@@ -73,26 +75,26 @@ def _validate_settings(config):
 
 
 def _check_bounding_boxes(boxes):
-    """Refuse ``bounding_boxes`` that are not a list of ``{offset, shape}``.
+    """Refuse ``bounding_boxes`` that are not a list of BoundingBox: ``{offset, shape}``,
+    each three numbers, nm, z, y, x, every side of the shape above 0.
 
-    Each is three numbers, nm, z, y, x: ``offset`` the box's lower corner
-    (0, 0, 0 when left out) and ``shape`` its size, every side above 0.
+    Checked strictly: a YAML's "8" or true is not a number here, as
+    pydantic would otherwise take it for one.
     """
     if not isinstance(boxes, list):
         raise ConfigError(f"bounding_boxes should be a list of {{offset, shape}}, got {boxes!r}")
     for n, box in enumerate(boxes, start=1):
-        if not isinstance(box, dict) or "shape" not in box:
-            raise ConfigError(f"bounding box {n} should be {{offset, shape}} in nm, got {box!r}")
-        for key, value in (("offset", box.get("offset", [0, 0, 0])), ("shape", box["shape"])):
-            numbers = isinstance(value, (list, tuple)) and len(value) == 3 and all(
-                isinstance(v, (int, float)) and not isinstance(v, bool) for v in value
+        try:
+            BoundingBox.model_validate(box, strict=True)
+        except ValidationError as e:
+            reasons = "; ".join(
+                f"{'.'.join(str(part) for part in error['loc']) or 'the box'}: {error['msg']}"
+                for error in e.errors()
             )
-            if not numbers:
-                raise ConfigError(
-                    f"bounding box {n}: {key} should be three numbers, nm, z, y, x; got {value!r}"
-                )
-        if any(v <= 0 for v in box["shape"]):
-            raise ConfigError(f"bounding box {n}: every side of its shape should be above 0, got {box['shape']}")
+            raise ConfigError(
+                f"bounding box {n} should be {{offset, shape}}, each three numbers (nm, z, y, x), every "
+                f"side of the shape above 0 ({reasons}); got {box!r}"
+            ) from None
 
 
 class _Output:
@@ -395,9 +397,6 @@ class CellMapFlowBlockwiseProcessor:
                     except Exception as e:
                         raise Exception(f"Failed to open {output.path / channel}\n{e}")
                 output.arrays.append(array)
-        # The first output's arrays: with separate_bounding_boxes_zarrs and
-        # several boxes, the first box's; otherwise the only output's.
-        self.output_arrays = self.outputs[0].arrays
 
     def _channel_indices(self, name):
         """The model channels a dict of output_channels gives output ``name``, as a list."""
@@ -442,9 +441,11 @@ class CellMapFlowBlockwiseProcessor:
         and the result is cut to the raw data's extent, where every output
         voxel has data to be computed from.
         """
-        offset = np.array(box.get("offset", [0, 0, 0]), dtype=float)
+        # Checked by _check_bounding_boxes; read here for its offset's default.
+        box = BoundingBox.model_validate(box)
+        offset = np.array(box.offset, dtype=float)
         begin = np.floor(offset).astype(int)
-        end = np.ceil(offset + np.array(box["shape"], dtype=float)).astype(int)
+        end = np.ceil(offset + np.array(box.shape, dtype=float)).astype(int)
         given = daisy.Roi(Coordinate(begin), Coordinate(end - begin))
         snapped = self._snap_to_output_grid(given, mode="grow")
         inside = snapped.intersect(self.full_output_roi)
