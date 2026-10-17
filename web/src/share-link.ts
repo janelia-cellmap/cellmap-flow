@@ -12,7 +12,8 @@
 // Two things of a finetuning session are in this browser alone. A model
 // finetuned here goes in the link as what rebuilds it (link.ts
 // finetunedRef: its base and its trained last layer's numbers), so it runs
-// where the link opens. The paint does not: an annotation volume is its
+// where the link opens; one whose whole network was trained (or that was
+// finetuned from one) is too many numbers for a link, and stays here. The paint does not: an annotation volume is its
 // chunks in the paint store, megabytes that no link carries, so the link
 // keeps its layer, which opens only in this browser, and the page says so
 // beside the button, with the Finetune tab's download that gives the paint
@@ -83,6 +84,9 @@ export async function linkRefs(models: readonly ModelEntry[], catalog: Pick<Cata
       const record = records.find((r) => r.id === model.id);
       if (!record) throw new Error("its record is not in this browser's catalog");
       const root = rootBase(record, records);
+      if (lineage(record, records).some((r) => r.params.finetune_mode === "full")) {
+        throw new Error("its whole network was trained in this browser, millions of weights where a link carries a last layer's few dozen; the Finetune tab's Download finetuned model saves it as an .onnx file to send");
+      }
       const base = await catalog.resolve(root.id);
       if (!base) throw new Error(`${root.name}, the model it was finetuned from, is not in the model catalog`);
       const head = headOf(await catalog.modelBytes(model));
@@ -94,6 +98,19 @@ export async function linkRefs(models: readonly ModelEntry[], catalog: Pick<Cata
     }
   }
   return linked;
+}
+
+/** `record` and the finetuned models it was finetuned from, as far back as
+ * this browser keeps them. */
+function lineage(record: FinetunedRecord, records: readonly FinetunedRecord[]): FinetunedRecord[] {
+  const out = [record];
+  for (let base = record.base; base.id.startsWith(`${FINETUNED_REPO}/`);) {
+    const parent = records.find((r) => r.id === base.id);
+    if (!parent || out.includes(parent)) break;
+    out.push(parent);
+    base = parent.base;
+  }
+  return out;
 }
 
 /** The Hugging Face model at the root of `record`'s lineage: its own base,

@@ -46,7 +46,8 @@ test.describe("finetuning in the browser", () => {
       // the volume and puts its paint layer in the viewer, selected.
       const models = await api<{ models: { name: string; finetune_modes: string[] }[] }>(page, "/api/finetune/models");
       expect(models.models).toHaveLength(1);
-      expect(models.models[0].finetune_modes).toEqual(["head"]);
+      // The modes its manifest declares; a 2D student offers its whole network too.
+      expect(models.models[0].finetune_modes).toContain("head");
       const modelName = models.models[0].name;
       await page.evaluate(() => document.getElementById("finetune-tab")!.click());
       await expect(page.locator("#modelSelect option")).toHaveCount(1, { timeout: 30_000 });

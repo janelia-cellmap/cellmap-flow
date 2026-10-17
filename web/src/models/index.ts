@@ -50,8 +50,10 @@ export {
 
 import { metadataFor } from "./metadata";
 
-/** The localStorage key of the cached listing. */
-export const LISTING_KEY = `cellmap-flow:models:${HF_REPO}@${HF_REVISION}:v1`;
+/** The localStorage key of the cached listing. v2 since the manifests
+ * gained their finetune block (2026-10-16): a v1 listing, cached for a day,
+ * holds manifests from before it, which would offer the old training only. */
+export const LISTING_KEY = `cellmap-flow:models:${HF_REPO}@${HF_REVISION}:v2`;
 
 export interface CatalogOptions {
   log: (line: string) => void;

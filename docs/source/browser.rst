@@ -38,9 +38,10 @@ Postprocess tabs, the same normalizers and postprocessing steps, a Finetune
 tab that paints and trains in the browser, and a Run tab of its own that
 saves the predictions over a region to a folder (both below). What is missing
 is what a browser cannot do: models that are not ONNX exports (PyTorch,
-TensorFlow, DaCapo, BioImage.io, Cellpose), a finetune of a whole network,
-crops imported from disk, the Pipeline Builder and blockwise runs on the
-cluster. Those are the server mode's (:doc:`cli`).
+TensorFlow, DaCapo, BioImage.io, Cellpose), a finetune of a 3D model's whole
+network (the 2D models' can train in the browser), crops imported from disk,
+the Pipeline Builder and blockwise runs on the cluster. Those are the server
+mode's (:doc:`cli`).
 
 Opening a volume
 ----------------
@@ -157,7 +158,67 @@ the finetune learns what the model mislabels where its features already tell
 the two apart (a membrane it calls mitochondrion, a texture it misses), not
 new shapes; that is a finetune of the whole network, which the server mode
 runs on the cluster, and whose result the browser can serve as any other
-model.
+model. The 2D models can train their whole network in the browser too (next).
+
+Training the whole network
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Each model's manifest on Hugging Face says how it can be trained, and the
+Training panel offers just that. For the 2D students (``setup_53_2d`` and
+``setup_54_2d``) it offers both, so a *Training* choice appears at the top of
+the panel: *Last layer*, as above, or *Whole network*: every weight of the
+model trains on your paint, with `TensorFlow.js <https://www.tensorflow.org/js>`_
+on this machine's GPU (WebGPU), from a training graph Marwan Zouinkhi exported
+beside each model. The weights trained are written back into the model's
+``.onnx``, which is then served, kept, downloaded and restarted from as a
+last-layer finetune is. A 3D model offers the last layer only, and a model
+served from an int8 file nothing (its weights are quantized and cannot be
+written): serve its fp32 or fp16 file to finetune it.
+
+The whole network trains on square tiles cut from the painted slices, in the
+plane you painted in (x–y, or z–y and z–x where the raw data's voxels are
+cubes, as the server's 2D training does), with masked BCE on the painted
+voxels and Adam. Its controls are the epochs, its own learning rates (1e-4 by
+default, a hundredth of the last layer's), the server's *Batch Size*, in tiles
+per step (1 by default), and *Tile Size*. The loss, distillation, smoothing
+and balance fields are the last layer's and are hidden; good regions are not
+used.
+
+*Tile Size* is the tile's side in pixels: 172, 300 (the default), 428 or 556.
+The model reads 88 pixels of context around what it predicts, so a tile's
+output is 88 pixels smaller: half of a 300² tile is output, a quarter of a
+172² one, 71% of a 556² one. A smaller tile trains a step faster and in less
+memory, but more of each step is context. The hint under the field gives the
+time and memory of one step at the batch chosen, as measured in Chrome on an
+Apple laptop GPU (TF.js 4.22.0, batch 1) and scaled by area for the sides not
+measured:
+
+.. list-table::
+   :header-rows: 1
+
+   * - Model
+     - 300², a step
+     - 300², memory
+     - 556², a step
+     - 556², memory
+   * - setup_53_2d
+     - 294 ms
+     - 320 MB
+     - 1178 ms
+     - 1307 MB
+   * - setup_54_2d
+     - 462 ms
+     - 908 MB
+     - 1919 ms
+     - 3702 MB
+
+300² is the default because it fits a laptop: four times faster than 556²
+and a quarter of its memory, which for setup_54_2d is more than many laptop
+GPUs give a tab. An epoch is one pass over the tiles, which cover each slice's
+paint once. *Whole network* needs a GPU: where the browser finds none
+through WebGPU, the option is shown disabled with why (on the CPU a step
+would take minutes, and the page would answer nothing else meanwhile). The
+log says how long a step takes.
 
 The *Patch on screen* tools label the box centred where the viewer looks, as
 on the server (:doc:`finetuning`): *Seed from Prediction* copies a model's

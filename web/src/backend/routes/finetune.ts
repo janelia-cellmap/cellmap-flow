@@ -11,13 +11,18 @@
 // directory, so a "session" is a volume and its id is its path; the catalog
 // for the models directory; a run in the tab (src/finetune/run.ts) for the
 // cluster job, so a submit needs no output path, queue or charge group, and
-// the server-only fields the form still sends (LoRA rank, the batch of
-// patches, patches per epoch, rehearsal, augmentation) are ignored. The
-// head trains with the server's per-voxel losses (BCE, MSE, margin), its
-// distillation term (λ and scope) and the browser's own batch of voxels
-// per step (readTraining); Dice needs a whole patch per sample and is
-// refused (refuseLoss). The good regions' routes are routes/good-regions.ts,
-// and the patch tools' Label it and AI annotation have routes of their own
+// the server-only fields the form still sends (LoRA rank, patches per
+// epoch, rehearsal, augmentation) are ignored. What trains is what the
+// model's manifest offers (finetune/modes.ts, answered as finetune_modes)
+// and the form's Training field picks: the head, with the server's
+// per-voxel losses (BCE, MSE, margin), its distillation term (λ and scope)
+// and the browser's own batch of voxels per step (readTraining), Dice
+// refused since it needs a whole patch per sample (refuseLoss); or the
+// whole network of a 2D model (finetune/full), with masked BCE, the
+// server's Batch Size in tiles and a tile side of its own, which the
+// models route offers with what a step costs (fullTraining). The good
+// regions' routes are routes/good-regions.ts, and the patch tools' Label it
+// and AI annotation have routes of their own
 // (view-labels.ts, ai-annotate.ts); crops import keeps needing a server and
 // stays unavailable (index.ts). One route is the browser's own, GET
 // /api/finetune/session-volume: which volume the session paints into, for
@@ -39,13 +44,18 @@
 // status answers carry no count. job-monitor.js decides from its card
 // whether the job can take the restart, and says why not in the tab's logs:
 // this Neuroglancer's status bar is not reachable from the page.
-import type { AppContext, FinetunedRecord, LayerSpec, PaintVolume } from "../../contracts";
+import type { AppContext, FinetunedRecord, LayerSpec, ModelEntry, PaintVolume } from "../../contracts";
 import { MANIFEST_METADATA_KEY, PAINT_ROUTE } from "../../contracts";
+import { type FetchFullFiles, fetchFullFiles } from "../../finetune/full/files";
+import { defaultTile, tileChoices } from "../../finetune/full/graph";
+import { checkTileSide } from "../../finetune/full/run-full";
+import { webgpuMissing } from "../../finetune/full/tfjs";
+import { finetuneModes, refuseMode, sourceOf } from "../../finetune/modes";
 import { withMetadata } from "../../finetune/onnx-proto";
 import { runFinetune } from "../../finetune/run";
 import { HEAD_LOSSES } from "../../finetune/head-trainer";
 import type { DistillationScope, FinetuneOptions, HeadLoss, RunFinetune } from "../../finetune/types";
-import { DEFAULT_OPTIONS } from "../../finetune/types";
+import { DEFAULT_OPTIONS, FULL_LEARNING_RATE } from "../../finetune/types";
 import { createVolume, hasAffinityChannels, paintedChunkIndices, planVolume, readVolume } from "../../finetune/volume";
 import { volumeZip, VOLUME_ZIP_SUFFIX } from "../../finetune/zip";
 import { PAINT_TAB, paintLayer, paintLayerName, paintLayerUrl } from "../../viewer/layers";
@@ -64,6 +74,10 @@ export interface FinetuneDeps {
   plan: typeof planVolume;
   now: () => Date;
   page: () => EventTarget | null;
+  /** A whole-network model's training graph and offsets (Hugging Face). */
+  fullFiles: FetchFullFiles;
+  /** Why the whole network cannot train here (no GPU for TF.js), or null. */
+  webgpuMissing: () => Promise<string | null>;
 }
 
 /** Shift+R over the viewer (restart_key.py's KEY and ACTION), and the event
@@ -79,6 +93,9 @@ const NO_DATASET = "No dataset is open. Enter its URL in the viewer panel first;
  * of any session in one step. */
 const MAX_BATCH_PIXELS = 1 << 20;
 
+/** The whole network's batch of tiles per step, at most (the form offers up to 32, as the server's). */
+const MAX_BATCH_PATCHES = 32;
+
 /** Register the routes; returns the jobs, which live as long as the router (the page). */
 export function finetuneRoutes(router: Router, deps: Partial<FinetuneDeps> = {}): FinetuneJobs {
   const d: FinetuneDeps = {
@@ -86,8 +103,48 @@ export function finetuneRoutes(router: Router, deps: Partial<FinetuneDeps> = {})
     plan: planVolume,
     now: () => new Date(),
     page: () => (typeof document === "undefined" ? null : document),
+    fullFiles: fetchFullFiles,
+    webgpuMissing,
     ...deps,
   };
+
+  /** What the tab shows for a model's whole-network training: the tile
+   * sides it offers with their cost per step (full/graph.ts tileChoices),
+   * the default, and the measurement's setup, or why the graph could not
+   * be had (the Hub unreachable, say), in which case no side is offered. */
+  async function fullTraining(entry: ModelEntry): Promise<Record<string, unknown>> {
+    const spec = entry.manifest.finetune!.full!;
+    try {
+      const { graph } = await d.fullFiles(sourceOf(entry), spec);
+      const tiles = tileChoices(graph, spec.spike?.full);
+      const unavailable = await refuseGpu();
+      return { tiles, default_tile: defaultTile(tiles), context: graph.context, measured_on: spec.spike?.setup ?? null, unavailable };
+    } catch (e) {
+      return { tiles: [], default_tile: null, context: null, measured_on: null, error: `The training graph could not be fetched: ${message(e)}` };
+    }
+  }
+
+  /** Why the whole network cannot train in this browser, or null. */
+  async function refuseGpu(): Promise<string | null> {
+    const missing = await d.webgpuMissing();
+    return missing && `The whole network trains on a GPU with WebGPU, and ${missing}. Train the last layer, or open the page in Chrome or Edge on a machine with a GPU.`;
+  }
+
+  /** A whole-network run checked: a GPU to train on, and `training`'s tile
+   * side against `entry`'s graph. Null when it can run (or the run is the
+   * head's), else why not. */
+  async function refuseFull(entry: ModelEntry, options: FinetuneOptions): Promise<string | null> {
+    if (options.mode !== "full") return null;
+    const gpu = await refuseGpu();
+    if (gpu) return gpu;
+    try {
+      const { graph } = await d.fullFiles(sourceOf(entry), entry.manifest.finetune!.full!);
+      checkTileSide(graph, options.tileSize, entry.name);
+      return null;
+    } catch (e) {
+      return message(e);
+    }
+  }
   const jobs = new FinetuneJobs({ run: d.run, now: d.now });
 
   /** restart_key.ensure_binding: bind Shift+R in the viewer, once per
@@ -103,15 +160,23 @@ export function finetuneRoutes(router: Router, deps: Partial<FinetuneDeps> = {})
 
   // GET /api/finetune/models: the served models, with the geometry the tab
   // shows (write_shape in nm, the voxel size, the channels), from the
-  // engine's model info as the Python asks each inference server. The one
-  // way to finetune here is the head; models.js explains the word.
-  router.get("/api/finetune/models", (_req, _params, ctx) => {
-    const models = ctx.infer.served().map((s) => ({
-      name: s.entry.name,
-      write_shape: s.info.write_shape,
-      output_voxel_size: s.info.output_voxel_size,
-      output_channels: s.info.output_channels,
-      finetune_modes: ["head"],
+  // engine's model info as the Python asks each inference server, and the
+  // ways each can be finetuned here, from its manifest (finetune/modes.ts:
+  // "head", "full"), as the server answers finetune_modes; a model whose
+  // manifest declares none has the head the graph is found to end in. A
+  // model that offers the whole network has its tile sides with them
+  // (full_training), which models.js and training-form.js show.
+  router.get("/api/finetune/models", async (_req, _params, ctx) => {
+    const models = await Promise.all(ctx.infer.served().map(async (s) => {
+      const modes = finetuneModes(s.entry);
+      return {
+        name: s.entry.name,
+        write_shape: s.info.write_shape,
+        output_voxel_size: s.info.output_voxel_size,
+        output_channels: s.info.output_channels,
+        finetune_modes: modes,
+        ...(modes.includes("full") ? { full_training: await fullTraining(s.entry) } : {}),
+      };
     }));
     return json(200, { models, selected_model: models.length === 1 ? models[0].name : null });
   });
@@ -261,8 +326,10 @@ export function finetuneRoutes(router: Router, deps: Partial<FinetuneDeps> = {})
 
   // POST /api/finetune/submit: a job on the session's volume. Refused, in
   // the order the tab can act on, without a volume (needs_volume: the tab
-  // offers New Volume), with nothing painted, with a loss that needs a
-  // server, for a model not served, and without a dataset.
+  // offers New Volume), with nothing painted, for a model not served, with
+  // a loss that needs a server (the head's: the whole network has its own),
+  // without a dataset, and for a mode the model's manifest does not offer
+  // or a tile side its graph does not take.
   router.post("/api/finetune/submit", async (req, _params, ctx) => {
     const body = objectBody(req);
     if (!body) return badRequest("expected a JSON object");
@@ -277,13 +344,20 @@ export function finetuneRoutes(router: Router, deps: Partial<FinetuneDeps> = {})
     if (!painted) {
       return badRequest(`Nothing is painted in ${volume.id} yet. Paint background (1) and objects (2 and up) on a few slices of the annotation layer first.`);
     }
-    const refused = refuseLoss(body.loss_type);
-    if (refused) return badRequest(refused);
     const model = ctx.infer.served().find((s) => s.entry.name === name);
     if (!model) return json(404, { success: false, error: `Model ${name} not found` });
+    // The mode the form asks for; a body without one (an older tab) the
+    // first the model offers.
+    const mode = body.finetune_mode ?? finetuneModes(model.entry)[0] ?? "head";
+    if (mode !== "full") {
+      const refused = refuseLoss(body.loss_type);
+      if (refused) return badRequest(refused);
+    }
     if (!ctx.infer.dataset()) return badRequest(NO_DATASET);
-    const training = readTraining(body);
+    const training = readTraining({ ...body, finetune_mode: mode });
     if ("error" in training) return badRequest(training.error);
+    const refusedMode = refuseMode(model.entry, training.options.mode) ?? (await refuseFull(model.entry, training.options));
+    if (refusedMode) return badRequest(refusedMode);
     const autoServe = body.auto_serve !== false;
     const outputType = hasAffinityChannels(model.entry) ? "affinities" : "binary";
     const job = jobs.submit({
@@ -302,7 +376,9 @@ export function finetuneRoutes(router: Router, deps: Partial<FinetuneDeps> = {})
       output_dir: job.toDict().output_dir,
       output_type: outputType,
       message: "Finetuning job submitted successfully",
-      note: `The model's head (its last layer) trains in this browser on the ${painted} painted chunk${painted === 1 ? "" : "s"}; the finetuned model is kept in this browser and listed on the Models tab.`,
+      note: training.options.mode === "full"
+        ? `The model's whole network trains in this browser with TensorFlow.js on the paint of the ${painted} painted chunk${painted === 1 ? "" : "s"}; the finetuned model is kept in this browser and listed on the Models tab.`
+        : `The model's head (its last layer) trains in this browser on the ${painted} painted chunk${painted === 1 ? "" : "s"}; the finetuned model is kept in this browser and listed on the Models tab.`,
     });
   });
 
@@ -350,19 +426,26 @@ export function finetuneRoutes(router: Router, deps: Partial<FinetuneDeps> = {})
 
   // POST /api/finetune/job/:id/restart: the form's parameters again (the
   // same body as submit, less the model), a new run from the trained head.
-  router.post("/api/finetune/job/:id/restart", (req, params) => {
+  router.post("/api/finetune/job/:id/restart", async (req, params) => {
     const body = objectBody(req) ?? {};
-    const refused = refuseLoss(body.loss_type);
-    if (refused) return badRequest(refused);
-    const training = readTraining(body);
+    // The job's own mode unless the body names one (jobs.restart refuses a switch).
+    const job = jobs.get(params.id);
+    const mode = body.finetune_mode ?? job?.args.options.mode ?? "head";
+    if (mode !== "full") {
+      const refused = refuseLoss(body.loss_type);
+      if (refused) return badRequest(refused);
+    }
+    const training = readTraining({ ...body, finetune_mode: mode });
     if ("error" in training) return badRequest(training.error);
+    const refusedFull = job ? await refuseFull(job.args.entry, training.options) : null;
+    if (refusedFull) return badRequest(refusedFull);
     const result = jobs.restart(params.id, training.options, training.params);
     if (!result.ok) return json(result.status, { success: false, error: result.error });
     return json(200, {
       success: true,
       job_id: params.id,
       annotations_synced: 0,
-      message: "Restart request sent. Training restarts from the trained head in this browser, on the paint as it is now.",
+      message: `Restart request sent. Training restarts from the trained ${training.options.mode === "full" ? "network" : "head"} in this browser, on the paint as it is now.`,
     });
   });
 
@@ -459,17 +542,23 @@ function refuseLoss(loss: unknown): string | null {
 /** The training parameters of a submit or restart body (training-form.js's
  * trainingParams, as job-monitor.js sends them): the ones the browser's
  * trainer takes, checked, as run.ts's options and as the job's params (the
- * card shows the loss, margin and distillation from them). batch_pixels is
- * the browser's own: voxels per Adam step, where the server's batch_size
+ * card shows the loss, margin and distillation from them). finetune_mode
+ * says what trains, "head" when absent. For the head, batch_pixels is the
+ * browser's own: voxels per Adam step, where the server's batch_size
  * counts patches. The margin goes with the margin loss alone, and label
  * smoothing is 0 with it, as the server sets it. The fields only a cluster
  * job uses (lora_r, batch_size, patches_per_epoch, rehearsal_fraction,
- * augment, queue, checkpoint_path) are left out of both. */
+ * augment, queue, checkpoint_path) are left out of both. For the whole
+ * network (readFullTraining) the batch is batch_size, in tiles, and the
+ * tile's side tile_size; the head's fields are left out. */
 export function readTraining(body: Record<string, unknown>): { options: FinetuneOptions; params: Record<string, unknown> } | { error: string } {
+  const mode = body.finetune_mode === undefined || body.finetune_mode === null || body.finetune_mode === "" ? "head" : body.finetune_mode;
+  if (mode !== "head" && mode !== "full") return { error: `finetune_mode: expected head or full, not ${JSON.stringify(mode)}` };
   const epochs = numberOr(body.num_epochs, DEFAULT_OPTIONS.epochs);
   if (!Number.isInteger(epochs) || epochs < 1) return { error: "num_epochs: expected a whole number of epochs, 1 or more" };
-  const learningRate = numberOr(body.learning_rate, DEFAULT_OPTIONS.learningRate);
+  const learningRate = numberOr(body.learning_rate, mode === "full" ? FULL_LEARNING_RATE : DEFAULT_OPTIONS.learningRate);
   if (!Number.isFinite(learningRate) || learningRate <= 0) return { error: "learning_rate: expected a positive number" };
+  if (mode === "full") return readFullTraining(body, epochs, learningRate);
   const lossType = body.loss_type === undefined || body.loss_type === null || body.loss_type === "" ? DEFAULT_OPTIONS.lossType : (body.loss_type as HeadLoss);
   if (!HEAD_LOSSES.includes(lossType)) return { error: refuseLoss(lossType)! };
   const margin = numberOr(body.margin, DEFAULT_OPTIONS.margin);
@@ -498,6 +587,28 @@ export function readTraining(body: Record<string, unknown>): { options: Finetune
       distillation_lambda: distillationLambda,
       distillation_scope: distillationScope,
       finetune_mode: "head",
+    },
+  };
+}
+
+/** readTraining's whole-network part: the batch in tiles (batch_size, 1 to
+ * MAX_BATCH_PATCHES) and the tile side (tile_size, a whole number; blank
+ * for the default), which submit then checks against the model's graph.
+ * The loss is masked BCE, so the params say "bce". */
+function readFullTraining(body: Record<string, unknown>, epochs: number, learningRate: number): { options: FinetuneOptions; params: Record<string, unknown> } | { error: string } {
+  const batchPatches = numberOr(body.batch_size, DEFAULT_OPTIONS.batchPatches);
+  if (!Number.isInteger(batchPatches) || batchPatches < 1 || batchPatches > MAX_BATCH_PATCHES) return { error: `batch_size: expected a whole number of tiles per step, from 1 to ${MAX_BATCH_PATCHES}` };
+  const tile = body.tile_size === undefined || body.tile_size === null || body.tile_size === "" ? null : Number(body.tile_size);
+  if (tile !== null && (!Number.isInteger(tile) || tile < 1)) return { error: "tile_size: expected a whole number of pixels on a side" };
+  return {
+    options: { ...DEFAULT_OPTIONS, mode: "full", epochs, learningRate, batchPatches, tileSize: tile, distillationLambda: 0 },
+    params: {
+      num_epochs: epochs,
+      learning_rate: learningRate,
+      loss_type: "bce",
+      batch_size: batchPatches,
+      ...(tile === null ? {} : { tile_size: tile }),
+      finetune_mode: "full",
     },
   };
 }

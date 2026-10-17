@@ -202,9 +202,28 @@ stays in the paint store of the browser that painted it.
 `backend/routes/finetune.ts`, `good-regions.ts` and `finetune-jobs.ts` answer the tab's routes
 with the Python routes' JSON (a job is a run in the page; its log streams as
 server-sent events), so the tab's job card, loss plot and log stream are
-unchanged. Why the head and not the network: onnxruntime-web trains nothing
-on the GPU; a WebGPU autograd library would have to rebuild the network, a
-later step behind the same `RunFinetune` seam (`finetune/types.ts`).
+unchanged. Why the head: onnxruntime-web trains nothing on the GPU, so the
+whole network trains only where it is rebuilt in a library that does.
+
+That is `finetune/full/`, for the models whose manifest offers it
+(`modes.ts`: a manifest's `finetune` block says `head`, and for the 2D
+students `full`, with the files each can write; the models route answers
+them as `finetune_modes`, and `run.ts` sends a run to the head's trainer or
+to `full/run-full.ts` by `FinetuneOptions.mode`). Marwan Zouinkhi exported
+each 2D model with a training graph (`train_graph.json`: NHWC ops and the
+ONNX initializers' names) and the initializers' byte offsets in every
+`.onnx` (`initializers.json`), and wrote the TF.js runtime that builds,
+trains and writes it back (`cellmap-tfjs-train.ts`, vendored). `graph.ts`
+checks the graph and walks its shapes to find the tile sides it takes;
+`tiles.ts` cuts the paint into output-sized tiles in the plane each stroke
+was drawn in and reads each tile's raw slice as the model stage would;
+`tfjs.ts` loads TF.js in chunks of its own when a run starts (WebGPU in the
+page, which the routes require through `webgpuMissing`; the CPU backend in
+Node, where the tests train) and resets its engine when the last run ends, freeing the GPU
+buffers it pools; `run-full.ts` checks the offsets against the served file,
+trains with masked BCE and Adam, and writes the trained weights into a copy
+of the bytes, which then go the way a head's do. A whole-network model is
+not put in a Share link.
 
 ## AI-assisted annotation (src/ai-annotate/)
 
@@ -376,7 +395,9 @@ web/
                              for picked directories; paint-store.ts + paint-route.ts: the annotation volumes' files and the worker's paint/ route
     finetune/                types.ts (the seams), volume.ts (planVolume, the zarr v2 files), samples.ts, targets.ts, onnx-proto.ts,
                              onnx-head.ts, features.ts, head-trainer.ts, distillation.ts, good-regions.ts, run.ts (runFinetune),
-                             zip.ts (the paint's download)
+                             zip.ts (the paint's download), modes.ts (what a manifest offers)
+      full/                  the whole network of a 2D model in TF.js: cellmap-tfjs-train.ts (Marwan's runtime), graph.ts (the
+                             training graph, its tile sides), files.ts, tiles.ts, tfjs.ts (lazy TF.js), run-full.ts
     ai-annotate/             AI-assisted annotation (above): types.ts, geometry.ts, plane.ts, mask.ts, labels.ts, fill.ts, prompts.ts,
                              organelles.ts (the pure ports), images.ts (the canvas codec), gemini.ts, fake.ts, providers.ts,
                              credentials.ts, usage.ts, audit.ts; labels.ts and fill.ts are Label it's too

@@ -4,4 +4,5 @@
 pixi.lock linguist-generated=true
 web/package-lock.json linguist-generated=true
 web/test/fixtures/*.json linguist-generated=true
+web/test/unit/fixtures/onnx-web-models/*.json linguist-generated=true
 cellmap_flow/dashboard/static/js/vendor/** linguist-vendored=true

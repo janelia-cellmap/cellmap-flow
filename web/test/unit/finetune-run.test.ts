@@ -20,7 +20,7 @@ import { createFeatureRunner, type FeatureRunner } from "../../src/finetune/feat
 import { regionAt } from "../../src/finetune/good-regions";
 import { headOf } from "../../src/finetune/onnx-head";
 import { createRunFinetune, runFinetune, type RunDeps } from "../../src/finetune/run";
-import { DEFAULT_OPTIONS, type Finetuned, type FinetuneRun, type PaintedChunk, type Sample, type Targets } from "../../src/finetune/types";
+import { DEFAULT_OPTIONS, type FinetuneRun, type HeadFinetuned, type PaintedChunk, type Sample, type Targets } from "../../src/finetune/types";
 import { CHUNK_DIR, chunkKey } from "../../src/finetune/volume";
 import { MemoryPaintStore } from "../../src/state/paint-store";
 
@@ -118,7 +118,7 @@ describe("runFinetune", () => {
   it("trains the head on the painted voxels of every chunk and writes it into a model that runs", async () => {
     const { paint, collectSamples } = await painted(CHUNKS);
     const disposed = { count: 0 }, report = reporter();
-    const finetuned: Finetuned = await createRunFinetune(deps(collectSamples, disposed))(run({}, paint, report));
+    const finetuned: HeadFinetuned = await createRunFinetune(deps(collectSamples, disposed))(run({}, paint, report));
     const log = report.lines.join("\n");
     expect(log).toMatch(/Finetuning head_fixture's head on volume vol-test: 2 painted chunks of 1×6×6 voxels/);
     expect(log).toMatch(/The head: a 1×1 convolution, 4 → 2 channels \(head\.weight, head\.bias, float32\); 8 epochs of 16 voxels per step/);

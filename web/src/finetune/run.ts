@@ -8,16 +8,18 @@
 // regions' blocks are run through the model too when nothing in them is
 // painted. The pieces are taken as a parameter (createRunFinetune) so a
 // test can run the whole with its own samples and targets over the real
-// ONNX step; runFinetune is the run with the real ones, what the backend's
-// finetune routes call.
+// ONNX step; runHeadFinetune is the run with the real ones. runFinetune,
+// what the backend's finetune routes call, sends a run to it or, for the
+// whole network (the options' mode "full"), to full/run-full.ts.
 import { concatDistillation, DISTILLATION_VOXELS, type DistillationPick, quotas, sampleDistillation } from "./distillation";
 import { createFeatureRunner } from "./features";
 import { anchorBoxes, anchorChunks } from "./good-regions";
 import { concatPixels, type DistillationSet, gatherPixels, mulberry32, type PixelSet, trainHead } from "./head-trainer";
+import { runFull } from "./full/run-full";
 import { headOf, withHead } from "./onnx-head";
 import { collectSamples } from "./samples";
 import { targetTransformFor } from "./targets";
-import type { Finetuned, FinetuneOptions, FinetuneRun, RunFinetune } from "./types";
+import type { FinetuneOptions, FinetuneRun, HeadFinetuned, RunFinetune } from "./types";
 import { chunkKey, paintedChunkIndices } from "./volume";
 
 export interface RunDeps {
@@ -46,12 +48,18 @@ function lossWords(options: FinetuneOptions): string {
  * weights (the model's own by default) toward the model's own head as the
  * teacher, and written into a copy of the model's bytes. No painted voxel
  * is an error: there is nothing to train on. */
-export function createRunFinetune(deps: RunDeps = { collectSamples, targetTransformFor, createFeatureRunner }): RunFinetune {
-  return async (run: FinetuneRun): Promise<Finetuned> => {
+export function createRunFinetune(deps: RunDeps = { collectSamples, targetTransformFor, createFeatureRunner }): (run: FinetuneRun) => Promise<HeadFinetuned> {
+  return async (run: FinetuneRun): Promise<HeadFinetuned> => {
     const { report, options, volume } = run;
     const paintedIndices = await paintedChunkIndices(run.paint, volume.id);
     const chunks = paintedIndices.length;
     const head = headOf(run.baseBytes);
+    // The manifest's head, where it declares one, must be the one found:
+    // the export names its weights, and the browser writes into them.
+    const declared = run.entry.manifest.finetune?.head;
+    if (declared && (declared.weight !== head.weightName || (declared.bias ?? null) !== head.biasName || declared.features !== head.featureTensor)) {
+      throw new Error(`${run.entry.name}'s manifest declares its head as ${declared.weight} on ${declared.features}, and its graph ends in ${head.weightName} on ${head.featureTensor}: the two disagree, so nothing is written`);
+    }
     report.log(`Finetuning ${run.entry.name}'s head on volume ${volume.id}: ${count(chunks)} painted chunk${chunks === 1 ? "" : "s"} of ${volume.chunk_size.join("×")} voxels`);
     report.log(`The head: a 1×1 convolution, ${head.inChannels} → ${head.outChannels} channels (${head.weightName}${head.biasName ? `, ${head.biasName}` : ", no bias"}, ${head.dtype}); ${options.epochs} epochs of ${count(options.batchPixels)} voxels per step at learning rate ${options.learningRate}, ${lossWords(options)}${options.balanceClasses ? ", classes balanced" : ""}${options.labelSmoothing > 0 && options.lossType !== "margin" ? `, labels smoothed by ${options.labelSmoothing}` : ""}`);
 
@@ -139,4 +147,9 @@ export function createRunFinetune(deps: RunDeps = { collectSamples, targetTransf
   };
 }
 
-export const runFinetune: RunFinetune = createRunFinetune();
+/** The head's run (createRunFinetune with the real pieces). */
+export const runHeadFinetune: RunFinetune = createRunFinetune();
+
+/** A run of the mode its options say: the head's, or the whole network's,
+ * which loads TensorFlow.js when it starts (full/tfjs.ts). */
+export const runFinetune: RunFinetune = (run) => (run.options.mode === "full" ? runFull(run) : runHeadFinetune(run));

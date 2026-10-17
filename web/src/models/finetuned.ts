@@ -18,6 +18,7 @@
 import { FINETUNED_REPO } from "../contracts";
 import type { FinetunedRecord, ModelEntry, ModelManifest, ModelVariant } from "../contracts";
 
+import { sourceOf } from "../finetune/modes";
 import { MODEL_DB_NAME, ModelDatabase } from "./byte-cache";
 import { entryFor } from "./manifest";
 
@@ -38,7 +39,8 @@ export function isFinetuned(entry: ModelEntry): boolean {
 /** The entry a model finetuned from `base` is served as, named `name`
  * (nextFinetunedName): repo FINETUNED_REPO, id `finetuned/<name>`, folder
  * and name both `name`, the base's manifest under the new name with one
- * variant, the base's block sizes and precision in a file `<name>.onnx`.
+ * variant, the base's block sizes and precision in a file `<name>.onnx`,
+ * and the Hugging Face file it was made from (ModelVariant.source).
  * `fileMb` is the ONNX file's size in MB (bytes / 1e6, as the manifests
  * give it); without it the base's is kept, which is right to the rounding
  * (the head is a few KB of the file).
@@ -54,6 +56,9 @@ export function finetunedEntry(base: ModelEntry, name: string, fileMb?: number):
     output_size: base.variant.output_size.slice(),
     file: `${name}.onnx`,
     file_mb: fileMb === undefined ? base.variant.file_mb : Math.round(fileMb * 100) / 100,
+    // The Hugging Face file at the root of its lineage, whose layout the
+    // bytes keep: what the manifest's finetune block names (modes.ts).
+    source: sourceOf(base),
   };
   const manifest: ModelManifest = {
     ...base.manifest,

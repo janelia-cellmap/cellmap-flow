@@ -25,6 +25,20 @@
   width: 100%;
 }
 
+/* The Finetune tab's Training field: the fields of what it picked show,
+   the others' hide. The Training pane carries data-training ("head" or
+   "full", set by training-form.js; the template starts it at "head"). The
+   whole network takes the server's Batch Size, in tiles, so that one
+   server-only field shows for it (full-also). */
+[data-training="full"] .head-only,
+[data-training="head"] .full-only {
+  display: none !important;
+}
+
+[data-mode="browser"] [data-training="full"] .server-only.full-also {
+  display: block !important;
+}
+
 /* While the page boots with a dataset already open (index.html's inline
    script sets data-viewer="pending" from the session's sessionStorage flag),
    the connect panel stays invisible: the viewer replaces it with the iframe,

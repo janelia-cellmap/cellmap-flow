@@ -61,6 +61,8 @@ export function metadataFor(entry: ModelEntry, record?: FinetunedRecord): Record
     file: v.file,
     file_mb: v.file_mb,
     onnx_url: entry.onnxUrl,
+    // Where the export came from, when its manifest says.
+    ...Object.fromEntries((["source_repo", "distilled_from_repo", "torch_version", "exporter", "opset"] as const).filter((k) => m[k] !== undefined).map((k) => [k, m[k]])),
     // And where a finetuned model came from, so the base's name or the
     // volume's id find it in the tab's search.
     ...(record ? { finetuned: { base: record.base, volume: record.volume, created_at: record.created_at, epochs: record.epochs, final_loss: record.final_loss, params: record.params, ...(record.from_link ? { from_link: record.from_link } : {}) } } : {}),
@@ -87,7 +89,8 @@ export function describe(entry: ModelEntry, record?: FinetunedRecord): string {
       const as = record.from_link.name === record.name ? "" : ` (as ${record.from_link.name})`;
       parts.push(`from a shared link${as}: ${record.base.name} with the link's last layer, ${dateOf(record.created_at)}`);
     } else if (record) {
-      parts.push(`finetuned in this browser from ${record.base.name} on ${record.volume}, ${dateOf(record.created_at)}`);
+      const what = record.params.finetune_mode === "full" ? "whole network finetuned" : "finetuned";
+      parts.push(`${what} in this browser from ${record.base.name} on ${record.volume}, ${dateOf(record.created_at)}`);
       parts.push(`${record.epochs} ${record.epochs === 1 ? "epoch" : "epochs"}, ${record.final_loss === null ? "final loss unknown" : `final loss ${lossLabel(record.final_loss)}`}`);
     } else {
       parts.push(m.checkpoint || FINETUNED_AUTHOR);

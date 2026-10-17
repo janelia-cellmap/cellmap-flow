@@ -40,8 +40,16 @@ function isRestartKey(event) {
 
 // The confirm Restart asks, to check the form's values first. The browser's
 // run reads only the head's parameters (the rest of the form is hidden
-// there), so its summary lists only those.
+// there), so its summary lists only those, or the whole network's.
 function restartSummary(requestBody, browser) {
+  if (browser && requestBody.finetune_mode === "full") {
+    return `Restart training with current form values?\n\n` +
+      `  training:       whole network\n` +
+      `  learning_rate:  ${requestBody.learning_rate}\n` +
+      `  epochs:         ${requestBody.num_epochs}\n` +
+      `  batch_size:     ${requestBody.batch_size}\n` +
+      `  tile_size:      ${requestBody.tile_size !== undefined ? requestBody.tile_size : 'default'}\n`;
+  }
   return browser
     ? `Restart training with current form values?\n\n` +
       `  loss:           ${requestBody.loss_type}\n` +

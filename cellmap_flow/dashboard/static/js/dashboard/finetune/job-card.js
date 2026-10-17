@@ -139,6 +139,12 @@ export function createJobCard(lossPlot) {
     if (!params || !params.loss_type) return;
     const interval = params.loss_type === "interval";
     const parts = [interval ? "distance bounds from the paint" : `${params.loss_type} loss`];
+    // The browser's whole network (finetune_mode "full"): its tiles and batch.
+    if (params.finetune_mode === "full") {
+      parts.unshift("whole network");
+      if (params.tile_size != null) parts.push(`${params.tile_size}² tiles`);
+      if (params.batch_size != null) parts.push(`batch ${params.batch_size}`);
+    }
     if (params.loss_type === "margin" && params.margin != null) parts.push(`margin ${params.margin}`);
     if (params.distillation_lambda != null) parts.push(`distillation ${params.distillation_lambda}`);
     const line = $("jobTraining");
