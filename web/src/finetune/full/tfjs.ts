@@ -10,8 +10,10 @@
 // The CPU backend is plain JavaScript on the calling thread: it trains,
 // but a step at 300² takes minutes where WebGPU takes a fraction of a
 // second, and the page answers nothing meanwhile, so the page offers the
-// whole network only where webgpuMissing finds a GPU. Version 4.22.0 is
-// the one Marwan measured with (the manifests' spike); package.json pins it.
+// whole network only where webgpuMissing finds a GPU; a run then falls back
+// to the CPU only when TF.js's own WebGPU backend fails to load or start.
+// Version 4.22.0 is the one Marwan measured with (the manifests' spike);
+// package.json pins it.
 //
 // A run holds TF.js from loadTf to its release(). When the last run lets
 // go, the engine is reset: its backend's GPU buffers, which TF.js pools for
@@ -33,6 +35,7 @@ export interface LoadedTf {
 let modules: Promise<Tf> | null = null;
 let backend: Promise<{ backend: TfBackend; fallback: string | null }> | null = null;
 let holders = 0;
+let gpuAnswer: Promise<string | null> | null = null;
 
 /** TF.js with its backend set, for one run; a failed load is tried again on the next call. */
 export async function loadTf(): Promise<LoadedTf> {
@@ -90,8 +93,14 @@ async function importTf(): Promise<Tf> {
  * for here first. The finetune routes refuse a whole-network run without
  * one: on the CPU backend a step takes minutes of the page's own thread,
  * which then answers nothing else (the viewer's chunks, the tab's status).
+ * The adapter is asked for once a page: the routes, the import of TF.js's
+ * WebGPU backend and the choice of backend take the same answer.
  */
-export async function webgpuMissing(): Promise<string | null> {
+export function webgpuMissing(): Promise<string | null> {
+  return (gpuAnswer ??= askForGpu());
+}
+
+async function askForGpu(): Promise<string | null> {
   if (typeof navigator === "undefined" || !("gpu" in navigator) || !navigator.gpu) return "this browser has no WebGPU";
   try {
     return (await navigator.gpu.requestAdapter()) ? null : "this browser's WebGPU found no GPU to use";

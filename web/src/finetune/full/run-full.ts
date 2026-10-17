@@ -157,9 +157,11 @@ export function createRunFull(deps: FullDeps = { loadTf, fetchFiles: fetchFullFi
     const channels = samples[0].target.length / (output * output);
 
     const { tf, backend, fallback, release } = await deps.loadTf();
+    // The routes refuse the run without a GPU (tfjs.ts webgpuMissing): on
+    // the CPU, it is TF.js's own WebGPU backend that did not load or start.
     report.log(backend === "webgpu"
       ? "TF.js on WebGPU"
-      : `TF.js on its CPU backend: ${fallback ?? "no WebGPU"}. It trains, but a step takes minutes here where a GPU takes a fraction of a second; try Chrome or Edge on a machine with a GPU, or a smaller tile`);
+      : `TF.js on its CPU backend: ${fallback ?? "its WebGPU backend did not start"}. It trains, but a step takes minutes here where the GPU takes a fraction of a second; reloading the page tries WebGPU again, and a smaller tile is quicker`);
     let net: ReturnType<typeof buildNet> | null = null, opt: ReturnType<typeof tf.train.adam> | null = null;
     try {
       net = buildNet(tf, graph, readOnnxWeights(start, offsets, names), { trainable });
