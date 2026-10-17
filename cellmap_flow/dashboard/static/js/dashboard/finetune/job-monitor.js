@@ -12,7 +12,7 @@
 // status answer carries the count (restart_requests), so it acts within one
 // poll; pressed over the viewer in browser mode, where
 // web/src/backend/routes/finetune.ts binds it in the page and sends
-// lib/events.js's RESTART_EVENT; and pressed on this page itself.
+// RESTART_EVENT; and pressed on this page itself.
 import { setBusy } from "../../lib/dom.js";
 import { announce, listen, MODELS_CHANGED_EVENT, RESTART_EVENT } from "../../lib/events.js";
 import { isBrowserMode } from "../../lib/page-data.js";
@@ -34,12 +34,10 @@ function isRestartKey(event) {
   return !(target.closest("input, textarea, select") || target.isContentEditable);
 }
 
-// The confirm Restart asks, to check the form's values first: one row per
-// value the run reads, as [label, the request's key, what to show when the
-// form leaves the key out]. A row whose value is more than one key, or none,
-// has a function of the request in the key's place. The browser's run reads
-// only the head's parameters (the rest of the form is hidden there), so its
-// rows are only those, or the whole network's.
+// The confirm Restart asks, to check the form's values first, as rows of
+// [label, the request's key or a function of it, shown if the key is not
+// sent]. The browser's run reads only the head's parameters (the rest of the
+// form is hidden there), so its rows are only those, or the whole network's.
 const RESTART_SUMMARY_ROWS = {
   server: [
     ["loss", (body) => body.loss_type + (body.margin !== undefined ? ` (margin=${body.margin})` : "")],
@@ -73,10 +71,8 @@ const RESTART_SUMMARY_ROWS = {
 function restartSummary(requestBody, browser) {
   const mode = !browser ? "server" : requestBody.finetune_mode === "full" ? "full" : "head";
   const rows = RESTART_SUMMARY_ROWS[mode].map(([label, key, fallback]) => {
-    let value;
-    if (typeof key === "function") value = key(requestBody);
-    else value = requestBody[key] !== undefined ? requestBody[key] : fallback;
-    return `  ${(label + ":").padEnd(16)}${value}\n`;
+    const value = typeof key === "function" ? key(requestBody) : requestBody[key];
+    return `  ${(label + ":").padEnd(16)}${value !== undefined ? value : fallback}\n`;
   });
   return "Restart training with current form values?\n\n" + rows.join("");
 }
@@ -152,9 +148,8 @@ export function initJobMonitor({ picker, form, log }) {
   }
 
   // The rest of the page is told when the job's model may have come, gone
-  // or been replaced (lib/events.js MODELS_CHANGED_EVENT): when its status,
-  // its server's readiness or its model's name changes from what was last
-  // seen.
+  // or been replaced: when its status, its server's readiness or its
+  // model's name changes from what was last seen.
   let servedSeen = null;
   function noteServed(job) {
     const seen = job ? [job.status, Boolean(job.inference_server_ready), job.finetuned_model_name || ""].join("|") : null;

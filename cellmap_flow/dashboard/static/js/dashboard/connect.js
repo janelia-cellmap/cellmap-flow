@@ -5,12 +5,11 @@
 // The datasets connected to before are offered in the path field, newest
 // first (its datalist, #recentDatasets). The field had only the browser's
 // own form history, which shows a few entries, and only those that start
-// with what is typed. They are kept in this browser's localStorage
-// (lib/stored.js): a convenience of this browser alone, gone with its site
-// data, and the field works as before when the storage cannot be read. A
-// folder picked on this machine (the browser mode's `local/<key>/` URLs) is
-// left out: it opens through the Browse button, which asks for its
-// permission again.
+// with what is typed. They are kept in this browser's localStorage: a
+// convenience of this browser alone, gone with its site data, and the
+// field works as before when the storage cannot be read. A folder picked
+// on this machine (the browser mode's `local/<key>/` URLs) is left out: it
+// opens through the Browse button, which asks for its permission again.
 import { ApiError, postJSON } from "../lib/api.js";
 import { readJSON, writeJSON } from "../lib/stored.js";
 

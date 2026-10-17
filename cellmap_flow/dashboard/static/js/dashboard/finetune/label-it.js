@@ -68,8 +68,7 @@ export function initLabelIt({ log }) {
       uses: ["threshold", "min_size", "connectivity", "per_slice"],
     },
   };
-  // The settings last used; none kept (or no storage): the defaults.
-  const saved = readJSON(SETTINGS_KEY, {}) || {};
+  const saved = readJSON(SETTINGS_KEY, {});
   if (saved.threshold !== undefined && saved.threshold !== "") seedThreshold.value = saved.threshold;
   if (saved.min_size !== undefined) seedMinSize.value = saved.min_size;
   if (saved.connectivity) seedConnectivity.value = saved.connectivity;

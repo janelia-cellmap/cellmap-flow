@@ -26,12 +26,7 @@ let chains = null;
 
 export function initModelAdvice({ input, postprocess }) {
   chains = { input, postprocess };
-  // Loading a model is the point at which advice is most useful, and that
-  // path never goes through Submit All: the advice is asked for again
-  // whenever the models served may have changed (lib/events.js), as on the
-  // Models tab's Submit, Add and ✕. The jobs start on background threads,
-  // so refreshModelAdvice polls rather than assuming the server is already
-  // up.
+  // Loading a model, not only Submit All, is when advice is most useful.
   listen(MODELS_CHANGED_EVENT, () => refreshModelAdvice());
 }
 

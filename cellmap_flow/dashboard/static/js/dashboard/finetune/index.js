@@ -30,12 +30,12 @@
 // patch tools, Label it, AI-assisted annotation and Good regions, all run
 // there, their routes answered in the page (web/src/backend/routes/
 // view-labels.ts, ai-annotate.ts and good-regions.ts).
+import { readJSON, writeJSON } from "../../lib/stored.js";
 import { initAiAnnotate } from "./ai-annotate.js";
 import { initCrops } from "./crops.js";
 import { initGoodRegionMarks } from "./good-region-marks.js";
 import { initJobMonitor } from "./job-monitor.js";
 import { initLabelIt } from "./label-it.js";
-import { readJSON, writeJSON } from "../../lib/stored.js";
 import { initModelPicker } from "./models.js";
 import { initSessions } from "./sessions.js";
 import { initTrainingForm } from "./training-form.js";
@@ -70,7 +70,7 @@ export function initFinetuneTab() {
 const OPEN_SECTIONS_KEY = "finetunePatchToolsOpen";
 
 function rememberOpenSections() {
-  const saved = readJSON(OPEN_SECTIONS_KEY, {}) || {};
+  const saved = readJSON(OPEN_SECTIONS_KEY, {});
   for (const section of document.querySelectorAll(".patch-tools-section[id]")) {
     if (typeof saved[section.id] === "boolean") section.open = saved[section.id];
     section.addEventListener("toggle", () => {

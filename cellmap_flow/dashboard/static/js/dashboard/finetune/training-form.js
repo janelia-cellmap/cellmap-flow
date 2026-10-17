@@ -68,7 +68,6 @@ function saveFinetuneState() {
   writeJSON(FINETUNE_STATE_KEY, state);
 }
 
-// The state saved last, or null if none is.
 function restoreFinetuneState() {
   return readJSON(FINETUNE_STATE_KEY, null);
 }

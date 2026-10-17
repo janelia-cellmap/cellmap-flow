@@ -8,9 +8,6 @@ import { isBrowserMode } from "../../lib/page-data.js";
 import { readText, writeText } from "../../lib/stored.js";
 import { getAnswer, postAnswer, watchProgress } from "./requests.js";
 
-// The Load Crops dialog's last path, kept in this browser as a plain string.
-const YAML_PATH_KEY = "loadCropsYamlPath";
-
 // A crop import's progress, as the status line shows it.
 function describeCropImport(p) {
   if (p.phase === "starting" || p.phase === "setup") {
@@ -208,7 +205,7 @@ export function initCrops({ log, picker, form }) {
       loadCropsModal = new bootstrap.Modal(document.getElementById("loadCropsModal"));
     }
     // Restore the last-used path so users don't retype it.
-    const saved = readText(YAML_PATH_KEY, "");
+    const saved = readText("loadCropsYamlPath", "");
     if (saved) loadCropsYamlPath.value = saved;
     loadCropsStatus.textContent = "";
     loadCropsModal.show();
@@ -229,7 +226,7 @@ export function initCrops({ log, picker, form }) {
       if (data.success) {
         loadCropsYaml.value = data.text;
         status.textContent = `Loaded ${data.text.length} chars from ${path}`;
-        writeText(YAML_PATH_KEY, path);
+        writeText("loadCropsYamlPath", path);
       } else {
         status.textContent = `Read failed: ${data.error}`;
       }
@@ -254,7 +251,7 @@ export function initCrops({ log, picker, form }) {
         "Paste YAML or enter a file path first.";
       return;
     }
-    if (yamlPath) writeText(YAML_PATH_KEY, yamlPath);
+    if (yamlPath) writeText("loadCropsYamlPath", yamlPath);
     const outputPath = outputPathInput.value.trim();
     const status = loadCropsStatus;
     status.textContent = "Starting...";
