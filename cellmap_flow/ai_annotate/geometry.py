@@ -74,13 +74,7 @@ def display_names(display_dimensions=None) -> tuple:
     """``display_dimensions`` when they are z, y and x in some order, else
     z, y, x: the display dimensions of a viewer that sets none over
     cellmap-flow's coordinate space, and of a plan saved before plans kept
-    them.
-
-    Applied where display dimensions come in: from a viewer
-    (``display_dimensions_for_view``), to a new plan (``plan_plane``) and
-    from a saved one (``PlanePlan.from_dict``). The functions that lay a
-    plane out take them as it gives them.
-    """
+    them."""
     names = tuple(display_dimensions or ())
     return names if sorted(names) == sorted(AXIS_NAMES) else AXIS_NAMES
 
@@ -162,18 +156,15 @@ def depth_axis_from_layout(layout, display_dimensions=None) -> int:
 
 
 def display_dimensions_for_view(viewer_state) -> tuple:
-    """The display dimensions of a neuroglancer ``ViewerState``
-    (``viewer.display_dimensions_for_view``), as ``display_names`` gives
-    them: what a plan of the plane it shows keeps."""
+    """The display dimensions of a neuroglancer ``ViewerState``, as
+    ``display_names`` gives them."""
     return display_names(viewer.display_dimensions_for_view(viewer_state))
 
 
 def depth_axis_for_view(viewer_state) -> int:
     """``depth_axis_from_layout`` for a neuroglancer ``ViewerState``, over
-    the display dimensions it shows (``viewer.display_dimensions_for_view``)
-    as they are, not as ``display_names`` gives them: a panel that looks
-    along one that is not z, y or x (time) gets z, as
-    ``depth_axis_from_layout`` gives it."""
+    its display dimensions as they are: a panel looking along one that is
+    not z, y or x (time) gets z."""
     display = viewer.display_dimensions_for_view(viewer_state)
     return depth_axis_from_layout(getattr(viewer_state, "layout", None), display or None)
 

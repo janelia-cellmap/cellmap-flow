@@ -70,9 +70,7 @@ def main(dataset, project, resample):
     session = get_session()
     session.dataset_path = dataset
     session.resample = resample
-    # The raw data as "data", in a viewer of z, y, x at 8 nm whatever the
-    # data's voxel size, as this command has always shown it; its server
-    # binds every interface.
+    # At 8 nm whatever the data's voxel size, as this command has always shown it.
     viewer = new_viewer(dataset, scales=(8, 8, 8))
     session.viewer = viewer
 

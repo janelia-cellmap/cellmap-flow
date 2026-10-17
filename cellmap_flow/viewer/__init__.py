@@ -4,20 +4,17 @@
 - ``layers``: a model's prediction layer and the raw data's layer, built the
   same way by every path that shows one.
 - ``DISPLAY_DIMENSIONS`` and ``display_dimensions_for_view``: which
-  dimensions a viewer displays, for bootstrap and for the AI annotation's
-  geometry. Defined here, so that importing them imports nothing else.
+  dimensions a viewer displays. Here, so that importing them imports
+  nothing else.
 
 Nothing here reads the dashboard's state or starts the dashboard; callers
 pass in what a layer needs.
 """
 
-# The display dimensions cellmap-flow's viewers set (bootstrap.display_dimensions),
-# over a coordinate space named z, y, x. Neuroglancer's "xy" panel shows the
-# first two display dimensions, which are the first three of the coordinate
-# space unless set: unset, that panel showed z across and y down, and a
-# model that computes one z-slice at a time was asked for a block for every
-# z position on screen. With x, y, z it is the XY plane, x across and y
-# down, looking along z, and the positions stay z, y, x.
+# The display dimensions cellmap-flow's viewers set over their z, y, x
+# coordinate space. Neuroglancer's "xy" panel shows the first two, which are
+# the first three of the coordinate space unless set: unset, it showed z
+# across and y down. With x, y, z it is the XY plane, looking along z.
 DISPLAY_DIMENSIONS = ("x", "y", "z")
 
 

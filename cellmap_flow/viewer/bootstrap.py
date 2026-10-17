@@ -28,11 +28,6 @@ logger = logging.getLogger(__name__)
 GPU_MEMORY_LIMIT = 2_000_000_000
 
 
-def apply_viewer_defaults(state):
-    """Give a new viewer's ``state`` cellmap-flow's settings (GPU_MEMORY_LIMIT)."""
-    state.gpu_memory_limit = GPU_MEMORY_LIMIT
-
-
 def display_dimensions(names):
     """The display dimensions for a viewer whose dimensions are ``names``:
     DISPLAY_DIMENSIONS (x, y, z) when it has all three, else None
@@ -88,7 +83,7 @@ def new_viewer(dataset_path, *, scales=None, raw=None, raw_name="data", layers=N
     neuroglancer.set_server_bind_address("0.0.0.0")
     viewer = neuroglancer.Viewer()
     with viewer.txn() as s:
-        apply_viewer_defaults(s)
+        s.gpu_memory_limit = GPU_MEMORY_LIMIT
         if dimensions is not None:
             s.dimensions = dimensions
             s.display_dimensions = display_dimensions(dimensions.names)

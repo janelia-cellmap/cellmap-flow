@@ -55,15 +55,7 @@ from typing import TYPE_CHECKING, Optional
 
 import numpy as np
 
-from cellmap_flow.models.configs.base import (
-    Config,
-    ModelConfig,
-    _as_given,
-    _get_device,
-    _per_axis,
-    _sizes,
-    _voxel_size,
-)
+from cellmap_flow.models.configs.base import Config, ModelConfig, _as_given, _get_device, _per_axis, _sizes, _voxel_size
 from cellmap_flow.models.geometry import _numbers
 
 if TYPE_CHECKING:

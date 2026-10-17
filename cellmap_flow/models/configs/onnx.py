@@ -456,7 +456,6 @@ class OnnxModelConfig(ModelConfig):
         # a 5.24 nm voxel to 5.
         self.input_voxel_size = None if input_voxel_size is None else _voxel_size(input_voxel_size)
         self.output_voxel_size = None if output_voxel_size is None else _voxel_size(output_voxel_size)
-        # Voxels of a block: one number or three (z, y, x).
         self.input_size = _sizes(input_size, min=1, lengths=(1, 3))
         self.output_size = _sizes(output_size, min=1, lengths=(1, 3))
         self.channels = _names(channels)

@@ -83,8 +83,7 @@ def _sizes(value, *, min=0, lengths=None):
 
     One number stays one (``_per_axis`` widens it), so that ``_as_given``
     writes it back as it was given. Each must be at least ``min``, and when
-    ``lengths`` is given, there must be one of those counts of them: the
-    onnx type takes a block size as one number or three, (1, 3).
+    ``lengths`` is given, their count must be one of them.
     """
     if value is None:
         return None
@@ -341,10 +340,8 @@ class ModelConfig:
         """The input normalization the model declares itself, as cellmap-flow
         steps (``[{"name": ..., **params}]``), or None when it declares none.
 
-        For the dashboard's model advice (``suggest_input_norm``'s
-        ``declared``), which asks on every poll, so it must be cheap and must
-        not raise. Only an onnx model's manifest declares any
-        (``OnnxModelConfig.declared_input_norm``).
+        Asked on every dashboard poll, so it must be cheap and must not
+        raise. Only an onnx model's manifest declares any.
         """
         return None
 
