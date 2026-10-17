@@ -5,7 +5,7 @@
 // each model is written to `<folder>/<model>.zarr` through chunkmirage's
 // directoryStore. Chrome drops a stored handle's permission when the page
 // reloads, and asking for it again needs a user gesture, so it is asked for
-// in the Run click (writable). A model's zarr that is there already is said
+// in the Run click (prepareFolder). A model's zarr that is there already is said
 // before anything is written (existingOutputs), and removed whole once the
 // user agrees (clearOutputs): empty chunks are skipped, not written, so a
 // chunk of the old zarr where the new one is empty would survive in it, and
@@ -25,7 +25,7 @@
 // `local/<key>/<model>.zarr/`.
 import type { Chain, LayerSpec, RegionStore, ServedModel } from "../contracts";
 import { type ZipEntry, zipStore } from "../finetune/zip";
-import type { PickedDirectory } from "../local-folder";
+import { ensurePermission, type PickedDirectory } from "../local-folder";
 import { stamp } from "../shared/format";
 import { message } from "../shared/message";
 import { type KeptShader, predictionLayer } from "../viewer/layers";
@@ -37,12 +37,6 @@ import { type KeptShader, predictionLayer } from "../viewer/layers";
 export interface OutputFolder extends PickedDirectory {
   getDirectoryHandle(name: string, options?: { create?: boolean }): Promise<unknown>;
   removeEntry(name: string, options?: { recursive?: boolean }): Promise<void>;
-}
-
-/** Where the folder's handle is kept: local-store's IndexedDB store, or a fake. */
-export interface FolderStore {
-  get(key: string): Promise<OutputFolder | undefined>;
-  put(key: string, folder: OutputFolder): Promise<void>;
 }
 
 /** The key the output folder's handle is kept under, beside the picked
@@ -59,14 +53,6 @@ export const OUTPUT_PICKER_OPTIONS = { id: "cellmap-flow-predictions", mode: "re
  * segments (ModelEntry.name), so they are folder names too. */
 export function zarrName(model: string): string {
   return `${model}.zarr`;
-}
-
-/** Whether the page may write into `folder`, asking for it when it may not
- * yet (the caller is in the user's click). */
-export async function writable(folder: Pick<PickedDirectory, "queryPermission" | "requestPermission">): Promise<boolean> {
-  let permission = await folder.queryPermission({ mode: "readwrite" });
-  if (permission !== "granted") permission = await folder.requestPermission({ mode: "readwrite" });
-  return permission === "granted";
 }
 
 /** The zarrs of `models` that `folder` has already, as entries named
@@ -111,7 +97,7 @@ export async function prepareFolder(
   ask: (question: string) => boolean,
 ): Promise<{ ready: true; removed: string[] } | { ready: false; reason: string; refused: boolean }> {
   try {
-    if (!(await writable(folder))) {
+    if ((await ensurePermission(folder, "readwrite")) !== "granted") {
       return { ready: false, refused: true, reason: `Writing to ${folder.name} was not allowed, so nothing was run. Click Run to be asked again, or choose another folder.` };
     }
   } catch (e) {

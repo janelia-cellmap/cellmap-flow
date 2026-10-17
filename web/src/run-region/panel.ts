@@ -25,15 +25,14 @@
 import { directoryStore, memoryStore } from "../../chunkmirage/web/src/materialize";
 import { pageBase } from "../backend/serving";
 import type { AppContext, LayerSpec, ServedModel } from "../contracts";
-import { localKeyFor, localUrl, supportsLocalFolders } from "../local-folder";
-import { carriesFiles, DROP_CLASS, type HandleItem } from "../local-folder/panel";
+import { type HandleStore, indexedDbHandles, localKeyFor, localUrl, pickDirectory, supportsLocalFolders } from "../local-folder";
+import { dropDirectory, type DropWording } from "../local-folder/panel";
 import { count, formatBytes, formatDuration } from "../shared/format";
 import { message } from "../shared/message";
-import { getHandle, putHandle } from "../state/local-store";
 import { shaderColor } from "../viewer/display";
 import { dimensionsOf, PREDICTION_COLORS } from "../viewer/layers";
 import {
-  type FolderStore, type MemoryStore, OUTPUT_FOLDER_KEY, OUTPUT_PICKER_OPTIONS, type OutputFolder, prepareFolder, savedLayer, savedLayerName,
+  type MemoryStore, OUTPUT_FOLDER_KEY, OUTPUT_PICKER_OPTIONS, type OutputFolder, prepareFolder, savedLayer, savedLayerName,
   ZIP_LIMIT_BYTES, zarrName, zipFileName, zipRun,
 } from "./output";
 import {
@@ -97,23 +96,18 @@ export const TYPED_BOX_DELAY_MS = 400;
  * has a few GB at most. */
 export const PEAK_WARN_BYTES = 512e6;
 
-/** The picker as Chromium has it (not in lib.dom, so `window` is read as this). */
-interface PickerWindow {
-  showDirectoryPicker?(options?: { id?: string; mode?: "read" | "readwrite"; startIn?: "desktop" | "documents" | "downloads" }): Promise<OutputFolder>;
-}
-
-/** The IndexedDB store of picked handles (state/local-store.ts), which the
- * service worker reads the local/ route's folders from. The casts are the
- * gap in lib.dom that OutputFolder fills. */
-const indexedDbFolders: FolderStore = {
-  get: (key) => getHandle(key) as unknown as Promise<OutputFolder | undefined>,
-  put: (key, folder) => putHandle(key, folder as unknown as FileSystemDirectoryHandle),
+/** What the Output folder row says of a drop that is not one folder. */
+const OUTPUT_DROP: DropWording = {
+  notOne: "Drop one folder: the one the predictions go to.",
+  noHandle: "This browser gives no handle for a dropped folder: use Choose folder… in Chrome or Edge.",
+  notFolder: (name) => `${name ?? "What was dropped"} is not a folder: drop the folder the predictions go to.`,
+  failed: (reason) => `Could not take the dropped folder: ${reason}`,
 };
 
 /** The Run tab, wired: does nothing on a page without it (the Flask
  * dashboard's). Call it once the page's DOM is there; it needs nothing of
  * the dashboard's own script. */
-export function installRunRegionUi(ctx: AppContext, opts: { folders?: FolderStore; supported?: boolean } = {}): void {
+export function installRunRegionUi(ctx: AppContext, opts: { folders?: HandleStore<OutputFolder>; supported?: boolean } = {}): void {
   const byId = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T | null;
   const pane = byId(IDS.pane);
   if (!pane) return;
@@ -129,7 +123,9 @@ export function installRunRegionUi(ctx: AppContext, opts: { folders?: FolderStor
     progress: byId(IDS.progress)!, progressBar: byId(IDS.progressBar)!, progressText: byId(IDS.progressText)!,
     results: byId(IDS.results)!, log: byId<HTMLTextAreaElement>(IDS.log)!,
   };
-  const folders = opts.folders ?? indexedDbFolders;
+  // The IndexedDB store of picked handles, which the service worker reads
+  // the local/ route's folders from.
+  const folders = opts.folders ?? indexedDbHandles<OutputFolder>();
   const supported = opts.supported ?? supportsLocalFolders();
 
   /** The folder the predictions go to, once chosen (or remembered). */
@@ -399,12 +395,11 @@ export function installRunRegionUi(ctx: AppContext, opts: { folders?: FolderStor
   /** The picker, in the user's click; the folder chosen, or null when the dialog was cancelled. */
   async function pickFolder(): Promise<OutputFolder | null> {
     try {
-      const picked = await (window as unknown as Required<PickerWindow>).showDirectoryPicker(OUTPUT_PICKER_OPTIONS);
-      await useFolder(picked);
+      const picked = await pickDirectory<OutputFolder>(OUTPUT_PICKER_OPTIONS);
+      if (picked) await useFolder(picked);
       return picked;
     } catch (e) {
-      // AbortError: the dialog was cancelled, which needs no message.
-      if ((e as { name?: string })?.name !== "AbortError") status(`Could not pick a folder: ${message(e)}`, "error");
+      status(`Could not pick a folder: ${message(e)}`, "error");
       return null;
     }
   }
@@ -419,37 +414,13 @@ export function installRunRegionUi(ctx: AppContext, opts: { folders?: FolderStor
   }
 
   /** A folder dropped on the Output folder row, taken as the picker's would
-   * be; the browser asks to allow writing to it when Run is clicked (start).
-   * Asked for in the drop event: the drag's items are gone once it ends. */
+   * be; the browser asks to allow writing to it when Run is clicked (start). */
   function acceptDroppedFolder(): void {
-    const zone = el.folderDrop;
-    zone.addEventListener("dragover", (event) => {
-      if (!carriesFiles(event.dataTransfer)) return;
-      event.preventDefault();
-      event.dataTransfer.dropEffect = "link";
-      zone.classList.add(DROP_CLASS);
-    });
-    zone.addEventListener("dragleave", (event) => {
-      // Leaving for one of the row's own children is not leaving.
-      if (!zone.contains(event.relatedTarget as Node | null)) zone.classList.remove(DROP_CLASS);
-    });
-    zone.addEventListener("drop", (event) => {
-      zone.classList.remove(DROP_CLASS);
-      if (!carriesFiles(event.dataTransfer)) return;
-      event.preventDefault();
-      const items = Array.from(event.dataTransfer.items).filter((item) => item.kind === "file") as HandleItem[];
-      if (items.length !== 1) return status("Drop one folder: the one the predictions go to.", "error");
-      const item = items[0];
-      if (!item.getAsFileSystemHandle) return status("This browser gives no handle for a dropped folder: use Choose folder… in Chrome or Edge.", "error");
-      item.getAsFileSystemHandle().then(
-        (handle) => {
-          if (!handle || handle.kind !== "directory") return status(`${handle ? handle.name : "What was dropped"} is not a folder: drop the folder the predictions go to.`, "error");
-          status(`Output folder: ${handle.name}. The browser asks to allow writing to it when you click Run.`);
-          return useFolder(handle as unknown as OutputFolder);
-        },
-        (e: unknown) => status(`Could not take the dropped folder: ${message(e)}`, "error"),
-      );
-    });
+    const take = (dropped: OutputFolder) => {
+      status(`Output folder: ${dropped.name}. The browser asks to allow writing to it when you click Run.`);
+      void useFolder(dropped);
+    };
+    dropDirectory(el.folderDrop, take, (text) => status(text, "error"), OUTPUT_DROP);
   }
 
   // ---------------------------------------------------------------- the run

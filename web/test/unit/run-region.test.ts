@@ -14,7 +14,7 @@ import type { Chain, DatasetInfo, RegionStore, RegionWrite, RegionWritten, Serve
 import type { Level } from "../../src/infer/geometry";
 import { formatDuration } from "../../src/shared/format";
 import {
-  existingOutputs, OUTPUT_FOLDER_KEY, type OutputFolder, overwriteQuestion, prepareFolder, savedLayer, savedLayerName, writable,
+  existingOutputs, OUTPUT_FOLDER_KEY, type OutputFolder, overwriteQuestion, prepareFolder, savedLayer, savedLayerName,
   zarrName, zipFileName, zipRun,
 } from "../../src/run-region/output";
 import {
@@ -380,15 +380,12 @@ describe("a run", () => {
 
 /** A picked folder: its entries by name, a directory or a file, and its permission. */
 function fakeFolder(entries: Record<string, "dir" | "file"> = {}, permission: PermissionState = "granted") {
-  const state = { entries: new Map(Object.entries(entries)), permission, asked: 0, failWith: null as string | null };
+  const state = { entries: new Map(Object.entries(entries)), permission, failWith: null as string | null };
   const named = (name: string) => Object.assign(new Error(name), { name });
   const folder: OutputFolder = {
     name: "Predictions",
     queryPermission: async () => state.permission,
-    requestPermission: async () => {
-      state.asked++;
-      return state.permission === "prompt" ? (state.permission = "granted") : state.permission;
-    },
+    requestPermission: async () => (state.permission === "prompt" ? (state.permission = "granted") : state.permission),
     getDirectoryHandle: async (name) => {
       if (state.failWith) throw named(state.failWith);
       const kind = state.entries.get(name);
@@ -406,16 +403,6 @@ describe("the output folder", () => {
     expect(await existingOutputs(folder, [NAME_54, NAME_56, "mito"])).toEqual([`${NAME_54}.zarr`, `${NAME_56}.zarr`]);
     state.failWith = "NotAllowedError";
     await expect(existingOutputs(folder, [NAME_54])).rejects.toThrow("NotAllowedError");
-  });
-
-  it("asks for write permission only when it is not granted", async () => {
-    const granted = fakeFolder();
-    expect(await writable(granted.folder)).toBe(true);
-    expect(granted.state.asked).toBe(0);
-    const prompt = fakeFolder({}, "prompt");
-    expect(await writable(prompt.folder)).toBe(true);
-    expect(prompt.state.asked).toBe(1);
-    expect(await writable(fakeFolder({}, "denied").folder)).toBe(false);
   });
 
   it("asks before writing over a model's zarr, and removes it whole only on a yes", async () => {
