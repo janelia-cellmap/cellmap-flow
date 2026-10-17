@@ -53,22 +53,18 @@ def _model_metadata(model_config) -> dict:
 
 
 def _declared_input_norm(model_config):
-    """The input normalization a model declares itself, in suggest_input_norm's
-    ``declared`` form (``{name: params}``, in order), or None.
+    """The input normalization a model declares itself
+    (``ModelConfig.declared_input_norm``), in suggest_input_norm's
+    ``declared`` form (``{name: params}``, in order), or None; None too for
+    a job whose model is not among the session's.
 
-    An onnx model's manifest declares the steps the browser feeds it through
-    (``OnnxModelConfig.declared_input_norm``); no other type declares any.
+    An onnx model's manifest declares the steps the browser feeds it through;
+    no other type declares any.
     """
-    declared = getattr(model_config, "declared_input_norm", None)
-    if not callable(declared):
-        return None
-    try:
-        steps = declared() or []
-    except Exception as e:
-        logger.debug(f"Could not read the declared input normalization of {model_config}: {e}")
+    if model_config is None:
         return None
     norm = {}
-    for step in steps:
+    for step in model_config.declared_input_norm() or []:
         if isinstance(step, dict) and step.get("name"):
             norm[step["name"]] = {k: v for k, v in step.items() if k != "name"}
     return norm or None

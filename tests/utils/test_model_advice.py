@@ -5,6 +5,7 @@ from types import SimpleNamespace
 import pytest
 
 from cellmap_flow.dashboard.state import get_session
+from cellmap_flow.models.configs.base import ModelConfig
 from cellmap_flow.models.configs.cellpose import CellposeModelConfig
 from cellmap_flow.models.configs.finetune import FinetuneModelConfig
 from cellmap_flow.process_chain import process_chain
@@ -43,9 +44,11 @@ def test_a_model_that_normalizes_its_own_input_gets_no_suggestion(advice, model_
 
 
 def test_a_model_that_declares_nothing_is_still_assumed_to_take_minus_one_to_one(advice):
-    # A stand-in rather than a ModelConfig subclass: the registry lists every
-    # subclass, and the type listings' tests would see one more.
-    suggestion = advice(SimpleNamespace(name="mine", to_dict=dict))
+    # The base class itself rather than a subclass of it: the registry lists
+    # every subclass, and the type listings' tests would see one more.
+    model_config = ModelConfig()
+    model_config.name = "mine"
+    suggestion = advice(model_config)
     assert suggestion["order"] == ["MinMaxNormalizer", "LambdaNormalizer"] and suggestion["confidence"] == "low"
 
 

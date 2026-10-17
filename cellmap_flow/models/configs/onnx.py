@@ -73,7 +73,7 @@ from typing import Dict, Optional
 
 import numpy as np
 
-from cellmap_flow.models.configs.base import Config, ModelConfig, _voxel_size
+from cellmap_flow.models.configs.base import Config, ModelConfig, _as_given, _names, _per_axis, _sizes, _voxel_size
 from cellmap_flow.models.geometry import _numbers
 
 logger = logging.getLogger(__name__)
@@ -291,29 +291,6 @@ def choose_variant(manifest, file=None, variant=None, input_size=None) -> dict:
 
 # --- serving ------------------------------------------------------------------------
 
-def _sizes(value):
-    """None, or ``value`` (one number, "148" or "1,300,300", or a list) as a tuple of positive ints."""
-    if value is None:
-        return None
-    if isinstance(value, str):
-        value = [v for v in value.replace("(", "").replace(")", "").split(",") if v.strip()]
-    if np.ndim(value) == 0:
-        value = [value]
-    sizes = tuple(int(float(v)) for v in value)
-    if len(sizes) not in (1, 3) or any(s < 1 for s in sizes):
-        raise ValueError(f"a block size is one positive whole number or three (z, y, x), got {list(sizes)}")
-    return sizes
-
-
-def _names(value):
-    """None, or channel names from a list or "mito, er"."""
-    if value is None:
-        return None
-    if isinstance(value, str):
-        value = [v.strip() for v in value.split(",") if v.strip()]
-    return [str(v) for v in value]
-
-
 def _fixed(shape) -> list:
     """A graph tensor's dims, None where it is not a fixed whole number (a symbolic or unknown dim)."""
     return [d if isinstance(d, int) and d > 0 else None for d in (shape or [])]
@@ -479,8 +456,9 @@ class OnnxModelConfig(ModelConfig):
         # a 5.24 nm voxel to 5.
         self.input_voxel_size = None if input_voxel_size is None else _voxel_size(input_voxel_size)
         self.output_voxel_size = None if output_voxel_size is None else _voxel_size(output_voxel_size)
-        self.input_size = _sizes(input_size)
-        self.output_size = _sizes(output_size)
+        # Voxels of a block: one number or three (z, y, x).
+        self.input_size = _sizes(input_size, min=1, lengths=(1, 3))
+        self.output_size = _sizes(output_size, min=1, lengths=(1, 3))
         self.channels = _names(channels)
         self.output = output
         self.slices_per_chunk = None if slices_per_chunk is None else int(slices_per_chunk)
@@ -609,8 +587,9 @@ class OnnxModelConfig(ModelConfig):
         # In the folder's case input_size chose the variant; a file's
         # manifest's variant is overruled by the entry's sizes.
         given_in = self.input_size if self.folder is None else None
-        in_size = first(_triple(given_in), variant.get("input_size"), in_dims[2:], what_is_it="input_size")
-        out_size = first(_triple(self.output_size), variant.get("output_size"), out_dims[-3:],
+        in_size = first(_per_axis(given_in, 3, "input_size"), variant.get("input_size"), in_dims[2:],
+                        what_is_it="input_size")
+        out_size = first(_per_axis(self.output_size, 3, "output_size"), variant.get("output_size"), out_dims[-3:],
                          what_is_it="output_size")
         for kind, size, dims in (("input", in_size, in_dims[2:]), ("output", out_size, out_dims[-3:])):
             if any(d is not None and d != s for d, s in zip(dims, size)):
@@ -676,15 +655,8 @@ class OnnxModelConfig(ModelConfig):
             if value is None:
                 continue
             if key in ("input_size", "output_size"):
-                value = value[0] if len(value) == 1 else list(value)  # one number as itself, as given
+                value = _as_given(value)
             elif isinstance(value, (tuple, list)):
                 value = list(value)  # a copy, and no tuple: yaml.safe_load refuses !!python/tuple
             result[key] = value
         return self._with_name_scale(result)
-
-
-def _triple(sizes):
-    """One number as a cube's three, three as they are; None as None."""
-    if sizes is None:
-        return None
-    return list(sizes) * 3 if len(sizes) == 1 else list(sizes)
