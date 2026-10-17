@@ -5,8 +5,10 @@ import { describe, expect, it } from "vitest";
 
 import { createBackend, restoreSession } from "../../src/backend";
 import { explainOpenError } from "../../src/backend/routes/data";
+import { toYaml } from "../../src/backend/yaml";
 import { ARGS_KEY } from "../../src/contracts";
-import type { ApiResponse } from "../../src/contracts";
+import type { ApiResponse, FinetunedRecord } from "../../src/contracts";
+import { finetunedEntry } from "../../src/models/finetuned";
 import { decodeArgs } from "../../src/shared/args";
 import { defaultChain } from "../../src/state";
 import { entry, fakeContext, NAME_54, NAME_56, request } from "./backend-fakes";
@@ -15,6 +17,15 @@ function body(res: ApiResponse): any {
   if (!("json" in res)) throw new Error(`not a JSON answer: ${JSON.stringify(res)}`);
   return res.json;
 }
+
+/** An exported config without its comments (the header's lines, a path
+ * line's note): the config itself, as toYaml writes it. */
+function uncommented(yaml: string): string {
+  return yaml.split("\n").filter((line) => !line.startsWith("#")).map((line) => line.replace(/ +#.*$/, "")).join("\n");
+}
+
+/** setup_54 as the server's onnx entry, running `file`. */
+const SERVER_54 = (file: string) => ({ type: "onnx", name: NAME_54, repo: "cellmap/onnx-web-models", folder: "setup_54", file });
 
 const HF54 = "cellmap/onnx-web-models/setup_54";
 const HF56 = "cellmap/onnx-web-models/setup_56";
@@ -177,6 +188,96 @@ describe("POST /api/models", () => {
   });
 });
 
+describe("the Loaded models list: GET /api/models/loaded and POST /api/models/remove", () => {
+  function loaded(name: string, folder: string, id: string) {
+    return { name, source: "huggingface", detail: folder, status: "running", removable: true, note: null, hf_id: id, zoo_id: null, cellpose: null };
+  }
+
+  it("lists the served models in order, each with where it came from and the Hugging Face row that ticks it", async () => {
+    const ctx = fakeContext();
+    const backend = createBackend(ctx);
+    expect(body(await backend.handle(request("GET", "/api/models/loaded")))).toEqual({ success: true, models: [] });
+    await backend.handle(submit([HF56, HF54]));
+    expect(body(await backend.handle(request("GET", "/api/models/loaded")))).toEqual({
+      success: true,
+      models: [loaded(NAME_56, "setup_56", HF56), loaded(NAME_54, "setup_54", HF54)],
+    });
+  });
+
+  it("says a model the session names but has not served again yet (a reload's restore) is starting", async () => {
+    const ctx = fakeContext({ state: { models: [entry("setup_54")] } });
+    const models = body(await createBackend(ctx).handle(request("GET", "/api/models/loaded"))).models;
+    expect(models.map((m: any) => [m.name, m.status])).toEqual([[NAME_54, "starting"]]);
+  });
+
+  it("stops serving the one model removed; the others stay served, their layers not redrawn, and nothing else in the request is read", async () => {
+    const ctx = fakeContext();
+    const backend = createBackend(ctx);
+    await backend.handle(submit([HF54, HF56]));
+    const serves = ctx.infer.serves.length;
+    const redraws = ctx.viewer.setLayersCalls;
+    const layer56 = ctx.viewer.layers[NAME_56];
+    // The tab has setup_56 unticked and nothing submitted: a remove names one model, and only it changes.
+    const res = await backend.handle(request("POST", "/api/models/remove", { name: NAME_54, selected_hf_models: [] }));
+    expect(res.status).toBe(200);
+    expect(body(res)).toEqual({ success: true, removed: NAME_54, models: [loaded(NAME_56, "setup_56", HF56)] });
+    expect(ctx.infer.served().map((s) => s.entry.name)).toEqual([NAME_56]);
+    expect(ctx.infer.disposed).toHaveLength(1);
+    expect(ctx.infer.disposed[0].startsWith(`${NAME_54}${ARGS_KEY}`)).toBe(true);
+    expect(ctx.viewer.removed).toEqual([NAME_54]);
+    expect(ctx.viewer.layers[NAME_56]).toBe(layer56);
+    expect(ctx.infer.serves).toHaveLength(serves);
+    expect(ctx.viewer.setLayersCalls).toBe(redraws);
+    expect(ctx.session.state.models.map((m) => m.name)).toEqual([NAME_56]);
+    // Ticked again and submitted, it is served again beside the other.
+    await backend.handle(submit([HF54, HF56]));
+    expect(ctx.infer.served().map((s) => s.entry.name).sort()).toEqual([NAME_54, NAME_56].sort());
+  });
+
+  it("answers a 404 for a model not served and a 400 without a name, changing nothing", async () => {
+    const ctx = fakeContext();
+    const backend = createBackend(ctx);
+    await backend.handle(submit([HF54]));
+    const gone = await backend.handle(request("POST", "/api/models/remove", { name: NAME_56 }));
+    expect(gone.status).toBe(404);
+    expect(body(gone)).toEqual({ success: false, error: `No model named ${NAME_56} is running` });
+    const nameless = await backend.handle(request("POST", "/api/models/remove", { name: " " }));
+    expect(nameless.status).toBe(400);
+    expect(body(nameless).error).toBe("name is required");
+    expect(ctx.infer.served().map((s) => s.entry.name)).toEqual([NAME_54]);
+    expect(ctx.infer.disposed).toEqual([]);
+  });
+
+  it("unserves a finetuned model but keeps it, listed and stored, to serve again", async () => {
+    const ctx = fakeContext();
+    const backend = createBackend(ctx);
+    const base = entry("setup_54");
+    const fentry = finetunedEntry(base, `${NAME_54}-ft1`, 0.1);
+    const record: FinetunedRecord = {
+      id: fentry.id, name: fentry.name, base: { id: base.id, name: base.name, file: base.variant.file },
+      volume: "vol-1", created_at: "2026-10-16T12:00:00Z", params: {}, epochs: 1, final_loss: null, entry: fentry,
+    };
+    await ctx.catalog.addFinetuned(record, new ArrayBuffer(16));
+    await backend.handle(submit([HF54, fentry.id]));
+    const listed = body(await backend.handle(request("GET", "/api/models/loaded"))).models;
+    expect(listed[1]).toMatchObject({ name: fentry.name, source: "finetuned", detail: `from ${NAME_54}`, removable: true, hf_id: fentry.id });
+    expect(listed[1].note).toMatch(/Kept in this browser/);
+
+    const res = await backend.handle(request("POST", "/api/models/remove", { name: fentry.name }));
+    expect(res.status).toBe(200);
+    expect(ctx.infer.served().map((s) => s.entry.name)).toEqual([NAME_54]);
+    expect(ctx.viewer.removed).toEqual([fentry.name]);
+    // Its record and bytes stay: the Hugging Face list still has it, and ticking it serves it again.
+    expect(ctx.catalog.finetunedRecords.map((r) => r.id)).toEqual([fentry.id]);
+    expect(ctx.catalog.finetunedBytes.has(fentry.onnxUrl)).toBe(true);
+    const listing = body(await backend.handle(request("GET", "/api/huggingface-models")));
+    expect(listing[fentry.id]).toBeDefined();
+    expect(listing[fentry.id].selected).toBeUndefined();
+    await backend.handle(submit([HF54, fentry.id]));
+    expect(ctx.infer.served().map((s) => s.entry.name)).toEqual([NAME_54, fentry.name]);
+  });
+});
+
 describe("PUT /api/pipeline", () => {
   const CHAIN = {
     input_norm: [
@@ -302,11 +403,12 @@ describe("the model lists", () => {
 });
 
 describe("adding a model by reference", () => {
-  it("resolves a catalog model to a huggingface entry the form can submit", async () => {
+  it("resolves a catalog model to the server's onnx entry, which the form can submit", async () => {
     const res = await createBackend(fakeContext()).handle(request("POST", "/api/models/resolve", { ref: HF54 }));
     expect(res.status).toBe(200);
     const d = body(res);
-    expect(d).toMatchObject({ success: true, type: "huggingface", params: { repo: "cellmap/onnx-web-models", folder: "setup_54" }, name: NAME_54, env: null, needs: [] });
+    expect(d).toMatchObject({ success: true, type: "onnx", params: { repo: "cellmap/onnx-web-models", folder: "setup_54" }, name: NAME_54, env: null, needs: [] });
+    expect(d.params).not.toHaveProperty("file");  // the one run is chosen for this GPU
     expect(d.how).toMatch(/browser/);
     expect(d.notes.join(" ")).toMatch(/fp32, int8w/);
   });
@@ -323,7 +425,7 @@ describe("adding a model by reference", () => {
     const ctx = fakeContext();
     const backend = createBackend(ctx);
     await backend.handle(submit([HF56]));
-    const res = await backend.handle(request("POST", "/api/models/add", { entry: { type: "huggingface", repo: "cellmap/onnx-web-models", folder: "setup_54", name: NAME_54 } }));
+    const res = await backend.handle(request("POST", "/api/models/add", { entry: { type: "onnx", repo: "cellmap/onnx-web-models", folder: "setup_54", name: NAME_54 } }));
     expect(body(res)).toEqual({ success: true, name: NAME_54 });
     expect(ctx.infer.served().map((s) => s.entry.name)).toEqual([NAME_56, NAME_54]);
     expect(ctx.session.state.models.map((m) => m.name)).toEqual([NAME_56, NAME_54]);
@@ -404,11 +506,39 @@ describe("the settings routes", () => {
     if (!("body" in res)) throw new Error("not a body answer");
     expect(res.type).toBe("text/yaml");
     expect(res.headers?.["content-disposition"]).toMatch(/^attachment; filename=cellmap_flow_config_\d{8}_\d{6}\.yaml$/);
+    expect(uncommented(res.body as string)).toBe(toYaml({
+      data_path: "https://example.org/em.zarr",
+      resample: false,
+      json_data: {
+        input_norm: [{ name: "MinMaxNormalizer", min_value: 0, max_value: 255 }, { name: "LambdaNormalizer", expression: "2*x-1" }],
+        postprocess: [{ name: "SigmoidPostprocessor" }],
+      },
+      models: [SERVER_54("setup_54_fp32.onnx")],
+    }));
+  });
+
+  it("exports the variant the page serves on this GPU, not the catalog's default the session keeps", async () => {
+    const ctx = fakeContext({ state: { datasetUrl: "https://example.org/em.zarr" } });
+    ctx.infer.limits = { maxBufferSize: 256 * 2 ** 20, maxStorageBufferBindingSize: null, shaderF16: false };
+    const backend = createBackend(ctx);
+    await backend.handle(submit([HF54]));
+    expect(ctx.session.state.models[0].variant.file).toBe("setup_54_fp32.onnx");
+    const res = await backend.handle(request("GET", "/api/export-config"));
+    if (!("body" in res)) throw new Error("not a body answer");
+    expect(uncommented(res.body as string)).toContain(toYaml({ models: [SERVER_54("setup_54_int8w.onnx")] }));
+  });
+
+  it("exports a model finetuned here by the path its download saves, saying where to put it", async () => {
+    const ctx = fakeContext({ state: { datasetUrl: "https://example.org/em.zarr" } });
+    const base = entry("setup_54");
+    const finetuned = finetunedEntry(base, `${NAME_54}-ft1`);
+    await ctx.session.update({ models: [base, finetuned] });
+    const res = await createBackend(ctx).handle(request("GET", "/api/export-config"));
+    if (!("body" in res)) throw new Error("not a body answer");
     const yaml = res.body as string;
-    expect(yaml).toContain("data_path: https://example.org/em.zarr\n");
-    expect(yaml).toContain("resample: false\n");
-    expect(yaml).toContain("json_data:\n  input_norm:\n  - name: MinMaxNormalizer\n    min_value: 0\n    max_value: 255\n  - name: LambdaNormalizer\n    expression: 2*x-1\n  postprocess:\n  - name: SigmoidPostprocessor\n");
-    expect(yaml).toContain(`models:\n- type: huggingface\n  repo: cellmap/onnx-web-models\n  name: ${NAME_54}\n  folder: setup_54\n  onnx: setup_54_fp32.onnx\n`);
+    expect(uncommented(yaml)).toContain(toYaml({ models: [SERVER_54("setup_54_fp32.onnx"), { type: "onnx", name: `${NAME_54}-ft1`, path: `${NAME_54}-ft1.onnx` }] }));
+    // The path line carries a note of where the file goes.
+    expect(yaml.split("\n").find((line) => line.includes(`path: ${NAME_54}-ft1.onnx`))).toContain("#");
   });
 });
 
@@ -466,5 +596,27 @@ describe("restoreSession", () => {
     expect(gone.logged.join("\n")).toMatch(/Could not open https:\/\/example.org\/moved.zarr again: 404/);
     // A volume that cannot be opened: the viewer is mounted without its geometry, for Neuroglancer to try.
     expect(gone.viewer.datasetsOpened).toEqual([{ url: "https://example.org/moved.zarr", info: null }]);
+  });
+
+  it("leaves no model served that was removed from the Loaded models list while it was being served again", async () => {
+    const models = [entry("setup_54"), entry("setup_56", "nuc", ["nuc"], 128)];
+    const ctx = fakeContext({ dataset: null, state: { datasetUrl: "https://example.org/em.zarr", models } });
+    // The volume opens slowly, so the ✕ comes while the models are still to be served ("starting").
+    let opened!: () => void;
+    const slow = new Promise<void>((resolve) => (opened = resolve));
+    const open = ctx.infer.openDataset.bind(ctx.infer);
+    ctx.infer.openDataset = async (url) => {
+      await slow;
+      return open(url);
+    };
+    const restoring = restoreSession(ctx);
+    const removed = await createBackend(ctx).handle(request("POST", "/api/models/remove", { name: NAME_54 }));
+    expect(removed.status).toBe(200);
+    expect(ctx.infer.serves).toEqual([]);
+    opened();
+    await restoring;
+    expect(ctx.infer.served().map((s) => s.entry.name)).toEqual([NAME_56]);
+    expect(Object.keys(ctx.viewer.layers)).toEqual([NAME_56]);
+    expect(ctx.session.state.models.map((m) => m.name)).toEqual([NAME_56]);
   });
 });

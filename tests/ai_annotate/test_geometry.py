@@ -17,6 +17,7 @@ from cellmap_flow.ai_annotate.geometry import (
     PlanePlan,
     depth_axis_for_view,
     depth_axis_from_layout,
+    display_dimensions_for_view,
     plan_plane,
     raw_box,
 )
@@ -77,8 +78,18 @@ def test_depth_axis_for_a_viewer_state():
     assert depth_axis_for_view(state) == 0
     state.layout = "xy-3d"
     assert depth_axis_for_view(state) == 2
+    assert display_dimensions_for_view(state) == ("z", "y", "x")
     state.display_dimensions = ["x", "y", "z"]
     assert depth_axis_for_view(state) == 0
+    assert display_dimensions_for_view(state) == ("x", "y", "z")
+    # One with no dimensions yet is laid out as one showing z, y, x.
+    assert display_dimensions_for_view(neuroglancer.ViewerState()) == ("z", "y", "x")
+
+
+# How the image is laid out as the viewer's panel draws the plane (to_screen,
+# from_screen) is web/test/fixtures/ai_annotate.json's "screen" cases, which
+# tests/web/test_fixtures_fresh.py regenerates from this code and the vitest
+# parity suite checks the TypeScript against.
 
 
 # --- the plane --------------------------------------------------------------------
@@ -240,3 +251,23 @@ def test_the_raw_box_reads_the_plane_on_the_raws_grid():
 def test_a_plan_survives_json():
     plan = plan_plane(_volume(output=(16, 8, 8), input=(8, 4, 4)), SHAPE, (808, 804, 1204), 1, 64)
     assert PlanePlan.from_dict(json.loads(json.dumps(plan.to_dict()))) == plan
+    shown = plan_plane(_volume(), SHAPE, (404, 804, 1204), 2, 64, display_dimensions=["x", "y", "z"])
+    assert shown.display_dimensions == ("x", "y", "z")
+    assert PlanePlan.from_dict(json.loads(json.dumps(shown.to_dict()))) == shown
+
+
+def test_a_plan_saved_before_plans_kept_display_dimensions_is_laid_out_z_y_x():
+    plan = plan_plane(_volume(), SHAPE, (404, 804, 1204), 2, 64, display_dimensions=["x", "y", "z"])
+    saved = plan.to_dict()
+    del saved["display_dimensions"]
+    assert PlanePlan.from_dict(saved).display_dimensions == ("z", "y", "x")
+    # The YZ plane, clipped at the volume's z edge so it is not square: y
+    # down and z across in both viewers (the "yz" panel of one showing
+    # x, y, z, the "xy" panel of one showing z, y, x), z increasing to the
+    # left only in the first, so the point is at the mirrored column.
+    near_edge = (780, 804, 1204)
+    shown = plan_plane(_volume(), SHAPE, near_edge, 2, 64, display_dimensions=["x", "y", "z"])
+    old = plan_plane(_volume(), SHAPE, near_edge, 2, 64)
+    assert shown.image_shape == old.image_shape == (128, 70)
+    row, col = old.click_px
+    assert shown.click_px == (row, old.image_shape[1] - 1 - col)

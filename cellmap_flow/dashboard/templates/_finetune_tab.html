@@ -9,7 +9,7 @@
    same difference. #}
 <div class="alert alert-info" role="alert">
   {% if mode == "browser" %}
-  <strong>Finetune:</strong> paint corrections, then train the model's last layer in this tab.
+  <strong>Finetune:</strong> paint corrections, then train the model's last layer in this tab, or a 2D model's whole network.
   {% else %}
   <strong>Finetune:</strong> paint corrections, then train on the GPU cluster.
   {% endif %}
@@ -223,8 +223,15 @@
              credentials list names (API key for the Gemini API; project and
              access token for Vertex AI; none for the fake provider, which
              hides the block) and writes the hint for its type. The secrets are
-             password fields, so they are not shown; autocomplete is off, which
-             a browser may still overrule by offering to save them. #}
+             text fields masked by CSS (.credential-secret), not password
+             fields: a password field in this form had Chrome offer to save the
+             key as a password when the form was submitted (with the project as
+             the user name), autocomplete="off" notwithstanding, and its
+             password manager offers only for password fields. The data-*ignore
+             attributes keep the password-manager extensions (1Password,
+             LastPass, Bitwarden) from offering too. A browser that cannot mask
+             a text field gets password fields back from ai-annotate.js, so a
+             key is never shown in the clear. #}
           {% if mode == "browser" %}
           <div class="mt-2" id="aiAnnotateCredentials" hidden>
             <div class="d-flex align-items-baseline justify-content-between">
@@ -233,7 +240,7 @@
             </div>
             <div class="patch-tools-fields ai-annotate-fields">
               <label for="aiAnnotateApiKey" data-credential="api_key">API key</label>
-              <input type="password" class="form-control form-control-sm" id="aiAnnotateApiKey" autocomplete="off" spellcheck="false" data-credential="api_key"
+              <input type="text" class="form-control form-control-sm credential-secret" id="aiAnnotateApiKey" autocomplete="off" spellcheck="false" data-1p-ignore data-lpignore="true" data-bwignore data-credential="api_key"
                      placeholder="From Google AI Studio"
                      title="A Gemini API key (aistudio.google.com/apikey). Used as soon as it is pasted, sent to Google with each plane, kept in this page only: paste it again after a reload.">
               <label for="aiAnnotateProject" data-credential="project">Project</label>
@@ -241,7 +248,7 @@
                      placeholder="my-gcp-project"
                      title="The Google Cloud project that is billed; the Vertex AI API must be enabled in it.">
               <label for="aiAnnotateAccessToken" data-credential="access_token">Access token</label>
-              <input type="password" class="form-control form-control-sm" id="aiAnnotateAccessToken" autocomplete="off" spellcheck="false" data-credential="access_token"
+              <input type="text" class="form-control form-control-sm credential-secret" id="aiAnnotateAccessToken" autocomplete="off" spellcheck="false" data-1p-ignore data-lpignore="true" data-bwignore data-credential="access_token"
                      placeholder="gcloud auth print-access-token"
                      title="The output of gcloud auth print-access-token, run where you are signed in to Google Cloud. It lasts about an hour; paste a new one when a call fails asking you to sign in.">
             </div>
@@ -310,8 +317,9 @@
      behind the service worker), so there is nothing to save; it can be taken
      out as a zarr, or thrown away. crops.js points both at the volume once
      one exists (New Volume, or Resume Existing Volume); until then the link
-     has no target and the button is disabled. The download is a GET the
-     service worker relays to the in-page backend, as the Export Config link. #}
+     has no target and the button is disabled. The page fetches the link on a
+     click (web/src/rebase.ts), as the Export Config link, and the service
+     worker relays the GET to the in-page backend. #}
   {% if mode == "browser" %}
   <div class="mb-2" id="browserVolumeActions">
     <div class="d-flex align-items-center gap-2 flex-wrap">
@@ -509,7 +517,11 @@
 </div><!-- End Crops Tab -->
 
 <!-- Training Tab -->
-<div class="tab-pane fade" id="training" role="tabpanel">
+{# data-training (browser mode): what the Training field picked, "head" or
+   "full"; web/src/browser.css shows the fields of that one (head-only,
+   full-only, and the server's Batch Size for the whole network, full-also),
+   and training-form.js sets it. #}
+<div class="tab-pane fade" id="training" role="tabpanel"{% if mode == "browser" %} data-training="head"{% endif %}>
 
 <!-- Training Configuration Card -->
 <div class="card mb-3">
@@ -527,8 +539,23 @@
        voxels per step (batchPixels: the server's Batch Size counts patches,
        8 of them where the head takes thousands of voxels, so the two are
        separate fields and one's saved value never lands in the other).
+       A 2D model whose manifest offers it can train its whole network
+       instead (the Training field, shown when the model offers both): that
+       takes the epochs, its own learning rates, the server's Batch Size (in
+       tiles) and a Tile Size, and none of the head's loss, distillation,
+       smoothing or balance fields (head-only), which it does not use.
        web/src/browser.css
        gives the fields the full row. #}
+    {% if mode == "browser" %}
+    <div class="mb-3" id="finetuneModeGroup" hidden>
+      <label for="finetuneMode" class="form-label" title="What trains on the paint. Last layer: the model's output convolution, on the features the rest of the network already computes; seconds, on any machine. Whole network: every weight, with TensorFlow.js on this machine's GPU; minutes, and it can learn what the features miss. The model's manifest says which it offers.">Training</label>
+      <select id="finetuneMode" class="form-select">
+        <option value="head" selected>Last layer</option>
+        <option value="full">Whole network</option>
+      </select>
+      <small class="text-muted d-block" id="finetuneModeNote">The last layer trains in seconds; the whole network in minutes, on this machine's GPU.</small>
+    </div>
+    {% endif %}
     <!-- Optional: Manual checkpoint path override -->
     <div class="mb-3 server-only">
       <label for="checkpointPath" class="form-label" title="The base model checkpoint to finetune from. Left empty, it is taken from the model's configuration or script.">
@@ -563,22 +590,32 @@
     </div>
 
     <div class="row">
-      <div class="col-md-6 server-only">
+      {# The browser's whole network takes this batch too, in tiles, one by default (full-also). #}
+      {% set default_batch_size = 1 if mode == "browser" else 8 %}
+      <div class="col-md-6 server-only full-also">
         <div class="mb-3">
           <label for="batchSize" class="form-label">Batch Size</label>
           <select id="batchSize" class="form-select">
-            <option value="1">1</option>
-            <option value="2">2</option>
-            <option value="4">4</option>
-            <option value="8" selected>8 (Default)</option>
-            <option value="16">16</option>
-            <option value="32">32</option>
+            {% for size in [1, 2, 4, 8, 16, 32] %}
+            <option value="{{ size }}"{% if size == default_batch_size %} selected{% endif %}>{{ size }}{% if size == default_batch_size %} (Default){% endif %}</option>
+            {% endfor %}
           </select>
+          {% if mode == "browser" %}
+          <small class="text-muted">Tiles per step: each step's time and memory grow with it.</small>
+          {% else %}
           <small class="text-muted">Higher = faster, more GPU memory.</small>
+          {% endif %}
         </div>
       </div>
       {% if mode == "browser" %}
-      <div class="col-md-6">
+      <div class="col-md-6 full-only">
+        <div class="mb-3">
+          <label for="tileSize" class="form-label" title="The side of the square slices the whole network trains on, in pixels of its input, cut in the plane you painted in. The model reads 88 pixels of context around what it predicts, so a tile's output is 88 pixels smaller. A smaller tile trains a step faster in less memory, but more of it is context. The sides offered are ones the network's pools and crops divide exactly.">Tile Size</label>
+          <select id="tileSize" class="form-select"></select>
+          <small class="text-muted d-block" id="tileSizeHint"></small>
+        </div>
+      </div>
+      <div class="col-md-6 head-only">
         <div class="mb-3">
           <label for="batchPixels" class="form-label" title="How many painted voxels each step of the head's training averages over, drawn from every painted chunk at once. Smaller batches take more steps per epoch: more movement, more noise. The epochs pass over all the paint whatever the batch.">Voxels per Step</label>
           <select id="batchPixels" class="form-select">
@@ -591,7 +628,7 @@
         </div>
       </div>
       {% endif %}
-      <div class="col-md-6">
+      <div class="col-md-6 head-only">
         <div class="mb-3">
           <label for="learningRate" class="form-label">Learning Rate</label>
           <select id="learningRate" class="form-select">
@@ -620,6 +657,23 @@
           {% endif %}
         </div>
       </div>
+      {# The whole network's rates: two million weights started from the
+         model's own take a hundredth of the head's step (Adam at 1e-4, as
+         Marwan measured it), so it has a select of its own and its own saved value. #}
+      {% if mode == "browser" %}
+      <div class="col-md-6 full-only">
+        <div class="mb-3">
+          <label for="learningRateFull" class="form-label">Learning Rate</label>
+          <select id="learningRateFull" class="form-select">
+            <option value="0.0003">3e-4 (Faster)</option>
+            <option value="0.0001" selected>1e-4 (Standard)</option>
+            <option value="0.00003">3e-5 (Gentle)</option>
+            <option value="0.00001">1e-5 (Very gentle)</option>
+          </select>
+          <small class="text-muted">1e-4 suits the whole network; lower it if the loss jumps about or the model forgets what it knew.</small>
+        </div>
+      </div>
+      {% endif %}
     </div>
 
     <div class="row server-only">
@@ -659,7 +713,8 @@
       </div>
     </div>
 
-    <div class="row">
+    {# The whole network trains with masked BCE on the paint alone: the rest are the head's. #}
+    <div class="row head-only">
       <div class="col-md-6">
         <div class="mb-3">
           <label for="lossType" class="form-label">Loss Function</label>
@@ -739,7 +794,7 @@
         </div>
       </div>
     </div>
-    <div class="row">
+    <div class="row head-only">
       <div class="col-md-6">
         <div class="mb-3">
           <label for="distillationScope" class="form-label">
@@ -824,6 +879,12 @@
         🚀 Start Finetuning
       </button>
     </div>
+    {# job-monitor.js's restartFromKey; the server's routes/finetune/restart_key.py
+       and the browser's web/src/backend/routes/finetune.ts bind the key over the viewer. #}
+    <small class="text-muted d-block mt-2">
+      Once a job waits for a restart, Shift+R over the viewer restarts it with these settings,
+      as Restart Training does, without asking first.
+    </small>
   </div>
 </div>
 
@@ -832,7 +893,8 @@
   <div class="card-header d-flex justify-content-between align-items-center">
     <h5>Training Status</h5>
     <div>
-      <button type="button" class="btn btn-warning btn-sm me-2" id="restartJobBtn" style="display: none;">
+      <button type="button" class="btn btn-warning btn-sm me-2" id="restartJobBtn" style="display: none;"
+              title="Train this job again, on the paint as it is now, with the Training Configuration's current settings. Shift+R over the viewer does the same without asking first.">
         🔄 Restart Training
       </button>
       <button type="button" class="btn btn-secondary btn-sm me-2" id="stopEarlyBtn" disabled title="Exit the training loop after the current epoch. Only available while training is actively running.">
@@ -875,13 +937,14 @@
     </div>
 
     {# Browser mode only: the finetuned model as an .onnx file, the base's
-       graph with the trained last layer, for the server mode or another
+       graph with the trained weights in it, for the server mode or another
        machine. job-monitor.js points it at the model a status answer says is
-       served and shows it then; hidden otherwise. The GET is relayed by the
-       service worker to the in-page backend, as the Export Config link. #}
+       served and shows it then; hidden otherwise. The page fetches the link
+       on a click (web/src/rebase.ts), as the Export Config link, and the
+       service worker relays the GET to the in-page backend. #}
     {% if mode == "browser" %}
     <a class="btn btn-outline-secondary btn-sm mt-3" id="downloadFinetunedBtn" role="button" download style="display: none;"
-       title="The finetuned model as an .onnx file: the base model's graph with the trained last layer in it">
+       title="The finetuned model as an .onnx file: the base model's graph with the trained weights (its last layer, or its whole network) in it">
       Download finetuned model
     </a>
     {% endif %}

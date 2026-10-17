@@ -31,7 +31,8 @@ flat in C order (``make_fixtures.array_record``). The sections of
 ``ai_annotate.json``:
 
 ``screen``
-    ``to_screen``/``from_screen``/``screen_shape`` of a small plane per depth axis.
+    ``to_screen``/``from_screen``/``screen_shape`` of a small plane per depth axis,
+    for a viewer that sets no display dimensions and for cellmap-flow's x, y, z.
 ``plan_plane``
     ``plan_plane`` cases (volumes, shapes, points, depth axes, crop sizes,
     data boxes): the plan ``to_dict`` wrote with its ``click_px``,
@@ -47,7 +48,8 @@ flat in C order (``make_fixtures.array_record``). The sections of
     ``pipeline._resize`` (PIL BOX when shrinking, BILINEAR otherwise) of
     small float32 planes, float32 results.
 ``mask_to_write_shape``
-    random masks of a plan's image put on its write box.
+    random masks of a plan's image cut into objects on its write box, and
+    two objects parted by a one-pixel line on voxels coarser than the pixels.
 ``box_voxels``, ``fresh_ids``, ``seed_labels``, ``labels_for_box``
     the box arithmetic and the ids, incl. refusals' messages.
 ``paint_box``
@@ -70,6 +72,7 @@ from pathlib import Path
 
 import numpy as np
 import zarr
+from scipy.ndimage import label
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -106,20 +109,25 @@ CENTRE = (50 * 8 + 1, 100 * 8 + 3, 150 * 8 + 6)  # in voxel (50, 100, 150), off 
 
 # --- screen layout --------------------------------------------------------------
 
+# A viewer that sets no display dimensions (z, y, x) and cellmap-flow's own.
+DISPLAYS = (None, ("x", "y", "z"))
+
 
 def make_screen() -> list:
     plane = np.arange(6, dtype=np.int32).reshape(2, 3)  # rows 2, cols 3, in z, y, x order
     image = np.arange(12, dtype=np.int32).reshape(3, 4)  # as a panel would draw it
     cases = []
-    for depth_axis in (0, 1, 2):
-        cases.append({
-            "depth_axis": depth_axis,
-            "plane": array_record(plane),
-            "to_screen": array_record(geometry.to_screen(plane, depth_axis)),
-            "screen_shape": list(geometry.screen_shape(plane.shape, depth_axis)),
-            "image": array_record(image),
-            "from_screen": array_record(geometry.from_screen(image, depth_axis)),
-        })
+    for display in DISPLAYS:
+        for depth_axis in (0, 1, 2):
+            cases.append({
+                "depth_axis": depth_axis,
+                "display_dimensions": list(display) if display else None,
+                "plane": array_record(plane),
+                "to_screen": array_record(geometry.to_screen(plane, depth_axis, display)),
+                "screen_shape": list(geometry.screen_shape(plane.shape, depth_axis, display)),
+                "image": array_record(image),
+                "from_screen": array_record(geometry.from_screen(image, depth_axis, display)),
+            })
     return cases
 
 
@@ -184,16 +192,25 @@ RAW_BOX_CASES = [
 ]
 
 
+# The cases planned again for a viewer showing x, y, z, as cellmap-flow's do:
+# the same boxes, the image laid out as that viewer's panels draw it.
+SHOWN_XYZ = ("centred_z", "centred_y", "centred_x", "aniso_xz")
+
+
 def make_plans() -> tuple[list, dict]:
     cases, plans = [], {}
-    for case_id, volume, shape, point, depth_axis, crop, data_box in PLAN_CASES:
+    shown = [(f"{c[0]}_shown_xyz", *c[1:], ("x", "y", "z")) for c in PLAN_CASES if c[0] in SHOWN_XYZ]
+    for case_id, volume, shape, point, depth_axis, crop, data_box, *display in [*PLAN_CASES, *shown]:
+        display = display[0] if display else None
         case = {
             "id": case_id, "volume": volume, "volume_shape": list(shape), "point_nm": [float(p) for p in point],
             "depth_axis": depth_axis, "crop_size_px": crop,
             "data_box_nm": [[float(v) for v in side] for side in data_box] if data_box else None,
+            "display_dimensions": list(display) if display else None,
         }
         try:
-            plan = geometry.plan_plane(volume, shape, point, depth_axis, crop, data_box_nm=data_box)
+            plan = geometry.plan_plane(volume, shape, point, depth_axis, crop, data_box_nm=data_box,
+                                       display_dimensions=display)
         except AIAnnotateError as e:
             case["error"] = _error(e)
         else:
@@ -269,12 +286,16 @@ def make_resize(rng: np.random.Generator) -> list:
 
 
 def make_mask_to_write_shape(rng: np.random.Generator, plans: dict) -> list:
+    masks = [(plan_id, plan_id, rng.random(tuple(plans[plan_id].image_shape)) < 0.5) for plan_id in MASK_PLAN_IDS]
+    # 32 px on 16 voxels: each voxel takes an odd pixel column, none the
+    # line in column 16 between the two objects.
+    line = np.ones(tuple(plans["small_z"].image_shape), dtype=bool)
+    line[:, 16] = False
+    masks.append(("small_z_line", "small_z", line))
     cases = []
-    for plan_id in MASK_PLAN_IDS:
-        plan = plans[plan_id]
-        mask = rng.random(tuple(plan.image_shape)) < 0.5
-        out = pipeline.mask_to_write_shape(mask, plan)
-        cases.append({"plan": plan_id, "mask": array_record(mask.astype(np.uint8)), "write": array_record(out.astype(np.uint8))})
+    for case_id, plan_id, mask in masks:
+        out = pipeline.mask_to_write_shape(mask, plans[plan_id])
+        cases.append({"id": case_id, "plan": plan_id, "mask": array_record(mask.astype(np.uint8)), "write": array_record(out)})
     return cases
 
 
@@ -416,9 +437,10 @@ def make_labels_for_box() -> list:
 
     out = []
     for case_id, mask, existing, depth_axis, count_up, beside in cases:
-        labels = pipeline.labels_for_box(mask, existing, depth_axis, count_up=count_up, beside=beside)
+        objects, _ = label(mask)
+        labels = pipeline.labels_for_box(objects, existing, depth_axis, count_up=count_up, beside=beside)
         out.append({
-            "id": f"{case_id}_axis{depth_axis}", "mask": array_record(mask.astype(np.uint8)), "existing": array_record(existing),
+            "id": f"{case_id}_axis{depth_axis}", "objects": array_record(objects), "existing": array_record(existing),
             "depth_axis": depth_axis, "count_up": count_up,
             "beside": None if beside is None else [None if p is None else array_record(p) for p in beside],
             "labels": array_record(labels),

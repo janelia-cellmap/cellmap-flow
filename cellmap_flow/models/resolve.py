@@ -24,31 +24,43 @@ stat, a file name, a regex, or (only when ``online``) one request.
      finetune's ``model_state_dict.pt``: ``finetune``, which needs its
      ``base_model``;
    - Cellpose-SAM weights (Cellpose 4 saves a torch state dict without an
-     extension; its keys say what it is): ``cellpose``.
+     extension; its keys say what it is): ``cellpose``;
+   - an ``.onnx`` file: ``onnx``. One the browser finetuned carries its
+     manifest, which says its geometry; any other needs its voxel size.
 
 2. A prefix, to say outright what a reference is: ``hf:org/repo[@revision]``,
    ``bioimageio:<id, nickname, URL or path>``, ``cellpose:<name or path>``,
-   ``fly:<path>``, ``dacapo:<run>@<iteration>``, ``script:<path>``. The
-   type's own name works as its prefix too (``huggingface:``,
-   ``bioimage:``). Nothing after a prefix is looked up online.
+   ``fly:<path>``, ``dacapo:<run>@<iteration>``, ``script:<path>``,
+   ``onnx:<path, folder or org/repo/folder>``. The type's own name works as
+   its prefix too (``huggingface:``, ``bioimage:``). Nothing after a prefix
+   is looked up online.
 
 3. A Cellpose model name (``cpsam_v2``, ``cpsam``, ``cpdino``,
    ``cpdino-vitb``): ``cellpose``.
 
 4. A URL: a bioimage.io model page, a Zenodo record, a DOI link, a Hypha
    artifact or the URL of an ``rdf.yaml`` or zip: ``bioimage``;
-   ``huggingface.co/<org>/<repo>`` (``/tree/<revision>`` too): as 5.
+   ``huggingface.co/<org>/<repo>`` (``/tree/<revision>`` too): as 5, and
+   with a folder after the revision (``/tree/main/setup_54``, or a file in
+   it), as 5's ``org/repo/folder``.
 
-5. ``org/repo`` (``@revision`` optional; not a DOI, which is 6's): a Hugging
-   Face repo. Online, its file list is read: with ``metadata.json`` and
-   ``model.ts`` it is a cellmap-models export, ``huggingface``; anything
-   else is refused with what to do instead. Offline, or when the Hub cannot
-   be reached, it is taken to be one, with a note.
+5. ``org/repo/folder`` (``@revision`` optional): a folder of a Hugging Face
+   repo of ONNX web exports, as cellmap/onnx-web-models holds them, one
+   model a folder with its ``manifest.json``: ``onnx``. ``org/repo``
+   (``@revision`` optional; not a DOI, which is 7's): a Hugging Face repo.
+   Online, its file list is read: with ``metadata.json`` and ``model.ts`` it
+   is a cellmap-models export, ``huggingface``; a repo of web exports is
+   refused with its folders, one of which to add; anything else is refused
+   with what to do instead. Offline, or when the Hub cannot be reached,
+   either is taken to be what it looks like, with a note.
 
 6. A BioImage Model Zoo id or nickname (``affable-shark``,
    ``10.5281/zenodo.5764892``): ``bioimage``. Online, it is looked up in
    the zoo's model list; offline, a nickname- or DOI-shaped one is taken to be
    one, with a note.
+
+7. A folder of cellmap/onnx-web-models by its name (``setup_54``), online
+   only: ``onnx``.
 
 Anything else is a ValueError that says what was tried.
 
@@ -78,6 +90,8 @@ EXPORT_METADATA, EXPORT_MODEL = "metadata.json", "model.ts"
 ADAPTER_CONFIG = "adapter_config.json"
 # What the finetune trainer saves a full finetune (--lora-r 0) as.
 FULL_FINETUNE_WEIGHTS = "model_state_dict.pt"
+# The repo of ONNX web exports the browser mode runs (the onnx type's default).
+ONNX_REPO = "cellmap/onnx-web-models"
 # A bioimage.io model description, by file name.
 _RDF_NAMES = ("rdf.yaml", "bioimageio.yaml")
 _RDF_SUFFIXES = (".rdf.yaml", ".bioimageio.yaml")
@@ -88,6 +102,9 @@ _CELLPOSE_SAM_KEYS = (b"encoder.patch_embed", b"encoder.neck")
 
 _PREFIX = re.compile(r"^([A-Za-z]+):(?!//)(.*)$", re.DOTALL)
 _HF_REPO = re.compile(r"^[A-Za-z0-9][\w.-]*/[A-Za-z0-9][\w.-]*(?:@[\w./-]+)?$")
+# org/repo/folder[@revision]: a folder of a repo of ONNX web exports.
+_ONNX_REF = re.compile(r"^([A-Za-z0-9][\w.-]*/[A-Za-z0-9][\w.-]*)/([A-Za-z0-9][\w.-]*)(?:@([\w./-]+))?$")
+_FOLDER = re.compile(r"^[A-Za-z0-9][\w.-]*$")
 _DOI = re.compile(r"^10\.\d{4,9}/\S+$")
 _NICKNAME = re.compile(r"^[a-z]+(?:-[a-z]+)+$")
 _VERSION = re.compile(r"^v?\d+(?:\.\d+)*$")
@@ -149,16 +166,16 @@ def resolve(ref: str, *, name: str = None, voxel_size=None, online: bool = True)
         raise ValueError("Give a model reference: a path, a URL, a Hugging Face repo or a model name")
     ref = ref.strip()
     request = _Request(name=name or None, voxel_size=_voxel_size(voxel_size), online=online)
-    for check in (_local_path, _prefixed, _cellpose_name, _url, _hf_repo, _zoo_id):
+    for check in (_local_path, _prefixed, _cellpose_name, _url, _onnx_ref, _hf_repo, _zoo_id, _onnx_web_folder):
         resolved = check(ref, request)
         if resolved is not None:
             return resolved
     raise ValueError(
         f"Could not tell what model {ref!r} is. Tried, in order: a local file or folder (there is "
         f"none{' at ' + _expanded(ref) if _looks_like_path(ref) else ''}); a prefix (hf:, bioimageio:, "
-        "cellpose:, fly:, dacapo:, script:); a Cellpose model name; a URL; a Hugging Face repo "
-        "(org/repo); and a BioImage Model Zoo id or nickname"
-        f"{' (offline: not looked up)' if not online else ''}. Say what it is with a prefix, "
+        "cellpose:, fly:, dacapo:, script:, onnx:); a Cellpose model name; a URL; a Hugging Face repo "
+        f"(org/repo, or org/repo/folder of ONNX exports); a BioImage Model Zoo id or nickname; and a folder "
+        f"of {ONNX_REPO}{' (offline: not looked up)' if not online else ''}. Say what it is with a prefix, "
         "e.g. fly:/path/to/checkpoint or dacapo:my_run@100000."
     )
 
@@ -220,7 +237,8 @@ def _default_env(type_name: str, params: Dict[str, Any]) -> Optional[str]:
 def _resolved(type_name, params, name, how, request, needs=(), notes=(), takes_voxel_size=False) -> Resolved:
     notes = list(notes)
     if request.voxel_size is not None and not takes_voxel_size:
-        notes.append(f"voxel_size is not used: a {type_name} model says its own")
+        article = "an" if type_name[0] in "aeiou" else "a"
+        notes.append(f"voxel_size is not used: {article} {type_name} model says its own")
     return Resolved(
         type=type_name,
         params=params,
@@ -251,7 +269,7 @@ def _expanded(ref: str) -> str:
 def _looks_like_path(ref: str) -> bool:
     """Whether ``ref`` is written as a path, so that its absence is worth saying."""
     return ref.startswith(("/", "./", "../", "~")) or (
-        "://" not in ref and ref.lower().endswith((".py", ".ts", ".pt", ".zip", ".yaml", ".yml"))
+        "://" not in ref and ref.lower().endswith((".py", ".ts", ".pt", ".zip", ".yaml", ".yml", ".onnx"))
     )
 
 
@@ -303,14 +321,16 @@ def _file(path: str, request: _Request) -> Resolved:
         return _finetune("weights_path", path, "a full finetune's weights", request)
     if _is_cellpose_weights(path):
         return _with_voxel_size("cellpose", {"pretrained_model": path}, "Cellpose-SAM weights", base, request)
+    if base.lower().endswith(".onnx"):
+        return _onnx_file(path, request)
     if path.endswith(".zip"):
         raise ValueError(f"{path} is a zip without an rdf.yaml or bioimageio.yaml in it: not a bioimage.io model")
     if base.endswith((".yaml", ".yml")):
         _refuse_a_config(path)
     raise ValueError(
         f"Could not tell what model {path} is from its name or contents. Say it with a prefix: "
-        f"fly:{path} (a fly_organelles checkpoint), cellpose:{path} (Cellpose weights) or script:<a .py "
-        "that loads it>."
+        f"fly:{path} (a fly_organelles checkpoint), cellpose:{path} (Cellpose weights), onnx:{path} (an ONNX "
+        "model) or script:<a .py that loads it>."
     )
 
 
@@ -523,6 +543,7 @@ def _prefixed(ref: str, request: _Request) -> Optional[Resolved]:
         "fly": _fly_prefixed,
         "dacapo": _dacapo_prefixed,
         "script": _script_prefixed,
+        "onnx": _onnx_prefixed,
     }.get(prefix)
     if handler is None:
         return None
@@ -610,7 +631,12 @@ def _url(ref: str, request: _Request) -> Optional[Resolved]:
     parsed = urlparse(ref)
     host = (parsed.hostname or "").lower()
     if host in ("huggingface.co", "www.huggingface.co", "hf.co"):
-        repo, revision = _hf_url(parsed)
+        repo, revision, rest = _hf_url(parsed)
+        if rest:
+            # A folder of the repo (tree/<rev>/<folder>), or a file in one:
+            # an ONNX export's, as cellmap/onnx-web-models holds them.
+            file = rest[1] if len(rest) == 2 and rest[1].lower().endswith(".onnx") else None
+            return _onnx_checked(repo, rest[0], revision, request, file=file)
         return _hf_checked(repo, revision, request)
     source = _bioimage_url(ref)
     if source is not None:
@@ -621,13 +647,15 @@ def _url(ref: str, request: _Request) -> Optional[Resolved]:
     )
 
 
-def _hf_url(parsed) -> Tuple[str, Optional[str]]:
-    """(repo, revision) from a huggingface.co URL: /<org>/<repo>, /tree/<rev> or /blob/<rev>/..."""
+def _hf_url(parsed) -> Tuple[str, Optional[str], List[str]]:
+    """(repo, revision, the path after it) from a huggingface.co URL: /<org>/<repo>,
+    /tree/<rev>[/<folder>] or /blob/<rev>/<folder>/<file>."""
     parts = [p for p in parsed.path.split("/") if p]
     if len(parts) < 2 or parts[0] in ("datasets", "spaces", "models", "docs", "collections"):
         raise ValueError(f"{parsed.geturl()} is not a Hugging Face model repo's page (huggingface.co/<org>/<repo>)")
-    revision = parts[3] if len(parts) > 3 and parts[2] in ("tree", "blob", "resolve") else None
-    return f"{parts[0]}/{parts[1]}", revision
+    if len(parts) > 3 and parts[2] in ("tree", "blob", "resolve"):
+        return f"{parts[0]}/{parts[1]}", parts[3], parts[4:]
+    return f"{parts[0]}/{parts[1]}", None, []
 
 
 def _bioimage_url(url: str) -> Optional[str]:
@@ -697,19 +725,37 @@ def _hf_files(repo: str, revision: Optional[str]) -> List[str]:
         raise LookupError(f"There is no Hugging Face model repo {repo} (or it is private or gated)") from e
 
 
-def _hf_checked(repo: str, revision: Optional[str], request: _Request) -> Resolved:
-    how = "a cellmap-models export on Hugging Face"
+def _hub_files(repo: str, revision: Optional[str], request: _Request,
+               taken_as: str) -> Tuple[Optional[List[str]], List[str]]:
+    """``(files, notes)``: ``repo``'s files at ``revision``, to check a
+    reference against, and no notes; or None and a note that the reference is
+    taken to be ``taken_as`` unchecked, when offline or when the Hub cannot
+    be reached.
+
+    Raises:
+        ValueError: there is no such repo (or revision) that can be read.
+    """
     if not request.online:
-        return _huggingface(repo, revision, how, request,
-                            notes=["not checked (offline): taken to be a cellmap-models export"])
+        return None, [f"not checked (offline): taken to be {taken_as}"]
     try:
-        files = _hf_files(repo, revision)
+        return _hf_files(repo, revision), []
     except LookupError as e:
         raise ValueError(str(e)) from None
     except Exception as e:
-        return _huggingface(repo, revision, how, request,
-                            notes=[f"could not reach Hugging Face to check it ({e}): taken to be a "
-                                   "cellmap-models export"])
+        return None, [f"could not reach Hugging Face to check it ({e}): taken to be {taken_as}"]
+
+
+def _hf_checked(repo: str, revision: Optional[str], request: _Request) -> Resolved:
+    how = "a cellmap-models export on Hugging Face"
+    files, notes = _hub_files(repo, revision, request, "a cellmap-models export")
+    if files is None:
+        return _huggingface(repo, revision, how, request, notes=notes)
+    folders = _onnx_folders(files)
+    if EXPORT_METADATA not in files and folders:
+        raise ValueError(
+            f"{repo} is a repo of ONNX web exports, one model a folder ({', '.join(folders)}): add one as "
+            f"{repo}/<folder>, e.g. {repo}/{folders[0]} (type: onnx)"
+        )
     if EXPORT_METADATA not in files:
         raise ValueError(
             f"{repo} is on Hugging Face but is not a cellmap-models export (it has no {EXPORT_METADATA}), "
@@ -779,3 +825,108 @@ def _zoo_id(ref: str, request: _Request) -> Optional[Resolved]:
     if shaped:
         raise ValueError(f"{ref!r} is not a model in the BioImage Model Zoo (by id, nickname or DOI)")
     return None
+
+
+# --- 5 and 7. ONNX web exports ------------------------------------------------------------
+
+def _onnx_folders(files: List[str]) -> List[str]:
+    """The folders of a repo's file list that hold an ONNX web export: a ``manifest.json`` of their own."""
+    return sorted({f.split("/")[0] for f in files if f.count("/") == 1 and f.endswith("/manifest.json")})
+
+
+def _onnx_file(path: str, request: _Request) -> Resolved:
+    """An ``.onnx`` file: its manifest says its geometry when it carries one
+    (a model the browser finetuned); without, its voxel size is needed.
+
+    Raises:
+        ValueError: the file is not an ONNX model, or its manifest is not one.
+    """
+    from cellmap_flow.models.configs.onnx import read_manifest
+
+    name = os.path.splitext(os.path.basename(path))[0]
+    manifest = read_manifest(path)
+    if manifest is not None:
+        voxel = "x".join(str(v) for v in manifest["input_voxel_size"])
+        notes = [f"its manifest says {', '.join(manifest['channels'])} at {voxel} nm"]
+        if manifest["output"]:
+            notes.append(f"its output is {manifest['output']}: add a SigmoidPostprocessor for probabilities")
+        return _resolved("onnx", {"path": path}, name, "an ONNX model that carries its cellmap-flow manifest "
+                         "(as one finetuned in the browser does)", request, notes=notes)
+    params, needs = {"path": path}, []
+    if request.voxel_size is not None:
+        params["input_voxel_size"] = request.voxel_size
+    else:
+        needs.append("input_voxel_size")
+    return _resolved(
+        "onnx", params, name, "an ONNX model without a cellmap-flow manifest", request, needs=needs,
+        notes=["its block sizes and channels are read from its graph's input and output shapes; give input_size, "
+               "output_size and channels when those are not fixed"],
+        takes_voxel_size=True,
+    )
+
+
+def _onnx_folder(repo, folder, revision, request, file=None, notes=()) -> Resolved:
+    params = {"repo": repo, "folder": folder}
+    if revision:
+        params["revision"] = revision
+    notes = list(notes)
+    if file:
+        params["file"] = file
+    else:
+        notes.append("serves its fp32 variant at the largest block, unless the entry gives file, or variant and "
+                     "input_size")
+    return _resolved("onnx", params, folder, f"an ONNX web export in {repo}, served with ONNX Runtime", request,
+                     notes=notes)
+
+
+def _onnx_checked(repo, folder, revision, request, file=None) -> Resolved:
+    """A folder of ``repo``, checked online to hold a manifest.json, as _hf_checked checks a repo."""
+    files, notes = _hub_files(repo, revision, request, "a folder of ONNX web exports")
+    if files is None:
+        return _onnx_folder(repo, folder, revision, request, file, notes=notes)
+    if f"{folder}/manifest.json" not in files:
+        folders = _onnx_folders(files)
+        raise ValueError(f"{repo} has no ONNX web export {folder} (a folder with a manifest.json)"
+                         + (f"; it has {', '.join(folders)}" if folders else ""))
+    if file and f"{folder}/{file}" not in files:
+        raise ValueError(f"{repo}/{folder} has no file {file}")
+    return _onnx_folder(repo, folder, revision, request, file)
+
+
+def _onnx_ref(ref: str, request: _Request) -> Optional[Resolved]:
+    """``org/repo/folder[@revision]``, as the browser's model ids are (cellmap/onnx-web-models/setup_54)."""
+    match = _ONNX_REF.match(ref)
+    # A relative path that is not there (runs/a/model.ts) is the error's.
+    if match is None or _DOI.match(ref) or _looks_like_path(ref):
+        return None
+    return _onnx_checked(match[1], match[2], match[3], request)
+
+
+def _onnx_web_folder(ref: str, request: _Request) -> Optional[Resolved]:
+    """A folder of ONNX_REPO by its bare name (``setup_54``): looked up online,
+    after the zoo, which has the first claim on a one-word name."""
+    if not request.online or not _FOLDER.match(ref):
+        return None
+    try:
+        files = _hf_files(ONNX_REPO, None)
+    except Exception:
+        return None
+    if f"{ref}/manifest.json" not in files:
+        return None
+    return _onnx_folder(ONNX_REPO, ref, None, request)
+
+
+def _onnx_prefixed(value: str, request: _Request) -> Resolved:
+    """``onnx:`` a path, ``org/repo/folder[@revision]``, or a folder of ONNX_REPO."""
+    path = _expanded(value)
+    if os.path.exists(path):
+        if os.path.isdir(path):
+            raise ValueError(f"onnx:{value}: {path} is a folder; give the .onnx file in it")
+        return _onnx_file(path, request)
+    match = _ONNX_REF.match(value)
+    if match is not None:
+        return _onnx_folder(match[1], match[2], match[3], request)
+    if _FOLDER.match(value) and not value.lower().endswith(".onnx"):
+        return _onnx_folder(ONNX_REPO, value, None, request)
+    raise ValueError(f"onnx:{value}: there is no {path}, and it is not a folder of a repo of ONNX web exports "
+                     f"(org/repo/folder, or a folder of {ONNX_REPO})")

@@ -10,6 +10,7 @@
 import type { Chain, DatasetInfo, ModelEntry, PaintStore, PaintVolume } from "../contracts";
 import { chooseRawLevel, geometryOf, inputShape, outputLevel, outputShape } from "../infer/geometry";
 import { isSegmentation } from "../infer/post";
+import { stamp } from "../shared/format";
 import type { PaintedChunk } from "./types";
 
 /** The directory of the labels' chunks within a volume: zarr v2, one level. */
@@ -28,9 +29,7 @@ export function parseChunkKey(name: string): number[] | null {
 
 /** `vol-<8 hex>-<YYYYmmdd-HHMMSS>`, as the server's new_volume_id. */
 export function newVolumeId(now: Date = new Date(), hex: string = randomHex(8)): string {
-  const pad = (n: number) => String(n).padStart(2, "0");
-  const stamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
-  return `vol-${hex}-${stamp}`;
+  return `vol-${hex}-${stamp(now)}`;
 }
 
 function randomHex(n: number): string {

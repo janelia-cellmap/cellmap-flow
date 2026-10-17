@@ -5,6 +5,7 @@
 // the paint can be downloaded as a zarr or deleted.
 import { esc, setBusy } from "../../lib/dom.js";
 import { isBrowserMode } from "../../lib/page-data.js";
+import { readText, writeText } from "../../lib/stored.js";
 import { getAnswer, postAnswer, watchProgress } from "./requests.js";
 
 // A crop import's progress, as the status line shows it.
@@ -36,9 +37,10 @@ export function initCrops({ log, picker, form }) {
   const browser = isBrowserMode();
 
   // Browser mode: the paint lives in this browser, so the template's
-  // browser-only block offers it as a download (a zip of the zarr, a GET
-  // the service worker relays to the in-page backend as it relays the Export
-  // Config link) and a delete. Both act on the volume last created or
+  // browser-only block offers it as a download (a zip of the zarr; the page
+  // fetches the link on a click, web/src/rebase.ts, as it does the Export
+  // Config link, and the service worker relays the GET to the in-page
+  // backend) and a delete. Both act on the volume last created or
   // resumed; with none (and again after a delete) the link has no target and
   // the button is disabled.
   function showVolumeActions(volumeId) {
@@ -203,10 +205,8 @@ export function initCrops({ log, picker, form }) {
       loadCropsModal = new bootstrap.Modal(document.getElementById("loadCropsModal"));
     }
     // Restore the last-used path so users don't retype it.
-    try {
-      const saved = localStorage.getItem("loadCropsYamlPath");
-      if (saved) loadCropsYamlPath.value = saved;
-    } catch (_) {}
+    const saved = readText("loadCropsYamlPath", "");
+    if (saved) loadCropsYamlPath.value = saved;
     loadCropsStatus.textContent = "";
     loadCropsModal.show();
   });
@@ -226,7 +226,7 @@ export function initCrops({ log, picker, form }) {
       if (data.success) {
         loadCropsYaml.value = data.text;
         status.textContent = `Loaded ${data.text.length} chars from ${path}`;
-        try { localStorage.setItem("loadCropsYamlPath", path); } catch (_) {}
+        writeText("loadCropsYamlPath", path);
       } else {
         status.textContent = `Read failed: ${data.error}`;
       }
@@ -251,7 +251,7 @@ export function initCrops({ log, picker, form }) {
         "Paste YAML or enter a file path first.";
       return;
     }
-    try { if (yamlPath) localStorage.setItem("loadCropsYamlPath", yamlPath); } catch (_) {}
+    if (yamlPath) writeText("loadCropsYamlPath", yamlPath);
     const outputPath = outputPathInput.value.trim();
     const status = loadCropsStatus;
     status.textContent = "Starting...";

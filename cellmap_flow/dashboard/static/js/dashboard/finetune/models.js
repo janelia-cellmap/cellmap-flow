@@ -1,9 +1,11 @@
 // The model picker at the top of the Annotation Crops panel: the served
 // models that can be finetuned (/api/finetune/models), and the one picked.
 import { esc } from "../../lib/dom.js";
+import { listen, MODELS_CHANGED_EVENT } from "../../lib/events.js";
+import { isBrowserMode } from "../../lib/page-data.js";
 import { poll } from "../../lib/poll.js";
 import { getAnswer } from "./requests.js";
-import { applyModelDefaults } from "./training-form.js";
+import { applyModelDefaults, setBrowserTraining } from "./training-form.js";
 
 // Models only appear in g.models_config once a pipeline has been submitted
 // on the main tab. The finetune tab is usually opened first, so a single
@@ -29,25 +31,21 @@ function displayModelInfo(model) {
       </small>
     `;
   document.getElementById("modelInfo").style.display = "block";
-  applyFinetuneModes(model.finetune_modes);
+  if (isBrowserMode()) setBrowserTraining(model);
+  else applyFinetuneModes(model.finetune_modes);
 }
 
 // Offer only the LoRA ranks the model can take: a compiled (TorchScript)
 // network trains in full only, and some models not at all. null (the
 // dashboard could not ask) offers them all; the trainer refuses what the
 // model cannot do anyway.
-// "head" is the browser mode's answer (web/src/finetune): the model's last
-// layer trains and nothing else, so there is no rank to pick. The Flask
-// server never says it, so the answer itself tells the two apart; the rank's
-// group is hidden in the browser (server-only), and the note says what trains.
+// The browser mode's modes ("head", the last layer, and "full", a 2D
+// model's whole network, as its manifest declares them) are the Training
+// field's instead (training-form.js setBrowserTraining): there is no rank to
+// pick there, and its group is server-only.
 function applyFinetuneModes(modes) {
   const rank = document.getElementById("loraRank");
   const note = document.getElementById("loraRankNote");
-  if (modes && modes.includes("head")) {
-    rank.disabled = true;
-    note.textContent = "Trains the model's last layer (its output convolution) on the painted voxels; the rest of the network stays as it was.";
-    return;
-  }
   const lora = !modes || modes.includes("lora");
   const full = !modes || modes.includes("full");
   Array.from(rank.options).forEach((option) => {
@@ -80,10 +78,10 @@ export function initModelPicker({ log, savedModelName }) {
   let lastLoadedCount = null;
 
   // One load of the list. The first load, and a Refresh, say what they
-  // found; the polls in between are quiet unless the number of models
-  // changes. Resolves to false once models are listed, which stops the poll.
+  // found; the others are quiet unless the number of models changes.
+  // Resolves to false once models are listed, which stops the poll.
   function loadModels({ tick, stale }) {
-    const quiet = tick > 1;
+    const quiet = tick > 1 || lastLoadedCount !== null;
     return getAnswer("/api/finetune/models")
       .then(data => {
         if (stale()) return;
@@ -101,6 +99,7 @@ export function initModelPicker({ log, savedModelName }) {
             log.add("  → Submit a model from the main tab; this list updates automatically");
           }
           modelSelect.innerHTML = "";
+          selectedModel = null;
           lastLoadedCount = 0;
           return;
         }
@@ -166,8 +165,13 @@ export function initModelPicker({ log, savedModelName }) {
     // pick; it rebuilds them from the response.
     models = [];
     selectedModel = null;
+    lastLoadedCount = null;
     modelPoll.restart();
   });
+
+  // Unlike Refresh, which is for models the page is not told of, this keeps
+  // the pick while asking: it comes without a click.
+  listen(MODELS_CHANGED_EVENT, () => modelPoll.restart());
 
   return { selected: () => selectedModel };
 }

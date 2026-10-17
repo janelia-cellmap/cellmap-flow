@@ -116,6 +116,12 @@ export interface ModelVariant {
   mean_abs?: number;
   flip_frac?: number;
   ort_cpu_s?: number;
+  /** A model finetuned in this browser: the Hugging Face file its bytes
+   * were made from (FINETUNED_REPO entries only, since 2026-10-16). Its
+   * graph is that file's, byte for byte but for the weights trained, so
+   * the base's finetune block (ModelManifest.finetune) describes it by
+   * that file's name, and its finetune files are in that folder. */
+  source?: { repo: string; folder: string; file: string };
 }
 
 export interface ModelManifest {
@@ -133,6 +139,59 @@ export interface ModelManifest {
   input_norm: Step[];
   io: { input: string; output: string; [k: string]: unknown };
   variants: ModelVariant[];
+  /** Where the export came from, as Marwan's manifests say since
+   * 2026-10-16: the PyTorch model's Hugging Face repo, the 3D model's a 2D
+   * student was distilled from, and how it was exported. */
+  source_repo?: string;
+  distilled_from_repo?: string;
+  torch_version?: string;
+  exporter?: string;
+  opset?: number;
+  /** What the browser can train of the model, as the export declares it.
+   * Absent from a manifest written before 2026-10-16, whose head the
+   * browser finds in the graph itself (finetune/modes.ts). */
+  finetune?: FinetuneSpec;
+}
+
+/** A manifest's `finetune` block: one entry per way to train the model,
+ * named as the Finetune tab's modes are (finetune/modes.ts). A mode the
+ * browser does not know is left out when the manifest is read. */
+export interface FinetuneSpec {
+  head?: HeadFinetuneSpec;
+  full?: FullFinetuneSpec;
+}
+
+/** The model's last layer, a 1×1 convolution, trained on frozen features. */
+export interface HeadFinetuneSpec {
+  /** The ONNX initializers of its weight and bias, and the tensor it reads. */
+  weight: string;
+  bias: string | null;
+  features: string;
+  onnx_node?: string;
+  in_channels?: number;
+  out_channels?: number;
+  /** The files whose head can be written: fp32 and fp16. An int8w file's
+   * weights feed a DequantizeLinear and are not plain initializers. */
+  files: string[];
+  initializers?: string;
+}
+
+/** The whole network, trained in the browser by `library`'s runtime. */
+export interface FullFinetuneSpec {
+  /** "tfjs": TensorFlow.js, from `files` (the graph, Marwan's runtime). */
+  library: string;
+  files: string[];
+  /** "identity": the graph's params are named as the ONNX initializers. */
+  weight_map: string;
+  /** The folder's initializers.json: each file's initializers' offsets. */
+  initializers: string;
+  /** The files the trained weights can be written back into. */
+  write_back: string[];
+  /** Params that never train (BatchNorm's running statistics). */
+  frozen: string[];
+  /** What a training step cost where Marwan measured it: per tile side,
+   * one step of one tile, and how. */
+  spike?: { setup?: string; date?: string; full: Record<string, { step_ms: number; peak_mb: number }> };
 }
 
 /** A model as the dashboard serves it: one manifest, one chosen variant. */
@@ -204,6 +263,13 @@ export interface Catalog {
  * the first segment of their ids), where Hugging Face models have theirs. */
 export const FINETUNED_REPO = "finetuned";
 
+/** The metadata_props key a finetuned model's downloaded .onnx carries its
+ * entry's manifest under, as JSON (GET /api/finetune/model/:name/download),
+ * so that the file alone says its voxel sizes, blocks and channels: the
+ * server's onnx model type reads it from there (cellmap_flow/models/configs/
+ * onnx.py MANIFEST_KEY). */
+export const MANIFEST_METADATA_KEY = "cellmap_flow.manifest";
+
 /** A model finetuned in this browser: the entry it is served as (the base's
  * manifest under the new name, one variant whose file is `<folder>.onnx`,
  * `onnxUrl` the key its bytes are kept under), and where it came from. */
@@ -221,6 +287,13 @@ export interface FinetunedRecord {
   epochs: number;
   final_loss: number | null;
   entry: ModelEntry;
+  /** Set when the model came from a shared link rather than a run in this
+   * browser (link.ts rebuildFinetuned): the name the link gave it, which is
+   * `name` unless this browser had a model of that name already. Such a
+   * record's `base` is the Hugging Face model it was rebuilt on, and it has
+   * no volume here (""), no parameters and no epochs: the training was in
+   * the browser the link was made in. */
+  from_link?: { name: string };
 }
 
 // ---------------------------------------------------------------------------
@@ -245,8 +318,12 @@ export interface ViewerController {
    * server's route builds its viewer without showing it either); returns the
    * viewer's URL for that state. */
   prepareDataset(url: string, raw: LayerSpec, info?: DatasetInfo): string;
-  /** Replace the named layers, keeping a layer's visibility if it was hidden. */
-  setLayers(layers: Record<string, LayerSpec>): void;
+  /** Replace the named layers, each keeping what the user set on the one it
+   * replaces (viewer/state.ts's carriedLayer: blending, opacity, being
+   * hidden...). `replacing` names, for a new layer, the layer it takes over
+   * from, whose place and settings it gets (a finetuned model's next
+   * iteration); that one is removed. */
+  setLayers(layers: Record<string, LayerSpec>, replacing?: Record<string, string>): void;
   removeLayer(name: string): void;
   /** The viewer's position, in nm (z, y, x), or null without a viewer. */
   position(): number[] | null;
@@ -282,6 +359,10 @@ export interface ViewerController {
    * XY plane, 1 y: XZ, 2 x: YZ), the first panel's (XY) in a multi-panel
    * layout, as geometry.depth_axis_for_view reads the Python viewer's. */
   viewDepthAxis(): 0 | 1 | 2;
+  /** The viewer's display dimensions (geometry.display_dimensions_for_view):
+   * those its state sets, else the first three of its coordinate space;
+   * empty when it has neither. They say how a panel draws its plane. */
+  viewDisplayDimensions(): string[];
   /** Bind `key` (Neuroglancer's spelling, "shift+keyg") to `action` in the
    * viewer, `handler` run when it is pressed, now and in every viewer
    * mounted after (a new dataset is a new page of Neuroglancer); returns
@@ -291,6 +372,10 @@ export interface ViewerController {
    * its back, as a server's refresh_annotation_layer does), keeping the
    * layer's own settings; whether a layer of that name was found. */
   refreshLayer(name: string): boolean;
+  /** Layer `name` as the viewer has it now, its JSON in the viewer's state
+   * (what the user did in it included: the boxes drawn in an annotation
+   * layer), or null when the viewer has no such layer. */
+  layer(name: string): LayerSpec | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -364,6 +449,75 @@ export interface Inference {
    * engine's caches; the rest are computed. The box must lie within the
    * level. */
   readOutput(view: string, lo: number[], hi: number[]): Promise<{ data: Float32Array; shape: number[] }>;
+  /** Compute the served model `view` (ServedModel.view: the layer's view,
+   * the chain's postprocessors and all) over voxels [lo, hi) of the level it
+   * is served at, and write it into `store` as an OME-Zarr of exactly that
+   * box: chunkmirage's Engine.materialize, which walks the model's chunks
+   * the box reaches (through the engine's caches and demand queue, as the
+   * viewer's requests go), stitches the box's own chunks from them and
+   * writes the zarr: one level of hi − lo voxels, the level's scale, a
+   * translation that puts its voxel 0 on the level's voxel lo, empty chunks
+   * skipped. For Run on a region (src/run-region). The box must lie within
+   * the level. */
+  materialize(view: string, store: RegionStore, options: RegionWrite): Promise<RegionWritten>;
+  /** What materialize would hold over that box, before anything is
+   * computed (chunkmirage's Engine.materializePlan): the most bytes of the
+   * saved array's chunks held at once while they are stitched from the
+   * model's, and the axes the box's corner is off the model's chunk edges
+   * along (z 0, y 1, x 2), the ones putting it on an edge shrinks that. */
+  materializePlan?(view: string, box: { lo: number[]; hi: number[] }): Promise<RegionPlan>;
+}
+
+/** Where materialize writes a zarr's files, by their path within it
+ * (`.zattrs`, `0/.zarray`, `0/0.1.2`): chunkmirage's WritableStore, which
+ * its directoryStore (a folder on this machine) and memoryStore are. */
+export interface RegionStore {
+  put(path: string, bytes: Uint8Array): Promise<void>;
+}
+
+/** How far a materialize has got: the saved array's chunks done of its
+ * `total`, those `written` (the rest were empty), and the bytes written so
+ * far; and the model's chunks `computed` of those the box `needed`, which a
+ * box off the chunks' edges has more of than it saves (its chunks are
+ * stitched from them). */
+export interface RegionProgress {
+  done: number;
+  total: number;
+  written: number;
+  bytes: number;
+  computed?: number;
+  needed?: number;
+}
+
+/** What materialize is asked to write: the box [lo, hi) in voxels of the
+ * served level (z, y, x), attributes merged into the zarr group's (the
+ * provenance), a signal that stops it and a progress callback. */
+export interface RegionWrite {
+  lo: number[];
+  hi: number[];
+  /** The chunks' compression: gzip (the default, smaller; zarr-python,
+   * Neuroglancer and napari read it) or none (null), for a reader without
+   * gzip, such as Fiji's. */
+  compression?: "gzip" | null;
+  attributes?: Record<string, unknown>;
+  signal?: AbortSignal;
+  onProgress?: (progress: RegionProgress) => void;
+}
+
+/** What a materialize would hold (Inference.materializePlan). */
+export interface RegionPlan {
+  peakBytes: number;
+  split: number[];
+}
+
+/** What a materialize did: the box's chunks, those written and skipped
+ * (empty), the bytes written, and whether the signal stopped it first. */
+export interface RegionWritten {
+  chunks: number;
+  written: number;
+  skipped: number;
+  bytes: number;
+  aborted: boolean;
 }
 
 // ---------------------------------------------------------------------------

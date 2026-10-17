@@ -17,8 +17,8 @@ logger = logging.getLogger(__name__)
 )
 @log_level_option()
 def cli(yaml_configs, client):
-    """Run the model a blockwise YAML describes over the whole volume, block
-    by block, writing its predictions to disk.
+    """Run the model a blockwise YAML describes over the whole volume, or
+    only its bounding_boxes, block by block, writing its predictions to disk.
 
     Several YAMLs run one after the other. One that leaves blocks
     unprocessed does not stop the rest; the command fails at the end,

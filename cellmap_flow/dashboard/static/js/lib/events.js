@@ -1,0 +1,12 @@
+// Events one part of the dashboard page sends the others, on document.
+export const MODELS_CHANGED_EVENT = "cellmap-flow:models-changed";  // the models served may have changed
+// Shift+R over the viewer in browser mode: web/src/backend/routes/finetune.ts sends this string too.
+export const RESTART_EVENT = "cellmap-flow:restart-finetune";
+
+export function announce(name) {
+  document.dispatchEvent(new CustomEvent(name));
+}
+
+export function listen(name, listener) {
+  document.addEventListener(name, listener);
+}

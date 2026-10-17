@@ -17,14 +17,17 @@ grid (``io.geometry``), from the voxel that holds the first pixel's centre.
 Axes are z, y, x throughout, as everywhere in cellmap-flow, except in the
 image sent: that is laid out as the viewer's panel shows the plane
 (``to_screen``), so the model, and the user reviewing its answer, see what
-was on screen. The XZ and YZ planes are transposed from z, y, x order, and the
-XY plane runs x leftwards, as neuroglancer draws it.
+was on screen. Which axis runs down it and which across, and whether across
+runs backwards, depend on the viewer's display dimensions (``screen_axes``):
+cellmap-flow's viewers show x, y, z, so the XY plane is drawn as in z, y, x
+order, the XZ plane too, and the YZ plane transposed and mirrored.
 """
 
 from dataclasses import asdict, dataclass
 
 import numpy as np
 
+from cellmap_flow import viewer
 from cellmap_flow.ai_annotate.errors import AIAnnotateError
 from cellmap_flow.finetune.session.fill import box_voxels
 from cellmap_flow.finetune.session.volume import volume_corner_nm
@@ -47,48 +50,71 @@ PLANE_NAMES = ("XY", "XZ", "YZ")
 # dimensions 0 and 1 and looks along 2, "xz" (rotated about the first) looks
 # along 1, "yz" (rotated about the second) along 0 (data_panel_layout.ts's
 # AXES_RELATIVE_ORIENTATION). The display dimensions are the first three of
-# the viewer's coordinate space unless set, and cellmap-flow's viewers name
-# theirs z, y, x in that order, so the "xy" panel is a z-y slice looking
-# along x, and the plane cellmap-flow calls XY is neuroglancer's "yz" panel.
+# the viewer's coordinate space unless set. cellmap-flow's viewers order
+# their dimensions x, y, z (viewer.VIEWER_AXES), so the "xy" panel is the XY
+# plane, looking along z. A viewer in z, y, x order (a link made before)
+# has a z-y slice looking along x there, and the XY plane is its "yz" panel.
 _LAYOUT_DEPTH_SLOT = {"xy": 2, "xz": 1, "yz": 0}
 
-# How the panel looking along each depth axis draws its plane, with
-# cellmap-flow's display dimensions (z, y, x): the axis running down it, the
-# axis running across, and whether across runs backwards. Neuroglancer's "xy"
-# panel draws display dimension 0 across and 1 down; "xz" turns it a quarter
-# about the first, so 0 across and 2 down; "yz" a quarter about the second, so
-# 1 down and 2 across, increasing to the left (AXES_RELATIVE_ORIENTATION's
-# quaternions). The image sent was z, y, x order before, so the XZ and YZ
-# planes went to the model, and back to the user's review, transposed from
-# what was on screen, and the XY plane mirrored.
-_SCREEN = {2: (1, 0, False), 1: (2, 0, False), 0: (1, 2, True)}
+# How neuroglancer's panels draw their plane, by the display-dimension slot
+# each looks along: the slot drawn down, the slot drawn across, and whether
+# across runs backwards. The "xy" panel (along slot 2) draws display
+# dimension 0 across and 1 down; "xz" (along 1) turns it a quarter about the
+# first, so 0 across and 2 down; "yz" (along 0) a quarter about the second,
+# so 1 down and 2 across, increasing to the left (AXES_RELATIVE_ORIENTATION's
+# quaternions). The image sent was z, y, x order before, so planes went to
+# the model, and back to the user's review, transposed or mirrored from what
+# was on screen.
+_PANEL_SLOTS = {2: (1, 0, False), 1: (2, 0, False), 0: (1, 2, True)}
 
 
-def _screen(depth_axis):
-    down, across, backwards = _SCREEN[int(depth_axis)]
+def display_names(display_dimensions=None) -> tuple:
+    """``display_dimensions`` when they are z, y and x in some order, else
+    z, y, x: the display dimensions of a viewer that sets none over
+    cellmap-flow's coordinate space, and of a plan saved before plans kept
+    them."""
+    names = tuple(display_dimensions or ())
+    return names if sorted(names) == sorted(AXIS_NAMES) else AXIS_NAMES
+
+
+def screen_axes(depth_axis, display_dimensions=None) -> tuple:
+    """``(down, across, backwards)``: the data axes (0 z, 1 y, 2 x) the panel
+    looking along ``depth_axis`` draws down and across, and whether across
+    runs backwards, in a viewer whose display dimensions are
+    ``display_dimensions``, as ``display_names`` gives them (a plan's), or
+    None for z, y, x."""
+    names = tuple(display_dimensions or AXIS_NAMES)
+    down, across, backwards = _PANEL_SLOTS[names.index(AXIS_NAMES[int(depth_axis)])]
+    return AXIS_NAMES.index(names[down]), AXIS_NAMES.index(names[across]), backwards
+
+
+def _screen(depth_axis, display_dimensions=None):
+    down, across, backwards = screen_axes(depth_axis, display_dimensions)
     return down > across, backwards
 
 
-def screen_shape(shape, depth_axis) -> tuple:
-    """A plane's ``(rows, cols)`` in z, y, x order, as the panel draws it."""
-    transposed, _ = _screen(depth_axis)
+def screen_shape(shape, depth_axis, display_dimensions=None) -> tuple:
+    """A plane's ``(rows, cols)`` in z, y, x order, as the panel draws it
+    (``screen_axes``)."""
+    transposed, _ = _screen(depth_axis, display_dimensions)
     rows, cols = (int(s) for s in shape)
     return (cols, rows) if transposed else (rows, cols)
 
 
-def to_screen(plane, depth_axis) -> np.ndarray:
+def to_screen(plane, depth_axis, display_dimensions=None) -> np.ndarray:
     """``plane`` (rows and columns its two axes in z, y, x order) as the panel
-    looking along ``depth_axis`` draws it."""
-    transposed, backwards = _screen(depth_axis)
+    looking along ``depth_axis`` draws it, in a viewer showing
+    ``display_dimensions`` (``screen_axes``)."""
+    transposed, backwards = _screen(depth_axis, display_dimensions)
     plane = np.asarray(plane)
     if transposed:
         plane = np.swapaxes(plane, 0, 1)
     return plane[:, ::-1] if backwards else plane
 
 
-def from_screen(image, depth_axis) -> np.ndarray:
+def from_screen(image, depth_axis, display_dimensions=None) -> np.ndarray:
     """``to_screen`` undone: an image as the panel draws it, in z, y, x order."""
-    transposed, backwards = _screen(depth_axis)
+    transposed, backwards = _screen(depth_axis, display_dimensions)
     image = np.asarray(image)
     if backwards:
         image = image[:, ::-1]
@@ -113,8 +139,8 @@ def depth_axis_from_layout(layout, display_dimensions=None) -> int:
     ``layout`` is neuroglancer's layout as a string ("xy", "xz-3d"...), a
     dict with a "type", or the state's layout object. ``display_dimensions``
     are the names of the viewer's display dimensions in order (z, y, x when
-    None, as cellmap-flow's viewers have them); see ``_LAYOUT_DEPTH_SLOT``
-    for why they matter. Only a single-plane layout says which plane the
+    None, as a viewer that sets none over z, y, x shows them); see
+    ``_LAYOUT_DEPTH_SLOT`` for why they matter. Only a single-plane layout says which plane the
     user is looking at: neuroglancer keeps one layout for the whole viewer,
     so in "4panel" or "3d" the panel a click landed in is not known. Those
     (and anything unrecognised) get the "xy" panel's axis, the panel
@@ -127,16 +153,17 @@ def depth_axis_from_layout(layout, display_dimensions=None) -> int:
     return 0
 
 
-def depth_axis_for_view(viewer_state) -> int:
-    """``depth_axis_from_layout`` for a neuroglancer ``ViewerState``.
+def display_dimensions_for_view(viewer_state) -> tuple:
+    """The display dimensions of a neuroglancer ``ViewerState``, as
+    ``display_names`` gives them."""
+    return display_names(viewer.display_dimensions_for_view(viewer_state))
 
-    Takes the display dimensions the state sets, else the first three of
-    its coordinate space, as neuroglancer does.
-    """
-    display = list(getattr(viewer_state, "display_dimensions", None) or [])
-    if not display:
-        dimensions = getattr(viewer_state, "dimensions", None)
-        display = list(getattr(dimensions, "names", None) or [])[:3]
+
+def depth_axis_for_view(viewer_state) -> int:
+    """``depth_axis_from_layout`` for a neuroglancer ``ViewerState``, over
+    its display dimensions as they are: a panel looking along one that is
+    not z, y or x (time) gets z."""
+    display = viewer.display_dimensions_for_view(viewer_state)
     return depth_axis_from_layout(getattr(viewer_state, "layout", None), display or None)
 
 
@@ -161,6 +188,9 @@ class PlanePlan:
     pixels, which a model needs to see shapes as they are). ``write_lo`` and
     ``write_hi`` are the annotation voxels written, ``[lo, hi)``, clipped to
     the volume and one voxel thick along the depth axis.
+    ``display_dimensions`` are the viewer's (``display_names``), which say
+    how its panel draws the plane (``screen_axes``); z, y, x in a plan saved
+    before plans kept them.
     """
 
     depth_axis: int
@@ -172,6 +202,7 @@ class PlanePlan:
     write_lo: tuple
     write_hi: tuple
     resolution_nm: float
+    display_dimensions: tuple = AXIS_NAMES
 
     @property
     def plane_axes(self) -> tuple:
@@ -191,7 +222,7 @@ class PlanePlan:
     @property
     def click_px(self) -> tuple:
         """``(row, col)`` of the point in the image sent."""
-        down, across, backwards = _SCREEN[self.depth_axis]
+        down, across, backwards = screen_axes(self.depth_axis, self.display_dimensions)
         position = []
         for side, a in zip(self.image_shape, (down, across)):
             fraction = (self.point_nm[a] - self.raw_offset_nm[a]) / self.raw_shape_nm[a]
@@ -204,11 +235,11 @@ class PlanePlan:
 
     def to_screen(self, plane) -> np.ndarray:
         """``to_screen`` for this plan's plane."""
-        return to_screen(plane, self.depth_axis)
+        return to_screen(plane, self.depth_axis, self.display_dimensions)
 
     def from_screen(self, image) -> np.ndarray:
         """``from_screen`` for this plan's plane."""
-        return from_screen(image, self.depth_axis)
+        return from_screen(image, self.depth_axis, self.display_dimensions)
 
     def to_dict(self) -> dict:
         """The plan as JSON-safe lists, for a staging's meta.json."""
@@ -227,11 +258,12 @@ class PlanePlan:
             write_lo=_ints(data["write_lo"]),
             write_hi=_ints(data["write_hi"]),
             resolution_nm=float(data["resolution_nm"]),
+            display_dimensions=display_names(data.get("display_dimensions")),
         )
 
 
 def plan_plane(volume: dict, volume_shape, point_nm, depth_axis: int, crop_size_px: int,
-               data_box_nm=None) -> PlanePlan:
+               data_box_nm=None, display_dimensions=None) -> PlanePlan:
     """The plane through ``point_nm`` (world nm, z, y, x) across ``depth_axis``.
 
     ``volume`` is the annotation volume's record (``output_voxel_size``,
@@ -252,7 +284,10 @@ def plan_plane(volume: dict, volume_shape, point_nm, depth_axis: int, crop_size_
     The raw is read over the clipped box's extent, so the image and the box
     cover the same physical area. The image's pixels are the finer in-plane
     input voxel size, square; when that makes a side longer than
-    ``MAX_IMAGE_SIDE`` the pixels are made larger to fit.
+    ``MAX_IMAGE_SIDE`` the pixels are made larger to fit. The image is laid
+    out as the viewer's panel draws the plane, for the viewer's
+    ``display_dimensions`` (``display_dimensions_for_view``; z, y, x when
+    None).
 
     Raises AIAnnotateError ("refused") when the point is outside the volume
     or the data: a field clipped to an edge it does not reach is not what
@@ -314,7 +349,8 @@ def plan_plane(volume: dict, volume_shape, point_nm, depth_axis: int, crop_size_
 
     extent = raw_shape[plane]
     resolution = max(float(input_voxel_size[plane].min()), float(extent.max()) / MAX_IMAGE_SIDE)
-    image_shape = screen_shape(np.maximum(np.round(snap_integral(extent / resolution)), 1), depth_axis)
+    display = display_names(display_dimensions)
+    image_shape = screen_shape(np.maximum(np.round(snap_integral(extent / resolution)), 1), depth_axis, display)
     return PlanePlan(
         depth_axis=int(depth_axis),
         point_nm=_floats(point),
@@ -325,6 +361,7 @@ def plan_plane(volume: dict, volume_shape, point_nm, depth_axis: int, crop_size_
         write_lo=_ints(lo),
         write_hi=_ints(hi),
         resolution_nm=float(snap_integral(resolution)),
+        display_dimensions=display,
     )
 
 

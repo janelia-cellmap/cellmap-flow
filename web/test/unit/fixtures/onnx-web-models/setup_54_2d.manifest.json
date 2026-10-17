@@ -166,5 +166,74 @@
       "crop1081": 0.9582
     },
     "teacher_3d_mean": 0.9576
-  }
+  },
+  "torch_version": "2.9.1",
+  "exporter": "torch.onnx.export (TorchScript, dynamo=False)",
+  "opset": 18,
+  "finetune": {
+    "head": {
+      "final_layer": "final_conv.c",
+      "onnx_node": "/final_conv/c/Conv",
+      "features": "/final_conv/Gather_output_0",
+      "weight": "final_conv.c.weight",
+      "bias": "final_conv.c.bias",
+      "in_channels": 40,
+      "out_channels": 3,
+      "activation": "none (logits)",
+      "files": [
+        "setup_54_mito_affinities_16nm_2d_in1060_fp16.onnx",
+        "setup_54_mito_affinities_16nm_2d_in1060_fp32.onnx",
+        "setup_54_mito_affinities_16nm_2d_in300_fp16.onnx",
+        "setup_54_mito_affinities_16nm_2d_in300_fp32.onnx",
+        "setup_54_mito_affinities_16nm_2d_in556_fp16.onnx",
+        "setup_54_mito_affinities_16nm_2d_in556_fp32.onnx"
+      ],
+      "initializers": "finetune/initializers.json",
+      "loss": "masked BCE on logits",
+      "note": "train the final 1x1 conv on frozen features"
+    },
+    "full": {
+      "library": "tfjs",
+      "files": [
+        "finetune/train_graph.json",
+        "finetune/cellmap_tfjs_train.js"
+      ],
+      "weight_map": "identity",
+      "initializers": "finetune/initializers.json",
+      "write_back": [
+        "setup_54_mito_affinities_16nm_2d_in1060_fp16.onnx",
+        "setup_54_mito_affinities_16nm_2d_in1060_fp32.onnx",
+        "setup_54_mito_affinities_16nm_2d_in300_fp16.onnx",
+        "setup_54_mito_affinities_16nm_2d_in300_fp32.onnx",
+        "setup_54_mito_affinities_16nm_2d_in556_fp16.onnx",
+        "setup_54_mito_affinities_16nm_2d_in556_fp32.onnx"
+      ],
+      "frozen": [],
+      "note": "params named as the ONNX initializers; BatchNorm running stats frozen",
+      "spike": {
+        "setup": "TF.js 4.22.0 WebGPU backend, Chrome on macOS, Apple GPU (metal-3, unified memory); batch 1, fp32, masked BCE on logits, Adam lr 1e-4; graph = finetune/train_graph.json, weights read from the served fp32 .onnx; median of 8 steps after 2 warm-up; peak = tf.profile peakBytes above baseline (tracked tensors; the WebGPU buffer pool holds more)",
+        "date": "2026-10-16",
+        "params": 3750963,
+        "full": {
+          "300": {
+            "step_ms": 462,
+            "peak_mb": 908
+          },
+          "556": {
+            "step_ms": 1919,
+            "peak_mb": 3702
+          }
+        },
+        "forward_ms": {
+          "300": 31,
+          "556": 123
+        },
+        "tfjs_webgpu_vs_ort_webgpu_556": {
+          "max_abs": 3.43e-05,
+          "flips": 0
+        }
+      }
+    }
+  },
+  "source_repo": "cellmap/mito-aff-resunet-setup-54-2d"
 }

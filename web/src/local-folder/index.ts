@@ -27,6 +27,7 @@
 // The DOM is in panel.ts behind the LocalPanel interface, so the flows here
 // run on fakes in the tests (test/unit/local.test.ts).
 import type { SessionStore } from "../contracts";
+import { message } from "../shared/message";
 import { getHandle, putHandle } from "../state/local-store";
 import { connectPanel, type LocalPanel } from "./panel";
 
@@ -41,18 +42,26 @@ export interface PickedDirectory {
 }
 
 /** Where picked handles are kept: local-store.ts's IndexedDB store, or a fake. */
-export interface HandleStore {
-  get(key: string): Promise<PickedDirectory | undefined>;
-  put(key: string, handle: PickedDirectory): Promise<void>;
+export interface HandleStore<T = PickedDirectory> {
+  get(key: string): Promise<T | undefined>;
+  put(key: string, handle: T): Promise<void>;
 }
 
 /** The IndexedDB store. The casts are the gap in lib.dom named above: what
  * it stores and gives back is a real FileSystemDirectoryHandle, which has
  * the permission methods in every browser that has the picker. */
-const indexedDbHandles: HandleStore = {
-  get: (key) => getHandle(key) as Promise<PickedDirectory | undefined>,
-  put: (key, handle) => putHandle(key, handle as unknown as FileSystemDirectoryHandle),
-};
+export function indexedDbHandles<T extends PickedDirectory = PickedDirectory>(): HandleStore<T> {
+  return {
+    get: (key) => getHandle(key) as unknown as Promise<T | undefined>,
+    put: (key, handle) => putHandle(key, handle as unknown as FileSystemDirectoryHandle),
+  };
+}
+
+/** The caller must be in the user's click: requesting a permission needs one. */
+export async function ensurePermission(handle: Pick<PickedDirectory, "queryPermission" | "requestPermission">, mode: "read" | "readwrite"): Promise<PermissionState> {
+  const permission = await handle.queryPermission({ mode });
+  return permission === "granted" ? permission : handle.requestPermission({ mode });
+}
 
 interface LocalOptions {
   log: (line: string) => void;
@@ -125,10 +134,6 @@ function randomChars(count: number): string {
   return Array.from(bytes, (b) => RANDOM_ALPHABET[b % RANDOM_ALPHABET.length]).join("");
 }
 
-function message(e: unknown): string {
-  return e instanceof Error ? e.message : String(e);
-}
-
 // ------------------------------------------------------------------ picking a folder
 
 /** Open `handle`'s directory as the dataset: read permission (asked for if
@@ -139,10 +144,9 @@ function message(e: unknown): string {
  * connect.js says its own failures. */
 export async function openLocalFolder(handle: PickedDirectory, opts: LocalOptions): Promise<void> {
   const panel = opts.panel ?? connectPanel();
-  const handles = opts.handles ?? indexedDbHandles;
+  const handles = opts.handles ?? indexedDbHandles();
   try {
-    let permission = await handle.queryPermission({ mode: "read" });
-    if (permission !== "granted") permission = await handle.requestPermission({ mode: "read" });
+    const permission = await ensurePermission(handle, "read");
     if (permission !== "granted") {
       panel.status(`Reading ${handle.name} was not allowed, so it cannot be opened.`, "error");
       opts.log(`reading ${handle.name} on this machine was not allowed (${permission})`);
@@ -161,9 +165,24 @@ export async function openLocalFolder(handle: PickedDirectory, opts: LocalOption
   }
 }
 
+export type PickerOptions = { id?: string; mode?: "read" | "readwrite"; startIn?: "desktop" | "documents" | "downloads" };
+
 /** The picker as Chromium has it (not in lib.dom, so `window` is read as this). */
 interface PickerWindow {
-  showDirectoryPicker?(options?: { id?: string; mode?: "read" | "readwrite"; startIn?: "desktop" | "documents" | "downloads" }): Promise<PickedDirectory>;
+  showDirectoryPicker?(options?: PickerOptions): Promise<PickedDirectory>;
+}
+
+export type Picker = (options: PickerOptions) => Promise<PickedDirectory>;
+const windowPicker: Picker = (options) => (window as unknown as Required<PickerWindow>).showDirectoryPicker(options);
+
+/** null when the user cancelled the dialog (an AbortError), which needs no message. */
+export async function pickDirectory<T extends PickedDirectory = PickedDirectory>(options: PickerOptions, pick: Picker = windowPicker): Promise<T | null> {
+  try {
+    return (await pick(options)) as T;
+  } catch (e) {
+    if ((e as { name?: string })?.name === "AbortError") return null;
+    throw e;
+  }
 }
 
 /** The picker's options: under `id` Chrome remembers the folder last picked
@@ -185,23 +204,18 @@ export const UNSUPPORTED_NOTE = "Opening a folder on this machine needs Chrome o
  * the dashboard's own script listens on Connect, which the button presses.
  * `pick` is the picker (window.showDirectoryPicker, read-only); a test hands
  * in its own, and says `supported` rather than having a window. */
-export function installLocalFolderUi(opts: LocalOptions & { pick?: () => Promise<PickedDirectory>; supported?: boolean }): void {
+export function installLocalFolderUi(opts: LocalOptions & { pick?: Picker; supported?: boolean }): void {
   const panel = opts.panel ?? connectPanel();
   if (!(opts.supported ?? supportsLocalFolders())) {
     panel.hideLocalControls(UNSUPPORTED_NOTE);
     return;
   }
-  const pick = opts.pick ?? (() => (window as unknown as Required<PickerWindow>).showDirectoryPicker(PICKER_OPTIONS));
   panel.onBrowse(async () => {
-    let handle: PickedDirectory;
-    try {
-      handle = await pick();
-    } catch (e) {
-      // AbortError: the dialog was cancelled, which needs no message.
-      if ((e as { name?: string })?.name !== "AbortError") panel.status(`Could not pick a folder: ${message(e)}`, "error");
-      return;
-    }
-    await openLocalFolder(handle, opts);
+    const handle = await pickDirectory(PICKER_OPTIONS, opts.pick).catch((e: unknown) => {
+      panel.status(`Could not pick a folder: ${message(e)}`, "error");
+      return null;
+    });
+    if (handle) await openLocalFolder(handle, opts);
   });
   panel.onDropDirectory((handle) => void openLocalFolder(handle, opts));
 }
@@ -226,7 +240,7 @@ export async function restoreLocalFolder(opts: LocalOptions & { session: Session
   const key = localKeyOf(session.state.datasetUrl, opts.base);
   if (!key) return;
   const panel = opts.panel ?? connectPanel();
-  const handles = opts.handles ?? indexedDbHandles;
+  const handles = opts.handles ?? indexedDbHandles();
 
   async function forget(): Promise<void> {
     panel.forgetPageState();

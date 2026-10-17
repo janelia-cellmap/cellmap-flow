@@ -2,6 +2,7 @@
 // kept in localStorage (the output path on the server too), the advice shown
 // next to some of them, and the GPU queue picker.
 import { isBrowserMode } from "../../lib/page-data.js";
+import { readJSON, writeJSON } from "../../lib/stored.js";
 import { fillQueueSelect, queueHint, subscribeGpuQueues } from "../../shared/gpu-queues.js";
 import { getAnswer, postAnswer } from "./requests.js";
 
@@ -39,12 +40,22 @@ const SAVED_FIELDS = [
 // the head had a choice of losses, and every browser that saved the form
 // saved the server template's default, margin, which must not come back as
 // the browser's loss. Its batch, voxels per step, is a field of its own
-// (batchPixels, in the template's browser-only block).
+// (batchPixels, in the template's browser-only block). The whole network's
+// fields are browser-only too: the Training choice, the Tile Size and the
+// whole network's learning rate; and its batch, the server's Batch Size, is
+// kept under a key of its own (fullBatchSize) for the same reason as the
+// loss: every browser saved the hidden field's 8.
 function savedFields() {
   if (!isBrowserMode()) return SAVED_FIELDS;
+  const renamed = { lossType: "headLossType", batchSize: "fullBatchSize" };
   return SAVED_FIELDS
-    .map((field) => (field[1] === "lossType" ? ["headLossType", "lossType", "value"] : field))
-    .concat([["batchPixels", "batchPixels", "value"]]);
+    .map((field) => (renamed[field[1]] ? [renamed[field[1]], field[1], field[2]] : field))
+    .concat([
+      ["batchPixels", "batchPixels", "value"],
+      ["finetuneMode", "finetuneMode", "value"],
+      ["tileSize", "tileSize", "value"],
+      ["fullLearningRate", "learningRateFull", "value"],
+    ]);
 }
 
 function saveFinetuneState() {
@@ -54,13 +65,11 @@ function saveFinetuneState() {
     state[key] = kind === "checkbox" ? el.checked : el.value;
   }
   state.selectedModelName = document.getElementById("modelSelect").value;
-  localStorage.setItem(FINETUNE_STATE_KEY, JSON.stringify(state));
+  writeJSON(FINETUNE_STATE_KEY, state);
 }
 
 function restoreFinetuneState() {
-  const raw = localStorage.getItem(FINETUNE_STATE_KEY);
-  if (!raw) return null;
-  try { return JSON.parse(raw); } catch { return null; }
+  return readJSON(FINETUNE_STATE_KEY, null);
 }
 
 function applySavedState(saved) {
@@ -124,13 +133,23 @@ function trainingParams() {
   if (rehearsalFraction !== undefined) {
     params.rehearsal_fraction = rehearsalFraction;
   }
-  // Browser mode: the head's batch is voxels per step, its own field; the
+  // Browser mode: what trains (the Training field); for the head, its
+  // batch in voxels per step, its own field; for the whole network, its
+  // learning rate, its tile side and the batch above, in tiles. The
   // server-only fields above go too and the page's routes ignore them
   // (web/src/backend/routes/finetune.ts readTraining). The Loss Function
   // offers the head's losses there (BCE, MSE, margin) and is read as on
-  // the server.
+  // the server; the whole network ignores it.
   if (isBrowserMode()) {
-    params.batch_pixels = parseInt(document.getElementById("batchPixels").value, 10);
+    const mode = document.getElementById("finetuneMode").value;
+    params.finetune_mode = mode;
+    if (mode === "full") {
+      params.learning_rate = parseFloat(document.getElementById("learningRateFull").value);
+      const tile = parseInt(document.getElementById("tileSize").value, 10);
+      if (Number.isInteger(tile)) params.tile_size = tile;
+    } else {
+      params.batch_pixels = parseInt(document.getElementById("batchPixels").value, 10);
+    }
   }
   if (params.loss_type === "margin") {
     const margin = parseFloat(document.getElementById("marginValue").value);
@@ -213,6 +232,110 @@ function showGpuQueues(data) {
   document.getElementById("finetuneGpuQueueHint").textContent = queueHint(data);
 }
 
+// --- The browser's Training field ---------------------------------------
+//
+// What a model offers comes from its manifest (the page's GET
+// /api/finetune/models: finetune_modes, and for the whole network
+// full_training's tile sides with what a step costs); models.js hands each
+// picked model to setBrowserTraining. The Training field shows only when
+// both are offered; the Training pane's data-training says which is picked,
+// and web/src/browser.css shows that one's fields.
+let browserModel = null;
+let headNote = null;  // the template's words for the head, kept to put back
+
+function trainingMode() {
+  return document.getElementById("finetuneMode").value;
+}
+
+// The model's tile sides as the Tile Size's options; the side saved, or the
+// one picked, when the model has it, else its default.
+function fillTileSizes(full) {
+  const select = document.getElementById("tileSize");
+  const keep = select.value || (restoreFinetuneState() || {}).tileSize;
+  select.innerHTML = "";
+  for (const tile of (full && full.tiles) || []) {
+    const option = document.createElement("option");
+    option.value = String(tile.side);
+    option.textContent = `${tile.side}² (output ${tile.output}²)${tile.side === full.default_tile ? " (Default)" : ""}`;
+    select.appendChild(option);
+  }
+  const sides = Array.from(select.options).map((option) => option.value);
+  if (sides.includes(String(keep))) select.value = String(keep);
+  else if (full && full.default_tile) select.value = String(full.default_tile);
+}
+
+// What a step of the tile picked is expected to cost at the batch picked,
+// from the manifest's measurement (scaled by area for a side it did not
+// measure), and how much of the tile is output.
+function updateTileHint() {
+  const hint = document.getElementById("tileSizeHint");
+  const full = browserModel && browserModel.full_training;
+  if (!full || !(full.tiles || []).length) {
+    hint.textContent = (full && full.error) || "";
+    hint.title = "";
+    return;
+  }
+  const tile = full.tiles.find((t) => String(t.side) === document.getElementById("tileSize").value);
+  if (!tile) return;
+  const batch = parseInt(document.getElementById("batchSize").value, 10) || 1;
+  const useful = `${Math.round(tile.useful * 100)}% of each tile is output, the rest context`;
+  const cost = tile.step_ms === null
+    ? ""
+    : `About ${formatMs(tile.step_ms * batch)} and ${formatMb(tile.peak_mb * batch)} a step` +
+      `${tile.measured ? " where it was measured" : ", scaled from the sides measured"}; `;
+  hint.textContent = `${cost}${useful}. Smaller tiles train faster in less memory, but spend more of each tile on context.`;
+  hint.title = full.measured_on ? `Measured on ${full.measured_on}` : "";
+}
+
+function formatMs(ms) {
+  return ms < 1000 ? `${Math.round(ms)} ms` : `${(ms / 1000).toFixed(1)} s`;
+}
+
+function formatMb(mb) {
+  return mb < 1000 ? `${Math.round(mb)} MB` : `${(mb / 1000).toFixed(1)} GB`;
+}
+
+// The pane's data-training and the notes, from the Training field.
+function applyTrainingMode() {
+  const mode = trainingMode();
+  document.getElementById("training").dataset.training = mode;
+  const note = document.getElementById("browserFinetuneNote");
+  if (note) {
+    headNote = headNote ?? note.textContent;
+    note.textContent = mode === "full"
+      ? "In the browser, this model can train its whole network: every weight, on the voxels you paint, with TensorFlow.js on this machine's GPU, in tiles cut in the plane you paint in. It takes minutes where the last layer takes seconds, and can learn what the model's features miss. Paint some background and some objects on a few slices, then train."
+      : headNote;
+  }
+  updateTileHint();
+}
+
+// Browser mode: what `model` (an answer of /api/finetune/models) offers.
+// Only the modes its manifest declares can be picked; the Training field
+// shows when there are two to pick from; no mode at all says why below it.
+export function setBrowserTraining(model) {
+  browserModel = model;
+  const modes = (model && model.finetune_modes) || ["head"];
+  // The whole network needs a GPU (WebGPU); without one it shows, disabled, with why.
+  const noGpu = (model && model.full_training && model.full_training.unavailable) || null;
+  const usable = noGpu ? modes.filter((mode) => mode !== "full") : modes;
+  const select = document.getElementById("finetuneMode");
+  Array.from(select.options).forEach((option) => {
+    option.disabled = !usable.includes(option.value);
+  });
+  if (usable.length && !usable.includes(select.value)) select.value = usable[0];
+  const both = modes.includes("head") && modes.includes("full");
+  document.getElementById("finetuneModeGroup").hidden = !both;
+  const note = document.getElementById("finetuneModeNote");
+  note.textContent = !both ? "" : noGpu
+    || "The last layer trains in seconds; the whole network in minutes, on this machine's GPU.";
+  fillTileSizes(model && model.full_training);
+  applyTrainingMode();
+  if (!modes.length) {
+    const browserNote = document.getElementById("browserFinetuneNote");
+    if (browserNote) browserNote.textContent = "This model cannot be finetuned in the browser: its manifest declares no training for the file served (an int8 file's weights are quantized and cannot be written).";
+  }
+}
+
 // Returns { saved, save(), trainingParams() }: saved is the state restored
 // at load (null if none); save() stores the form's state now.
 export function initTrainingForm() {
@@ -277,6 +400,12 @@ export function initTrainingForm() {
     document.getElementById(id).addEventListener("change", updateAugmentAdvice);
   });
   updateAugmentAdvice();
+
+  if (isBrowserMode()) {
+    document.getElementById("finetuneMode").addEventListener("change", applyTrainingMode);
+    ["tileSize", "batchSize"].forEach((id) => document.getElementById(id).addEventListener("change", updateTileHint));
+    applyTrainingMode();
+  }
 
   return {
     saved,

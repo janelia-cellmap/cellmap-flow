@@ -10,7 +10,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { DatasetInfo } from "../../src/contracts";
-import { planPlane, writeShape } from "../../src/ai-annotate/geometry";
+import { planPlane, toScreen, writeShape } from "../../src/ai-annotate/geometry";
 import { ORGANELLES } from "../../src/ai-annotate/organelles";
 import { buildRequest, labelsForBox, levelCornerNm, maskToWriteShape, rawExtentNm, readPlane, resizePlane } from "../../src/ai-annotate/plane";
 import { AIAnnotateError, type DepthAxis, type PlanePlan } from "../../src/ai-annotate/types";
@@ -254,7 +254,7 @@ describe("maskToWriteShape", () => {
   it("comes back to z, y, x order from the screen layout at the same size", () => {
     // XY: 2 rows (y) × 3 cols (x leftwards). Image pixel (0, 0) is x = 2.
     const plan = planOf(0, [1, 2, 3], [2, 3]);
-    expect(Array.from(maskToWriteShape(Uint8Array.from([1, 0, 0, 0, 0, 1]), plan))).toEqual([0, 0, 1, 1, 0, 0]);
+    expect(Array.from(maskToWriteShape(Uint8Array.from([1, 0, 0, 0, 0, 1]), plan))).toEqual([0, 0, 1, 2, 0, 0]);  // two objects, numbered in the box's raster order
     // Values other than 1 count as set.
     expect(Array.from(maskToWriteShape(Uint8Array.from([255, 0, 0, 0, 0, 0]), plan))).toEqual([0, 0, 1, 0, 0, 0]);
   });
@@ -272,6 +272,17 @@ describe("labelsForBox", () => {
     return [[0, 0, 0], hi];
   };
 
+  /** `mask` (the box's plane, z, y, x order) cut into objects by
+   * maskToWriteShape, from an image of the box's own size. */
+  const objectsOf = (mask: Uint8Array, depthAxis: DepthAxis, rows: number, cols: number): Int32Array => {
+    const [lo, hi] = box(depthAxis, rows, cols);
+    const image = toScreen(mask, rows, cols, depthAxis);
+    return maskToWriteShape(image.data, {
+      depth_axis: depthAxis, point_nm: [0, 0, 0], raw_offset_nm: [0, 0, 0], raw_shape_nm: [1, 1, 1], image_shape: [image.rows, image.cols],
+      input_voxel_size: [1, 1, 1], write_lo: lo, write_hi: hi, resolution_nm: 1,
+    });
+  };
+
   for (const depthAxis of [0, 1, 2] as DepthAxis[]) {
     it(`gives each object an id and keeps corner-touching pieces apart (axis ${depthAxis})`, () => {
       const mask = new Uint8Array(6 * 8);
@@ -279,7 +290,7 @@ describe("labelsForBox", () => {
       for (let r = 3; r < 5; r++) for (let c = 4; c < 7; c++) mask[r * 8 + c] = 1;
       mask[5 * 8 + 7] = 1;  // touches the second only at a corner: an object of its own
       const [lo, hi] = box(depthAxis, 6, 8);
-      const labels = labelsForBox(mask, new Uint8Array(48), lo, hi, depthAxis, false);
+      const labels = labelsForBox(objectsOf(mask, depthAxis, 6, 8), new Uint8Array(48), lo, hi, depthAxis, false);
       expect(labels).toBeInstanceOf(Uint8Array);
       for (let i = 0; i < 48; i++) if (!mask[i]) expect(labels[i]).toBe(1);
       expect(new Set([labels[0], labels[3 * 8 + 4], labels[5 * 8 + 7]])).toEqual(new Set([2, 3, 4]));
@@ -304,7 +315,7 @@ describe("labelsForBox", () => {
     for (let r = 0; r < 4; r++) for (const c of [0, 1, 4, 5]) mask[r * 8 + c] = 1;
     const existing = new Uint16Array(32);
     existing[7] = 300;
-    const labels = labelsForBox(mask, existing, ...box(1, 4, 8), 1, true);
+    const labels = labelsForBox(objectsOf(mask, 1, 4, 8), existing, ...box(1, 4, 8), 1, true);
     expect(labels).toBeInstanceOf(Uint16Array);
     expect(new Set([labels[0], labels[4]])).toEqual(new Set([301, 302]));
   });
@@ -324,7 +335,7 @@ describe("labelsForBox", () => {
       for (let c = 9; c < 12; c++) mask[r * 12 + c] = 1;
     }
     for (const depthAxis of [0, 1, 2] as DepthAxis[]) {
-      const labels = labelsForBox(mask, new Uint16Array(72), ...box(depthAxis, 6, 12), depthAxis, true, [before, null]);
+      const labels = labelsForBox(objectsOf(mask, depthAxis, 6, 12), new Uint16Array(72), ...box(depthAxis, 6, 12), depthAxis, true, [before, null]);
       for (let r = 1; r < 4; r++) {
         for (let c = 5; c < 8; c++) expect(labels[r * 12 + c]).toBe(3);  // the same object, not a fresh id
         for (let c = 9; c < 12; c++) expect(labels[r * 12 + c]).toBe(4);  // a new object, not 2: that id is a different object right beside it

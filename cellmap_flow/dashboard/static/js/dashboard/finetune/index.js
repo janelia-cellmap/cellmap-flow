@@ -12,10 +12,10 @@
 // - ai-annotate.js: AI-assisted annotation, a hosted model's labels for the
 //   plane on screen, reviewed and then accepted (undone by Label it's Undo)
 //   or rejected;
-// - job-monitor.js: submit, the status poll, Restart, Stop Early, Cancel,
-//   and the job restored after a reload, with job-card.js (the Training
-//   Status card), log-stream.js (the Training Logs text) and loss-plot.js
-//   (the loss plot).
+// - job-monitor.js: submit, the status poll, Restart (and Shift+R, which
+//   restarts from the viewer), Stop Early, Cancel, and the job restored
+//   after a reload, with job-card.js (the Training Status card),
+//   log-stream.js (the Training Logs text) and loss-plot.js (the loss plot).
 // They start in this order, which is the order of the tab's first requests:
 // the saved output path, the models, the seed sources, the good-region
 // count, the AI annotation's configuration, and the job to restore. (The GPU
@@ -30,6 +30,7 @@
 // patch tools, Label it, AI-assisted annotation and Good regions, all run
 // there, their routes answered in the page (web/src/backend/routes/
 // view-labels.ts, ai-annotate.ts and good-regions.ts).
+import { readJSON, writeJSON } from "../../lib/stored.js";
 import { initAiAnnotate } from "./ai-annotate.js";
 import { initCrops } from "./crops.js";
 import { initGoodRegionMarks } from "./good-region-marks.js";
@@ -41,7 +42,8 @@ import { initTrainingForm } from "./training-form.js";
 
 export function initFinetuneTab() {
   const logArea = document.getElementById("finetuneLog");
-  // The Annotation Crops panel's log, which every part but the job writes to.
+  // The Annotation Crops panel's log, which every part but the job writes
+  // to, and Shift+R's restart of the job.
   const log = {
     add(line) {
       logArea.value += line + "\n";
@@ -58,7 +60,7 @@ export function initFinetuneTab() {
   initLabelIt({ log });
   initGoodRegionMarks({ log });
   initAiAnnotate({ log });
-  initJobMonitor({ picker, form });
+  initJobMonitor({ picker, form, log });
   rememberOpenSections();
 }
 
@@ -68,17 +70,12 @@ export function initFinetuneTab() {
 const OPEN_SECTIONS_KEY = "finetunePatchToolsOpen";
 
 function rememberOpenSections() {
-  let saved = {};
-  try {
-    saved = JSON.parse(localStorage.getItem(OPEN_SECTIONS_KEY) || "{}") || {};
-  } catch (_) {}
+  const saved = readJSON(OPEN_SECTIONS_KEY, {});
   for (const section of document.querySelectorAll(".patch-tools-section[id]")) {
     if (typeof saved[section.id] === "boolean") section.open = saved[section.id];
     section.addEventListener("toggle", () => {
       saved[section.id] = section.open;
-      try {
-        localStorage.setItem(OPEN_SECTIONS_KEY, JSON.stringify(saved));
-      } catch (_) {}
+      writeJSON(OPEN_SECTIONS_KEY, saved);
     });
   }
 }

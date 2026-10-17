@@ -78,6 +78,53 @@ def _voxel_size(value):
     return _numbers(float(v) for v in value)
 
 
+def _sizes(value, *, min=0, lengths=None):
+    """None, or ``value`` (one number, "148", "20,256,256" or a list) as a tuple of ints.
+
+    One number stays one (``_per_axis`` widens it), so that ``_as_given``
+    writes it back as it was given. Each must be at least ``min``, and when
+    ``lengths`` is given, their count must be one of them.
+    """
+    if value is None:
+        return None
+    if isinstance(value, str):
+        value = [v for v in value.replace("(", "").replace(")", "").split(",") if v.strip()]
+    if np.ndim(value) == 0:
+        value = [value]
+    sizes = tuple(int(float(v)) for v in value)
+    if lengths is not None and len(sizes) not in lengths:
+        counts = " or ".join(str(n) for n in lengths)
+        raise ValueError(f"sizes are {counts} whole numbers, got {list(sizes)}")
+    if any(s < min for s in sizes):
+        raise ValueError(f"sizes must be at least {min}, got {list(sizes)}")
+    return sizes
+
+
+def _per_axis(sizes, n: int, what: str):
+    """``sizes`` (``_sizes``'s) for each of ``n`` axes: one number is every axis's; None stays None."""
+    if sizes is None:
+        return None
+    if len(sizes) == 1:
+        return tuple(sizes) * n
+    if len(sizes) != n:
+        raise ValueError(f"{what} needs one number or {n} (one per space axis of the model), got {list(sizes)}")
+    return tuple(sizes)
+
+
+def _as_given(sizes):
+    """``sizes`` (``_sizes``'s) as a model entry writes them: one number as itself, more as a list."""
+    return sizes[0] if len(sizes) == 1 else list(sizes)
+
+
+def _names(value):
+    """None, or channel names from a list or the "mito, er" the server CLI and the model form send."""
+    if value is None:
+        return None
+    if isinstance(value, str):
+        value = [v.strip() for v in value.split(",") if v.strip()]
+    return [str(v) for v in value]
+
+
 def _plain(value):
     """``value`` with tuples, arrays and numpy numbers as lists and Python numbers.
 
@@ -274,6 +321,12 @@ class ModelConfig:
     # ``serve_trained``. A type sets it once those two do the right thing for
     # it; the trainer refuses the others before submitting a job.
     finetunable = False
+    # Constructor arguments that name a file, which a YAML entry may give
+    # relative to the YAML file's own folder (``registry.build_model``'s
+    # ``base_dir``): an exported YAML can then name a file downloaded beside
+    # it, wherever `cellmap_flow yaml` is run from. None of the older types
+    # sets it; their relative paths stay the working directory's.
+    config_relative_paths = ()
 
     def finetune_modes(self):
         """What this model can be finetuned with: ("lora", "full"), ("full",)
@@ -282,6 +335,15 @@ class ModelConfig:
         it from what describes the model. The trainer checks the module it
         gets the same way (``finetune.trainable.finetune_modes``)."""
         return ("lora", "full") if type(self).finetunable else ()
+
+    def declared_input_norm(self):
+        """The input normalization the model declares itself, as cellmap-flow
+        steps (``[{"name": ..., **params}]``), or None when it declares none.
+
+        Asked on every dashboard poll, so it must be cheap and must not
+        raise. Only an onnx model's manifest declares any.
+        """
+        return None
 
     def trainable_model(self):
         """The torch module the finetune trainer trains, or None for

@@ -403,7 +403,7 @@ export async function trainHead(pixels: PixelSet, head: Head, options: FinetuneO
 }
 
 /** Fisher–Yates over `order`, from the seeded generator. */
-function shuffle(order: Uint32Array, random: () => number): void {
+export function shuffle(order: Uint32Array, random: () => number): void {
   for (let i = order.length - 1; i > 0; i--) {
     const j = Math.floor(random() * (i + 1));
     const t = order[i]; order[i] = order[j]; order[j] = t;

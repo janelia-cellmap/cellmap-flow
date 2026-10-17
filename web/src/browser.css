@@ -25,6 +25,20 @@
   width: 100%;
 }
 
+/* The Finetune tab's Training field: the fields of what it picked show,
+   the others' hide. The Training pane carries data-training ("head" or
+   "full", set by training-form.js; the template starts it at "head"). The
+   whole network takes the server's Batch Size, in tiles, so that one
+   server-only field shows for it (full-also). */
+[data-training="full"] .head-only,
+[data-training="head"] .full-only {
+  display: none !important;
+}
+
+[data-mode="browser"] [data-training="full"] .server-only.full-also {
+  display: block !important;
+}
+
 /* While the page boots with a dataset already open (index.html's inline
    script sets data-viewer="pending" from the session's sessionStorage flag),
    the connect panel stays invisible: the viewer replaces it with the iframe,
@@ -51,6 +65,15 @@
 #localFolderHint {
   font-size: 13px;
   color: var(--text-muted);
+}
+
+/* The Run tab's Output folder block while a folder is dragged over it
+   (src/run-region/panel.ts acceptDroppedFolder). */
+#runFolderDrop.local-drop-target {
+  outline: 2px dashed var(--accent);
+  outline-offset: 4px;
+  background: var(--accent-muted);
+  border-radius: var(--radius-md);
 }
 
 #noNeuroglancerPanel.local-drop-target {
@@ -83,4 +106,78 @@
   flex-wrap: wrap;
   justify-content: center;
   gap: 8px;
+}
+
+/* The link's notice (src/share-link.ts showLinkNotice): on Share, what the
+   link leaves in this browser (a paint volume, a finetuned model it could not
+   carry); on opening a link, what this browser could not show of it. Under
+   the header by the Share button (the script sets `top` where the header
+   ends), over the viewer rather than in the page's flow, so the viewer does
+   not move, in the colours of the dashboard's .alert-info (dark.css), the
+   border amber for what was left out. It stays until closed. */
+.link-notice {
+  position: fixed;
+  right: 16px;
+  z-index: 1000;
+  max-width: min(460px, calc(100vw - 32px));
+  padding: 10px 36px 10px 14px;
+  background: var(--bg-muted);
+  border: 1px solid var(--info);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  color: var(--text-primary);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.link-notice.warning {
+  border-color: var(--warning);
+}
+
+.link-notice strong {
+  font-weight: 600;
+}
+
+.link-notice p {
+  margin: 6px 0 0;
+}
+
+.link-notice-close {
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  padding: 2px 8px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.link-notice-close:hover {
+  color: var(--text-primary);
+}
+
+/* Run on a region (the browser-only Run tab, templates/_run_tab.html, driven
+   by src/run-region/panel.ts): the region's offset and size in nm as a grid,
+   a row each, a column per axis (z, y, x) under a header row, narrow enough
+   for the dashboard's column on a phone; and the models' checkboxes, one a
+   line. */
+.run-region-fields {
+  display: grid;
+  grid-template-columns: max-content repeat(3, minmax(0, 1fr));
+  align-items: center;
+  gap: 4px 8px;
+  max-width: 440px;
+  font-size: 0.85rem;
+}
+
+.run-region-axis {
+  text-align: center;
+  color: var(--text-muted);
+}
+
+#runModels .form-check {
+  margin-bottom: 2px;
 }

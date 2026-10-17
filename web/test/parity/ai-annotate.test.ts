@@ -32,7 +32,7 @@ interface Refusal { category: string; message: string; http_status: number }
 interface VolumeRecord { output_voxel_size: number[]; input_voxel_size: number[]; dataset_offset_nm: number[] }
 interface PlanCase {
   id: string; volume: VolumeRecord; volume_shape: number[]; point_nm: number[]; depth_axis: DepthAxis; crop_size_px: number;
-  data_box_nm: [number[], number[]] | null;
+  data_box_nm: [number[], number[]] | null; display_dimensions: string[] | null;
   plan?: PlanePlan; click_px?: number[]; plane_axes?: number[]; write_shape?: number[]; plane_name?: string; error?: Refusal;
 }
 interface PaintCase {
@@ -44,17 +44,17 @@ interface PaintCase {
 interface Fixture {
   seed: number;
   constants: { max_image_side: number; plane_names: string[] };
-  screen: { depth_axis: DepthAxis; plane: ArrayRecord; to_screen: ArrayRecord; screen_shape: number[]; image: ArrayRecord; from_screen: ArrayRecord }[];
+  screen: { depth_axis: DepthAxis; display_dimensions: string[] | null; plane: ArrayRecord; to_screen: ArrayRecord; screen_shape: number[]; image: ArrayRecord; from_screen: ArrayRecord }[];
   plan_plane: PlanCase[];
   raw_box: { plan: string; voxel_size: number[]; corner: number[]; begin: number[]; count: number[] }[];
   extract_mask: { image: ArrayRecord; cases: { color_name: string; target_rgb: [number, number, number]; threshold: number; mask: ArrayRecord }[] };
   normalize_to_uint8: { id: string; plane: ArrayRecord; uint8: ArrayRecord }[];
   resize: { id: string; plane: ArrayRecord; shape: number[]; resized: ArrayRecord }[];
-  mask_to_write_shape: { plan: string; mask: ArrayRecord; write: ArrayRecord }[];
+  mask_to_write_shape: { id: string; plan: string; mask: ArrayRecord; write: ArrayRecord }[];
   box_voxels: { id: string; volume: VolumeRecord; offset_nm: number[]; shape_nm: number[]; volume_shape: number[]; corner_nm: number[]; box: { lo: number[]; hi: number[] } | null }[];
   fresh_ids: { id: string; existing: ArrayRecord; count: number; count_up: boolean; ids?: number[]; error?: string }[];
   seed_labels: { id: string; objects: ArrayRecord; existing: ArrayRecord; count_up: boolean; labels?: ArrayRecord; error?: string }[];
-  labels_for_box: { id: string; mask: ArrayRecord; existing: ArrayRecord; depth_axis: DepthAxis; count_up: boolean; beside: (ArrayRecord | null)[] | null; labels: ArrayRecord }[];
+  labels_for_box: { id: string; objects: ArrayRecord; existing: ArrayRecord; depth_axis: DepthAxis; count_up: boolean; beside: (ArrayRecord | null)[] | null; labels: ArrayRecord }[];
   paint_box: PaintCase[];
   prompts: {
     max_prompt_chars: number; editable: Record<string, string>; editable_generic: string;
@@ -106,14 +106,14 @@ describe("constants", () => {
 
 describe("screen layout (to_screen, from_screen, screen_shape)", () => {
   for (const c of fixture.screen) {
-    it(`depth axis ${c.depth_axis}`, () => {
+    it(`depth axis ${c.depth_axis}, display dimensions ${c.display_dimensions?.join(", ") ?? "unset"}`, () => {
       const [rows, cols] = c.plane.shape;
-      const screen = toScreen(Int32Array.from(c.plane.data), rows, cols, c.depth_axis);
+      const screen = toScreen(Int32Array.from(c.plane.data), rows, cols, c.depth_axis, c.display_dimensions);
       expect([screen.rows, screen.cols]).toEqual(c.to_screen.shape);
       expect(Array.from(screen.data)).toEqual(c.to_screen.data);
-      expect(screenShape([rows, cols], c.depth_axis)).toEqual(c.screen_shape);
+      expect(screenShape([rows, cols], c.depth_axis, c.display_dimensions)).toEqual(c.screen_shape);
       const [imageRows, imageCols] = c.image.shape;
-      const back = fromScreen(Int32Array.from(c.image.data), imageRows, imageCols, c.depth_axis);
+      const back = fromScreen(Int32Array.from(c.image.data), imageRows, imageCols, c.depth_axis, c.display_dimensions);
       expect([back.rows, back.cols]).toEqual(c.from_screen.shape);
       expect(Array.from(back.data)).toEqual(c.from_screen.data);
     });
@@ -123,13 +123,14 @@ describe("screen layout (to_screen, from_screen, screen_shape)", () => {
 describe("plan_plane", () => {
   for (const c of fixture.plan_plane) {
     it(c.id, () => {
-      const plan = () => planPlane(c.volume, c.volume_shape, c.point_nm, c.depth_axis, c.crop_size_px, c.data_box_nm);
+      const plan = () => planPlane(c.volume, c.volume_shape, c.point_nm, c.depth_axis, c.crop_size_px, c.data_box_nm, c.display_dimensions);
       if (c.error) {
         expectRefused(plan, c.error, c.id);
         return;
       }
       const got = plan(), want = c.plan!;
       expect(got.depth_axis).toBe(want.depth_axis);
+      expect(got.display_dimensions).toEqual(want.display_dimensions);
       expect(got.image_shape).toEqual(want.image_shape);
       expect(got.write_lo).toEqual(want.write_lo);
       expect(got.write_hi).toEqual(want.write_hi);
@@ -148,6 +149,7 @@ describe("plan_plane", () => {
   it("covers each depth axis, a refusal of each kind, a clipped field, anisotropic voxels and a half-pixel rounding", () => {
     const ids = new Set(planCases.keys());
     for (const id of ["centred_z", "centred_y", "centred_x", "clipped_edge", "aniso_xz", "data_box_clip", "half_pixel_rounding"]) expect(ids, id).toContain(id);
+    for (const id of ["centred_z", "centred_y", "centred_x", "aniso_xz"]) expect(ids, `${id}_shown_xyz`).toContain(`${id}_shown_xyz`);
     expect(planCases.get("outside_before_z")!.error!.message).toContain("outside the annotation volume");
     expect(planCases.get("data_box_refused")!.error!.message).toContain("outside the data");
     // 1001 voxels at 16 nm pixels is 500.5 px: numpy rounds it to 500.
@@ -204,12 +206,12 @@ describe("_resize (PIL BOX when shrinking, BILINEAR otherwise)", () => {
 
 describe("mask_to_write_shape", () => {
   for (const c of fixture.mask_to_write_shape) {
-    it(c.plan, () => {
+    it(c.id, () => {
       const plan = planOf(c.plan);
       expect(c.mask.shape).toEqual(plan.image_shape);
       const out = maskToWriteShape(Uint8Array.from(c.mask.data), plan);
       expect(c.write.shape).toEqual(writeShape(plan));
-      expectArrayMatches(out, c.write, c.plan);
+      expectArrayMatches(out, c.write, c.id);
     });
   }
 });
@@ -259,7 +261,7 @@ describe("labels_for_box", () => {
       // layout is the plane's: writeLo 0, writeHi the box's shape.
       const existing = labelsOf(c.existing);
       const beside = (c.beside ?? []).map((p) => (p ? labelsOf(p) : null));
-      const labels = labelsForBox(Uint8Array.from(c.mask.data), existing, [0, 0, 0], c.existing.shape, c.depth_axis, c.count_up, beside);
+      const labels = labelsForBox(Int32Array.from(c.objects.data), existing, [0, 0, 0], c.existing.shape, c.depth_axis, c.count_up, beside);
       expect(labels.constructor).toBe(existing.constructor);
       expectArrayMatches(labels, c.labels, c.id);
     });

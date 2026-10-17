@@ -93,7 +93,7 @@ export function overlay(image: RgbaImage, mask: Uint8Array, rgb: readonly [numbe
 }
 
 /** The share of `mask`'s pixels set (staging.py's mask_fraction). */
-export function maskFraction(mask: Uint8Array): number {
+export function maskFraction(mask: ArrayLike<number>): number {
   if (mask.length === 0) return 0;
   let n = 0;
   for (let i = 0; i < mask.length; i++) if (mask[i]) n++;

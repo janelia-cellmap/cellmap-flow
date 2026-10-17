@@ -24,7 +24,9 @@ routes, with the same request and response JSON. The controls only a server
 can serve (LSF settings, Job Logs, the Local Catalog of cluster paths, the
 Review tab, and the Finetune tab's crops import) are hidden;
 everything else is the dashboard you know, finetuning, the patch tools and
-AI-assisted annotation included ([below](#finetuning-in-the-browser)).
+AI-assisted annotation included ([below](#finetuning-in-the-browser)), with
+one tab of the browser's own, *Run*, which saves the models' predictions over
+a region to a folder ([below](#running-the-models-over-a-region)).
 `ARCHITECTURE.md` describes how the parts fit together.
 
 ## Running it locally
@@ -86,6 +88,46 @@ rendered default). The address bar never carries any of it: when the page's
 URL mirrored the viewer's, Chrome's omnibox completed a typed address to the
 last view and a new tab came back with it.
 
+A model finetuned in the browser is kept in that browser alone, so its name
+would mean nothing elsewhere; the link carries what rebuilds it instead.
+A last-layer finetune changes only the model's last 1×1 convolution, so the
+model is its base's file with other numbers in that layer, and its `model`
+value is
+
+```
+<name>~<base folder>~<base file>~<out>x<in>~<weights>
+```
+
+for example `mito_aff_setup53_16nm-ft1~setup_53~setup_53_mito_affinities_16nm_in140_fp16.onnx~3x32~AAC…`,
+the weight matrix then the biases as float32 little-endian in URL-safe
+base64 (528 characters for a 3 × 32 head; `~` is never escaped in a URL, and
+no plain ref has one, so links made before still read as they did). The base
+is the Hugging Face model at the root of the model's lineage, and the file
+the one its head was trained on. Opening the link downloads that file
+(the catalog's default when the manifest no longer lists it), writes the
+numbers in (`src/finetune/onnx-head.ts` `withHead`), keeps the result as a
+finetuned model whose record says it came from a link, and serves it in the
+link's order. A model of that name already in this browser is never
+replaced: one with exactly the link's numbers is served as it is (so opening
+a link twice keeps one model), and otherwise the link's takes the next name
+of its series (`-ft2`), its layer renamed in the view. A ref that cannot be
+read or rebuilt (its base unknown, its download failed, its head another
+shape than the base's) is logged and left out; the rest run. A model whose
+whole network was trained (a 2D model's *Whole network*), or one
+finetuned from such a model, has millions of numbers changed, not a head's
+few dozen: it is named by its folder, which opens only in this browser, and
+the notice says so; its *Download finetuned model* is the way to send it.
+
+Paint does not travel: an annotation volume is its chunks in the browser's
+paint store, too much for a link. Share still copies the link, and a notice
+under the header names each paint volume in the view, says it stays in this
+browser, and points to the Finetune tab's *Download paint (zarr)*, which
+saves it as a `.zarr.zip`. The page that opens a link takes out of its view
+the paint layers whose volume it does not hold (the sender opening their own
+link in another tab keeps them) and the layers of models it does not serve,
+and says which and why in the same notice, which also names each finetuned
+model it rebuilt.
+
 ## Opening a folder on your machine
 
 In Chrome or Edge the connect panel has a **Browse local folder…** button,
@@ -103,6 +145,13 @@ comes back. Choosing "Allow on every visit" in Chrome's prompt skips this.
 Firefox and Safari have no directory picker, so the button is not shown
 there, and a link to the page with a local folder open works only in the
 browser that picked the folder.
+
+## Running the models over a region
+
+The **Run** tab (browser mode only, `src/run-region/`) runs the served models
+over a region and saves their predictions as OME-Zarr in a folder on your
+machine. The docs' [browser page](https://janelia-cellmap.github.io/cellmap-flow/browser.html#running-the-models-over-a-region)
+says how to use it, and `ARCHITECTURE.md` ("Run on a region") how it works.
 
 ## Finetuning in the browser
 
@@ -149,12 +198,22 @@ weights are written back into a copy of the model's initializers, and the
 result is an ordinary model entry (`src/models/finetuned.ts`, repo
 `finetuned`, kept in IndexedDB with its bytes): served beside the base
 when *Auto-serve* is on, listed on the Models tab, downloadable as `.onnx`.
+
+The download (`GET /api/finetune/model/:name/download`,
+`downloadableOnnx` in `src/backend/routes/finetune.ts`) writes the entry's
+manifest into the model's `metadata_props` under `cellmap_flow.manifest`
+(`withMetadata` in `src/finetune/onnx-proto.ts`: one field 14 appended, every
+other byte as it was), so that the server's `type: onnx`
+(`cellmap_flow/models/configs/onnx.py`) serves the file on its own; the
+bytes kept in IndexedDB stay the ones the run wrote. *Export Config*
+(`GET /api/export-config`, `src/backend/routes/config.ts`) writes the YAML
+the [docs' YAML page](https://janelia-cellmap.github.io/cellmap-flow/yaml_config.html#onnx)
+describes under `type: onnx`.
 The job routes answer as the server's do (`src/backend/routes/finetune.ts`,
 `finetune-jobs.ts`), so the tab's own job card, loss plot and log stream
-follow the run unchanged. Why the head and not the network: onnxruntime-web
-trains nothing on the GPU; a WebGPU autograd library would have to rebuild
-the network, which is a later step behind the same `RunFinetune` seam
-(`src/finetune/types.ts`).
+follow the run unchanged. The 2D models can also train their whole network
+(`src/finetune/full/`): the docs' [browser page](https://janelia-cellmap.github.io/cellmap-flow/browser.html#training-the-whole-network)
+says what the user sees, and `ARCHITECTURE.md` how it works.
 
 AI-assisted annotation (`src/ai-annotate/`, the port of
 `cellmap_flow/ai_annotate/`) is in the tab too. Shift+G or *Annotate at View

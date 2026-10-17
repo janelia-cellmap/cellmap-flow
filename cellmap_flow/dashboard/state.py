@@ -33,8 +33,9 @@ rather than being stored beside the real one:
 - Blockwise's ``tmp_dir`` and ``blockwise_tasks_dir``, and ``tasks_dir()``.
 - The finetune tab's MinIO and volumes: ``minio_state``, ``label_undo``,
   ``annotation_volumes``, ``output_sessions``; its AI annotation's
-  ``ai_annotate``; its training jobs' ``finetune_job_manager``; the Review
-  tab's ``review``.
+  ``ai_annotate``; its training jobs' ``finetune_job_manager``, and the
+  ``restart_key`` that restarts one from the viewer; the Review tab's
+  ``review``.
 - The log panel's ``log_buffer`` and ``log_clients``; the box tool's
   ``bbx_generator_state``.
 
@@ -56,6 +57,8 @@ from cellmap_flow.process_chain import process_chain
 # The builder's node lists, as /api/pipeline/apply stores them.
 _BUILDER_KEYS = ("inputs", "outputs", "edges", "normalizers", "models", "postprocessors")
 
+LAYER_BOOKKEEPING = ("shaders", "shader_controls", "extra_layers")
+
 
 class Session:
     """The dashboard's state; see the module docstring."""
@@ -66,7 +69,7 @@ class Session:
     __slots__ = ("dataset_path", "resample", "viewer", "raw", "neuroglancer_url", "shaders", "shader_controls", "extra_layers",
                  "models_config", "model_catalog", "_builder_state", "builder_model_configs", "tmp_dir",
                  "blockwise_tasks_dir", "minio_state", "annotation_volumes", "output_sessions", "review",
-                 "_finetune_job_manager", "label_undo", "ai_annotate", "log_buffer", "log_clients",
+                 "_finetune_job_manager", "restart_key", "label_undo", "ai_annotate", "log_buffer", "log_clients",
                  "bbx_generator_state")
 
     def __init__(self):
@@ -140,18 +143,29 @@ class Session:
         # the provider, model, target and prompt the user chose (None until
         # they do); {dataset path: {provider id: the destination the user
         # acknowledged its images go to}}; the one job, running or staged
-        # for review (None when there is none); the lock its worker thread
-        # and the routes change the job under; and the viewer Shift+G is
-        # bound in. Never a key or other secret: those are read when a call
-        # is made.
+        # for review (None when there is none); and the lock its worker
+        # thread and the routes change the job under. Never a key or other
+        # secret: those are read when a call is made.
         self.ai_annotate = {
             "settings": None,
             "acknowledged": {},
             "job": None,
             "lock": threading.Lock(),
-            "binding_registered_for": None,
         }
         self._finetune_job_manager = None
+        # Shift+R over the viewer (routes/finetune/restart_key.py): the job
+        # the Finetune tab follows, the last whose status it asked for; {job
+        # id: the presses that asked for its restart}, which its status
+        # answer carries for the tab to act on; {job id: when the last press
+        # that no restart has answered yet was made}; and the lock the key's
+        # action, on neuroglancer's event loop, and the routes, in Flask's
+        # threads, change these under.
+        self.restart_key = {
+            "followed": None,
+            "requests": {},
+            "asked": {},
+            "lock": threading.Lock(),
+        }
 
         # The log panel and the box tool
         # The last log lines, for a log panel that connects late.
@@ -168,6 +182,12 @@ class Session:
             "viewer_url": None,
             "viewer_state": None,
         }
+
+    # The data and the viewer
+    def forget_layer(self, name):
+        """Drop ``name``'s LAYER_BOOKKEEPING, so a later layer of that name starts fresh."""
+        for attr in LAYER_BOOKKEEPING:
+            getattr(self, attr).pop(name, None)
 
     # The models
     @property

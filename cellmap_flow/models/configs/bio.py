@@ -55,7 +55,7 @@ from typing import TYPE_CHECKING, Optional
 
 import numpy as np
 
-from cellmap_flow.models.configs.base import Config, ModelConfig, _get_device, _voxel_size
+from cellmap_flow.models.configs.base import Config, ModelConfig, _as_given, _get_device, _per_axis, _sizes, _voxel_size
 from cellmap_flow.models.geometry import _numbers
 
 if TYPE_CHECKING:
@@ -94,34 +94,6 @@ NM_PER_UNIT = {
     "centimeter": 1e7,
     "meter": 1e9,
 }
-
-
-def _sizes(value):
-    """None, or ``value`` (one number, "20,256,256" or a list) as a tuple of ints."""
-    if value is None:
-        return None
-    if isinstance(value, str):
-        value = [v for v in value.replace("(", "").replace(")", "").split(",") if v.strip()]
-    if np.ndim(value) == 0:
-        value = [value]
-    sizes = tuple(int(float(v)) for v in value)
-    if any(s < 0 for s in sizes):
-        raise ValueError(f"sizes must not be negative, got {list(sizes)}")
-    return sizes
-
-
-def _per_axis(sizes, n: int, what: str) -> tuple:
-    """``sizes`` for each of ``n`` axes: one number is every axis's."""
-    if len(sizes) == 1:
-        return tuple(sizes) * n
-    if len(sizes) != n:
-        raise ValueError(f"{what} needs one number or {n} (one per space axis of the model), got {list(sizes)}")
-    return tuple(sizes)
-
-
-def _as_given(sizes):
-    """``sizes`` as a model entry writes them: one number as itself, more as a list."""
-    return sizes[0] if len(sizes) == 1 else list(sizes)
 
 
 def _space_axes(axes) -> list:

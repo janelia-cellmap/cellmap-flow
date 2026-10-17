@@ -46,25 +46,16 @@ def main(dataset, project, resample):
     """
     # Imported inside the command so --help and argument errors do not
     # pay for the whole inference stack (~16s before this).
-    import neuroglancer
-
     from cellmap_flow.dashboard.app import create_and_run_app
     from cellmap_flow.dashboard.state import get_session
     from cellmap_flow.jobs.launch import install_cleanup_handlers
     from cellmap_flow.jobs.settings import launcher_settings
-    from cellmap_flow.viewer.bootstrap import apply_viewer_defaults, viewer_url
-    from cellmap_flow.viewer.raw import get_raw_layer
+    from cellmap_flow.viewer.bootstrap import new_viewer, viewer_url
 
     # Models picked in the dashboard are jobs too; kill them on the way out.
     install_cleanup_handlers()
 
     logger.info(f"Starting CellMap Flow viewer with dataset: {dataset}")
-
-    # Set up neuroglancer server
-    neuroglancer.set_server_bind_address("0.0.0.0")
-
-    # Create viewer
-    viewer = neuroglancer.Viewer()
 
     # Fileglancer runs the viewer as an LSF job, and the models picked in the
     # dashboard should be billed where that job is: LSB_PROJECT_NAME is the
@@ -79,20 +70,9 @@ def main(dataset, project, resample):
     session = get_session()
     session.dataset_path = dataset
     session.resample = resample
+    # At 8 nm whatever the data's voxel size, as this command has always shown it.
+    viewer = new_viewer(dataset, scales=(8, 8, 8))
     session.viewer = viewer
-
-    # Add dataset layer to viewer
-    with viewer.txn() as s:
-        apply_viewer_defaults(s)
-        # Set coordinate space
-        s.dimensions = neuroglancer.CoordinateSpace(
-            names=["z", "y", "x"],
-            units="nm",
-            scales=[8, 8, 8],
-        )
-
-        # Add data layer
-        s.layers["data"] = get_raw_layer(dataset)
 
     # Print viewer URL
     url = viewer_url(viewer)

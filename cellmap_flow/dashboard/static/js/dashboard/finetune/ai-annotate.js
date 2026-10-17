@@ -470,6 +470,13 @@ export function initAiAnnotate({ log }) {
   }
 
   if (credentials) {
+    // The secrets are text fields masked by CSS, which a password manager
+    // does not offer to save (the template says why). Where the browser
+    // cannot mask a text field, they are password fields after all: a
+    // prompt to save the key is better than the key in the clear.
+    if (!(window.CSS && CSS.supports("-webkit-text-security", "disc"))) {
+      for (const input of credentials.querySelectorAll("input.credential-secret")) input.type = "password";
+    }
     forgetCredsBtn.addEventListener("click", clearCredentials);
     for (const input of Object.values(credentialInputs)) {
       input.addEventListener("input", handOverSoon);

@@ -16,7 +16,7 @@ import { PAINT_ROUTE } from "../contracts";
 import type { Chain, DatasetInfo, LayerSpec, ModelInfo, PaintVolume, ServedModel, Step } from "../contracts";
 import { isSegmentation, outputChannels, outputDtype } from "../infer/post";
 import { outputDisplayRange, PREDICTION_COLORS, predictionShader, rawShader } from "./display";
-import type { NgState } from "./state";
+import { mapSourceUrls, type NgState, sourceUrls } from "./state";
 
 export { PREDICTION_COLORS };
 
@@ -27,6 +27,10 @@ export const RAW_LAYER_NAME = "data";
 /** Neuroglancer's limit on the GPU memory it keeps chunks in, twice its
  * default of 1 GB, as bootstrap.apply_viewer_defaults sets it. */
 export const GPU_MEMORY_LIMIT = 2_000_000_000;
+
+/** The order of the viewer's dimensions (viewer.VIEWER_AXES, which says
+ * why): Neuroglancer's "xy" panel is then the XY plane, looking along z. */
+export const VIEWER_AXES: readonly string[] = ["x", "y", "z"];
 
 /** The layout a new viewer opens with. The Python viewer leaves
  * Neuroglancer's default, 4panel (three cross sections and a 3D view). In
@@ -215,7 +219,9 @@ const LENGTH_UNITS = new Set(["nm", "nanometer", "nanometre", "um", "µm", "micr
  * voxel and origin arrays. The arrays may cover every axis or only the last
  * ones (chunkmirage keeps channels apart from the spatial shape), so an axis
  * is paired with them from the end. A channel axis ("c") is never spatial;
- * an axis with no unit is spatial when it is x, y or z. */
+ * an axis with no unit is spatial when it is x, y or z. In the viewer's
+ * order: x, y, z when all three are there (bootstrap.viewer_space), else
+ * the data's. */
 function spatialAxes(info: DatasetInfo): { name: string; index: number }[] {
   const count = info.levels[0]?.voxel.length ?? info.axes.length;
   const first = Math.max(0, info.axes.length - count);
@@ -226,6 +232,10 @@ function spatialAxes(info: DatasetInfo): { name: string; index: number }[] {
     const spatial = axis.name !== "c" && LENGTH_UNITS.has(unit) && (unit !== "" || ["x", "y", "z"].includes(axis.name));
     if (spatial) axes.push({ name: axis.name, index: i - first });
   });
+  if (VIEWER_AXES.every((name) => axes.some((axis) => axis.name === name))) {
+    const rank = (name: string) => (VIEWER_AXES.includes(name) ? VIEWER_AXES.indexOf(name) : VIEWER_AXES.length);
+    axes.sort((a, b) => rank(a.name) - rank(b.name));
+  }
   return axes;
 }
 
@@ -258,9 +268,10 @@ export function layerList(layers: Record<string, LayerSpec>): NgState["layers"] 
 }
 
 /** A new viewer's state on the raw data `info` describes (bootstrap.new_viewer):
- * the raw's dimensions, the position at the volume's centre, one voxel per
- * screen pixel (crossSectionScale 1, Neuroglancer's default, which the Python
- * viewer leaves), `layers` in their order, the raw first, and the layout. */
+ * the raw's dimensions (x, y, z, dimensionsOf), the position at the volume's
+ * centre, one voxel per screen pixel (crossSectionScale 1,
+ * Neuroglancer's default, which the Python viewer leaves), `layers` in their
+ * order, the raw first, and the layout. */
 export function initialState(info: DatasetInfo, layers: Record<string, LayerSpec>, options: { layout?: string } = {}): NgState {
   return {
     gpuMemoryLimit: GPU_MEMORY_LIMIT,
@@ -361,19 +372,26 @@ export function respelledPaintUrl(url: string): string | null {
  * source respelled and the others kept); null when no paint-route URL is
  * in it. */
 export function respelledPaintSource(source: unknown): unknown | null {
-  if (typeof source === "string") return respelledPaintUrl(source);
-  if (Array.isArray(source)) {
-    for (let i = 0; i < source.length; i++) {
-      const respelled = respelledPaintSource(source[i]);
-      if (respelled !== null) return source.map((entry, j) => (j === i ? respelled : entry));
-    }
-    return null;
-  }
-  if (source && typeof source === "object" && typeof (source as { url?: unknown }).url === "string") {
-    const url = respelledPaintUrl((source as { url: string }).url);
-    return url === null ? null : { ...(source as Record<string, unknown>), url };
-  }
-  return null;
+  let respelled = false;
+  return mapSourceUrls(source, (url) => {
+    if (respelled) return null;  // the first paint source only
+    const next = respelledPaintUrl(url);
+    respelled = next !== null;
+    return next;
+  });
+}
+
+/** The paint volume a layer's `source` paints into: the volume segment of
+ * its paint-route URL, the refresh suffix dropped, whichever of
+ * Neuroglancer's forms the source is in (the first paint source of an
+ * array); null for any other layer. Only the fork's `s3+` scheme counts, the
+ * one paintLayerUrl writes, so a raw volume whose path happens to hold a
+ * `paint` folder is not taken for one. For a shared link: the paint is in
+ * the paint store of the browser that painted it, so a link's paint layer
+ * opens only where its volume is (link.ts linkedView). */
+export function paintVolumeOf(source: unknown): string | null {
+  const volumes = sourceUrls(source).map((url) => (url.startsWith("s3+") ? (PAINT_VOLUME_SEGMENT.exec(url)?.[2] ?? null) : null));
+  return volumes.find((volume) => volume !== null) ?? null;
 }
 
 /** The writable segmentation layer on `url` for `volume`, as

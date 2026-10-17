@@ -137,11 +137,10 @@ def with_input(**params):
                      """)}, id="list-fields-typed-as-text"),
     pytest.param(pipeline(inputs=with_input(bounding_boxes=[BOX_1])),
                  {"run_<ts>.yaml": task("bounding_boxes:\n" + BOX_1_YAML)}, id="bounding-boxes"),
+    # One task, which writes each box to /out/pred.zarr/box_<n>. (Blockwise
+    # took one box, so this was a task per box, each with its own output_path.)
     pytest.param(pipeline(inputs=with_input(bounding_boxes=[BOX_1, BOX_2], separate_bounding_boxes_zarrs=True)), {
-        "run_<ts>_box1.yaml": task("bounding_boxes:\n" + BOX_1_YAML + "separate_bounding_boxes_zarrs: true\n",
-                                   output_path="/out/pred.zarr/box_1", task_name="run_<ts>_box1"),
-        "run_<ts>_box2.yaml": task("bounding_boxes:\n" + BOX_2_YAML + "separate_bounding_boxes_zarrs: true\n",
-                                   output_path="/out/pred.zarr/box_2", task_name="run_<ts>_box2"),
+        "run_<ts>.yaml": task("bounding_boxes:\n" + BOX_1_YAML + BOX_2_YAML + "separate_bounding_boxes_zarrs: true\n"),
     }, id="a-zarr-per-box"),
     pytest.param(pipeline(inputs=with_input(separate_bounding_boxes_zarrs=True)),
                  {"run_<ts>.yaml": task("separate_bounding_boxes_zarrs: true\n")}, id="a-zarr-per-box-without-boxes"),

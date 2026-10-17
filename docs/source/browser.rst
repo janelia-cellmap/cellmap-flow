@@ -34,12 +34,14 @@ networks from `cellmap/onnx-web-models <https://huggingface.co/cellmap/onnx-web-
 on Hugging Face, cached in the browser after the first download.
 
 It is the same dashboard as the server's: the same Models, Input and
-Postprocess tabs, the same normalizers and postprocessing steps, and a
-Finetune tab that paints and trains in the browser (below). What is missing
+Postprocess tabs, the same normalizers and postprocessing steps, a Finetune
+tab that paints and trains in the browser, and a Run tab of its own that
+saves the predictions over a region to a folder (both below). What is missing
 is what a browser cannot do: models that are not ONNX exports (PyTorch,
-TensorFlow, DaCapo, BioImage.io, Cellpose), a finetune of a whole network,
-crops imported from disk, the Pipeline Builder and blockwise runs on the
-cluster. Those are the server mode's (:doc:`cli`).
+TensorFlow, DaCapo, BioImage.io, Cellpose), a finetune of a 3D model's whole
+network (the 2D models' can train in the browser), crops imported from disk,
+the Pipeline Builder and blockwise runs on the cluster. Those are the server
+mode's (:doc:`cli`).
 
 Opening a volume
 ----------------
@@ -66,19 +68,79 @@ the site-information panel beside the address bar (or at
 ``chrome://settings/content/localNetworkAccess``). Running the app locally
 on ``http://localhost`` (below) is not gated.
 
+Running the models over a region
+--------------------------------
+
+The viewer computes the chunks it shows, and keeps none of them. The *Run*
+tab runs the models served on the Models tab over a region, or the whole
+volume, on your GPU, and saves each one's predictions as an OME-Zarr in a
+folder on your machine, to open in the app again or to copy to the cluster.
+
+1. Tick the models (all are ticked at first). Each runs through the Input and
+   Postprocess steps it is served with, so what is saved is what its layer
+   shows.
+2. *Draw a box* adds a ``run_region`` layer to the viewer. Hold ``Ctrl``
+   and click two opposite corners of the box in the viewer, scrolling
+   between the two clicks to give it depth (a flat box is one chunk
+   deep). The latest box drawn fills the *Offset* and *Size* fields (nm, z y
+   x), and typing in them moves the box in the viewer to match, once you
+   pause. *Whole volume* fills them with the volume's
+   extent instead. Under the fields, the tab says what each model would
+   compute: the box in its voxels and in chunks (a chunk is one block the
+   model computes at a time), with a warning for a run of more than 2,000
+   chunks.
+3. *Choose folder…* picks the folder to save into, or drop a folder on the
+   *Output folder* block; the browser asks you to allow the page to edit
+   files in it. Chrome refuses some folders themselves, such as Downloads
+   and your home folder ("it contains system files"): make a new folder
+   inside one (the picker has a *New Folder* button) and choose that. The
+   folder is remembered, and after a reload the browser asks again when you
+   click *Run*.
+4. *Run* writes each model to ``<folder>/<model>.zarr`` with a progress bar
+   (chunks, megabytes, time left) and *Cancel*, which keeps what was written.
+   The run goes on while you move around the viewer or use the other tabs,
+   and the viewer stays responsive: its chunks go first; reloading the page
+   during a run asks first. If a
+   ``<model>.zarr`` is in the folder already, the tab asks before replacing
+   it (it is deleted first, so the old chunks do not mix with the new ones).
+5. *Show the saved predictions in the viewer* adds each saved zarr as a
+   ``<model> (saved)`` layer, read back from the folder, over the model's live
+   layer.
+
+Each zarr is zarr v2 with OME-Zarr 0.4 metadata, gzip-compressed (or not,
+with *Compression* set to *None*: Fiji's zarr reader has no gzip), holding
+exactly the region: an array of the region's voxels, not the whole volume's,
+at the voxel size of the model's layer and placed where the layer is by its
+translation (empty chunks are left out), so Neuroglancer, zarr-python and
+the server mode read it as they read any OME-Zarr. Its attributes, under
+``cellmap_flow``, say what made it: the model and its variant, the
+normalizers and postprocessing, the volume's URL, the region in nm and the
+box in voxels, and when. Saving to a folder needs Chrome or Edge (the File
+System Access API); in Firefox and Safari a run of up to 256 MB of
+predictions is kept in memory and offered as a zip of the ``.zarr`` folders.
+
 Finetuning in the browser
 -------------------------
 
 With a model running, the Finetune tab's *New Volume* adds a paint layer to
 the viewer, selected, on its Draw tab: paint background (value 1) and the
 objects (2 and up) on a few slices with the brush (``A``) and flood fill
-(``F``), as on the server (:doc:`finetuning`). On the tab's Training panel,
+(``F``), as on the server
+(`docs/finetuning.md <https://github.com/janelia-cellmap/cellmap-flow/blob/main/docs/finetuning.md>`__).
+On the tab's Training panel,
 *Start Finetuning* trains in the tab: the model's last layer, its output
 convolution, is fitted on the voxels you painted, from the model's own
 weights, in seconds on any machine; the job card and the loss plot follow it.
 With *Auto-serve* on, the finetuned model takes the layer over as soon as it
 is trained. Paint where it is still wrong and train again (*Restart* goes on
-from the trained layer, with the form's values as they are then).
+from the trained layer, with the form's values as they are then). Once the
+job waits for a restart, ``Shift+R`` over the viewer does the same without
+asking first, so painting and training again need not leave the viewer; it
+says in the tab's logs what it did, or why there was nothing to restart. A
+restart's model replaces the one before it, its layer included, and the one
+before is deleted from the browser: a job keeps its latest model only, as the
+server serves only a job's latest iteration, and a new *Start Finetuning*
+makes a new one beside it.
 
 The training panel's controls are the server's where they mean something for
 one layer: the epochs, the learning rate, the loss (BCE by default, MSE or
@@ -101,10 +163,72 @@ the finetune learns what the model mislabels where its features already tell
 the two apart (a membrane it calls mitochondrion, a texture it misses), not
 new shapes; that is a finetune of the whole network, which the server mode
 runs on the cluster, and whose result the browser can serve as any other
-model.
+model. The 2D models can train their whole network in the browser too (next).
+
+Training the whole network
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Each model's manifest on Hugging Face says how it can be trained, and the
+Training panel offers just that. For the 2D students (``setup_53_2d`` and
+``setup_54_2d``) it offers both, so a *Training* choice appears at the top of
+the panel: *Last layer*, as above, or *Whole network*: every weight of the
+model trains on your paint, with `TensorFlow.js <https://www.tensorflow.org/js>`_
+on this machine's GPU (WebGPU), from a training graph Marwan Zouinkhi exported
+beside each model. The weights trained are written back into the model's
+``.onnx``, which is then served, kept, downloaded and restarted from as a
+last-layer finetune is; switching between the two needs a new *Start
+Finetuning*. A 3D model offers the last layer only, and a model
+served from an int8 file nothing (its weights are quantized and cannot be
+written): serve its fp32 or fp16 file to finetune it.
+
+The whole network trains on square tiles cut from the painted slices, in the
+plane you painted in (x–y, or z–y and z–x where the raw data's voxels are
+cubes, as the server's 2D training does), with masked BCE on the painted
+voxels and Adam. Its controls are the epochs, its own learning rates (1e-4 by
+default, a hundredth of the last layer's), the server's *Batch Size*, in tiles
+per step (1 by default), and *Tile Size*. The loss, distillation, smoothing
+and balance fields are the last layer's and are hidden; good regions are not
+used.
+
+*Tile Size* is the tile's side in pixels: 172, 300 (the default), 428 or 556.
+The model reads 88 pixels of context around what it predicts, so a tile's
+output is 88 pixels smaller: half of a 300² tile is output, a quarter of a
+172² one, 71% of a 556² one. A smaller tile trains a step faster and in less
+memory, but more of each step is context. The hint under the field gives the
+time and memory of one step at the batch chosen, as measured in Chrome on an
+Apple laptop GPU (TF.js 4.22.0, batch 1) and scaled by area for the sides not
+measured:
+
+.. list-table::
+   :header-rows: 1
+
+   * - Model
+     - 300², a step
+     - 300², memory
+     - 556², a step
+     - 556², memory
+   * - setup_53_2d
+     - 294 ms
+     - 320 MB
+     - 1178 ms
+     - 1307 MB
+   * - setup_54_2d
+     - 462 ms
+     - 908 MB
+     - 1919 ms
+     - 3702 MB
+
+300² is the default because it fits a laptop: four times faster than 556²
+and a quarter of its memory, which for setup_54_2d is more than many laptop
+GPUs give a tab. An epoch is one pass over the tiles, which cover each slice's
+paint once. *Whole network* needs a GPU: where the browser finds none
+through WebGPU, the option is shown disabled with why (on the CPU a step
+would take minutes, and the page would answer nothing else meanwhile). The
+log says how long a step takes.
 
 The *Patch on screen* tools label the box centred where the viewer looks, as
-on the server (:doc:`finetuning`): *Seed from Prediction* copies a model's
+on the server (`docs/finetuning.md <https://github.com/janelia-cellmap/cellmap-flow/blob/main/docs/finetuning.md>`__):
+*Seed from Prediction* copies a model's
 prediction into the unpainted voxels, an id per object and background 1, for
 you to fix with the brush; *All Background* labels them background; *Split
 Objects* gives each connected object an id of its own (paint a background wall
@@ -134,10 +258,19 @@ has the details under "In the browser".
 
 The paint and the finetuned models stay in the browser (IndexedDB): *Resume
 Existing Volume* lists the volumes painted here, newest first, and the
-Models tab lists the finetuned models under the Hugging Face ones. *Download
-paint* saves the volume as a zarr (zipped, the server's layout, so a server
-session can train on it) and *Download finetuned model* the ``.onnx``.
+Models tab lists the finetuned models under the Hugging Face ones. The ✕
+beside a finetuned model under *Loaded models* (see *Usage* on the
+:doc:`front page <index>`) stops serving it and keeps it, to tick again.
+*Download paint* saves the volume as a zarr (zipped, the server's layout, so a server
+session can train on it) and *Download finetuned model* the ``.onnx``, with
+its manifest (voxel sizes, block, channels, input normalization) written into
+the file's metadata, so that the server mode serves the file as it is.
 Nothing leaves your machine unless you download and share it.
+
+To run the same models on the cluster, *Export Config* (in the header) saves
+a YAML that ``cellmap_flow yaml`` runs, each model a ``type: onnx`` entry; a
+finetuned model's ``.onnx``, from *Download finetuned model*, goes beside it.
+See :ref:`onnx` for what the YAML holds and what to add for the cluster.
 
 Browsers and devices
 --------------------

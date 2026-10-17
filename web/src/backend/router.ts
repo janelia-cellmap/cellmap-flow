@@ -135,6 +135,4 @@ export function objectBody(req: ApiRequest): Record<string, unknown> | null {
 }
 
 /** An error's message, for an answer's `error`. */
-export function message(e: unknown): string {
-  return e instanceof Error ? e.message : String(e);
-}
+export { message } from "../shared/message";

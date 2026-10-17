@@ -261,8 +261,9 @@ def test_a_finetuned_models_layer(servers, viewer, server, postprocess, layer):
     from cellmap_flow.dashboard.finetune_layers import add_finetuned_layer
 
     get_session().set_pipeline(PipelineSpec.from_steps(INPUT_NORM, postprocess))
-    job = SimpleNamespace(model_name=server, lsf_job=SimpleNamespace(job_id="7"), finetuned_model_name=None,
-                          inference_server_url=f"http://{server}:8000", params={"output_voxel_size": [16, 16, 16]})
+    job = SimpleNamespace(job_id="ft-1", model_name=server, lsf_job=SimpleNamespace(job_id="7"),
+                          finetuned_model_name=None, inference_server_url=f"http://{server}:8000",
+                          params={"output_voxel_size": [16, 16, 16]})
     add_finetuned_layer(job, f"{server}_finetuned_1")
 
     kind, scales, shader = layer

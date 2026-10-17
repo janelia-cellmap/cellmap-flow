@@ -5,6 +5,7 @@
 // currently configured. Only renders when there is something to say.
 import { getJSON } from "../lib/api.js";
 import { esc } from "../lib/dom.js";
+import { listen, MODELS_CHANGED_EVENT } from "../lib/events.js";
 import { poll } from "../lib/poll.js";
 
 // A confirmation needs no decision from anyone, so it should not sit at the
@@ -25,6 +26,8 @@ let chains = null;
 
 export function initModelAdvice({ input, postprocess }) {
   chains = { input, postprocess };
+  // Loading a model, not only Submit All, is when advice is most useful.
+  listen(MODELS_CHANGED_EVENT, () => refreshModelAdvice());
 }
 
 // Tick exactly the suggested steps, fill in their parameters, and move them

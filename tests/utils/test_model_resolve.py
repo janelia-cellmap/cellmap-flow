@@ -4,12 +4,15 @@ route. Hugging Face and the zoo are fakes: a test that reaches for the
 network fails."""
 
 import json
+import shutil
 import zipfile
 
 import pytest
 
 from cellmap_flow.models import registry, resolve as resolve_module
+from cellmap_flow.models.configs.onnx import MANIFEST_KEY
 from cellmap_flow.models.resolve import bioimage_params, resolve
+from tests.utils.onnx_helpers import FINETUNED_MANIFEST, HEAD, with_metadata
 
 ZOO = [
     {"type": "model", "id": "10.5281/zenodo.5764892", "nickname": "affable-shark",
@@ -366,6 +369,73 @@ def test_the_bioimage_type_is_asked_for_its_signature(monkeypatch):
     real = registry.model_type
     monkeypatch.setattr(registry, "model_type", lambda name: NewBio if name == "bioimage" else real(name))
     assert _summary(resolve("affable-shark")) == ("bioimage", {"model": "affable-shark"}, "affable-shark", [])
+
+
+# --- ONNX models ------------------------------------------------------------------------------------
+
+WEB_EXPORTS = ["README.md", "setup_54/manifest.json", "setup_54/setup_54_in148_fp32.onnx",
+               "setup_53_2d/manifest.json", "conv3d/setup_54/model.onnx"]
+
+
+def _with_manifest(path, manifest):
+    """The fixture with ``manifest`` in its metadata_props, as the browser's download writes it."""
+    path.write_bytes(with_metadata(HEAD.read_bytes(), {MANIFEST_KEY: json.dumps(manifest or FINETUNED_MANIFEST)}))
+    return path
+
+
+def test_an_onnx_file_that_carries_its_manifest_needs_nothing(tmp_path, online):
+    path = _with_manifest(tmp_path / "mito_aff_setup53-2d_16nm-ft1.onnx", None)
+    resolved = resolve(str(path), voxel_size=8)
+    assert _summary(resolved) == ("onnx", {"path": str(path)}, "mito_aff_setup53-2d_16nm-ft1", [])
+    assert resolved.env == "onnx" and "manifest" in resolved.how
+    assert resolved.notes[:2] == ["its manifest says mito_aff_z, mito_aff_y at 16x16x16 nm",
+                                  "its output is raw logits (apply sigmoid / threshold at 0): add a "
+                                  "SigmoidPostprocessor for probabilities"]
+    assert resolved.notes[-1] == "voxel_size is not used: an onnx model says its own"
+    assert online.asked == []
+
+
+def test_an_onnx_file_without_one_needs_its_voxel_size(tmp_path):
+    shutil.copy(HEAD, tmp_path / "plain.onnx")
+    assert _summary(resolve(str(tmp_path / "plain.onnx"))) == (
+        "onnx", {"path": str(tmp_path / "plain.onnx")}, "plain", ["input_voxel_size"])
+    assert _summary(resolve(f"onnx:{tmp_path}/plain.onnx", voxel_size="16,8,8")) == (
+        "onnx", {"path": str(tmp_path / "plain.onnx"), "input_voxel_size": [16, 8, 8]}, "plain", [])
+    (tmp_path / "page.onnx").write_text("<html>rate limited</html>")
+    with pytest.raises(ValueError, match="not an ONNX model"):
+        resolve(str(tmp_path / "page.onnx"))
+    with pytest.raises(ValueError, match="there is none at .*gone.onnx"):
+        resolve("gone.onnx")
+
+
+def test_a_folder_of_onnx_web_exports_is_an_onnx_model(online):
+    """By the browser's id (org/repo/folder), its page on the Hub, or its bare name."""
+    online.hf["cellmap/onnx-web-models"] = WEB_EXPORTS
+    expected = ("onnx", {"repo": "cellmap/onnx-web-models", "folder": "setup_54"}, "setup_54", [])
+    assert _summary(resolve("cellmap/onnx-web-models/setup_54")) == expected
+    assert _summary(resolve("setup_54")) == expected
+    assert _summary(resolve("https://huggingface.co/cellmap/onnx-web-models/tree/main/setup_54")) == (
+        "onnx", {"repo": "cellmap/onnx-web-models", "folder": "setup_54", "revision": "main"}, "setup_54", [])
+    file_url = "https://huggingface.co/cellmap/onnx-web-models/blob/main/setup_54/setup_54_in148_fp32.onnx"
+    assert resolve(file_url).params["file"] == "setup_54_in148_fp32.onnx"
+    with pytest.raises(ValueError, match="has no ONNX web export setup_99.*it has setup_53_2d, setup_54"):
+        resolve("cellmap/onnx-web-models/setup_99")
+    with pytest.raises(ValueError, match="repo of ONNX web exports.*cellmap/onnx-web-models/setup_53_2d"):
+        resolve("cellmap/onnx-web-models")
+    # A one-word name is the zoo's first, and the exports' only when it is a folder of theirs.
+    with pytest.raises(ValueError, match="Could not tell what model 'unet'"):
+        resolve("unet")
+
+
+def test_offline_an_onnx_folder_is_taken_on_trust_only_when_written_out(online):
+    resolved = resolve("cellmap/onnx-web-models/setup_54", online=False)
+    assert (resolved.type, resolved.notes[0]) == ("onnx", "not checked (offline): taken to be a folder of ONNX "
+                                                          "web exports")
+    assert _summary(resolve("onnx:me/exports/m1@v2", online=False)) == (
+        "onnx", {"repo": "me/exports", "folder": "m1", "revision": "v2"}, "m1", [])
+    with pytest.raises(ValueError, match="offline: not looked up"):
+        resolve("setup_54", online=False)
+    assert online.asked == []
 
 
 # --- the dashboard's route -----------------------------------------------------------------------

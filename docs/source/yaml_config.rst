@@ -71,10 +71,10 @@ A configuration file has the following top-level fields:
      - Temporary directory for intermediate files.
    * - ``bounding_boxes``
      - No
-     - List of bounding boxes to process (blockwise).
+     - Regions to process instead of the whole volume, each ``{offset, shape}`` in nm, z, y, x; the output covers only them (blockwise, see :ref:`bounding-boxes`).
    * - ``separate_bounding_boxes_zarrs``
      - No
-     - Write each bounding box to a separate zarr (blockwise).
+     - Write each bounding box to its own output, ``<output_path>/box_<n>`` (blockwise).
    * - ``output_channels``
      - No
      - Which model channels blockwise writes, and to which outputs (see :ref:`output-channels`).
@@ -148,6 +148,11 @@ Available Model Types
    * - ``cellpose``
      - CellposeModelConfig
      - ``voxel_size`` (required), ``pretrained_model``, ``output``. See :ref:`cellpose`.
+   * - ``onnx``
+     - OnnxModelConfig
+     - ``path`` (an ``.onnx``) or ``folder`` (of ``repo``, cellmap/onnx-web-models
+       by default), with ``file`` or ``variant``; ``input_voxel_size`` for a file
+       without a manifest. See :ref:`onnx`.
 
 Common optional parameters: ``name``, ``scale``, ``env`` (see :ref:`model-env`).
 
@@ -183,9 +188,10 @@ In the dashboard, the same ``REF`` goes in the Models tab's *Add a model* box.
 *Resolve* (``POST /api/models/resolve``) shows what it was taken to be and
 where it runs, with a box for each value it still needs; *Run*
 (``POST /api/models/add``) starts it, and it joins the models with a ticked
-box, stopped when unticked like any other. A config YAML (one with
-``models:``) is refused with how to run it: it is a whole run, for
-``cellmap_flow yaml``.
+box, stopped when unticked like any other or by its ✕ under *Loaded models*
+(see *Usage* on the :doc:`front page <index>`); ticked again, it is started
+again. A config YAML (one with ``models:``) is refused with how to run it: it
+is a whole run, for ``cellmap_flow yaml``.
 
 ``REF`` is checked against these in order, and the first that matches wins:
 
@@ -197,23 +203,33 @@ box, stopped when unticked like any other. A config YAML (one with
    run's folder, see :ref:`fly`); a folder with ``adapter_config.json`` (a
    LoRA adapter) or a full finetune's ``model_state_dict.pt`` a
    ``finetune``, which still needs its ``base_model``; Cellpose-SAM weights a
-   ``cellpose`` model.
+   ``cellpose`` model; an ``.onnx`` an ``onnx`` model, which needs
+   ``input_voxel_size`` unless it carries a manifest (one finetuned in the
+   browser does).
 2. A prefix that says outright what it is: ``hf:org/repo[@revision]``,
    ``bioimageio:<id, nickname, URL or path>``, ``cellpose:<name or path>``,
-   ``fly:<path>``, ``dacapo:<run>@<iteration>``, ``script:<path>``.
+   ``fly:<path>``, ``dacapo:<run>@<iteration>``, ``script:<path>``,
+   ``onnx:<path, folder or org/repo/folder>``.
 3. A Cellpose model name: ``cpsam_v2``, ``cpsam``, ``cpdino``, ``cpdino-vitb``.
 4. A URL: a bioimage.io model page, a Zenodo record, a DOI link or the URL of
    an ``rdf.yaml`` or zip is a ``bioimage`` model; ``huggingface.co/org/repo``
-   is as 5.
-5. ``org/repo``: a Hugging Face repo, which must be a cellmap-models export
-   (``metadata.json`` and ``model.ts``). Any other model on the Hub is
-   refused: wrap it in a script (:doc:`custom_script`).
+   is as 5, and with a folder after its revision
+   (``.../tree/main/setup_54``) an ``onnx`` model.
+5. ``org/repo/folder``: a folder of a repo of ONNX web exports (one with its
+   ``manifest.json``, as cellmap/onnx-web-models holds them), an ``onnx``
+   model. ``org/repo``: a Hugging Face repo, which must be a cellmap-models
+   export (``metadata.json`` and ``model.ts``). A repo of web exports is
+   refused with its folders, one of which to add; any other model on the Hub
+   is refused: wrap it in a script (:doc:`custom_script`).
 6. A BioImage Model Zoo nickname or id (``affable-shark``,
    ``10.5281/zenodo.5764892``), looked up in the zoo's model list, the one
    the Models tab shows (bioimage.io's server, else its legacy index).
+7. A folder of cellmap/onnx-web-models by its name (``setup_54``): an
+   ``onnx`` model.
 
-5 and 6 are checked online; with ``--offline`` (or when the Hub or zoo
-cannot be reached) a repo or zoo-shaped name is taken on trust, with a note.
+5, 6 and 7 are checked online; with ``--offline`` (or when the Hub or zoo
+cannot be reached) a repo, folder or zoo-shaped name is taken on trust, with
+a note, and a bare folder name needs its ``onnx:`` prefix.
 Anything else is an error saying what was tried; a prefix settles it.
 
 .. _model-env:
@@ -271,6 +287,11 @@ runs there when its entry gives no ``env``; an explicit ``env`` wins, and
      - ``bioimageio.core`` 0.11 with its ONNX and PyTorch backends, for BioImage
        Model Zoo models. ``example/bioimage_em.yaml`` runs one.
      - ``bioimage``
+   * - ``onnx``
+     - ONNX Runtime: ``onnxruntime-gpu`` (its CUDA provider, CUDA 13 as the
+       torch wheels) on Linux, ``onnxruntime`` (CPU) on the Mac, for the browser
+       mode's ONNX exports and the models finetuned there. Solved on its own.
+     - ``onnx``
    * - ``cellpose4``
      - Cellpose 4 (Cellpose-SAM), which needs a newer torch and numpy than
        Cellpose 3. Solved on its own.
@@ -294,6 +315,72 @@ does not install it is refused when the job is submitted.
 ``cellmap_flow infer <type> --env <env>`` and the dashboard's model form take
 it too. The ``cellpose`` type runs in ``cellpose4`` without one (see
 :ref:`cellpose`).
+
+.. _onnx:
+
+ONNX exports and models finetuned in the browser
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+``type: onnx`` serves an ONNX model with ONNX Runtime, fed exactly as the
+browser mode feeds it: one block of float32 ``[1, 1, z, y, x]`` a call (an
+fp16 export whose graph takes float16 gets float16), ``[1, C, z', y', x']``
+out, served as float32. Its server runs in pixi's ``onnx`` environment, on the
+GPU when the job has one. The model is either
+
+- ``folder``: a model of a Hugging Face repo of web exports, ``repo``
+  (``cellmap/onnx-web-models`` by default) at ``revision``. Its
+  ``manifest.json`` gives the voxel sizes, the channels and the variants, one
+  ``.onnx`` per precision and block; ``file`` names the one to serve (what
+  the browser's *Export Config* writes: the one the page ran), else
+  ``variant`` (``fp32`` by default, ``fp16``, ``int8w``, ``int8w_fp16``) and
+  ``input_size`` choose, by default the largest block. Both are downloaded
+  with ``huggingface_hub`` on first use, as a ``huggingface`` model is.
+- ``path``: a local ``.onnx``. The one the browser's *Download finetuned
+  model* saves carries its manifest in the file's ``metadata_props``
+  (``cellmap_flow.manifest``), so it needs nothing else. Any other file needs
+  ``input_voxel_size``; its blocks and channel count are read from its graph's
+  input and output shapes, or given as ``input_size``, ``output_size`` and
+  ``channels`` when those are not fixed. A relative ``path`` is taken from the
+  YAML file's folder.
+
+.. code-block:: yaml
+
+    models:
+      mito_aff_setup54_16nm:
+        type: onnx
+        repo: cellmap/onnx-web-models
+        folder: setup_54
+        file: setup_54_mito_affinities_16nm_in132_fp16.onnx
+      mito_aff_setup54_16nm-ft1:
+        type: onnx
+        path: mito_aff_setup54_16nm-ft1.onnx   # beside this YAML
+
+The browser's *Export Config* (in its header) writes such a YAML: the
+volume's URL as ``data_path``, the ``resample`` setting, the Input and
+Postprocess steps as ``json_data``, and each model it serves as a
+``type: onnx`` entry, a Hugging Face export by ``repo``, ``folder`` and the
+``file`` the page ran, a model finetuned there by ``path: <name>.onnx`` (the
+file *Download finetuned model* saves), with a comment saying to put that
+file beside the YAML. It writes the entries as a list, each with its
+``name`` (both forms load, see `Model Entries`_), and leaves out
+``charge_group`` and ``queue``: add them to run on the cluster.
+
+What the entry gives (``input_voxel_size``, ``output_voxel_size``, the sizes,
+``channels``, ``output``) wins over the manifest; run at another
+``input_voxel_size``, the output keeps the manifest's ratio to it. A 2D
+student (input and output one slice thick, ``setup_53_2d``) is given one z
+slice a call, ``slices_per_chunk`` (8) slices a chunk.
+
+The exports output logits (their manifests' ``output``): add a
+``SigmoidPostprocessor``, or the affinity chain for affinities; the warmup's
+output probe sees the output unbounded, and the dashboard suggests the same.
+Their manifests also declare the input normalization they were trained
+behind (``input_norm``), which the dashboard offers with an *Apply* button;
+the YAML's ``json_data`` is what runs, as for every type. An ONNX model cannot
+be finetuned on the server (the trainer trains torch modules); the browser
+finetunes an export's last layer (or, for the 2D exports, its whole network),
+and the result is served here.
+``example/onnx_web_models.yaml`` runs two exports.
 
 .. _fly:
 
@@ -802,10 +889,12 @@ Behind a Reverse Proxy
 
 When the dashboard is reached through a reverse proxy that sets ``X-Forwarded-Host``, the page loads the neuroglancer viewer from the same path on the proxy's host, so the proxy must route ``/v/`` on to the viewer. Inference servers are addressed as they report themselves (``http://<node>:<port>``) unless ``CELLMAP_FLOW_SERVER_URL_TEMPLATE`` is set in the dashboard's environment, for example to ``https://proxy.example.org/inf-{port}``; ``{url}``, ``{host}`` and ``{port}`` are the reported address and its parts.
 
+.. _bounding-boxes:
+
 Bounding Boxes
 --------------
 
-For blockwise processing, you can specify regions of interest:
+Blockwise processing can run over regions of interest instead of the whole volume. Each box is an ``offset``, its lower corner, and a ``shape``, both in nm, z, y, x (not voxels):
 
 .. code-block:: yaml
 
@@ -815,7 +904,13 @@ For blockwise processing, you can specify regions of interest:
       - offset: [64285, 26408, 15695]
         shape: [11626, 12405, 26847]
 
-Set ``separate_bounding_boxes_zarrs: true`` to write each bounding box to its own zarr subdirectory (``box_1``, ``box_2``, etc).
+The output covers only the box, not the whole volume. A box is widened to every output voxel it touches (snapped outward onto the output voxel grid, which starts at the raw data's corner) and cut to the raw data's extent. The output's offset is the box's corner, and its OME translation the centre of the voxel there, half a voxel in. Its blocks start there and the last block along each axis is cut at the box's end, so nothing is written past it. For example, on data whose corner is at 0, with 8 nm output voxels, a box like the first above, 4674 nm deep from 59611 nm, covers 59608 nm to 64288 nm in z: 585 voxels.
+
+With several boxes, one output covers their bounding box, on each axis from the lowest of their corners to the highest of their far ends; only the boxes' blocks are run, and what lies between the boxes stays 0. Set ``separate_bounding_boxes_zarrs: true`` to give each box its own output instead, the size of the box: ``<output_path>/box_1``, ``box_2`` and so on, in the list's order.
+
+Label ids a postprocessor makes unique by block (Morton, affinity segmentation) stay unique: a block's index is counted from the raw data's corner, so a box on the volume's block grid gets the ids the inference server gives. The precheck refuses a box whose ``offset`` (0, 0, 0 when left out) or ``shape`` is not three numbers, or whose shape has a side not above 0.
+
+A run resumes into an output only if it covers the same region: one written for other boxes, or for boxes by an older cellmap-flow (which wrote an array the size of the whole volume), is refused. Write to a new output path.
 
 .. _output-channels:
 

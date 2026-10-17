@@ -8,8 +8,9 @@
 // model's logits are W · features + b computed here (the reconstruction
 // that makes training the head outside the graph sound); withHead's new
 // weights change the model's output as predicted and an unchanged head
-// round-trips the bytes exactly; and the float16 conversions, by hand,
-// agree with IEEE 754 on every bit pattern.
+// round-trips the bytes exactly; metadata_props written in are read back,
+// by onnxruntime too, which still runs the model; and the float16
+// conversions, by hand, agree with IEEE 754 on every bit pattern.
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import * as ort from "onnxruntime-web";
@@ -18,8 +19,9 @@ import { describe, expect, it, vi } from "vitest";
 import { asFloat32, createFeatureRunner } from "../../src/finetune/features";
 import { mulberry32 } from "../../src/finetune/head-trainer";
 import { float16ArrayToFloat32, float16ToFloat32, float32ArrayToFloat16, float32ToFloat16, headOf, withFeatureOutput, withHead } from "../../src/finetune/onnx-head";
-import { concatBytes, encodeFields, encodeLengthDelimited, encodeVarint, encodeVarintField, parseFields, readGraph, readModel, readVarint, withGraphOutput } from "../../src/finetune/onnx-proto";
+import { concatBytes, encodeFields, encodeLengthDelimited, encodeVarint, encodeVarintField, parseFields, readGraph, readModel, readVarint, withGraphOutput, withMetadata } from "../../src/finetune/onnx-proto";
 import type { Head } from "../../src/finetune/types";
+import { readMetadata } from "./onnx-metadata";
 
 // The page's ORT entry (WebGPU + WASM, which fetches its runtime over HTTP)
 // replaced by the package's Node entry, the same WASM runtime read from disk.
@@ -156,6 +158,45 @@ describe("protobuf fields", () => {
     expect(others(after, out)).toEqual(others(before, HEAD));
     expect(after.graph.value.subarray(0, before.graph.value.length)).toEqual(before.graph.value);
     expect(out.length).toBe(HEAD.length + (after.graph.value.length - before.graph.value.length) + (encodeVarint(after.graph.value.length).length - encodeVarint(before.graph.value.length).length));
+  });
+});
+
+describe("metadata_props", () => {
+  it("writes entries after every other field, which stay byte for byte, and reads them back", () => {
+    expect(readMetadata(HEAD)).toEqual({});
+    const out = withMetadata(HEAD, { "cellmap_flow.manifest": '{"model":"x-ft1","channels":["a"]}', note: "é ✓" });
+    expect(out.subarray(0, HEAD.length)).toEqual(HEAD);
+    expect(readMetadata(out)).toEqual({ "cellmap_flow.manifest": '{"model":"x-ft1","channels":["a"]}', note: "é ✓" });
+    // Each entry is one field 14, a StringStringEntryProto: 1 the key, 2 the value.
+    const added = readModel(out).fields.filter((f) => f.number === 14);
+    expect(added).toHaveLength(2);
+    expect(parseFields(added[1].value).map((f) => [f.number, new TextDecoder().decode(f.value)])).toEqual([[1, "note"], [2, "é ✓"]]);
+  });
+
+  it("replaces an entry of the same key rather than writing the key twice, and keeps the others", () => {
+    const once = withMetadata(HEAD, { a: "1", b: "2" });
+    const twice = withMetadata(once, { a: "3" });
+    expect(readMetadata(twice)).toEqual({ b: "2", a: "3" });
+    expect(readModel(twice).fields.filter((f) => f.number === 14)).toHaveLength(2);
+    // The model's own fields are still where they were: only metadata moved.
+    expect(twice.subarray(0, HEAD.length)).toEqual(HEAD);
+  });
+
+  it("refuses bytes that are not a model", () => {
+    expect(() => withMetadata(concatBytes([encodeVarintField(1, 8)]), { a: "1" })).toThrow(/no graph/);
+  });
+
+  it("leaves the model one onnxruntime runs, with the same output", async () => {
+    const data = input(3);
+    const out = withMetadata(HEAD, { "cellmap_flow.manifest": "{}" });
+    const before = (await runOrt(HEAD, data)).results.output.data as Float32Array;
+    const session = await ort.InferenceSession.create(out, { executionProviders: ["wasm"] });
+    try {
+      const after = (await session.run({ input: new ort.Tensor("float32", data, IN) })).output.data as Float32Array;
+      expect(Array.from(after)).toEqual(Array.from(before));
+    } finally {
+      await session.release();
+    }
   });
 });
 

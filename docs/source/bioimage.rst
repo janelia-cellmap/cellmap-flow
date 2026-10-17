@@ -30,8 +30,9 @@ In the dashboard
    100x80x80 nm, z,y,x), and a few across several resolutions, for which you enter
    one. Other models need one entered.
 4. Click **Submit Models**. As for the other models, unticking one and
-   submitting again stops it, and a running one is ticked when the page is
-   reloaded.
+   submitting again stops it, as does its ✕ under *Loaded models* (see
+   *Usage* on the :doc:`front page <index>`), and a running one is ticked
+   when the page is reloaded.
 
 A ticked model is entered as its nickname (``kind-seashell``), and its
 layer and job are named after it (``kind_seashell``).

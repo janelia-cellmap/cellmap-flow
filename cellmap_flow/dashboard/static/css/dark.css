@@ -571,6 +571,13 @@ textarea.form-control[readonly] {
   grid-template-columns: auto 1fr;
 }
 
+/* The AI panel's API key and access token: text fields shown as dots, so a
+   browser's password manager does not offer to save them as it does a
+   password field's (_finetune_tab.html says why). */
+.credential-secret {
+  -webkit-text-security: disc;
+}
+
 /* Input | model output | overlay, each scaled to a third of the panel. */
 .ai-annotate-previews {
   display: grid;
@@ -754,4 +761,109 @@ textarea.form-control[readonly] {
   color: var(--text-muted);
   font-size: 0.85rem;
   margin: 0;
+}
+
+/* ---------- Models tab: Loaded models ---------- */
+/* One row per model running or starting: its name and where it came from
+   on the first line, what it is (and any note) below, and its ✕ on the
+   right across both. The text column shrinks and wraps, so a row fits the
+   340px column and a phone's width without scrolling sideways. */
+.loaded-models-count {
+  margin-left: 6px;
+  font-size: 13px;
+  letter-spacing: normal;
+  text-transform: none;
+}
+
+.loaded-model-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 8px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 6px 6px 6px 10px;
+  margin-bottom: 6px;
+}
+
+.loaded-model-head {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+/* The whole name, wrapped (after its _, - and ., or anywhere in a word
+   too long): it is the layer's, and two models' can differ only at the end. */
+.loaded-model-name {
+  color: var(--text-primary);
+  font-size: 15px;
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+
+.loaded-model-head .zoo-tag {
+  flex-shrink: 0;
+  margin-left: 6px;
+}
+
+.loaded-model-status {
+  color: var(--warning);
+  border-color: currentColor;
+}
+
+.loaded-model-detail {
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.loaded-model-note {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.loaded-model-text {
+  min-width: 0;
+}
+
+/* The ✕: a 32px target, quiet until hovered. A disabled one keeps its
+   tooltip on the span around it (a disabled button gets no mouse events). */
+.loaded-model-remove-wrap {
+  display: inline-flex;
+}
+
+.loaded-model-remove {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  font-size: 16px;
+  line-height: 1;
+  color: var(--text-muted);
+  background: transparent;
+  border: 1px solid var(--border-hover);
+  border-radius: var(--radius-sm);
+  transition: all var(--transition);
+}
+
+.loaded-model-remove:hover:not(:disabled),
+.loaded-model-remove:focus-visible {
+  color: var(--danger);
+  border-color: var(--danger);
+  background: rgba(248, 113, 113, 0.08);
+  outline: none;
+}
+
+.loaded-model-remove:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.loaded-models-empty {
+  font-size: 13px;
+  color: var(--text-muted);
 }

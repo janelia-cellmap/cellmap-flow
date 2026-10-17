@@ -26,6 +26,7 @@ from cellmap_flow.models.models_config import (
     FlyModelConfig,
     HuggingFaceModelConfig,
     ModelConfig,
+    OnnxModelConfig,
     ScriptModelConfig,
 )
 from cellmap_flow.models.configs.script import load_safe_config
@@ -56,8 +57,11 @@ SERVE_FORMS = {
         lambda: HuggingFaceModelConfig(repo="cellmap/mito-v1", revision="abc123", name="m v1"),
         lambda: CellposeModelConfig(voxel_size=(16, 8, 8), pretrained_model="/w/my model", output="masks",
                                     slices_per_chunk=4, batch_size=12, diameter=45, flow_threshold=0.5, name="cp"),
+        lambda: OnnxModelConfig(path="/ft/my model-ft1.onnx", input_voxel_size=(5.24, 4, 4), input_size=(1, 300, 300),
+                                channels=["mito", "er"], slices_per_chunk=4, name="ft"),
+        lambda: OnnxModelConfig(folder="setup_53_2d", repo="cellmap/onnx-web-models", variant="fp16", input_size=556),
     ],
-    ids=["script", "dacapo", "fly", "bio", "finetune", "huggingface", "cellpose"],
+    ids=["script", "dacapo", "fly", "bio", "finetune", "huggingface", "cellpose", "onnx", "onnx-hub"],
 )
 @pytest.mark.parametrize("form", list(SERVE_FORMS))
 def test_the_server_rebuilds_the_same_config(config, form, monkeypatch):
@@ -168,6 +172,7 @@ def test_a_dacapo_models_geometry_and_channels_follow_the_model(fake_frameworks,
                                         input_voxel_size=(8, 8, 8), output_voxel_size=(8, 8, 8)),
                  None, id="fly-torchscript"),
     pytest.param(lambda: BioModelConfig(model="affable-shark", voxel_size=(8, 8, 8)), "bioimageio", id="bio"),
+    pytest.param(lambda: OnnxModelConfig(folder="setup_54"), "onnx", id="onnx"),
     # pixi.toml's dacapo environment does not import DaCapo yet.
     pytest.param(lambda: DaCapoModelConfig(run_name="r", iteration=0), None, id="dacapo"),
 ])

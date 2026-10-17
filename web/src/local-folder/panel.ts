@@ -9,6 +9,7 @@
 // The dashboard's own connect.js owns the Connect button and the status line
 // and is not changed: this fills the dataset field and clicks Connect, and
 // writes the status line the way connect.js does (its colours too).
+import { message } from "../shared/message";
 import { forgetState, withHash } from "../viewer/share";
 import type { PickedDirectory } from "./index";
 
@@ -20,7 +21,7 @@ const CONNECT_ID = "setDataBtn";
 const STATUS_ID = "setDataStatus";
 const BROWSE_ID = "browseLocalBtn";
 const HINT_ID = "localFolderHint";
-/** On the panel while a folder from the file manager is over it (browser.css). */
+/** On a drop target while a folder from the file manager is over it (browser.css). */
 const DROP_CLASS = "local-drop-target";
 
 /** The colours connect.js gives the status line, and the panel's own muted one. */
@@ -73,12 +74,59 @@ function carriesFiles(transfer: DataTransfer | null): transfer is DataTransfer {
 /** The drop's handle method as Chromium has it (not in lib.dom). */
 type HandleItem = DataTransferItem & { getAsFileSystemHandle?: () => Promise<FileSystemHandle | null> };
 
+/** What dropDirectory says of a drop it cannot take; `notFolder` gets null
+ * when the browser gave no handle for it. */
+export interface DropWording {
+  notOne: string;
+  noHandle: string;
+  notFolder(name: string | null): string;
+  failed(reason: string): string;
+}
+
+/** `zone` as the drop target for one folder from the file manager. */
+export function dropDirectory<T extends PickedDirectory = PickedDirectory>(zone: HTMLElement, onHandle: (handle: T) => void, status: (text: string) => void, wording: DropWording): void {
+  zone.addEventListener("dragover", (event) => {
+    if (!carriesFiles(event.dataTransfer)) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "link";
+    zone.classList.add(DROP_CLASS);
+  });
+  zone.addEventListener("dragleave", (event) => {
+    // Leaving for one of the zone's own children is not leaving.
+    if (!zone.contains(event.relatedTarget as Node | null)) zone.classList.remove(DROP_CLASS);
+  });
+  zone.addEventListener("drop", (event) => {
+    zone.classList.remove(DROP_CLASS);
+    if (!carriesFiles(event.dataTransfer)) return;
+    event.preventDefault();
+    const items = Array.from(event.dataTransfer.items).filter((item) => item.kind === "file") as HandleItem[];
+    if (items.length !== 1) return status(wording.notOne);
+    const item = items[0];
+    if (!item.getAsFileSystemHandle) return status(wording.noHandle);
+    // Asked for now, in the event: the drag's items are gone once it ends.
+    item.getAsFileSystemHandle().then(
+      (handle) => {
+        if (!handle || handle.kind !== "directory") return status(wording.notFolder(handle ? handle.name : null));
+        onHandle(handle as unknown as T);
+      },
+      (e: unknown) => status(wording.failed(message(e))),
+    );
+  });
+}
+
+const VOLUME_DROP: DropWording = {
+  notOne: "Drop one folder: the volume's .zarr or .n5 directory.",
+  noHandle: "This browser gives no handle for a dropped folder; use Chrome or Edge.",
+  notFolder: (name) => (name === null ? "Nothing that can be opened was dropped." : `${name} is a file. Drop the volume's folder (the .zarr or .n5 directory).`),
+  failed: (reason) => `Could not read what was dropped: ${reason}`,
+};
+
 export function connectPanel(): LocalPanel {
-  const status: LocalPanel["status"] = (message, tone) => {
+  const status: LocalPanel["status"] = (text, tone) => {
     const el = byId(STATUS_ID);
     if (!el) return;
     el.style.color = STATUS_COLOR[tone];
-    el.textContent = message;
+    el.textContent = text;
   };
 
   return {
@@ -162,34 +210,7 @@ export function connectPanel(): LocalPanel {
           if (carriesFiles(event.dataTransfer)) event.preventDefault();
         });
       }
-      panel.addEventListener("dragover", (event) => {
-        if (!carriesFiles(event.dataTransfer)) return;
-        event.preventDefault();
-        event.dataTransfer.dropEffect = "link";
-        panel.classList.add(DROP_CLASS);
-      });
-      panel.addEventListener("dragleave", (event) => {
-        // Leaving for one of the panel's own children is not leaving.
-        if (!panel.contains(event.relatedTarget as Node | null)) panel.classList.remove(DROP_CLASS);
-      });
-      panel.addEventListener("drop", (event) => {
-        panel.classList.remove(DROP_CLASS);
-        if (!carriesFiles(event.dataTransfer)) return;
-        event.preventDefault();
-        const items = Array.from(event.dataTransfer.items).filter((item) => item.kind === "file") as HandleItem[];
-        if (items.length !== 1) return status("Drop one folder: the volume's .zarr or .n5 directory.", "error");
-        const item = items[0];
-        if (!item.getAsFileSystemHandle) return status("This browser gives no handle for a dropped folder; use Chrome or Edge.", "error");
-        // Asked for now, in the event: the drag's items are gone once it ends.
-        item.getAsFileSystemHandle().then(
-          (handle) => {
-            if (!handle) return status("Nothing that can be opened was dropped.", "error");
-            if (handle.kind !== "directory") return status(`${handle.name} is a file. Drop the volume's folder (the .zarr or .n5 directory).`, "error");
-            handler(handle as unknown as PickedDirectory);
-          },
-          (e: unknown) => status(`Could not read what was dropped: ${e instanceof Error ? e.message : String(e)}`, "error"),
-        );
-      });
+      dropDirectory(panel, handler, (text) => status(text, "error"), VOLUME_DROP);
     },
   };
 }

@@ -113,16 +113,10 @@ def cellpose_panel_data(models_config, running_job_names):
 
 def cellpose_panel_names(models_config):
     """The names of the Cellpose models the Cellpose panel lists as its own
-    rows: one of its models, named as a row of it names its job, so that the
-    panel's Submit names it alike."""
-    from cellmap_flow.dashboard.services.launch import CELLPOSE_MODELS, cellpose_job_name
-    from cellmap_flow.models.models_config import CellposeModelConfig
+    rows (services.launch.is_panel_cellpose)."""
+    from cellmap_flow.dashboard.services.launch import is_panel_cellpose
 
-    return {
-        mc.name for mc in models_config
-        if isinstance(mc, CellposeModelConfig) and mc.pretrained_model in CELLPOSE_MODELS
-        and mc.name == cellpose_job_name(mc.pretrained_model, mc.output, mc.do_3d)
-    }
+    return {mc.name for mc in models_config if is_panel_cellpose(mc)}
 
 
 @index_bp.route("/")
@@ -144,21 +138,16 @@ def index():
     logger.debug(f"Input norm rows: {input_norm_items}")
     logger.debug(f"Postprocess rows: {postprocess_items}")
 
-    # Collect running HF model repos
-    from cellmap_flow.models.models_config import HuggingFaceModelConfig
-    running_job_names = {j.model_name for j in session.jobs}
-    default_hf_repos = [
-        mc.repo for mc in session.models_config
-        if isinstance(mc, HuggingFaceModelConfig) and mc.name in running_job_names
-    ]
-    # And the running zoo models, with the voxel size each was given.
-    from cellmap_flow.models.bioimage_catalog import entry_model_id
-    from cellmap_flow.models.models_config import BioModelConfig
+    # The Hugging Face and zoo rows to tick: the loaded models', running or starting.
+    from cellmap_flow.dashboard.services.launch import configs_by_name, loaded_models
+
+    loaded, configs = loaded_models(), configs_by_name()
+    default_hf_repos = [model["hf_id"] for model in loaded if model["hf_id"]]
     default_bioimage_models = [
-        {"id": entry_model_id(mc), "voxel_size": mc.to_dict().get("voxel_size")}
-        for mc in session.models_config
-        if isinstance(mc, BioModelConfig) and mc.name in running_job_names
+        {"id": model["zoo_id"], "voxel_size": configs[model["name"]].to_dict().get("voxel_size")}
+        for model in loaded if model["zoo_id"]
     ]
+    running_job_names = {j.model_name for j in session.jobs}
     cellpose_panel = cellpose_panel_data(session.models_config, running_job_names)
     on_cluster = bsub_available()
 
