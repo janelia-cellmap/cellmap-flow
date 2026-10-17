@@ -5,7 +5,7 @@
 // the finetune tab's user preferences (routes/finetune/annotation_core.py),
 // kept in the session.
 import type { AppContext, ModelEntry, Step } from "../../contracts";
-import { FINETUNED_REPO } from "../../contracts";
+import { isFinetuned } from "../../models";
 import type { Router } from "../router";
 import { badRequest, json, objectBody, text } from "../router";
 import { toYaml, type YamlValue } from "../yaml";
@@ -98,8 +98,8 @@ export function exportYaml(ctx: AppContext): string {
   // The emitter writes no comments, so the finetuned models' path lines get
   // theirs here: the line is the emitter's own rendering of the entry's path.
   for (const m of models) {
-    if (m.repo !== FINETUNED_REPO) continue;
-    const line = `  ${toYaml({ path: finetunedFile(m) }).trimEnd()}\n`;
+    if (!isFinetuned(m)) continue;
+    const line = `  ${toYaml({ path: m.variant.file }).trimEnd()}\n`;
     yaml = yaml.replace(line, `${line.trimEnd()}  # the file Download finetuned model saves: put it beside this YAML\n`);
   }
   return header + yaml;
@@ -114,16 +114,11 @@ export function serverEntry(m: ModelEntry): Record<string, YamlValue> {
 /** The server's onnx type's arguments for a model: a Hugging Face export by
  * repo and folder, and with `withFile` its variant's file (for a served
  * entry, the variant chosen for this GPU), so the server runs the same one;
- * a model finetuned here by `path`, the file its download saves under its
- * name, beside the YAML. */
+ * a model finetuned here by `path`, its variant's file (`<name>.onnx`,
+ * which its download saves, routes/finetune.ts), beside the YAML. */
 export function serverParams(m: ModelEntry, withFile: boolean): Record<string, YamlValue> {
-  if (m.repo === FINETUNED_REPO) return { path: finetunedFile(m) };
+  if (isFinetuned(m)) return { path: m.variant.file };
   return { repo: m.repo, folder: m.folder, ...(withFile ? { file: m.variant.file } : {}) };
-}
-
-/** The file name a finetuned model downloads as (routes/finetune.ts). */
-function finetunedFile(m: ModelEntry): string {
-  return `${m.name}.onnx`;
 }
 
 function stepValue(step: Step): YamlValue {

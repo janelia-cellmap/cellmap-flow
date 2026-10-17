@@ -83,8 +83,9 @@ export async function linkRefs(models: readonly ModelEntry[], catalog: Pick<Cata
       records ??= await catalog.finetuned();
       const record = records.find((r) => r.id === model.id);
       if (!record) throw new Error("its record is not in this browser's catalog");
-      const root = rootBase(record, records);
-      if (lineage(record, records).some((r) => r.params.finetune_mode === "full")) {
+      const ancestry = lineage(record, records);
+      const root = rootBase(ancestry);
+      if (ancestry.some((r) => r.params.finetune_mode === "full")) {
         throw new Error("its whole network was trained in this browser, millions of weights where a link carries a last layer's few dozen; the Finetune tab's Download finetuned model saves it as an .onnx file to send");
       }
       const base = await catalog.resolve(root.id);
@@ -113,17 +114,14 @@ function lineage(record: FinetunedRecord, records: readonly FinetunedRecord[]): 
   return out;
 }
 
-/** The Hugging Face model at the root of `record`'s lineage: its own base,
- * or, for a model finetuned from a finetuned one, that one's, and so on. */
-function rootBase(record: FinetunedRecord, records: readonly FinetunedRecord[]): FinetunedRecord["base"] {
-  const seen = new Set([record.id]);
-  let base = record.base;
-  while (base.id.startsWith(`${FINETUNED_REPO}/`)) {
-    const parent = records.find((r) => r.id === base.id);
-    if (!parent || seen.has(parent.id)) throw new Error(`${base.name}, the model it was finetuned from, is no longer kept in this browser`);
-    seen.add(parent.id);
-    base = parent.base;
-  }
+/** The Hugging Face model at the root of a record's lineage (`ancestry`,
+ * as lineage gives it): the base of the oldest model in it, which is the
+ * record's own base unless the record was finetuned from a finetuned model.
+ * An error when the lineage stops short of the root: a model in it is no
+ * longer kept in this browser. */
+function rootBase(ancestry: readonly FinetunedRecord[]): FinetunedRecord["base"] {
+  const { base } = ancestry[ancestry.length - 1];
+  if (base.id.startsWith(`${FINETUNED_REPO}/`)) throw new Error(`${base.name}, the model it was finetuned from, is no longer kept in this browser`);
   return base;
 }
 

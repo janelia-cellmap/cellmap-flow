@@ -69,6 +69,25 @@ export function finetunedEntry(base: ModelEntry, name: string, fileMb?: number):
   return entryFor(name, manifest, variant, FINETUNED_REPO);
 }
 
+/** What a record says of how its model was made: the volume, the
+ * parameters, the epochs and the final loss of its training, and when; or,
+ * for a model rebuilt from a shared link, the link's name for it. */
+export type FinetunedHistory = Pick<FinetunedRecord, "volume" | "created_at" | "params" | "epochs" | "final_loss" | "from_link">;
+
+/** The record of a model finetuned from `base` as `name`, whose ONNX file
+ * is `byteLength` bytes: its entry (finetunedEntry), the base it was made
+ * from, and `history`. */
+export function finetunedRecord(base: ModelEntry, name: string, byteLength: number, history: FinetunedHistory): FinetunedRecord {
+  const entry = finetunedEntry(base, name, byteLength / 1e6);
+  return {
+    id: entry.id,
+    name,
+    base: { id: base.id, name: base.name, file: base.variant.file },
+    ...history,
+    entry,
+  };
+}
+
 /** The name for the next model finetuned from `base`: `<base name>-ft<n>`,
  * n one past the highest among `existing` for that base (a record whose
  * base is this entry, or whose name is `<base name>-ft<k>`); the first is

@@ -23,10 +23,10 @@
 // the browser that painted it. A link's `#!` view is opened without the
 // layers this browser cannot show (linkedView), the page saying which and
 // why (linkNotes), rather than with layers whose sources never answer.
-import { ARGS_KEY, type Catalog, type Chain, type FinetunedRecord, type ModelEntry, type PaintStore } from "./contracts";
+import { ARGS_KEY, type Catalog, type Chain, type ModelEntry, type PaintStore } from "./contracts";
 import { headOf, withHead } from "./finetune/onnx-head";
 import type { Head } from "./finetune/types";
-import { finetunedEntry, isFinetuned, nextFinetunedName } from "./models/finetuned";
+import { finetunedRecord, isFinetuned, nextFinetunedName } from "./models/finetuned";
 import { entryFor } from "./models/manifest";
 import { base64UrlToBytes, bytesToBase64Url, decodeArgs } from "./shared/args";
 import { paintVolumeOf } from "./viewer/layers";
@@ -310,24 +310,19 @@ export async function rebuildFinetuned(
   const holder = await catalog.resolve(model.name).catch(() => null);
   const taken = holder !== null || records.some((r) => r.name === model.name);
   const name = taken ? nextFinetunedName(source, records, opts.reserved) : model.name;
-  const entry = finetunedEntry(source, name, data.byteLength / 1e6);
-  const record: FinetunedRecord = {
-    id: entry.id,
-    name,
-    base: { id: source.id, name: source.name, file: source.variant.file },
+  const record = finetunedRecord(source, name, data.byteLength, {
     volume: "",
     created_at: opts.now().toISOString(),
     params: {},
     epochs: 0,
     final_loss: null,
-    entry,
     from_link: { name: model.name },
-  };
+  });
   await catalog.addFinetuned(record, data);
   log(taken
     ? `The link's ${model.name} is kept in this browser as ${name}, rebuilt from ${source.name}: this browser has a model named ${model.name} already, with other weights, and keeps it`
     : `The link's ${model.name} is kept in this browser, rebuilt from ${source.name}`);
-  return entry;
+  return record.entry;
 }
 
 // ---------------------------------------------------------------------------

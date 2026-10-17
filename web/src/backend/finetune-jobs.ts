@@ -25,11 +25,11 @@
 // goes, then COMPLETED (kept, not served), WAITING_FOR_RESTART (kept and
 // served; restartable), FAILED or CANCELLED. The last three but one are
 // final (TERMINAL_STATUSES): nothing moves a job again once it has one.
-import type { AppContext, FinetunedRecord, ModelEntry, PaintVolume } from "../contracts";
+import type { AppContext, ModelEntry, PaintVolume } from "../contracts";
 import { loadGoodRegions } from "../finetune/good-regions";
 import { MODE_NOUN, MODE_WORDS } from "../finetune/modes";
 import type { Finetuned, FinetuneOptions, FinetuneRun, RunFinetune, RunReporter } from "../finetune/types";
-import { finetunedEntry, nextFinetunedName } from "../models/finetuned";
+import { finetunedRecord, nextFinetunedName } from "../models/finetuned";
 import { stamp } from "../shared/format";
 import { message } from "./router";
 import { serveModels } from "./serving";
@@ -443,18 +443,14 @@ export class FinetuneJobs {
   private async keep(job: FinetuneJob, result: Finetuned): Promise<void> {
     const { ctx, entry, volume, autoServe } = job.args;
     const name = nextFinetunedName(entry, await ctx.catalog.finetuned());
-    const fentry = finetunedEntry(entry, name, result.bytes.byteLength / 1e6);
-    const record: FinetunedRecord = {
-      id: fentry.id,
-      name,
-      base: { id: entry.id, name: entry.name, file: entry.variant.file },
+    const record = finetunedRecord(entry, name, result.bytes.byteLength, {
       volume: volume.id,
       created_at: this.now().toISOString(),
       params: job.params,
       epochs: result.epochs,
       final_loss: result.finalLoss,
-      entry: fentry,
-    };
+    });
+    const fentry = record.entry;
     await ctx.catalog.addFinetuned(record, result.bytes);
     const loss = result.finalLoss === null ? "" : `, final loss ${result.finalLoss.toFixed(6)}`;
     const on = result.tiles === undefined ? `of ${result.chunks} chunk(s)` : `in ${result.tiles} tile(s)`;
