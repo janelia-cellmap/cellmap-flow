@@ -506,8 +506,6 @@ export function initModelsTab() {
       // extra rows below it.
       mine.forEach((settings, i) => list.append(cellposeRow(model, settings, i > 0)));
     });
-    document.getElementById("cellposeRunningCount").textContent =
-      running.length ? running.length + " running" : "";
   }
 
   renderCellposeModels();
@@ -573,18 +571,28 @@ export function initModelsTab() {
 
   // /api/job-logs runs bpeek per job, each with its own timeout, so a
   // refresh can outlast the 5s follow interval. One at a time, whether it
-  // comes from Follow or from the button: overlapping requests pile onto a
-  // dashboard that is already the slow part.
+  // comes from Follow, from the button or from the watch after a Submit:
+  // overlapping requests pile onto a dashboard that is already the slow
+  // part. Resolves to the answer once it is drawn, or to null when a
+  // request was already on its way and none was made; rejects if it fails.
   let jobLogsBusy = false;
 
-  function refreshJobLogs() {
-    if (jobLogsBusy) return Promise.resolve();
+  function askJobLogs() {
+    if (jobLogsBusy) return Promise.resolve(null);
     jobLogsBusy = true;
-    const statusEl = document.getElementById("jobLogsStatus");
     return getJSON("/api/job-logs")
-      .then(renderJobLogs)
-      .catch(function (e) { statusEl.textContent = "error: " + e; })
-      .then(function () { jobLogsBusy = false; });
+      .then(function (data) {
+        renderJobLogs(data);
+        return data;
+      })
+      .finally(function () { jobLogsBusy = false; });
+  }
+
+  // Follow's and the button's: a failure is said beside the logs.
+  function refreshJobLogs() {
+    return askJobLogs().catch(function (e) {
+      document.getElementById("jobLogsStatus").textContent = "error: " + e;
+    });
   }
 
   document.getElementById("jobLogsBtn").addEventListener("click", function () {
@@ -606,32 +614,77 @@ export function initModelsTab() {
         document.getElementById("jobLogsBtn").click();
       }
       jobLogsFollower = poll(refreshJobLogs, { intervalMs: JOB_LOGS_POLL_MS, immediate: false });
+      // Follow keeps the logs current itself: a Submit's watch ends.
+      endStartingJobsWatch();
     }
   });
 
   // After a Submit, show Job Logs and keep it current until no job is still
   // starting (waiting in a queue, or installing its environment), even with
   // Follow off: until then the page showed nothing of what Submit started.
-  // A tick resolving false stops the poll.
-  let startingWatcher = null;
+  // The first look is at once, the others the starting poll's (below). The
+  // first looks can come before a job is handed to LSF at all, which lists
+  // nothing: only a list with no starting job in it ends the watch, and so
+  // do 60 looks (5 minutes), a failed request, and Follow.
+  const STARTING_JOBS_MAX_LOOKS = 60;
+  const EMPTY_LIST_LOOKS = 6;  // looks an empty list is waited out for
+  let startingJobsWatch = null;  // { looks }: the looks answered so far
 
   function watchStartingJobs() {
     const area = document.getElementById("jobLogsArea");
     if (area.style.display === "none") document.getElementById("jobLogsBtn").click();
-    if (startingWatcher) startingWatcher.stop();
-    // The first ticks can come before a job is handed to LSF at all, which
-    // lists nothing: only a list with no starting job in it ends the watch.
-    let ticks = 0;
-    startingWatcher = poll(function () {
-      if (jobLogsFollower) return Promise.resolve(false);  // Follow keeps it current
-      ticks += 1;
-      return getJSON("/api/job-logs").then(function (data) {
-        renderJobLogs(data);
-        const jobs = (data && data.jobs) || [];
-        const starting = jobs.some(function (j) { return j.status === "starting"; });
-        return starting || (jobs.length === 0 && ticks < 6) ? undefined : false;
-      }).catch(function () { return false; });
-    }, { intervalMs: JOB_LOGS_POLL_MS, maxTicks: 60 });
+    if (jobLogsFollower) return;  // Follow keeps it current
+    startingJobsWatch = { looks: 0 };
+    lookAtStartingJobs();
+    keepStartingPoll();
+  }
+
+  function lookAtStartingJobs() {
+    const watch = startingJobsWatch;
+    return askJobLogs().then(function (data) {
+      // Nothing asked (a request was on its way already, and is drawn), or
+      // a newer Submit's watch has taken over.
+      if (data === null || watch !== startingJobsWatch) return;
+      watch.looks += 1;
+      const jobs = (data && data.jobs) || [];
+      const starting = jobs.some(function (j) { return j.status === "starting"; });
+      const waiting = starting || (jobs.length === 0 && watch.looks < EMPTY_LIST_LOOKS);
+      if (!waiting || watch.looks >= STARTING_JOBS_MAX_LOOKS) endStartingJobsWatch();
+    }, function () {
+      if (watch === startingJobsWatch) endStartingJobsWatch();
+    });
+  }
+
+  function endStartingJobsWatch() {
+    startingJobsWatch = null;
+    keepStartingPoll();
+  }
+
+  // One poll, every 5 s while anything is starting, keeps both views of it
+  // current: the Loaded models list while it lists a model starting
+  // (minutes in a queue, or loading), so it says when that one is up; and
+  // Job Logs while a Submit's jobs are watched (above). It waits while the
+  // page is hidden, and asks as soon as the page is shown again.
+  const STARTING_POLL_MS = 5000;
+  let startingPoll = null;
+  let loadedStarting = false;  // the Loaded models list last drawn has a model starting
+
+  function pollStarting() {
+    const asked = [];
+    if (loadedStarting) asked.push(refreshLoaded());
+    if (startingJobsWatch) asked.push(lookAtStartingJobs());
+    return Promise.all(asked);
+  }
+
+  // Started when either has something starting; stopped once neither has.
+  function keepStartingPoll() {
+    const wanted = loadedStarting || startingJobsWatch !== null;
+    if (wanted && !startingPoll) {
+      startingPoll = poll(pollStarting, { intervalMs: STARTING_POLL_MS, immediate: false, pauseWhenHidden: true });
+    } else if (!wanted && startingPoll) {
+      startingPoll.stop();
+      startingPoll = null;
+    }
   }
 
   // GPU queue picker: the one next to Submit and the Server Config one show
@@ -891,9 +944,7 @@ export function initModelsTab() {
     added: "Added by reference (Add a model), or by the YAML the dashboard was started with",
     finetuned: "Made by a finetune on the Finetune tab",
   };
-  const LOADED_POLL_MS = 5000;
   const loadedList = document.getElementById("loadedModelsList");
-  let loadedWatcher = null;
   // Bumped by each refresh and each remove: an answer to an older refresh
   // (the poll's, in flight while a ✕ was answered) is not drawn over a
   // newer list.
@@ -966,17 +1017,14 @@ export function initModelsTab() {
     if (models.length - starting) counts.push((models.length - starting) + " running");
     if (starting) counts.push(starting + " starting");
     document.getElementById("loadedModelsCount").textContent = counts.length ? "(" + counts.join(", ") + ")" : "";
-    // The Cellpose panel's "N running", after a remove or a Submit as on load.
+    // The Cellpose panel's "N running": written here alone, from this list,
+    // on load as after a Submit or a remove.
     const cellposeRunning = models.filter((m) => m.source === "cellpose").length;
     document.getElementById("cellposeRunningCount").textContent = cellposeRunning ? cellposeRunning + " running" : "";
-    // Asked again while a model is starting (minutes in a queue, or loading),
-    // so the list says when it is up; not otherwise.
-    if (starting && !loadedWatcher) {
-      loadedWatcher = poll(() => refreshLoaded(), { intervalMs: LOADED_POLL_MS, immediate: false, pauseWhenHidden: true });
-    } else if (!starting && loadedWatcher) {
-      loadedWatcher.stop();
-      loadedWatcher = null;
-    }
+    // Asked again while a model is starting, by the starting poll, so the
+    // list says when it is up; not otherwise.
+    loadedStarting = starting > 0;
+    keepStartingPoll();
   }
 
   // Quietly: a failed refresh leaves the list as it was.
