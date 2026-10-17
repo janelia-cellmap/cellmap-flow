@@ -434,7 +434,7 @@ describe("a job's life", () => {
     expect(run.infer).toBe(ctx.infer);
     expect(run.options).toEqual({
       mode: "head", epochs: 3, learningRate: 0.01, lossType: "bce", margin: 0.3, balanceClasses: true, labelSmoothing: 0, batchPixels: 4096,
-      distillationLambda: 0.01, distillationScope: "unlabeled", seed: 0, batchPatches: 1, tileSize: null,
+      distillationLambda: 0.01, distillationScope: "unlabeled", seed: 0, batchPatches: 1, tileSize: null, augment: false,
     });
     expect(run.goodRegions).toBeUndefined();
     expect(run.initialHead).toBeUndefined();

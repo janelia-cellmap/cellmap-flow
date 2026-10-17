@@ -408,9 +408,10 @@ web/
                              for picked directories; paint-store.ts + paint-route.ts: the annotation volumes' files and the worker's paint/ route
     finetune/                types.ts (the seams), volume.ts (planVolume, the zarr v2 files), samples.ts, targets.ts, onnx-proto.ts,
                              onnx-head.ts, features.ts, head-trainer.ts, distillation.ts, good-regions.ts, run.ts (runFinetune),
-                             zip.ts (the paint's download), modes.ts (what a manifest offers)
+                             zip.ts (the paint's download), modes.ts (what a manifest offers), augment.ts (the whole network's)
       full/                  the whole network of a 2D model in TF.js: cellmap-tfjs-train.ts (Marwan's runtime), graph.ts (the
-                             training graph, its tile sides), files.ts, tiles.ts, tfjs.ts (lazy TF.js), run-full.ts
+                             training graph, its tile sides), files.ts, tiles.ts, tfjs.ts (lazy TF.js), loss.ts (the head's
+                             loss in TF.js), run-full.ts
     ai-annotate/             AI-assisted annotation (above): types.ts, geometry.ts, plane.ts, mask.ts, labels.ts, fill.ts, prompts.ts,
                              organelles.ts (the pure ports), images.ts (the canvas codec), gemini.ts, fake.ts, providers.ts,
                              credentials.ts, usage.ts, audit.ts; labels.ts and fill.ts are Label it's too

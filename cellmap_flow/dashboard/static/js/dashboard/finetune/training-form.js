@@ -135,11 +135,11 @@ function trainingParams() {
   }
   // Browser mode: what trains (the Training field); for the head, its
   // batch in voxels per step, its own field; for the whole network, its
-  // learning rate, its tile side and the batch above, in tiles. The
-  // server-only fields above go too and the page's routes ignore them
-  // (web/src/backend/routes/finetune.ts readTraining). The Loss Function
-  // offers the head's losses there (BCE, MSE, margin) and is read as on
-  // the server; the whole network ignores it.
+  // learning rate, its tile side and the batch above, in tiles, and
+  // augmentation. The server-only fields above go too and the page's
+  // routes ignore them (web/src/backend/routes/finetune.ts readTraining).
+  // The Loss Function offers the head's losses there (BCE, MSE, margin) and
+  // is read as on the server, by both.
   if (isBrowserMode()) {
     const mode = document.getElementById("finetuneMode").value;
     params.finetune_mode = mode;
@@ -192,6 +192,16 @@ export function applyModelDefaults(name) {
 function updateAugmentAdvice() {
   const advice = document.getElementById("augmentAdvice");
   const epochs = parseInt(document.getElementById("numEpochs").value, 10);
+  // The browser's whole network trains on the same tiles every epoch, as
+  // many as the paint makes, which the form cannot know: the advice is the
+  // epochs alone.
+  if (isBrowserMode()) {
+    advice.textContent = epochs > 0
+      ? `Each tile is trained on ${epochs} time${epochs === 1 ? "" : "s"}, once an epoch: the more epochs, the more it keeps the network from learning the tiles by heart.`
+      : "";
+    advice.className = "d-block text-muted";
+    return;
+  }
   const batch = parseInt(document.getElementById("batchSize").value, 10);
   const patchesRaw = document.getElementById("patchesPerEpoch").value;
   const patches = patchesRaw === "" || patchesRaw == null
