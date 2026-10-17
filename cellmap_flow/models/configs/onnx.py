@@ -75,13 +75,13 @@ import numpy as np
 
 from cellmap_flow.models.configs.base import Config, ModelConfig, _as_given, _names, _per_axis, _sizes, _voxel_size
 from cellmap_flow.models.geometry import _numbers
+from cellmap_flow.models.resolve import ONNX_REPO
 
 logger = logging.getLogger(__name__)
 
 # The metadata_props key a model finetuned in the browser carries its
 # manifest under, as JSON (web/src/contracts.ts MANIFEST_METADATA_KEY).
 MANIFEST_KEY = "cellmap_flow.manifest"
-DEFAULT_REPO = "cellmap/onnx-web-models"
 # web/src/models/manifest.ts's VARIANT_NAMES, in its order: a variant of
 # another precision is left out, as the browser leaves it out.
 VARIANTS = ("fp32", "fp16", "int8w", "int8w_fp16")
@@ -440,7 +440,7 @@ class OnnxModelConfig(ModelConfig):
         super().__init__()
         if (path is None) == (folder is None):
             raise ValueError("An onnx model is a path (a local .onnx file) or a folder of a Hugging Face repo "
-                             f"({DEFAULT_REPO} by default), and not both")
+                             f"({ONNX_REPO} by default), and not both")
         if path is not None and (repo is not None or revision is not None or file is not None):
             raise ValueError("repo, revision and file name a Hugging Face model's file; a path is the file itself")
         if variant is not None and variant not in VARIANTS:
@@ -475,7 +475,7 @@ class OnnxModelConfig(ModelConfig):
 
     @property
     def hub_repo(self) -> str:
-        return self.repo or DEFAULT_REPO
+        return self.repo or ONNX_REPO
 
     def _hub_download(self, filename: str) -> str:
         from huggingface_hub import hf_hub_download

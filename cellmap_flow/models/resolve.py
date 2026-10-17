@@ -725,19 +725,31 @@ def _hf_files(repo: str, revision: Optional[str]) -> List[str]:
         raise LookupError(f"There is no Hugging Face model repo {repo} (or it is private or gated)") from e
 
 
-def _hf_checked(repo: str, revision: Optional[str], request: _Request) -> Resolved:
-    how = "a cellmap-models export on Hugging Face"
+def _hub_files(repo: str, revision: Optional[str], request: _Request,
+               taken_as: str) -> Tuple[Optional[List[str]], List[str]]:
+    """``(files, notes)``: ``repo``'s files at ``revision``, to check a
+    reference against, and no notes; or None and a note that the reference is
+    taken to be ``taken_as`` unchecked, when offline or when the Hub cannot
+    be reached.
+
+    Raises:
+        ValueError: there is no such repo (or revision) that can be read.
+    """
     if not request.online:
-        return _huggingface(repo, revision, how, request,
-                            notes=["not checked (offline): taken to be a cellmap-models export"])
+        return None, [f"not checked (offline): taken to be {taken_as}"]
     try:
-        files = _hf_files(repo, revision)
+        return _hf_files(repo, revision), []
     except LookupError as e:
         raise ValueError(str(e)) from None
     except Exception as e:
-        return _huggingface(repo, revision, how, request,
-                            notes=[f"could not reach Hugging Face to check it ({e}): taken to be a "
-                                   "cellmap-models export"])
+        return None, [f"could not reach Hugging Face to check it ({e}): taken to be {taken_as}"]
+
+
+def _hf_checked(repo: str, revision: Optional[str], request: _Request) -> Resolved:
+    how = "a cellmap-models export on Hugging Face"
+    files, notes = _hub_files(repo, revision, request, "a cellmap-models export")
+    if files is None:
+        return _huggingface(repo, revision, how, request, notes=notes)
     folders = _onnx_folders(files)
     if EXPORT_METADATA not in files and folders:
         raise ValueError(
@@ -869,17 +881,9 @@ def _onnx_folder(repo, folder, revision, request, file=None, notes=()) -> Resolv
 
 def _onnx_checked(repo, folder, revision, request, file=None) -> Resolved:
     """A folder of ``repo``, checked online to hold a manifest.json, as _hf_checked checks a repo."""
-    if not request.online:
-        return _onnx_folder(repo, folder, revision, request, file,
-                            notes=["not checked (offline): taken to be a folder of ONNX web exports"])
-    try:
-        files = _hf_files(repo, revision)
-    except LookupError as e:
-        raise ValueError(str(e)) from None
-    except Exception as e:
-        return _onnx_folder(repo, folder, revision, request, file,
-                            notes=[f"could not reach Hugging Face to check it ({e}): taken to be a folder of ONNX "
-                                   "web exports"])
+    files, notes = _hub_files(repo, revision, request, "a folder of ONNX web exports")
+    if files is None:
+        return _onnx_folder(repo, folder, revision, request, file, notes=notes)
     if f"{folder}/manifest.json" not in files:
         folders = _onnx_folders(files)
         raise ValueError(f"{repo} has no ONNX web export {folder} (a folder with a manifest.json)"
