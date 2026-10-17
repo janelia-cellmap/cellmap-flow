@@ -50,7 +50,7 @@ import { type FetchFullFiles, fetchFullFiles } from "../../finetune/full/files";
 import { defaultTile, tileChoices } from "../../finetune/full/graph";
 import { checkTileSide } from "../../finetune/full/run-full";
 import { webgpuMissing } from "../../finetune/full/tfjs";
-import { finetuneModes, refuseMode, sourceOf } from "../../finetune/modes";
+import { finetuneModes, MODE_NOUN, refuseMode, sourceOf } from "../../finetune/modes";
 import { withMetadata } from "../../finetune/onnx-proto";
 import { runFinetune } from "../../finetune/run";
 import { HEAD_LOSSES } from "../../finetune/head-trainer";
@@ -130,13 +130,13 @@ export function finetuneRoutes(router: Router, deps: Partial<FinetuneDeps> = {})
     return missing && `The whole network trains on a GPU with WebGPU, and ${missing}. Train the last layer, or open the page in Chrome or Edge on a machine with a GPU.`;
   }
 
-  /** A whole-network run checked: a GPU to train on, and `training`'s tile
-   * side against `entry`'s graph. Null when it can run (or the run is the
-   * head's), else why not. */
+  /** A whole-network run checked: `entry`'s manifest offering it, a GPU to
+   * train on, and the options' tile side against `entry`'s graph. Null when
+   * it can run (or the run is the head's), else why not. */
   async function refuseFull(entry: ModelEntry, options: FinetuneOptions): Promise<string | null> {
     if (options.mode !== "full") return null;
-    const gpu = await refuseGpu();
-    if (gpu) return gpu;
+    const refused = refuseMode(entry, "full") ?? (await refuseGpu());
+    if (refused) return refused;
     try {
       const { graph } = await d.fullFiles(sourceOf(entry), entry.manifest.finetune!.full!);
       checkTileSide(graph, options.tileSize, entry.name);
@@ -144,6 +144,22 @@ export function finetuneRoutes(router: Router, deps: Partial<FinetuneDeps> = {})
     } catch (e) {
       return message(e);
     }
+  }
+
+  /** A submit's or restart's body read as the training of `mode`, checked:
+   * the loss, for the head (refuseLoss: the whole network has its own),
+   * the parameters (readTraining), and a whole-network run against `entry`
+   * (refuseFull), when there is an entry. The options and params, or why
+   * not. */
+  async function checkedTraining(body: Record<string, unknown>, mode: unknown, entry: ModelEntry | undefined): Promise<Training | { error: string }> {
+    if (mode !== "full") {
+      const refused = refuseLoss(body.loss_type);
+      if (refused) return { error: refused };
+    }
+    const training = readTraining({ ...body, finetune_mode: mode });
+    if ("error" in training) return training;
+    const refused = entry ? await refuseFull(entry, training.options) : null;
+    return refused ? { error: refused } : training;
   }
   const jobs = new FinetuneJobs({ run: d.run, now: d.now });
 
@@ -326,10 +342,10 @@ export function finetuneRoutes(router: Router, deps: Partial<FinetuneDeps> = {})
 
   // POST /api/finetune/submit: a job on the session's volume. Refused, in
   // the order the tab can act on, without a volume (needs_volume: the tab
-  // offers New Volume), with nothing painted, for a model not served, with
-  // a loss that needs a server (the head's: the whole network has its own),
-  // without a dataset, and for a mode the model's manifest does not offer
-  // or a tile side its graph does not take.
+  // offers New Volume), with nothing painted, for a model not served,
+  // without a dataset, with a loss that needs a server (the head's: the
+  // whole network has its own), and for a mode the model's manifest does
+  // not offer or a tile side its graph does not take.
   router.post("/api/finetune/submit", async (req, _params, ctx) => {
     const body = objectBody(req);
     if (!body) return badRequest("expected a JSON object");
@@ -346,17 +362,14 @@ export function finetuneRoutes(router: Router, deps: Partial<FinetuneDeps> = {})
     }
     const model = ctx.infer.served().find((s) => s.entry.name === name);
     if (!model) return json(404, { success: false, error: `Model ${name} not found` });
+    if (!ctx.infer.dataset()) return badRequest(NO_DATASET);
     // The mode the form asks for; a body without one (an older tab) the
     // first the model offers.
     const mode = body.finetune_mode ?? finetuneModes(model.entry)[0] ?? "head";
-    if (mode !== "full") {
-      const refused = refuseLoss(body.loss_type);
-      if (refused) return badRequest(refused);
-    }
-    if (!ctx.infer.dataset()) return badRequest(NO_DATASET);
-    const training = readTraining({ ...body, finetune_mode: mode });
+    const training = await checkedTraining(body, mode, model.entry);
     if ("error" in training) return badRequest(training.error);
-    const refusedMode = refuseMode(model.entry, training.options.mode) ?? (await refuseFull(model.entry, training.options));
+    // A mode the model's manifest offers (refuseFull has asked it of the whole network already).
+    const refusedMode = refuseMode(model.entry, training.options.mode);
     if (refusedMode) return badRequest(refusedMode);
     const autoServe = body.auto_serve !== false;
     const outputType = hasAffinityChannels(model.entry) ? "affinities" : "binary";
@@ -431,21 +444,15 @@ export function finetuneRoutes(router: Router, deps: Partial<FinetuneDeps> = {})
     // The job's own mode unless the body names one (jobs.restart refuses a switch).
     const job = jobs.get(params.id);
     const mode = body.finetune_mode ?? job?.args.options.mode ?? "head";
-    if (mode !== "full") {
-      const refused = refuseLoss(body.loss_type);
-      if (refused) return badRequest(refused);
-    }
-    const training = readTraining({ ...body, finetune_mode: mode });
+    const training = await checkedTraining(body, mode, job?.args.entry);
     if ("error" in training) return badRequest(training.error);
-    const refusedFull = job ? await refuseFull(job.args.entry, training.options) : null;
-    if (refusedFull) return badRequest(refusedFull);
     const result = jobs.restart(params.id, training.options, training.params);
     if (!result.ok) return json(result.status, { success: false, error: result.error });
     return json(200, {
       success: true,
       job_id: params.id,
       annotations_synced: 0,
-      message: `Restart request sent. Training restarts from the trained ${training.options.mode === "full" ? "network" : "head"} in this browser, on the paint as it is now.`,
+      message: `Restart request sent. Training restarts from the trained ${MODE_NOUN[training.options.mode]} in this browser, on the paint as it is now.`,
     });
   });
 
@@ -539,6 +546,12 @@ function refuseLoss(loss: unknown): string | null {
   return `The ${String(loss)} loss needs a server: ${why}. In the browser the model's head trains with BCE (bce), MSE (mse) or margin (margin): pick one, or run the dashboard on a server for the others.`;
 }
 
+/** A submit's or restart's training: run.ts's options, and the job's params. */
+interface Training {
+  options: FinetuneOptions;
+  params: Record<string, unknown>;
+}
+
 /** The training parameters of a submit or restart body (training-form.js's
  * trainingParams, as job-monitor.js sends them): the ones the browser's
  * trainer takes, checked, as run.ts's options and as the job's params (the
@@ -551,7 +564,7 @@ function refuseLoss(loss: unknown): string | null {
  * augment, queue, checkpoint_path) are left out of both. For the whole
  * network (readFullTraining) the batch is batch_size, in tiles, and the
  * tile's side tile_size; the head's fields are left out. */
-export function readTraining(body: Record<string, unknown>): { options: FinetuneOptions; params: Record<string, unknown> } | { error: string } {
+export function readTraining(body: Record<string, unknown>): Training | { error: string } {
   const mode = body.finetune_mode === undefined || body.finetune_mode === null || body.finetune_mode === "" ? "head" : body.finetune_mode;
   if (mode !== "head" && mode !== "full") return { error: `finetune_mode: expected head or full, not ${JSON.stringify(mode)}` };
   const epochs = numberOr(body.num_epochs, DEFAULT_OPTIONS.epochs);

@@ -16,6 +16,7 @@ import { createFeatureRunner } from "./features";
 import { anchorBoxes, anchorChunks } from "./good-regions";
 import { concatPixels, type DistillationSet, gatherPixels, mulberry32, type PixelSet, trainHead } from "./head-trainer";
 import { runFull } from "./full/run-full";
+import { count, epochSummary, plural } from "./log-words";
 import { headOf, withHead } from "./onnx-head";
 import { collectSamples } from "./samples";
 import { targetTransformFor } from "./targets";
@@ -27,9 +28,6 @@ export interface RunDeps {
   targetTransformFor: typeof targetTransformFor;
   createFeatureRunner: typeof createFeatureRunner;
 }
-
-const count = (n: number) => n.toLocaleString("en-US");
-const plural = (n: number, word: string) => `${count(n)} ${word}${n === 1 ? "" : "s"}`;
 
 /** The seed of the distillation voxels' draw, a stream apart from the trainer's. */
 const SAMPLE_STREAM = 0x85ebca6b;
@@ -131,11 +129,7 @@ export function createRunFinetune(deps: RunDeps = { collectSamples, targetTransf
       const finalLoss = trained.losses.length ? trained.losses[trained.losses.length - 1] : null;
       const finalSupervised = trained.supervised.length ? trained.supervised[trained.supervised.length - 1] : null;
       const supervisedWords = heldSet && finalSupervised !== null ? ` (supervised ${finalSupervised.toFixed(6)})` : "";
-      report.log(
-        trained.losses.length === options.epochs
-          ? `Trained ${trained.losses.length} epochs; final loss ${finalLoss!.toFixed(6)}${supervisedWords}`
-          : `Stopped after ${trained.losses.length} of ${options.epochs} epochs${finalLoss === null ? "" : `; loss ${finalLoss.toFixed(6)}${supervisedWords}`}`,
-      );
+      report.log(epochSummary(trained.losses, options.epochs, supervisedWords));
       return {
         bytes, head, weight: trained.weight, bias: trained.bias,
         epochs: trained.losses.length, losses: trained.losses, finalLoss, supervisedLosses: trained.supervised,

@@ -19,7 +19,8 @@
 // own TF.js loader and files.
 import type { DatasetInfo, ModelEntry } from "../../contracts";
 import { chooseRawLevel, geometryOf, inputShape, outputLevel, outputShape, ratio, sameVoxelSize } from "../../infer/geometry";
-import { mulberry32, SLICE_MS, yieldEvery } from "../head-trainer";
+import { mulberry32, shuffle, SLICE_MS, yieldEvery } from "../head-trainer";
+import { count, epochSummary, plural } from "../log-words";
 import { refuseMode, sourceOf } from "../modes";
 import { readGraph, readModel } from "../onnx-proto";
 import { targetTransformFor } from "../targets";
@@ -35,9 +36,6 @@ export interface FullDeps {
   fetchFiles: FetchFullFiles;
   targetTransformFor: typeof targetTransformFor;
 }
-
-const count = (n: number) => n.toLocaleString("en-US");
-const plural = (n: number, word: string) => `${count(n)} ${word}${n === 1 ? "" : "s"}`;
 
 /** The largest tile side offered or accepted. */
 export const MAX_TILE = 1100;
@@ -220,11 +218,7 @@ export function createRunFull(deps: FullDeps = { loadTf, fetchFiles: fetchFullFi
       }
       const bytes = writeOnnxWeights(start, offsets, net.exportWeights());
       const finalLoss = losses.length ? losses[losses.length - 1] : null;
-      report.log(
-        losses.length === options.epochs
-          ? `Trained ${plural(losses.length, "epoch")}; final loss ${finalLoss!.toFixed(6)}`
-          : `Stopped after ${losses.length} of ${options.epochs} epochs${finalLoss === null ? "" : `; loss ${finalLoss.toFixed(6)}`}`,
-      );
+      report.log(epochSummary(losses, options.epochs));
       return {
         bytes: bytes.buffer, epochs: losses.length, losses, finalLoss, supervisedLosses: losses.slice(),
         pixels: painted, chunks: chunks.size, distilled: 0, tiles: samples.length,
@@ -240,14 +234,6 @@ export function createRunFull(deps: FullDeps = { loadTf, fetchFiles: fetchFullFi
 /** "12 s", "3.4 min". */
 function seconds(s: number): string {
   return s < 90 ? `${s < 10 ? s.toFixed(1) : Math.round(s)} s` : `${(s / 60).toFixed(1)} min`;
-}
-
-/** Fisher–Yates over `order`, from the seeded generator. */
-function shuffle(order: Uint32Array, random: () => number): void {
-  for (let i = order.length - 1; i > 0; i--) {
-    const j = Math.floor(random() * (i + 1));
-    const tmp = order[i]; order[i] = order[j]; order[j] = tmp;
-  }
 }
 
 export const runFull: RunFinetune = createRunFull();

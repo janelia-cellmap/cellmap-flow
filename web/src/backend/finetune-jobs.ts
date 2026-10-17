@@ -27,7 +27,7 @@
 // final (TERMINAL_STATUSES): nothing moves a job again once it has one.
 import type { AppContext, FinetunedRecord, ModelEntry, PaintVolume } from "../contracts";
 import { loadGoodRegions } from "../finetune/good-regions";
-import { MODE_WORDS } from "../finetune/modes";
+import { MODE_NOUN, MODE_WORDS } from "../finetune/modes";
 import type { Finetuned, FinetuneOptions, FinetuneRun, RunFinetune, RunReporter } from "../finetune/types";
 import { finetunedEntry, nextFinetunedName } from "../models/finetuned";
 import { stamp } from "../shared/format";
@@ -375,7 +375,7 @@ export class FinetuneJobs {
     // The marker first (job-card.js resets the card and the loss plot on
     // it), then the progress from zero, so the first status poll after it
     // already shows the new run.
-    job.log(`${RESTARTING_MARKER}: a new run from the trained ${mode === "full" ? "network" : "head"}, ${options.epochs} epoch(s) with the form's parameters`);
+    job.log(`${RESTARTING_MARKER}: a new run from the trained ${MODE_NOUN[mode]}, ${options.epochs} epoch(s) with the form's parameters`);
     job.startIteration(options.epochs);
     job.start(this.run(job, from));
     return { ok: true, job };
@@ -505,7 +505,7 @@ export class FinetuneJobs {
         job.log(`${was} could not be removed from this browser (${error instanceof Error ? error.message : String(error)}); it stays on the Models tab, beside ${name}.`);
       }
     }
-    job.log(`Serving ${name} beside ${entry.name}. WAITING_FOR_RESTART: paint where it is still wrong and Restart to train again from ${job.args.options.mode === "full" ? "this network" : "this head"}.`);
+    job.log(`Serving ${name} beside ${entry.name}. WAITING_FOR_RESTART: paint where it is still wrong and Restart to train again from this ${MODE_NOUN[job.args.options.mode]}.`);
     job.setStatus("WAITING_FOR_RESTART");
   }
 }
@@ -515,7 +515,7 @@ type StartFrom = Pick<FinetuneRun, "initialHead" | "initialBytes">;
 
 /** What a job's run trains, in a log line's words: "the head trained", "the network trained". */
 function trained(job: FinetuneJob): string {
-  return job.args.options.mode === "full" ? "the network trained" : "the head trained";
+  return `the ${MODE_NOUN[job.args.options.mode]} trained`;
 }
 
 /** `YYYYmmdd-HHMMSS`, as the volume ids and the server's run directories are stamped. */
