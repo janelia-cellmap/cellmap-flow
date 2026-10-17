@@ -1,24 +1,20 @@
-"""``BoundingBox``: a box of a dataset to process, as a blockwise task lists it.
-
-A task YAML's ``bounding_boxes`` is a list of them, which the blockwise
-processor checks (``_check_bounding_boxes``); the dashboard's box tool draws
-and loads the INPUT node's (``dashboard.requests.BbxGenerator``), which the
-task YAML it generates lists. Importing this imports pydantic only: no Flask,
-and none of the blockwise processor.
-"""
+"""A box of a dataset, nm, z, y, x: the box tool's (lenient) and a blockwise task's (strict). No Flask."""
 
 from typing import Annotated
 
 from pydantic import BaseModel, Field
 
-# z, y, x, nm.
-_Point = Annotated[list[float], Field(min_length=3, max_length=3)]
-_Size = Annotated[list[Annotated[float, Field(gt=0)]], Field(min_length=3, max_length=3)]
+_Triple = Annotated[list[float], Field(min_length=3, max_length=3)]
 
 
 class BoundingBox(BaseModel):
-    """A box, nm, z, y, x: ``offset`` its lower corner (0, 0, 0 when left
-    out) and ``shape`` its size, every side above 0."""
+    """Its lower corner and its size."""
 
-    offset: _Point = [0, 0, 0]
-    shape: _Size
+    offset: _Triple = [0, 0, 0]
+    shape: _Triple = [1, 1, 1]
+
+
+class TaskBoundingBox(BoundingBox):
+    """A task YAML's box: its shape given, every side above 0."""
+
+    shape: Annotated[list[Annotated[float, Field(gt=0)]], Field(min_length=3, max_length=3)]

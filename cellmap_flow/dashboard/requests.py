@@ -213,14 +213,13 @@ class Equivalences(BaseModel):
     equivalences: list[list[int]]
 
 
-# A point, z, y, x.
+# A point or a size, z, y, x.
 _Triple = Annotated[list[float], Field(min_length=3, max_length=3)]
 
 
 class BbxGenerator(BaseModel):
     """The box tool's viewer on ``dataset_path``, showing the boxes the
-    INPUT node has, each a blockwise task's BoundingBox; ``num_boxes`` is
-    how many the dialog counts up to."""
+    INPUT node has; ``num_boxes`` is how many the dialog counts up to."""
 
     dataset_path: Annotated[str, _required("dataset_path", message="Dataset path is required")] = Field(
         None, validate_default=True)

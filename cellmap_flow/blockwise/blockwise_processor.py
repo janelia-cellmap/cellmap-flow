@@ -17,7 +17,7 @@ from zarr.storage import NestedDirectoryStore
 from zarr.hierarchy import open_group
 from functools import partial
 from pydantic import ValidationError
-from cellmap_flow.blockwise.bounding_box import BoundingBox
+from cellmap_flow.blockwise.bounding_box import BoundingBox, TaskBoundingBox
 from cellmap_flow.image_data_interface import ImageDataInterface
 from cellmap_flow.inferencer import Inferencer
 from cellmap_flow.pipeline_spec import PipelineSpec
@@ -75,17 +75,12 @@ def _validate_settings(config):
 
 
 def _check_bounding_boxes(boxes):
-    """Refuse ``bounding_boxes`` that are not a list of BoundingBox: ``{offset, shape}``,
-    each three numbers, nm, z, y, x, every side of the shape above 0.
-
-    Checked strictly: a YAML's "8" or true is not a number here, as
-    pydantic would otherwise take it for one.
-    """
+    """Refuse ``bounding_boxes`` that are not a list of TaskBoundingBox; strictly, so "8" or true is no number."""
     if not isinstance(boxes, list):
         raise ConfigError(f"bounding_boxes should be a list of {{offset, shape}}, got {boxes!r}")
     for n, box in enumerate(boxes, start=1):
         try:
-            BoundingBox.model_validate(box, strict=True)
+            TaskBoundingBox.model_validate(box, strict=True)
         except ValidationError as e:
             reasons = "; ".join(
                 f"{'.'.join(str(part) for part in error['loc']) or 'the box'}: {error['msg']}"
@@ -441,7 +436,6 @@ class CellMapFlowBlockwiseProcessor:
         and the result is cut to the raw data's extent, where every output
         voxel has data to be computed from.
         """
-        # Checked by _check_bounding_boxes; read here for its offset's default.
         box = BoundingBox.model_validate(box)
         offset = np.array(box.offset, dtype=float)
         begin = np.floor(offset).astype(int)
