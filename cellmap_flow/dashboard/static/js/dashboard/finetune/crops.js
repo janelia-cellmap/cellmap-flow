@@ -5,7 +5,11 @@
 // the paint can be downloaded as a zarr or deleted.
 import { esc, setBusy } from "../../lib/dom.js";
 import { isBrowserMode } from "../../lib/page-data.js";
+import { readText, writeText } from "../../lib/stored.js";
 import { getAnswer, postAnswer, watchProgress } from "./requests.js";
+
+// The Load Crops dialog's last path, kept in this browser as a plain string.
+const YAML_PATH_KEY = "loadCropsYamlPath";
 
 // A crop import's progress, as the status line shows it.
 function describeCropImport(p) {
@@ -204,10 +208,8 @@ export function initCrops({ log, picker, form }) {
       loadCropsModal = new bootstrap.Modal(document.getElementById("loadCropsModal"));
     }
     // Restore the last-used path so users don't retype it.
-    try {
-      const saved = localStorage.getItem("loadCropsYamlPath");
-      if (saved) loadCropsYamlPath.value = saved;
-    } catch (_) {}
+    const saved = readText(YAML_PATH_KEY, "");
+    if (saved) loadCropsYamlPath.value = saved;
     loadCropsStatus.textContent = "";
     loadCropsModal.show();
   });
@@ -227,7 +229,7 @@ export function initCrops({ log, picker, form }) {
       if (data.success) {
         loadCropsYaml.value = data.text;
         status.textContent = `Loaded ${data.text.length} chars from ${path}`;
-        try { localStorage.setItem("loadCropsYamlPath", path); } catch (_) {}
+        writeText(YAML_PATH_KEY, path);
       } else {
         status.textContent = `Read failed: ${data.error}`;
       }
@@ -252,7 +254,7 @@ export function initCrops({ log, picker, form }) {
         "Paste YAML or enter a file path first.";
       return;
     }
-    try { if (yamlPath) localStorage.setItem("loadCropsYamlPath", yamlPath); } catch (_) {}
+    if (yamlPath) writeText(YAML_PATH_KEY, yamlPath);
     const outputPath = outputPathInput.value.trim();
     const status = loadCropsStatus;
     status.textContent = "Starting...";

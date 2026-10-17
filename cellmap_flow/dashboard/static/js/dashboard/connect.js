@@ -5,12 +5,14 @@
 // The datasets connected to before are offered in the path field, newest
 // first (its datalist, #recentDatasets). The field had only the browser's
 // own form history, which shows a few entries, and only those that start
-// with what is typed. They are kept in this browser's localStorage: a
-// convenience of this browser alone, gone with its site data, and the
-// field works as before when the storage cannot be read. A folder picked
-// on this machine (the browser mode's `local/<key>/` URLs) is left out: it
-// opens through the Browse button, which asks for its permission again.
+// with what is typed. They are kept in this browser's localStorage
+// (lib/stored.js): a convenience of this browser alone, gone with its site
+// data, and the field works as before when the storage cannot be read. A
+// folder picked on this machine (the browser mode's `local/<key>/` URLs) is
+// left out: it opens through the Browse button, which asks for its
+// permission again.
 import { ApiError, postJSON } from "../lib/api.js";
+import { readJSON, writeJSON } from "../lib/stored.js";
 
 const RECENT_KEY = "cellmap-flow:recent-datasets";
 // Enough to find last week's datasets; the datalist scrolls past a dozen.
@@ -20,12 +22,8 @@ const LOCAL_FOLDER = /\/local\/[^/]+\//;
 // The datasets connected to before, newest first; none when the storage
 // cannot be read (a private window, blocked site data).
 function recentDatasets() {
-  try {
-    const stored = JSON.parse(window.localStorage.getItem(RECENT_KEY) || "[]");
-    return Array.isArray(stored) ? stored.filter((path) => typeof path === "string" && path) : [];
-  } catch {
-    return [];
-  }
+  const stored = readJSON(RECENT_KEY, []);
+  return Array.isArray(stored) ? stored.filter((path) => typeof path === "string" && path) : [];
 }
 
 // `path` first among the recent datasets, once, the oldest dropped past
@@ -33,11 +31,7 @@ function recentDatasets() {
 function rememberDataset(path) {
   if (LOCAL_FOLDER.test(path)) return;
   const recent = [path, ...recentDatasets().filter((other) => other !== path)].slice(0, MAX_RECENT);
-  try {
-    window.localStorage.setItem(RECENT_KEY, JSON.stringify(recent));
-  } catch {
-    // Not stored: the next visit offers what it offered before.
-  }
+  writeJSON(RECENT_KEY, recent);
 }
 
 // The field's datalist filled with the recent datasets.

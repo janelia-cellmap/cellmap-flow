@@ -6,7 +6,11 @@
 // row.
 import { esc, setBusy } from "../../lib/dom.js";
 import { isBrowserMode } from "../../lib/page-data.js";
+import { readText, writeText } from "../../lib/stored.js";
 import { postAnswer, watchProgress } from "./requests.js";
+
+// The directory last scanned, kept in this browser as a plain string.
+const BROWSE_ROOT_KEY = "existingBrowseRoot";
 
 // A session copy's progress, as the status line shows it.
 function describeCopy(p) {
@@ -50,9 +54,7 @@ export function initSessions({ log, addToViewer, volumeReady }) {
       existingSessionsEmpty.style.display = "none";
       return;
     }
-    if (!browser) {
-      try { localStorage.setItem("existingBrowseRoot", rootPath); } catch (_) {}
-    }
+    if (!browser) writeText(BROWSE_ROOT_KEY, rootPath);
     existingSessionsList.innerHTML = '<option>Loading...</option>';
     existingSessionsEmpty.style.display = "none";
     loadExistingConfirmBtn.disabled = true;
@@ -104,7 +106,7 @@ export function initSessions({ log, addToViewer, volumeReady }) {
     }
     // Seed the root: prefer outputPath field, then last used, then blank
     const outputPath = outputPathInput.value.trim();
-    const saved = (() => { try { return localStorage.getItem("existingBrowseRoot"); } catch (_) { return null; } })();
+    const saved = readText(BROWSE_ROOT_KEY, null);
     existingBrowseRoot.value = outputPath || saved || "";
     loadExistingModal.show();
     if (existingBrowseRoot.value) scanExistingSessions();

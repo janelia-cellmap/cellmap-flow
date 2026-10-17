@@ -2,6 +2,7 @@
 // kept in localStorage (the output path on the server too), the advice shown
 // next to some of them, and the GPU queue picker.
 import { isBrowserMode } from "../../lib/page-data.js";
+import { readJSON, writeJSON } from "../../lib/stored.js";
 import { fillQueueSelect, queueHint, subscribeGpuQueues } from "../../shared/gpu-queues.js";
 import { getAnswer, postAnswer } from "./requests.js";
 
@@ -64,13 +65,12 @@ function saveFinetuneState() {
     state[key] = kind === "checkbox" ? el.checked : el.value;
   }
   state.selectedModelName = document.getElementById("modelSelect").value;
-  localStorage.setItem(FINETUNE_STATE_KEY, JSON.stringify(state));
+  writeJSON(FINETUNE_STATE_KEY, state);
 }
 
+// The state saved last, or null if none is.
 function restoreFinetuneState() {
-  const raw = localStorage.getItem(FINETUNE_STATE_KEY);
-  if (!raw) return null;
-  try { return JSON.parse(raw); } catch { return null; }
+  return readJSON(FINETUNE_STATE_KEY, null);
 }
 
 function applySavedState(saved) {

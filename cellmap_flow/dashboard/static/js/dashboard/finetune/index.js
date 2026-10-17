@@ -35,6 +35,7 @@ import { initCrops } from "./crops.js";
 import { initGoodRegionMarks } from "./good-region-marks.js";
 import { initJobMonitor } from "./job-monitor.js";
 import { initLabelIt } from "./label-it.js";
+import { readJSON, writeJSON } from "../../lib/stored.js";
 import { initModelPicker } from "./models.js";
 import { initSessions } from "./sessions.js";
 import { initTrainingForm } from "./training-form.js";
@@ -69,17 +70,12 @@ export function initFinetuneTab() {
 const OPEN_SECTIONS_KEY = "finetunePatchToolsOpen";
 
 function rememberOpenSections() {
-  let saved = {};
-  try {
-    saved = JSON.parse(localStorage.getItem(OPEN_SECTIONS_KEY) || "{}") || {};
-  } catch (_) {}
+  const saved = readJSON(OPEN_SECTIONS_KEY, {}) || {};
   for (const section of document.querySelectorAll(".patch-tools-section[id]")) {
     if (typeof saved[section.id] === "boolean") section.open = saved[section.id];
     section.addEventListener("toggle", () => {
       saved[section.id] = section.open;
-      try {
-        localStorage.setItem(OPEN_SECTIONS_KEY, JSON.stringify(saved));
-      } catch (_) {}
+      writeJSON(OPEN_SECTIONS_KEY, saved);
     });
   }
 }
