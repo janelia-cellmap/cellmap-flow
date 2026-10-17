@@ -36,7 +36,7 @@ import {
   ZIP_LIMIT_BYTES, zarrName, zipFileName, zipRun,
 } from "./output";
 import {
-  describePlan, isPlan, largeRunWarning, latestBox, type ModelPlan, planModel, type RegionNm, regionError,
+  chunkStart, describePlan, isPlan, largeRunWarning, latestBox, type ModelPlan, planModel, type RegionNm, regionError,
   roundedOut, RUN_REGION_LAYER, runRegionLayer, sameRegion, snappedRegion, wholeVolumeNm, withBox,
 } from "./region";
 import { describeProgress, provenance, type RunOutcome, type RunProgress, runRegion, type RunTarget } from "./run";
@@ -268,7 +268,7 @@ export function installRunRegionUi(ctx: AppContext, opts: { folders?: HandleStor
         let best: { axis: number; bytes: number } | null = null;
         for (const axis of peak.split) {
           const lo = [...p.lo];
-          lo[axis] = Math.floor(lo[axis] / p.chunk[axis]) * p.chunk[axis];
+          lo[axis] = chunkStart(lo[axis], p.chunk[axis]);
           const snapped = await planOf(p.served.view, { lo, hi: p.hi });
           if (!best || snapped.peakBytes < best.bytes) best = { axis, bytes: snapped.peakBytes };
         }

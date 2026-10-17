@@ -55,14 +55,20 @@ export function levelCornerNm(level: Pick<Level, "origin" | "voxel">): number[] 
   return level.origin.map((o, a) => o - level.voxel[a] / 2);
 }
 
+/** Where a level's voxels are, in world nm z, y, x: from the lower corner
+ * of its voxel 0 (levelCornerNm), `offset`, over `size`, its shape times
+ * its voxel size. */
+export function levelExtentNm(level: Pick<Level, "origin" | "voxel" | "shape">): { offset: number[]; size: number[] } {
+  return { offset: levelCornerNm(level), size: level.shape.map((n, a) => n * level.voxel[a]) };
+}
+
 /** `[lo, hi]`, world nm z, y, x: where the volume's raw data is, read at
  * its input voxel size (pipeline.raw_extent_nm: planPlane's `dataBoxNm`).
  * The level is the one chooseRawLevel picks for `volume.input_voxel_size`,
  * which planVolume set to a level's own voxel size. */
 export function rawExtentNm(dataset: Pick<DatasetInfo, "levels">, volume: Pick<PaintVolume, "input_voxel_size">): [number[], number[]] {
-  const level = dataset.levels[chooseRawLevel(dataset.levels, volume.input_voxel_size)];
-  const lo = levelCornerNm(level);
-  return [lo, lo.map((l, a) => l + level.shape[a] * level.voxel[a])];
+  const { offset, size } = levelExtentNm(dataset.levels[chooseRawLevel(dataset.levels, volume.input_voxel_size)]);
+  return [offset, offset.map((o, a) => o + size[a])];
 }
 
 /** The raw plane `plan` reads, as `plan.image_shape` laid out as on screen

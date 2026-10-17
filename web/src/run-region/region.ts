@@ -15,11 +15,13 @@
 // voxel 0's centre (infer/geometry.ts outputLevel; label-it/prediction.ts
 // places a seed on the same grid), so voxel v of a level spans
 // [corner + v * voxel, corner + (v + 1) * voxel) with the corner half a
-// voxel before the origin. The level is the one infer/engine.ts serves the
+// voxel before the origin (ai-annotate/plane.ts levelCornerNm). The level is the one infer/engine.ts serves the
 // model's view at (servedLevel: the raw level chosen for the model's input
 // voxel size, read as if it were at that size), in nm whatever the source's
 // unit, as the viewer's coordinates are; voxel indices need no unit.
+import { levelCornerNm, levelExtentNm } from "../ai-annotate/plane";
 import type { Chain, DatasetInfo, LayerSpec, ServedModel } from "../contracts";
+import { steady } from "../finetune/good-regions";
 import { TYPED } from "../infer/dtype";
 import { geometryOf, type Level, outputShape } from "../infer/geometry";
 import { outputChannels, outputDtype } from "../infer/post";
@@ -41,22 +43,19 @@ export interface RegionNm {
  * more, and the files to match. */
 export const LARGE_RUN_CHUNKS = 2000;
 
-/** Rounded to a millionth of a voxel before a floor or a ceiling: the float
- * noise of nm → voxels (100.5 × 8 / 8 coming back as 100.49999999999999)
- * must not move a box's edge by a voxel. */
-const steady = (x: number) => Math.round(x * 1e6) / 1e6;
-
 /** The whole volume as a region: the finest level's extent, from its
  * voxel 0's corner (the level's origin is that voxel's centre) to the far
  * corner. Every model's level lies within it (each is read from a level of
  * the same pyramid and floor-divided into output voxels), so this maps to
  * the whole of each model's level. */
 export function wholeVolumeNm(dataset: Pick<DatasetInfo, "levels">): RegionNm {
-  const finest = dataset.levels[0];
-  return {
-    offset: finest.origin.map((o, a) => o - finest.voxel[a] / 2),
-    size: finest.shape.map((n, a) => n * finest.voxel[a]),
-  };
+  return levelExtentNm(dataset.levels[0]);
+}
+
+/** The first voxel of the chunk that voxel `v` is in, on a grid chunked by
+ * `chunk` voxels from voxel 0. */
+export function chunkStart(v: number, chunk: number): number {
+  return Math.floor(v / chunk) * chunk;
 }
 
 /** `region` with its corner moved back along `axis` (0 z, 1 y, 2 x) to the
@@ -69,8 +68,7 @@ export function wholeVolumeNm(dataset: Pick<DatasetInfo, "levels">): RegionNm {
  * chunk before. */
 export function snappedRegion(region: RegionNm, plan: Pick<ModelPlan, "lo" | "chunk" | "level">, axis: number): RegionNm {
   const { level } = plan;
-  const corner = level.origin[axis] - level.voxel[axis] / 2;
-  const start = corner + Math.floor(plan.lo[axis] / plan.chunk[axis]) * plan.chunk[axis] * level.voxel[axis];
+  const start = levelCornerNm(level)[axis] + chunkStart(plan.lo[axis], plan.chunk[axis]) * level.voxel[axis];
   const offset = [...region.offset], size = [...region.size];
   const at = Math.ceil(steady(start));
   size[axis] = steady(region.offset[axis] + region.size[axis] - at);
@@ -96,10 +94,10 @@ export function regionError(region: RegionNm): string | null {
  * along an axis (a flat box) takes the one voxel it lies in. */
 export function levelBox(region: RegionNm, level: Level): { lo: number[]; hi: number[] } | null {
   const lo: number[] = [], hi: number[] = [];
+  const corner = levelCornerNm(level);
   for (let a = 0; a < 3; a++) {
-    const corner = level.origin[a] - level.voxel[a] / 2;
-    const start = steady((region.offset[a] - corner) / level.voxel[a]);
-    const end = steady((region.offset[a] + region.size[a] - corner) / level.voxel[a]);
+    const start = steady((region.offset[a] - corner[a]) / level.voxel[a]);
+    const end = steady((region.offset[a] + region.size[a] - corner[a]) / level.voxel[a]);
     let l = Math.floor(start), h = Math.ceil(end);
     if (h <= l) h = l + 1;
     l = Math.max(l, 0);
