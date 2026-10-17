@@ -115,11 +115,8 @@ function lineage(record: FinetunedRecord, records: readonly FinetunedRecord[]): 
   return out;
 }
 
-/** The Hugging Face model at the root of a record's lineage (`ancestry`,
- * as lineage gives it): the base of the oldest model in it, which is the
- * record's own base unless the record was finetuned from a finetuned model.
- * An error when the lineage stops short of the root: a model in it is no
- * longer kept in this browser. */
+/** The Hugging Face model at the root of `ancestry` (lineage's answer), or
+ * an error when it stops short of one: a model in it is no longer kept. */
 function rootBase(ancestry: readonly FinetunedRecord[]): FinetunedRecord["base"] {
   const { base } = ancestry[ancestry.length - 1];
   if (base.id.startsWith(`${FINETUNED_REPO}/`)) throw new Error(`${base.name}, the model it was finetuned from, is no longer kept in this browser`);

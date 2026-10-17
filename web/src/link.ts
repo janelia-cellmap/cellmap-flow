@@ -311,14 +311,7 @@ export async function rebuildFinetuned(
   const holder = await catalog.resolve(model.name).catch(() => null);
   const taken = holder !== null || records.some((r) => r.name === model.name);
   const name = taken ? nextFinetunedName(source, records, opts.reserved) : model.name;
-  const record = finetunedRecord(source, name, data.byteLength, {
-    volume: "",
-    created_at: opts.now().toISOString(),
-    params: {},
-    epochs: 0,
-    final_loss: null,
-    from_link: { name: model.name },
-  });
+  const record = finetunedRecord(source, name, data.byteLength, { volume: "", created_at: opts.now().toISOString(), params: {}, epochs: 0, final_loss: null, from_link: { name: model.name } });
   await catalog.addFinetuned(record, data);
   log(taken
     ? `The link's ${model.name} is kept in this browser as ${name}, rebuilt from ${source.name}: this browser has a model named ${model.name} already, with other weights, and keeps it`

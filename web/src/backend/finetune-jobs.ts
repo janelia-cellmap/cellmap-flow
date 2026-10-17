@@ -443,13 +443,7 @@ export class FinetuneJobs {
   private async keep(job: FinetuneJob, result: Finetuned): Promise<void> {
     const { ctx, entry, volume, autoServe } = job.args;
     const name = nextFinetunedName(entry, await ctx.catalog.finetuned());
-    const record = finetunedRecord(entry, name, result.bytes.byteLength, {
-      volume: volume.id,
-      created_at: this.now().toISOString(),
-      params: job.params,
-      epochs: result.epochs,
-      final_loss: result.finalLoss,
-    });
+    const record = finetunedRecord(entry, name, result.bytes.byteLength, { volume: volume.id, created_at: this.now().toISOString(), params: job.params, epochs: result.epochs, final_loss: result.finalLoss });
     const fentry = record.entry;
     await ctx.catalog.addFinetuned(record, result.bytes);
     const loss = result.finalLoss === null ? "" : `, final loss ${result.finalLoss.toFixed(6)}`;

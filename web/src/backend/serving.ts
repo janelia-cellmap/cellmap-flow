@@ -102,13 +102,9 @@ export async function serveModels(ctx: AppContext, entries: ModelEntry[], chain:
   const handedOver = new Set(Object.values(replacing));
   for (const old of before) {
     if (kept.has(old)) continue;
-    if (names.has(old.entry.name)) {
-      // Served anew above, through this chain: only its old view goes.
-      await old.dispose();
-    } else {
-      // A layer handed over goes when its successor's is set, below.
-      await stopServing(ctx, old.entry.name, [old], { keepLayer: handedOver.has(old.entry.name) });
-    }
+    // A layer handed over goes when its successor's is set, below.
+    if (!names.has(old.entry.name)) await stopServing(ctx, old.entry.name, [old], { keepLayer: handedOver.has(old.entry.name) });
+    else await old.dispose();
   }
   showLayers(ctx, result, chain, options.postprocessChanged ?? false, replacing);
   return result;
@@ -126,10 +122,7 @@ export async function unserveModel(ctx: AppContext, name: string): Promise<void>
   await stopServing(ctx, name, ctx.infer.served().filter((s) => s.entry.name === name));
 }
 
-/** Stop serving the model named `name`: `views`, its served views (none
- * for a model still starting), disposed of, its layer removed from the
- * viewer unless `keepLayer` (a layer handed over to the model replacing it,
- * which goes when that one's is set), and the log told. */
+/** Stop serving the model named `name`, whose `views` are none while it is still starting. */
 export async function stopServing(ctx: AppContext, name: string, views: readonly ServedModel[], options: { keepLayer?: boolean } = {}): Promise<void> {
   for (const view of views) await view.dispose();
   if (!options.keepLayer) ctx.viewer.removeLayer(name);

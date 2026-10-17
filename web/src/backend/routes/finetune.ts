@@ -146,16 +146,9 @@ export function finetuneRoutes(router: Router, deps: Partial<FinetuneDeps> = {})
     }
   }
 
-  /** A submit's or restart's body read as the training of `mode`, checked:
-   * the loss, for the head (refuseLoss: the whole network has its own),
-   * the parameters (readTraining), and a whole-network run against `entry`
-   * (refuseFull), when there is an entry. The options and params, or why
-   * not. */
-  async function checkedTraining(body: Record<string, unknown>, mode: unknown, entry: ModelEntry | undefined): Promise<Training | { error: string }> {
-    if (mode !== "full") {
-      const refused = refuseLoss(body.loss_type);
-      if (refused) return { error: refused };
-    }
+  async function checkedTraining(body: Record<string, unknown>, mode: unknown, entry: ModelEntry | undefined): Promise<ReturnType<typeof readTraining>> {
+    const lossRefused = mode === "full" ? null : refuseLoss(body.loss_type);
+    if (lossRefused) return { error: lossRefused };
     const training = readTraining({ ...body, finetune_mode: mode });
     if ("error" in training) return training;
     const refused = entry ? await refuseFull(entry, training.options) : null;
@@ -368,7 +361,6 @@ export function finetuneRoutes(router: Router, deps: Partial<FinetuneDeps> = {})
     const mode = body.finetune_mode ?? finetuneModes(model.entry)[0] ?? "head";
     const training = await checkedTraining(body, mode, model.entry);
     if ("error" in training) return badRequest(training.error);
-    // A mode the model's manifest offers (refuseFull has asked it of the whole network already).
     const refusedMode = refuseMode(model.entry, training.options.mode);
     if (refusedMode) return badRequest(refusedMode);
     const autoServe = body.auto_serve !== false;
@@ -547,12 +539,6 @@ function refuseLoss(loss: unknown): string | null {
   return `The ${String(loss)} loss needs a server: ${why}. In the browser the model's head trains with BCE (bce), MSE (mse) or margin (margin): pick one, or run the dashboard on a server for the others.`;
 }
 
-/** A submit's or restart's training: run.ts's options, and the job's params. */
-interface Training {
-  options: FinetuneOptions;
-  params: Record<string, unknown>;
-}
-
 /** The training parameters of a submit or restart body (training-form.js's
  * trainingParams, as job-monitor.js sends them): the ones the browser's
  * trainer takes, checked, as run.ts's options and as the job's params (the
@@ -565,7 +551,7 @@ interface Training {
  * augment, queue, checkpoint_path) are left out of both. For the whole
  * network (readFullTraining) the batch is batch_size, in tiles, and the
  * tile's side tile_size; the head's fields are left out. */
-export function readTraining(body: Record<string, unknown>): Training | { error: string } {
+export function readTraining(body: Record<string, unknown>): { options: FinetuneOptions; params: Record<string, unknown> } | { error: string } {
   const mode = body.finetune_mode === undefined || body.finetune_mode === null || body.finetune_mode === "" ? "head" : body.finetune_mode;
   if (mode !== "head" && mode !== "full") return { error: `finetune_mode: expected head or full, not ${JSON.stringify(mode)}` };
   const epochs = numberOr(body.num_epochs, DEFAULT_OPTIONS.epochs);

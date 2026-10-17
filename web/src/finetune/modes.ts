@@ -39,9 +39,6 @@ export function finetuneModes(entry: ModelEntry): FinetuneMode[] {
 
 /** What each mode trains, in the tab's words. */
 export const MODE_WORDS: Record<FinetuneMode, string> = { head: "the last layer", full: "the whole network" };
-
-/** What each mode trains, as one noun for a log line: "the trained head",
- * "from this network". */
 export const MODE_NOUN: Record<FinetuneMode, string> = { head: "head", full: "network" };
 
 /** Why `entry` cannot be trained as `mode`, in a sentence, or null when it can. */
