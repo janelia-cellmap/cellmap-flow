@@ -191,8 +191,7 @@ export function pointerNm(coords: ArrayLike<number> | null | undefined, dimensio
   const names = Object.keys(dimensions);
   if (names.length < 3 || coords.length !== names.length) return null;
   const nm: number[] = [];
-  ["z", "y", "x"].forEach((axis, fallback) => {
-    const i = names.includes(axis) ? names.indexOf(axis) : fallback;
+  zyxIndices(names).forEach((i) => {
     const [scale, unit] = dimensions[names[i]];
     const perUnit = NM_PER_UNIT[unit];
     if (perUnit === undefined) return; // not a length: the position is not in nm
@@ -215,15 +214,22 @@ export function coordsFromNm(nm: readonly number[], dimensions: Record<string, [
   const names = Object.keys(dimensions);
   if (names.length < 3 || nm.length !== 3) return null;
   const coords = names.map(() => 0);
-  for (const [fallback, axis] of ["z", "y", "x"].entries()) {
-    const i = names.includes(axis) ? names.indexOf(axis) : fallback;
+  for (const [axis, i] of zyxIndices(names).entries()) {
     const [scale, unit] = dimensions[names[i]];
     const perUnit = NM_PER_UNIT[unit];
     if (perUnit === undefined) return null;
     // Rounded as pointerNm rounds: to a millionth of the coordinate.
-    coords[i] = Math.round((nm[fallback] / (scale * perUnit)) * 1e6) / 1e6;
+    coords[i] = Math.round((nm[axis] / (scale * perUnit)) * 1e6) / 1e6;
   }
   return coords;
+}
+
+/** Where z, y and x are among a coordinate space's dimension `names`, in
+ * that order: each found by its name, or, when it is not among them, at
+ * its own place in z, y, x (the first three dimensions in order), as
+ * pointerNm and coordsFromNm match them. */
+function zyxIndices(names: readonly string[]): number[] {
+  return AXIS_NAMES.map((axis, fallback) => (names.includes(axis) ? names.indexOf(axis) : fallback));
 }
 
 // ---------------------------------------------------------------------------
