@@ -19,8 +19,9 @@ import { describe, expect, it, vi } from "vitest";
 import { asFloat32, createFeatureRunner } from "../../src/finetune/features";
 import { mulberry32 } from "../../src/finetune/head-trainer";
 import { float16ArrayToFloat32, float16ToFloat32, float32ArrayToFloat16, float32ToFloat16, headOf, withFeatureOutput, withHead } from "../../src/finetune/onnx-head";
-import { concatBytes, encodeFields, encodeLengthDelimited, encodeVarint, encodeVarintField, parseFields, readGraph, readMetadata, readModel, readVarint, withGraphOutput, withMetadata } from "../../src/finetune/onnx-proto";
+import { concatBytes, encodeFields, encodeLengthDelimited, encodeVarint, encodeVarintField, parseFields, readGraph, readModel, readVarint, withGraphOutput, withMetadata } from "../../src/finetune/onnx-proto";
 import type { Head } from "../../src/finetune/types";
+import { readMetadata } from "./onnx-metadata";
 
 // The page's ORT entry (WebGPU + WASM, which fetches its runtime over HTTP)
 // replaced by the package's Node entry, the same WASM runtime read from disk.

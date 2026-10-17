@@ -19,8 +19,6 @@ import type { ModelEntry } from "../contracts";
 
 export type FinetuneMode = "head" | "full";
 
-export const FINETUNE_MODES: readonly FinetuneMode[] = ["head", "full"];
-
 /** The Hugging Face file `entry`'s bytes are, or were made from: a model
  * finetuned in this browser names its base's (ModelVariant.source), whose
  * layout its bytes keep and whose folder holds its finetune files. */
@@ -28,7 +26,7 @@ export function sourceOf(entry: ModelEntry): { repo: string; folder: string; fil
   return entry.variant.source ?? { repo: entry.repo, folder: entry.folder, file: entry.variant.file };
 }
 
-/** The ways `entry` can be finetuned in the browser, in FINETUNE_MODES order. */
+/** The ways `entry` can be finetuned in the browser, the head first. */
 export function finetuneModes(entry: ModelEntry): FinetuneMode[] {
   const spec = entry.manifest.finetune;
   if (!spec) return ["head"];

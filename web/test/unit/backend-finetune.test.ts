@@ -10,13 +10,13 @@ import { type FinetuneDeps, finetuneRoutes, readTraining, RESTART_EVENT, sameDat
 import { Router } from "../../src/backend/router";
 import type { ApiRequest, ApiResponse, Chain, ModelEntry, PaintVolume } from "../../src/contracts";
 import { MANIFEST_METADATA_KEY } from "../../src/contracts";
-import { readMetadata } from "../../src/finetune/onnx-proto";
 import { saveGoodRegions } from "../../src/finetune/good-regions";
 import type { Finetuned, FinetuneRun, RunFinetune } from "../../src/finetune/types";
 import { CHUNK_DIR, chunkKey } from "../../src/finetune/volume";
 import { defaultChain } from "../../src/state";
 import { paintLayerName } from "../../src/viewer/layers";
 import { DATASET, entry, type FakeContext, fakeContext, NAME_54, NAME_56, request } from "./backend-fakes";
+import { readMetadata } from "./onnx-metadata";
 
 function body(res: ApiResponse): any {
   if (!("json" in res)) throw new Error(`not a JSON answer: ${JSON.stringify(res)}`);

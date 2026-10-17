@@ -2,7 +2,7 @@
 // little of ONNX's schema that finetuning the head needs: the graph's nodes,
 // its initializers (where their bytes lie in the file) and its inputs and
 // outputs by name, and two edits, a graph output added and an initializer's
-// values replaced; and the model's metadata_props, read and written, where a
+// values replaced; and the model's metadata_props written, where a
 // finetuned model's download carries its manifest (routes/finetune.ts; the
 // server's onnx model type reads it, cellmap_flow/models/configs/onnx.py).
 // Protobuf is a sequence of (field number, wire type) tags, each followed by
@@ -326,21 +326,6 @@ export function withGraphOutput(modelBytes: Uint8Array, name: string, elemType: 
   const valueInfo = concatBytes([encodeLengthDelimited(1, utf8Encoder.encode(name)), encodeLengthDelimited(2, tensorType)]);
   const graphBytes = concatBytes([graph.value, encodeLengthDelimited(12, valueInfo)]);
   return concatBytes(fields.map((f) => (f === graph ? encodeLengthDelimited(7, graphBytes) : modelBytes.subarray(f.tagStart, f.end))));
-}
-
-/** The model's metadata_props (ModelProto field 14, each entry a
- * StringStringEntryProto: field 1 its key, 2 its value), by key; a key
- * written twice is the later entry's, as onnx's own readers take it. */
-export function readMetadata(modelBytes: Uint8Array): Record<string, string> {
-  const metadata: Record<string, string> = {};
-  for (const f of readModel(modelBytes).fields) {
-    if (f.number !== 14 || f.wireType !== WIRE_LENGTH) continue;
-    const entry = parseFields(f.value, f.start);
-    const key = entry.find((e) => e.number === 1 && e.wireType === WIRE_LENGTH);
-    const value = entry.find((e) => e.number === 2 && e.wireType === WIRE_LENGTH);
-    metadata[key ? text(key) : ""] = value ? text(value) : "";
-  }
-  return metadata;
 }
 
 /** The model with `entries` in its metadata_props: an entry already there
