@@ -22,7 +22,7 @@ Only one request can be in flight or waiting for review at a time: accept or rej
 
 ### What gets written
 
-The mask covers one plane, one annotation voxel thick, `crop_size_px` annotation voxels on a side (512 by default), centred on the point you chose and clipped to the data (the volume can reach past the data's edge, rounded up to whole chunks of the model's output). The model is sent the plane as the panel you took it in shows it, and the review shows it the same way. Within that plane, each connected piece of the mask becomes an object with its own id (2 and up) and every other voxel becomes background (1), as with **Seed from Prediction**. Check the result, then fix it with the brush as usual.
+The mask covers one plane, one annotation voxel thick, `crop_size_px` annotation voxels on a side (512 by default), centred on the point you chose and clipped to the data (the volume can reach past the data's edge, rounded up to whole chunks of the model's output). The model is sent the plane as the panel you took it in shows it, and the review shows it the same way. Within that plane, each connected piece of the mask, as the model drew it, becomes an object with its own id (2 and up) and every other voxel becomes background (1), as with **Seed from Prediction**. Check the result, then fix it with the brush as usual.
 
 ### Choosing the plane
 

@@ -50,11 +50,11 @@ interface Fixture {
   extract_mask: { image: ArrayRecord; cases: { color_name: string; target_rgb: [number, number, number]; threshold: number; mask: ArrayRecord }[] };
   normalize_to_uint8: { id: string; plane: ArrayRecord; uint8: ArrayRecord }[];
   resize: { id: string; plane: ArrayRecord; shape: number[]; resized: ArrayRecord }[];
-  mask_to_write_shape: { plan: string; mask: ArrayRecord; write: ArrayRecord }[];
+  mask_to_write_shape: { id: string; plan: string; mask: ArrayRecord; write: ArrayRecord }[];
   box_voxels: { id: string; volume: VolumeRecord; offset_nm: number[]; shape_nm: number[]; volume_shape: number[]; corner_nm: number[]; box: { lo: number[]; hi: number[] } | null }[];
   fresh_ids: { id: string; existing: ArrayRecord; count: number; count_up: boolean; ids?: number[]; error?: string }[];
   seed_labels: { id: string; objects: ArrayRecord; existing: ArrayRecord; count_up: boolean; labels?: ArrayRecord; error?: string }[];
-  labels_for_box: { id: string; mask: ArrayRecord; existing: ArrayRecord; depth_axis: DepthAxis; count_up: boolean; beside: (ArrayRecord | null)[] | null; labels: ArrayRecord }[];
+  labels_for_box: { id: string; objects: ArrayRecord; existing: ArrayRecord; depth_axis: DepthAxis; count_up: boolean; beside: (ArrayRecord | null)[] | null; labels: ArrayRecord }[];
   paint_box: PaintCase[];
   prompts: {
     max_prompt_chars: number; editable: Record<string, string>; editable_generic: string;
@@ -204,12 +204,12 @@ describe("_resize (PIL BOX when shrinking, BILINEAR otherwise)", () => {
 
 describe("mask_to_write_shape", () => {
   for (const c of fixture.mask_to_write_shape) {
-    it(c.plan, () => {
+    it(c.id, () => {
       const plan = planOf(c.plan);
       expect(c.mask.shape).toEqual(plan.image_shape);
       const out = maskToWriteShape(Uint8Array.from(c.mask.data), plan);
       expect(c.write.shape).toEqual(writeShape(plan));
-      expectArrayMatches(out, c.write, c.plan);
+      expectArrayMatches(out, c.write, c.id);
     });
   }
 });
@@ -259,7 +259,7 @@ describe("labels_for_box", () => {
       // layout is the plane's: writeLo 0, writeHi the box's shape.
       const existing = labelsOf(c.existing);
       const beside = (c.beside ?? []).map((p) => (p ? labelsOf(p) : null));
-      const labels = labelsForBox(Uint8Array.from(c.mask.data), existing, [0, 0, 0], c.existing.shape, c.depth_axis, c.count_up, beside);
+      const labels = labelsForBox(Int32Array.from(c.objects.data), existing, [0, 0, 0], c.existing.shape, c.depth_axis, c.count_up, beside);
       expect(labels.constructor).toBe(existing.constructor);
       expectArrayMatches(labels, c.labels, c.id);
     });
