@@ -21,14 +21,14 @@
 // rows, as the network sees them. Side planes are used only where the raw
 // level and the model's voxels are cubes; elsewhere every tile is an x–y
 // slice and the log says how much paint lay in another plane.
+import { emptyLabels } from "../../ai-annotate/fill";
+import type { DepthAxis } from "../../ai-annotate/types";
 import type { DatasetInfo, Inference, PaintStore, PaintVolume, Step } from "../../contracts";
 import { copyBox } from "../../infer/stages";
 import { applyNormalizers } from "../../infer/norms";
 import { padded } from "../../../chunkmirage/web/src/stages";
 import type { PaintedChunk, TargetTransform } from "../types";
 import { chunkKey, paintedChunkIndices, readPaintedChunk } from "../volume";
-
-export type DepthAxis = 0 | 1 | 2;
 
 /** What each axis a slice is cut across makes of it (sampler.py PLANE_NAMES). */
 export const PLANE_NAMES = ["x–y", "z–x", "z–y"] as const;
@@ -180,7 +180,7 @@ function voxelOf(tile: Tile, a: number, b: number, out: number[]): number[] {
 /** The paint of `tile`'s output box (output × output, rows then columns),
  * 0 where nothing is painted and past the volume. */
 export function tileLabels(tile: Tile, output: number, chunks: Map<string, PaintedChunk>, volume: Pick<PaintVolume, "chunk_size" | "dataset_shape_voxels" | "dtype">): Uint8Array | Uint16Array {
-  const labels = volume.dtype === "uint16" ? new Uint16Array(output * output) : new Uint8Array(output * output);
+  const labels = emptyLabels(volume, output * output);
   const [cz, cy, cx] = volume.chunk_size, shape = volume.dataset_shape_voxels, v = [0, 0, 0];
   for (let a = 0; a < output; a++) for (let b = 0; b < output; b++) {
     const [z, y, x] = voxelOf(tile, a, b, v);
