@@ -1,8 +1,9 @@
-"""The neuroglancer viewer: making one, and the layers it shows.
+"""The neuroglancer viewer: making one, the layers it shows and the keys bound in it.
 
 - ``bootstrap``: ``new_viewer()``, the one place a viewer is made.
 - ``layers``: a model's prediction layer and the raw data's layer, built the
   same way by every path that shows one.
+- ``keys``: binding a key once per viewer, and its status-bar message.
 - ``DISPLAY_DIMENSIONS`` and ``display_dimensions_for_view``: which
   dimensions a viewer displays. Here, so that importing them imports
   nothing else.
