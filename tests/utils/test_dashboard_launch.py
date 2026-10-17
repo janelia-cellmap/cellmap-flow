@@ -76,7 +76,7 @@ def test_a_model_taken_off_is_killed_forgotten_and_can_be_started_again(viewer, 
     launch.update_run_models(["mito"])
     assert dropped.killed and not kept.killed and get_session().jobs == [kept]
     assert [layer.name for layer in viewer.state.layers] == ["mito"]
-    # Drawn again, its layer keeps what the user set on it (unlike after the ✕).
+    # Kept for when it is drawn again (the ✕ forgets it).
     assert get_session().shader_controls["nuc"] == {"contrast": {"range": [0, 1]}}
     # Selecting it again must start it again, not be a silent no-op.
     launch.update_run_models(["mito", "nuc"])
@@ -121,9 +121,8 @@ def test_submit_on_the_models_tab_leaves_a_finetune_jobs_server_running(viewer, 
                         lambda *a, **k: neuroglancer.ImageLayer(source="zarr://http://gpu1:9000/x"))
     killed = []
     monkeypatch.setattr(LSFJob, "kill", lambda self: killed.append(self.job_id))
-    training = SimpleNamespace(job_id="ft-1", inference_server_url="http://gpu1:9000",
-                               lsf_job=SimpleNamespace(job_id="4242"), model_name="mito", finetuned_model_name=None,
-                               params={})
+    training = SimpleNamespace(inference_server_url="http://gpu1:9000", lsf_job=SimpleNamespace(job_id="4242"),
+                               model_name="mito", finetuned_model_name=None, params={}, job_id="ft-1")
     finetune_layers.add_finetuned_layer(training, "mito_finetuned_1")
     monkeypatch.setattr(launch, "run_model", lambda path, name, st: None)
     monkeypatch.setattr(launch.threading, "Thread", _InlineThread)
@@ -276,9 +275,8 @@ def _finetune_jobs_model(monkeypatch, status):
     monkeypatch.setattr(finetune_layers, "fetch_model_info", lambda url: {})
     monkeypatch.setattr(finetune_layers, "prediction_layer",
                         lambda *a, **k: neuroglancer.ImageLayer(source="zarr://http://gpu1:9000/x"))
-    training = SimpleNamespace(job_id="ft-1", inference_server_url="http://gpu1:9000",
-                               lsf_job=SimpleNamespace(job_id="4242"), model_name="mito", finetuned_model_name=None,
-                               params={}, status=status)
+    training = SimpleNamespace(inference_server_url="http://gpu1:9000", lsf_job=SimpleNamespace(job_id="4242"),
+                               model_name="mito", finetuned_model_name=None, params={}, status=status, job_id="ft-1")
     finetune_layers.add_finetuned_layer(training, "mito_finetuned_1")
     training.finetuned_model_name = "mito_finetuned_1"
     get_session().finetune_job_manager = SimpleNamespace(jobs={"ft-1": training})
@@ -400,19 +398,16 @@ def test_a_finetune_jobs_model_is_removed_only_once_its_job_has_ended(viewer, da
     assert killed == [] and get_session().jobs == [] and "mito_finetuned_1" not in viewer.state.layers
 
 
-@pytest.mark.parametrize("finetuned", [pytest.param(False, id="a running model"),
-                                       pytest.param(True, id="an ended finetune job's model")])
+@pytest.mark.parametrize("finetuned", [False, True], ids=["a running model", "an ended finetune job's model"])
 def test_a_removed_models_shader_is_forgotten_so_a_later_layer_of_its_name_starts_fresh(viewer, dashboard,
                                                                                        monkeypatch, finetuned):
-    """As /api/viewer/remove-layer forgets it: the ✕ left it behind, an ended finetune job's model's too."""
     from cellmap_flow.finetune.job_manager.state import JobStatus
 
     session = get_session()
+    name = "mito_finetuned_1" if finetuned else "mito"
     if finetuned:
-        name = "mito_finetuned_1"
         _finetune_jobs_model(monkeypatch, JobStatus.CANCELLED)
     else:
-        name = "mito"
         session.jobs = [_Job(name)]
     session.shaders[name], session.shader_controls[name] = "void main() {}", {"contrast": {"range": [0, 1]}}
 

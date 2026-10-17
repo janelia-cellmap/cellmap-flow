@@ -160,8 +160,6 @@ def _on_review_pick(action_state) -> None:
     Runs on Neuroglancer's Tornado event loop, which is single-threaded and
     shared with every HTTP-request dispatch (including subvolume chunk
     fetches). Keep this handler O(1) — no DB I/O, nothing that can yield.
-
-    Bound by /api/review/open (viewer.keys.bind_key), once per viewer.
     """
     session = get_session().review
     if session is None or not session.segmentation_layer:
@@ -291,7 +289,6 @@ def review_open():
         previous.picks.close()
     if seg_layer is not None and get_session().viewer is not None:
         try:
-            # Once per viewer: an index opened again in the same viewer finds the key bound.
             keys.bind_key(get_session().viewer, _REVIEW_PICK_ACTION, _REVIEW_PICK_KEYBINDING, _on_review_pick)
             logger.info(f"review: registered 'review-pick' action on key 't' for layer {seg_layer!r}")
         except Exception as e:

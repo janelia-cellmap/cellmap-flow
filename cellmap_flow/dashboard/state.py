@@ -26,8 +26,7 @@ rather than being stored beside the real one:
 
 - The data and the viewer: ``dataset_path``, ``resample``, ``viewer``,
   ``raw``, ``neuroglancer_url``, ``shaders``, ``shader_controls``,
-  ``extra_layers``; ``forget_layer()`` drops the last three's entries for
-  a layer taken away for good.
+  ``extra_layers``.
 - The models: ``models_config``, ``model_catalog``.
 - The pipeline builder's last apply: ``builder_state``,
   ``builder_model_configs``.
@@ -58,9 +57,6 @@ from cellmap_flow.process_chain import process_chain
 # The builder's node lists, as /api/pipeline/apply stores them.
 _BUILDER_KEYS = ("inputs", "outputs", "edges", "normalizers", "models", "postprocessors")
 
-# What the session keeps by layer name, to build a layer of that name with:
-# its shader, its shaderControls, and a YAML's extra layer of that name.
-# Session.forget_layer drops a name's, so a later layer of it starts fresh.
 LAYER_BOOKKEEPING = ("shaders", "shader_controls", "extra_layers")
 
 
@@ -149,8 +145,7 @@ class Session:
         # acknowledged its images go to}}; the one job, running or staged
         # for review (None when there is none); and the lock its worker
         # thread and the routes change the job under. Never a key or other
-        # secret: those are read when a call is made. (viewer.keys remembers
-        # the viewers Shift+G is bound in.)
+        # secret: those are read when a call is made.
         self.ai_annotate = {
             "settings": None,
             "acknowledged": {},
@@ -164,8 +159,7 @@ class Session:
         # answer carries for the tab to act on; {job id: when the last press
         # that no restart has answered yet was made}; and the lock the key's
         # action, on neuroglancer's event loop, and the routes, in Flask's
-        # threads, change these under. (viewer.keys remembers the viewers
-        # the key is bound in.)
+        # threads, change these under.
         self.restart_key = {
             "followed": None,
             "requests": {},
@@ -191,15 +185,7 @@ class Session:
 
     # The data and the viewer
     def forget_layer(self, name):
-        """Drop what the session keeps to build a layer named ``name`` with
-        (LAYER_BOOKKEEPING), so a later layer of that name starts fresh.
-
-        For a layer taken away for good: by /api/viewer/remove-layer
-        (routes/finetune/layers.py), or with its model removed from the
-        Models tab's Loaded models list (services/launch.remove_model). Not
-        for a model Submit stops: drawn again, its layer keeps what the
-        user set on it.
-        """
+        """Drop ``name``'s LAYER_BOOKKEEPING, so a later layer of that name starts fresh."""
         for attr in LAYER_BOOKKEEPING:
             getattr(self, attr).pop(name, None)
 

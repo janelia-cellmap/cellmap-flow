@@ -30,7 +30,6 @@ straight to job-monitor.js, which says why not in the tab itself.
 """
 
 import math
-import threading
 import time
 
 from cellmap_flow.dashboard.state import get_session
@@ -71,30 +70,21 @@ def _state():
     return get_session().restart_key
 
 
-def _later(seconds, function, *args):
-    """Run ``function(*args)`` in ``seconds``, on a daemon timer. Tests replace this."""
-    timer = threading.Timer(seconds, function, args)
-    timer.daemon = True
-    timer.start()
-
-
 def _say(viewer, message):
     """Show ``message`` in neuroglancer's status bar (None clears it); never raises."""
     keys.say(viewer, STATUS_KEY, message)
 
 
 def _show(viewer, message):
-    """Show ``message`` in the status bar for SHOW_S, unless another replaces it sooner."""
+    """Show ``message`` in the status bar for SHOW_S."""
     keys.say_for(viewer, STATUS_KEY, message, SHOW_S)
 
 
 def ensure_binding():
     """Bind Shift+R to the restart action in the session's viewer, once per viewer.
 
-    As ai_annotate's Shift+G (viewer.keys.bind_key): a new dataset makes a
-    new viewer, which is bound the first time one of the routes that call
-    this answers after it. They are the job list, which the Finetune tab
-    asks for on every page load (and connect.js reloads the page after a new
+    The routes that call this are the job list, which the Finetune tab asks
+    for on every page load (and connect.js reloads the page after a new
     dataset), and a job's status, which it polls while it follows a job.
     """
     keys.bind_key(get_session().viewer, ACTION, KEY, _on_restart_key)
@@ -126,7 +116,7 @@ def _on_restart_key(action_state):
         return
     # Until the restart route answers it (answered), or PENDING_S passes.
     _say(viewer, message)
-    _later(PENDING_S, _unanswered, *press)
+    keys.later(PENDING_S, _unanswered, *press)
 
 
 def _press():

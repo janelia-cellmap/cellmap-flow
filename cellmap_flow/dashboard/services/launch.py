@@ -69,8 +69,7 @@ def _start(command, name):
         return None
     if _withdrawn():
         logger.info(f"Stopping '{name}', which was removed from the loaded models while it was starting")
-        # It has no layer yet; the layer of its name, if there is one, is
-        # that of the launch a Submit started since, and stays.
+        # No layer of its own yet: one of its name is a later launch's.
         _stop_jobs([job], drop_layers=False)
         return None
     return job
@@ -234,10 +233,8 @@ def cellpose_job_name(model: str, output: str, do_3d: bool = False) -> str:
 
 
 def is_panel_cellpose(mc) -> bool:
-    """Whether the model config ``mc`` is one the Models tab's Cellpose panel
-    lists as a row of its own: one of its models (CELLPOSE_MODELS), named as
-    a row of it names its job (``cellpose_job_name``), so that the panel's
-    Submit names it alike. Not a YAML's Cellpose model of another name."""
+    """Whether ``mc`` is one of the Cellpose panel's own rows: a model it
+    lists, named as the row names its job, so its Submit names it alike."""
     return (isinstance(mc, CellposeModelConfig) and mc.pretrained_model in CELLPOSE_MODELS
             and mc.name == cellpose_job_name(mc.pretrained_model, mc.output, mc.do_3d))
 
@@ -366,56 +363,34 @@ def running_names() -> set:
 
 
 def _owned_by_finetune(job) -> bool:
-    """Whether ``job`` is a finetune job's server (finetune_layers marks it):
-    the Finetune tab's to stop, never the Models tab's."""
+    """A finetune job's server: the Finetune tab's to stop, never the Models tab's."""
     return getattr(job, "owned_by_finetune", False)
 
 
 def _stop_jobs(jobs, *, drop_layers=True):
-    """Stop ``jobs`` and forget them: how Submit stops a model unticked,
-    the Loaded models list's ✕ the model removed, and ``_start`` a model
-    removed while it was starting.
+    """Stop ``jobs`` and forget them (a killed job left among the jobs counts as running).
 
-    Each job's layer goes from the viewer, when there is one. What the
-    session keeps to build a layer of that name with (its shader and shader
-    controls) stays: a model ticked again, or restarted by Submit with a new
-    voxel size or slice linking, is drawn again with what the user set on
-    it. Only the ✕ (``remove_model``) forgets that too. Its server is
-    killed, unless a finetune job owns it: that job stops its own server,
-    and ``remove_model`` passes one only once the job has ended. Then the
-    job goes from the session's jobs, by identity (another job of its name
-    stays): a killed job left there still counted as running, so selecting
-    that model again did nothing, and each PUT /api/pipeline rebuilt a
-    layer pointing at its dead host.
-
-    ``drop_layers=False`` leaves the layers alone, for a job that never had
-    a layer of its own.
+    The session's shaders for their names stay, so a model started again is
+    drawn with what the user set on it; only the ✕ forgets them. Jobs are
+    forgotten by identity: another of the same name may be a later launch's.
     """
-    jobs = list(jobs)
-    if not jobs:
-        return
     session = get_session()
-    if drop_layers and session.viewer is not None:
-        names = list(dict.fromkeys(job.model_name for job in jobs))
+    if drop_layers and jobs and session.viewer is not None:
         with session.viewer.txn() as s:
-            for name in names:
+            for name in {job.model_name for job in jobs}:
                 if name in s.layers:
                     del s.layers[name]
     for job in jobs:
         if not _owned_by_finetune(job):
             job.kill()
-    stopped = {id(job) for job in jobs}
-    session.jobs = [j for j in session.jobs if id(j) not in stopped]
+    session.jobs = [j for j in session.jobs if not any(j is job for job in jobs)]
 
 
 def configs_by_name() -> dict:
-    """``{name: config}`` of the session's models; the last of a name, when
-    there are two."""
     return {getattr(mc, "name", None): mc for mc in get_session().models_config}
 
 
 def _catalog_groups() -> dict:
-    """``{model name: its group}`` of the Models tab's catalog."""
     return {name: group for group, models in get_session().model_catalog.items() for name in models}
 
 
@@ -557,8 +532,7 @@ def _loaded_entry(name, job, config, catalog_group):
     elif isinstance(config, CellposeModelConfig):
         output = config.output + (", 3D" if config.do_3d else "")
         entry.update(source="cellpose", detail=f"{config.pretrained_model}, {output}")
-        # Its row in the Cellpose panel, to untick: only a model the panel
-        # lists as its own.
+        # Its row in the Cellpose panel, to untick.
         if is_panel_cellpose(config):
             entry["cellpose"] = {"model": config.pretrained_model, "output": config.output, "do_3d": config.do_3d}
     elif catalog_group is not None:
@@ -606,18 +580,15 @@ def remove_model(name: str) -> list:
     model, and anything ticked on the Models tab and not submitted, stays as
     it is. Returns the Loaded models list as it is then.
 
-    A running model's job is killed and forgotten, and its layer taken away
-    (``_stop_jobs``), as Submit does for one unticked; unlike Submit, the ✕
-    also forgets what the session keeps to build a layer of its name with
-    (Session.forget_layer). A model still starting is withdrawn: a job of it
-    waiting in a queue is killed now, and whatever its launch still starts
-    is stopped as it comes up (``_start``), so a Submit may start it again
-    at once. A finetune job's model is that job's server: while the job is
-    alive it is the Finetune tab's to stop (NotRemovable); once the job has
-    ended, its server has too, and only its layer, with that bookkeeping,
-    and its entry among the jobs are left to take away. Its config stays
-    among the session's models, as every stopped model's does, for the
-    pipeline builder.
+    A running model's job is killed and forgotten, as Submit does for one
+    unticked. A model still starting is withdrawn: a job of it waiting in a
+    queue is killed now, and whatever its launch still starts is stopped
+    as it comes up (``_start``), so a Submit may start it again at once. A
+    finetune job's model is that job's server: while the job is alive it
+    is the Finetune tab's to stop (NotRemovable); once the job has ended,
+    its server has too, and only its layer and its entry among the jobs are
+    left to take away. Its config stays among the session's models, as
+    every stopped model's does, for the pipeline builder.
 
     Raises LookupError when no model of that name is running or starting.
     """
@@ -645,8 +616,6 @@ def remove_model(name: str) -> list:
                 logger.info(f"Killing '{name}', removed from the loaded models while it was starting")
                 job.kill()
     _stop_jobs(jobs)
-    # Removed, not stopped to start again: a later layer of its name starts
-    # fresh, as one /api/viewer/remove-layer took away does.
     session.forget_layer(name)
     logger.info(f"Removed model {name}")
     return loaded_models()

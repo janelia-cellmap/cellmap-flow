@@ -12,9 +12,8 @@ views of the model:
   session's models, so the pipeline builder offers it.
 
 ``training_job_of()`` goes the other way, from such a server's job to its
-finetune job, by the id add_finetuned_layer records on it: the Models tab's
-Loaded models list asks whether that job is still alive before it lets the
-model be removed (services.launch).
+finetune job: the Models tab's Loaded models list asks whether that job is
+still alive before it lets the model be removed (services.launch).
 
 ``follow_jobs(manager)`` has the listener told of a manager's jobs; the
 routes that put jobs into the manager (submit, and finding the jobs of an
@@ -43,15 +42,10 @@ def _is_finetuned_from(model_name, base_model_name):
 
 
 def training_job_of(inference_job):
-    """The finetune job (job_manager.FinetuneJob) whose server is
-    ``inference_job``, one add_finetuned_layer made: the session's job
-    manager's job of the id it recorded there. None for any other job, and
-    when the manager has no job of that id.
-    """
+    """The FinetuneJob whose server ``inference_job`` is, by the id
+    add_finetuned_layer records; None when the job manager has no such job."""
     training_job_id = getattr(inference_job, "training_job_id", None)
-    if training_job_id is None:
-        return None
-    return get_session().finetune_job_manager.jobs.get(training_job_id)
+    return None if training_job_id is None else get_session().finetune_job_manager.jobs.get(training_job_id)
 
 
 def add_finetuned_layer(job, model_name):
@@ -82,8 +76,6 @@ def add_finetuned_layer(job, model_name):
     inference_job.status = JobStatus.RUNNING
     # The Finetune tab owns it: the Models tab's Submit must not kill it.
     inference_job.owned_by_finetune = True
-    # Which finetune job it serves (training_job_of). The id, not the job:
-    # the manager keeps the job's record, and the id cannot go stale.
     inference_job.training_job_id = job.job_id
 
     # Replace any old finetuned jobs for this base model. One assignment of

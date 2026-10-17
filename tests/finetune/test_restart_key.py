@@ -36,13 +36,8 @@ def keyed(dashboard, viewer, make_job, tmp_path, monkeypatch):
     monkeypatch.setattr(training, "sync_all_annotations_from_minio", lambda force=True: 0)
     monkeypatch.setattr(manager, "restart_finetuning_job", lambda job_id, updated_params: job)
     world = SimpleNamespace(job=job, timers=[], dashboard=dashboard)
-
-    def later(seconds, function, *args):
-        world.timers.append((seconds, function, args))
-
-    # restart_key's own timers, and those that clear what it said (viewer.keys.say_for).
-    monkeypatch.setattr(restart_key, "_later", later)
-    monkeypatch.setattr(keys, "_later", later)
+    monkeypatch.setattr(keys, "later", lambda seconds, function, *args: world.timers.append(
+        (seconds, function, args)))
 
     def message():
         return get_session().viewer.config_state.state.status_messages.get(restart_key.STATUS_KEY)

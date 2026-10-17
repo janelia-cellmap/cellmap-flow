@@ -13,9 +13,8 @@ when the name is absent; rename-layer answers 409 rather than overwrite
 another layer.
 
 The layer's per-name bookkeeping -- the session's ``shaders``,
-``shader_controls`` and ``extra_layers`` (dashboard.state's
-LAYER_BOOKKEEPING) -- follows a remove or a rename, so a later layer of the
-same name starts fresh.
+``shader_controls`` and ``extra_layers`` (dashboard.state) -- follows a
+remove or a rename, so a later layer of the same name starts fresh.
 
 ``path`` is opened as ``/api/set-data`` opens a dataset: any zarr, n5 or
 precomputed store the dashboard's user can read.

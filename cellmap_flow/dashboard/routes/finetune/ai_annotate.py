@@ -216,11 +216,7 @@ def _say(viewer, message):
 
 
 def _ensure_binding():
-    """Bind Shift+G to the AI-annotate action in the session's viewer, once per viewer.
-
-    A new dataset makes a new viewer, which viewer.keys.bind_key binds the
-    first time this is called after it: the settings route, and a run.
-    """
+    """Bind Shift+G to the AI-annotate action in the session's viewer, once per viewer."""
     keys.bind_key(get_session().viewer, ACTION, KEY, _on_annotate_key)
 
 

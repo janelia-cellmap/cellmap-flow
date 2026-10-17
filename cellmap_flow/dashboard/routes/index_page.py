@@ -138,9 +138,7 @@ def index():
     logger.debug(f"Input norm rows: {input_norm_items}")
     logger.debug(f"Postprocess rows: {postprocess_items}")
 
-    # The Hugging Face and zoo rows to tick: those of the models running or
-    # still starting (services.launch.loaded_models), by what each row knows
-    # its model by; a zoo row with the voxel size its model was given.
+    # The Hugging Face and zoo rows to tick: the loaded models', running or starting.
     from cellmap_flow.dashboard.services.launch import configs_by_name, loaded_models
 
     loaded, configs = loaded_models(), configs_by_name()
