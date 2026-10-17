@@ -1,10 +1,10 @@
 """A new viewer on a dataset: ``new_viewer()``.
 
 The viewers the dashboard serves are made here: the CLIs' startup viewer
-(dashboard.services.startup.generate_neuroglancer_url), /api/set-data, and the
-bounding-box tool. ``cellmap_flow view`` (cli/viewer_cli.py) still builds its
-own. It never starts the dashboard. ``viewer_url()`` is the address a browser
-is given for any of them.
+(dashboard.services.startup.generate_neuroglancer_url), ``cellmap_flow view``'s
+(cli/viewer_cli.py), /api/set-data, and the bounding-box tool. It never
+starts the dashboard. ``viewer_url()`` is the address a browser is given for
+any of them.
 """
 
 import ipaddress
@@ -16,6 +16,7 @@ import neuroglancer
 from cellmap_flow.image_data_interface import legacy_meta
 from cellmap_flow.io import metadata
 from cellmap_flow.utils.address import this_machine_ip
+from cellmap_flow.viewer import DISPLAY_DIMENSIONS
 from cellmap_flow.viewer.layers import raw_layer
 
 logger = logging.getLogger(__name__)
@@ -34,17 +35,11 @@ def apply_viewer_defaults(state):
 
 def display_dimensions(names):
     """The display dimensions for a viewer whose dimensions are ``names``:
-    x, y, z when it has all three, else None (neuroglancer's default).
-
-    Neuroglancer's "xy" panel shows the first two display dimensions, which
-    are the first three of the coordinate space unless set. cellmap-flow
-    names its dimensions z, y, x, so that panel showed z across and y down,
-    and a model that computes one z-slice at a time was asked for a block
-    for every z position on screen. With x, y, z it is the XY plane, x
-    across and y down, looking along z, and the positions stay z, y, x.
+    DISPLAY_DIMENSIONS (x, y, z) when it has all three, else None
+    (neuroglancer's default, the first three of ``names``).
     """
     names = list(names or [])
-    return ["x", "y", "z"] if all(axis in names for axis in ("x", "y", "z")) else None
+    return list(DISPLAY_DIMENSIONS) if all(axis in names for axis in DISPLAY_DIMENSIONS) else None
 
 
 def raw_dimensions(dataset_path):

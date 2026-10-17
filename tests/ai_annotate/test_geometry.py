@@ -82,7 +82,8 @@ def test_depth_axis_for_a_viewer_state():
     state.display_dimensions = ["x", "y", "z"]
     assert depth_axis_for_view(state) == 0
     assert display_dimensions_for_view(state) == ("x", "y", "z")
-    assert display_dimensions_for_view(neuroglancer.ViewerState()) == ()
+    # One with no dimensions yet is laid out as one showing z, y, x.
+    assert display_dimensions_for_view(neuroglancer.ViewerState()) == ("z", "y", "x")
 
 
 # How the image is laid out as the viewer's panel draws the plane (to_screen,
