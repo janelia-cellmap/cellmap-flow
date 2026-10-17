@@ -189,9 +189,9 @@ In the dashboard, the same ``REF`` goes in the Models tab's *Add a model* box.
 where it runs, with a box for each value it still needs; *Run*
 (``POST /api/models/add``) starts it, and it joins the models with a ticked
 box, stopped when unticked like any other or by its ✕ under *Loaded models*
-at the top of the tab; ticked again, it is started again. A config YAML (one with
-``models:``) is refused with how to run it: it is a whole run, for
-``cellmap_flow yaml``.
+(see *Usage* on the :doc:`front page <index>`); ticked again, it is started
+again. A config YAML (one with ``models:``) is refused with how to run it: it
+is a whole run, for ``cellmap_flow yaml``.
 
 ``REF`` is checked against these in order, and the first that matches wins:
 
@@ -354,6 +354,16 @@ GPU when the job has one. The model is either
       mito_aff_setup54_16nm-ft1:
         type: onnx
         path: mito_aff_setup54_16nm-ft1.onnx   # beside this YAML
+
+The browser's *Export Config* (in its header) writes such a YAML: the
+volume's URL as ``data_path``, the ``resample`` setting, the Input and
+Postprocess steps as ``json_data``, and each model it serves as a
+``type: onnx`` entry, a Hugging Face export by ``repo``, ``folder`` and the
+``file`` the page ran, a model finetuned there by ``path: <name>.onnx`` (the
+file *Download finetuned model* saves), with a comment saying to put that
+file beside the YAML. It writes the entries as a list, each with its
+``name`` (both forms load, see `Model Entries`_), and leaves out
+``charge_group`` and ``queue``: add them to run on the cluster.
 
 What the entry gives (``input_voxel_size``, ``output_voxel_size``, the sizes,
 ``channels``, ``output``) wins over the manifest; run at another
@@ -897,6 +907,8 @@ Blockwise processing can run over regions of interest instead of the whole volum
 The output covers only the box, not the whole volume. A box is widened to every output voxel it touches (snapped outward onto the output voxel grid, which starts at the raw data's corner) and cut to the raw data's extent. The output's offset is the box's corner, and its OME translation the centre of the voxel there, half a voxel in. Its blocks start there and the last block along each axis is cut at the box's end, so nothing is written past it. For example, on data whose corner is at 0, with 8 nm output voxels, a box like the first above, 4674 nm deep from 59611 nm, covers 59608 nm to 64288 nm in z: 585 voxels.
 
 With several boxes, one output covers their bounding box, on each axis from the lowest of their corners to the highest of their far ends; only the boxes' blocks are run, and what lies between the boxes stays 0. Set ``separate_bounding_boxes_zarrs: true`` to give each box its own output instead, the size of the box: ``<output_path>/box_1``, ``box_2`` and so on, in the list's order.
+
+Label ids a postprocessor makes unique by block (Morton, affinity segmentation) stay unique: a block's index is counted from the raw data's corner, so a box on the volume's block grid gets the ids the inference server gives. The precheck refuses a box whose ``offset`` (0, 0, 0 when left out) or ``shape`` is not three numbers, or whose shape has a side not above 0.
 
 A run resumes into an output only if it covers the same region: one written for other boxes, or for boxes by an older cellmap-flow (which wrote an array the size of the whole volume), is refused. Write to a new output path.
 

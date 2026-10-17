@@ -122,10 +122,8 @@ Using the Dashboard
 3. In the **HuggingFace Models** section, browse or search for a model.
 4. Select the model(s) you want to run and click **Submit**.
 5. The models running are listed under **Loaded models** at the top of the
-   tab, each with where it came from. The ✕ beside one stops that model
-   alone and takes its layer away (``POST /api/models/remove``); the other
-   models, and any box ticked or unticked and not yet submitted, stay as
-   they are. Tick it again and Submit to bring it back.
+   tab, where the ✕ beside one stops that model alone (see *Usage* on the
+   :doc:`front page <index>`).
 
 Parameters
 ----------

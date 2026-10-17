@@ -113,7 +113,7 @@ a link twice keeps one model), and otherwise the link's takes the next name
 of its series (`-ft2`), its layer renamed in the view. A ref that cannot be
 read or rebuilt (its base unknown, its download failed, its head another
 shape than the base's) is logged and left out; the rest run. A model whose
-whole network was trained (a 2D model's *Whole network*, below), or one
+whole network was trained (a 2D model's *Whole network*), or one
 finetuned from such a model, has millions of numbers changed, not a head's
 few dozen: it is named by its folder, which opens only in this browser, and
 the notice says so; its *Download finetuned model* is the way to send it.
@@ -125,7 +125,8 @@ browser, and points to the Finetune tab's *Download paint (zarr)*, which
 saves it as a `.zarr.zip`. The page that opens a link takes out of its view
 the paint layers whose volume it does not hold (the sender opening their own
 link in another tab keeps them) and the layers of models it does not serve,
-and says which and why in the same notice.
+and says which and why in the same notice, which also names each finetuned
+model it rebuilt.
 
 ## Opening a folder on your machine
 
@@ -147,51 +148,10 @@ browser that picked the folder.
 
 ## Running the models over a region
 
-The viewer computes only the chunks it shows, and keeps none of them. The
-**Run** tab (browser mode only, `src/run-region/`) computes the served models
-over a region and saves the predictions in a folder on your machine:
-
-1. Tick the models (all, by default); each is written through the Input and
-   Postprocess steps it is served with.
-2. *Draw a box* adds a `run_region` annotation layer to the viewer, its
-   bounding-box tool as its tool: hold Ctrl and click two
-   opposite corners (scroll between the clicks to give the box depth; a flat
-   box is one chunk deep). The latest box drawn fills the offset and size
-   fields (nm, z y x), and typing in them redraws the box to match once
-   typing pauses (`withBox`, 400 ms). Or *Whole volume*. The tab says
-   each model's box in voxels and chunks of the level it is served at (a
-   chunk is one model output block), and warns past 2,000 chunks.
-3. *Choose folder…* picks the folder, with write access, or a folder dropped
-   on the *Output folder* block is taken; Chrome refuses Downloads and the
-   home folder themselves (a folder inside them is fine). It is remembered
-   (IndexedDB), and after a reload the browser asks again when you click
-   *Run*.
-4. *Run* writes each model to `<folder>/<model>.zarr`, one model after the
-   other, with progress (chunks, megabytes, time left) and *Cancel*; it goes
-   on while you browse, and a reload asks first. A `<model>.zarr` already in
-   the folder is replaced only once you confirm, and deleted first: empty
-   chunks are not written, so old ones would stay and mix with the new.
-5. *Show the saved predictions in the viewer* adds each zarr as a
-   `<model> (saved)` layer, read back from the folder through the service
-   worker's `local/` route, over the model's live layer.
-
-What is written is the model's own view as the viewer shows it, its
-postprocessing applied: chunkmirage's `Engine.materialize` walks the box's
-chunks through the same stages, caches and demand queue (behind every chunk
-the viewer waits for, so browsing stays quick, and nothing the viewer has
-computed is computed again) and writes zarr v2 with OME-Zarr 0.4 metadata,
-gzip-compressed (or not: the tab's *Compression*, *None* for Fiji, which
-reads no gzip), empty chunks left out: an array of exactly the box's voxels
-(`extent: "box"`; its chunks are stitched from the model's, and the last
-ones end at the box), at the served level's scale, its translation the
-box's corner, so the zarr opens in place in Neuroglancer, zarr-python or the
-server mode. The group's
-attributes hold `cellmap_flow`: the model (name, id, repository, folder,
-variant, file), its normalizers and postprocessors, the dataset, the region
-in nm and the box in voxels, the voxel size, the time and the page's
-address. Firefox and Safari have no folder access, so there a run of up to
-256 MB of predictions (before compression) is kept in memory and offered as
-a zip of the `.zarr` folders.
+The **Run** tab (browser mode only, `src/run-region/`) runs the served models
+over a region and saves their predictions as OME-Zarr in a folder on your
+machine. The docs' [browser page](https://janelia-cellmap.github.io/cellmap-flow/browser.html#running-the-models-over-a-region)
+says how to use it, and `ARCHITECTURE.md` ("Run on a region") how it works.
 
 ## Finetuning in the browser
 
@@ -238,10 +198,6 @@ weights are written back into a copy of the model's initializers, and the
 result is an ordinary model entry (`src/models/finetuned.ts`, repo
 `finetuned`, kept in IndexedDB with its bytes): served beside the base
 when *Auto-serve* is on, listed on the Models tab, downloadable as `.onnx`.
-A Restart's model takes the place of the job's previous one, its layer
-included, and the previous one is removed from IndexedDB, record and bytes:
-a job keeps its latest model only, as the server serves only a job's latest
-iteration; a new job's model is a new entry.
 
 The download (`GET /api/finetune/model/:name/download`,
 `downloadableOnnx` in `src/backend/routes/finetune.ts`) writes the entry's
@@ -250,47 +206,14 @@ manifest into the model's `metadata_props` under `cellmap_flow.manifest`
 other byte as it was), so that the server's `type: onnx`
 (`cellmap_flow/models/configs/onnx.py`) serves the file on its own; the
 bytes kept in IndexedDB stay the ones the run wrote. *Export Config*
-(`GET /api/export-config`, `src/backend/routes/config.ts`) writes a YAML
-`cellmap_flow yaml` runs: each served model a `type: onnx` entry, a Hugging
-Face export by repo, folder and the file this page ran, a finetuned one by
-`path: <name>.onnx`, the file its download saves, beside the YAML.
+(`GET /api/export-config`, `src/backend/routes/config.ts`) writes the YAML
+the [docs' YAML page](https://janelia-cellmap.github.io/cellmap-flow/yaml_config.html#onnx)
+describes under `type: onnx`.
 The job routes answer as the server's do (`src/backend/routes/finetune.ts`,
 `finetune-jobs.ts`), so the tab's own job card, loss plot and log stream
-follow the run unchanged. Shift+R over the viewer, bound by the job list
-route (`ctx.viewer.bindKey`), sends the page `cellmap-flow:restart-finetune`,
-and the tab's `job-monitor.js` restarts the job as its Restart does, without
-the confirm, or says why not; the server's key, in its Python process,
-counts the press in the job's status for the tab's poll instead. Why the
-head: onnxruntime-web trains nothing on the GPU, so the network itself has to
-be rebuilt in a library that does, which the 2D models now are (below).
-
-What a model can be trained as comes from its manifest's `finetune` block
-(`src/models/manifest.ts` `parseFinetune`, `src/finetune/modes.ts`), and
-`GET /api/finetune/models` answers it as `finetune_modes`, as the server's
-`finetune_modes()` does: `head` when the served file is one of the head's
-`files` (fp32 and fp16; an int8w file's weights are DequantizeLinear inputs),
-`full` when the library is `tfjs` and the file is one of `write_back`. A
-manifest without the block keeps the head the graph is found to end in. The
-tab's *Training* field (browser-only, shown when both are offered) picks one.
-*Whole network* (`src/finetune/full/`) trains a 2D model with TensorFlow.js
-4.22.0 on WebGPU, loaded only when such a run starts, and only where the
-browser has a GPU (`tfjs.ts` `webgpuMissing`; without one the option is
-disabled with why and submit refuses it, since TF.js's CPU backend would
-hold the page's thread for minutes a step) (`tfjs.ts`: six chunks, 0.68 MB, 0.19 MB gzipped): the folder's
-`finetune/train_graph.json` and `finetune/initializers.json` are fetched from
-the Hub (`files.ts`), the paint is cut into tiles in the plane it was drawn in
-(`tiles.ts`, the server's `paint_depth_axes` and `slice_axes`), the network is
-built from the weights in the served `.onnx` and trained with masked BCE and
-Adam by Marwan Zouinkhi's reference runtime (`cellmap-tfjs-train.ts`, his
-`finetune/cellmap_tfjs_train.js` ported to TypeScript), BatchNorm's running
-statistics held (`frozen`), and the trained weights are written back at their
-offsets, checked against the file first (`run-full.ts`). The batch is the
-server's *Batch Size*, in tiles; *Tile Size* offers the sides the graph takes
-(`graph.ts` walks its shapes: 92 + 8k for both graphs) near 172, 300, 428 and
-556, with the manifest's measured step time and memory, scaled by area for
-the sides not measured. A restart goes on from the last run's model; a switch
-between the two needs a new job. A model whose whole network was trained is
-not put in a Share link (millions of weights where a link carries a head's).
+follow the run unchanged. The 2D models can also train their whole network
+(`src/finetune/full/`): the docs' [browser page](https://janelia-cellmap.github.io/cellmap-flow/browser.html#training-the-whole-network)
+says what the user sees, and `ARCHITECTURE.md` how it works.
 
 AI-assisted annotation (`src/ai-annotate/`, the port of
 `cellmap_flow/ai_annotate/`) is in the tab too. Shift+G or *Annotate at View

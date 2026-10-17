@@ -99,7 +99,8 @@ folder on your machine, to open in the app again or to copy to the cluster.
 4. *Run* writes each model to ``<folder>/<model>.zarr`` with a progress bar
    (chunks, megabytes, time left) and *Cancel*, which keeps what was written.
    The run goes on while you move around the viewer or use the other tabs,
-   and the viewer stays responsive: its chunks go first. If a
+   and the viewer stays responsive: its chunks go first; reloading the page
+   during a run asks first. If a
    ``<model>.zarr`` is in the folder already, the tab asks before replacing
    it (it is deleted first, so the old chunks do not mix with the new ones).
 5. *Show the saved predictions in the viewer* adds each saved zarr as a
@@ -124,7 +125,9 @@ Finetuning in the browser
 With a model running, the Finetune tab's *New Volume* adds a paint layer to
 the viewer, selected, on its Draw tab: paint background (value 1) and the
 objects (2 and up) on a few slices with the brush (``A``) and flood fill
-(``F``), as on the server (:doc:`finetuning`). On the tab's Training panel,
+(``F``), as on the server
+(`docs/finetuning.md <https://github.com/janelia-cellmap/cellmap-flow/blob/main/docs/finetuning.md>`__).
+On the tab's Training panel,
 *Start Finetuning* trains in the tab: the model's last layer, its output
 convolution, is fitted on the voxels you painted, from the model's own
 weights, in seconds on any machine; the job card and the loss plot follow it.
@@ -134,8 +137,10 @@ from the trained layer, with the form's values as they are then). Once the
 job waits for a restart, ``Shift+R`` over the viewer does the same without
 asking first, so painting and training again need not leave the viewer; it
 says in the tab's logs what it did, or why there was nothing to restart. A
-restart's model replaces the one before it: the Models tab keeps one model
-per job, the latest, and a new *Start Finetuning* makes a new one beside it.
+restart's model replaces the one before it, its layer included, and the one
+before is deleted from the browser: a job keeps its latest model only, as the
+server serves only a job's latest iteration, and a new *Start Finetuning*
+makes a new one beside it.
 
 The training panel's controls are the server's where they mean something for
 one layer: the epochs, the learning rate, the loss (BCE by default, MSE or
@@ -171,7 +176,8 @@ model trains on your paint, with `TensorFlow.js <https://www.tensorflow.org/js>`
 on this machine's GPU (WebGPU), from a training graph Marwan Zouinkhi exported
 beside each model. The weights trained are written back into the model's
 ``.onnx``, which is then served, kept, downloaded and restarted from as a
-last-layer finetune is. A 3D model offers the last layer only, and a model
+last-layer finetune is; switching between the two needs a new *Start
+Finetuning*. A 3D model offers the last layer only, and a model
 served from an int8 file nothing (its weights are quantized and cannot be
 written): serve its fp32 or fp16 file to finetune it.
 
@@ -221,7 +227,8 @@ would take minutes, and the page would answer nothing else meanwhile). The
 log says how long a step takes.
 
 The *Patch on screen* tools label the box centred where the viewer looks, as
-on the server (:doc:`finetuning`): *Seed from Prediction* copies a model's
+on the server (`docs/finetuning.md <https://github.com/janelia-cellmap/cellmap-flow/blob/main/docs/finetuning.md>`__):
+*Seed from Prediction* copies a model's
 prediction into the unpainted voxels, an id per object and background 1, for
 you to fix with the brush; *All Background* labels them background; *Split
 Objects* gives each connected object an id of its own (paint a background wall
@@ -251,35 +258,19 @@ has the details under "In the browser".
 
 The paint and the finetuned models stay in the browser (IndexedDB): *Resume
 Existing Volume* lists the volumes painted here, newest first, and the
-Models tab lists the finetuned models under the Hugging Face ones. *Loaded
-models*, at the top of the Models tab, lists the models served in the page,
-finetuned ones among them; the ✕ beside one stops serving it and takes its
-layer away, and a finetuned model stays kept, to tick and serve again. *Download
-paint* saves the volume as a zarr (zipped, the server's layout, so a server
+Models tab lists the finetuned models under the Hugging Face ones. The ✕
+beside a finetuned model under *Loaded models* (see *Usage* on the
+:doc:`front page <index>`) stops serving it and keeps it, to tick again.
+*Download paint* saves the volume as a zarr (zipped, the server's layout, so a server
 session can train on it) and *Download finetuned model* the ``.onnx``, with
 its manifest (voxel sizes, block, channels, input normalization) written into
 the file's metadata, so that the server mode serves the file as it is.
 Nothing leaves your machine unless you download and share it.
 
 To run the same models on the cluster, *Export Config* (in the header) saves
-a YAML that ``cellmap_flow yaml`` runs: each model a ``type: onnx`` entry
-(:ref:`onnx`), a Hugging Face export by its repo, folder and the file this
-browser ran, a finetuned one by ``path: <name>.onnx``, the file *Download
-finetuned model* saves, which goes beside the YAML (a relative path is the
-YAML's folder's), and the Input and Postprocess steps as its ``json_data``.
-Add ``charge_group:`` and ``queue:`` for the cluster:
-
-.. code-block:: yaml
-
-    models:
-    - type: onnx
-      name: mito_aff_setup54_16nm
-      repo: cellmap/onnx-web-models
-      folder: setup_54
-      file: setup_54_mito_affinities_16nm_in132_fp16.onnx
-    - type: onnx
-      name: mito_aff_setup54_16nm-ft1
-      path: mito_aff_setup54_16nm-ft1.onnx  # the file Download finetuned model saves: put it beside this YAML
+a YAML that ``cellmap_flow yaml`` runs, each model a ``type: onnx`` entry; a
+finetuned model's ``.onnx``, from *Download finetuned model*, goes beside it.
+See :ref:`onnx` for what the YAML holds and what to add for the cluster.
 
 Browsers and devices
 --------------------

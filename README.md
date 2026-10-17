@@ -232,12 +232,20 @@ $ cellmap_flow infer script -s script_path -d data_path
 models a YAML lists; `infer <type>` runs one model of that type (`cellpose`
 is Cellpose-SAM).
 
-In the dashboard, *Loaded models* at the top of the Models tab lists every
-model running or starting, wherever it was picked (the catalog, Hugging Face,
-the BioImage Model Zoo, Cellpose, *Add a model*, the YAML, a finetune), and
-the ✕ beside one stops that model alone, takes its layer away and unticks
-it, leaving the rest of the tab as it is. A finetune's model keeps its ✕
-disabled while its training job is alive: Cancel that on the Finetune tab.
+In the dashboard, and in the browser app, *Loaded models* at the top of the
+Models tab lists every model running or starting, wherever it was picked (the
+catalog, Hugging Face, the BioImage Model Zoo, Cellpose, *Add a model*, the
+YAML, a finetune), with where it came from and what it is (the catalog group,
+the repo, the zoo id, the Cellpose model and output, the base a finetune
+started from). The ✕ beside one stops that model alone, with no confirmation:
+its server is killed (in the browser, it is no longer served), its layer is
+taken away and it is unticked, so a Submit does not bring it back; the other
+models, and any box ticked or unticked and not yet submitted, stay as they
+are. Tick it again and Submit to bring it back. A model still starting is
+withdrawn: its job waiting in a queue is killed, and one that comes up anyway
+is stopped. A finetune's model keeps its ✕ disabled while its training job
+is alive, since that job is its server (Cancel it on the Finetune tab); once
+the job has ended, the ✕ takes away the layer left pointing at it.
 The Models tab's *Job Logs* shows each model's server output as it runs: `starting` while it waits in its queue, installs its environment or
 loads, then its status, and `failed to start` with its traceback when it dies
 before serving.

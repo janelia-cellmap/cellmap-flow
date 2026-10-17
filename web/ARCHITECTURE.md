@@ -99,15 +99,11 @@ dashboard build (`build/`, `vite.config.ts`).
    and `listenForApiRequests(backend)`: a `route("/api/", …)` in chunkmirage's
    route table (routes.ts), the one listener the page has for the worker's
    asks; the Engine adds its `/virtual/<page>/` route there when it starts.
-   Between the catalog and the backend, a link's models go into the session
-   (`resolveLinkedModels` in src/link.ts: a finetuned model's ref, its base
-   and its head's numbers, rebuilt with `withHead` and kept in the catalog
-   under a name no model of this browser has), and its `#!` view loses what
-   this browser cannot show (`linkedHash`: paint layers whose volume is not
-   in the paint store, layers of models not served, a renamed model's layer
-   renamed), before `viewer.restore()` reads the page's hash; the page says
-   what it left out in a notice under the header (`showLinkNotice`, which
-   Share uses too, for the paint a link leaves in this browser).
+   Between the catalog and the backend, `resolveLinkedModels` and `linkedHash`
+   (src/link.ts) put a link's models in the session and take out of its `#!`
+   view what this browser cannot show, before `viewer.restore()` reads the
+   hash; `showLinkNotice` says what was left out (README.md, "A link that
+   opens a volume and runs models").
 4. `restoreLocalFolder()` (src/local-folder) – when the session's dataset is this
    page's own `local/<key>/`, a folder picked on this machine, its handle must
    still be in IndexedDB and readable before anything opens it. Chrome drops
@@ -193,37 +189,49 @@ unpainted ones, all of them, or the good regions' unpainted ones, which
 `good-regions.ts` places on the volume's grid); `run.ts` is one run of all
 of it. The
 result is a model entry of the `finetuned` repo (`models/finetuned.ts`: a
-record in IndexedDB, its bytes in the byte cache), served like any other.
-Since the head is all that changed, a link carries the model as its root
-Hugging Face base, the file trained on and the head's float32 numbers
-(`link.ts` `finetunedRef`; Share builds it from the bytes with `headOf`),
-and the page that opens it rebuilds the same bytes from the base. The paint
-stays in the paint store of the browser that painted it.
+record in IndexedDB, its bytes in the byte cache), served like any other;
+a Restart's model replaces the job's previous entry, whose record and bytes
+are deleted. Share puts a finetuned model in a link as its head's numbers
+(`link.ts` `finetunedRef`, read from the bytes with `headOf`; README.md has
+the format), which the page that opens it writes back into the base.
 `backend/routes/finetune.ts`, `good-regions.ts` and `finetune-jobs.ts` answer the tab's routes
 with the Python routes' JSON (a job is a run in the page; its log streams as
 server-sent events), so the tab's job card, loss plot and log stream are
-unchanged. Why the head: onnxruntime-web trains nothing on the GPU, so the
-whole network trains only where it is rebuilt in a library that does.
+unchanged. Shift+R over the viewer, bound by the job list route
+(`ctx.viewer.bindKey`), sends the page `cellmap-flow:restart-finetune`, on
+which the tab's `job-monitor.js` restarts the job as its Restart does,
+without the confirm, or says why not; the server's key counts the press for
+the tab's poll instead (the docs' architecture page, "A finetune job"). Why
+the head: onnxruntime-web trains nothing on the GPU, so the whole network
+trains only where it is rebuilt in a library that does.
 
-That is `finetune/full/`, for the models whose manifest offers it
-(`modes.ts`: a manifest's `finetune` block says `head`, and for the 2D
-students `full`, with the files each can write; the models route answers
-them as `finetune_modes`, and `run.ts` sends a run to the head's trainer or
-to `full/run-full.ts` by `FinetuneOptions.mode`). Marwan Zouinkhi exported
+That is `finetune/full/`, for the models whose manifest offers it.
+`modes.ts` reads a manifest's `finetune` block (`models/manifest.ts`
+`parseFinetune`): `head` when the served file is one of the head's `files`
+(fp32 and fp16; an int8w file's weights are DequantizeLinear inputs), `full`
+when its library is `tfjs` and the file is one of `write_back` (the 2D
+students'), and without the block the head the graph is found to end in.
+`GET /api/finetune/models` answers them as `finetune_modes`, as the server's
+`finetune_modes()` does, and `run.ts` sends a run to the head's trainer or
+to `full/run-full.ts` by `FinetuneOptions.mode`. Marwan Zouinkhi exported
 each 2D model with a training graph (`train_graph.json`: NHWC ops and the
 ONNX initializers' names) and the initializers' byte offsets in every
-`.onnx` (`initializers.json`), and wrote the TF.js runtime that builds,
-trains and writes it back (`cellmap-tfjs-train.ts`, vendored). `graph.ts`
-checks the graph and walks its shapes to find the tile sides it takes;
-`tiles.ts` cuts the paint into output-sized tiles in the plane each stroke
-was drawn in and reads each tile's raw slice as the model stage would;
-`tfjs.ts` loads TF.js in chunks of its own when a run starts (WebGPU in the
-page, which the routes require through `webgpuMissing`; the CPU backend in
-Node, where the tests train) and resets its engine when the last run ends, freeing the GPU
-buffers it pools; `run-full.ts` checks the offsets against the served file,
-trains with masked BCE and Adam, and writes the trained weights into a copy
-of the bytes, which then go the way a head's do. A whole-network model is
-not put in a Share link.
+`.onnx` (`initializers.json`), which `files.ts` fetches from the folder's
+`finetune/` on the Hub, and wrote the TF.js runtime that builds, trains and
+writes it back (`cellmap-tfjs-train.ts`, his `finetune/cellmap_tfjs_train.js`
+vendored and ported to TypeScript). `graph.ts` checks the graph and walks
+its shapes to find the tile sides it takes (92 + 8k for both graphs; the
+form offers those nearest 172, 300, 428 and 556, with the manifest's
+measured step time and memory); `tiles.ts` cuts the paint into output-sized
+tiles in the plane each stroke was drawn in (the server's `paint_depth_axes`
+and `slice_axes`) and reads each tile's raw slice as the model stage would;
+`tfjs.ts` loads TF.js 4.22.0, in six chunks of its own (0.68 MB, 0.19 MB
+gzipped), when a run starts (WebGPU in the page, which the routes require
+through `webgpuMissing`; the CPU backend in Node, where the tests train) and
+resets its engine when the last run ends, freeing the GPU buffers it pools;
+`run-full.ts` checks the offsets against the served file, trains with masked
+BCE and Adam, BatchNorm's running statistics held (`frozen`), and writes the
+trained weights into a copy of the bytes, which then go the way a head's do.
 
 ## AI-assisted annotation (src/ai-annotate/)
 
@@ -325,33 +333,38 @@ browser page and nowhere on the Flask one.
 `region.ts` is the geometry: the region is a box in nm, z y x, from the
 latest axis-aligned box in the `run_region` annotation layer (a local layer
 at 1 nm, built as the good regions' layer is, with Neuroglancer's
-`annotateBoundingBox` as its `tool`, drawn with two Ctrl+clicks: a legacy
-annotation tool, which `toolBindings` cannot take; `ViewerController.layer` reads
-it from the live viewer's state, the tab polling once a second while shown),
-from the whole volume (the finest level's extent), or typed; each model's
+`annotateBoundingBox` as its `tool`: a legacy annotation tool, which
+`toolBindings` cannot take; `ViewerController.layer` reads it from the live
+viewer's state, the tab polling once a second while shown), from the whole
+volume (the finest level's extent), or typed (`withBox` redraws the box from
+the fields once typing has paused for `TYPED_BOX_DELAY_MS`); each model's
 box is the voxels of its served level the region touches (`servedLevel`,
 the level `infer/engine.ts` serves its view at, voxel 0's centre its OME
 translation, as `label-it/prediction.ts` places a seed), and its chunks are
-its output blocks, which the summary counts and a large run (over 2,000)
-is warned of. `run.ts` runs the models one after another through
-`Inference.materialize`, with the progress across them, the stop (an
-AbortSignal), and the provenance under `cellmap_flow` in each zarr's group
-attributes (the model, its chain from the served view's blob, the dataset,
-the region and the box, the voxel size, the time, the page). `infer/engine.ts`
-maps materialize onto chunkmirage's `Engine.materialize` on the layer's own
-view at its one level, as zarr v2 with OME-Zarr 0.4 metadata, gzip, empty
+its output blocks, which the summary counts. `run.ts` runs the models one
+after another through `Inference.materialize`, with the progress across
+them, the stop (an AbortSignal), and the provenance under `cellmap_flow` in
+each zarr's group attributes (the model's name, id, repository, folder,
+variant and file, its chain from the served view's blob, the dataset, the
+region and the box, the voxel size, the time, the page's address).
+`infer/engine.ts` maps materialize onto chunkmirage's `Engine.materialize`
+on the layer's own view at its one level, with `extent: "box"` (an array of
+exactly the box, its chunks stitched from the model's and the last ones
+ending at the box), as zarr v2 with OME-Zarr 0.4 metadata, gzip, empty
 chunks skipped; the engine walks the chunks through the view's stages,
-caches and demand queue (behind the viewer's chunks) and writes the
-metadata and the chunks, none of which is here. `output.ts` is the rest:
-the folder's handle in IndexedDB (`run-region:output`, beside the picked
-volumes'), write permission asked in the Run click, a `<model>.zarr` in the
-way removed whole after a confirm (empty chunks are skipped, so an old one
-would survive in a new zarr), the zip of a run kept in memory where there is
-no File System Access API (Firefox, Safari; up to 256 MB, with
-`finetune/zip.ts`), and the layer a saved zarr opens as: the model's own
-layer (`predictionLayer`) on `zarr2://<page>local/<key>/<model>.zarr/`, the
-folder's handle stored under a fresh `local/` key for the service worker's
-`local/` route, so the saved predictions are read back from the folder.
+caches and demand queue (behind the viewer's chunks, and nothing the viewer
+has computed is computed again) and writes the metadata and the chunks,
+none of which is here. `output.ts` is the rest: the folder's handle in
+IndexedDB (`run-region:output`, beside the picked volumes'), write
+permission asked in the Run click, a `<model>.zarr` in the way removed whole
+after a confirm (empty chunks are skipped, so an old one would survive in a
+new zarr), the zip of a run kept in memory where there is no File System
+Access API (Firefox, Safari; up to `ZIP_LIMIT_BYTES` before compression,
+with `finetune/zip.ts`), and the layer a saved zarr opens as: the model's
+own layer (`predictionLayer`) on `zarr2://<page>local/<key>/<model>.zarr/`,
+the folder's handle stored under a fresh `local/` key for the service
+worker's `local/` route, so the saved predictions are read back from the
+folder.
 
 ## State
 

@@ -528,7 +528,8 @@ A blockwise run
 #. ``run()`` makes one daisy task per region (the whole extent, or each
    bounding box), with the id ``predict_<model>_<task>`` (``_roi<n>`` after
    it for each of several boxes), its blocks laid from its output's corner
-   and the last ones cut at the region's end. Daisy spawns the
+   and the last ones cut at the region's end, so they meet the output's
+   chunks and the task sets no ``read_write_conflict``. Daisy spawns the
    workers through ``spawn_worker``: each is an LSF job, submitted with
    ``jobs.launch.submit_bsub_job``, that runs
    ``cellmap_flow blockwise <task.yaml> --client``, with a walltime and its
