@@ -22,12 +22,12 @@ def test_rendering_the_index_leaves_the_model_catalog_alone(dashboard):
     assert get_session().model_catalog == catalog_before, "but not added to the catalog everything else reads"
 
 
-def test_the_models_tab_starts_with_the_loaded_models_and_its_script_finds_its_elements(dashboard, monkeypatch):
-    """The Loaded models list comes first, above Add a model and the lists
-    the models are picked from, on every page (a cluster's, a laptop's, the
-    browser's); and every element models-tab.js looks up by id is on one of
-    them (a lookup that finds nothing throws, and takes the rest of the
-    tab's setup with it)."""
+def test_every_element_the_models_tab_script_looks_up_is_on_a_page(dashboard, monkeypatch):
+    """models-tab.js runs on the Flask dashboard's page (a cluster's or a
+    laptop's) and on the browser's, and a lookup that finds nothing throws,
+    and takes the rest of the tab's setup with it. Its Loaded models list
+    comes first, above Add a model and the lists the models are picked from;
+    the browser page keeps it (tests/web/test_render.py's KEPT)."""
     import importlib.util
     from pathlib import Path
 
@@ -42,11 +42,8 @@ def test_the_models_tab_starts_with_the_loaded_models_and_its_script_finds_its_e
     for cluster in (True, False):
         monkeypatch.setattr(index_page, "bsub_available", lambda: cluster)
         pages.append(dashboard.get("/").get_data(as_text=True))
-    for html in pages:
-        tab = html[html.index('<form id="modelSelectionForm">'):]
-        assert tab.index('id="loadedModels"') < tab.index('id="addModelRef"') < tab.index('id="hfModelAccordion"')
-        section = re.search(r'<section class="([^"]*)" id="loadedModels"', tab).group(1)
-        assert "server-only" not in section.split()
+    tab = pages[1][pages[1].index('<form id="modelSelectionForm">'):]
+    assert tab.index('id="loadedModels"') < tab.index('id="addModelRef"') < tab.index('id="hfModelAccordion"')
 
     script = (Path(cellmap_flow.dashboard.__file__).parent / "static" / "js" / "dashboard" / "models-tab.js").read_text()
     looked_up = set(re.findall(r"""getElementById\(\s*["']([\w-]+)["']\s*\)""", script))

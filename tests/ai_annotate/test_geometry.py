@@ -18,10 +18,8 @@ from cellmap_flow.ai_annotate.geometry import (
     depth_axis_for_view,
     depth_axis_from_layout,
     display_dimensions_for_view,
-    from_screen,
     plan_plane,
     raw_box,
-    to_screen,
 )
 
 
@@ -87,21 +85,10 @@ def test_depth_axis_for_a_viewer_state():
     assert display_dimensions_for_view(neuroglancer.ViewerState()) == ()
 
 
-def test_the_image_is_laid_out_as_the_viewers_panel_draws_the_plane():
-    plane = np.arange(6).reshape(2, 3)  # its two axes in z, y, x order
-    xyz = ("x", "y", "z")
-    # cellmap-flow's viewers show x, y, z: XY is y down and x across, XZ z
-    # down and x across, as in z, y, x order; YZ is y down and z across,
-    # increasing to the left.
-    assert to_screen(plane, 0, xyz).tolist() == plane.tolist()
-    assert to_screen(plane, 1, xyz).tolist() == plane.tolist()
-    assert to_screen(plane, 2, xyz).tolist() == plane.T[:, ::-1].tolist()
-    # A viewer that sets none shows z, y, x: XY mirrored, YZ transposed.
-    assert to_screen(plane, 0).tolist() == plane[:, ::-1].tolist()
-    assert to_screen(plane, 2).tolist() == plane.T.tolist()
-    for depth_axis in (0, 1, 2):
-        for display in (None, xyz):
-            assert from_screen(to_screen(plane, depth_axis, display), depth_axis, display).tolist() == plane.tolist()
+# How the image is laid out as the viewer's panel draws the plane (to_screen,
+# from_screen) is web/test/fixtures/ai_annotate.json's "screen" cases, which
+# tests/web/test_fixtures_fresh.py regenerates from this code and the vitest
+# parity suite checks the TypeScript against.
 
 
 # --- the plane --------------------------------------------------------------------
