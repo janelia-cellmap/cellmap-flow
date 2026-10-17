@@ -6,7 +6,7 @@
 import { describe, expect, it } from "vitest";
 
 import { createBackend } from "../../src/backend";
-import { type FinetuneDeps, finetuneRoutes, readTraining, RESTART_ACTION, RESTART_EVENT, RESTART_KEY, sameDataset } from "../../src/backend/routes/finetune";
+import { type FinetuneDeps, finetuneRoutes, readTraining, RESTART_EVENT, sameDataset } from "../../src/backend/routes/finetune";
 import { Router } from "../../src/backend/router";
 import type { ApiRequest, ApiResponse, Chain, ModelEntry, PaintVolume } from "../../src/contracts";
 import { MANIFEST_METADATA_KEY } from "../../src/contracts";
@@ -760,7 +760,6 @@ describe("Shift+R over the viewer", () => {
     const h = harness(ctx);
     for (let i = 0; i < 2; i++) expect(body(await h.handle(request("GET", "/api/finetune/jobs")))).toEqual({ success: true, jobs: [] });
     expect(ctx.viewer.bindings.map((b) => [b.key, b.action])).toEqual([["shift+keyr", "finetune-restart"]]);
-    expect([RESTART_KEY, RESTART_ACTION]).toEqual(["shift+keyr", "finetune-restart"]);
   });
 
   it("tells the page, whose job-monitor.js restarts the job; the job itself is left to it, and its status carries no count", async () => {

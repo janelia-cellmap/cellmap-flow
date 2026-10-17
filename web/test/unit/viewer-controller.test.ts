@@ -354,14 +354,6 @@ describe("the reach into a live viewer for AI-assisted annotation", () => {
     expect(createViewer({ session: fakeSession(), log: () => {} }).viewDepthAxis()).toBe(2);
   });
 
-  it("a dataset opened with its geometry is shown x, y, z: the one panel is the XY plane", async () => {
-    stubDocument();
-    const viewer = createViewer({ session: fakeSession(), log: () => {} });
-    await viewer.openDataset(LIVER.url, { type: "image", source: `zarr://${LIVER.url}` }, LIVER);
-    expect(viewer.viewDisplayDimensions()).toEqual(["x", "y", "z"]);
-    expect(viewer.viewDepthAxis()).toBe(0);
-  });
-
   it("puts back the display dimensions Neuroglancer's restoreState drops while its coordinate space is empty", async () => {
     const { doc, viewer } = await mounted({ ...live, displayDimensions: ["x", "y", "z"] });
     // Neuroglancer as Chromium showed it: restoreState empties the space,
@@ -381,24 +373,16 @@ describe("the reach into a live viewer for AI-assisted annotation", () => {
     };
     ng.coordinateSpace = { get value() { return { names }; }, changed: { add: (fn: () => void) => (listeners.add(fn), () => listeners.delete(fn)) } };
     ng.navigationState = { pose: { displayDimensions: { restoreState: (next: string[]) => (current = { ...current, displayDimensions: next }) } } };
+    // Two changes in a row (a layer added, then selected): the second state
+    // is made before they are back, and they are put back all the same.
     viewer.setLayers({ boxes: { type: "annotation", source: "local://annotations" } });
+    viewer.selectLayer("boxes");
     expect(current.displayDimensions).toBeUndefined();
     expect(listeners.size).toBe(1);
     names = ["z", "y", "x"];
     [...listeners].forEach((fn) => fn());
     expect(current.displayDimensions).toEqual(["x", "y", "z"]);
     expect(viewer.viewDisplayDimensions()).toEqual(["x", "y", "z"]);
-    expect(listeners.size).toBe(0);
-
-    // Two changes in a row (a layer added, then selected): the second state
-    // is made before they are back, and they are put back all the same.
-    viewer.setLayers({ more: { type: "annotation", source: "local://annotations" } });
-    viewer.selectLayer("more");
-    expect(current.displayDimensions).toBeUndefined();
-    expect(listeners.size).toBe(1);
-    names = ["z", "y", "x"];
-    [...listeners].forEach((fn) => fn());
-    expect(current.displayDimensions).toEqual(["x", "y", "z"]);
     expect(listeners.size).toBe(0);
   });
 

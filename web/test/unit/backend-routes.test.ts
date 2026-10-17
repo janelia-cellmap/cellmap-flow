@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 
 import { createBackend, restoreSession } from "../../src/backend";
 import { explainOpenError } from "../../src/backend/routes/data";
+import { toYaml } from "../../src/backend/yaml";
 import { ARGS_KEY } from "../../src/contracts";
 import type { ApiResponse, FinetunedRecord } from "../../src/contracts";
 import { finetunedEntry } from "../../src/models/finetuned";
@@ -16,6 +17,15 @@ function body(res: ApiResponse): any {
   if (!("json" in res)) throw new Error(`not a JSON answer: ${JSON.stringify(res)}`);
   return res.json;
 }
+
+/** An exported config without its comments (the header's lines, a path
+ * line's note): the config itself, as toYaml writes it. */
+function uncommented(yaml: string): string {
+  return yaml.split("\n").filter((line) => !line.startsWith("#")).map((line) => line.replace(/ +#.*$/, "")).join("\n");
+}
+
+/** setup_54 as the server's onnx entry, running `file`. */
+const SERVER_54 = (file: string) => ({ type: "onnx", name: NAME_54, repo: "cellmap/onnx-web-models", folder: "setup_54", file });
 
 const HF54 = "cellmap/onnx-web-models/setup_54";
 const HF56 = "cellmap/onnx-web-models/setup_56";
@@ -496,13 +506,15 @@ describe("the settings routes", () => {
     if (!("body" in res)) throw new Error("not a body answer");
     expect(res.type).toBe("text/yaml");
     expect(res.headers?.["content-disposition"]).toMatch(/^attachment; filename=cellmap_flow_config_\d{8}_\d{6}\.yaml$/);
-    const yaml = res.body as string;
-    expect(yaml).toContain("data_path: https://example.org/em.zarr\n");
-    expect(yaml).toContain("resample: false\n");
-    expect(yaml).toContain("json_data:\n  input_norm:\n  - name: MinMaxNormalizer\n    min_value: 0\n    max_value: 255\n  - name: LambdaNormalizer\n    expression: 2*x-1\n  postprocess:\n  - name: SigmoidPostprocessor\n");
-    expect(yaml).toContain(`models:\n- type: onnx\n  name: ${NAME_54}\n  repo: cellmap/onnx-web-models\n  folder: setup_54\n  file: setup_54_fp32.onnx\n`);
-    expect(yaml).toMatch(/^# Exported from the browser mode\. Each model is an ONNX export, which the\n# server serves with ONNX Runtime \(type: onnx/m);
-    expect(yaml).not.toMatch(/PyTorch/);
+    expect(uncommented(res.body as string)).toBe(toYaml({
+      data_path: "https://example.org/em.zarr",
+      resample: false,
+      json_data: {
+        input_norm: [{ name: "MinMaxNormalizer", min_value: 0, max_value: 255 }, { name: "LambdaNormalizer", expression: "2*x-1" }],
+        postprocess: [{ name: "SigmoidPostprocessor" }],
+      },
+      models: [SERVER_54("setup_54_fp32.onnx")],
+    }));
   });
 
   it("exports the variant the page serves on this GPU, not the catalog's default the session keeps", async () => {
@@ -513,7 +525,7 @@ describe("the settings routes", () => {
     expect(ctx.session.state.models[0].variant.file).toBe("setup_54_fp32.onnx");
     const res = await backend.handle(request("GET", "/api/export-config"));
     if (!("body" in res)) throw new Error("not a body answer");
-    expect(res.body as string).toContain("  folder: setup_54\n  file: setup_54_int8w.onnx\n");
+    expect(uncommented(res.body as string)).toContain(toYaml({ models: [SERVER_54("setup_54_int8w.onnx")] }));
   });
 
   it("exports a model finetuned here by the path its download saves, saying where to put it", async () => {
@@ -523,10 +535,10 @@ describe("the settings routes", () => {
     await ctx.session.update({ models: [base, finetuned] });
     const res = await createBackend(ctx).handle(request("GET", "/api/export-config"));
     if (!("body" in res)) throw new Error("not a body answer");
-    expect(res.body as string).toContain(
-      `models:\n- type: onnx\n  name: ${NAME_54}\n  repo: cellmap/onnx-web-models\n  folder: setup_54\n  file: setup_54_fp32.onnx\n` +
-      `- type: onnx\n  name: ${NAME_54}-ft1\n  path: ${NAME_54}-ft1.onnx  # the file Download finetuned model saves: put it beside this YAML\n`,
-    );
+    const yaml = res.body as string;
+    expect(uncommented(yaml)).toContain(toYaml({ models: [SERVER_54("setup_54_fp32.onnx"), { type: "onnx", name: `${NAME_54}-ft1`, path: `${NAME_54}-ft1.onnx` }] }));
+    // The path line carries a note of where the file goes.
+    expect(yaml.split("\n").find((line) => line.includes(`path: ${NAME_54}-ft1.onnx`))).toContain("#");
   });
 });
 

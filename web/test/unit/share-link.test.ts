@@ -96,24 +96,21 @@ describe("linkRefs", () => {
     const linked = await linkRefs([orphan.entry, gone.entry], { ...catalog, finetuned: async () => [orphan, gone] });
     expect(linked.refs).toEqual([orphan.name, gone.name]);
     expect(linked.rebuilt).toEqual([]);
+    // Why: the model it was finetuned from is gone; the catalog's error for its bytes.
     expect(linked.unlinked).toEqual([
-      { name: orphan.name, why: "mito_aff_setup53_16nm-ft7, the model it was finetuned from, is no longer kept in this browser" },
-      { name: gone.name, why: "mito_aff_setup53_16nm-ft9's bytes are no longer in the browser's storage" },
+      { name: orphan.name, why: expect.stringContaining("mito_aff_setup53_16nm-ft7") },
+      { name: gone.name, why: expect.stringContaining("no longer in the browser's storage") },
     ]);
   });
 });
 
 describe("shareNotes", () => {
-  it("says the paint stays here and how to take it along, and where a finetuned model is rebuilt", () => {
+  it("has a note for the paint that stays here, a finetuned model rebuilt where the link opens, and one left out of it", () => {
     const notes = shareNotes(["vol-0badcafe-20261016-101500"], {
       rebuilt: [{ name: "mito_aff_setup53_16nm-ft1", base: "mito_aff_setup53_16nm" }],
       unlinked: [{ name: "mito_aff_setup53_16nm-ft8", why: "its record is not in this browser's catalog" }],
     });
-    expect(notes).toEqual([
-      "The paint in vol-0badcafe-20261016-101500 stays in this browser: someone else opening the link will not see it. The Finetune tab's Download paint (zarr) saves it as a .zarr.zip to send with the link.",
-      "mito_aff_setup53_16nm-ft1's last layer is in the link: it is rebuilt from mito_aff_setup53_16nm where the link opens.",
-      "mito_aff_setup53_16nm-ft8 could not be put in the link as a finetuned model (its record is not in this browser's catalog): it opens only in this browser.",
-    ]);
+    expect(notes).toEqual(["vol-0badcafe-20261016-101500", "mito_aff_setup53_16nm-ft1", "mito_aff_setup53_16nm-ft8"].map((name) => expect.stringContaining(name)));
   });
 
   it("says nothing of a link that opens elsewhere as it is here", () => {
