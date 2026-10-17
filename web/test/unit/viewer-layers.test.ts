@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest";
 import type { Chain, DatasetInfo, ModelEntry, ModelInfo, PaintVolume, ServedModel } from "../../src/contracts";
 import { predictionShader, rawShader } from "../../src/viewer/display";
 import {
-  centrePosition, DEFAULT_LAYOUT, dimensionsOf, displayChannel, displayDimensionsFor, GPU_MEMORY_LIMIT, initialState, layerList, PAINT_LAYER_PREFIX, PAINT_TAB,
+  centrePosition, DEFAULT_LAYOUT, dimensionsOf, displayChannel, GPU_MEMORY_LIMIT, initialState, layerList, PAINT_LAYER_PREFIX, PAINT_TAB,
   PAINT_TOOL_BINDINGS, paintLayer, paintLayerName, paintLayerUrl, paintVolumeOf, PREDICTION_COLORS, predictionLayer, predictionSource, predictionVoxelOverride,
   RAW_LAYER_NAME, rawLayer, rawSource, respelledPaintSource, respelledPaintUrl, stateWithoutInfo,
 } from "../../src/viewer/layers";
@@ -203,20 +203,20 @@ describe("dimensionsOf and centrePosition (bootstrap.raw_dimensions)", () => {
     expect(dimensionsOf(mixed)).toEqual({ z: [4e-9, "m"], y: [4.5e-9, "m"], x: [8e-9, "m"] });
   });
   it("puts the position at the volume's centre, in voxels, the origin included", () => {
-    expect(centrePosition(info)).toEqual([250, 500, 1000]);
+    expect(centrePosition(info)).toEqual([1000, 500, 250]);
     const offset = { ...info, levels: [{ shape: [500, 1000, 2000], voxel: [8, 8, 8], origin: [-4, -4, 800] }] };
-    expect(centrePosition(offset)).toEqual([249.5, 499.5, 1100]);
+    expect(centrePosition(offset)).toEqual([1100, 499.5, 249.5]);
   });
   it("skips a channel axis, whether or not the levels' arrays cover it", () => {
     const apart = { ...info, channels: 2, axes: [{ name: "c", unit: "" }, ...info.axes] };
     expect(dimensionsOf(apart)).toEqual(dimensionsOf(info));
-    expect(centrePosition(apart)).toEqual([250, 500, 1000]);
+    expect(centrePosition(apart)).toEqual([1000, 500, 250]);
     const together = {
       ...apart,
       levels: [{ shape: [2, 500, 1000, 2000], voxel: [1, 8, 8, 8], origin: [0, 0, 0, 0] }],
     };
     expect(dimensionsOf(together)).toEqual(dimensionsOf(info));
-    expect(centrePosition(together)).toEqual([250, 500, 1000]);
+    expect(centrePosition(together)).toEqual([1000, 500, 250]);
   });
   it("reads axes named with their full unit", () => {
     const named = { ...info, axes: [{ name: "z", unit: "nanometer" }, { name: "y", unit: "nanometer" }, { name: "x", unit: "nanometer" }] };
@@ -225,15 +225,14 @@ describe("dimensionsOf and centrePosition (bootstrap.raw_dimensions)", () => {
 });
 
 describe("initialState (bootstrap.new_viewer)", () => {
-  it("is the raw's dimensions shown x, y, z, the centre, one voxel per pixel, the layers in order, one panel", () => {
+  it("is the raw's dimensions, the centre, one voxel per pixel, the layers in order, one panel", () => {
     const raw = rawLayer(DATASET, info);
     const model = predictionLayer(served("mito"), chain(sigmoid), "red");
     const state = initialState(info, { data: raw, mito: model });
     expect(state).toEqual({
       gpuMemoryLimit: GPU_MEMORY_LIMIT,
-      dimensions: { z: [8e-9, "m"], y: [8e-9, "m"], x: [8e-9, "m"] },
-      displayDimensions: ["x", "y", "z"],
-      position: [250, 500, 1000],
+      dimensions: { x: [8e-9, "m"], y: [8e-9, "m"], z: [8e-9, "m"] },
+      position: [1000, 500, 250],
       crossSectionScale: 1,
       layers: [{ ...raw, name: "data" }, { ...model, name: "mito" }],
       layout: "xy",
@@ -241,11 +240,11 @@ describe("initialState (bootstrap.new_viewer)", () => {
     expect(GPU_MEMORY_LIMIT).toBe(2_000_000_000); // bootstrap.GPU_MEMORY_LIMIT
   });
 
-  it("shows x, y, z only when the dimensions have all three (bootstrap.display_dimensions)", () => {
-    // The "xy" panel shows the first two display dimensions: unset, z across and y down.
-    expect(displayDimensionsFor(["z", "y", "x"])).toEqual(["x", "y", "z"]);
-    expect(displayDimensionsFor(["c^", "z", "y", "x"])).toEqual(["x", "y", "z"]);
-    expect(displayDimensionsFor(["y", "x"])).toBeUndefined();
+  it("orders the dimensions x, y, z, so the xy panel is the XY plane (bootstrap.viewer_space)", () => {
+    // The "xy" panel shows the first two: in z, y, x order, z across and y down.
+    const state = initialState(info, {});
+    expect(Object.keys(state.dimensions!)).toEqual(["x", "y", "z"]);
+    expect(state.displayDimensions).toBeUndefined();
     expect(DEFAULT_LAYOUT).toBe("xy");
   });
   it("names the layers by their keys, as Neuroglancer's array of layers wants", () => {

@@ -28,6 +28,10 @@ export const RAW_LAYER_NAME = "data";
  * default of 1 GB, as bootstrap.apply_viewer_defaults sets it. */
 export const GPU_MEMORY_LIMIT = 2_000_000_000;
 
+/** The order of the viewer's dimensions (viewer.VIEWER_AXES, which says
+ * why): Neuroglancer's "xy" panel is then the XY plane, looking along z. */
+export const VIEWER_AXES: readonly string[] = ["x", "y", "z"];
+
 /** The layout a new viewer opens with. The Python viewer leaves
  * Neuroglancer's default, 4panel (three cross sections and a 3D view). In
  * the browser every prediction chunk is a forward pass of the model on this
@@ -215,7 +219,9 @@ const LENGTH_UNITS = new Set(["nm", "nanometer", "nanometre", "um", "µm", "micr
  * voxel and origin arrays. The arrays may cover every axis or only the last
  * ones (chunkmirage keeps channels apart from the spatial shape), so an axis
  * is paired with them from the end. A channel axis ("c") is never spatial;
- * an axis with no unit is spatial when it is x, y or z. */
+ * an axis with no unit is spatial when it is x, y or z. In the viewer's
+ * order: x, y, z when all three are there (bootstrap.viewer_space), else
+ * the data's. */
 function spatialAxes(info: DatasetInfo): { name: string; index: number }[] {
   const count = info.levels[0]?.voxel.length ?? info.axes.length;
   const first = Math.max(0, info.axes.length - count);
@@ -226,6 +232,10 @@ function spatialAxes(info: DatasetInfo): { name: string; index: number }[] {
     const spatial = axis.name !== "c" && LENGTH_UNITS.has(unit) && (unit !== "" || ["x", "y", "z"].includes(axis.name));
     if (spatial) axes.push({ name: axis.name, index: i - first });
   });
+  if (VIEWER_AXES.every((name) => axes.some((axis) => axis.name === name))) {
+    const rank = (name: string) => (VIEWER_AXES.includes(name) ? VIEWER_AXES.indexOf(name) : VIEWER_AXES.length);
+    axes.sort((a, b) => rank(a.name) - rank(b.name));
+  }
   return axes;
 }
 
@@ -240,18 +250,6 @@ export function dimensionsOf(info: DatasetInfo): NgDimensions {
   const dimensions: NgDimensions = {};
   for (const { name, index } of spatialAxes(info)) dimensions[name] = [nmToMetres(finest.voxel[index]), "m"];
   return dimensions;
-}
-
-/** The display dimensions for a viewer whose dimensions are `names`
- * (bootstrap.display_dimensions): x, y, z when it has all three, else
- * undefined (Neuroglancer's default, the first three in order). The "xy"
- * panel shows the first two: cellmap-flow names its dimensions z, y, x, so
- * that panel showed z across and y down, and a 2D model, which computes one
- * z-slice at a time, was asked for a block for every z position on screen.
- * With x, y, z it is the XY plane, x across and y down, looking along z,
- * and the positions stay z, y, x. */
-export function displayDimensionsFor(names: readonly string[]): string[] | undefined {
-  return ["x", "y", "z"].every((axis) => names.includes(axis)) ? ["x", "y", "z"] : undefined;
 }
 
 /** The volume's centre as a viewer position: in voxels of dimensionsOf, the
@@ -270,17 +268,14 @@ export function layerList(layers: Record<string, LayerSpec>): NgState["layers"] 
 }
 
 /** A new viewer's state on the raw data `info` describes (bootstrap.new_viewer):
- * the raw's dimensions, shown x, y, z (displayDimensionsFor), the position at
- * the volume's centre, one voxel per screen pixel (crossSectionScale 1,
+ * the raw's dimensions (x, y, z, dimensionsOf), the position at the volume's
+ * centre, one voxel per screen pixel (crossSectionScale 1,
  * Neuroglancer's default, which the Python viewer leaves), `layers` in their
  * order, the raw first, and the layout. */
 export function initialState(info: DatasetInfo, layers: Record<string, LayerSpec>, options: { layout?: string } = {}): NgState {
-  const dimensions = dimensionsOf(info);
-  const displayDimensions = displayDimensionsFor(Object.keys(dimensions));
   return {
     gpuMemoryLimit: GPU_MEMORY_LIMIT,
-    dimensions,
-    ...(displayDimensions ? { displayDimensions } : {}),
+    dimensions: dimensionsOf(info),
     position: centrePosition(info),
     crossSectionScale: 1,
     layers: layerList(layers),

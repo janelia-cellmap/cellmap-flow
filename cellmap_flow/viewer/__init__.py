@@ -4,19 +4,23 @@
 - ``layers``: a model's prediction layer and the raw data's layer, built the
   same way by every path that shows one.
 - ``keys``: binding a key once per viewer, and its status-bar message.
-- ``DISPLAY_DIMENSIONS`` and ``display_dimensions_for_view``: which
-  dimensions a viewer displays. Here, so that importing them imports
-  nothing else.
+- ``VIEWER_AXES`` and ``display_dimensions_for_view``: the order of a
+  viewer's dimensions, and which it displays. Here, so that importing them
+  imports nothing else.
 
 Nothing here reads the dashboard's state or starts the dashboard; callers
 pass in what a layer needs.
 """
 
-# The display dimensions cellmap-flow's viewers set over their z, y, x
-# coordinate space. Neuroglancer's "xy" panel shows the first two, which are
-# the first three of the coordinate space unless set: unset, it showed z
-# across and y down. With x, y, z it is the XY plane, looking along z.
-DISPLAY_DIMENSIONS = ("x", "y", "z")
+# The order of cellmap-flow's viewers' dimensions, as Neuroglancer's own
+# viewers have them. Its "xy" panel shows the first two display dimensions,
+# which are the first three of the coordinate space: in this order the XY
+# plane, x across and y down, looking along z. In z, y, x order it showed z
+# across and y down. Setting the display dimensions to x, y, z over a z, y,
+# x space does not do instead: the painting fork's brush reads a panel's
+# normal, given in display order, in the space's order, and painted across
+# the slice shown.
+VIEWER_AXES = ("x", "y", "z")
 
 
 def display_dimensions_for_view(viewer_state) -> tuple:

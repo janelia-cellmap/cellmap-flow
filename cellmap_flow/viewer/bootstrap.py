@@ -16,7 +16,7 @@ import neuroglancer
 from cellmap_flow.image_data_interface import legacy_meta
 from cellmap_flow.io import metadata
 from cellmap_flow.utils.address import this_machine_ip
-from cellmap_flow.viewer import DISPLAY_DIMENSIONS
+from cellmap_flow.viewer import VIEWER_AXES
 from cellmap_flow.viewer.layers import raw_layer
 
 logger = logging.getLogger(__name__)
@@ -28,18 +28,22 @@ logger = logging.getLogger(__name__)
 GPU_MEMORY_LIMIT = 2_000_000_000
 
 
-def display_dimensions(names):
-    """The display dimensions for a viewer whose dimensions are ``names``:
-    DISPLAY_DIMENSIONS (x, y, z) when it has all three, else None
-    (neuroglancer's default, the first three of ``names``).
+def viewer_space(names, scales):
+    """A viewer's coordinate space over axes ``names`` at ``scales`` nm, put
+    in VIEWER_AXES order (x, y, z, then any others) when it has all three.
     """
-    names = list(names or [])
-    return list(DISPLAY_DIMENSIONS) if all(axis in names for axis in DISPLAY_DIMENSIONS) else None
+    names, scales = list(names), list(scales)
+    if all(axis in names for axis in VIEWER_AXES):
+        order = [names.index(axis) for axis in VIEWER_AXES]
+        order += [i for i in range(len(names)) if i not in order]
+        names, scales = [names[i] for i in order], [scales[i] for i in order]
+    return neuroglancer.CoordinateSpace(names=names, units="nm", scales=scales)
 
 
 def raw_dimensions(dataset_path):
     """The viewer's dimensions for ``dataset_path``: the axes and voxel size
-    of the finest level of its pyramid (of the array itself, if it is none).
+    of the finest level of its pyramid (of the array itself, if it is none),
+    x, y, z (viewer_space).
 
     Set before any layer is added, so that the raw data decides the viewer's
     coordinate space rather than whichever layer neuroglancer takes it from,
@@ -57,7 +61,7 @@ def raw_dimensions(dataset_path):
         finest = min(levels, key=lambda meta: tuple(meta.spatial().voxel_size))
         # The names and sizes ImageDataInterface gives the raw layer's volume.
         voxel_size, _, _, _, names, _ = legacy_meta(finest)
-        return neuroglancer.CoordinateSpace(names=names, units="nm", scales=voxel_size)
+        return viewer_space(names, voxel_size)
     except Exception as e:
         logger.warning(f"Could not read the viewer's dimensions from {dataset_path}: {e}")
         return None
@@ -66,9 +70,9 @@ def raw_dimensions(dataset_path):
 def new_viewer(dataset_path, *, scales=None, raw=None, raw_name="data", layers=None):
     """A viewer showing the raw data at ``dataset_path``, then ``layers``.
 
-    - ``scales``: the viewer's dimensions, z, y, x in nm. None takes them from
-      the raw (raw_dimensions), or leaves them to neuroglancer if it cannot
-      be read. Its display dimensions are x, y, z (display_dimensions).
+    - ``scales``: the viewer's voxel size, z, y, x in nm. None takes it from
+      the raw (raw_dimensions), or leaves the dimensions to neuroglancer if
+      it cannot be read. Either way the dimensions are x, y, z (viewer_space).
     - ``raw``: the raw data's layer, if the caller built it (raw_layer);
       shown as ``raw_name``.
     - ``layers``: ``{name: layer}``, added after the raw in their order.
@@ -79,14 +83,13 @@ def new_viewer(dataset_path, *, scales=None, raw=None, raw_name="data", layers=N
     if scales is None:
         dimensions = raw_dimensions(dataset_path)
     else:
-        dimensions = neuroglancer.CoordinateSpace(names=["z", "y", "x"], units="nm", scales=list(scales))
+        dimensions = viewer_space(["z", "y", "x"], scales)
     neuroglancer.set_server_bind_address("0.0.0.0")
     viewer = neuroglancer.Viewer()
     with viewer.txn() as s:
         s.gpu_memory_limit = GPU_MEMORY_LIMIT
         if dimensions is not None:
             s.dimensions = dimensions
-            s.display_dimensions = display_dimensions(dimensions.names)
         s.layers[raw_name] = raw_layer(dataset_path) if raw is None else raw
         for name, layer in (layers or {}).items():
             s.layers[name] = layer

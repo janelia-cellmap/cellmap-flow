@@ -66,8 +66,8 @@ describe("POST /api/finetune/good-regions/mark-view", () => {
     expect(await loadGoodRegions(ctx.paint, VOLUME.id)).toEqual([first.region]);
     expect(ctx.viewer.layers[GOOD_REGIONS_LAYER]).toEqual({
       type: "annotation",
-      source: [{ url: "local://annotations", transform: { outputDimensions: { z: [1e-9, "m"], y: [1e-9, "m"], x: [1e-9, "m"] } } }],
-      annotations: [{ type: "axis_aligned_bounding_box", pointA: [8, 16, 16], pointB: [24, 48, 48], id: "0", description: "good-1" }],
+      source: [{ url: "local://annotations", transform: { outputDimensions: { x: [1e-9, "m"], y: [1e-9, "m"], z: [1e-9, "m"] } } }],
+      annotations: [{ type: "axis_aligned_bounding_box", pointA: [16, 16, 8], pointB: [48, 48, 24], id: "0", description: "good-1" }],
     });
     expect(ctx.logged).toContain("Marked good region good-1 at [16, 32, 32] nm, size [16, 32, 32] nm (1 total)");
     // A label and one size for every axis, as the route takes them.
@@ -104,7 +104,7 @@ describe("POST /api/finetune/good-regions/delete", () => {
     const b = body(await handle("POST", "/api/finetune/good-regions/mark-view", {})).region;
     expect(body(await handle("POST", "/api/finetune/good-regions/delete", { id: a.id }))).toEqual({ success: true, count: 1 });
     expect(await loadGoodRegions(ctx.paint, VOLUME.id)).toEqual([b]);
-    expect(drawn(ctx)).toEqual([[[8, 16, 16], [24, 48, 48], "0", "good-2"]]);
+    expect(drawn(ctx)).toEqual([[[16, 16, 8], [48, 48, 24], "0", "good-2"]]);
     const missing = await handle("POST", "/api/finetune/good-regions/delete", { id: "nope" });
     expect(missing.status).toBe(404);
     expect(body(missing)).toEqual({ success: false, error: "No region nope" });

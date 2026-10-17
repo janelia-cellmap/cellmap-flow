@@ -69,7 +69,6 @@ from cellmap_flow.dashboard.routes.finetune.blueprint import finetune_bp
 from cellmap_flow.dashboard.routes.finetune.common import (
     INSTANCE_TARGETS,
     session_store,
-    viewer_position_and_scales,
 )
 from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.finetune.session import fill
@@ -608,10 +607,9 @@ def ai_annotate_run():
             if depth_axis is None:
                 depth_axis = geometry.depth_axis_for_view(state)
             if point_nm is None:
-                position, _ = viewer_position_and_scales()
-                if position is None:
+                if state.position is None:
                     raise _Refused("The viewer has no position.", 400)
-                point_nm = _zyx_nm(position, state.dimensions)
+                point_nm = _zyx_nm(state.position, state.dimensions)
         annotate_id = _begin_run(point_nm, depth_axis, display)
         return jsonify({"success": True, "annotate_id": annotate_id, "status": "running"})
     except Exception as e:

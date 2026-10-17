@@ -280,7 +280,7 @@ describe("datasetOpened", () => {
     viewer.datasetOpened(LIVER.url, LIVER);
     const state = shown();
     expect(state.dimensions).toEqual({ z: [8e-9, "m"], y: [8e-9, "m"], x: [8e-9, "m"] });
-    expect(state.position).toEqual([4466, 6364, 6373.5]);
+    expect(state.position).toEqual([6373.5, 6364, 4466]);
     expect((state.layers as { name: string }[]).map((l) => l.name)).toEqual(["data", "model"]);
     expect(lines).toContain(`viewer restored on ${LIVER.url}`);
     const src = frame.src;
@@ -354,36 +354,19 @@ describe("the reach into a live viewer for AI-assisted annotation", () => {
     expect(createViewer({ session: fakeSession(), log: () => {} }).viewDepthAxis()).toBe(2);
   });
 
-  it("puts back the display dimensions Neuroglancer's restoreState drops while its coordinate space is empty", async () => {
-    const { doc, viewer } = await mounted({ ...live, displayDimensions: ["x", "y", "z"] });
-    // Neuroglancer as Chromium showed it: restoreState empties the space,
-    // so the display dimensions it restores fall back to the default; the
-    // space names its dimensions again a frame later.
-    const ng = doc.stub.viewer as unknown as Record<string, unknown>;
-    let current: NgState = { ...live, displayDimensions: ["x", "y", "z"] };
-    let names: string[] = ["z", "y", "x"];
-    const listeners = new Set<() => void>();
-    ng.state = {
-      toJSON: () => current,
-      restoreState: (next: NgState) => {
-        const { displayDimensions: _dropped, ...rest } = next;
-        current = rest;
-        names = [];
-      },
-    };
-    ng.coordinateSpace = { get value() { return { names }; }, changed: { add: (fn: () => void) => (listeners.add(fn), () => listeners.delete(fn)) } };
-    ng.navigationState = { pose: { displayDimensions: { restoreState: (next: string[]) => (current = { ...current, displayDimensions: next }) } } };
-    // Two changes in a row (a layer added, then selected): the second state
-    // is made before they are back, and they are put back all the same.
+  it("holds Neuroglancer's coordinate space through a layer change, so its x, y, z order stays", async () => {
+    // Without the hold, restoreState's dropping every layer emptied the
+    // space, and the new layers made it z, y, x again with the position's
+    // numbers kept: the brush then painted across the slice shown.
+    const { doc, viewer } = await mounted();
+    let holds = 0;
+    const heldDuring: boolean[] = [];
+    (doc.stub.viewer as unknown as Record<string, unknown>).layerSpecification = { coordinateSpaceCombiner: { retain: () => (holds++, () => void holds--) } };
+    const restore = doc.stub.viewer.state.restoreState;
+    doc.stub.viewer.state.restoreState = (next: NgState) => { heldDuring.push(holds > 0); restore(next); };
     viewer.setLayers({ boxes: { type: "annotation", source: "local://annotations" } });
-    viewer.selectLayer("boxes");
-    expect(current.displayDimensions).toBeUndefined();
-    expect(listeners.size).toBe(1);
-    names = ["z", "y", "x"];
-    [...listeners].forEach((fn) => fn());
-    expect(current.displayDimensions).toEqual(["x", "y", "z"]);
-    expect(viewer.viewDisplayDimensions()).toEqual(["x", "y", "z"]);
-    expect(listeners.size).toBe(0);
+    expect(heldDuring).toEqual([true]);
+    expect(holds).toBe(0);
   });
 
   it("viewDepthAxis reads the state in the iframe's hash while Neuroglancer is still loading", async () => {

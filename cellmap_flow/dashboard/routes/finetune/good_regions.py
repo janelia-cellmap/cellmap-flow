@@ -115,7 +115,7 @@ def view_box_nm(size_nm=None):
         raise ValueError("Viewer has no position")
 
     # viewer_position_and_scales returns the position in viewer voxels and
-    # the scale of each axis in nm, so the product is absolute nm.
+    # the scale of each axis in nm, both z, y, x, so the product is absolute nm.
     centre_nm = np.array(position, dtype=float)
     if scales_nm:
         centre_nm = centre_nm * np.array(scales_nm, dtype=float)

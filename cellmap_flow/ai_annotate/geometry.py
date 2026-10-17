@@ -50,12 +50,10 @@ PLANE_NAMES = ("XY", "XZ", "YZ")
 # dimensions 0 and 1 and looks along 2, "xz" (rotated about the first) looks
 # along 1, "yz" (rotated about the second) along 0 (data_panel_layout.ts's
 # AXES_RELATIVE_ORIENTATION). The display dimensions are the first three of
-# the viewer's coordinate space unless set. cellmap-flow's viewers name
-# their dimensions z, y, x and set the display dimensions to x, y, z
-# (viewer.DISPLAY_DIMENSIONS), so the "xy" panel is the XY plane, looking
-# along z. A viewer that sets none (a link made before they were
-# set) shows z, y, x: its "xy" panel is a z-y slice looking along x, and the
-# XY plane is its "yz" panel.
+# the viewer's coordinate space unless set. cellmap-flow's viewers order
+# their dimensions x, y, z (viewer.VIEWER_AXES), so the "xy" panel is the XY
+# plane, looking along z. A viewer in z, y, x order (a link made before)
+# has a z-y slice looking along x there, and the XY plane is its "yz" panel.
 _LAYOUT_DEPTH_SLOT = {"xy": 2, "xz": 1, "yz": 0}
 
 # How neuroglancer's panels draw their plane, by the display-dimension slot
