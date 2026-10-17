@@ -71,10 +71,13 @@ def test_a_model_taken_off_is_killed_forgotten_and_can_be_started_again(viewer, 
     with viewer.txn() as s:
         for name in ("mito", "nuc"):
             s.layers[name] = neuroglancer.ImageLayer(source=f"zarr://http://{name}/x")
+    get_session().shader_controls["nuc"] = {"contrast": {"range": [0, 1]}}
 
     launch.update_run_models(["mito"])
     assert dropped.killed and not kept.killed and get_session().jobs == [kept]
     assert [layer.name for layer in viewer.state.layers] == ["mito"]
+    # Drawn again, its layer keeps what the user set on it (unlike after the ✕).
+    assert get_session().shader_controls["nuc"] == {"contrast": {"range": [0, 1]}}
     # Selecting it again must start it again, not be a silent no-op.
     launch.update_run_models(["mito", "nuc"])
     assert launched == ["nuc"]

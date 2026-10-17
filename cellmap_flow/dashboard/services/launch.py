@@ -376,32 +376,31 @@ def _stop_jobs(jobs, *, drop_layers=True):
     the Loaded models list's ✕ the model removed, and ``_start`` a model
     removed while it was starting.
 
-    Each job's layer goes from the viewer, when there is one, and with it
-    what the session keeps to build a layer of that name with
-    (Session.forget_layer), as /api/viewer/remove-layer does: a later layer
-    of the name starts fresh. Its server is killed, unless a finetune job
-    owns it: that job stops its own server, and ``remove_model`` passes one
-    only once the job has ended. Then the job goes from the session's jobs,
-    by identity (another job of its name stays): a killed job left there
-    still counted as running, so selecting that model again did nothing,
-    and each PUT /api/pipeline rebuilt a layer pointing at its dead host.
+    Each job's layer goes from the viewer, when there is one. What the
+    session keeps to build a layer of that name with (its shader and shader
+    controls) stays: a model ticked again, or restarted by Submit with a new
+    voxel size or slice linking, is drawn again with what the user set on
+    it. Only the ✕ (``remove_model``) forgets that too. Its server is
+    killed, unless a finetune job owns it: that job stops its own server,
+    and ``remove_model`` passes one only once the job has ended. Then the
+    job goes from the session's jobs, by identity (another job of its name
+    stays): a killed job left there still counted as running, so selecting
+    that model again did nothing, and each PUT /api/pipeline rebuilt a
+    layer pointing at its dead host.
 
-    ``drop_layers=False`` leaves the layers and the bookkeeping alone, for
-    a job that never had a layer of its own.
+    ``drop_layers=False`` leaves the layers alone, for a job that never had
+    a layer of its own.
     """
     jobs = list(jobs)
     if not jobs:
         return
     session = get_session()
-    if drop_layers:
+    if drop_layers and session.viewer is not None:
         names = list(dict.fromkeys(job.model_name for job in jobs))
-        if session.viewer is not None:
-            with session.viewer.txn() as s:
-                for name in names:
-                    if name in s.layers:
-                        del s.layers[name]
-        for name in names:
-            session.forget_layer(name)
+        with session.viewer.txn() as s:
+            for name in names:
+                if name in s.layers:
+                    del s.layers[name]
     for job in jobs:
         if not _owned_by_finetune(job):
             job.kill()
@@ -608,16 +607,17 @@ def remove_model(name: str) -> list:
     it is. Returns the Loaded models list as it is then.
 
     A running model's job is killed and forgotten, and its layer taken away
-    with what the session keeps to build one of its name with
-    (``_stop_jobs``), as Submit does for one unticked. A model still
-    starting is withdrawn: a job of it waiting in a queue is killed now, and
-    whatever its launch still starts is stopped as it comes up (``_start``),
-    so a Submit may start it again at once. A finetune job's model is that
-    job's server: while the job is alive it is the Finetune tab's to stop
-    (NotRemovable); once the job has ended, its server has too, and only its
-    layer, with that bookkeeping, and its entry among the jobs are left to
-    take away. Its config stays among the session's models, as every stopped
-    model's does, for the pipeline builder.
+    (``_stop_jobs``), as Submit does for one unticked; unlike Submit, the ✕
+    also forgets what the session keeps to build a layer of its name with
+    (Session.forget_layer). A model still starting is withdrawn: a job of it
+    waiting in a queue is killed now, and whatever its launch still starts
+    is stopped as it comes up (``_start``), so a Submit may start it again
+    at once. A finetune job's model is that job's server: while the job is
+    alive it is the Finetune tab's to stop (NotRemovable); once the job has
+    ended, its server has too, and only its layer, with that bookkeeping,
+    and its entry among the jobs are left to take away. Its config stays
+    among the session's models, as every stopped model's does, for the
+    pipeline builder.
 
     Raises LookupError when no model of that name is running or starting.
     """
@@ -645,5 +645,8 @@ def remove_model(name: str) -> list:
                 logger.info(f"Killing '{name}', removed from the loaded models while it was starting")
                 job.kill()
     _stop_jobs(jobs)
+    # Removed, not stopped to start again: a later layer of its name starts
+    # fresh, as one /api/viewer/remove-layer took away does.
+    session.forget_layer(name)
     logger.info(f"Removed model {name}")
     return loaded_models()

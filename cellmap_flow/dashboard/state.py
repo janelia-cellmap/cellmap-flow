@@ -27,7 +27,7 @@ rather than being stored beside the real one:
 - The data and the viewer: ``dataset_path``, ``resample``, ``viewer``,
   ``raw``, ``neuroglancer_url``, ``shaders``, ``shader_controls``,
   ``extra_layers``; ``forget_layer()`` drops the last three's entries for
-  a layer taken out of the viewer.
+  a layer taken away for good.
 - The models: ``models_config``, ``model_catalog``.
 - The pipeline builder's last apply: ``builder_state``,
   ``builder_model_configs``.
@@ -194,9 +194,11 @@ class Session:
         """Drop what the session keeps to build a layer named ``name`` with
         (LAYER_BOOKKEEPING), so a later layer of that name starts fresh.
 
-        For a layer taken out of the viewer: by /api/viewer/remove-layer
-        (routes/finetune/layers.py), or with its model stopped
-        (services/launch.py).
+        For a layer taken away for good: by /api/viewer/remove-layer
+        (routes/finetune/layers.py), or with its model removed from the
+        Models tab's Loaded models list (services/launch.remove_model). Not
+        for a model Submit stops: drawn again, its layer keeps what the
+        user set on it.
         """
         for attr in LAYER_BOOKKEEPING:
             getattr(self, attr).pop(name, None)
