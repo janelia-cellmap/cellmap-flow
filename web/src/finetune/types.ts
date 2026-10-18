@@ -20,10 +20,10 @@
 //                   with the volume, and where they fall on its grid;
 //   run.ts          all of it, one run: runFinetune;
 //   modes.ts        the ways a model can be trained, from its manifest;
-//   augment.ts      the whole network's augmentation of a tile;
-//   full/           the other way, the whole network of a 2D model trained
-//                   with TensorFlow.js (full/run-full.ts), when the
-//                   manifest offers it.
+//   augment.ts      the whole network's augmentation of a tile or block;
+//   full/           the other way, the whole network trained with
+//                   TensorFlow.js (full/run-full.ts), a 2D model's on tiles
+//                   and a 3D model's on blocks, when the manifest offers it.
 //
 // Why the head. The browser runs the models with onnxruntime-web, which
 // trains nothing on the GPU, so the network's body stays as exported and
@@ -38,11 +38,12 @@
 // what the layer shows.
 //
 // Since 2026-10-16 the 2D students' manifests also offer the whole network
-// ("full"): Marwan Zouinkhi exported each with a training graph that
-// TensorFlow.js builds and trains on WebGPU (its gradients are TF.js's, not
-// onnxruntime's), and the weights trained are written back into the .onnx,
-// which serves as before. The tab offers what the manifest declares
-// (modes.ts) and FinetuneOptions.mode says which a run is.
+// ("full"), and since 2026-10-17 the 3D models' too: Marwan Zouinkhi
+// exported each with a training graph that TensorFlow.js builds and trains
+// on WebGPU (its gradients are TF.js's, not onnxruntime's), and the weights
+// trained are written back into the .onnx, which serves as before. The tab
+// offers what the manifest declares (modes.ts) and FinetuneOptions.mode
+// says which a run is.
 import type { Chain, DatasetInfo, Inference, ModelEntry, PaintStore, PaintVolume } from "../contracts";
 import type { FinetuneMode } from "./modes";
 
@@ -147,10 +148,12 @@ export interface FinetuneOptions {
   distillationLambda: number;
   distillationScope: DistillationScope;
   seed: number;
-  /** The whole network's batch: tiles per optimizer step (the server's Batch Size). */
+  /** The whole network's batch: tiles per optimizer step (the server's
+   * Batch Size); a 3D model trains one block a step, and takes only 1. */
   batchPatches: number;
-  /** The whole network's tile side, in pixels of the input; null for the
-   * default (full/graph.ts DEFAULT_TILE, the side the graph takes nearest it). */
+  /** The whole network's tile side, in pixels of the input, or a 3D model's
+   * block side; null for the default (full/graph.ts DEFAULT_TILE,
+   * full/run-full.ts DEFAULT_BLOCK: the side the graph takes nearest it). */
   tileSize: number | null;
   /** Whole network only: each step's tiles get a random brightness and
    * noise, flips and quarter turns, as the server's augmentation
@@ -192,8 +195,10 @@ export interface Finetuned {
    * starting network, after a whole-network run: each epoch's); 0 without
    * distillation. */
   distilled: number;
-  /** The tiles a whole-network run trained on (full/tiles.ts). */
+  /** The tiles a 2D model's whole-network run trained on, or the blocks a
+   * 3D model's did (full/tiles.ts). */
   tiles?: number;
+  blocks?: number;
 }
 
 /** What a head run made: a Finetuned with the head and its trained weights. */

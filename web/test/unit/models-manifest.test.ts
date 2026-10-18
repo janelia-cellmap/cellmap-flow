@@ -101,10 +101,14 @@ describe("parseManifest on the repo's manifests", () => {
     delete before.finetune;
     expect(modes("setup_54", "int8w", before)).toEqual(["head"]);
     // A 3D model's manifest declaring the whole network (NDHWC, since
-    // 2026-10-17): not offered until the browser builds 3D graphs.
+    // 2026-10-17): offered with the files that map its PyTorch-named params
+    // onto the initializers, and not without them.
     const raw54 = rawManifest("setup_54") as { finetune: Record<string, unknown> };
-    const full3d = { ...raw54, finetune: { ...raw54.finetune, full: { library: "tfjs", files: ["finetune/train_graph.json"], weight_map: "finetune/weight_map.json", initializers: "finetune/initializers.json", write_back: [116, 132, 148].map((n) => `setup_54_mito_affinities_16nm_in${n}_fp32.onnx`) } } };
-    expect(modes("setup_54", "fp32", full3d)).toEqual(["head"]);
+    const full = { library: "tfjs", files: ["finetune/train_graph.json"], weight_map: "finetune/weight_map.json", torch_params: "finetune/torch_params.json", initializers: "finetune/initializers.json", write_back: [116, 132, 148].map((n) => `setup_54_mito_affinities_16nm_in${n}_fp32.onnx`) };
+    const with3d = (spec: Record<string, unknown>) => ({ ...raw54, finetune: { ...raw54.finetune, full: spec } });
+    expect(modes("setup_54", "fp32", with3d(full))).toEqual(["head", "full"]);
+    expect(modes("setup_54", "fp32", with3d({ ...full, torch_params: undefined }))).toEqual(["head"]);
+    expect(modes("setup_54", "fp32", with3d({ ...full, weight_map: "identity" }))).toEqual(["head"]);
   });
 
   it("takes block sizes already given per axis", () => {

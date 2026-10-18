@@ -13,7 +13,9 @@
 //   the scope picks: those the mask leaves out (unlabeled), or all.
 //
 // As on the server (lora_trainer.py), the starting network sees the tile
-// the student sees, after augmentation; its logits are not turned.
+// the student sees, after augmentation; its logits are not turned. A 3D
+// model's step is its runtime's (net3d.ts), which takes the same terms
+// (lossTerms) on its NDHWC logits.
 import type * as TF from "@tensorflow/tfjs-core";
 
 import type { FinetuneOptions } from "../types";
@@ -56,19 +58,27 @@ export function distillationWeights(tf: Tf, m: TF.Tensor, scope: FullLossOptions
   return scope === "all" ? tf.onesLike(m) : tf.sub(1, m);
 }
 
-/** One Adam step of `net` on the batch: the supervised term, plus λ × the
- * distillation term towards `teacher`'s logits when there are some. Both
+/** The loss's terms on the logits `z` (any rank, channels last): the
+ * supervised term against `y` over `m`, and, with `teacher`'s logits and
+ * λ > 0, the distillation term; `total` is the first plus λ × the second,
+ * a tensor of its own either way (the 3D runtime and the optimizer may
+ * dispose it apart from the terms). */
+export function lossTerms(tf: Tf, z: TF.Tensor, y: TF.Tensor, m: TF.Tensor, teacher: TF.Tensor | null, o: FullLossOptions): { total: TF.Scalar; supervised: TF.Scalar; distillation: TF.Scalar | null } {
+  const supervised = supervisedLoss(tf, z, y, m, o);
+  if (!teacher || !(o.distillationLambda > 0)) return { total: tf.clone(supervised), supervised, distillation: null };
+  const distillation = distillationLoss(tf, z, teacher, distillationWeights(tf, m, o.distillationScope));
+  return { total: tf.add(supervised, tf.mul(distillation, o.distillationLambda)) as TF.Scalar, supervised, distillation };
+}
+
+/** One Adam step of `net` on the batch: lossTerms on its logits. Both
  * terms as they were before the step; the caller disposes them. */
 export function fullTrainStep(tf: Tf, net: TrainNet, opt: TF.Optimizer, x: TF.Tensor4D, y: TF.Tensor4D, m: TF.Tensor4D, teacher: TF.Tensor4D | null, o: FullLossOptions): { total: TF.Scalar; supervised: TF.Scalar; distillation: TF.Scalar | null } {
   let supervised: TF.Scalar | null = null, distillation: TF.Scalar | null = null;
   const total = opt.minimize(() => {
-    const z = net.forward(x);
-    const sup = tf.keep(supervisedLoss(tf, z, y, m, o));
-    supervised = sup;
-    if (!teacher || !(o.distillationLambda > 0)) return tf.clone(sup);
-    const dist = tf.keep(distillationLoss(tf, z, teacher, distillationWeights(tf, m, o.distillationScope)));
-    distillation = dist;
-    return tf.add(sup, tf.mul(dist, o.distillationLambda)) as TF.Scalar;
+    const terms = lossTerms(tf, net.forward(x), y, m, teacher, o);
+    supervised = tf.keep(terms.supervised);
+    distillation = terms.distillation && tf.keep(terms.distillation);
+    return terms.total;
   }, true, net.vars);
   if (!total || !supervised) throw new Error("the optimizer returned no loss");
   return { total, supervised, distillation };

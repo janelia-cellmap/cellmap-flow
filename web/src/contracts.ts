@@ -181,8 +181,14 @@ export interface FullFinetuneSpec {
   /** "tfjs": TensorFlow.js, from `files` (the graph, Marwan's runtime). */
   library: string;
   files: string[];
-  /** "identity": the graph's params are named as the ONNX initializers. */
+  /** "identity": the graph's params are named as the ONNX initializers (the
+   * 2D models). Else the path of weight_map.json (the 3D models, since
+   * 2026-10-17): the graph's params are PyTorch's state_dict tensors, and
+   * this says how each initializer is cut from one. */
   weight_map: string;
+  /** With a weight_map file, the path of torch_params.json: how each
+   * PyTorch param is rebuilt from the initializers. */
+  torch_params?: string;
   /** The folder's initializers.json: each file's initializers' offsets. */
   initializers: string;
   /** The files the trained weights can be written back into. */

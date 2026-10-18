@@ -209,29 +209,41 @@ That is `finetune/full/`, for the models whose manifest offers it.
 `modes.ts` reads a manifest's `finetune` block (`models/manifest.ts`
 `parseFinetune`): `head` when the served file is one of the head's `files`
 (fp32 and fp16; an int8w file's weights are DequantizeLinear inputs), `full`
-when its library is `tfjs` and the file is one of `write_back` (the 2D
-students'), and without the block the head the graph is found to end in.
+when its library is `tfjs` and the file is one of `write_back` (for a 3D
+model, also with `torch_params` and a `weight_map` file, below), and without
+the block the head the graph is found to end in.
 `GET /api/finetune/models` answers them as `finetune_modes`, as the server's
 `finetune_modes()` does, and `run.ts` sends a run to the head's trainer or
 to `full/run-full.ts` by `FinetuneOptions.mode`. Marwan Zouinkhi exported
-each 2D model with a training graph (`train_graph.json`: NHWC ops and the
-ONNX initializers' names) and the initializers' byte offsets in every
-`.onnx` (`initializers.json`), which `files.ts` fetches from the folder's
-`finetune/` on the Hub, and wrote the TF.js runtime that builds, trains and
-writes it back (`cellmap-tfjs-train.ts`, his `finetune/cellmap_tfjs_train.js`
-vendored and ported to TypeScript). `graph.ts` checks the graph and walks
-its shapes to find the tile sides it takes (92 + 8k for both graphs; the
-form offers those nearest 172, 300, 428 and 556, with the manifest's
-measured step time and memory); `tiles.ts` cuts the paint into output-sized
-tiles in the plane each stroke was drawn in (the server's `paint_depth_axes`
-and `slice_axes`) and reads each tile's raw slice as the model stage would;
-`tfjs.ts` loads TF.js 4.22.0, in six chunks of its own (0.68 MB, 0.19 MB
-gzipped), when a run starts (WebGPU in the page, which the routes require
-through `webgpuMissing`; the CPU backend in Node, where the tests train) and
-resets its engine when the last run ends, freeing the GPU buffers it pools;
-`run-full.ts` checks the offsets against the served file, trains with masked
-BCE and Adam, BatchNorm's running statistics held (`frozen`), and writes the
-trained weights into a copy of the bytes, which then go the way a head's do.
+each model with a training graph (`train_graph.json`: NHWC ops for a 2D
+model, named as the ONNX initializers; NDHWC for a 3D one, named as the
+PyTorch state_dict, with `torch_params.json` and `weight_map.json` to rebuild
+each param from the initializers and cut it back into them) and the
+initializers' byte offsets in every `.onnx` (`initializers.json`), which
+`files.ts` fetches from the folder's `finetune/` on the Hub, and wrote the
+TF.js runtime that builds, trains and writes it back
+(`cellmap-tfjs-train.ts`, his `finetune/cellmap_tfjs_train.js` vendored and
+ported to TypeScript). `graph.ts` checks the graph and walks its shapes to
+find the sides it takes (92 + 8k for every graph; the form offers a 2D
+model's tiles nearest 172, 300, 428 and 556, with the manifest's measured
+step time and memory, and a 3D model's blocks from 124³ to 172³, with
+`run-full.ts`'s `BLOCK_COSTS`, measured on an RTX 2080 Ti); `tiles.ts` cuts
+the paint into output-sized tiles in the plane each stroke was drawn in (the
+server's `paint_depth_axes` and `slice_axes`), or for a 3D model a grid of
+output-sized cubes over it, and reads each one's raw as the model stage
+would; `augment.ts` draws each step's brightness, noise, flips and y–x turns
+of a tile or block; `tfjs.ts` loads TF.js 4.22.0, in chunks of its own, when
+a run starts (WebGPU in the page, which the routes require through
+`webgpuMissing`; the CPU backend in Node, where the tests train) and resets
+its engine when the last run ends, freeing the GPU buffers it pools;
+`run-full.ts` checks the offsets against the served file, trains with the
+head's loss (`loss.ts`) and Adam, BatchNorm's running statistics held
+(`frozen`), and writes the trained weights into a copy of the bytes, which
+then go the way a head's do. A 3D model's network is `net3d.ts`'s: the same
+graph trained in a fraction of the memory plain autodiff takes (fused
+convolution, batch norm and ReLU, the backward pass recomputed from
+checkpoints), one block a step, a step that runs out of GPU memory
+(`GpuMemoryError`) ending the run with a smaller block to try.
 
 ## AI-assisted annotation (src/ai-annotate/)
 
@@ -409,9 +421,10 @@ web/
     finetune/                types.ts (the seams), volume.ts (planVolume, the zarr v2 files), samples.ts, targets.ts, onnx-proto.ts,
                              onnx-head.ts, features.ts, head-trainer.ts, distillation.ts, good-regions.ts, run.ts (runFinetune),
                              zip.ts (the paint's download), modes.ts (what a manifest offers), augment.ts (the whole network's)
-      full/                  the whole network of a 2D model in TF.js: cellmap-tfjs-train.ts (Marwan's runtime), graph.ts (the
-                             training graph, its tile sides), files.ts, tiles.ts, tfjs.ts (lazy TF.js), loss.ts (the head's
-                             loss in TF.js), run-full.ts
+      full/                  the whole network in TF.js: cellmap-tfjs-train.ts (Marwan's runtime, the weights read and written),
+                             graph.ts (the training graph, its tile and block sides), net3d.ts (a 3D model's network in a GPU's
+                             memory), files.ts, tiles.ts (2D tiles, 3D blocks), tfjs.ts (lazy TF.js), loss.ts (the head's loss
+                             in TF.js), run-full.ts
     ai-annotate/             AI-assisted annotation (above): types.ts, geometry.ts, plane.ts, mask.ts, labels.ts, fill.ts, prompts.ts,
                              organelles.ts (the pure ports), images.ts (the canvas codec), gemini.ts, fake.ts, providers.ts,
                              credentials.ts, usage.ts, audit.ts; labels.ts and fill.ts are Label it's too

@@ -1,5 +1,5 @@
-// Training-time augmentation of a whole-network tile, the port of the
-// server's (cellmap_flow/finetune/data/augment.py): a random brightness
+// Training-time augmentation of a whole-network tile or block, the port of
+// the server's (cellmap_flow/finetune/data/augment.py): a random brightness
 // (×0.8 to ×1.2) and Gaussian noise of 1% of the value range on the raw as
 // stored, before it is normalized, then random flips of each axis and a
 // random quarter turn in the y–x plane of the raw and the paint alike.
@@ -13,12 +13,13 @@
 // out on the turned input, not turned. So the run turns the raw and the
 // paint, then makes both from them (full/run-full.ts).
 //
-// A tile is a block of (z, y, x) in the order the network takes it: one
-// slice for a 2D model (its slice axis first, as tiles.ts hands it over).
-// The raw and the paint share the block's centre: the raw is the paint's
-// box grown by the same context on each side, so the same flip or turn of
-// each about its own centre keeps them registered. z is flipped but never
-// turned into, as on the server: EM is often coarser along z.
+// A sample is a block of (z, y, x) in the order the network takes it: one
+// slice for a 2D model (its slice axis first, as tiles.ts hands it over), a
+// cube for a 3D model, whose flips along z are real ones. The raw and the
+// paint share the block's centre: the raw is the paint's box grown by the
+// same context on each side, so the same flip or turn of each about its own
+// centre keeps them registered. z is flipped but never turned into, as on
+// the server: EM is often coarser along z.
 import type { Step } from "../contracts";
 
 /** One tile's draw: a flip per axis (z, y, x), the quarter turns in y–x (0 to 3), the brightness factor. */
@@ -124,12 +125,13 @@ export class AugmentTally {
   }
 
   /** "120 tiles augmented: flipped along rows 49%, columns 52%; turned 0°: 26%, …; brightness ×0.80 to ×1.20".
-   * `names` name the block's axes (z, y, x), null for one a tile is a voxel thick along (a slice's z). */
-  describe(names: readonly (string | null)[], turnable: boolean): string {
-    if (!this.n) return "no tiles augmented";
+   * `names` name the block's axes (z, y, x), null for one a tile is a voxel
+   * thick along (a slice's z); `noun` what was drawn for, a tile or a block. */
+  describe(names: readonly (string | null)[], turnable: boolean, noun = "tile"): string {
+    if (!this.n) return `no ${noun}s augmented`;
     const pct = (k: number) => `${Math.round((100 * k) / this.n)}%`;
     const flips = names.map((name, a) => (name ? `${name} ${pct(this.flipped[a])}` : "")).filter(Boolean).join(", ");
     const turns = turnable ? `; turned ${this.turned.map((k, i) => `${i * 90}°: ${pct(k)}`).join(", ")}` : "";
-    return `${this.n} tile${this.n === 1 ? "" : "s"} augmented: flipped along ${flips}${turns}; brightness ×${this.low.toFixed(2)} to ×${this.high.toFixed(2)}`;
+    return `${this.n} ${noun}${this.n === 1 ? "" : "s"} augmented: flipped along ${flips}${turns}; brightness ×${this.low.toFixed(2)} to ×${this.high.toFixed(2)}`;
   }
 }

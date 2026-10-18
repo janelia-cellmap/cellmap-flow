@@ -3,6 +3,8 @@
 // JavaScript reads (crops.js, sessions.js, models.js, job-monitor.js,
 // job-card.js, log-stream.js), and what each does to the paint store, the
 // session, the viewer and the catalog.
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { createBackend } from "../../src/backend";
@@ -10,12 +12,15 @@ import { type FinetuneDeps, finetuneRoutes, readTraining, RESTART_EVENT, sameDat
 import { Router } from "../../src/backend/router";
 import type { ApiRequest, ApiResponse, Chain, ModelEntry, PaintVolume } from "../../src/contracts";
 import { MANIFEST_METADATA_KEY } from "../../src/contracts";
+import { parseTrainGraph } from "../../src/finetune/full/graph";
 import { saveGoodRegions } from "../../src/finetune/good-regions";
 import type { Finetuned, FinetuneRun, RunFinetune } from "../../src/finetune/types";
 import { CHUNK_DIR, chunkKey } from "../../src/finetune/volume";
+import { entryFor, parseManifest } from "../../src/models/manifest";
 import { defaultChain } from "../../src/state";
 import { paintLayerName } from "../../src/viewer/layers";
 import { DATASET, entry, type FakeContext, fakeContext, NAME_54, NAME_56, request } from "./backend-fakes";
+import { rawManifest } from "./models-helpers";
 import { readMetadata } from "./onnx-metadata";
 
 function body(res: ApiResponse): any {
@@ -216,6 +221,40 @@ describe("GET /api/finetune/models", () => {
     const two = body(await h.handle(request("GET", "/api/finetune/models")));
     expect(two.models.map((m: any) => m.name)).toEqual([NAME_54, NAME_56]);
     expect(two.selected_model).toBeNull();
+  });
+
+  it("offers a 3D model's whole network in block sides with what a step costs, one block a step", async () => {
+    // setup_53 served from its 124³ fp32 file, its manifest's full block as on the Hub since 2026-10-17.
+    const file = "setup_53_mito_affinities_16nm_in124_fp32.onnx";
+    const raw = rawManifest("setup_53") as { finetune: Record<string, unknown> };
+    const full = { library: "tfjs", files: ["finetune/train_graph.json"], weight_map: "finetune/weight_map.json", torch_params: "finetune/torch_params.json", initializers: "finetune/initializers.json", write_back: [file], frozen: [] };
+    const manifest = parseManifest({ ...raw, finetune: { ...raw.finetune, full } });
+    const e53 = entryFor("setup_53", manifest, manifest.variants.find((v) => v.file === file)!);
+    const ctx = fakeContext();
+    const graph = parseTrainGraph(JSON.parse(readFileSync(resolve(import.meta.dirname, "../fixtures/full3d/setup_53.train_graph.json"), "utf8")));
+    const { run, calls } = fakeRun();
+    const h = harness(ctx, { run, fullFiles: async () => ({ graph, initializers: {}, torchParams: {}, weightMap: {} }), webgpuMissing: async () => null });
+    await serve(ctx, e53);
+    const [model] = body(await h.handle(request("GET", "/api/finetune/models"))).models;
+    expect(model.finetune_modes).toEqual(["head", "full"]);
+    const training = model.full_training;
+    expect(training).toMatchObject({ dims: 3, default_tile: 124, context: 88, unavailable: null });
+    expect(training.tiles.map((t: any) => t.side)).toEqual(expect.arrayContaining([124, 140, 172]));
+    for (const t of training.tiles) expect(t.output).toBe(t.side - 88);
+    expect(training.tiles.find((t: any) => t.side === 124)).toMatchObject({ measured: true, step_ms: expect.any(Number), peak_mb: expect.any(Number) });
+
+    // Submit: a side the graph takes, one block a step.
+    await h.handle(request("POST", "/api/finetune/create-volume", { model_name: e53.name }));
+    await paint(ctx, ctx.session.state.paintVolume!, [0, 0, 0]);
+    const submit = (extra: Record<string, unknown>) => h.handle(request("POST", "/api/finetune/submit", { ...FORM, model_name: e53.name, finetune_mode: "full", ...extra })).then(body);
+    expect((await submit({ batch_size: 2, tile_size: 124 })).success).toBe(false);
+    expect((await submit({ batch_size: 1, tile_size: 125 })).success).toBe(false);
+    expect((await submit({ batch_size: 1, tile_size: 140 })).success).toBe(true);
+    expect(calls.at(-1)!.options).toMatchObject({ mode: "full", batchPatches: 1, tileSize: 140 });
+    // The job card shows the side as a block's.
+    const [job] = body(await h.handle(request("GET", "/api/finetune/jobs"))).jobs;
+    expect(job.params).toMatchObject({ block_size: 140 });
+    expect(job.params.tile_size).toBeUndefined();
   });
 });
 

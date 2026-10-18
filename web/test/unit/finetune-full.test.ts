@@ -3,9 +3,11 @@
 // on a network small enough for TF.js's CPU backend, head.onnx (a 3×3 body
 // and a 1×1 head, shaped as the exports end): a few steps lower the masked
 // loss, and the weights trained, written back at their offsets, are what
-// onnxruntime then reads and runs. The real setup_53_2d is opt-in, as
-// models-live is: it downloads 7.75 MB from Hugging Face, and TF.js's CPU
-// backend takes about 30 s for one forward pass at 300².
+// onnxruntime then reads and runs. A 3D model's training block is read with
+// its paint where the network sees the two in register. The real
+// setup_53_2d is opt-in, as models-live is: it downloads 7.75 MB from
+// Hugging Face, and TF.js's CPU backend takes about 30 s for one forward
+// pass at 300².
 //
 //   CELLMAP_FLOW_LIVE=1 npx vitest run test/unit/finetune-full
 import { readFileSync } from "node:fs";
@@ -13,12 +15,17 @@ import { resolve } from "node:path";
 import * as ort from "onnxruntime-web";
 import { describe, expect, it } from "vitest";
 
+import type { DatasetInfo } from "../../src/contracts";
+import { transformBlock } from "../../src/finetune/augment";
 import type { Tf } from "../../src/finetune/full/cellmap-tfjs-train";
 import { buildNet, maskedBce, readOnnxWeights, trainStep, writeOnnxWeights } from "../../src/finetune/full/cellmap-tfjs-train";
 import { parseTrainGraph, tileSides } from "../../src/finetune/full/graph";
 import { fullTrainStep } from "../../src/finetune/full/loss";
 import { checkOffsets, onnxInitializerOffsets } from "../../src/finetune/full/run-full";
 import { loadTf } from "../../src/finetune/full/tfjs";
+import { blockLabels, blockRaw, blockTargets, paintedVoxels, planBlocks } from "../../src/finetune/full/tiles";
+import { affinityOffsets, affinityTargets } from "../../src/finetune/targets";
+import type { PaintedChunk } from "../../src/finetune/types";
 import { readFixture } from "./models-helpers";
 
 const FIXTURES = resolve(import.meta.dirname, "../fixtures");
@@ -83,6 +90,53 @@ describe("the exported training graphs", () => {
     for (const folder of ["setup_53_2d", "setup_54_2d"]) {
       expect(tileSides(parseTrainGraph(readFixture(`${folder}.train_graph.json`)), sides.at(-1)!)).toEqual(sides);
     }
+  });
+});
+
+describe("a 3D model's training blocks", () => {
+  it("hold the raw around the paint's cube in register with it, through flips of z and turns, and pair z neighbours", async () => {
+    // A 20³ volume in 4³ chunks, read for a network of 6³ in and 2³ out
+    // (context 4: the input is the output cube grown by 2 each way). The
+    // paint: a 2³ object at (8..9)³, its corner voxel another object (3);
+    // the raw: 0 but for a mark on that corner voxel.
+    const n = 20, side = 6, output = 2, halo = 2;
+    const volume = { chunk_size: [4, 4, 4], dataset_shape_voxels: [n, n, n], dtype: "uint16" as const };
+    const chunk: PaintedChunk = { index: [2, 2, 2], shape: [4, 4, 4], labels: new Uint16Array(64) };
+    for (let z = 0; z < 2; z++) for (let y = 0; y < 2; y++) for (let x = 0; x < 2; x++) chunk.labels[(z * 4 + y) * 4 + x] = z + y + x ? 2 : 3;
+    const chunks = new Map([["2.2.2", chunk]]);
+    const rawVolume = new Uint8Array(n ** 3);
+    rawVolume[(8 * n + 8) * n + 8] = 1;
+    const dataset = { url: "", dtype: "uint8", channels: 1, axes: [], levels: [{ shape: [n, n, n], voxel: [16, 16, 16], origin: [0, 0, 0] }] } as unknown as DatasetInfo;
+    const infer = {
+      async readRaw(_level: number, lo: number[], hi: number[]) {
+        const out = new Uint8Array((hi[0] - lo[0]) * (hi[1] - lo[1]) * (hi[2] - lo[2]));
+        let i = 0;
+        for (let z = lo[0]; z < hi[0]; z++) for (let y = lo[1]; y < hi[1]; y++) for (let x = lo[2]; x < hi[2]; x++) out[i++] = rawVolume[(z * n + y) * n + x];
+        return out.buffer;
+      },
+    };
+
+    const blocks = planBlocks(paintedVoxels(chunks), output);
+    expect(blocks).toEqual([{ corner: [8, 8, 8] }]);
+    const labels = blockLabels(blocks[0], output, chunks, volume);
+    const { raw, inside } = await blockRaw(blocks[0], side, output, infer, dataset, 0);
+    expect(inside.every((v) => v === 1)).toBe(true);
+    // The mark on the output's corner voxel is at the input's corner + context/2.
+    expect(raw.indexOf(1)).toBe((halo * side + halo) * side + halo);
+    expect(labels.indexOf(3)).toBe(0);
+    // And stays there through any draw: the same flips and turn of each about its own centre.
+    const at = (i: number, s: number) => [Math.floor(i / (s * s)), Math.floor(i / s) % s, i % s];
+    for (const draw of [{ flips: [true, false, false], turns: 0 }, { flips: [true, true, false], turns: 1 }, { flips: [false, true, true], turns: 3 }] as const) {
+      const d = { flips: [...draw.flips] as [boolean, boolean, boolean], turns: draw.turns, scale: 1 };
+      const r = at(transformBlock(raw, [side, side, side], d).indexOf(1), side);
+      const l = at(transformBlock(labels, [output, output, output], d).indexOf(3), output);
+      expect(r.map((v) => v - halo)).toEqual(l);
+    }
+    // The z affinity pairs each voxel of the lower slice with the one above:
+    // 3 over 2 is a boundary, 2 over 2 the same object.
+    const t = blockTargets(labels, [output, output, output], affinityTargets(affinityOffsets(["mito_aff_z", "mito_aff_y", "mito_aff_x"]), 3));
+    const zPairs = [0, 1, 2, 3].map((p) => [t.mask[p * 3], t.target[p * 3]]);
+    expect(zPairs).toEqual([[1, 0], [1, 1], [1, 1], [1, 1]]);
   });
 });
 

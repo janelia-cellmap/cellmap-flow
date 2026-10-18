@@ -447,7 +447,7 @@ export class FinetuneJobs {
     const fentry = record.entry;
     await ctx.catalog.addFinetuned(record, result.bytes);
     const loss = result.finalLoss === null ? "" : `, final loss ${result.finalLoss.toFixed(6)}`;
-    const on = result.tiles === undefined ? `of ${result.chunks} chunk(s)` : `in ${result.tiles} tile(s)`;
+    const on = result.blocks !== undefined ? `in ${result.blocks} block(s)` : result.tiles !== undefined ? `in ${result.tiles} tile(s)` : `of ${result.chunks} chunk(s)`;
     const kept = `Finetuned model ${name} kept in this browser (${fentry.variant.file_mb} MB): ${result.epochs} epoch(s) on ${result.pixels} painted voxels ${on}${loss}.`;
     job.log(`${kept} The Models tab lists it; Download gives the .onnx.`);
     ctx.log(kept);

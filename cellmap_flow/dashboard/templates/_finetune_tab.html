@@ -539,12 +539,13 @@
        voxels per step (batchPixels: the server's Batch Size counts patches,
        8 of them where the head takes thousands of voxels, so the two are
        separate fields and one's saved value never lands in the other).
-       A 2D model whose manifest offers it can train its whole network
-       instead (the Training field, shown when the model offers both): that
-       takes the epochs, the same loss, distillation, smoothing and balance
-       fields, its own learning rates, the server's Batch Size (in tiles), a
-       Tile Size and the server's Augmentation (full-also), but not the
-       head's Voxels per Step (head-only).
+       A model whose manifest offers it can train its whole network instead
+       (the Training field, shown when the model offers both): that takes
+       the epochs, the same loss, distillation, smoothing and balance fields,
+       its own learning rates, the server's Batch Size (in tiles; a 3D
+       model's is held at one block), a Tile Size (a 3D model's Block Size)
+       and the server's Augmentation (full-also), but not the head's Voxels
+       per Step (head-only).
        web/src/browser.css
        gives the fields the full row. #}
     {% if mode == "browser" %}
@@ -602,7 +603,7 @@
             {% endfor %}
           </select>
           {% if mode == "browser" %}
-          <small class="text-muted">Tiles per step: each step's time and memory grow with it.</small>
+          <small class="text-muted" id="batchSizeHint">Tiles per step: each step's time and memory grow with it.</small>
           {% else %}
           <small class="text-muted">Higher = faster, more GPU memory.</small>
           {% endif %}
@@ -611,7 +612,8 @@
       {% if mode == "browser" %}
       <div class="col-md-6 full-only">
         <div class="mb-3">
-          <label for="tileSize" class="form-label" title="The side of the square slices the whole network trains on, in pixels of its input, cut in the plane you painted in. The model reads 88 pixels of context around what it predicts, so a tile's output is 88 pixels smaller. A smaller tile trains a step faster in less memory, but more of it is context. The sides offered are ones the network's pools and crops divide exactly.">Tile Size</label>
+          {# A 3D model's Block Size: training-form.js renames it, its title and its sides (N³). #}
+          <label for="tileSize" id="tileSizeLabel" class="form-label" title="The side of the square slices the whole network trains on, in pixels of its input, cut in the plane you painted in. The model reads 88 pixels of context around what it predicts, so a tile's output is 88 pixels smaller. A smaller tile trains a step faster in less memory, but more of it is context. The sides offered are ones the network's pools and crops divide exactly.">Tile Size</label>
           <select id="tileSize" class="form-select"></select>
           <small class="text-muted d-block" id="tileSizeHint"></small>
         </div>
