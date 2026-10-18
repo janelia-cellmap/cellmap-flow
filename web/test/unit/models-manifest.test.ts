@@ -100,6 +100,11 @@ describe("parseManifest on the repo's manifests", () => {
     const before = { ...(rawManifest("setup_54") as Record<string, unknown>) };
     delete before.finetune;
     expect(modes("setup_54", "int8w", before)).toEqual(["head"]);
+    // A 3D model's manifest declaring the whole network (NDHWC, since
+    // 2026-10-17): not offered until the browser builds 3D graphs.
+    const raw54 = rawManifest("setup_54") as { finetune: Record<string, unknown> };
+    const full3d = { ...raw54, finetune: { ...raw54.finetune, full: { library: "tfjs", files: ["finetune/train_graph.json"], weight_map: "finetune/weight_map.json", initializers: "finetune/initializers.json", write_back: [116, 132, 148].map((n) => `setup_54_mito_affinities_16nm_in${n}_fp32.onnx`) } } };
+    expect(modes("setup_54", "fp32", full3d)).toEqual(["head"]);
   });
 
   it("takes block sizes already given per axis", () => {
