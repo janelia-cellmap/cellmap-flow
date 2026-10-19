@@ -199,9 +199,20 @@ With paint on one object, scores a few points apart are as good as tied, and
 the list says so; a little paint in two or three places ranks them more
 clearly. On ``jrc_jurkat-1``, with a slice of one nucleus painted (4,430
 voxels), ``setup_56`` came first at 62% and ``setup_55``, the volume's own
-model, which sees none of the dataset's nuclei, matched 50%. To finetune the
-model that ranks first, make a volume for it (*New Volume* with it selected)
-and paint there.
+model, which sees none of the dataset's nuclei, matched 50%. The box above
+the list filters it (``nuc``, ``16 nm``, ``affinities``, ``2d``), and only
+the ticked models it shows are ranked.
+
+*Use this model* makes a ranked model the one to finetune without painting
+again: it is loaded with its layer and picked under *Select Model*, a volume
+is made for it, the paint and the good regions are copied into that volume
+on the model's own grid, and its paint layer takes the old one's place (the
+old volume stays, under *Resume Existing Volume*). On the same grid the paint
+is copied voxel for voxel; on a finer one each painted voxel becomes the
+voxels it covers; on a coarser one each voxel takes the label of the painted
+voxels inside it, and is left unpainted where they disagree (object against
+background in one voxel), which the status line counts. A stroke thinner
+than the coarser voxel still lands, a voxel wide.
 
 Training the whole network
 ~~~~~~~~~~~~~~~~~~~~~~~~~~

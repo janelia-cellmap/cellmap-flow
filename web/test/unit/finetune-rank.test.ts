@@ -1,17 +1,21 @@
-// Which model to start from (src/finetune/rank.ts, backend/routes/rank.ts):
+// Which model to start from (src/finetune/rank.ts, carry.ts, backend/routes/rank.ts):
 // the score is balanced between object and background paint, forgives a
 // binary model the edges of the strokes, and the score route reads a served
-// model as it is and serves any other for its score alone.
+// model as it is and serves any other for its score alone; Use this model
+// carries the paint onto the model's grid and makes its volume the session's.
 import { describe, expect, it } from "vitest";
 
-import { writeBox } from "../../src/ai-annotate/fill";
+import { readBox, writeBox } from "../../src/ai-annotate/fill";
 import { Router } from "../../src/backend/router";
 import { finetuneRoutes } from "../../src/backend/routes/finetune";
 import { rankRoutes } from "../../src/backend/routes/rank";
 import type { ApiRequest, ApiResponse, PaintVolume } from "../../src/contracts";
+import { carryPaint } from "../../src/finetune/carry";
 import { emptyTallies, paintEdges, rankScore, tallyChunk } from "../../src/finetune/rank";
 import { binaryTargets } from "../../src/finetune/targets";
 import { readVolume } from "../../src/finetune/volume";
+import { MemoryPaintStore } from "../../src/state/paint-store";
+import { paintLayerName } from "../../src/viewer/layers";
 import { entry, type FakeContext, fakeContext, NAME_54, NAME_56, request } from "./backend-fakes";
 
 function body(res: ApiResponse): any {
@@ -99,5 +103,43 @@ describe("the rank routes", () => {
     const { handle } = await painted();
     const missing = await handle(request("POST", "/api/finetune/rank/score", { name: "nope" }));
     expect(missing).toMatchObject({ status: 404 });
+  });
+});
+
+/** A volume of `shape` voxels of `voxel` nm (voxel 0's centre at voxel / 2, so both grids start at 0 nm) in chunks of `chunk`. */
+function volumeOf(id: string, voxel: number, shape: number, chunk: number): PaintVolume {
+  return { id, dtype: "uint8", chunk_size: [chunk, chunk, chunk], output_voxel_size: [voxel, voxel, voxel], dataset_offset_nm: [voxel / 2, voxel / 2, voxel / 2], dataset_shape_voxels: [shape, shape, shape] } as PaintVolume;
+}
+
+describe("paint carried to another model's grid", () => {
+  it("repeats a voxel onto a finer grid, and drops only where object and background meet on a coarser one", async () => {
+    const store = new MemoryPaintStore();
+    const from = volumeOf("from", 16, 8, 4);
+    // A row of x: background, background, object, object (labels 1 1 2 2) at z = y = 0.
+    await writeBox(store, from, [0, 0, 0], [1, 1, 4], Uint8Array.of(1, 1, 2, 2));
+    const fine = volumeOf("fine", 8, 16, 8);
+    expect(await carryPaint(store, from, fine)).toMatchObject({ painted: 32, source: 4, conflicts: 0 });
+    expect(Array.from(await readBox(store, fine, [1, 1, 0], [2, 2, 8]))).toEqual([1, 1, 1, 1, 2, 2, 2, 2]);
+    // At 32 nm, x voxel 0 holds both backgrounds and voxel 1 both objects: no conflict.
+    const coarse = volumeOf("coarse", 32, 4, 2);
+    expect(await carryPaint(store, from, coarse)).toMatchObject({ painted: 2, conflicts: 0 });
+    // Background then object inside 32 nm voxel 1 (x 2 and 3): left unpainted. A lone 16 nm
+    // object voxel (x 5) still lands on its 32 nm voxel.
+    await writeBox(store, from, [0, 0, 0], [1, 1, 6], Uint8Array.of(1, 1, 1, 2, 0, 2));
+    const shifted = volumeOf("shifted", 32, 4, 2);
+    expect(await carryPaint(store, from, shifted)).toMatchObject({ painted: 2, conflicts: 1 });
+    expect(Array.from(await readBox(store, shifted, [0, 0, 0], [1, 1, 3]))).toEqual([1, 0, 2]);
+  });
+
+  it("makes the volume of the model used the session's, its paint layer in the old one's place", async () => {
+    const { ctx, handle } = await painted();
+    const before = ctx.session.state.paintVolume!;
+    const used = body(await handle(request("POST", "/api/finetune/rank/use", { name: NAME_54 })));
+    expect(used).toMatchObject({ success: true, name: NAME_54, from_volume: before, painted_voxels: 20 ** 3, conflicts: 0 });
+    expect(ctx.session.state.paintVolume).toBe(used.volume_id);
+    expect(ctx.infer.served().map((s) => s.entry.name)).toContain(NAME_54);
+    expect(ctx.viewer.removed).toContain(paintLayerName(before));
+    expect(Object.keys(ctx.viewer.layers)).toContain(paintLayerName(used.volume_id));
+    expect(body(await handle(request("POST", "/api/finetune/rank/use", { name: NAME_54 }))).success).toBe(false);
   });
 });

@@ -11,20 +11,29 @@
 // has had them computed; any other is served for the score alone, with its
 // manifest's normalizers and no layer, and released after, so a ranking
 // leaves the Models tab and the GPU as they were (its download stays in the
-// catalog's byte cache, and Show serves it at once).
+// catalog's byte cache, and Show serves it at once). POST
+// /api/finetune/rank/use {name} makes the one picked the model to finetune:
+// served with its layer (as the Models tab's Add serves it), a volume made
+// for it with the session volume's paint carried onto its grid
+// (finetune/carry.ts) and its good regions, and that volume the session's,
+// its paint layer in the old one's place; the old volume stays in the paint
+// store.
 import type { AppContext, Chain, ModelEntry, PaintVolume, ServedModel } from "../../contracts";
 import { FINETUNED_REPO } from "../../contracts";
+import { carryPaint, paintedBox } from "../../finetune/carry";
+import { loadGoodRegions, saveGoodRegions } from "../../finetune/good-regions";
 import { readsOneSlice } from "../../finetune/modes";
 import type { PaintedChunk } from "../../finetune/types";
 import { emptyTallies, paintEdges, RANK_BLOCKS, rankScore, spread, tallyChunk } from "../../finetune/rank";
 import { targetTransformFor } from "../../finetune/targets";
-import { hasAffinityChannels, paintedChunkIndices, readPaintedChunk, readVolume } from "../../finetune/volume";
+import { createVolume, hasAffinityChannels, paintedChunkIndices, planVolume, readPaintedChunk, readVolume } from "../../finetune/volume";
 import { geometryOf, outputShape } from "../../infer/geometry";
 import { servedIndices, servedLevel } from "../../label-it/prediction";
 import { entryFor } from "../../models/manifest";
+import { PAINT_TAB, paintLayer, paintLayerName, paintLayerUrl } from "../../viewer/layers";
 import type { Router } from "../router";
 import { badRequest, json, message, objectBody } from "../router";
-import { blobFor } from "../serving";
+import { blobFor, pageBase, serveModels } from "../serving";
 
 const NO_DATASET = "No dataset is open. Enter its URL in the viewer panel first; the volume is painted on it.";
 
@@ -136,6 +145,51 @@ export function rankRoutes(router: Router): void {
       await held.release();
     }
   });
+
+  // POST /api/finetune/rank/use {name}: see the top of the file. Answers the
+  // new volume, how much paint it took and how much was dropped where the
+  // old voxels disagreed on the new grid. Refused as score is, and when the
+  // session's volume is the model's already.
+  router.post("/api/finetune/rank/use", async (req, _params, ctx) => {
+    const body = objectBody(req);
+    if (!body) return badRequest("expected a JSON object");
+    const name = typeof body.name === "string" ? body.name.trim() : "";
+    if (!name) return badRequest("name is required");
+    const dataset = ctx.infer.dataset();
+    if (!dataset) return badRequest(NO_DATASET);
+    const from = await sessionVolume(ctx);
+    if (!from) return json(400, { success: false, error: "No annotation volume in this session to carry paint from.", needs_volume: true });
+    const entry = (await ctx.catalog.list()).find((e) => e.name === name) ?? (await ctx.catalog.resolve(name));
+    if (!entry) return json(404, { success: false, error: `${name} is not a model the browser can run` });
+    if (from.model_id === entry.id) return badRequest(`${from.id} is ${name}'s volume already: finetune it as it is.`);
+    try {
+      if (!ctx.infer.served().some((s) => s.entry.id === entry.id)) {
+        const entries = [...ctx.session.state.models.filter((m) => m.id !== entry.id), entry];
+        await serveModels(ctx, entries, ctx.session.state.chain);
+        await ctx.session.update({ models: entries });
+      }
+      const served = ctx.infer.served().find((s) => s.entry.id === entry.id);
+      if (!served) throw new Error(`${name} did not start`);
+      const to = planVolume(dataset, served.entry, ctx.session.state.chain);
+      await createVolume(ctx.paint, to);
+      const carried = await carryPaint(ctx.paint, from, to);
+      // Good regions are boxes in nm, the same on any grid: they go with the paint.
+      const regions = await loadGoodRegions(ctx.paint, from.id);
+      if (regions.length) await saveGoodRegions(ctx.paint, to.id, regions);
+      await ctx.session.update({ paintVolume: to.id });
+      const layer = paintLayerName(to.id);
+      ctx.viewer.removeLayer(paintLayerName(from.id));
+      ctx.viewer.setLayers({ [layer]: { ...paintLayer(paintLayerUrl(to.id, pageBase()), to), name: layer } });
+      ctx.viewer.selectLayer(layer, PAINT_TAB);
+      ctx.log(`Carried ${from.id}'s paint to ${to.id} for ${name}: ${carried.painted} voxels at ${to.output_voxel_size.join("×")} nm from ${carried.source} at ${from.output_voxel_size.join("×")} nm, in ${carried.chunks} chunk${carried.chunks === 1 ? "" : "s"}${carried.conflicts ? `; ${carried.conflicts} left unpainted where object and background met in one voxel` : ""}`);
+      return json(200, {
+        success: true, name, volume_id: to.id, from_volume: from.id, layer_name: layer,
+        painted_voxels: carried.painted, source_voxels: carried.source, conflicts: carried.conflicts, chunks: carried.chunks, good_regions: regions.length,
+      });
+    } catch (e) {
+      return json(400, { success: false, error: `Could not make ${name} the model to finetune: ${message(e)}` });
+    }
+  });
 }
 
 /** `visit(i, served)` for each painted voxel of `chunk` the model's level
@@ -152,17 +206,6 @@ function forEachPainted(chunk: PaintedChunk, origin: number[], at: NonNullable<R
 
 function compareIndex(p: number[], q: number[]): number {
   return p[0] - q[0] || p[1] - q[1] || p[2] - q[2];
-}
-
-/** The box of `chunk`'s painted voxels, in its own voxels; null when none is painted. */
-function paintedBox(chunk: PaintedChunk): { lo: number[]; hi: number[] } | null {
-  const [, h, w] = chunk.shape, lo = [Infinity, Infinity, Infinity], hi = [-1, -1, -1];
-  chunk.labels.forEach((label, i) => {
-    if (!label) return;
-    const at = [Math.floor(i / (h * w)), Math.floor(i / w) % h, i % w];
-    for (let a = 0; a < 3; a++) { lo[a] = Math.min(lo[a], at[a]); hi[a] = Math.max(hi[a], at[a] + 1); }
-  });
-  return hi[0] < 0 ? null : { lo, hi };
 }
 
 async function sessionVolume(ctx: AppContext): Promise<PaintVolume | null> {
