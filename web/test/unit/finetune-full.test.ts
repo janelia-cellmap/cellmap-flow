@@ -23,7 +23,7 @@ import { parseTrainGraph, tileSides } from "../../src/finetune/full/graph";
 import { fullTrainStep } from "../../src/finetune/full/loss";
 import { checkOffsets, onnxInitializerOffsets } from "../../src/finetune/full/run-full";
 import { loadTf } from "../../src/finetune/full/tfjs";
-import { blockLabels, blockRaw, blockTargets, paintedVoxels, planBlocks } from "../../src/finetune/full/tiles";
+import { blockLabels, blockRaw, blockTargets, normalizeTile, paintedVoxels, planBlocks } from "../../src/finetune/full/tiles";
 import { affinityOffsets, affinityTargets } from "../../src/finetune/targets";
 import type { PaintedChunk } from "../../src/finetune/types";
 import { readFixture } from "./models-helpers";
@@ -137,6 +137,28 @@ describe("a 3D model's training blocks", () => {
     const t = blockTargets(labels, [output, output, output], affinityTargets(affinityOffsets(["mito_aff_z", "mito_aff_y", "mito_aff_x"]), 3));
     const zPairs = [0, 1, 2, 3].map((p) => [t.mask[p * 3], t.target[p * 3]]);
     expect(zPairs).toEqual([[1, 0], [1, 1], [1, 1], [1, 1]]);
+  });
+
+  it("repeat the volume's normalized edge past it, as the model stage serves a block", async () => {
+    // A 4³ volume and the 6³ block around the output cube at its corner: the
+    // block starts 2 voxels before the volume on every axis.
+    const n = 4, side = 6, output = 2;
+    const value = (z: number, y: number, x: number) => 100 * z + 10 * y + x + 1;
+    const dataset = { url: "", dtype: "uint16", channels: 1, axes: [], levels: [{ shape: [n, n, n], voxel: [16, 16, 16], origin: [0, 0, 0] }] } as unknown as DatasetInfo;
+    const infer = {
+      async readRaw(_level: number, lo: number[], hi: number[]) {
+        const out = new Uint16Array((hi[0] - lo[0]) * (hi[1] - lo[1]) * (hi[2] - lo[2]));
+        let i = 0;
+        for (let z = lo[0]; z < hi[0]; z++) for (let y = lo[1]; y < hi[1]; y++) for (let x = lo[2]; x < hi[2]; x++) out[i++] = value(z, y, x);
+        return out.buffer;
+      },
+    };
+    const { raw, inside } = await blockRaw({ corner: [0, 0, 0] }, side, output, infer, dataset, 0);
+    const input = normalizeTile(raw, inside, [{ name: "LambdaNormalizer", expression: "x/1000" }], [side, side, side]);
+    const near = (i: number) => Math.min(Math.max(i - 2, 0), n - 1);
+    for (const [z, y, x] of [[0, 0, 0], [1, 3, 5], [2, 2, 2], [5, 0, 4]]) {
+      expect(input[(z * side + y) * side + x]).toBeCloseTo(value(near(z), near(y), near(x)) / 1000, 6);
+    }
   });
 });
 

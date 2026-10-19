@@ -35,7 +35,7 @@
 import { emptyLabels } from "../../ai-annotate/fill";
 import type { DepthAxis } from "../../ai-annotate/types";
 import type { DatasetInfo, Inference, PaintStore, PaintVolume, Step } from "../../contracts";
-import { copyBox } from "../../infer/stages";
+import { copyBox, edgePadded } from "../../infer/stages";
 import { applyNormalizers } from "../../infer/norms";
 import { padded } from "../../../chunkmirage/web/src/stages";
 import type { PaintedChunk, TargetTransform } from "../types";
@@ -319,23 +319,30 @@ async function boxRaw(box: Box, infer: Pick<Inference, "readRaw">, dataset: Data
   return { raw, inside };
 }
 
-/** `raw`'s voxels `inside` normalized through `norm`, in order, as the model
- * stage normalizes a block, and those past the level zero, as it pads one
- * (infer/stages.ts modelInput): a tile's or a block's alike. */
-export function normalizeTile(raw: Float32Array, inside: Uint8Array, norm: Step[]): Float32Array {
+/** `raw` (of `shape`: [1, side, side] for a tile, [side, side, side] for a
+ * block) with its voxels `inside` normalized through `norm`, in order, as the
+ * model stage normalizes a block, and those past the level the nearest
+ * normalized one, as it pads one (infer/stages.ts modelInput, edgePadded).
+ * What is inside the level is a box (boxRaw). */
+export function normalizeTile(raw: Float32Array, inside: Uint8Array, norm: Step[], shape: readonly number[]): Float32Array {
+  const lo = [shape[0], shape[1], shape[2]], hi = [0, 0, 0];
   let n = 0;
-  for (let i = 0; i < inside.length; i++) n += inside[i];
+  for (let z = 0, i = 0; z < shape[0]; z++) for (let y = 0; y < shape[1]; y++) for (let x = 0; x < shape[2]; x++, i++) {
+    if (!inside[i]) continue;
+    n++;
+    [z, y, x].forEach((v, a) => { lo[a] = Math.min(lo[a], v); hi[a] = Math.max(hi[a], v + 1); });
+  }
+  if (!n) return new Float32Array(raw.length);  // nothing of the level to repeat: zeros
+  // The box's voxels in C order, normalized, then their edge repeated out to the tile.
   const values = new Float32Array(n);
   for (let i = 0, k = 0; i < raw.length; i++) if (inside[i]) values[k++] = raw[i];
-  const normalized = applyNormalizers(values, norm), out = new Float32Array(raw.length);
-  for (let i = 0, k = 0; i < raw.length; i++) if (inside[i]) out[i] = normalized[k++];
-  return out;
+  return edgePadded(applyNormalizers(values, norm), hi.map((h, a) => h - lo[a]), lo, shape);
 }
 
 /** The network's input for `tile`: tileRaw normalized (normalizeTile). */
 export async function tileInput(tile: Tile, side: number, output: number, infer: Pick<Inference, "readRaw">, dataset: DatasetInfo, level: number, norm: Step[]): Promise<Float32Array> {
   const { raw, inside } = await tileRaw(tile, side, output, infer, dataset, level);
-  return normalizeTile(raw, inside, norm);
+  return normalizeTile(raw, inside, norm, [1, side, side]);
 }
 
 /** A tile's targets from its labels, through the model's transform

@@ -106,18 +106,24 @@ READS = {
                                 fill_value=7),
         {}, (0, 0, 0), Roi((-1, 0, 0), (2, 1, 1)), ((2, 1, 1), "uint8", [0, 1]),
     ),
-    # ...or with custom_fill_value, or the border voxels repeated...
+    # ...or with custom_fill_value, or the border voxels repeated (padding="edge",
+    # what a model's input is read with)...
     "custom-fill-value": (
         _at_the_origin, {"custom_fill_value": 9}, (0, 0, 0), Roi((-8, 0, 0), (16, 8, 8)), ((2, 1, 1), "uint8", [9, 1]),
     ),
     "edge-fill": (
-        _at_the_origin, {"custom_fill_value": "edge"}, (0, 0, 0), Roi((-8, 0, 0), (16, 8, 8)),
+        _at_the_origin, {"padding": "edge"}, (0, 0, 0), Roi((-8, 0, 0), (16, 8, 8)),
         ((2, 1, 1), "uint8", [1, 1]),
     ),
-    # ...and the padding is added after the chain: it is never normalized.
+    # ...and the padding is added after the chain: it is never normalized, and
+    # the edge repeated is the normalized one.
     "chain-then-padding": (
         _at_the_origin, {"input_norms": [LambdaNormalizer("x * 2")]}, (0, 0, 0), Roi((-8, 0, 0), (16, 8, 8)),
         ((2, 1, 1), "float32", [0.0, 2.0]),
+    ),
+    "chain-then-edge": (
+        _at_the_origin, {"input_norms": [LambdaNormalizer("x * 2")], "padding": "edge"}, (0, 0, 0),
+        Roi((-8, 0, 0), (16, 8, 8)), ((2, 1, 1), "float32", [2.0, 2.0]),
     ),
     # A ROI wholly outside the array is all padding, in the chain's dtype...
     "wholly-past-the-end": (
@@ -126,11 +132,11 @@ READS = {
     ),
     # ...and "edge" repeats the array's voxels nearest it, on either side.
     "wholly-before-the-start-edge": (
-        _at_the_origin, {"custom_fill_value": "edge"}, (0, 0, 0), Roi((-32, 0, 0), (16, 8, 8)),
+        _at_the_origin, {"padding": "edge"}, (0, 0, 0), Roi((-32, 0, 0), (16, 8, 8)),
         ((2, 1, 1), "uint8", [1, 1]),
     ),
     "wholly-past-the-end-edge": (
-        _at_the_origin, {"custom_fill_value": "edge"}, (0, 0, 0), Roi((200, 0, 0), (16, 8, 8)),
+        _at_the_origin, {"padding": "edge"}, (0, 0, 0), Roi((200, 0, 0), (16, 8, 8)),
         ((2, 1, 1), "uint8", [16, 16]),
     ),
     "not-normalized": (

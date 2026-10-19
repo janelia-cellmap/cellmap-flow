@@ -141,11 +141,13 @@ class ChunkmirageServer:
         self.geometry = model_config.geometry
 
         # The level the model reads, chosen and placed as ImageDataInterface
-        # does for every reader (blockwise reads the same level).
+        # does for every reader (blockwise reads the same level, padded the
+        # same way: its edge repeated, as BlockInput pads).
         self.idi_raw = ImageDataInterface(
             dataset_name,
             voxel_size=Coordinate(self.geometry.input_voxel_size),
             on_voxel_size_mismatch="resample" if resample else "relabel",
+            padding="edge",
         )
         idi = self.idi_raw
         self.axes = [a for a in idi.axes_names if a not in CHANNEL_AXIS_NAMES]
@@ -295,7 +297,7 @@ class ChunkmirageServer:
             ops,
             cache=self.registry.cache,
             chunk_shape=list(self.served.block),
-            padding="zero",
+            padding="edge",
             input_level="resample" if self.resample else "nearest",
             # The level is the one cellmap-flow chose: read as it is only at
             # the model's voxel size.

@@ -99,7 +99,7 @@ def _where(raw, anchor):
 RECORDED = {
     "plain": dict(
         epoch=4,
-        draws=["6a3506e1465ecfa5", "52566bcdbfe22ee2"],
+        draws=["fbb724a052a1f1df", "b9278e53492f0ff3"],
         where=[
             [
                 "4,8,3", "41,4,41", "9,8,7", "3,6,4", "7,4,5", "30,30,27", "42,4,42", "30,30,22",
@@ -123,7 +123,7 @@ RECORDED = {
             ],
         ],
     ),
-    "augmented": dict(epoch=4, draws=["2fdd11bbffae032f", "6c6f0a6079c3f3c3"]),
+    "augmented": dict(epoch=4, draws=["a91240a48a887ff0", "24a6518ccde98f5a"]),
 }
 
 

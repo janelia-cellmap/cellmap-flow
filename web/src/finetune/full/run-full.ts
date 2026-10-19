@@ -235,7 +235,7 @@ export function createRunFull(deps: FullDeps = { loadTf, fetchFiles: fetchFullFi
       const { raw, inside } = await tileRaw(tile, side, output, run.infer, dataset, geo.rawLevel);
       samples.push(options.augment
         ? { tile, input: new Float32Array(0), target: t.target, mask: t.mask, masked: t.masked, raw, inside, labels }
-        : { tile, input: normalizeTile(raw, inside, norm), target: t.target, mask: t.mask, masked: t.masked });
+        : { tile, input: normalizeTile(raw, inside, norm, [1, side, side]), target: t.target, mask: t.mask, masked: t.masked });
       if (lambda > 0) distilled += options.distillationScope === "all" ? output * output : unmaskedVoxels(t.mask, t.channels);
     }
     if (!samples.length) throw new Error("the paint gives the loss nothing to count: an affinity is between two painted neighbours, so paint strokes, not single voxels");
@@ -340,7 +340,7 @@ export function createRunFull(deps: FullDeps = { loadTf, fetchFiles: fetchFullFi
       if (!s.raw || !s.inside || !s.labels) return s;
       const draw = drawAugmentation(augmentRandom, turnable(s.tile.depth));
       tally.add(draw);
-      const input = transformBlock(normalizeTile(augmentIntensity(s.raw, s.inside, draw.scale, range, augmentRandom), s.inside, norm), [1, side, side], draw);
+      const input = transformBlock(normalizeTile(augmentIntensity(s.raw, s.inside, draw.scale, range, augmentRandom), s.inside, norm, [1, side, side]), [1, side, side], draw);
       const t = tileTargets(transformBlock(s.labels, [1, output, output], draw), output, transform);
       return { input, target: t.target, mask: t.mask, masked: t.masked };
     }
@@ -421,7 +421,7 @@ async function trainBlocks(run: FinetuneRun, deps: FullDeps): Promise<Finetuned>
     const { raw, inside } = await blockRaw(block, side, output, run.infer, dataset, geo.rawLevel);
     samples.push(options.augment
       ? { block, input: new Float32Array(0), target: t.target, mask: t.mask, masked: t.masked, raw, inside, labels }
-      : { block, input: normalizeTile(raw, inside, norm), target: t.target, mask: t.mask, masked: t.masked });
+      : { block, input: normalizeTile(raw, inside, norm, [side, side, side]), target: t.target, mask: t.mask, masked: t.masked });
     if (lambda > 0) distilled += options.distillationScope === "all" ? output ** 3 : unmaskedVoxels(t.mask, t.channels);
   }
   if (!samples.length) throw new Error("the paint gives the loss nothing to count: an affinity is between two painted neighbours, so paint strokes, not single voxels");
@@ -511,7 +511,7 @@ async function trainBlocks(run: FinetuneRun, deps: FullDeps): Promise<Finetuned>
     if (!s.raw || !s.inside || !s.labels) return s;
     const draw = drawAugmentation(augmentRandom, turnable);
     tally.add(draw);
-    const input = transformBlock(normalizeTile(augmentIntensity(s.raw, s.inside, draw.scale, range, augmentRandom), s.inside, norm), [side, side, side], draw);
+    const input = transformBlock(normalizeTile(augmentIntensity(s.raw, s.inside, draw.scale, range, augmentRandom), s.inside, norm, [side, side, side]), [side, side, side], draw);
     const t = blockTargets(transformBlock(s.labels, cube, draw), cube, transform);
     return { input, target: t.target, mask: t.mask, masked: t.masked };
   }

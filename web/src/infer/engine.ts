@@ -202,8 +202,10 @@ export class InferenceEngine implements Inference {
         modelChannels: info.output_channels, hasChannel: info.has_channel,
       }),
     ];
-    // Zero past the volume, as the Python server's Pipeline(padding="zero").
-    engine.serveStages(view, viewInfo, block, RAW_VIEW, stages, "zero");
+    // The volume's edge repeated past it, as the Python server's
+    // Pipeline(padding="edge"); the model stage pads its normalized block the
+    // same way (stages.ts modelInput).
+    engine.serveStages(view, viewInfo, block, RAW_VIEW, stages, "edge");
     this.runner.retain(model.key);
     // The model's own output, for readOutput: served only once asked for.
     const output: OutputView = {
@@ -292,7 +294,7 @@ export class InferenceEngine implements Inference {
       throw new Error(`the box ${lo.join(",")}..${hi.join(",")} is not within the model's ${output.levelShape.join("×")} output voxels`);
     }
     if (!output.registered) {
-      engine.serveStages(output.name, output.info, output.chunk, RAW_VIEW, [output.stage], "zero");
+      engine.serveStages(output.name, output.info, output.chunk, RAW_VIEW, [output.stage], "edge");
       output.registered = true;
     }
     const base = engine.url(output.name);

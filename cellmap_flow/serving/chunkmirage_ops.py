@@ -113,8 +113,12 @@ class BlockInput:
         self.input_norms = list(input_norms)
 
     def to_ndarray_ts(self, roi):
-        """``roi`` (nm) through the input chain, padded with 0 past the data,
-        after the chain, as ``ImageDataInterface.to_ndarray_ts`` reads it."""
+        """``roi`` (nm) through the input chain, the data's outermost voxels
+        repeated past it, after the chain, as ``ImageDataInterface.to_ndarray_ts``
+        reads it with ``padding="edge"``. A flat fill there is a wall the model
+        never saw in training: on jrc_jurkat-1 setup_56 found 28% of the
+        nuclei the volume's edge cuts with zeros past it, 60% with the edge
+        repeated. ``roi`` wholly outside the data reads zeros."""
         want = self.grid.world_to_box(roi)
         begin = np.asarray(want.begin, dtype=int)
         shape = np.asarray(want.shape, dtype=int)
@@ -129,9 +133,9 @@ class BlockInput:
         data = apply_norms(self.block[tuple(slice(a, b) for a, b in zip(start, stop))], self.input_norms)
         if np.array_equal(lo, begin) and np.array_equal(hi, begin + shape):
             return data
-        out = np.zeros(tuple(shape), dtype=data.dtype)
-        out[tuple(slice(a, b) for a, b in zip(lo - begin, hi - begin))] = data
-        return out
+        if data.size == 0:
+            return np.zeros(tuple(shape), dtype=data.dtype)
+        return np.pad(data, list(zip(lo - begin, begin + shape - hi)), mode="edge")
 
 
 def _whole(values, what):

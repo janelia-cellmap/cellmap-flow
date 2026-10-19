@@ -413,15 +413,16 @@ A chunk served to Neuroglancer
    process's chain, ``process_chain()``, which is empty in a server started
    from the command line; the log then warns that the model is fed raw voxel
    values.
-#. chunkmirage reads each chunk's input with the model's halo (zeros past
-   the data) and queues it for the device, finest level first, dropping
+#. chunkmirage reads each chunk's input with the model's halo (the data's
+   outermost voxels repeated past it) and queues it for the device, finest level first, dropping
    chunks nobody waits for any more (``InferenceOp.slots``, from
    ``CELLMAP_FLOW_GPU_SLOTS``, plus a few chunks whose normalization overlaps
    the running forward). The forward itself runs inside a ``DeviceSlots``
    slot: by default one chunk at a time on the GPU, first come first
    served. ``InferenceOp`` hands the model a ``BlockInput`` for its
    ``to_ndarray_ts``, which applies the normalizers to what lies inside the
-   data and pads after, as ``ImageDataInterface.to_ndarray_ts`` does; a
+   data and repeats its edge after, as ``ImageDataInterface.to_ndarray_ts``
+   does with ``padding="edge"``; a
    config with its own ``process_chunk`` (TensorFlow, ONNX, cellpose,
    bioimage.io) reads through the same. A chunk the data ends in is computed
    whole and cropped.

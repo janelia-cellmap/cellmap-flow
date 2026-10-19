@@ -341,10 +341,13 @@ class CellMapFlowBlockwiseProcessor:
         # to the model's input voxel size when it has no level at it; the
         # grid below is then the resampled one, starting at the level's own
         # corner.
+        # padding="edge": the data's edge repeated past it, as the inference
+        # server pads the model's input (BlockInput).
         self.idi_raw = ImageDataInterface(
             self.input_path,
             voxel_size=self.input_voxel_size,
             on_voxel_size_mismatch="resample" if self.config.get("resample", True) else "relabel",
+            padding="edge",
         )
 
         # The output grid starts at the corner of the raw level the model
