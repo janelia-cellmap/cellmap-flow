@@ -20,6 +20,7 @@
 //                   with the volume, and where they fall on its grid;
 //   run.ts          all of it, one run: runFinetune;
 //   modes.ts        the ways a model can be trained, from its manifest;
+//   augment.ts      the whole network's augmentation of a tile;
 //   full/           the other way, the whole network of a 2D model trained
 //                   with TensorFlow.js (full/run-full.ts), when the
 //                   manifest offers it.
@@ -122,8 +123,8 @@ export type DistillationScope = "unlabeled" | "all";
  * /api/finetune/submit and the routes read them. */
 export interface FinetuneOptions {
   /** What trains: the head, or the whole network (full/run-full.ts), which
-   * reads the epochs, the learning rate, the seed and its two fields below
-   * and none of the head's (its loss is masked BCE on the paint alone). */
+   * reads the same loss, smoothing, balance and distillation fields, its
+   * own batch and tile below, and augmentation, but not batchPixels. */
   mode: FinetuneMode;
   epochs: number;
   learningRate: number;
@@ -151,6 +152,10 @@ export interface FinetuneOptions {
   /** The whole network's tile side, in pixels of the input; null for the
    * default (full/graph.ts DEFAULT_TILE, the side the graph takes nearest it). */
   tileSize: number | null;
+  /** Whole network only: each step's tiles get a random brightness and
+   * noise, flips and quarter turns, as the server's augmentation
+   * (augment.ts); the head trains on features computed once, and ignores it. */
+  augment: boolean;
 }
 
 /** How a run speaks to the job that follows it: its log lines, in the words
@@ -183,7 +188,9 @@ export interface Finetuned {
   /** The painted voxels trained on, over all channels' masks, and the chunks they came from. */
   pixels: number;
   chunks: number;
-  /** The voxels the distillation term held to the starting head; 0 without distillation. */
+  /** The voxels the distillation term held to the starting head (the
+   * starting network, after a whole-network run: each epoch's); 0 without
+   * distillation. */
   distilled: number;
   /** The tiles a whole-network run trained on (full/tiles.ts). */
   tiles?: number;
@@ -272,4 +279,5 @@ export const DEFAULT_OPTIONS: FinetuneOptions = {
   seed: 0,
   batchPatches: 1,
   tileSize: null,
+  augment: false,
 };

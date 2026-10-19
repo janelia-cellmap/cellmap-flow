@@ -16,6 +16,7 @@ import { describe, expect, it } from "vitest";
 import type { Tf } from "../../src/finetune/full/cellmap-tfjs-train";
 import { buildNet, maskedBce, readOnnxWeights, trainStep, writeOnnxWeights } from "../../src/finetune/full/cellmap-tfjs-train";
 import { parseTrainGraph, tileSides } from "../../src/finetune/full/graph";
+import { fullTrainStep } from "../../src/finetune/full/loss";
 import { checkOffsets, onnxInitializerOffsets } from "../../src/finetune/full/run-full";
 import { loadTf } from "../../src/finetune/full/tfjs";
 import { readFixture } from "./models-helpers";
@@ -92,6 +93,33 @@ describe("Marwan's TF.js runtime on head.onnx", () => {
     const { losses, after } = trained(tf, new Uint8Array(readFileSync(resolve(FIXTURES, "head.onnx"))), 20);
     expect(after).toBeLessThan(losses[0] * 0.8);
     expect(losses.at(-1)!).toBeLessThan(losses[0]);
+  });
+
+  it("holds the network to its starting self: the distillation term is 0 before the first step and grows as it trains", { timeout: 120_000 }, async () => {
+    const { tf } = await loadTf();
+    const bytes = new Uint8Array(readFileSync(resolve(FIXTURES, "head.onnx")));
+    const offsets = onnxInitializerOffsets(bytes), names = Object.keys(TINY.params);
+    const net = buildNet(tf, TINY, readOnnxWeights(bytes, offsets, names));
+    const teacher = buildNet(tf, TINY, readOnnxWeights(bytes, offsets, names), { trainable: new Set() });
+    const x = tf.tensor4d(slice(8), [1, 8, 8, 1]);
+    const target = tf.tensor4d(Float32Array.from({ length: 72 }, (_, i) => (i % 3 === 0 ? 1 : 0)), [1, 6, 6, 2]);
+    const mask = tf.tensor4d(Float32Array.from({ length: 72 }, (_, i) => (i % 5 === 0 ? 0 : 1)), [1, 6, 6, 2]);
+    const z0 = tf.tidy(() => teacher.forward(x));
+    const bce = tf.tidy(() => maskedBce(tf, z0, target, mask).dataSync()[0]);
+    const opt = tf.train.adam(0.05);
+    const o = { lossType: "bce" as const, margin: 0.3, labelSmoothing: 0, balanceClasses: false, distillationLambda: 1, distillationScope: "unlabeled" as const };
+    const terms = [0, 1, 2].map(() => {
+      const step = fullTrainStep(tf, net, opt, x, target, mask, z0, o);
+      const out = { supervised: step.supervised.dataSync()[0], distillation: step.distillation!.dataSync()[0], total: step.total.dataSync()[0] };
+      [step.total, step.supervised, step.distillation!].forEach((s) => s.dispose());
+      return out;
+    });
+    expect(terms[0].distillation).toBeCloseTo(0, 6);
+    expect(terms[0].supervised).toBeCloseTo(bce, 5);  // without the head's options, Marwan's masked BCE
+    expect(terms[2].distillation).toBeGreaterThan(0);
+    expect(terms[2].total).toBeCloseTo(terms[2].supervised + terms[2].distillation, 5);
+    [x, target, mask, z0].forEach((t) => t.dispose());
+    opt.dispose(); net.dispose(); teacher.dispose();
   });
 
   it("writes the trained weights back where onnxruntime reads them, in fp32 and fp16", { timeout: 120_000 }, async () => {

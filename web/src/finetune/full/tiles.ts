@@ -52,6 +52,12 @@ export interface TileSample {
   mask: Uint8Array;
   /** Mask entries set, over all channels: what the loss averages over. */
   masked: number;
+  /** Kept for augmentation, which draws each step's input and targets from
+   * them (run-full.ts): the raw as stored and which of it is inside the
+   * level (tileRaw), and the paint (tileLabels). */
+  raw?: Float32Array;
+  inside?: Uint8Array;
+  labels?: Uint8Array | Uint16Array;
 }
 
 /** The two axes of the plane cut across `depth`, in the order a tile hands them over. */
@@ -191,12 +197,11 @@ export function tileLabels(tile: Tile, output: number, chunks: Map<string, Paint
   return labels;
 }
 
-/** The network's input for `tile`: the raw slice around its output box
- * (`side` × `side`, the box grown by half the context each way) on raw
- * level `level`, the voxels inside the level normalized through `norm` and
- * those past it zero, as the model stage pads a block (infer/stages.ts
- * modelInput). The raw level's voxels are the volume's (a ratio of 1). */
-export async function tileInput(tile: Tile, side: number, output: number, infer: Pick<Inference, "readRaw">, dataset: DatasetInfo, level: number, norm: Step[]): Promise<Float32Array> {
+/** The raw slice around `tile`'s output box (`side` × `side`, the box grown
+ * by half the context each way) on raw level `level`, as stored, and which
+ * of its voxels are inside the level (1) or past it (0, where the value is
+ * 0). The raw level's voxels are the volume's (a ratio of 1). */
+export async function tileRaw(tile: Tile, side: number, output: number, infer: Pick<Inference, "readRaw">, dataset: DatasetInfo, level: number): Promise<{ raw: Float32Array; inside: Uint8Array }> {
   const halo = (side - output) / 2;
   const [pu, pv] = planeAxes(tile.depth);
   const lo = [0, 0, 0], hi = [0, 0, 0];
@@ -204,17 +209,40 @@ export async function tileInput(tile: Tile, side: number, output: number, infer:
   lo[pu] = tile.corner[0] - halo; hi[pu] = tile.corner[0] + output + halo;
   lo[pv] = tile.corner[1] - halo; hi[pv] = tile.corner[1] + output + halo;
   const shape = hi.map((h, a) => h - lo[a]);
-  const block = new Float32Array(side * side);
+  const raw = new Float32Array(side * side), inside = new Uint8Array(side * side);
   const rawShape = dataset.levels[level].shape;
   const readLo = lo.map((o) => Math.max(o, 0)), readHi = hi.map((h, a) => Math.min(h, rawShape[a]));
   const span = readHi.map((h, a) => h - readLo[a]);
-  if (span.some((n) => n <= 0)) return block;
+  if (span.some((n) => n <= 0)) return { raw, inside };
   const read = padded(await infer.readRaw(level, readLo, readHi), dataset.dtype, 1, readLo, readHi, readLo, readHi, "zero");
-  const values = applyNormalizers(Float32Array.from(read.data as ArrayLike<number>), norm);
   // The box with its depth axis one voxel thick, in C order, is the tile's
   // rows and columns: copied into the block where it lies in the box.
-  copyBox(block, shape, readLo.map((o, a) => o - lo[a]), values, span, [0, 0, 0], span);
-  return block;
+  const at = readLo.map((o, a) => o - lo[a]);
+  copyBox(raw, shape, at, Float32Array.from(read.data as ArrayLike<number>), span, [0, 0, 0], span);
+  for (let z = 0; z < span[0]; z++) for (let y = 0; y < span[1]; y++) {
+    const from = ((z + at[0]) * shape[1] + y + at[1]) * shape[2] + at[2];
+    inside.fill(1, from, from + span[2]);
+  }
+  return { raw, inside };
+}
+
+/** `raw`'s voxels `inside` normalized through `norm`, in order, as the model
+ * stage normalizes a block, and those past the level zero, as it pads one
+ * (infer/stages.ts modelInput). */
+export function normalizeTile(raw: Float32Array, inside: Uint8Array, norm: Step[]): Float32Array {
+  let n = 0;
+  for (let i = 0; i < inside.length; i++) n += inside[i];
+  const values = new Float32Array(n);
+  for (let i = 0, k = 0; i < raw.length; i++) if (inside[i]) values[k++] = raw[i];
+  const normalized = applyNormalizers(values, norm), out = new Float32Array(raw.length);
+  for (let i = 0, k = 0; i < raw.length; i++) if (inside[i]) out[i] = normalized[k++];
+  return out;
+}
+
+/** The network's input for `tile`: tileRaw normalized (normalizeTile). */
+export async function tileInput(tile: Tile, side: number, output: number, infer: Pick<Inference, "readRaw">, dataset: DatasetInfo, level: number, norm: Step[]): Promise<Float32Array> {
+  const { raw, inside } = await tileRaw(tile, side, output, infer, dataset, level);
+  return normalizeTile(raw, inside, norm);
 }
 
 /** A tile's targets from its labels, through the model's transform

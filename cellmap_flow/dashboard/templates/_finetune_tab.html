@@ -541,9 +541,10 @@
        separate fields and one's saved value never lands in the other).
        A 2D model whose manifest offers it can train its whole network
        instead (the Training field, shown when the model offers both): that
-       takes the epochs, its own learning rates, the server's Batch Size (in
-       tiles) and a Tile Size, and none of the head's loss, distillation,
-       smoothing or balance fields (head-only), which it does not use.
+       takes the epochs, the same loss, distillation, smoothing and balance
+       fields, its own learning rates, the server's Batch Size (in tiles), a
+       Tile Size and the server's Augmentation (full-also), but not the
+       head's Voxels per Step (head-only).
        web/src/browser.css
        gives the fields the full row. #}
     {% if mode == "browser" %}
@@ -713,8 +714,7 @@
       </div>
     </div>
 
-    {# The whole network trains with masked BCE on the paint alone: the rest are the head's. #}
-    <div class="row head-only">
+    <div class="row">
       <div class="col-md-6">
         <div class="mb-3">
           <label for="lossType" class="form-label">Loss Function</label>
@@ -766,7 +766,7 @@
       <div class="col-md-6">
         <div class="mb-3">
           {% if mode == "browser" %}
-          <label for="distillationLambda" class="form-label" title="Adds this weight times the mean squared distance of the head's logits from the starting head's, on the voxels the scope below picks (or, once good regions are marked, their unpainted voxels): what the paint does not ask to change stays as the model had it. 0.01 is a light hold; a head moves freely, so 0.1 to 1 holds it firmly.">
+          <label for="distillationLambda" class="form-label" title="Adds this weight times the mean squared distance of the model's logits from the starting model's, on the voxels the scope below picks (for the last layer, once good regions are marked, their unpainted voxels): what the paint does not ask to change stays as the model had it. 0.01 is a light hold; a head moves freely, so 0.1 to 1 holds it firmly. The whole network is held on the same tile it trains on, as the server holds it.">
             Distillation Weight
           </label>
           {% else %}
@@ -787,14 +787,14 @@
             <option value="10.0">10.0</option>
           </select>
           {% if mode == "browser" %}
-          <small class="text-muted">Keeps the head near the model's own output where nothing is painted.</small>
+          <small class="text-muted">Keeps the model near its own output where nothing is painted.</small>
           {% else %}
           <small class="text-muted">Keeps the model near its original output. Keep it small.</small>
           {% endif %}
         </div>
       </div>
     </div>
-    <div class="row head-only">
+    <div class="row">
       <div class="col-md-6">
         <div class="mb-3">
           <label for="distillationScope" class="form-label">
@@ -837,12 +837,19 @@
           </div>
           <small class="text-muted">Weights fg and bg equally.</small>
         </div>
-        <div class="mb-3 server-only">
+        {# The browser's whole network takes it too (full-also): its tiles are the same every epoch, so it is the case augmentation is for. #}
+        <div class="mb-3 server-only full-also">
           <div class="form-check">
             <input class="form-check-input" type="checkbox" id="augment">
+            {% if mode == "browser" %}
+            <label class="form-check-label" for="augment" title="Each step's tiles get a random brightness (×0.8 to ×1.2) and noise (1% of the range), then random flips and quarter turns of the image and your paint together, with the targets made after, as on the server. The whole network sees the same tiles every epoch, so without it, it can learn them by heart. Off by default, as on the server.">
+              Augmentation
+            </label>
+            {% else %}
             <label class="form-check-label" for="augment" title="Random flips, XY rotations, brightness and noise, on top of the patch-centre jitter that is always applied. Off by default: augmentation earns its keep when a run sees the same patches many times over, so a short correction run mostly just gets noisier gradients.">
               Augmentation
             </label>
+            {% endif %}
           </div>
           <small class="text-muted">
             <span id="augmentAdvice" class="d-block"></span>

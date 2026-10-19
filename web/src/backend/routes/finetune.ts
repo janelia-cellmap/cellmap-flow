@@ -12,15 +12,15 @@
 // for the models directory; a run in the tab (src/finetune/run.ts) for the
 // cluster job, so a submit needs no output path, queue or charge group, and
 // the server-only fields the form still sends (LoRA rank, patches per
-// epoch, rehearsal, augmentation) are ignored. What trains is what the
-// model's manifest offers (finetune/modes.ts, answered as finetune_modes)
-// and the form's Training field picks: the head, with the server's
-// per-voxel losses (BCE, MSE, margin), its distillation term (λ and scope)
-// and the browser's own batch of voxels per step (readTraining), Dice
-// refused since it needs a whole patch per sample (refuseLoss); or the
-// whole network of a 2D model (finetune/full), with masked BCE, the
-// server's Batch Size in tiles and a tile side of its own, which the
-// models route offers with what a step costs (fullTraining). The good
+// epoch, rehearsal) are ignored. What trains is what the model's manifest
+// offers (finetune/modes.ts, answered as finetune_modes) and the form's
+// Training field picks, with the server's per-voxel losses (BCE, MSE,
+// margin), smoothing, class balance and distillation term (λ and scope) in
+// both (readTraining), Dice refused since it needs a whole patch per sample
+// (refuseLoss): the head, with the browser's own batch of voxels per step;
+// or the whole network of a 2D model (finetune/full), with the server's
+// Batch Size in tiles, a tile side of its own, which the models route
+// offers with what a step costs (fullTraining), and augmentation. The good
 // regions' routes are routes/good-regions.ts, and the patch tools' Label it
 // and AI annotation have routes of their own
 // (view-labels.ts, ai-annotate.ts); crops import keeps needing a server and
@@ -543,14 +543,14 @@ function refuseLoss(loss: unknown): string | null {
  * trainingParams, as job-monitor.js sends them): the ones the browser's
  * trainer takes, checked, as run.ts's options and as the job's params (the
  * card shows the loss, margin and distillation from them). finetune_mode
- * says what trains, "head" when absent. For the head, batch_pixels is the
- * browser's own: voxels per Adam step, where the server's batch_size
- * counts patches. The margin goes with the margin loss alone, and label
- * smoothing is 0 with it, as the server sets it. The fields only a cluster
- * job uses (lora_r, batch_size, patches_per_epoch, rehearsal_fraction,
- * augment, queue, checkpoint_path) are left out of both. For the whole
- * network (readFullTraining) the batch is batch_size, in tiles, and the
- * tile's side tile_size; the head's fields are left out. */
+ * says what trains, "head" when absent. Both modes take the loss fields
+ * (readLoss). For the head, batch_pixels is the browser's own: voxels per
+ * Adam step, where the server's batch_size counts patches. The fields only
+ * a cluster job uses (lora_r, patches_per_epoch, rehearsal_fraction, queue,
+ * checkpoint_path, and for the head batch_size and augment) are left out
+ * of both. For the whole network (readFullTraining) the batch is
+ * batch_size, in tiles, the tile's side tile_size, and augment says
+ * whether its tiles are augmented. */
 export function readTraining(body: Record<string, unknown>): { options: FinetuneOptions; params: Record<string, unknown> } | { error: string } {
   const mode = body.finetune_mode === undefined || body.finetune_mode === null || body.finetune_mode === "" ? "head" : body.finetune_mode;
   if (mode !== "head" && mode !== "full") return { error: `finetune_mode: expected head or full, not ${JSON.stringify(mode)}` };
@@ -558,7 +558,23 @@ export function readTraining(body: Record<string, unknown>): { options: Finetune
   if (!Number.isInteger(epochs) || epochs < 1) return { error: "num_epochs: expected a whole number of epochs, 1 or more" };
   const learningRate = numberOr(body.learning_rate, mode === "full" ? FULL_LEARNING_RATE : DEFAULT_OPTIONS.learningRate);
   if (!Number.isFinite(learningRate) || learningRate <= 0) return { error: "learning_rate: expected a positive number" };
-  if (mode === "full") return readFullTraining(body, epochs, learningRate);
+  const loss = readLoss(body);
+  if ("error" in loss) return loss;
+  if (mode === "full") return readFullTraining(body, epochs, learningRate, loss);
+  const batchPixels = numberOr(body.batch_pixels, DEFAULT_OPTIONS.batchPixels);
+  if (!Number.isInteger(batchPixels) || batchPixels < 1 || batchPixels > MAX_BATCH_PIXELS) return { error: `batch_pixels: expected a whole number of voxels per step, from 1 to ${MAX_BATCH_PIXELS}` };
+  return {
+    options: { ...DEFAULT_OPTIONS, epochs, learningRate, ...loss.options, batchPixels },
+    params: { num_epochs: epochs, learning_rate: learningRate, ...loss.params, batch_pixels: batchPixels, finetune_mode: "head" },
+  };
+}
+
+type LossFields = Pick<FinetuneOptions, "lossType" | "margin" | "balanceClasses" | "labelSmoothing" | "distillationLambda" | "distillationScope">;
+
+/** The loss fields both modes train with, checked: the loss (Dice refused),
+ * its margin, label smoothing (0 with the margin loss), class balance and
+ * the distillation term's λ and scope. */
+function readLoss(body: Record<string, unknown>): { options: LossFields; params: Record<string, unknown> } | { error: string } {
   const lossType = body.loss_type === undefined || body.loss_type === null || body.loss_type === "" ? DEFAULT_OPTIONS.lossType : (body.loss_type as HeadLoss);
   if (!HEAD_LOSSES.includes(lossType)) return { error: refuseLoss(lossType)! };
   const margin = numberOr(body.margin, DEFAULT_OPTIONS.margin);
@@ -567,47 +583,43 @@ export function readTraining(body: Record<string, unknown>): { options: Finetune
   if (!(labelSmoothing >= 0 && labelSmoothing < 1)) return { error: "label_smoothing: expected a number from 0 up to, not including, 1" };
   if (lossType === "margin") labelSmoothing = 0;
   const balanceClasses = typeof body.balance_classes === "boolean" ? body.balance_classes : DEFAULT_OPTIONS.balanceClasses;
-  const batchPixels = numberOr(body.batch_pixels, DEFAULT_OPTIONS.batchPixels);
-  if (!Number.isInteger(batchPixels) || batchPixels < 1 || batchPixels > MAX_BATCH_PIXELS) return { error: `batch_pixels: expected a whole number of voxels per step, from 1 to ${MAX_BATCH_PIXELS}` };
   const distillationLambda = numberOr(body.distillation_lambda, DEFAULT_OPTIONS.distillationLambda);
   if (!Number.isFinite(distillationLambda) || distillationLambda < 0) return { error: "distillation_lambda: expected a number, 0 or more (0 switches distillation off)" };
   const scope = body.distillation_scope === undefined || body.distillation_scope === null || body.distillation_scope === "" ? DEFAULT_OPTIONS.distillationScope : String(body.distillation_scope).toLowerCase();
   if (scope !== "unlabeled" && scope !== "all") return { error: "distillation_scope: expected unlabeled or all" };
   const distillationScope = scope as DistillationScope;
   return {
-    options: { ...DEFAULT_OPTIONS, epochs, learningRate, lossType, margin, balanceClasses, labelSmoothing, batchPixels, distillationLambda, distillationScope },
+    options: { lossType, margin, balanceClasses, labelSmoothing, distillationLambda, distillationScope },
     params: {
-      num_epochs: epochs,
-      learning_rate: learningRate,
       loss_type: lossType,
       ...(lossType === "margin" ? { margin } : {}),
       balance_classes: balanceClasses,
       label_smoothing: labelSmoothing,
-      batch_pixels: batchPixels,
       distillation_lambda: distillationLambda,
       distillation_scope: distillationScope,
-      finetune_mode: "head",
     },
   };
 }
 
-/** readTraining's whole-network part: the batch in tiles (batch_size, 1 to
- * MAX_BATCH_PATCHES) and the tile side (tile_size, a whole number; blank
- * for the default), which submit then checks against the model's graph.
- * The loss is masked BCE, so the params say "bce". */
-function readFullTraining(body: Record<string, unknown>, epochs: number, learningRate: number): { options: FinetuneOptions; params: Record<string, unknown> } | { error: string } {
+/** readTraining's whole-network part: the loss fields as the head's, the
+ * batch in tiles (batch_size, 1 to MAX_BATCH_PATCHES), the tile side
+ * (tile_size, a whole number; blank for the default), which submit then
+ * checks against the model's graph, and augmentation (augment). */
+function readFullTraining(body: Record<string, unknown>, epochs: number, learningRate: number, loss: { options: LossFields; params: Record<string, unknown> }): { options: FinetuneOptions; params: Record<string, unknown> } | { error: string } {
   const batchPatches = numberOr(body.batch_size, DEFAULT_OPTIONS.batchPatches);
   if (!Number.isInteger(batchPatches) || batchPatches < 1 || batchPatches > MAX_BATCH_PATCHES) return { error: `batch_size: expected a whole number of tiles per step, from 1 to ${MAX_BATCH_PATCHES}` };
   const tile = body.tile_size === undefined || body.tile_size === null || body.tile_size === "" ? null : Number(body.tile_size);
   if (tile !== null && (!Number.isInteger(tile) || tile < 1)) return { error: "tile_size: expected a whole number of pixels on a side" };
+  const augment = typeof body.augment === "boolean" ? body.augment : DEFAULT_OPTIONS.augment;
   return {
-    options: { ...DEFAULT_OPTIONS, mode: "full", epochs, learningRate, batchPatches, tileSize: tile, distillationLambda: 0 },
+    options: { ...DEFAULT_OPTIONS, mode: "full", epochs, learningRate, ...loss.options, batchPatches, tileSize: tile, augment },
     params: {
       num_epochs: epochs,
       learning_rate: learningRate,
-      loss_type: "bce",
+      ...loss.params,
       batch_size: batchPatches,
       ...(tile === null ? {} : { tile_size: tile }),
+      augment,
       finetune_mode: "full",
     },
   };
