@@ -199,7 +199,7 @@ function updateAugmentAdvice() {
   // epochs alone.
   if (isBrowserMode()) {
     advice.textContent = epochs > 0
-      ? `Each tile is trained on ${epochs} time${epochs === 1 ? "" : "s"}, once an epoch: the more epochs, the more it keeps the network from learning the tiles by heart.`
+      ? `Each tile or block is trained on ${epochs} time${epochs === 1 ? "" : "s"}, once an epoch. With augmentation, plan on 3 to 5 times the epochs; with paint on only one or two objects, leave it off.`
       : "";
     advice.className = "d-block text-muted";
     return;

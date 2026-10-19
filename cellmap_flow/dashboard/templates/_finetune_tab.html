@@ -585,8 +585,8 @@
       <div class="col-md-6">
         <div class="mb-3">
           <label for="numEpochs" class="form-label">Number of Epochs</label>
-          <input type="number" id="numEpochs" class="form-control" value="20" min="5" max="50" step="1">
-          <small class="text-muted">Usually 10–20.</small>
+          <input type="number" id="numEpochs" class="form-control" value="20" min="5" max="500" step="1">
+          <small class="text-muted">Usually 10–20.{% if mode == "browser" %} A 3D model's whole network trains one block a step: aim for 60 to 150 steps in all, epochs × blocks (the run's first line gives the blocks).{% endif %}</small>
         </div>
       </div>
     </div>
@@ -839,12 +839,12 @@
           </div>
           <small class="text-muted">Weights fg and bg equally.</small>
         </div>
-        {# The browser's whole network takes it too (full-also): its tiles are the same every epoch, so it is the case augmentation is for. #}
+        {# The browser's whole network takes it too (full-also): its tiles are the same every epoch, which augmentation varies, at the price of several times the steps. #}
         <div class="mb-3 server-only full-also">
           <div class="form-check">
             <input class="form-check-input" type="checkbox" id="augment">
             {% if mode == "browser" %}
-            <label class="form-check-label" for="augment" title="Each step's tiles get a random brightness (×0.8 to ×1.2) and noise (1% of the range), then random flips and quarter turns of the image and your paint together, with the targets made after, as on the server. The whole network sees the same tiles every epoch, so without it, it can learn them by heart. Off by default, as on the server.">
+            <label class="form-check-label" for="augment" title="Each step's tiles get a random brightness (×0.8 to ×1.2) and noise (1% of the range), then random flips and quarter turns of the image and your paint together, with the targets made after, as on the server. It helps the model work on objects you did not paint, but slows learning several times over: with paint on only one or two objects it can stall at a loss near 0.69, which is guessing. Turn it on once you have painted several objects, with 3 to 5 times the epochs. Off by default, as on the server.">
               Augmentation
             </label>
             {% else %}
