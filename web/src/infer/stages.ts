@@ -13,7 +13,7 @@
 //
 // The engine does the rest: it reads the raw level at the model's input
 // voxel size over the chunk grown by the model's halo, pads past the volume
-// with zeros (as the server's Pipeline(padding="zero") does), keeps each
+// with its outermost voxels (as the server's Pipeline(padding="edge")), keeps each
 // stage's output under the stage's key, places the last stage's block in a
 // whole chunk and encodes it. So a postprocess change finds the model's
 // output made (its key is the model stage's plus the steps), a normalizer
@@ -80,9 +80,10 @@ export function postprocessStageKey(modelKey: string, chain: Chain): string {
 export interface ModelStageSpec {
   key: string;
   geometry: BlockGeometry;
-  /** The raw level's voxels: what lies inside the data. The engine zero-pads
-   * the rest, and the stage leaves that at zero, as the Python server does
-   * (ImageDataInterface.to_ndarray_ts: "padding is never normalized"). */
+  /** The raw level's voxels: what lies inside the data. Only those are
+   * normalized; the rest repeats the data's outermost normalized voxels
+   * (edgePadded), as the Python server pads (BlockInput.to_ndarray_ts:
+   * padding is never normalized). */
   rawShape: number[];
   /** The raw level's voxel size as the engine's source declares it (the
    * level `chooseRawLevel` picked, in the source's units): the engine reads
@@ -104,7 +105,7 @@ export interface ModelStageSpec {
  * A chunk at the volume's edge is clipped to the level by the engine (as the
  * Python pipeline clips chunk_box), so its input block is smaller than the
  * model's fixed input: the stage runs the model on the whole block all the
- * same, zero past what was read, and crops the output to the chunk, as
+ * same, the data's edge repeated past what was read, and crops the output to the chunk, as
  * InferenceOp.apply_at does ("the whole chunk, as the model always computed
  * it; one the data ends in is cropped after"). */
 export function modelStage(spec: ModelStageSpec): Stage {
@@ -134,10 +135,13 @@ export function modelStage(spec: ModelStageSpec): Stage {
 
 /** The model's input block for the chunk `at` describes, float32 and
  * normalized: the engine's `input` (the chunk's box grown by the halo, on
- * the raw level's grid, zero past the volume) converted, the voxels inside
- * the volume normalized and the rest left at zero, placed in a block of the
- * model's input shape (the engine's block is that, or its leading part for a
- * chunk the volume ends in). */
+ * the raw level's grid) converted, the voxels inside the volume normalized
+ * and placed in a block of the model's input shape (the engine's block is
+ * that, or its leading part for a chunk the volume ends in), every voxel past
+ * the volume the nearest one inside it (edgePadded). A flat fill there is a
+ * wall the model never saw in training, and it misses what the volume's edge
+ * cuts through: on jrc_jurkat-1, setup_56 found 28% of the nuclei the edge
+ * cuts with zeros there and 60% with the edge repeated. */
 export function modelInput(spec: Pick<ModelStageSpec, "normalizers" | "rawShape">, input: Block, at: StageAt, halo: number[], r: number[], inShape: number[]): Float32Array {
   const lead = input.shape.slice(0, -3);
   if (prod(lead) !== 1) throw new Error(`the raw volume has ${prod(lead)} channels; a model reads one (the browser mode does not select a channel yet)`);
@@ -157,17 +161,29 @@ export function modelInput(spec: Pick<ModelStageSpec, "normalizers" | "rawShape"
   if (inside && inside.hi.some((h, a) => h > inHi[a])) {
     throw new Error(`the model reads voxels ${inside.lo.join(",")} to ${inside.hi.join(",")} of the raw level, outside the block read for it (to ${inHi.join(",")})`);
   }
-  if (!inside) return new Float32Array(prod(inShape));  // nothing of the volume: zeros, as the engine read
+  if (!inside) return new Float32Array(prod(inShape));  // nothing of the volume to repeat: zeros
   const data = Float32Array.from(input.data as ArrayLike<number>);  // the engine's block, in the model's dtype
   const span = inside.hi.map((h, a) => h - inside.lo[a]);
   if (span.every((n, a) => n === inShape[a])) return applyNormalizers(data, spec.normalizers);  // the whole block is data
-  // Only the data is normalized: it is cut out, normalized and put back into
-  // a zero block of the model's input shape.
+  // Only the data is normalized: it is cut out, normalized and its edge
+  // repeated out to the model's input shape.
   const values = new Float32Array(prod(span));
   copyBox(values, span, [0, 0, 0], data, read, inside.offset, span);
   applyNormalizers(values, spec.normalizers);
-  const block = new Float32Array(prod(inShape));
-  copyBox(block, inShape, inside.offset, values, span, [0, 0, 0], span);
+  return edgePadded(values, span, inside.offset, inShape);
+}
+
+/** `values` (a box of `span` voxels, C order) placed at `offset` in a block
+ * of `shape`, every voxel of the block past the box the nearest voxel in it:
+ * the box's outermost voxels repeated outward, as numpy's pad(mode="edge"). */
+export function edgePadded(values: Float32Array, span: readonly number[], offset: readonly number[], shape: readonly number[]): Float32Array {
+  // The box's voxel nearest each of the block's along each axis.
+  const near = shape.map((n, a) => Int32Array.from({ length: n }, (_, i) => Math.min(Math.max(i - offset[a], 0), span[a] - 1)));
+  const block = new Float32Array(shape.reduce((p, n) => p * n, 1));
+  for (let z = 0, o = 0; z < shape[0]; z++) for (let y = 0; y < shape[1]; y++) {
+    const row = (near[0][z] * span[1] + near[1][y]) * span[2];
+    for (let x = 0; x < shape[2]; x++) block[o++] = values[row + near[2][x]];
+  }
   return block;
 }
 

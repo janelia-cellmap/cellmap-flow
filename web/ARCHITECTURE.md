@@ -26,12 +26,12 @@ service worker (src/sw.ts, on chunkmirage's relay.ts)  ── relays to the page
 chunkmirage Engine (web/chunkmirage/web/src/engine.ts, serveStages)
    │ demand queue: finest level first, abandoned chunks dropped unrun;
    │ reads the chunk's input box from the raw level (grown by the model's halo,
-   │ clipped to the volume, zero past it); 512 MB cache of each stage's output
+   │ clipped to the volume, its edge repeated past it); 512 MB cache of each stage's output
    │ under the stage's key; 256 MB cache of served chunks; whole-chunk layout
    ▼
 stage 1, the model (src/infer/stages.ts modelStage)  ─ our code:
-   normalizers on the data (the padding stays zero, as the Python server pads
-   after the chain) → one forward pass through chunkmirage's Onnx (onnx.ts:
+   normalizers on the data, then its edge repeated past the volume (as the
+   Python server pads, after the chain) → one forward pass through chunkmirage's Onnx (onnx.ts:
    onnxruntime-web on WebGPU, one call into ORT at a time on the page whatever
    the model, its `exclusive`, which the finetune's feature session takes
    too; WASM fallback)
@@ -264,8 +264,7 @@ memory until Accept or Reject.
 Who does what: `geometry.ts` plans the plane (the depth axis from the
 viewer's layout, the raw box, the image laid out as the panel draws it, the
 click in image pixels); `plane.ts` reads it from the raw level through
-`Inference.readRaw` (clipped to the level and zero past it, as `samples.ts`
-reads), resizes it to the image sent, normalizes it to uint8 RGBA (`mask.ts`)
+`Inference.readRaw` (clipped to the level and zero past it), resizes it to the image sent, normalizes it to uint8 RGBA (`mask.ts`)
 and builds the request; `gemini.ts` is the two Google providers
 (`gemini_api`: generativelanguage.googleapis.com with `x-goog-api-key`;
 `vertex_gemini`: aiplatform.googleapis.com, location global, with a bearer

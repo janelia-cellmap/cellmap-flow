@@ -15,12 +15,12 @@
 //   - the input box on the raw level: the chunk's box scaled by the ratio
 //     of the grids and grown by the model's halo (chunkmirage's inputBox);
 //   - the raw read where the box lies inside the level (Inference.readRaw,
-//     the engine's reader) and zero past it (chunkmirage's padded with the
-//     "zero" padding the engine serves the models with, as the Python
-//     server's Pipeline(padding="zero"));
+//     the engine's reader) and its edge repeated past it (chunkmirage's
+//     padded with the "edge" padding the engine serves the models with, as
+//     the Python server's Pipeline(padding="edge"));
 //   - that block converted to float32, the voxels inside the level
-//     normalized through the volume's input_norm and the padding left at
-//     zero, placed in a block of the model's input shape (modelInput).
+//     normalized through the volume's input_norm and placed in a block of
+//     the model's input shape, their edge repeated past them (modelInput).
 //
 // The normalizers are the volume's (PaintVolume.input_norm, the chain when
 // the volume was made), as the server's PatchReader normalizes through the
@@ -67,11 +67,11 @@ export async function* collectSamples(run: Pick<FinetuneRun, "volume" | "entry" 
     const painted = (await readPaintedChunk(run.paint, volume, index)) ?? (indices ? unpainted(volume.chunk_size, index, volume.dtype) : null);
     if (!painted) continue;
     // The input box on the raw level and what lies inside it, read; the rest
-    // zero (Engine.input). Nothing is read for a box wholly outside.
+    // its edge repeated (Engine.input). Nothing is read for a box wholly outside.
     const { lo: inLo, hi: inHi } = inputBox(lo, hi, r, halo);
     const readLo = inLo.map((o) => Math.max(o, 0)), readHi = inHi.map((h, a) => Math.min(h, raw.shape[a]));
     const data = readHi.every((h, a) => h > readLo[a]) ? await run.infer.readRaw(rawLevel, readLo, readHi) : null;
-    const block = padded(data, dataset.dtype, dataset.channels, readLo, readHi, inLo, inHi, "zero");
+    const block = padded(data, dataset.dtype, dataset.channels, readLo, readHi, inLo, inHi, "edge");
     // The stage's view of the chunk: only its box matters to modelInput (the
     // view and level name the engine's cache keys, which no sample has).
     const at: StageAt = { view: "", level: 0, index, lo, hi, voxel: level.voxel };

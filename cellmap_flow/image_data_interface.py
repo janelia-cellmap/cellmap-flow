@@ -39,6 +39,10 @@ _warned_relabel = set()
 
 ON_VOXEL_SIZE_MISMATCH = ("relabel", "resample", "error")
 
+# What a read past the array is padded with: 0, or the array's outermost
+# voxels repeated ("edge"), which is what a model's input is read with.
+PADDINGS = ("zero", "edge")
+
 # What the relabel warning suggests instead.
 RESAMPLE_HINT = (
     'on_voxel_size_mismatch="resample" (`resample: true` in a YAML, `--resample` '
@@ -99,6 +103,7 @@ class ImageDataInterface:
         normalize=True,
         input_norms=None,
         on_voxel_size_mismatch="relabel",
+        padding="zero",
     ):
         """``input_norms``: the normalizers (and ChannelSelector) to read with.
         ``None`` follows the process's chain (``process_chain().input_norms``)
@@ -132,7 +137,15 @@ class ImageDataInterface:
 
         ``actual_voxel_size`` (the level read) and ``requested_voxel_size``
         record both sizes either way.
+
+        ``padding`` is what a read past the array is padded with, after the
+        chain: "zero", or "edge", the array's outermost voxels repeated. A
+        model's input is read with "edge" (blockwise, the finetune trainer,
+        as the inference server's BlockInput pads), since a flat fill is a
+        wall the model never saw in training; labels with "zero".
         """
+        if padding not in PADDINGS:
+            raise ValueError(f"padding must be one of {PADDINGS}, not {padding!r}")
         resample = on_voxel_size_mismatch == "resample"
         if resample and output_voxel_size is not None:
             raise ValueError('output_voxel_size cannot be combined with on_voxel_size_mismatch="resample"')
@@ -240,6 +253,7 @@ class ImageDataInterface:
         self.offset = coordinate_or_floats(offset_f, "offset", dataset_path)
         self.roi = self._grid.box_to_world(Box((0,) * len(shape), tuple(shape)))
         self.custom_fill_value = custom_fill_value
+        self.padding = padding
         # The array as stored (every channel, not normalized), opened on the
         # first read and shared with every with_input_norms() view.
         self.source = open_array(dataset_path)
@@ -290,18 +304,26 @@ class ImageDataInterface:
         view = self._view()
         return view if self.normalize else view.selected()
 
-    def read_box(self, box: Box, fill=0) -> np.ndarray:
+    def read_box(self, box: Box, fill=None) -> np.ndarray:
         """The voxels of ``box`` (a ``Box`` of voxel indices at ``voxel_size``)
-        through the input chain, as a numpy array padded with ``fill`` where
-        it runs past the array: ``to_ndarray_ts`` by voxels instead of nm.
-        Unlike ``ts``, works on a resampled dataset too.
+        through the input chain, as a numpy array padded with ``fill`` (a
+        value or "edge"; ``padding``'s when None) where it runs past the
+        array: ``to_ndarray_ts`` by voxels instead of nm. Unlike ``ts``,
+        works on a resampled dataset too.
         """
+        fill = self._fill() if fill is None else fill
         view = self._view()
         store = view.selected()
         through_chain = functools.partial(apply_norms, input_norms=view.norms_to_apply())
         if self.resampled:
             return self._resampling.read(store, box, fill, through_chain)
         return read_padded(store, box, fill, through_chain)
+
+    def _fill(self):
+        """What reads past the array are padded with, as read_padded takes it."""
+        if self.custom_fill_value:
+            return self.custom_fill_value
+        return "edge" if self.padding == "edge" else 0
 
     def with_input_norms(self, input_norms):
         """This dataset, read through ``input_norms`` instead of the process's chain.
@@ -329,9 +351,10 @@ class ImageDataInterface:
         """``roi`` (world nm; all of the array when None) read through the
         input chain, as a numpy array.
 
-        Where the ROI runs past the array it is padded with
-        ``custom_fill_value`` (0 when unset; "edge" repeats the border
-        voxels), after the chain: padding is never normalized.
+        Where the ROI runs past the array it is padded as ``padding`` says
+        (0, or "edge": the border voxels repeated; the deprecated
+        ``custom_fill_value`` wins when set), after the chain: padding is
+        never normalized.
 
         A resampled dataset (``resampled``) is read at ``voxel_size`` by
         ``io.resample``: the stored voxels are resampled, then go through the
@@ -342,7 +365,7 @@ class ImageDataInterface:
         view = self._view()
         store = view.selected()
         through_chain = functools.partial(apply_norms, input_norms=view.norms_to_apply())
-        fill = self.custom_fill_value if self.custom_fill_value else 0
+        fill = self._fill()
         if self.resampled:
             box = Box((0,) * len(self.shape), tuple(self.shape)) if roi is None else self._grid.world_to_box(roi)
             return self._resampling.read(store, box, fill, through_chain)

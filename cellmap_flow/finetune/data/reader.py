@@ -203,6 +203,7 @@ class PatchReader:
                 voxel_size=self.input_voxel_size,
                 normalize=False,
                 on_voxel_size_mismatch="resample" if self.resample else "relabel",
+                padding="edge",
             )
         raw_voxel_size = np.asarray(self._raw_idi.voxel_size, dtype=float)
         raw_corner_nm = np.asarray(self._raw_idi.offset, dtype=float)
@@ -214,7 +215,11 @@ class PatchReader:
         begin = np.floor(snap_integral((lower_edge_nm - raw_corner_nm) / raw_voxel_size))
         box = Box(tuple(int(b) for b in begin), tuple(int(s) for s in in_size))
         # The selected channel, unnormalized (normalize=False), resampled when
-        # the volume is; out of the array is padded with 0, as to_ndarray_ts pads.
+        # the volume is; out of the array its edge is repeated, as the served
+        # model's input is (BlockInput). normalize() comes after, which for
+        # pointwise normalizers (the manifests' MinMax, Lambda, ZScore) is the
+        # same as normalizing first; zeros here became -1 after them, a black
+        # wall the served model never saw.
         return np.ascontiguousarray(self._raw_idi.read_box(box).transpose(slice_axes(depth_axis)))
 
     def normalize(self, raw: np.ndarray) -> np.ndarray:

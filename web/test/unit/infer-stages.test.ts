@@ -95,12 +95,13 @@ describe("the model stage", () => {
     expect(data[7]).toBe(rawValue(3, 1, 3));
   });
 
-  it("normalizes the data and leaves the engine's padding past the volume at zero, as the Python server pads after the chain", async () => {
+  it("normalizes the data and repeats its normalized edge past the volume, as the Python server pads after the chain", async () => {
     const m = model(1);
     await produce(stage([{ name: "ZScoreNormalizer", mean: "1", std: "1" }], 1, true, m.run), [0, 0, 0]);  // raw - 1
     const fed = m.fed[0].data, v = (z: number, y: number, x: number) => fed[(z * 6 + y) * 6 + x];
-    expect(v(0, 0, 0)).toBe(0);  // before the volume: zero, not -1
-    expect(v(1, 1, 1)).toBe(0);
+    // Before the volume: the nearest voxel inside it, normalized (not its raw value, not 0).
+    expect(v(1, 2, 3)).toBe(rawValue(0, 0, 1) - 1);
+    expect(v(0, 4, 5)).toBe(rawValue(0, 2, 3) - 1);
     expect(v(2, 2, 2)).toBe(rawValue(0, 0, 0) - 1);  // the volume starts at block voxel 2
     expect(v(5, 5, 5)).toBe(rawValue(3, 3, 3) - 1);
   });
@@ -126,8 +127,8 @@ describe("the model stage", () => {
     expect(m.fed[0].dims).toEqual([1, 1, 6, 6, 6]);
     const fed = m.fed[0].data, v = (z: number, y: number, x: number) => fed[(z * 6 + y) * 6 + x];
     expect(v(2, 2, 2)).toBe(rawValue(4, 2, 0));  // the block starts at raw (2, 0, -2)
-    expect(v(3, 2, 2)).toBe(0);  // raw z 5: past the volume (the engine's zeros)
-    expect(v(5, 2, 2)).toBe(0);  // raw z 7: past what the engine read (the stage's zeros)
+    expect(v(3, 2, 2)).toBe(rawValue(4, 2, 0));  // raw z 5: past the volume, its last voxel repeated
+    expect(v(5, 2, 2)).toBe(rawValue(4, 2, 0));  // raw z 7: past what the engine read, the same
     expect(out.shape).toEqual([1, 1, 2, 2]);
     expect(Array.from(out.data as Float32Array)).toEqual([rawValue(4, 2, 0), rawValue(4, 2, 1), rawValue(4, 3, 0), rawValue(4, 3, 1)]);
   });

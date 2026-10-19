@@ -127,34 +127,35 @@ describe("collectSamples on a 3D model", () => {
     expect(Array.from(s.chunk.labels)).toEqual(EIGHT);
   });
 
-  it("clips the box where the level ends and leaves the block zero past it", async () => {
+  it("clips the box where the level ends and repeats the level's last voxels past it", async () => {
     // Chunk [3, 1, 1] covers z 6..7 on a level of 7: the engine clips it to
     // one voxel deep, and its input box, z 4..9, is read to 7. The block the
-    // model sees is still 6 deep: the data at the front, zeros behind.
+    // model sees is still 6 deep: the data at the front, its last slice
+    // repeated behind.
     const { samples, reads } = await samplesOf(G3, RAW3, { "3.1.1": EIGHT });
     expect(reads).toEqual([{ level: 0, lo: [4, 0, 0], hi: [7, 6, 6] }]);
     const [s] = samples;
     expect(s.inputDims).toEqual([1, 1, 6, 6, 6]);
     expect(at(s, [6, 6, 6], 0, 0, 0)).toBe(rawValue(4, 0, 0));
     expect(at(s, [6, 6, 6], 2, 5, 5)).toBe(rawValue(6, 5, 5));
-    expect(at(s, [6, 6, 6], 3, 0, 0)).toBe(0);
-    expect(at(s, [6, 6, 6], 5, 5, 5)).toBe(0);
+    expect(at(s, [6, 6, 6], 3, 0, 0)).toBe(rawValue(6, 0, 0));
+    expect(at(s, [6, 6, 6], 5, 5, 5)).toBe(rawValue(6, 5, 5));
   });
 
-  it("is zero before the level for a chunk at the origin", async () => {
+  it("repeats the level's first voxels before it for a chunk at the origin", async () => {
     const { samples, reads } = await samplesOf(G3, RAW3, { "0.0.0": EIGHT });
     expect(reads).toEqual([{ level: 0, lo: [0, 0, 0], hi: [4, 4, 4] }]);
     const [s] = samples;
-    expect(at(s, [6, 6, 6], 0, 0, 0)).toBe(0);
-    expect(at(s, [6, 6, 6], 1, 1, 1)).toBe(0);
-    expect(at(s, [6, 6, 6], 1, 2, 2)).toBe(0);
+    expect(at(s, [6, 6, 6], 0, 0, 0)).toBe(rawValue(0, 0, 0));
+    expect(at(s, [6, 6, 6], 0, 3, 4)).toBe(rawValue(0, 1, 2));
+    expect(at(s, [6, 6, 6], 1, 2, 5)).toBe(rawValue(0, 0, 3));
     expect(at(s, [6, 6, 6], 2, 2, 2)).toBe(rawValue(0, 0, 0));
     expect(at(s, [6, 6, 6], 5, 5, 5)).toBe(rawValue(3, 3, 3));
   });
 
-  it("normalizes the data through the volume's input_norm and leaves the padding at zero", async () => {
-    // The manifests' chain: MinMax 0..255 then 2x-1, so 255 is 1.0; the
-    // zeros past the level stay 0, not -1, as the server pads after the chain.
+  it("normalizes the data through the volume's input_norm and repeats it past the level", async () => {
+    // The manifests' chain: MinMax 0..255 then 2x-1, so 255 is 1.0, and the
+    // voxels past the level repeat that.
     const steps: Step[] = [{ name: "MinMaxNormalizer", min_value: 0, max_value: 255 }, { name: "LambdaNormalizer", expression: "2*x-1" }];
     const raw = dataset([7, 8, 8], "uint8");
     // The run's chain says otherwise: the volume's normalizers are the ones
@@ -162,9 +163,7 @@ describe("collectSamples on a 3D model", () => {
     const chain: Chain = { input_norm: [{ name: "ZScoreNormalizer", mean: 255, std: 1 }], postprocess: [] };
     const { samples } = await samplesOf(G3, raw, { "0.0.0": EIGHT, "1.1.1": EIGHT }, { inputNorm: steps, value: () => 255, chain });
     const [origin, inside] = samples;
-    expect(at(origin, [6, 6, 6], 0, 0, 0)).toBe(0);
-    expect(at(origin, [6, 6, 6], 2, 2, 2)).toBe(1);
-    expect(at(origin, [6, 6, 6], 5, 5, 5)).toBe(1);
+    expect(origin.input.every((v) => v === 1)).toBe(true);
     expect(inside.input.every((v) => v === 1)).toBe(true);
   });
 
@@ -218,7 +217,7 @@ describe("collectSamples on a 2D model", () => {
     expect(Array.from(s.chunk.labels)).toEqual(FOUR);
   });
 
-  it("clips a slice's box at the far edge of the plane and zero-pads", async () => {
+  it("clips a slice's box at the far edge of the plane and repeats the plane's edge", async () => {
     // A 7-voxel plane: chunk [0, 3, 3] covers y, x 6..7, its box 4..10 is
     // read to 7, and the block has data in its first three rows and columns.
     const { samples, reads } = await samplesOf(G2, dataset([3, 7, 7]), { "0.3.3": FOUR });
@@ -226,9 +225,9 @@ describe("collectSamples on a 2D model", () => {
     const [s] = samples;
     expect(at(s, [1, 6, 6], 0, 0, 0)).toBe(rawValue(0, 4, 4));
     expect(at(s, [1, 6, 6], 0, 2, 2)).toBe(rawValue(0, 6, 6));
-    expect(at(s, [1, 6, 6], 0, 3, 0)).toBe(0);
-    expect(at(s, [1, 6, 6], 0, 0, 3)).toBe(0);
-    expect(at(s, [1, 6, 6], 0, 5, 5)).toBe(0);
+    expect(at(s, [1, 6, 6], 0, 3, 0)).toBe(rawValue(0, 6, 4));
+    expect(at(s, [1, 6, 6], 0, 0, 3)).toBe(rawValue(0, 4, 6));
+    expect(at(s, [1, 6, 6], 0, 5, 5)).toBe(rawValue(0, 6, 6));
   });
 });
 
@@ -244,7 +243,7 @@ describe("collectSamples on a model writing coarser voxels than it reads", () =>
     expect(reads).toEqual([{ level: 0, lo: [2, 0, 0], hi: [10, 6, 6] }]);
     const [s] = samples;
     expect(s.inputDims).toEqual([1, 1, 8, 8, 8]);
-    expect(at(s, [8, 8, 8], 0, 0, 0)).toBe(0);
+    expect(at(s, [8, 8, 8], 0, 0, 0)).toBe(rawValue(2, 0, 0));  // raw (2, -2, -2): y and x repeated
     expect(at(s, [8, 8, 8], 0, 2, 2)).toBe(rawValue(2, 0, 0));
     expect(at(s, [8, 8, 8], 7, 7, 7)).toBe(rawValue(9, 5, 5));
   });
