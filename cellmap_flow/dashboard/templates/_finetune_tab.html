@@ -539,12 +539,13 @@
        voxels per step (batchPixels: the server's Batch Size counts patches,
        8 of them where the head takes thousands of voxels, so the two are
        separate fields and one's saved value never lands in the other).
-       A 2D model whose manifest offers it can train its whole network
-       instead (the Training field, shown when the model offers both): that
-       takes the epochs, the same loss, distillation, smoothing and balance
-       fields, its own learning rates, the server's Batch Size (in tiles), a
-       Tile Size and the server's Augmentation (full-also), but not the
-       head's Voxels per Step (head-only).
+       A model whose manifest offers it can train its whole network instead
+       (the Training field, shown when the model offers both): that takes
+       the epochs, the same loss, distillation, smoothing and balance fields,
+       its own learning rates, the server's Batch Size (in tiles; a 3D
+       model's is held at one block), a Tile Size (a 3D model's Block Size)
+       and the server's Augmentation (full-also), but not the head's Voxels
+       per Step (head-only).
        web/src/browser.css
        gives the fields the full row. #}
     {% if mode == "browser" %}
@@ -584,8 +585,8 @@
       <div class="col-md-6">
         <div class="mb-3">
           <label for="numEpochs" class="form-label">Number of Epochs</label>
-          <input type="number" id="numEpochs" class="form-control" value="20" min="5" max="50" step="1">
-          <small class="text-muted">Usually 10–20.</small>
+          <input type="number" id="numEpochs" class="form-control" value="20" min="5" max="500" step="1">
+          <small class="text-muted">Usually 10–20.{% if mode == "browser" %} A 3D model's whole network trains one block a step: aim for 60 to 150 steps in all, epochs × blocks (the run's first line gives the blocks).{% endif %}</small>
         </div>
       </div>
     </div>
@@ -602,7 +603,7 @@
             {% endfor %}
           </select>
           {% if mode == "browser" %}
-          <small class="text-muted">Tiles per step: each step's time and memory grow with it.</small>
+          <small class="text-muted" id="batchSizeHint">Tiles per step: each step's time and memory grow with it.</small>
           {% else %}
           <small class="text-muted">Higher = faster, more GPU memory.</small>
           {% endif %}
@@ -611,7 +612,8 @@
       {% if mode == "browser" %}
       <div class="col-md-6 full-only">
         <div class="mb-3">
-          <label for="tileSize" class="form-label" title="The side of the square slices the whole network trains on, in pixels of its input, cut in the plane you painted in. The model reads 88 pixels of context around what it predicts, so a tile's output is 88 pixels smaller. A smaller tile trains a step faster in less memory, but more of it is context. The sides offered are ones the network's pools and crops divide exactly.">Tile Size</label>
+          {# A 3D model's Block Size: training-form.js renames it, its title and its sides (N³). #}
+          <label for="tileSize" id="tileSizeLabel" class="form-label" title="The side of the square slices the whole network trains on, in pixels of its input, cut in the plane you painted in. The model reads 88 pixels of context around what it predicts, so a tile's output is 88 pixels smaller. A smaller tile trains a step faster in less memory, but more of it is context. The sides offered are ones the network's pools and crops divide exactly.">Tile Size</label>
           <select id="tileSize" class="form-select"></select>
           <small class="text-muted d-block" id="tileSizeHint"></small>
         </div>
@@ -837,12 +839,12 @@
           </div>
           <small class="text-muted">Weights fg and bg equally.</small>
         </div>
-        {# The browser's whole network takes it too (full-also): its tiles are the same every epoch, so it is the case augmentation is for. #}
+        {# The browser's whole network takes it too (full-also): its tiles are the same every epoch, which augmentation varies, at the price of several times the steps. #}
         <div class="mb-3 server-only full-also">
           <div class="form-check">
             <input class="form-check-input" type="checkbox" id="augment">
             {% if mode == "browser" %}
-            <label class="form-check-label" for="augment" title="Each step's tiles get a random brightness (×0.8 to ×1.2) and noise (1% of the range), then random flips and quarter turns of the image and your paint together, with the targets made after, as on the server. The whole network sees the same tiles every epoch, so without it, it can learn them by heart. Off by default, as on the server.">
+            <label class="form-check-label" for="augment" title="Each step's tiles get a random brightness (×0.8 to ×1.2) and noise (1% of the range), then random flips and quarter turns of the image and your paint together, with the targets made after, as on the server. It helps the model work on objects you did not paint, but slows learning several times over: with paint on only one or two objects it can stall at a loss near 0.69, which is guessing. Turn it on once you have painted several objects, with 3 to 5 times the epochs. Off by default, as on the server.">
               Augmentation
             </label>
             {% else %}

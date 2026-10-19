@@ -13,9 +13,10 @@
 // export can switch without a change here.
 //
 // Since 2026-10-16 the manifests also say what the browser can train
-// (`finetune`: the head, and for the 2D students the whole network) and
-// where the export came from (source_repo, distilled_from_repo,
-// torch_version, exporter, opset); both are kept (parseFinetune). A
+// (`finetune`: the head, and the whole network, the 2D students' since
+// 2026-10-16 and the 3D models' since 2026-10-17) and where the export came
+// from (source_repo, distilled_from_repo, torch_version, exporter, opset);
+// both are kept (parseFinetune). A
 // finetune entry that is not what it should be is left out rather than
 // failing the manifest: the model still runs, without that way to train it.
 import { FINETUNED_REPO } from "../contracts";
@@ -115,6 +116,7 @@ export function parseFinetune(value: unknown): FinetuneSpec | null {
       weight_map: isString(full.weight_map) ? full.weight_map : "identity",
       frozen: isStrings(full.frozen) ? full.frozen : [],
     } as unknown as FullFinetuneSpec;
+    if (!isString(full.torch_params)) delete fullSpec.torch_params;
     const spike = spikeOf(full.spike);
     if (spike) fullSpec.spike = spike;
     else delete fullSpec.spike;

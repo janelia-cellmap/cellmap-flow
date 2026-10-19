@@ -41,10 +41,10 @@ const SAVED_FIELDS = [
 // saved the server template's default, margin, which must not come back as
 // the browser's loss. Its batch, voxels per step, is a field of its own
 // (batchPixels, in the template's browser-only block). The whole network's
-// fields are browser-only too: the Training choice, the Tile Size and the
-// whole network's learning rate; and its batch, the server's Batch Size, is
-// kept under a key of its own (fullBatchSize) for the same reason as the
-// loss: every browser saved the hidden field's 8.
+// fields are browser-only too: the Training choice, the Tile Size (a 3D
+// model's Block Size) and the whole network's learning rate; and its batch,
+// the server's Batch Size, is kept under a key of its own (fullBatchSize)
+// for the same reason as the loss: every browser saved the hidden field's 8.
 function savedFields() {
   if (!isBrowserMode()) return SAVED_FIELDS;
   const renamed = { lossType: "headLossType", batchSize: "fullBatchSize" };
@@ -62,7 +62,9 @@ function saveFinetuneState() {
   const state = {};
   for (const [key, id, kind] of savedFields()) {
     const el = document.getElementById(id);
-    state[key] = kind === "checkbox" ? el.checked : el.value;
+    // A field the form holds (a 3D model's Batch Size, at 1) saves the value it will put back.
+    const held = el.disabled && el.dataset.kept !== undefined;
+    state[key] = kind === "checkbox" ? el.checked : held ? el.dataset.kept : el.value;
   }
   state.selectedModelName = document.getElementById("modelSelect").value;
   writeJSON(FINETUNE_STATE_KEY, state);
@@ -197,7 +199,7 @@ function updateAugmentAdvice() {
   // epochs alone.
   if (isBrowserMode()) {
     advice.textContent = epochs > 0
-      ? `Each tile is trained on ${epochs} time${epochs === 1 ? "" : "s"}, once an epoch: the more epochs, the more it keeps the network from learning the tiles by heart.`
+      ? `Each tile or block is trained on ${epochs} time${epochs === 1 ? "" : "s"}, once an epoch. With augmentation, plan on 3 to 5 times the epochs; with paint on only one or two objects, leave it off.`
       : "";
     advice.className = "d-block text-muted";
     return;
@@ -250,28 +252,66 @@ function showGpuQueues(data) {
 // picked model to setBrowserTraining. The Training field shows only when
 // both are offered; the Training pane's data-training says which is picked,
 // and web/src/browser.css shows that one's fields.
+//
+// A 3D model's whole network (full_training.dims 3) trains on cubes, one a
+// step: the Tile Size field becomes Block Size, its sides N³, and the Batch
+// Size is held at 1 (the batch picked for a 2D model is put back after).
 let browserModel = null;
 let headNote = null;  // the template's words for the head, kept to put back
+let tileWords = null;  // the template's Tile Size label and its title, likewise
+let batchHint = null;  // and its Batch Size hint
 
 function trainingMode() {
   return document.getElementById("finetuneMode").value;
 }
 
-// The model's tile sides as the Tile Size's options; the side saved, or the
-// one picked, when the model has it, else its default.
+// Whether the model picked trains its whole network on 3D blocks.
+function trainsBlocks() {
+  return !!(browserModel && browserModel.full_training && browserModel.full_training.dims === 3);
+}
+
+// The model's tile sides as the Tile Size's options (a 3D model's block
+// sides as Block Size's); the side saved, or the one picked, when the model
+// has it, else its default.
 function fillTileSizes(full) {
   const select = document.getElementById("tileSize");
   const keep = select.value || (restoreFinetuneState() || {}).tileSize;
+  const power = full && full.dims === 3 ? "³" : "²";
   select.innerHTML = "";
   for (const tile of (full && full.tiles) || []) {
     const option = document.createElement("option");
     option.value = String(tile.side);
-    option.textContent = `${tile.side}² (output ${tile.output}²)${tile.side === full.default_tile ? " (Default)" : ""}`;
+    option.textContent = `${tile.side}${power} (output ${tile.output}${power})${tile.side === full.default_tile ? " (Default)" : ""}`;
     select.appendChild(option);
   }
   const sides = Array.from(select.options).map((option) => option.value);
   if (sides.includes(String(keep))) select.value = String(keep);
   else if (full && full.default_tile) select.value = String(full.default_tile);
+  const label = document.getElementById("tileSizeLabel");
+  tileWords = tileWords ?? { text: label.textContent, title: label.title };
+  label.textContent = power === "³" ? "Block Size" : tileWords.text;
+  label.title = power === "³"
+    ? "The side of the cubes the whole network trains on, in voxels of its input, around the voxels you painted. The model reads 88 voxels of context around what it predicts, so a block's output is 88 voxels smaller on each axis. A smaller block trains a step faster in far less memory (it grows with the cube of the side), but more of it is context. The sides offered are ones the network's pools and crops divide exactly."
+    : tileWords.title;
+}
+
+// The Batch Size for a 3D model's whole network: one block a step, the
+// field held at 1 and the batch picked before kept to put back.
+function holdBatchForBlocks() {
+  const select = document.getElementById("batchSize");
+  const hint = document.getElementById("batchSizeHint");
+  batchHint = batchHint ?? hint.textContent;
+  if (trainsBlocks()) {
+    if (!select.disabled) select.dataset.kept = select.value;
+    select.value = "1";
+    select.disabled = true;
+    hint.textContent = "A 3D model's whole network trains one block a step: a block is a batch's memory already.";
+  } else if (select.disabled) {
+    select.disabled = false;
+    if (select.dataset.kept) select.value = select.dataset.kept;
+    delete select.dataset.kept;
+    hint.textContent = batchHint;
+  }
 }
 
 // What a step of the tile picked is expected to cost at the batch picked,
@@ -288,12 +328,17 @@ function updateTileHint() {
   const tile = full.tiles.find((t) => String(t.side) === document.getElementById("tileSize").value);
   if (!tile) return;
   const batch = parseInt(document.getElementById("batchSize").value, 10) || 1;
-  const useful = `${Math.round(tile.useful * 100)}% of each tile is output, the rest context`;
+  const noun = full.dims === 3 ? "block" : "tile";
+  const percent = tile.useful * 100;
+  const useful = `${percent < 10 ? percent.toFixed(1) : Math.round(percent)}% of each ${noun} is output, the rest context`;
+  // A 3D model's costs were measured on one GPU, which the hint names.
+  const where = full.measured_gpu
+    ? `${tile.measured ? "" : ", scaled from the sides"} measured on ${full.measured_gpu}`
+    : tile.measured ? " where it was measured" : ", scaled from the sides measured";
   const cost = tile.step_ms === null
     ? ""
-    : `About ${formatMs(tile.step_ms * batch)} and ${formatMb(tile.peak_mb * batch)} a step` +
-      `${tile.measured ? " where it was measured" : ", scaled from the sides measured"}; `;
-  hint.textContent = `${cost}${useful}. Smaller tiles train faster in less memory, but spend more of each tile on context.`;
+    : `About ${formatMs(tile.step_ms * batch)} and ${formatMb(tile.peak_mb * batch)} a step${where}; `;
+  hint.textContent = `${cost}${useful}. Smaller ${noun}s train faster in less memory, but spend more of each ${noun} on context.`;
   hint.title = full.measured_on ? `Measured on ${full.measured_on}` : "";
 }
 
@@ -312,8 +357,9 @@ function applyTrainingMode() {
   const note = document.getElementById("browserFinetuneNote");
   if (note) {
     headNote = headNote ?? note.textContent;
+    const pieces = trainsBlocks() ? "in blocks around the voxels you paint" : "in tiles cut in the plane you paint in";
     note.textContent = mode === "full"
-      ? "In the browser, this model can train its whole network: every weight, on the voxels you paint, with TensorFlow.js on this machine's GPU, in tiles cut in the plane you paint in. It takes minutes where the last layer takes seconds, and can learn what the model's features miss. Paint some background and some objects on a few slices, then train."
+      ? `In the browser, this model can train its whole network: every weight, on the voxels you paint, with TensorFlow.js on this machine's GPU, ${pieces}. It takes minutes where the last layer takes seconds, and can learn what the model's features miss. Paint some background and some objects on a few slices, then train.`
       : headNote;
   }
   updateTileHint();
@@ -339,6 +385,7 @@ export function setBrowserTraining(model) {
   note.textContent = !both ? "" : noGpu
     || "The last layer trains in seconds; the whole network in minutes, on this machine's GPU.";
   fillTileSizes(model && model.full_training);
+  holdBatchForBlocks();
   applyTrainingMode();
   if (!modes.length) {
     const browserNote = document.getElementById("browserFinetuneNote");

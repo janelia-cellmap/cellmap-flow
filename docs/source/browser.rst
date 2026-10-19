@@ -163,27 +163,29 @@ the finetune learns what the model mislabels where its features already tell
 the two apart (a membrane it calls mitochondrion, a texture it misses), not
 new shapes; that is a finetune of the whole network, which the server mode
 runs on the cluster, and whose result the browser can serve as any other
-model. The 2D models can train their whole network in the browser too (next).
+model. The models can train their whole network in the browser too (next).
 
 Training the whole network
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Each model's manifest on Hugging Face says how it can be trained, and the
 Training panel offers just that. For the 2D students (``setup_53_2d`` and
-``setup_54_2d``) it offers both, so a *Training* choice appears at the top of
-the panel: *Last layer*, as above, or *Whole network*: every weight of the
-model trains on your paint, with `TensorFlow.js <https://www.tensorflow.org/js>`_
-on this machine's GPU (WebGPU), from a training graph Marwan Zouinkhi exported
-beside each model. The weights trained are written back into the model's
-``.onnx``, which is then served, kept, downloaded and restarted from as a
-last-layer finetune is; switching between the two needs a new *Start
-Finetuning*. A 3D model offers the last layer only, and a model
-served from an int8 file nothing (its weights are quantized and cannot be
+``setup_54_2d``) and the 3D models (``setup_53``, ``setup_54``, ``setup_55``,
+``setup_56``, ``setup_61`` and ``setup_67``) it offers both, so a *Training*
+choice appears at the top of the panel: *Last layer*, as above, or *Whole
+network*: every weight of the model trains on your paint, with
+`TensorFlow.js <https://www.tensorflow.org/js>`_ on this machine's GPU
+(WebGPU), from a training graph Marwan Zouinkhi exported beside each model.
+The weights trained are written back into the model's ``.onnx``, which is
+then served, kept, downloaded and restarted from as a last-layer finetune
+is; switching between the two needs a new *Start Finetuning*. A model served
+from an int8 file offers neither (its weights are quantized and cannot be
 written): serve its fp32 or fp16 file to finetune it.
 
-The whole network trains on square tiles cut from the painted slices, in the
-plane you painted in (x–y, or z–y and z–x where the raw data's voxels are
-cubes, as the server's 2D training does), with Adam. Its controls are the
+A 2D model's whole network trains on square tiles cut from the painted
+slices, in the plane you painted in (x–y, or z–y and z–x where the raw data's
+voxels are cubes, as the server's 2D training does), with Adam; a 3D model's
+on cubes around the paint (below). Its controls are the
 epochs, its own learning rates (1e-4 by default, a hundredth of the last
 layer's), the server's *Batch Size*, in tiles per step (1 by default), *Tile
 Size*, *Augmentation*, and the last layer's loss, distillation, smoothing and
@@ -197,9 +199,11 @@ normalization, then random flips and quarter turns of the image and the paint
 together, the server's augmentation. The targets, and the starting network's
 output for distillation, are made after the turn, from the turned paint and
 image, so an affinity still means its own direction. The whole network sees
-the same tiles every epoch, so over many epochs it can learn them by heart:
-augmentation is what keeps it from that. The last layer trains on features
-computed once, and takes no augmentation.
+the same tiles every epoch, and augmentation varies them, so that it learns
+what it is shown rather than how one tile looks; the price is several times
+the steps, and with paint on only one or two objects it can stall (see the 3D
+models below). The last layer trains on features computed once, and takes no
+augmentation.
 
 *Tile Size* is the tile's side in pixels: 172, 300 (the default), 428 or 556.
 The model reads 88 pixels of context around what it predicts, so a tile's
@@ -236,6 +240,60 @@ paint once. *Whole network* needs a GPU: where the browser finds none
 through WebGPU, the option is shown disabled with why (on the CPU a step
 would take minutes, and the page would answer nothing else meanwhile). The
 log says how long a step takes.
+
+A 3D model trains on cubes instead of tiles: a grid of cubes the size of the
+model's output is laid over the painted voxels, and each cube that holds
+paint is read with the raw around it, whatever planes you painted in, so
+strokes on a few neighbouring slices teach the model along z too (an
+affinity model's z channel learns from them). The field is then *Block
+Size*, the cube's side: 124³ (the default), 140³, 156³ or 172³. The model
+reads 88 voxels of context on each axis, so a 124³ block's output is 36³,
+2.4% of it, and a block costs its volume: 172³ takes about three times the
+time and memory of 124³. A 3D model trains one block a step, so *Batch Size*
+is held at 1. *Augmentation* flips a block along z, y and x and turns it
+only in the x–y plane. The network is trained in less than a third of the
+memory TensorFlow.js's own gradients would take (its activations recomputed
+rather than kept), and the hint gives the time and memory of one step as
+measured on an NVIDIA RTX 2080 Ti (11 GB), the time with distillation's
+forward pass of the starting network:
+
+.. list-table::
+   :header-rows: 1
+
+   * - Model
+     - 124³, a step
+     - 124³, memory
+     - 172³, a step
+     - 172³, memory
+   * - setup_53, setup_55 (UNet)
+     - 2.8 s
+     - 2.2 GB
+     - 8.2 s
+     - 5.3 GB
+   * - setup_54, setup_56, setup_61, setup_67 (ResUNet)
+     - 4.0 s
+     - 4.0 GB
+     - 11.9 s
+     - 9.9 GB
+
+A block that does not fit the GPU's memory stops the run with a message
+naming a smaller *Block Size* to try; where even 124³ does not fit, train the
+last layer, which needs no more than inference.
+
+A run is a number of steps, epochs × blocks (its first line gives the
+blocks), and a 3D model's whole network wants 60 to 150 of them: *Number of
+Epochs* goes up to 500 for paint that lies in one or two blocks. In a test on
+``jrc_jurkat-1`` with ``setup_55``, which sees none of its nuclei to start
+with, one painted slice of one nucleus (4 blocks) took it to 98% of that
+nucleus and 62% of the ten it was not shown in 300 steps, scored against
+OpenOrganelle's nucleus segmentation; painting the whole slice rather than a
+ring of background around the nucleus cut the background it called nucleus
+from 18% to 6.5%. With *Augmentation* on, a ring around the same nucleus held
+the loss between 0.63 and 0.68, next to guessing, through 500 steps; turn it
+on once several objects are painted, with 3 to 5 times the epochs. The epoch
+lines' loss reads
+against two marks: 0.69 for the default class-balanced BCE is guessing, and
+about 0.20 with label smoothing of 0.1 is the paint fitted exactly.
 
 The *Patch on screen* tools label the box centred where the viewer looks, as
 on the server (`docs/finetuning.md <https://github.com/janelia-cellmap/cellmap-flow/blob/main/docs/finetuning.md>`__):

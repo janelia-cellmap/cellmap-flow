@@ -18,9 +18,10 @@
 // margin), smoothing, class balance and distillation term (λ and scope) in
 // both (readTraining), Dice refused since it needs a whole patch per sample
 // (refuseLoss): the head, with the browser's own batch of voxels per step;
-// or the whole network of a 2D model (finetune/full), with the server's
-// Batch Size in tiles, a tile side of its own, which the models route
-// offers with what a step costs (fullTraining), and augmentation. The good
+// or the whole network (finetune/full), with the server's Batch Size in
+// tiles (a 3D model's one block a step), a tile or block side of its own,
+// which the models route offers with what a step costs (fullTraining), and
+// augmentation. The good
 // regions' routes are routes/good-regions.ts, and the patch tools' Label it
 // and AI annotation have routes of their own
 // (view-labels.ts, ai-annotate.ts); crops import keeps needing a server and
@@ -47,10 +48,10 @@
 import type { AppContext, FinetunedRecord, LayerSpec, ModelEntry, PaintVolume } from "../../contracts";
 import { MANIFEST_METADATA_KEY, PAINT_ROUTE } from "../../contracts";
 import { type FetchFullFiles, fetchFullFiles } from "../../finetune/full/files";
-import { defaultTile, tileChoices } from "../../finetune/full/graph";
-import { checkTileSide } from "../../finetune/full/run-full";
+import { defaultTile, is3d, tileChoices } from "../../finetune/full/graph";
+import { BLOCK_COSTS, checkTileSide } from "../../finetune/full/run-full";
 import { webgpuMissing } from "../../finetune/full/tfjs";
-import { finetuneModes, MODE_NOUN, refuseMode, sourceOf } from "../../finetune/modes";
+import { finetuneModes, MODE_NOUN, readsOneSlice, refuseMode, sourceOf } from "../../finetune/modes";
 import { withMetadata } from "../../finetune/onnx-proto";
 import { runFinetune } from "../../finetune/run";
 import { HEAD_LOSSES } from "../../finetune/head-trainer";
@@ -111,14 +112,18 @@ export function finetuneRoutes(router: Router, deps: Partial<FinetuneDeps> = {})
   /** What the tab shows for a model's whole-network training: the tile
    * sides it offers with their cost per step (full/graph.ts tileChoices),
    * the default, and the measurement's setup, or why the graph could not
-   * be had (the Hub unreachable, say), in which case no side is offered. */
+   * be had (the Hub unreachable, say), in which case no side is offered. A
+   * 3D model's are block sides (dims 3), whose costs were measured on one
+   * GPU (run-full.ts BLOCK_COSTS), which `measured_gpu` names. */
   async function fullTraining(entry: ModelEntry): Promise<Record<string, unknown>> {
     const spec = entry.manifest.finetune!.full!;
     try {
       const { graph } = await d.fullFiles(sourceOf(entry), spec);
-      const tiles = tileChoices(graph, spec.spike?.full);
       const unavailable = await refuseGpu();
-      return { tiles, default_tile: defaultTile(tiles), context: graph.context, measured_on: spec.spike?.setup ?? null, unavailable };
+      const blocks = is3d(graph), costs = blocks ? BLOCK_COSTS.architectures[entry.manifest.architecture] : spec.spike?.full;
+      const tiles = tileChoices(graph, costs);
+      const measured = blocks ? { measured_on: costs ? BLOCK_COSTS.setup : null, measured_gpu: costs ? BLOCK_COSTS.gpu : null } : { measured_on: spec.spike?.setup ?? null };
+      return { dims: blocks ? 3 : 2, tiles, default_tile: defaultTile(tiles), context: graph.context, ...measured, unavailable };
     } catch (e) {
       return { tiles: [], default_tile: null, context: null, measured_on: null, error: `The training graph could not be fetched: ${message(e)}` };
     }
@@ -131,28 +136,40 @@ export function finetuneRoutes(router: Router, deps: Partial<FinetuneDeps> = {})
   }
 
   /** A whole-network run checked: `entry`'s manifest offering it, a GPU to
-   * train on, and the options' tile side against `entry`'s graph. Null when
-   * it can run (or the run is the head's), else why not. */
+   * train on, and the options' tile or block side against `entry`'s graph,
+   * and for a 3D model a batch of one block. Null when it can run (or the
+   * run is the head's), else why not. */
   async function refuseFull(entry: ModelEntry, options: FinetuneOptions): Promise<string | null> {
     if (options.mode !== "full") return null;
     const refused = refuseMode(entry, "full") ?? (await refuseGpu());
     if (refused) return refused;
     try {
       const { graph } = await d.fullFiles(sourceOf(entry), entry.manifest.finetune!.full!);
-      checkTileSide(graph, options.tileSize, entry.name);
+      const side = checkTileSide(graph, options.tileSize, entry.name);
+      if (is3d(graph) && options.batchPatches !== 1) {
+        return `${entry.name} is a 3D model, whose whole network trains one block a step (a block of ${side}³ is a batch's memory already): set Batch Size to 1.`;
+      }
       return null;
     } catch (e) {
       return message(e);
     }
   }
 
+  /** The form's training fields read (readTraining) and checked against
+   * `entry`; a 3D model's whole-network side is kept in the job's params as
+   * block_size, which the job card shows as a cube. */
   async function checkedTraining(body: Record<string, unknown>, mode: unknown, entry: ModelEntry | undefined): Promise<ReturnType<typeof readTraining>> {
     const lossRefused = mode === "full" ? null : refuseLoss(body.loss_type);
     if (lossRefused) return { error: lossRefused };
     const training = readTraining({ ...body, finetune_mode: mode });
     if ("error" in training) return training;
     const refused = entry ? await refuseFull(entry, training.options) : null;
-    return refused ? { error: refused } : training;
+    if (refused) return { error: refused };
+    if (entry && training.options.mode === "full" && !readsOneSlice(entry) && "tile_size" in training.params) {
+      const { tile_size: side, ...params } = training.params;
+      return { options: training.options, params: { ...params, block_size: side } };
+    }
+    return training;
   }
   const jobs = new FinetuneJobs({ run: d.run, now: d.now });
 
@@ -338,7 +355,8 @@ export function finetuneRoutes(router: Router, deps: Partial<FinetuneDeps> = {})
   // offers New Volume), with nothing painted, for a model not served,
   // without a dataset, with a loss that needs a server (the head's: the
   // whole network has its own), and for a mode the model's manifest does
-  // not offer or a tile side its graph does not take.
+  // not offer, a tile or block side its graph does not take, or a 3D model's
+// batch of more than one block.
   router.post("/api/finetune/submit", async (req, _params, ctx) => {
     const body = objectBody(req);
     if (!body) return badRequest("expected a JSON object");
@@ -602,9 +620,10 @@ function readLoss(body: Record<string, unknown>): { options: LossFields; params:
 }
 
 /** readTraining's whole-network part: the loss fields as the head's, the
- * batch in tiles (batch_size, 1 to MAX_BATCH_PATCHES), the tile side
- * (tile_size, a whole number; blank for the default), which submit then
- * checks against the model's graph, and augmentation (augment). */
+ * batch in tiles (batch_size, 1 to MAX_BATCH_PATCHES), the tile side, or a
+ * 3D model's block side (tile_size, a whole number; blank for the default),
+ * which submit then checks against the model's graph, and augmentation
+ * (augment). */
 function readFullTraining(body: Record<string, unknown>, epochs: number, learningRate: number, loss: { options: LossFields; params: Record<string, unknown> }): { options: FinetuneOptions; params: Record<string, unknown> } | { error: string } {
   const batchPatches = numberOr(body.batch_size, DEFAULT_OPTIONS.batchPatches);
   if (!Number.isInteger(batchPatches) || batchPatches < 1 || batchPatches > MAX_BATCH_PATCHES) return { error: `batch_size: expected a whole number of tiles per step, from 1 to ${MAX_BATCH_PATCHES}` };
