@@ -194,6 +194,12 @@ a Restart's model replaces the job's previous entry, whose record and bytes
 are deleted. Share puts a finetuned model in a link as its head's numbers
 (`link.ts` `finetunedRef`, read from the bytes with `headOf`; README.md has
 the format), which the page that opens it writes back into the base.
+Which model to start from (`backend/routes/rank.ts`) scores a model on the
+paint with the engine's own reads: the model served (or the served one
+reused), `readOutput` over at most `RANK_BLOCKS` of its blocks under the
+paint, each painted voxel's model voxel from Label it's `servedIndices`,
+and the targets from `targetTransformFor`; `finetune/rank.ts` is the
+counting alone, so it adds nothing to the engine.
 `backend/routes/finetune.ts`, `good-regions.ts` and `finetune-jobs.ts` answer the tab's routes
 with the Python routes' JSON (a job is a run in the page; its log streams as
 server-sent events), so the tab's job card, loss plot and log stream are

@@ -14,6 +14,17 @@ import { applyModelDefaults, setBrowserTraining } from "./training-form.js";
 const MODEL_POLL_INTERVAL_MS = 2000;
 const MODEL_POLL_MAX_ATTEMPTS = 150;  // ~5 minutes, enough for a queued job
 
+// pickModel's way into the picker, once initModelPicker has made it.
+let pickWhenListed = null;
+
+// Picks `name` in the picker as choosing it would (its info, the defaults of
+// its kind, the pick saved with the form), once the list has it: the list is
+// loaded again first, as the model may only now be served. For rank.js's
+// Use this model.
+export function pickModel(name) {
+  if (pickWhenListed) pickWhenListed(name);
+}
+
 function displayModelInfo(model) {
   if (!model) return;
 
@@ -73,6 +84,7 @@ export function initModelPicker({ log, savedModelName }) {
   const modelSelectionDiv = document.getElementById("modelSelectionDiv");
   let models = [];
   let selectedModel = null;
+  let wanted = null;  // a model to pick once the list has it (pickModel)
 
   let loggedNoModels = false;
   let lastLoadedCount = null;
@@ -137,7 +149,13 @@ export function initModelPicker({ log, savedModelName }) {
           log.add(`Loaded ${models.length} model(s)`);
         }
         lastLoadedCount = models.length;
-        return false;
+        if (has(wanted)) {
+          modelSelect.value = wanted;
+          wanted = null;
+          modelSelect.dispatchEvent(new Event("change"));
+        }
+        // A model to pick that is not listed yet keeps the poll going.
+        return wanted ? undefined : false;
       })
       .catch(err => {
         if (!quiet) log.add(`Error loading models: ${err}`);
@@ -172,6 +190,11 @@ export function initModelPicker({ log, savedModelName }) {
   // Unlike Refresh, which is for models the page is not told of, this keeps
   // the pick while asking: it comes without a click.
   listen(MODELS_CHANGED_EVENT, () => modelPoll.restart());
+
+  pickWhenListed = (name) => {
+    wanted = name;
+    modelPoll.restart();
+  };
 
   return { selected: () => selectedModel };
 }
