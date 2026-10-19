@@ -189,8 +189,8 @@ export const TILE_TARGETS: readonly number[] = [172, 300, 428, 556];
  * quarter is. */
 export const DEFAULT_TILE = 300;
 
-/** The block sides the tab offers a 3D model, as TILE_TARGETS: the sides
- * its .onnx files were exported at (116 to 172) and one between. A block
+/** The block sides the tab offers a 3D model whose files' sides are not
+ * known (tileChoices offers those when they are), as TILE_TARGETS. A block
  * costs about its volume, so the range is narrow: a step at 172³ takes 2.4
  * to 2.9 times the memory and time of one at 124³ (net3d.ts), and little
  * of a block is output (36³ of 124³ is 2.4%, 84³ of 172³ 11.6%). */
@@ -220,12 +220,19 @@ export interface TileChoice {
   dims?: 2 | 3;
 }
 
-/** The offered sides of `graph` with their costs from `spike` (side → numbers). */
-export function tileChoices(graph: TrainGraph, spike: Record<string, { step_ms: number; peak_mb: number }> = {}): TileChoice[] {
+/** The offered sides of `graph` with their costs from `spike` (side → numbers).
+ * A 3D model's are `files`, the block sides of the files a finetune can be
+ * written into (run-full.ts writableBlocks), where the graph takes them: an
+ * InstanceNorm network normalizes each block by its own statistics, so a
+ * finetune serves well only at the block it trained on, and it is served
+ * from the file it was written into. Without them, the sides nearest
+ * TILE_TARGETS (TILE_TARGETS_3D). */
+export function tileChoices(graph: TrainGraph, spike: Record<string, { step_ms: number; peak_mb: number }> = {}, files: readonly number[] = []): TileChoice[] {
   const dims = is3d(graph) ? 3 : 2;
   const sides = tileSides(graph, MAX_SIDE[dims]);
   if (!sides.length) return [];
-  const offered = [...new Set((dims === 3 ? TILE_TARGETS_3D : TILE_TARGETS).map((t) => nearest(sides, t)))].sort((a, b) => a - b);
+  const fitting = dims === 3 ? [...new Set(files.filter((f) => sides.includes(f)))].sort((a, b) => a - b) : [];
+  const offered = fitting.length ? fitting : [...new Set((dims === 3 ? TILE_TARGETS_3D : TILE_TARGETS).map((t) => nearest(sides, t)))].sort((a, b) => a - b);
   const measuredSides = Object.keys(spike).map(Number).filter((n) => Number.isInteger(n) && n > 0 && spike[String(n)]);
   return offered.map((side) => {
     const output = side - graph.context;
@@ -244,8 +251,11 @@ export function tileChoices(graph: TrainGraph, spike: Record<string, { step_ms: 
   });
 }
 
-/** The default side among `choices`: the one nearest DEFAULT_TILE (DEFAULT_TILE_3D for blocks). */
-export function defaultTile(choices: TileChoice[]): number | null {
+/** The default side among `choices`: `served` when offered (a 3D model's
+ * block as it is served, which a finetune is then served at too), else the
+ * one nearest DEFAULT_TILE (DEFAULT_TILE_3D for blocks). */
+export function defaultTile(choices: TileChoice[], served: number | null = null): number | null {
+  if (served !== null && choices.some((c) => c.side === served)) return served;
   return choices.length ? nearest(choices.map((c) => c.side), choices[0].dims === 3 ? DEFAULT_TILE_3D : DEFAULT_TILE) : null;
 }
 

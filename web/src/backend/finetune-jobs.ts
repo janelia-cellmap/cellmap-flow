@@ -26,6 +26,7 @@
 // served; restartable), FAILED or CANCELLED. The last three but one are
 // final (TERMINAL_STATUSES): nothing moves a job again once it has one.
 import type { AppContext, ModelEntry, PaintVolume } from "../contracts";
+import { trainingEntry } from "../finetune/full/run-full";
 import { loadGoodRegions } from "../finetune/good-regions";
 import { MODE_NOUN, MODE_WORDS } from "../finetune/modes";
 import type { Finetuned, FinetuneOptions, FinetuneRun, RunFinetune, RunReporter } from "../finetune/types";
@@ -368,6 +369,16 @@ export class FinetuneJobs {
         error: `Job ${id} trains ${MODE_WORDS[mode]}; switching to ${MODE_WORDS[options.mode]} needs a new job, not a restart (Start Finetuning, with the Training field as it is now)`,
       };
     }
+    // A 3D model's network lies in the file of the block it trained on
+    // (run-full.ts trainingEntry), which another block's file cannot start from.
+    const before = trainingEntry(job.args.entry, job.args.options), after = trainingEntry(job.args.entry, options);
+    if (mode === "full" && after.variant.file !== before.variant.file) {
+      return {
+        ok: false,
+        status: 409,
+        error: `Job ${id} trains ${job.args.entry.name}'s whole network on blocks of ${before.variant.input_size[0]}³, in its ${before.variant.input_size[0]}³ file; a Block Size of ${after.variant.input_size[0]}³ needs a new job, not a restart (Start Finetuning, with the form as it is now)`,
+      };
+    }
     job.args = { ...job.args, options, params: { ...job.params, ...params } };
     // Where the new run starts: the last run's head, or its whole model.
     const last = job.last;
@@ -389,12 +400,18 @@ export class FinetuneJobs {
    * the job and makes it FAILED, never thrown (a job's end is read from its
    * status, as a cluster job's is). */
   private async run(job: FinetuneJob, from: StartFrom = {}): Promise<void> {
-    const { ctx, entry, volume, options } = job.args;
+    const { ctx, entry: served, volume, options } = job.args;
+    // The file it trains from and into: a 3D model's of the run's block,
+    // which may not be the one served (run-full.ts trainingEntry).
+    const entry = trainingEntry(served, options);
     job.setStatus("RUNNING");
     let result: Finetuned;
     try {
       const dataset = ctx.infer.dataset();
       if (!dataset) throw new Error("No dataset is open: open the volume the paint was made on first");
+      if (entry !== served) {
+        job.log(`Training ${entry.variant.file}, the ${entry.variant.input_size[0]}³ file, where ${served.name} is served from its ${served.variant.input_size[0]}³ one: the finetune is served at the block it trains on`);
+      }
       const baseBytes = await ctx.catalog.modelBytes(entry);
       const goodRegions = await loadGoodRegions(ctx.paint, volume.id);
       result = await this.deps.run({
@@ -426,7 +443,7 @@ export class FinetuneJobs {
     job.last = result;
     if (job.stopAfterEpoch !== null) job.log(`Stopped early after epoch ${result.epochs}: ${trained(job)} so far is kept.`);
     try {
-      await this.keep(job, result);
+      await this.keep(job, result, entry);
     } catch (e) {
       if (job.isFinal()) return;
       job.log(`Could not keep or serve the finetuned model: ${message(e)}`);
@@ -436,14 +453,15 @@ export class FinetuneJobs {
 
   /** The run's result as a finetuned model: a catalog entry named after the
    * base (nextFinetunedName) with the result's bytes, recorded with where it
-   * came from; then, with Auto-serve, served in the session beside its base
+   * came from (`trained`, the file the run trained, so the finetune is served
+   * at its block); then, with Auto-serve, served in the session beside its base
    * (in place of this job's previous model, on a restart, which is then
    * removed from the catalog: a job keeps its latest model only), and the
    * job left WAITING_FOR_RESTART, its model ready; without, COMPLETED. */
-  private async keep(job: FinetuneJob, result: Finetuned): Promise<void> {
+  private async keep(job: FinetuneJob, result: Finetuned, trained: ModelEntry): Promise<void> {
     const { ctx, entry, volume, autoServe } = job.args;
     const name = nextFinetunedName(entry, await ctx.catalog.finetuned());
-    const record = finetunedRecord(entry, name, result.bytes.byteLength, { volume: volume.id, created_at: this.now().toISOString(), params: job.params, epochs: result.epochs, final_loss: result.finalLoss });
+    const record = finetunedRecord(trained, name, result.bytes.byteLength, { volume: volume.id, created_at: this.now().toISOString(), params: job.params, epochs: result.epochs, final_loss: result.finalLoss });
     const fentry = record.entry;
     await ctx.catalog.addFinetuned(record, result.bytes);
     const loss = result.finalLoss === null ? "" : `, final loss ${result.finalLoss.toFixed(6)}`;

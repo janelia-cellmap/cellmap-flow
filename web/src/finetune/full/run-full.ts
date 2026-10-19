@@ -42,15 +42,17 @@
 // own TF.js loader and files.
 import type * as TF from "@tensorflow/tfjs-core";
 
-import type { DatasetInfo, ModelEntry } from "../../contracts";
+import type { DatasetInfo, ModelEntry, ModelVariant } from "../../contracts";
+import { FINETUNED_REPO } from "../../contracts";
 import { chooseRawLevel, geometryOf, inputShape, outputLevel, outputShape, ratio, sameVoxelSize } from "../../infer/geometry";
 import { mulberry32, shuffle, SLICE_MS, yieldEvery } from "../head-trainer";
 import { count, epochSummary, plural } from "../log-words";
 import { AugmentTally, augmentIntensity, drawAugmentation, intensityRange, transformBlock } from "../augment";
+import { entryFor } from "../../models/manifest";
 import { readsOneSlice, refuseMode, sourceOf } from "../modes";
 import { readGraph, readModel } from "../onnx-proto";
 import { targetTransformFor } from "../targets";
-import type { Finetuned, FinetuneRun, RunFinetune } from "../types";
+import type { Finetuned, FinetuneOptions, FinetuneRun, RunFinetune } from "../types";
 import { buildNet, type InitializerOffsets, readOnnxWeights, readTorchParams, toOnnxWeights, writeOnnxWeights } from "./cellmap-tfjs-train";
 import { type FetchFullFiles, fetchFullFiles, type TorchParams } from "./files";
 import { defaultTile, describeSides, is3d, outputSide, tileChoices, tileSides, type TrainGraph } from "./graph";
@@ -67,6 +69,33 @@ export interface FullDeps {
 
 /** The largest tile side offered or accepted. */
 export const MAX_TILE = 1100;
+
+/** The files a 3D model's whole-network finetune can be written into, by
+ * block side: its variants at the precision it is served at that the
+ * manifest's full block lists in write_back. A model finetuned in this
+ * browser has its trained weights in its own bytes, so its one file is all
+ * it offers. Empty for a 2D model, whose tiles are not its file's blocks. */
+export function writableBlocks(entry: ModelEntry): Map<number, ModelVariant> {
+  const out = new Map<number, ModelVariant>();
+  const spec = entry.manifest.finetune?.full;
+  if (!spec || readsOneSlice(entry)) return out;
+  if (entry.repo === FINETUNED_REPO) return out.set(entry.variant.input_size[0], entry.variant);
+  const writable = new Set(spec.write_back);
+  for (const v of entry.manifest.variants) {
+    if (v.variant === entry.variant.variant && writable.has(v.file) && v.input_size.every((n) => n === v.input_size[0])) out.set(v.input_size[0], v);
+  }
+  return out;
+}
+
+/** The entry a run trains, from whose file it starts and into which it is
+ * written: for a 3D model's whole network, its file of the run's block side
+ * (writableBlocks), so that the finetune, served from that file, is served
+ * at the block it trained on; `entry` itself otherwise. */
+export function trainingEntry(entry: ModelEntry, options: Pick<FinetuneOptions, "mode" | "tileSize">): ModelEntry {
+  if (options.mode !== "full" || !options.tileSize) return entry;
+  const v = writableBlocks(entry).get(options.tileSize);
+  return v && v.file !== entry.variant.file ? entryFor(entry.folder, entry.manifest, v, entry.repo) : entry;
+}
 
 /** The largest block side offered or accepted: setup_54 takes 9.9 GB to train a block of 172³. */
 export const MAX_BLOCK = 256;

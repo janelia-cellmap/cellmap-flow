@@ -163,7 +163,56 @@ the finetune learns what the model mislabels where its features already tell
 the two apart (a membrane it calls mitochondrion, a texture it misses), not
 new shapes; that is a finetune of the whole network, which the server mode
 runs on the cluster, and whose result the browser can serve as any other
-model. The models can train their whole network in the browser too (next).
+model. The models can train their whole network in the browser too (below).
+
+Which model to start from
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+A finetune has least to learn from the model that already gets most of your
+paint right, and that is not always the one the volume was made for. The
+Training panel's *Which model to start from* ranks the models the browser can
+run, those finetuned in it among them, by how well each one's prediction
+matches the volume's paint: tick the models, press *Rank models*, and each is
+scored in turn, a few seconds to half a minute each, and listed best first.
+
+- **Match**, which ranks them, is the share of the painted voxels the model
+  gets right, objects and background counting equally, so that paint mostly
+  of background does not reward a model that calls everything background:
+  such a model matches 50%. Beside it are the share of painted objects it
+  calls object and of painted background it calls background.
+- A model is scored on what its own finetune would train on: a nucleus or
+  mitochondria model on its channel (a model of several such channels on the
+  one that matches best, which the row names), an affinity model on the pairs
+  of painted neighbours, the same object or not. Its prediction is read on
+  the paint's grid, each painted voxel taking the model's voxel its centre
+  lies in, so a model at another voxel size is scored on the same paint.
+- Rough strokes are forgiven: for a nucleus or mitochondria model, a painted
+  voxel next to one painted the other class is not counted.
+- A model finer than the paint (8 or 16 nm under 128 nm strokes) needs a
+  block of its own for every few painted voxels, so it is scored under at
+  most 32 of its blocks, spread over the paint, and its row says so.
+- A model not loaded is loaded for its score alone, at its smallest block
+  size, and released after: the Models tab, the viewer and the GPU are left
+  as they were. *Show* loads one and adds its layer.
+
+With paint on one object, scores a few points apart are as good as tied, and
+the list says so; a little paint in two or three places ranks them more
+clearly. On ``jrc_jurkat-1``, with a slice of one nucleus painted (4,430
+voxels), ``setup_56`` came first at 62% and ``setup_55``, the volume's own
+model, which sees none of the dataset's nuclei, matched 50%. The box above
+the list filters it (``nuc``, ``16 nm``, ``affinities``, ``2d``), and only
+the ticked models it shows are ranked.
+
+*Use this model* makes a ranked model the one to finetune without painting
+again: it is loaded with its layer and picked under *Select Model*, a volume
+is made for it, the paint and the good regions are copied into that volume
+on the model's own grid, and its paint layer takes the old one's place (the
+old volume stays, under *Resume Existing Volume*). On the same grid the paint
+is copied voxel for voxel; on a finer one each painted voxel becomes the
+voxels it covers; on a coarser one each voxel takes the label of the painted
+voxels inside it, and is left unpainted where they disagree (object against
+background in one voxel), which the status line counts. A stroke thinner
+than the coarser voxel still lands, a voxel wide.
 
 Training the whole network
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -246,7 +295,16 @@ model's output is laid over the painted voxels, and each cube that holds
 paint is read with the raw around it, whatever planes you painted in, so
 strokes on a few neighbouring slices teach the model along z too (an
 affinity model's z channel learns from them). The field is then *Block
-Size*, the cube's side: 124³ (the default), 140³, 156³ or 172³. The model
+Size*, the cube's side, in the sides the model's files come in: 124³, 140³
+and 172³ for the UNets (``setup_53``, ``setup_55``), 116³, 132³ and 148³ for
+the ResUNets (``setup_54``, ``setup_56``, ``setup_61``, ``setup_67``), the
+one it is served at by default. The run trains that side's file, at the
+precision served, and the finetune is served from it, so it is served at
+the block it trained on: a ResUNet's InstanceNorm normalizes each block by
+its own statistics, and a network trained on one size of block and served
+at another meets statistics it did not learn on. A *Restart* keeps the
+block; another one is a new job, as the trained network is in its file. A
+model finetuned here trains at its own block only. The model
 reads 88 voxels of context on each axis, so a 124³ block's output is 36³,
 2.4% of it, and a block costs its volume: 172³ takes about three times the
 time and memory of 124³. A 3D model trains one block a step, so *Batch Size*
