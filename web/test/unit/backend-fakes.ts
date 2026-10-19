@@ -16,6 +16,9 @@ import type {
   ModelEntry,
   ModelInfo,
   ModelManifest,
+  RegionStore,
+  RegionWrite,
+  RegionWritten,
   ServedModel,
   SessionState,
   ViewerController,
@@ -189,6 +192,41 @@ export class FakeInference implements Inference {
     }
     return { data, shape };
   }
+
+  /** Every materialize call: the view, the store and the options. */
+  materialized: { view: string; store: RegionStore; options: RegionWrite }[] = [];
+
+  /** Called with each chunk's grid index before the fake writes it: a test
+   * aborts there, or throws to fail the run. */
+  beforeChunk: (view: string, index: number[]) => void | Promise<void> = () => {};
+
+  /** chunkmirage's Engine.materialize as far as a run on a region sees it:
+   * the box rounded out to the served model's output blocks (its chunks),
+   * each chunk a file `0/z.y.x` of one byte, the group's `.zattrs` the
+   * attributes, progress after each chunk, and a stop between chunks once
+   * the signal is aborted, which is answered (not thrown) with `aborted`. */
+  async materialize(view: string, store: RegionStore, options: RegionWrite): Promise<RegionWritten> {
+    const served = this.views.find((s) => s.view === view);
+    if (!served) throw new Error(`${view} is not served`);
+    this.materialized.push({ view, store, options });
+    const chunk = served.entry.variant.output_size;
+    const first = options.lo.map((l, a) => Math.floor(l / chunk[a]));
+    const last = options.hi.map((h, a) => Math.ceil(h / chunk[a]));
+    const total = last.reduce((n, l, a) => n * (l - first[a]), 1);
+    const attrs = new TextEncoder().encode(JSON.stringify({ ...options.attributes }));
+    await store.put(".zattrs", attrs);
+    let done = 0, bytes = attrs.length;
+    for (let z = first[0]; z < last[0]; z++) for (let y = first[1]; y < last[1]; y++) for (let x = first[2]; x < last[2]; x++) {
+      if (options.signal?.aborted) return { chunks: total, written: done, skipped: 0, bytes, aborted: true };
+      await this.beforeChunk(view, [z, y, x]);
+      if (options.signal?.aborted) return { chunks: total, written: done, skipped: 0, bytes, aborted: true };
+      await store.put(`0/${z}.${y}.${x}`, new Uint8Array([1]));
+      done++;
+      bytes++;
+      options.onProgress?.({ done, total, written: done, bytes });
+    }
+    return { chunks: total, written: done, skipped: 0, bytes, aborted: false };
+  }
 }
 
 export class FakeCatalog implements Catalog {
@@ -269,8 +307,13 @@ export class FakeViewer implements ViewerController {
     return "http://localhost/ng/#!state";
   }
 
-  setLayers(layers: Record<string, LayerSpec>): void {
+  /** What each setLayers call's `replacing` named, in order. */
+  replacings: Record<string, string>[] = [];
+
+  setLayers(layers: Record<string, LayerSpec>, replacing: Record<string, string> = {}): void {
     this.setLayersCalls++;
+    this.replacings.push(replacing);
+    for (const old of Object.values(replacing)) delete this.layers[old];
     Object.assign(this.layers, layers);
   }
 
@@ -324,6 +367,13 @@ export class FakeViewer implements ViewerController {
     return this.depthAxis;
   }
 
+  /** The display dimensions a test pretends the viewer shows. */
+  displayDimensions: string[] = ["x", "y", "z"];
+
+  viewDisplayDimensions(): string[] {
+    return this.displayDimensions;
+  }
+
   /** Every binding made and not yet unbound: a test presses a key by calling its handler. */
   bindings: { key: string; action: string; handler: () => void }[] = [];
 
@@ -341,6 +391,11 @@ export class FakeViewer implements ViewerController {
   refreshLayer(name: string): boolean {
     this.refreshed.push(name);
     return name in this.layers;
+  }
+
+  /** The layer as set, with its name; a test puts what the user drew in it. */
+  layer(name: string): LayerSpec | null {
+    return name in this.layers ? { ...this.layers[name], name } : null;
   }
 }
 

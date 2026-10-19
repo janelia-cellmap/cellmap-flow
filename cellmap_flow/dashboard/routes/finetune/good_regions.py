@@ -28,6 +28,7 @@ from cellmap_flow.dashboard.routes.finetune.blueprint import finetune_bp
 from cellmap_flow.dashboard.routes.finetune.common import session_store, viewer_position_and_scales
 from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.finetune.session import manifest as session_manifest
+from cellmap_flow.viewer.layers import replace_layer
 
 logger = logging.getLogger(__name__)
 
@@ -114,7 +115,7 @@ def view_box_nm(size_nm=None):
         raise ValueError("Viewer has no position")
 
     # viewer_position_and_scales returns the position in viewer voxels and
-    # the scale of each axis in nm, so the product is absolute nm.
+    # the scale of each axis in nm, both z, y, x, so the product is absolute nm.
     centre_nm = np.array(position, dtype=float)
     if scales_nm:
         centre_nm = centre_nm * np.array(scales_nm, dtype=float)
@@ -230,30 +231,17 @@ def refresh_good_regions_layer(regions=None):
 
     try:
         with session.viewer.txn() as s:
-            # Keep whatever visibility the user chose, but start visible when
-            # creating the layer: unlike annotated_regions, which appears on
-            # its own and was asked to stay out of the way, these boxes only
-            # exist because the user just clicked to make one, and seeing it
-            # appear is the confirmation that the click landed.
-            was_visible = None
-            if GOOD_REGIONS_LAYER in s.layers:
-                try:
-                    was_visible = bool(s.layers[GOOD_REGIONS_LAYER].visible)
-                except Exception:
-                    was_visible = None
-
-            s.layers[GOOD_REGIONS_LAYER] = neuroglancer.LocalAnnotationLayer(
+            # Kept as the user left it (hidden, its colour), and visible when
+            # the layer is new: unlike annotated_regions, which appears on its
+            # own and was asked to stay out of the way, these boxes only exist
+            # because the user just clicked to make one, and seeing it appear
+            # is the confirmation that the click landed.
+            replace_layer(s.layers, GOOD_REGIONS_LAYER, neuroglancer.LocalAnnotationLayer(
                 dimensions=neuroglancer.CoordinateSpace(
                     names=axes_names, units="nm", scales=[1, 1, 1]
                 ),
                 annotations=annotations,
-            )
-            try:
-                s.layers[GOOD_REGIONS_LAYER].visible = (
-                    True if was_visible is None else was_visible
-                )
-            except Exception:
-                pass
+            ))
     except Exception as e:
         logger.warning(f"Could not update {GOOD_REGIONS_LAYER} layer: {e}")
         return 0

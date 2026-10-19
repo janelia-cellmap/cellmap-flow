@@ -42,6 +42,7 @@ from pydantic import (
     model_validator,
 )
 
+from cellmap_flow.blockwise.bounding_box import BoundingBox
 from cellmap_flow.jobs.settings import SERVER_CONFIG_KEYS
 from cellmap_flow.jobs.site import current_site
 
@@ -196,6 +197,13 @@ class SubmitModels(BaseModel):
     resample: Optional[bool] = None
 
 
+class RemoveModel(BaseModel):
+    """The ✕ of a model on the Models tab's Loaded models list: the one
+    model to stop (services.launch.remove_model), by its name."""
+
+    name: Annotated[str, _required("name", strip=True)] = Field(None, validate_default=True)
+
+
 class Equivalences(BaseModel):
     """A merging postprocessor's merged ids, from its inference server, for
     the segmentation layer whose source ends in ``dataset``: each list is a
@@ -207,13 +215,6 @@ class Equivalences(BaseModel):
 
 # A point or a size, z, y, x.
 _Triple = Annotated[list[float], Field(min_length=3, max_length=3)]
-
-
-class BoundingBox(BaseModel):
-    """A box drawn or loaded on an INPUT node: its corner and its size."""
-
-    offset: _Triple = [0, 0, 0]
-    shape: _Triple = [1, 1, 1]
 
 
 class BbxGenerator(BaseModel):

@@ -121,6 +121,9 @@ Using the Dashboard
 2. Go to the **Models** tab.
 3. In the **HuggingFace Models** section, browse or search for a model.
 4. Select the model(s) you want to run and click **Submit**.
+5. The models running are listed under **Loaded models** at the top of the
+   tab, where the ✕ beside one stops that model alone (see *Usage* on the
+   :doc:`front page <index>`).
 
 Parameters
 ----------

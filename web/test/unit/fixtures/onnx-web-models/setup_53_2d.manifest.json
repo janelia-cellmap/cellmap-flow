@@ -166,5 +166,111 @@
       "crop1081": 0.9456
     },
     "teacher_3d_mean": 0.9535
-  }
+  },
+  "torch_version": "2.9.1",
+  "exporter": "torch.onnx.export (TorchScript, dynamo=False)",
+  "opset": 18,
+  "finetune": {
+    "head": {
+      "final_layer": "final_conv.c",
+      "onnx_node": "/final_conv/c/Conv",
+      "features": "/final_conv/Gather_output_0",
+      "weight": "final_conv.c.weight",
+      "bias": "final_conv.c.bias",
+      "in_channels": 32,
+      "out_channels": 3,
+      "activation": "none (logits)",
+      "files": [
+        "setup_53_mito_affinities_16nm_2d_in1068_fp16.onnx",
+        "setup_53_mito_affinities_16nm_2d_in1068_fp32.onnx",
+        "setup_53_mito_affinities_16nm_2d_in300_fp16.onnx",
+        "setup_53_mito_affinities_16nm_2d_in300_fp32.onnx",
+        "setup_53_mito_affinities_16nm_2d_in556_fp16.onnx",
+        "setup_53_mito_affinities_16nm_2d_in556_fp32.onnx"
+      ],
+      "initializers": "finetune/initializers.json",
+      "loss": "masked BCE on logits",
+      "note": "train the final 1x1 conv on frozen features"
+    },
+    "full": {
+      "library": "tfjs",
+      "files": [
+        "finetune/train_graph.json",
+        "finetune/cellmap_tfjs_train.js"
+      ],
+      "weight_map": "identity",
+      "initializers": "finetune/initializers.json",
+      "write_back": [
+        "setup_53_mito_affinities_16nm_2d_in1068_fp16.onnx",
+        "setup_53_mito_affinities_16nm_2d_in1068_fp32.onnx",
+        "setup_53_mito_affinities_16nm_2d_in300_fp16.onnx",
+        "setup_53_mito_affinities_16nm_2d_in300_fp32.onnx",
+        "setup_53_mito_affinities_16nm_2d_in556_fp16.onnx",
+        "setup_53_mito_affinities_16nm_2d_in556_fp32.onnx"
+      ],
+      "frozen": [
+        "encoder0.bn1.running_mean",
+        "encoder0.bn1.running_var",
+        "encoder0.bn2.running_mean",
+        "encoder0.bn2.running_var",
+        "encoder1.bn1.running_mean",
+        "encoder1.bn1.running_var",
+        "encoder1.bn2.running_mean",
+        "encoder1.bn2.running_var",
+        "encoder2.bn1.running_mean",
+        "encoder2.bn1.running_var",
+        "encoder2.bn2.running_mean",
+        "encoder2.bn2.running_var",
+        "bottleneck.bn1.running_mean",
+        "bottleneck.bn1.running_var",
+        "bottleneck.bn2.running_mean",
+        "bottleneck.bn2.running_var",
+        "decoder2.bn1.running_mean",
+        "decoder2.bn1.running_var",
+        "decoder2.bn2.running_mean",
+        "decoder2.bn2.running_var",
+        "decoder1.bn1.running_mean",
+        "decoder1.bn1.running_var",
+        "decoder1.bn2.running_mean",
+        "decoder1.bn2.running_var",
+        "decoder0.bn1.running_mean",
+        "decoder0.bn1.running_var",
+        "decoder0.bn2.running_mean",
+        "decoder0.bn2.running_var"
+      ],
+      "note": "params named as the ONNX initializers; BatchNorm running stats frozen",
+      "spike": {
+        "setup": "TF.js 4.22.0 WebGPU backend, Chrome on macOS, Apple GPU (metal-3, unified memory); batch 1, fp32, masked BCE on logits, Adam lr 1e-4; graph = finetune/train_graph.json, weights read from the served fp32 .onnx; median of 8 steps after 2 warm-up; peak = tf.profile peakBytes above baseline (tracked tensors; the WebGPU buffer pool holds more)",
+        "date": "2026-10-16",
+        "params": 1927907,
+        "full": {
+          "300": {
+            "step_ms": 294,
+            "peak_mb": 320
+          },
+          "556": {
+            "step_ms": 1178,
+            "peak_mb": 1307
+          }
+        },
+        "head_through_full_graph": {
+          "300": {
+            "step_ms": 31
+          },
+          "556": {
+            "step_ms": 133
+          }
+        },
+        "forward_ms": {
+          "300": 11,
+          "556": 41
+        },
+        "tfjs_webgpu_vs_ort_webgpu_556": {
+          "max_abs": 9.06e-06,
+          "flips": 0
+        }
+      }
+    }
+  },
+  "source_repo": "cellmap/mito-aff-unetiso-setup-53-2d"
 }

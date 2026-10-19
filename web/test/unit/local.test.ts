@@ -272,6 +272,7 @@ describe("openLocalFolder", () => {
     expect(handles.stored.size).toBe(1);
     const [key, stored] = [...handles.stored.entries()][0];
     expect(stored).toBe(handle);
+    expect(handle.asked).toBe(0);
     expect(key).toMatch(/^[a-z0-9]{6}-volume\.zarr$/);
     expect(panel.connected).toEqual([`http://localhost:5173/local/${key}/`]);
     expect(localKeyOf(panel.connected[0], ROOT_PAGE)).toBe(key);

@@ -29,8 +29,10 @@
 // Axes are z, y, x throughout, as everywhere in cellmap-flow, except in the
 // image sent: that is laid out as the viewer's panel shows the plane
 // (toScreen), so the model, and the user reviewing its answer, see what was
-// on screen. The XZ and YZ planes are transposed from z, y, x order, and the
-// XY plane runs x leftwards, as Neuroglancer draws it.
+// on screen. Which axis runs down it and which across, and whether across
+// runs backwards, depend on the viewer's display dimensions (screenAxes):
+// cellmap-flow's viewers show x, y, z, so the XY plane is drawn as in z, y, x
+// order, the XZ plane too, and the YZ plane transposed and mirrored.
 //
 // Arithmetic follows the Python operation by operation (snapIntegral where
 // it snaps, numpy's round-half-to-even where it rounds), so a plan made here
@@ -104,21 +106,58 @@ function stripZeros(text: string): string {
 // Screen layout (geometry.py _SCREEN, screen_shape, to_screen, from_screen)
 // ---------------------------------------------------------------------------
 
-/** How the panel looking along each depth axis draws its plane, with
- * cellmap-flow's display dimensions (z, y, x): the axis running down it, the
- * axis running across, and whether across runs backwards. Neuroglancer's "xy"
- * panel draws display dimension 0 across and 1 down; "xz" turns it a quarter
- * about the first, so 0 across and 2 down; "yz" a quarter about the second,
- * so 1 down and 2 across, increasing to the left (data_panel_layout.ts's
- * AXES_RELATIVE_ORIENTATION quaternions). */
-const SCREEN: Record<DepthAxis, { down: number; across: number; backwards: boolean }> = {
+/** Neuroglancer names its cross-section panels after display-dimension
+ * *slots*, not after the dimensions' names: the "xy" panel shows display
+ * dimensions 0 and 1 and looks along 2, "xz" (rotated about the first)
+ * looks along 1, "yz" (rotated about the second) along 0
+ * (data_panel_layout.ts's AXES_RELATIVE_ORIENTATION). The display dimensions
+ * are the first three of the viewer's coordinate space unless set.
+ * cellmap-flow's viewers order their dimensions x, y, z (viewer/layers.ts
+ * VIEWER_AXES), so the "xy" panel is the XY plane, looking along z. A viewer
+ * in z, y, x order (a link made before) has a z-y slice looking along x
+ * there, and the XY plane is its "yz" panel (geometry.py _LAYOUT_DEPTH_SLOT). */
+export const LAYOUT_DEPTH_SLOT: Readonly<Record<string, number>> = { xy: 2, xz: 1, yz: 0 };
+
+/** How Neuroglancer's panels draw their plane, by the display-dimension
+ * slot each looks along (geometry.py _PANEL_SLOTS): the slot drawn down, the
+ * slot drawn across, and whether across runs backwards. The "xy" panel
+ * (along slot 2) draws display dimension 0 across and 1 down; "xz" (along 1)
+ * turns it a quarter about the first, so 0 across and 2 down; "yz" (along 0)
+ * a quarter about the second, so 1 down and 2 across, increasing to the left
+ * (data_panel_layout.ts's AXES_RELATIVE_ORIENTATION quaternions). */
+const PANEL_SLOTS: Record<DepthAxis, { down: number; across: number; backwards: boolean }> = {
   2: { down: 1, across: 0, backwards: false },
   1: { down: 2, across: 0, backwards: false },
   0: { down: 1, across: 2, backwards: true },
 };
 
-function screen(depthAxis: DepthAxis): { transposed: boolean; backwards: boolean } {
-  const { down, across, backwards } = SCREEN[checkDepthAxis(depthAxis)];
+/** `displayDimensions` when they are z, y and x in some order, else z, y, x
+ * (geometry.display_names): the display dimensions of a viewer that sets
+ * none over cellmap-flow's coordinate space, and of a plan saved before
+ * plans kept them. */
+export function displayNames(displayDimensions?: readonly string[] | null): string[] {
+  const names = [...(displayDimensions ?? [])];
+  const same = [...names].sort().join() === [...AXIS_NAMES].sort().join();
+  return same ? names : [...AXIS_NAMES];
+}
+
+/** The data axis (0 z, 1 y, 2 x) display slot `slot` shows, or -1 when it shows none of them. */
+export function slotAxis(names: readonly string[], slot: number): number {
+  return slot < names.length ? (AXIS_NAMES as readonly string[]).indexOf(names[slot]) : -1;
+}
+
+/** The data axes (0 z, 1 y, 2 x) the panel looking along `depthAxis` draws
+ * down and across, and whether across runs backwards, in a viewer whose
+ * display dimensions are `displayDimensions` (displayNames;
+ * geometry.screen_axes). */
+export function screenAxes(depthAxis: DepthAxis, displayDimensions?: readonly string[] | null): { down: number; across: number; backwards: boolean } {
+  const names = displayNames(displayDimensions);
+  const { down, across, backwards } = PANEL_SLOTS[names.indexOf(AXIS_NAMES[checkDepthAxis(depthAxis)]) as DepthAxis];
+  return { down: slotAxis(names, down), across: slotAxis(names, across), backwards };
+}
+
+function screen(depthAxis: DepthAxis, displayDimensions?: readonly string[] | null): { transposed: boolean; backwards: boolean } {
+  const { down, across, backwards } = screenAxes(depthAxis, displayDimensions);
   return { transposed: down > across, backwards };
 }
 
@@ -127,9 +166,9 @@ function checkDepthAxis(depthAxis: number): DepthAxis {
   return depthAxis;
 }
 
-/** A plane's (rows, cols) in z, y, x order, as the panel draws it. */
-export function screenShape(shape: readonly number[], depthAxis: DepthAxis): [number, number] {
-  const { transposed } = screen(depthAxis);
+/** A plane's (rows, cols) in z, y, x order, as the panel draws it (screenAxes). */
+export function screenShape(shape: readonly number[], depthAxis: DepthAxis, displayDimensions?: readonly string[] | null): [number, number] {
+  const { transposed } = screen(depthAxis, displayDimensions);
   const [rows, cols] = shape;
   return transposed ? [cols, rows] : [rows, cols];
 }
@@ -149,11 +188,12 @@ function sameKind<T extends PlaneArray>(like: T, n: number): T {
 }
 
 /** `plane` (rows × cols, its two axes in z, y, x order) as the panel looking
- * along `depthAxis` draws it (geometry.to_screen): transposed when the axis
- * drawn down is the later one in z, y, x order, then mirrored across when
- * across runs backwards. */
-export function toScreen<T extends PlaneArray>(plane: T, rows: number, cols: number, depthAxis: DepthAxis): Plane<T> {
-  const { transposed, backwards } = screen(depthAxis);
+ * along `depthAxis` draws it in a viewer showing `displayDimensions`
+ * (geometry.to_screen, screenAxes): transposed when the axis drawn down is
+ * the later one in z, y, x order, then mirrored across when across runs
+ * backwards. */
+export function toScreen<T extends PlaneArray>(plane: T, rows: number, cols: number, depthAxis: DepthAxis, displayDimensions?: readonly string[] | null): Plane<T> {
+  const { transposed, backwards } = screen(depthAxis, displayDimensions);
   if (plane.length !== rows * cols) throw new Error(`a ${rows}×${cols} plane has ${rows * cols} values, not ${plane.length}`);
   const outRows = transposed ? cols : rows, outCols = transposed ? rows : cols;
   const out = sameKind(plane, plane.length);
@@ -170,8 +210,8 @@ export function toScreen<T extends PlaneArray>(plane: T, rows: number, cols: num
 
 /** toScreen undone (geometry.from_screen): an image as the panel draws it
  * (`rows × cols` as on screen), in z, y, x order. */
-export function fromScreen<T extends PlaneArray>(image: T, rows: number, cols: number, depthAxis: DepthAxis): Plane<T> {
-  const { transposed, backwards } = screen(depthAxis);
+export function fromScreen<T extends PlaneArray>(image: T, rows: number, cols: number, depthAxis: DepthAxis, displayDimensions?: readonly string[] | null): Plane<T> {
+  const { transposed, backwards } = screen(depthAxis, displayDimensions);
   if (image.length !== rows * cols) throw new Error(`a ${rows}×${cols} image has ${rows * cols} pixels, not ${image.length}`);
   const outRows = transposed ? cols : rows, outCols = transposed ? rows : cols;
   const out = sameKind(image, image.length);
@@ -210,7 +250,7 @@ export function writeShape(plan: Pick<PlanePlan, "depth_axis" | "write_lo" | "wr
  * runs backwards, counted from the near end first so a point on a boundary
  * takes the pixel it takes in z, y, x order. */
 export function clickPx(plan: PlanePlan): [number, number] {
-  const { down, across, backwards } = SCREEN[checkDepthAxis(plan.depth_axis)];
+  const { down, across, backwards } = screenAxes(plan.depth_axis, plan.display_dimensions);
   const position = [down, across].map((a, i) => {
     const side = plan.image_shape[i];
     const fraction = (plan.point_nm[a] - plan.raw_offset_nm[a]) / plan.raw_shape_nm[a];
@@ -248,7 +288,9 @@ const joinG = (values: readonly number[]) => values.map((v) => formatG(v)).join(
  * The raw is read over the clipped box's extent, so the image and the box
  * cover the same physical area. The image's pixels are the finer in-plane
  * input voxel size, square; when that makes a side longer than
- * MAX_IMAGE_SIDE the pixels are made larger to fit.
+ * MAX_IMAGE_SIDE the pixels are made larger to fit. The image is laid out as
+ * the viewer's panel draws the plane, for the viewer's `displayDimensions`
+ * (viewer.viewDisplayDimensions; z, y, x when null).
  *
  * Throws AIAnnotateError("refused", ..., 400) when the point is outside the
  * volume or the data: a field clipped to an edge it does not reach is not
@@ -261,6 +303,7 @@ export function planPlane(
   depthAxis: DepthAxis,
   cropSizePx: number,
   dataBoxNm: readonly [readonly number[], readonly number[]] | null = null,
+  displayDimensions: readonly string[] | null = null,
 ): PlanePlan {
   checkDepthAxis(depthAxis);
   if (!Number.isFinite(cropSizePx) || Math.trunc(cropSizePx) < 1) throw new Error(`crop_size_px must be at least 1, got ${JSON.stringify(cropSizePx)}`);
@@ -318,16 +361,18 @@ export function planPlane(
   const extent = plane.map((a) => rawShape[a]);
   const resolution = Math.max(Math.min(...plane.map((a) => input[a])), Math.max(...extent) / MAX_IMAGE_SIDE);
   const pixels = extent.map((e) => Math.max(roundHalfEven(snapIntegral(e / resolution)), 1));
+  const display = displayNames(displayDimensions);
   return {
     depth_axis: depthAxis,
     point_nm: point,
     raw_offset_nm: rawOffset.map(snapIntegral),
     raw_shape_nm: rawShape.map(snapIntegral),
-    image_shape: screenShape(pixels, depthAxis),
+    image_shape: screenShape(pixels, depthAxis, display),
     input_voxel_size: input,
     write_lo: lo,
     write_hi: hi,
     resolution_nm: snapIntegral(resolution),
+    display_dimensions: display,
   };
 }
 

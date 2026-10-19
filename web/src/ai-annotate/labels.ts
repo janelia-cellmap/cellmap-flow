@@ -1,7 +1,7 @@
 // The ids a box of labels gets from a segmentation: the port of
 // cellmap_flow/finetune/session/fill.py's _fresh_ids, seed_labels and
 // relabel_objects, and of the scipy.ndimage.label call
-// pipeline.labels_for_box makes on the mask (label2d), for the browser's AI
+// pipeline.mask_to_write_shape makes on the mask (label2d), for the browser's AI
 // annotation and the Finetune tab's Label it tools (Seed from Prediction's
 // ids, Split Objects' relabelling; backend/routes/view-labels.ts). The
 // connected-component labelling itself is infer/label.ts's (labelComponents,

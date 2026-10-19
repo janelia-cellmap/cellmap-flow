@@ -14,12 +14,15 @@
   the Hugging Face Hub.
 - ``cellpose``: ``CellposeModelConfig``, Cellpose 4 (Cellpose-SAM) run on
   each z slice, in its own environment by default.
+- ``onnx``: ``OnnxModelConfig``, an ONNX export as the browser mode runs it
+  (a local file, or a folder of cellmap/onnx-web-models), with ONNX Runtime,
+  in its own environment by default.
 
 Import the classes from ``cellmap_flow.models.models_config``, their public
 path: the docs name it, and plugins subclass the classes by it.
 
 Each type imports its framework (torch, dacapo, bioimageio,
-cellmap_models, cellpose, ...) inside the methods that build the model,
+cellmap_models, cellpose, onnxruntime, ...) inside the methods that build the model,
 because the CLIs import every type to build their commands.
 
 Every type module is imported here, in this order, however the package is
@@ -38,4 +41,5 @@ from cellmap_flow.models.configs import (  # noqa: F401
     finetune,
     huggingface,
     cellpose,
+    onnx,
 )

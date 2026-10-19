@@ -69,12 +69,12 @@ from cellmap_flow.dashboard.routes.finetune.blueprint import finetune_bp
 from cellmap_flow.dashboard.routes.finetune.common import (
     INSTANCE_TARGETS,
     session_store,
-    viewer_position_and_scales,
 )
 from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.finetune.session import fill
 from cellmap_flow.finetune.session.fill import paint_box
 from cellmap_flow.io.metadata import nm_per_unit
+from cellmap_flow.viewer import keys
 
 logger = logging.getLogger(__name__)
 
@@ -211,32 +211,12 @@ def _override(prompt, profile):
 
 def _say(viewer, message):
     """Show ``message`` in neuroglancer's status bar (None clears it); never raises."""
-    if viewer is None:
-        return
-    try:
-        with viewer.config_state.txn() as s:
-            if message:
-                s.status_messages[STATUS_KEY] = message
-            else:
-                s.status_messages.pop(STATUS_KEY, None)
-    except Exception as e:
-        logger.debug(f"Could not set the viewer's status message: {e}")
+    keys.say(viewer, STATUS_KEY, message)
 
 
-def _ensure_binding(ai):
-    """Bind Shift+G to the AI-annotate action in the session's viewer, once per viewer.
-
-    A new dataset makes a new viewer, so the viewer bound is remembered
-    rather than a flag. neuroglancer keeps a set of handlers per action, so
-    binding the one module-level handler again adds nothing.
-    """
-    viewer = get_session().viewer
-    if viewer is None or ai["binding_registered_for"] is viewer:
-        return
-    viewer.actions.add(ACTION, _on_annotate_key)
-    with viewer.config_state.txn() as cs:
-        cs.input_event_bindings.viewer[KEY] = ACTION
-    ai["binding_registered_for"] = viewer
+def _ensure_binding():
+    """Bind Shift+G to the AI-annotate action in the session's viewer, once per viewer."""
+    keys.bind_key(get_session().viewer, ACTION, KEY, _on_annotate_key)
 
 
 def _on_annotate_key(action_state):
@@ -280,7 +260,8 @@ def _start_from_key(coordinates, viewer_state):
         if coordinates is None:
             raise _Refused("Hover the mouse over the data, then press Shift+G.", 400)
         point_nm = _zyx_nm(coordinates, viewer_state.dimensions)
-        _begin_run(point_nm, geometry.depth_axis_for_view(viewer_state))
+        _begin_run(point_nm, geometry.depth_axis_for_view(viewer_state),
+                   geometry.display_dimensions_for_view(viewer_state))
     except Exception as e:
         needs_volume = False
         if isinstance(e, _Refused):
@@ -335,8 +316,11 @@ def _check_limit(config):
         )
 
 
-def _begin_run(point_nm, depth_axis):
+def _begin_run(point_nm, depth_axis, display_dimensions=None):
     """Check everything a run needs, then start its job; returns its annotate_id.
+
+    ``display_dimensions`` are the viewer's (``geometry.display_dimensions_for_view``):
+    the image is laid out as its panel draws the plane.
 
     The checks, in order: the feature is on, the session has settings, there
     is an annotation volume, the model is allowed, the provider's
@@ -354,7 +338,7 @@ def _begin_run(point_nm, depth_axis):
         raise _Refused("No annotation volume to annotate. Create or resume one first.", needs_volume=True)
     dataset = _dataset(volume)
     _check_egress(ai, config, dataset, settings["provider"], settings["model"])
-    _ensure_binding(ai)
+    _ensure_binding()
 
     point_nm = [float(v) for v in point_nm]
     depth_axis = int(depth_axis)
@@ -379,6 +363,7 @@ def _begin_run(point_nm, depth_axis):
             "model": settings["model"], "label_name": label_name, "depth_axis": depth_axis,
             "point_nm": point_nm,
             # What the worker and the decisions need, not answered.
+            "display_dimensions": geometry.display_names(display_dimensions),
             "volume_id": volume_id, "corrections_dir": volume["corrections_dir"], "dataset": dataset,
             "profile": profile, "override": override, "plan": None, "request": None,
         }
@@ -413,7 +398,8 @@ def _run_job(ai, job, config, volume):
         _stage(ai, job, viewer, "fetching_crop")
         shape = zarr.open_array(f"{volume['zarr_path']}/annotation/s0", mode="r").shape
         plan = geometry.plan_plane(volume, shape, job["point_nm"], job["depth_axis"], config.crop_size_px,
-                                   data_box_nm=pipeline.raw_extent_nm(volume))
+                                   data_box_nm=pipeline.raw_extent_nm(volume),
+                                   display_dimensions=job["display_dimensions"])
         _set(ai, job, plan=plan, write_box={"lo": [int(v) for v in plan.write_lo],
                                             "hi": [int(v) for v in plan.write_hi]})
         plane = pipeline.read_plane(volume, plan)
@@ -445,7 +431,7 @@ def _ask_and_stage(ai, job, viewer, config, segment_request):
         volume_id=job["volume_id"],
     )
     preview = staging.preview(job["corrections_dir"], job["annotate_id"])
-    mask_fraction = float(meta.get("mask_fraction", np.mean(mask_write)))
+    mask_fraction = float(meta.get("mask_fraction", np.mean(mask_write > 0)))
     _set(ai, job, status="ready", stage=None, error=None, mask_fraction=mask_fraction, preview=preview)
     _audit(
         job["corrections_dir"], "staged", annotate_id=job["annotate_id"], volume_id=job["volume_id"],
@@ -591,7 +577,7 @@ def ai_annotate_settings():
             ai["acknowledged"].setdefault(dataset, {})[body.provider] = current
             logger.info(f"AI annotate: images of {dataset} may be sent to {body.provider} ({current})")
         ai["settings"] = settings
-        _ensure_binding(ai)
+        _ensure_binding()
         return jsonify({"success": True, "settings": settings,
                         "acknowledged": _acknowledged(ai, config, dataset)})
     except Exception as e:
@@ -610,19 +596,21 @@ def ai_annotate_run():
         return refused
     try:
         point_nm, depth_axis = body.point_nm, body.depth_axis
+        viewer = get_session().viewer
+        # The image is laid out as the viewer's panel draws the plane, so its
+        # display dimensions are wanted even when both are given.
+        display = geometry.display_dimensions_for_view(viewer.state) if viewer is not None else None
         if point_nm is None or depth_axis is None:
-            viewer = get_session().viewer
             if viewer is None:
                 raise _Refused("Open a dataset in the viewer first.", 400)
             state = viewer.state
             if depth_axis is None:
                 depth_axis = geometry.depth_axis_for_view(state)
             if point_nm is None:
-                position, _ = viewer_position_and_scales()
-                if position is None:
+                if state.position is None:
                     raise _Refused("The viewer has no position.", 400)
-                point_nm = _zyx_nm(position, state.dimensions)
-        annotate_id = _begin_run(point_nm, depth_axis)
+                point_nm = _zyx_nm(state.position, state.dimensions)
+        annotate_id = _begin_run(point_nm, depth_axis, display)
         return jsonify({"success": True, "annotate_id": annotate_id, "status": "running"})
     except Exception as e:
         return _answer_error(e)

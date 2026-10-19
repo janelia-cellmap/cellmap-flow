@@ -64,6 +64,9 @@ def current_chain():
 
 
 def viewer_position_and_scales():
+    """The viewer's position, in its voxels, and each axis's scale in nm:
+    z, y, x when its dimensions name all three (they are x, y, z there),
+    else in the viewer's order."""
     viewer = get_session().viewer
     if viewer is None:
         raise ValueError("Viewer not initialized")
@@ -99,6 +102,13 @@ def viewer_position_and_scales():
     elif hasattr(position, "__iter__"):
         position = list(position)
 
+    names = list(getattr(dimensions, "names", None) or [])
+    if all(axis in names for axis in "zyx"):
+        order = [names.index(axis) for axis in "zyx"]
+        if position is not None and len(position) == len(names):
+            position = [position[i] for i in order]
+        if scales_nm is not None and len(scales_nm) == len(names):
+            scales_nm = [scales_nm[i] for i in order]
     return position, scales_nm
 
 

@@ -544,7 +544,9 @@ JOB = {"job_id": "j", "lsf_job_id": None, "model_name": "m", "output_dir": "<tmp
        "finetuned_model_name": None, "model_yaml_path": None, "current_epoch": 0, "total_epochs": 10,
        "inference_server_url": None, "inference_server_ready": False, "corrections_path": None, "loss": None,
        "loss_epoch": None,
-       "progress_percent": 0.0}
+       "progress_percent": 0.0,
+       # No Shift+R pressed for it (restart_key).
+       "restart_requests": 0}
 
 
 class _Killable:

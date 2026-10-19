@@ -1,18 +1,20 @@
-// The Models tab (templates/_models_tab.html): the local catalog, Hugging
-// Face, BioImage Model Zoo and Cellpose models to serve, the LSF server config, the GPU
-// queue picker, and the inference jobs' own output.
+// The Models tab (templates/_models_tab.html): the models loaded, each with
+// a ✕ to stop it; the local catalog, Hugging Face, BioImage Model Zoo and
+// Cellpose models to serve, the LSF server config, the GPU queue picker,
+// and the inference jobs' own output.
 import { ApiError, getJSON, postJSON } from "../lib/api.js";
+import { announce, listen, MODELS_CHANGED_EVENT } from "../lib/events.js";
 import { pageData } from "../lib/page-data.js";
 import { poll } from "../lib/poll.js";
 import { fillQueueSelect, queueHint, subscribeGpuQueues } from "../shared/gpu-queues.js";
 import { readCount, saveServerConfig, WALLTIME_RE } from "../shared/server-config.js";
 
-// onModelsSubmitted runs after the server has taken a new model selection.
-export function initModelsTab({ onModelsSubmitted } = {}) {
+export function initModelsTab() {
   const submitBtn = document.getElementById("submitModelsBtn");
   const logArea = document.getElementById("modelSubmissionLogModels");
-  // The repos of the Hugging Face models already running, ticked on load.
-  const defaultHfRepos = pageData().default_hf_repos || [];
+  // The repos of the Hugging Face models already running, ticked on load;
+  // one removed from the Loaded models list is taken out.
+  const hfRunning = new Set(pageData().default_hf_repos || []);
   // The session's Resample setting (a YAML's resample, view --resample).
   const resampleCheckbox = document.getElementById("resampleCheckbox");
   resampleCheckbox.checked = !!pageData().resample;
@@ -65,7 +67,7 @@ export function initModelsTab({ onModelsSubmitted } = {}) {
       input.value = modelId;
       // Ticked when the page started with it, or when the listing says it is
       // being served (the browser mode's, after a reload or from a link).
-      input.defaultChecked = defaultHfRepos.includes(modelId) || metadata.selected === true;
+      input.defaultChecked = hfRunning.has(modelId) || metadata.selected === true;
       const label = document.createElement("label");
       label.className = "form-check-label";
       label.htmlFor = input.id;
@@ -499,8 +501,6 @@ export function initModelsTab({ onModelsSubmitted } = {}) {
       // extra rows below it.
       mine.forEach((settings, i) => list.append(cellposeRow(model, settings, i > 0)));
     });
-    document.getElementById("cellposeRunningCount").textContent =
-      running.length ? running.length + " running" : "";
   }
 
   renderCellposeModels();
@@ -566,8 +566,9 @@ export function initModelsTab({ onModelsSubmitted } = {}) {
 
   // /api/job-logs runs bpeek per job, each with its own timeout, so a
   // refresh can outlast the 5s follow interval. One at a time, whether it
-  // comes from Follow or from the button: overlapping requests pile onto a
-  // dashboard that is already the slow part.
+  // comes from Follow, the button or a Submit's watch: overlapping requests
+  // pile onto a dashboard that is already the slow part. Resolves to the
+  // answer, or to nothing when none was drawn.
   let jobLogsBusy = false;
 
   function refreshJobLogs() {
@@ -575,9 +576,9 @@ export function initModelsTab({ onModelsSubmitted } = {}) {
     jobLogsBusy = true;
     const statusEl = document.getElementById("jobLogsStatus");
     return getJSON("/api/job-logs")
-      .then(renderJobLogs)
+      .then(function (data) { renderJobLogs(data); return data; })
       .catch(function (e) { statusEl.textContent = "error: " + e; })
-      .then(function () { jobLogsBusy = false; });
+      .then(function (data) { jobLogsBusy = false; return data; });
   }
 
   document.getElementById("jobLogsBtn").addEventListener("click", function () {
@@ -599,33 +600,41 @@ export function initModelsTab({ onModelsSubmitted } = {}) {
         document.getElementById("jobLogsBtn").click();
       }
       jobLogsFollower = poll(refreshJobLogs, { intervalMs: JOB_LOGS_POLL_MS, immediate: false });
+      startingJobsWatch = null;  // Follow keeps it current
     }
   });
 
   // After a Submit, show Job Logs and keep it current until no job is still
   // starting (waiting in a queue, or installing its environment), even with
   // Follow off: until then the page showed nothing of what Submit started.
-  // A tick resolving false stops the poll.
-  let startingWatcher = null;
+  let startingJobsWatch = null;  // { looks }
 
   function watchStartingJobs() {
     const area = document.getElementById("jobLogsArea");
     if (area.style.display === "none") document.getElementById("jobLogsBtn").click();
-    if (startingWatcher) startingWatcher.stop();
-    // The first ticks can come before a job is handed to LSF at all, which
-    // lists nothing: only a list with no starting job in it ends the watch.
-    let ticks = 0;
-    startingWatcher = poll(function () {
-      if (jobLogsFollower) return Promise.resolve(false);  // Follow keeps it current
-      ticks += 1;
-      return getJSON("/api/job-logs").then(function (data) {
-        renderJobLogs(data);
-        const jobs = (data && data.jobs) || [];
-        const starting = jobs.some(function (j) { return j.status === "starting"; });
-        return starting || (jobs.length === 0 && ticks < 6) ? undefined : false;
-      }).catch(function () { return false; });
-    }, { intervalMs: JOB_LOGS_POLL_MS, maxTicks: 60 });
+    if (jobLogsFollower) return;
+    startingJobsWatch = { looks: 0 };
+    lookAtStartingJobs();
   }
+
+  // The first looks can come before a job is handed to LSF at all, which
+  // lists nothing: an empty list ends the watch only after 6 looks.
+  function lookAtStartingJobs() {
+    const watch = startingJobsWatch;
+    watch.looks += 1;
+    if (watch.looks >= 60) startingJobsWatch = null;
+    return refreshJobLogs().then(function (data) {
+      if (!data || watch !== startingJobsWatch) return;
+      const jobs = data.jobs || [];
+      const starting = jobs.some(function (j) { return j.status === "starting"; });
+      if (!starting && !(jobs.length === 0 && watch.looks < 6)) startingJobsWatch = null;
+    });
+  }
+
+  // One poll for both, asking only while either has something starting.
+  let loadedStarting = false;
+  poll(() => Promise.all([loadedStarting && refreshLoaded(), startingJobsWatch && lookAtStartingJobs()]),
+       { intervalMs: JOB_LOGS_POLL_MS, immediate: false, pauseWhenHidden: true });
 
   // GPU queue picker: the one next to Submit and the Server Config one show
   // the same configured queue.
@@ -856,10 +865,195 @@ export function initModelsTab({ onModelsSubmitted } = {}) {
         addResult.hidden = true;
         addRef.value = "";
         logArea.value += `Added ${d.name}: starting its server\n`;
-        if (onModelsSubmitted) onModelsSubmitted();
+        announce(MODELS_CHANGED_EVENT);
       })
       .catch((err) => alert("Could not add that model: " + (err instanceof ApiError ? err.message : err)));
   });
+
+  // Loaded models: every model running or starting, wherever on this tab
+  // (or in the YAML, or by a finetune) it was picked, with where it came
+  // from. GET /api/models/loaded lists them (services/launch.loaded_models;
+  // in the browser web/src/backend/routes/models.ts). Each ✕ stops that one
+  // model (POST /api/models/remove) and unticks its rows here, so a Submit
+  // does not start it again; nothing else is sent, so the other models, and
+  // whatever is ticked or unticked below and not submitted, stay as they are.
+  const SOURCE_LABELS = {
+    catalog: "catalog",
+    huggingface: "Hugging Face",
+    bioimage: "zoo",
+    cellpose: "Cellpose",
+    added: "added",
+    finetuned: "finetuned",
+  };
+  const SOURCE_TITLES = {
+    catalog: "From the Local Catalog",
+    huggingface: "From the Hugging Face list",
+    bioimage: "From the BioImage Model Zoo list",
+    cellpose: "From the Cellpose list",
+    added: "Added by reference (Add a model), or by the YAML the dashboard was started with",
+    finetuned: "Made by a finetune on the Finetune tab",
+  };
+  const loadedList = document.getElementById("loadedModelsList");
+  // Bumped by each refresh and each remove: an answer to an older refresh
+  // (the poll's, in flight while a ✕ was answered) is not drawn over a
+  // newer list.
+  let loadedSeq = 0;
+
+  function loadedRow(model) {
+    const li = document.createElement("li");
+    li.className = "loaded-model-item";
+    li.dataset.name = model.name;
+
+    const text = document.createElement("div");
+    text.className = "loaded-model-text";
+    const head = document.createElement("div");
+    head.className = "loaded-model-head";
+    const name = document.createElement("span");
+    name.className = "loaded-model-name";
+    // A name has no spaces: a line may break after each _, - or ., so a long
+    // one wraps between its words.
+    model.name.split(/(?<=[_.-])/).forEach((part, i) => {
+      if (i) name.append(document.createElement("wbr"));
+      name.append(part);
+    });
+    name.title = model.name;
+    head.append(name, zooTag(SOURCE_LABELS[model.source] || model.source, SOURCE_TITLES[model.source]));
+    if (model.status && model.status !== "running") {
+      const status = zooTag(model.status);
+      status.classList.add("loaded-model-status");
+      head.append(status);
+    }
+    text.append(head);
+    if (model.detail) {
+      const detail = document.createElement("div");
+      detail.className = "loaded-model-detail";
+      detail.textContent = model.detail;
+      detail.title = model.detail;
+      text.append(detail);
+    }
+    if (model.note) {
+      const note = document.createElement("div");
+      note.className = "loaded-model-note";
+      note.textContent = model.note;
+      text.append(note);
+    }
+
+    // The title is on the span around the button: a disabled button gets no
+    // mouse events, so its own would never show.
+    const wrap = document.createElement("span");
+    wrap.className = "loaded-model-remove-wrap";
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "loaded-model-remove";
+    remove.textContent = "\u2715";
+    remove.setAttribute("aria-label", "Remove " + model.name);
+    remove.disabled = !model.removable;
+    wrap.title = model.removable
+      ? "Stop " + model.name + " and remove its layer; the other models stay as they are. "
+        + "Tick it again and Submit to bring it back."
+      : (model.note || "This model cannot be removed here.");
+    remove.addEventListener("click", () => removeLoaded(model, remove));
+    wrap.append(remove);
+    li.append(text, wrap);
+    return li;
+  }
+
+  function renderLoaded(models) {
+    loadedList.replaceChildren(...models.map(loadedRow));
+    document.getElementById("loadedModelsEmpty").hidden = models.length > 0;
+    const starting = models.filter((m) => m.status === "starting").length;
+    const counts = [];
+    if (models.length - starting) counts.push((models.length - starting) + " running");
+    if (starting) counts.push(starting + " starting");
+    document.getElementById("loadedModelsCount").textContent = counts.length ? "(" + counts.join(", ") + ")" : "";
+    // The Cellpose panel's "N running", after a remove or a Submit as on load.
+    const cellposeRunning = models.filter((m) => m.source === "cellpose").length;
+    document.getElementById("cellposeRunningCount").textContent = cellposeRunning ? cellposeRunning + " running" : "";
+    // Asked again while a model is starting (minutes in a queue, or loading),
+    // so the list says when it is up; not otherwise.
+    loadedStarting = starting > 0;
+  }
+
+  // Quietly: a failed refresh leaves the list as it was.
+  function refreshLoaded() {
+    const seq = ++loadedSeq;
+    return getJSON("/api/models/loaded")
+      .then((data) => { if (seq === loadedSeq) renderLoaded(data.models || []); })
+      .catch((err) => console.warn("Could not list the loaded models:", err));
+  }
+
+  // Untick ``model``'s rows wherever they are on the tab, so a Submit leaves
+  // it stopped: its box in the catalog's lists (the running models' "User"
+  // group, an added model's box), its Hugging Face, zoo or Cellpose row.
+  // A list not loaded yet will not tick it either. Each box is told of the
+  // change, so a zoo or Cellpose row hides its settings as on a click.
+  function untickRows(model) {
+    const untick = (box) => {
+      if (!box.checked) return;
+      box.checked = false;
+      box.dispatchEvent(new Event("change", { bubbles: true }));
+    };
+    document.querySelectorAll("#modelSelectionForm input.model-checkbox").forEach((box) => {
+      if (box.value === model.name) untick(box);
+    });
+    if (model.hf_id) {
+      hfRunning.delete(model.hf_id);
+      document.querySelectorAll("#modelSelectionForm input.hf-model-checkbox").forEach((box) => {
+        if (box.value !== model.hf_id) return;
+        box.defaultChecked = false;
+        untick(box);
+      });
+    }
+    if (model.zoo_id) {
+      zooRunning.delete(model.zoo_id);
+      document.querySelectorAll("#zooModelList .zoo-model-checkbox").forEach((box) => {
+        if (box.value === model.zoo_id) untick(box);
+      });
+      filterZooModels();
+    }
+    if (model.cellpose) {
+      const { model: cpModel, output, do_3d: do3d } = model.cellpose;
+      document.querySelectorAll("#cellposeModelList .cellpose-model-item").forEach((row) => {
+        if (row.dataset.model === cpModel && row.querySelector(".cellpose-output").value === output
+            && row.querySelector(".cellpose-3d").checked === !!do3d) {
+          untick(row.querySelector(".cellpose-model-checkbox"));
+        }
+      });
+    }
+  }
+
+  function removeLoaded(model, button) {
+    button.disabled = true;
+    postJSON("/api/models/remove", { name: model.name })
+      .then((data) => {
+        untickRows(model);
+        // A finetune's model whose job has ended had no server left to stop.
+        logArea.value += `Removed ${model.name}: ${model.status === "ended" ? "its" : "stopped, and its"} layer taken away\n`;
+        logArea.scrollTop = logArea.scrollHeight;
+        loadedSeq += 1;
+        renderLoaded(data.models || []);
+        announce(MODELS_CHANGED_EVENT);
+      })
+      .catch((err) => {
+        const message = err instanceof ApiError ? err.message : String(err);
+        // Gone already (stopped elsewhere, or the list was old): show the list as it is.
+        if (err instanceof ApiError && err.status === 404) {
+          refreshLoaded();
+          return;
+        }
+        button.disabled = !model.removable;
+        logArea.value += `Not removed: ${message}\n`;
+        logArea.scrollTop = logArea.scrollHeight;
+        alert("Could not remove " + model.name + ": " + message);
+      });
+  }
+
+  // When the models served may have changed (this tab's Submit, Run and ✕
+  // say so too, rather than ask themselves); and each time the tab is opened.
+  listen(MODELS_CHANGED_EVENT, () => refreshLoaded());
+  const modelTabButton = document.getElementById("model-tab");
+  if (modelTabButton) modelTabButton.addEventListener("shown.bs.tab", refreshLoaded);
+  refreshLoaded();
 
   submitBtn.addEventListener("click", function () {
     // Gather checked local catalog models
@@ -906,7 +1100,7 @@ export function initModelsTab({ onModelsSubmitted } = {}) {
           : "Submitted: no model selected; any running ones are stopped\n";
         logArea.scrollTop = logArea.scrollHeight;
         if (started.length) watchStartingJobs();
-        if (onModelsSubmitted) onModelsSubmitted();
+        announce(MODELS_CHANGED_EVENT);
       })
       .catch((err) => {
         console.error("Error:", err);

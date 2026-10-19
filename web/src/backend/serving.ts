@@ -53,6 +53,10 @@ export interface ServeOptions {
    * [0, 1]), so the user's shader is dropped then and the layer gets a fresh
    * one over the new range, as pipeline.py does. */
   postprocessChanged?: boolean;
+  /** For a model of `entries`, the served model it takes over from (by
+   * name): its layer's place and the user's settings on it go to the new
+   * one's (a finetune's next iteration, `x-ft2` for `x-ft1`). */
+  replacing?: Record<string, string>;
 }
 
 /** Serve `entries` through `chain`, in their order, and nothing else: a
@@ -94,16 +98,35 @@ export async function serveModels(ctx: AppContext, entries: ModelEntry[], chain:
     result.push(await ctx.infer.serve(tuned, chain, blob, () => ctx.catalog.modelBytes(tuned)));
   }
   const names = new Set(entries.map((e) => e.name));
+  const replacing = options.replacing ?? {};
+  const handedOver = new Set(Object.values(replacing));
   for (const old of before) {
     if (kept.has(old)) continue;
-    await old.dispose();
-    if (!names.has(old.entry.name)) {
-      ctx.log(`Stopped serving ${old.entry.name}`);
-      ctx.viewer.removeLayer(old.entry.name);
-    }
+    // A layer handed over goes when its successor's is set, below.
+    if (!names.has(old.entry.name)) await stopServing(ctx, old.entry.name, [old], { keepLayer: handedOver.has(old.entry.name) });
+    else await old.dispose();
   }
-  showLayers(ctx, result, chain, options.postprocessChanged ?? false);
+  showLayers(ctx, result, chain, options.postprocessChanged ?? false, replacing);
   return result;
+}
+
+/** Stop serving the one model named `name`, the Loaded models list's ✕:
+ * its views are disposed of, its layer removed and it leaves the session's
+ * models, and nothing else changes. The other models stay served and their
+ * layers are not redrawn (serveModels would draw them all again, coloured
+ * by their new positions). A finetuned model's bytes and record stay in the
+ * catalog, so it is listed and can be served again. In server mode this is
+ * services/launch.py's remove_model. */
+export async function unserveModel(ctx: AppContext, name: string): Promise<void> {
+  await ctx.session.update({ models: ctx.session.state.models.filter((m) => m.name !== name) });
+  await stopServing(ctx, name, ctx.infer.served().filter((s) => s.entry.name === name));
+}
+
+/** Stop serving the model named `name`, whose `views` are none while it is still starting. */
+export async function stopServing(ctx: AppContext, name: string, views: readonly ServedModel[], options: { keepLayer?: boolean } = {}): Promise<void> {
+  for (const view of views) await view.dispose();
+  if (!options.keepLayer) ctx.viewer.removeLayer(name);
+  ctx.log(`Stopped serving ${name}`);
 }
 
 /** Put one prediction layer per served model in the viewer, coloured by its
@@ -112,7 +135,7 @@ export async function serveModels(ctx: AppContext, entries: ModelEntry[], chain:
  * contrast range belongs to the old chain) but its colour is kept, so the
  * layer the user knows by its colour stays that colour (pipeline.py's
  * previous_shader). */
-export function showLayers(ctx: AppContext, served: ServedModel[], chain: Chain, postprocessChanged: boolean): void {
+export function showLayers(ctx: AppContext, served: ServedModel[], chain: Chain, postprocessChanged: boolean, replacing: Record<string, string> = {}): void {
   if (!served.length) return;
   const layers: Record<string, ReturnType<typeof predictionLayer>> = {};
   served.forEach((s, i) => {
@@ -121,7 +144,7 @@ export function showLayers(ctx: AppContext, served: ServedModel[], chain: Chain,
     const color = (postprocessChanged ? shaderColor(current?.shader) : null) ?? PREDICTION_COLORS[i % PREDICTION_COLORS.length];
     layers[name] = predictionLayer(s, chain, color, postprocessChanged ? undefined : (current ?? undefined));
   });
-  ctx.viewer.setLayers(layers);
+  ctx.viewer.setLayers(layers, replacing);
 }
 
 /** "148" for a cubic block, "148x148x64" otherwise. */

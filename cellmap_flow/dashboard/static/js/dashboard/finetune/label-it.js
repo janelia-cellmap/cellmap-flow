@@ -10,6 +10,7 @@
 // served in the page and its Undo the one the AI annotation's Accept
 // shares, so the AI panel has no Undo of its own.
 import { setBusy } from "../../lib/dom.js";
+import { readJSON, writeJSON } from "../../lib/stored.js";
 import { getAnswer, offerNewVolume, postAnswer } from "./requests.js";
 
 // log: the Annotation Crops panel's log.
@@ -67,17 +68,14 @@ export function initLabelIt({ log }) {
       uses: ["threshold", "min_size", "connectivity", "per_slice"],
     },
   };
+  const saved = readJSON(SETTINGS_KEY, {});
+  if (saved.threshold !== undefined && saved.threshold !== "") seedThreshold.value = saved.threshold;
+  if (saved.min_size !== undefined) seedMinSize.value = saved.min_size;
+  if (saved.connectivity) seedConnectivity.value = saved.connectivity;
+  seedPerSlice.checked = Boolean(saved.per_slice);
+  if (saved.box) seedBox.value = saved.box;
   // The method last picked by hand, used whenever the chosen model offers it.
-  let chosenMethod = "";
-  try {
-    const saved = JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}");
-    if (saved.threshold !== undefined && saved.threshold !== "") seedThreshold.value = saved.threshold;
-    if (saved.min_size !== undefined) seedMinSize.value = saved.min_size;
-    if (saved.connectivity) seedConnectivity.value = saved.connectivity;
-    seedPerSlice.checked = Boolean(saved.per_slice);
-    if (saved.box) seedBox.value = saved.box;
-    chosenMethod = saved.method || "";
-  } catch (e) { /* no storage: defaults */ }
+  let chosenMethod = saved.method || "";
   // The box, in annotation voxels: "z, y, x" or one number. Blank: the
   // server's default, one output patch. Anything else is sent as typed, for
   // the server to refuse with a reason.
@@ -106,12 +104,10 @@ export function initLabelIt({ log }) {
     return body;
   }
   function rememberSeedSettings() {
-    try {
-      localStorage.setItem(SETTINGS_KEY, JSON.stringify({
-        threshold: seedThreshold.value, min_size: seedMinSize.value, method: chosenMethod,
-        connectivity: seedConnectivity.value, per_slice: seedPerSlice.checked, box: seedBox.value.trim(),
-      }));
-    } catch (e) { /* no storage */ }
+    writeJSON(SETTINGS_KEY, {
+      threshold: seedThreshold.value, min_size: seedMinSize.value, method: chosenMethod,
+      connectivity: seedConnectivity.value, per_slice: seedPerSlice.checked, box: seedBox.value.trim(),
+    });
   }
   // The method's line, and the settings it does not read greyed out (Split
   // Objects reads connectivity and per slice whatever the method).

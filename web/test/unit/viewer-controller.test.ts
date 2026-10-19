@@ -15,7 +15,7 @@ import type { SessionState, SessionStore } from "../../src/contracts";
 import type { DatasetInfo } from "../../src/contracts";
 import { createViewer, EXAMPLE_DATASET_URL, liveEquivalences, NG_PAGE, withSelectedLayer } from "../../src/viewer/index";
 import { decodeState, TAB_STATE_KEY } from "../../src/viewer/share";
-import type { NgState } from "../../src/viewer/state";
+import type { NgLayer, NgState } from "../../src/viewer/state";
 
 function fakeSession(state: Partial<SessionState> = {}): SessionStore {
   const current: SessionState = {
@@ -280,7 +280,7 @@ describe("datasetOpened", () => {
     viewer.datasetOpened(LIVER.url, LIVER);
     const state = shown();
     expect(state.dimensions).toEqual({ z: [8e-9, "m"], y: [8e-9, "m"], x: [8e-9, "m"] });
-    expect(state.position).toEqual([4466, 6364, 6373.5]);
+    expect(state.position).toEqual([6373.5, 6364, 4466]);
     expect((state.layers as { name: string }[]).map((l) => l.name)).toEqual(["data", "model"]);
     expect(lines).toContain(`viewer restored on ${LIVER.url}`);
     const src = frame.src;
@@ -352,6 +352,21 @@ describe("the reach into a live viewer for AI-assisted annotation", () => {
     doc.stub.viewer.state.restoreState({ ...live, layout: "xy", displayDimensions: ["x", "y", "z"] });
     expect(viewer.viewDepthAxis()).toBe(0);
     expect(createViewer({ session: fakeSession(), log: () => {} }).viewDepthAxis()).toBe(2);
+  });
+
+  it("holds Neuroglancer's coordinate space through a layer change, so its x, y, z order stays", async () => {
+    // Without the hold, restoreState's dropping every layer emptied the
+    // space, and the new layers made it z, y, x again with the position's
+    // numbers kept: the brush then painted across the slice shown.
+    const { doc, viewer } = await mounted();
+    let holds = 0;
+    const heldDuring: boolean[] = [];
+    (doc.stub.viewer as unknown as Record<string, unknown>).layerSpecification = { coordinateSpaceCombiner: { retain: () => (holds++, () => void holds--) } };
+    const restore = doc.stub.viewer.state.restoreState;
+    doc.stub.viewer.state.restoreState = (next: NgState) => { heldDuring.push(holds > 0); restore(next); };
+    viewer.setLayers({ boxes: { type: "annotation", source: "local://annotations" } });
+    expect(heldDuring).toEqual([true]);
+    expect(holds).toBe(0);
   });
 
   it("viewDepthAxis reads the state in the iframe's hash while Neuroglancer is still loading", async () => {
@@ -481,6 +496,44 @@ describe("the reach into a live viewer for AI-assisted annotation", () => {
     expect(lines.some((l) => l.includes("could not take the re-read annotation_v layer") && l.includes("opening it again"))).toBe(true);
   });
 
+  it("marks the mouse off the viewer while a state goes in, so Neuroglancer's hover tracking skips the half-made layers", async () => {
+    const doc = liveDocument(live);
+    const viewer = createViewer({ session: fakeSession(), log: () => {} });
+    await viewer.openDataset("https://example.org/em.zarr", { type: "image", source: "zarr://https://example.org/em.zarr" });
+    doc.load();
+    // The pointer over a panel, as when a finetune's new model comes in while the user paints.
+    const mouse = doc.stub.viewer.mouseState as { active: boolean; setActive?(active: boolean): void };
+    mouse.active = true;
+    const told: boolean[] = [];
+    mouse.setActive = (active) => { told.push(active); mouse.active = active; };
+    let activeDuringRestore: boolean | null = null;
+    const restore = doc.stub.viewer.state.restoreState;
+    doc.stub.viewer.state.restoreState = (next: NgState) => { activeDuringRestore = mouse.active; restore(next); };
+    viewer.setLayers({ "mito-ft2": { type: "image", source: "zarr3://http://h/mito-ft2/" } });
+    expect(activeDuringRestore).toBe(false);
+    expect(told).toEqual([false]);
+    expect((doc.stub.viewer.state.toJSON().layers as { name: string }[]).map((l) => l.name)).toContain("mito-ft2");
+  });
+
+  it("opens the viewer again on the new layers when Neuroglancer throws taking them, instead of throwing to the caller", async () => {
+    const lines: string[] = [];
+    const doc = liveDocument(live);
+    const viewer = createViewer({ session: fakeSession(), log: (l) => lines.push(l) });
+    await viewer.openDataset("https://example.org/em.zarr", { type: "image", source: "zarr://https://example.org/em.zarr" });
+    doc.load();
+    doc.stub.viewer.state.restoreState = () => {
+      throw new TypeError("Cannot set properties of undefined (setting 'localPositionValid')");
+    };
+    expect(() => viewer.setLayers({ "mito-ft2": { type: "image", source: "zarr3://http://h/mito-ft2/" } })).not.toThrow();
+    const fresh = doc.frame.replacedBy as { src: string } | null;
+    expect(fresh).not.toBeNull();
+    const reopened = decodeState(fresh!.src.replace(/^[^#]*/, ""));
+    expect((reopened?.layers as { name: string }[]).map((l) => l.name)).toEqual(["data", "annotation_v", "mito-ft2"]);
+    expect(lines.some((l) => l.includes("could not take the layer mito-ft2") && l.includes("opening it again"))).toBe(true);
+    // Taking a layer out goes the same way.
+    expect(() => viewer.removeLayer("annotation_v")).not.toThrow();
+  });
+
   it("refreshLayer keeps a hidden paint layer hidden", async () => {
     const hidden: NgState = { ...live, layers: [{ name: "annotation_v", ...paint, visible: false }] };
     const { doc, viewer } = await mounted(hidden);
@@ -505,5 +558,33 @@ describe("the reach into a live viewer for AI-assisted annotation", () => {
     expect(viewer.refreshLayer("annotation_v")).toBe(true);
     const layer = (shown().layers as Record<string, unknown>[]).find((l) => l.name === "annotation_v")!;
     expect((layer.source as { url: string }).url).toBe("s3+http://localhost/paint/v~1/annotation");
+  });
+});
+
+describe("layer: a layer as the viewer has it, for Run on a region's box", () => {
+  afterEach(() => vi.unstubAllGlobals());
+  const box = { type: "axis_aligned_bounding_box", id: "1", pointA: [0, 0, 0], pointB: [80, 160, 240] };
+  const region = { type: "annotation", source: [{ url: "local://annotations" }], annotations: [] as unknown[] };
+
+  it("is the layer in the live viewer's state, with what the user drew in it since the page set it", async () => {
+    const doc = liveDocument(live);
+    const viewer = createViewer({ session: fakeSession(), log: () => {} });
+    await viewer.openDataset("https://example.org/em.zarr", { type: "image", source: "zarr://https://example.org/em.zarr" });
+    // Drawn in Neuroglancer: its own state has the box, no state the page set does.
+    doc.stub.viewer.state.restoreState({ ...live, layers: [...(live.layers as NgLayer[]), { name: "run_region", ...region, annotations: [box] }] });
+    expect(viewer.layer("run_region")).toEqual({ name: "run_region", ...region, annotations: [box] });
+    expect(viewer.layer("gone")).toBeNull();
+  });
+
+  it("is the layer queued before there is an iframe, and the one in the iframe's hash while Neuroglancer loads", async () => {
+    const early = createViewer({ session: fakeSession(), log: () => {} });
+    early.setLayers({ run_region: region });
+    expect(early.layer("run_region")).toEqual({ ...region, name: "run_region" });
+    expect(early.layer("data")).toBeNull();
+    stubDocument();
+    const loading = createViewer({ session: fakeSession(), log: () => {} });
+    loading.setLayers({ run_region: { ...region, annotations: [box] } });
+    await loading.openDataset("https://example.org/em.zarr", { type: "image", source: "zarr://https://example.org/em.zarr" });
+    expect(loading.layer("run_region")).toEqual({ name: "run_region", ...region, annotations: [box] });
   });
 });

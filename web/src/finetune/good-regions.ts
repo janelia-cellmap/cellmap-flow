@@ -95,10 +95,10 @@ export interface AnchorBox {
   hi: number[];
 }
 
-/** Rounded to a millionth of a voxel before a floor: the float noise of
- * nm → voxels (100.5 × 8 / 8 come back as 100.49999999999999) must not move
- * a box by a voxel. */
-const steady = (x: number) => Math.round(x * 1e6) / 1e6;
+/** Rounded to a millionth of a voxel before a floor or a ceiling: the float
+ * noise of nm → voxels (100.5 × 8 / 8 come back as 100.49999999999999) must
+ * not move a box by a voxel. */
+export const steady = (x: number) => Math.round(x * 1e6) / 1e6;
 
 /** The anchor box of each usable region of `regions` on `volume`'s grid, and
  * what was skipped and why (sampler._index_rehearsal): an entry that is not

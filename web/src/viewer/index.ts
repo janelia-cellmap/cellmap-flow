@@ -31,7 +31,7 @@ import type { DatasetInfo, LayerSpec, SessionStore, ViewerController } from "../
 import { initialState, RAW_LAYER_NAME, rawLayer, respelledPaintSource, stateWithoutInfo } from "./layers";
 import { withEquivalences } from "./equivalences";
 import { decodeState, encodeState, isStateHash, mirrorFrameHash, rememberedState, rememberState, withHash } from "./share";
-import { datasetUrlFromState, layerShaderOf, layersOf, type NgState, pointerNm, positionNm, replaceLayers, viewDepthAxisOf, withoutLayer } from "./state";
+import { datasetUrlFromState, displayDimensionsOf, layerShaderOf, layersOf, type NgState, pointerNm, positionNm, replaceLayers, viewDepthAxisOf, withoutLayer } from "./state";
 
 /** Neuroglancer's page, built beside this one (vite.config.ts serves ./ng/). */
 export const NG_PAGE = "./ng/index.html";
@@ -70,9 +70,12 @@ const CONNECT_DESCRIPTION = "No dataset open. Enter the URL of a public OME-Zarr
 interface NgViewer {
   state: { toJSON(): NgState; restoreState(state: NgState): void };
   layerManager?: { getLayerByName(name: string): { layer: NgUserLayer | null } | undefined };
-  mouseState?: { position?: ArrayLike<number>; active?: boolean };
+  mouseState?: { position?: ArrayLike<number>; active?: boolean; setActive?(active: boolean): void };
   inputEventBindings?: { global?: { set(key: string, action: string): void; delete?(key: string): void } };
   bindAction?(action: string, handler: (event: Event) => void): void;
+  /** What builds the global coordinate space from the layers' own: holding
+   * it (retain) keeps its dimensions while no layer is bound to them. */
+  layerSpecification?: { coordinateSpaceCombiner?: { retain(): () => void } };
 }
 
 /** A key binding the page asked for (bindKey): put on every viewer as it
@@ -228,11 +231,47 @@ export function createViewer(opts: { session: SessionStore; log: (line: string) 
 
   /** Put `state` in the viewer: through the live viewer when there is one,
    * else through the iframe's hash (a reset to that state when Neuroglancer
-   * reads it). Either way the page's hash follows. */
-  function applyState(state: NgState): void {
+   * reads it). Either way the page's hash follows. `what` names the change
+   * for the log, should the live viewer throw on it.
+   *
+   * Neuroglancer makes every layer of a restored state anew, and a new
+   * layer's selection state only once the layer has restored its own
+   * (UserLayer.initializationDone). With the mouse over the viewer, its
+   * hover tracking (LayerSelectedValues.update) reads every layer each time
+   * the layer list changes, the half-made one too, and throws: "Cannot set
+   * properties of undefined (setting 'localPositionValid')", or, from the
+   * layout's restore, "Error restoring property "layout": Cannot read
+   * properties of undefined (reading 'generation')". The viewer was left
+   * blank, and the throw reached whatever had asked for the change: a
+   * finetune's restart failed as its new model's layer went in, a Seed from
+   * Prediction was reported failed. So the mouse is marked off the viewer
+   * for the restore, which is synchronous, and the tracking skips it; the
+   * next move over a panel marks it on again. Should Neuroglancer throw all
+   * the same, the viewer is opened again on the state, in a new iframe: the
+   * change is made by then (the labels written, the model served), and a
+   * hash change would only hand the half-restored viewer the same state. */
+  function applyState(state: NgState, what = "the new state"): void {
     const live = liveViewer();
     if (live) {
-      live.state.restoreState(state);
+      offTheViewer(live);
+      // restoreState drops every layer before making the new ones, and with
+      // no layer bound Neuroglancer empties the coordinate space, then takes
+      // it from the new layers as they load: in their order (z, y, x for a
+      // zarr) and at whichever voxel size comes first, the position's
+      // numbers kept. Held through the call, the state's dimensions stay;
+      // each new layer holds them from there until its data is read.
+      const release = live.layerSpecification?.coordinateSpaceCombiner?.retain();
+      try {
+        live.state.restoreState(state);
+      } catch (e) {
+        log(`the viewer could not take ${what} (${(e as Error)?.message ?? e}); opening it again on that state`);
+        const hash = encodeState(state);
+        pending = state;
+        reopenFrame(hash);
+        rememberState(hash);
+      } finally {
+        release?.();
+      }
       // Neuroglancer rewrites its own hash from the new state a moment
       // later; the mirror picks it up on its next poll.
       return;
@@ -241,6 +280,16 @@ export function createViewer(opts: { session: SessionStore; log: (line: string) 
     pending = state;
     mountFrame(hash);
     rememberState(hash);
+  }
+
+  /** `viewer`'s mouse marked as not over it (applyState says why), through
+   * MouseSelectionState.setActive, which tells the hover tracking; a build
+   * without it gets the flag cleared. */
+  function offTheViewer(viewer: NgViewer): void {
+    const mouse = viewer.mouseState;
+    if (!mouse?.active) return;
+    if (typeof mouse.setActive === "function") mouse.setActive(false);
+    else mouse.active = false;
   }
 
   /** The iframe showing Neuroglancer at `hash`: created in place of the
@@ -444,14 +493,16 @@ export function createViewer(opts: { session: SessionStore; log: (line: string) 
       return NG_PAGE + hash;
     },
 
-    setLayers(layers) {
+    setLayers(layers, replacing = {}) {
       const state = currentState();
       if (!state) {
         // No iframe yet: shown when restore() or openDataset() makes one.
+        // A layer replaced meanwhile is only queued, with nothing set on it.
+        for (const old of Object.values(replacing)) delete queued[old];
         Object.assign(queued, layers);
         return;
       }
-      applyState(withSelection(replaceLayers(state, layers)));
+      applyState(withSelection(replaceLayers(state, layers, replacing)), `the layer${Object.keys(layers).length === 1 ? "" : "s"} ${Object.keys(layers).join(", ")}`);
     },
 
     removeLayer(name) {
@@ -459,7 +510,7 @@ export function createViewer(opts: { session: SessionStore; log: (line: string) 
       if (selection?.name === name) selection = null;
       const state = currentState();
       if (!state) return;
-      applyState(withoutLayer(state, name));
+      applyState(withoutLayer(state, name), `the view without ${name}`);
     },
 
     setEquivalences(name, sets) {
@@ -527,6 +578,19 @@ export function createViewer(opts: { session: SessionStore; log: (line: string) 
       return viewDepthAxisOf(currentState());
     },
 
+    layer(name) {
+      // From the live viewer's state when it is up, which holds what the
+      // user did since the page last set a state (a box drawn); else from
+      // the state last given to the iframe, or the layers queued for it.
+      const found = layersOf(currentState()).find((candidate) => candidate.name === name);
+      if (found) return { ...found };
+      return queued[name] ? { ...queued[name], name } : null;
+    },
+
+    viewDisplayDimensions() {
+      return displayDimensionsOf(currentState());
+    },
+
     bindKey(key, action, handler) {
       const binding: KeyBinding = { key, action, handler, active: true, appliedTo: new WeakSet() };
       bindings.push(binding);
@@ -556,23 +620,11 @@ export function createViewer(opts: { session: SessionStore; log: (line: string) 
       if (!layer) return false;
       const source = respelledPaintSource(layer.source);
       if (source === null) return false;  // not a paint layer: nothing of ours to re-read
-      const next = replaceLayers(state, { [name]: { ...layer, source } });
-      try {
-        applyState(next);
-      } catch (e) {
-        // Neuroglancer can throw part way through taking a state, leaving
-        // the viewer half restored (seen after a Seed from Prediction:
-        // "Error restoring property "layout": Cannot read properties of
-        // undefined (reading 'generation')"). The labels are written by
-        // then, so the viewer is opened again on the new state, rather than
-        // the write reported failed or the iframe reloaded on the state it
-        // was first given, which lacks every layer added since.
-        log(`the viewer could not take the re-read ${name} layer (${(e as Error).message ?? e}); opening it again on that state`);
-        const hash = encodeState(next);
-        pending = next;
-        reopenFrame(hash);
-        rememberState(hash);
-      }
+      // Should Neuroglancer throw on it, applyState opens the viewer again
+      // on the new state: the labels are written by then, so the write is
+      // not reported failed, nor the iframe reloaded on the state it was
+      // first given, which lacks every layer added since.
+      applyState(replaceLayers(state, { [name]: { ...layer, source } }), `the re-read ${name} layer`);
       return true;
     },
   };

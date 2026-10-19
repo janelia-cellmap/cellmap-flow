@@ -33,6 +33,8 @@ SERVER_ONLY = [
 KEPT = [
     "model-tab", "input-tab", "output-tab", "models", "input", "output",
     "addModelRef",  # Add a model takes a Hugging Face reference
+    # The Loaded models list, whose ✕ stops serving one model in the page too.
+    "loadedModels", "loadedModelsList", "loadedModelsEmpty", "loadedModelsCount",
     "hfModelAccordion", "submitModelsBtn", "resampleCheckbox",
     "inputNormList", "postProcessList", "datasetPathInput", "setDataBtn",
     "localFolderGroup", "browseLocalBtn",  # a folder on this machine: the browser-only block of the connect panel
@@ -67,6 +69,15 @@ AI_ANNOTATE_BROWSER_ONLY = [
     "aiAnnotateModelName",
 ]
 KEPT += AI_ANNOTATE_BROWSER_ONLY
+# The Run tab (_run_tab.html, included by _dashboard.html in browser mode
+# only): the served models run over a region and saved to a folder on this
+# machine. web/src/run-region/panel.ts finds its elements by the ids in its
+# IDS table, which test_the_run_tab_has_every_element_its_script_looks_up
+# reads; these are the main ones. On the browser page, never on the Flask
+# page.
+RUN_TAB = ["run-tab", "run", "runModels", "runRegionBox", "runRegionWhole", "runDrawBoxBtn", "runChooseFolderBtn", "runStartBtn", "runCancelBtn", "runLog"]
+KEPT += RUN_TAB
+RUN_PANEL_TS = Path(__file__).resolve().parents[2] / "web" / "src" / "run-region" / "panel.ts"
 
 
 @pytest.fixture(scope="module")
@@ -213,13 +224,17 @@ def test_the_browser_page_offers_the_heads_training_controls(page):
 
 def test_the_browser_page_takes_the_ai_annotation_credentials(page):
     """The AI panel's credentials block: hidden until the config names a
-    provider that needs one, the secrets password fields the browser must not
-    autofill, and the project a plain field. Its accepted annotations are
+    provider that needs one, the secrets text fields masked by CSS that a
+    browser's password manager does not offer to save (a password field it
+    does, whatever autocomplete says), and the project a plain field. Its accepted annotations are
     taken back by Label it's Undo, disabled until there is something to take
     back; the panel has no Undo of its own."""
     assert re.search(r'<div class="[^"]*" id="aiAnnotateCredentials" hidden>', page)
     for secret in ("aiAnnotateApiKey", "aiAnnotateAccessToken"):
-        assert re.search(rf'<input type="password"[^>]*id="{secret}"[^>]*autocomplete="off"', page), secret
+        field = re.search(rf'<input [^>]*id="{secret}"[^>]*>', page).group(0)
+        assert 'type="text"' in field and "credential-secret" in field and 'autocomplete="off"' in field, field
+        assert "data-1p-ignore" in field and 'data-lpignore="true"' in field and "data-bwignore" in field, field
+    assert 'type="password"' not in page
     assert re.search(r'<input type="text"[^>]*id="aiAnnotateProject"[^>]*autocomplete="off"', page)
     assert re.search(r'<input type="text"[^>]*id="aiAnnotateModelName"[^>]*\bhidden\b', page)
     assert re.search(r'<button[^>]*id="undoViewLabelsBtn"[^>]*\bdisabled\b', page)
@@ -236,6 +251,21 @@ def test_the_browser_page_labels_the_patch_from_the_models_it_serves(page):
     in the page, which the picker's title says, not a running server's."""
     assert "any model served on the Models tab, a model finetuned in this browser among them" in page
     assert "whichever has a server running" not in page
+
+
+def test_the_run_tab_has_every_element_its_script_looks_up(page):
+    """The Run tab's script is TypeScript (web/src/run-region/panel.ts), not
+    a dashboard module, so tests/utils/test_dashboard_tab_scripts.py does not
+    see it: its IDS table must name elements of the browser page, each one
+    once, or a button does nothing. The tab opens on a box drawn in the
+    viewer, its Cancel and progress waiting for a run."""
+    ids = re.findall(r'^\s+\w+: "([\w-]+)",$', re.search(r"export const IDS = \{(.*?)\} as const;", RUN_PANEL_TS.read_text(), re.S).group(1), re.M)
+    assert ids, "web/src/run-region/panel.ts no longer declares its IDS table as one id a line"
+    counts = {i: len(re.findall(rf'\bid="{re.escape(i)}"', page)) for i in ids}
+    assert {i: n for i, n in counts.items() if n != 1} == {}
+    assert re.search(r'<input type="radio"[^>]*id="runRegionBox"[^>]*\bchecked\b', page)
+    assert re.search(r'<button[^>]*id="runCancelBtn"[^>]*\bdisabled\b', page)
+    assert re.search(r'<div class="progress[^"]*" id="runProgress"[^>]*\bhidden\b', page)
 
 
 def test_the_browser_page_renders_an_empty_catalog(page):
@@ -286,6 +316,8 @@ def test_the_flask_dashboard_is_unchanged_by_the_markers(dashboard):
     assert _select_options(html, "lossType") == [("margin", True), ("mse", False), ("bce", False), ("dice", False), ("combined", False)]
     for browser_only in ("downloadVolumeBtn", "deleteVolumeBtn", "downloadFinetunedBtn", "existingVolumesNote", "batchPixels", *AI_ANNOTATE_BROWSER_ONLY):
         assert browser_only not in html, browser_only
+    # Nor the Run tab: no button for it, no pane.
+    assert [i for i in RUN_TAB if f'id="{i}"' in html] == []
     # The AI panel and its review are on the Flask page as before, with the
     # server's words on the pickers and without the browser's additions.
     assert "aiAnnotatePanel" in classes and "aiAnnotateReviewModal" in classes

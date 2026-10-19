@@ -62,7 +62,7 @@ import re
 import numpy as np
 import yaml
 
-from cellmap_flow.models.configs.base import Config, ModelConfig, _as_int_tuple, _get_device
+from cellmap_flow.models.configs.base import Config, ModelConfig, _as_int_tuple, _get_device, _names, _voxel_size
 from cellmap_flow.models.geometry import _numbers
 
 logger = logging.getLogger(__name__)
@@ -81,21 +81,6 @@ def checkpoint_format(checkpoint_path: str) -> str:
     if checkpoint_path.endswith("model.pt"):
         return PICKLE
     return STATE_DICT
-
-
-def _voxel_size(value):
-    """A voxel size given as one number, "16,16,16" or one per axis: three numbers, ints kept ints.
-
-    Not cellpose's alike: importing that module here would define its type
-    before this one, and the registry lists the types in definition order.
-    """
-    if isinstance(value, str):
-        value = [float(v) for v in value.replace("(", "").replace(")", "").split(",") if v.strip()]
-    if np.ndim(value) == 0:
-        value = [value] * 3
-    elif len(value) == 1:
-        value = list(value) * 3
-    return _numbers(float(v) for v in value)
 
 
 def _flag(value) -> bool:
@@ -365,9 +350,7 @@ class FlyModelConfig(ModelConfig):
             return value
 
         # The server CLI passes the channels as "mito,er".
-        if isinstance(channels, str):
-            channels = [c.strip() for c in channels.split(",") if c.strip()]
-        channels = given_or_found("channels", channels)
+        channels = given_or_found("channels", _names(channels))
         # The voxel sizes and the sizes are each a pair: one given stands for
         # its partner rather than letting the files supply it, since the files
         # describe the network at the other one.

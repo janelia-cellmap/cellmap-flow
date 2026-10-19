@@ -291,7 +291,11 @@
             {% endif %}
           </div>
           <div class="no-data-input-group">
-            <input type="text" id="datasetPathInput" class="form-control" placeholder="{% if mode == 'browser' %}https://host/path/volume.zarr{% else %}/path/to/dataset.zarr{% endif %}" style="flex:1;" />
+            {# The datasets connected to before, newest first (connect.js fills the
+               datalist from this browser's storage); the browser's own form
+               history, a few entries starting with what is typed, is off. #}
+            <input type="text" id="datasetPathInput" class="form-control" list="recentDatasets" autocomplete="off" placeholder="{% if mode == 'browser' %}https://host/path/volume.zarr{% else %}/path/to/dataset.zarr{% endif %}" style="flex:1;" />
+            <datalist id="recentDatasets"></datalist>
             <button type="button" class="btn btn-primary" id="setDataBtn">Connect</button>
           </div>
           {# Browser mode only: a folder on this machine, through the File System

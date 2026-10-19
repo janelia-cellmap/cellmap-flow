@@ -17,6 +17,9 @@
     "check": "npm run typecheck && npm test && npm run build"
   },
   "dependencies": {
+    "@tensorflow/tfjs-backend-cpu": "4.22.0",
+    "@tensorflow/tfjs-backend-webgpu": "4.22.0",
+    "@tensorflow/tfjs-core": "4.22.0",
     "geotiff": "3.1.0-beta.0",
     "onnxruntime-web": "1.30.0",
     "zarrita": "0.7.5"

@@ -25,11 +25,10 @@ import logging
 from flask import jsonify, request
 
 from cellmap_flow.dashboard.routes.finetune.blueprint import finetune_bp
-from cellmap_flow.dashboard.state import get_session
+from cellmap_flow.dashboard.state import LAYER_BOOKKEEPING, get_session
+from cellmap_flow.viewer.layers import replace_layer
 
 logger = logging.getLogger(__name__)
-
-_BOOKKEEPING = ("shaders", "shader_controls", "extra_layers")
 
 
 def _error(message, status=400):
@@ -40,8 +39,8 @@ def _add_layer(name, layer, layer_type, path):
     with get_session().viewer.txn() as s:
         if name in s.layers:
             logger.info(f"Replacing existing layer {name}")
-            del s.layers[name]
-        s.layers[name] = layer
+        # Keeping what the user set on the one it replaces.
+        replace_layer(s.layers, name, layer)
     logger.info(f"Added {layer_type} layer: {name} -> {path}")
     return jsonify(
         {
@@ -135,8 +134,7 @@ def remove_layer_from_viewer():
             with session.viewer.txn() as s:
                 if name in s.layers:
                     del s.layers[name]
-        for attr in _BOOKKEEPING:
-            getattr(session, attr).pop(name, None)
+        session.forget_layer(name)
 
         logger.info(f"Removed layer: {name} (was_present={removed})")
         return jsonify(
@@ -190,7 +188,7 @@ def rename_layer_in_viewer():
         with session.viewer.txn() as s:
             s.layers[old_name].name = new_name
 
-        for attr in _BOOKKEEPING:
+        for attr in LAYER_BOOKKEEPING:
             bookkeeping = getattr(session, attr)
             if old_name in bookkeeping:
                 bookkeeping[new_name] = bookkeeping.pop(old_name)

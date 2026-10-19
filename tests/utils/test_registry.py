@@ -26,7 +26,7 @@ def _built_in(types):
 
 def test_the_built_in_types_and_how_yaml_names_them():
     assert list(_built_in(registry.model_types())) == [
-        "script", "dacapo", "fly", "bioimage", "cellmap", "finetune", "huggingface", "cellpose",
+        "script", "dacapo", "fly", "bioimage", "cellmap", "finetune", "huggingface", "cellpose", "onnx",
     ]
     assert list(_built_in(registry.model_classes()))[:3] == ["ScriptModelConfig", "DaCapoModelConfig", "FlyModelConfig"]
     assert registry.model_type("fly") is registry.model_type("FLY") is FlyModelConfig
@@ -96,21 +96,23 @@ def test_a_bad_model_entry_is_a_config_error(models, message):
 
 
 def test_the_dashboard_offers_and_builds_a_plugin_type(dashboard):
-    class OnnxModelConfig(ModelConfig):
-        cli_name = "onnx"
+    # Not an onnx type, which is a built-in one now: a plugin's own name.
+    class TfliteModelConfig(ModelConfig):
+        cli_name = "tflite"
 
-        def __init__(self, onnx_path: str, output_channels: int = 1, name=None):
+        def __init__(self, tflite_path: str, output_channels: int = 1, name=None):
             super().__init__()
-            self.onnx_path, self.output_channels, self.name = onnx_path, output_channels, name
+            self.tflite_path, self.output_channels, self.name = tflite_path, output_channels, name
 
     get_session().models_config = []
     types = dashboard.get("/api/model-config-types").get_json()
-    assert types["OnnxModelConfig"]["display_name"] == "Onnx Model" and "ScriptModelConfig" in types
-    assert types["OnnxModelConfig"]["parameters"]["onnx_path"]["input_type"] == "file"
+    assert types["TfliteModelConfig"]["display_name"] == "Tflite Model" and "ScriptModelConfig" in types
+    assert types["TfliteModelConfig"]["parameters"]["tflite_path"]["input_type"] == "file"
     response = dashboard.post("/api/create-model-config", json={
-        "class_name": "OnnxModelConfig", "params": {"onnx_path": "/m.onnx", "output_channels": "3", "name": "o"},
+        "class_name": "TfliteModelConfig", "params": {"tflite_path": "/m.tflite", "output_channels": "3", "name": "o"},
     })
     assert response.status_code == 200, response.get_json()
     # No to_dict() of its own: ModelConfig's default serves.
-    assert response.get_json()["config_dict"] == {"type": "onnx", "onnx_path": "/m.onnx", "output_channels": 3, "name": "o"}
-    assert isinstance(get_session().models_config[-1], OnnxModelConfig)
+    assert response.get_json()["config_dict"] == {"type": "tflite", "tflite_path": "/m.tflite", "output_channels": 3,
+                                                  "name": "o"}
+    assert isinstance(get_session().models_config[-1], TfliteModelConfig)

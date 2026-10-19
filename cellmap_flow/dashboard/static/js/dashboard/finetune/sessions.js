@@ -6,6 +6,7 @@
 // row.
 import { esc, setBusy } from "../../lib/dom.js";
 import { isBrowserMode } from "../../lib/page-data.js";
+import { readText, writeText } from "../../lib/stored.js";
 import { postAnswer, watchProgress } from "./requests.js";
 
 // A session copy's progress, as the status line shows it.
@@ -50,9 +51,7 @@ export function initSessions({ log, addToViewer, volumeReady }) {
       existingSessionsEmpty.style.display = "none";
       return;
     }
-    if (!browser) {
-      try { localStorage.setItem("existingBrowseRoot", rootPath); } catch (_) {}
-    }
+    if (!browser) writeText("existingBrowseRoot", rootPath);
     existingSessionsList.innerHTML = '<option>Loading...</option>';
     existingSessionsEmpty.style.display = "none";
     loadExistingConfirmBtn.disabled = true;
@@ -104,7 +103,7 @@ export function initSessions({ log, addToViewer, volumeReady }) {
     }
     // Seed the root: prefer outputPath field, then last used, then blank
     const outputPath = outputPathInput.value.trim();
-    const saved = (() => { try { return localStorage.getItem("existingBrowseRoot"); } catch (_) { return null; } })();
+    const saved = readText("existingBrowseRoot", null);
     existingBrowseRoot.value = outputPath || saved || "";
     loadExistingModal.show();
     if (existingBrowseRoot.value) scanExistingSessions();
