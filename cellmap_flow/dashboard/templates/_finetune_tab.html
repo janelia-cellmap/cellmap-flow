@@ -523,6 +523,40 @@
    and training-form.js sets it. #}
 <div class="tab-pane fade" id="training" role="tabpanel"{% if mode == "browser" %} data-training="head"{% endif %}>
 
+{# Browser mode only: which model to start from (rank.js), the models the
+   browser can run ranked by how well each one's prediction already matches
+   the session volume's paint (web/src/backend/routes/rank.ts). The results
+   are a list, a model to a row with its scores on a line under its name, as
+   the dashboard's column is too narrow for a table of them. #}
+{% if mode == "browser" %}
+<!-- Which Model to Start From Card -->
+<div class="card mb-3" id="rankCard">
+  <div class="card-header">
+    <h5>Which model to start from</h5>
+  </div>
+  <div class="card-body">
+    <p class="text-muted small mb-2">Ranks models by how well each one already matches your paint, to pick the best one to finetune.</p>
+    <div id="rankCandidates" class="mb-2" style="max-height: 14rem; overflow-y: auto;"></div>
+    <div class="d-flex align-items-center gap-2 flex-wrap mb-1">
+      <button type="button" class="btn btn-primary" id="rankBtn" disabled
+              title="Scores each ticked model in turn on the voxels you painted. A model not served yet is downloaded and run for its score, which can take up to a minute each; the Models tab and the viewer are left as they were.">
+        Rank models
+      </button>
+      <button type="button" class="btn btn-secondary" id="rankStopBtn" hidden
+              title="Stop once the model being scored now is done; its score and the ones before it stay.">
+        Stop
+      </button>
+    </div>
+    <small class="d-block text-muted" id="rankStatus" role="status"></small>
+    <div class="mt-2" id="rankResults" hidden>
+      <small class="d-block text-muted mb-1">Match: the share of your painted voxels the model gets right, objects and background counting equally, which ranks them; then the share of painted objects it calls object, and of painted background it calls background.</small>
+      <ol class="list-unstyled mb-1" id="rankRows"></ol>
+      <div class="small text-warning" id="rankLittlePaint" hidden>Little paint: scores a few points apart are effectively tied; paint a little in two or three places for a clearer ranking.</div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
 <!-- Training Configuration Card -->
 <div class="card mb-3">
   <div class="card-header">

@@ -47,6 +47,7 @@ import { type FinetuneDeps, finetuneRoutes } from "./routes/finetune";
 import { goodRegionRoutes } from "./routes/good-regions";
 import { modelRoutes } from "./routes/models";
 import { pipelineRoutes } from "./routes/pipeline";
+import { rankRoutes } from "./routes/rank";
 import { viewLabelsRoutes } from "./routes/view-labels";
 import { serveModels, stopServing } from "./serving";
 
@@ -72,6 +73,7 @@ export function createRouter(options: BackendOptions = {}): Router {
   configRoutes(router);
   finetuneRoutes(router, options.finetune);
   goodRegionRoutes(router);
+  rankRoutes(router);
   const labels = viewLabelsRoutes(router);
   aiAnnotateRoutes(router, { ...options.aiAnnotate, undo: labels.undo });
   router.otherwise((req) =>

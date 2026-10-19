@@ -163,7 +163,45 @@ the finetune learns what the model mislabels where its features already tell
 the two apart (a membrane it calls mitochondrion, a texture it misses), not
 new shapes; that is a finetune of the whole network, which the server mode
 runs on the cluster, and whose result the browser can serve as any other
-model. The models can train their whole network in the browser too (next).
+model. The models can train their whole network in the browser too (below).
+
+Which model to start from
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+A finetune has least to learn from the model that already gets most of your
+paint right, and that is not always the one the volume was made for. The
+Training panel's *Which model to start from* ranks the models the browser can
+run, those finetuned in it among them, by how well each one's prediction
+matches the volume's paint: tick the models, press *Rank models*, and each is
+scored in turn, a few seconds to half a minute each, and listed best first.
+
+- **Match**, which ranks them, is the share of the painted voxels the model
+  gets right, objects and background counting equally, so that paint mostly
+  of background does not reward a model that calls everything background:
+  such a model matches 50%. Beside it are the share of painted objects it
+  calls object and of painted background it calls background.
+- A model is scored on what its own finetune would train on: a nucleus or
+  mitochondria model on its channel (a model of several such channels on the
+  one that matches best, which the row names), an affinity model on the pairs
+  of painted neighbours, the same object or not. Its prediction is read on
+  the paint's grid, each painted voxel taking the model's voxel its centre
+  lies in, so a model at another voxel size is scored on the same paint.
+- Rough strokes are forgiven: for a nucleus or mitochondria model, a painted
+  voxel next to one painted the other class is not counted.
+- A model finer than the paint (8 or 16 nm under 128 nm strokes) needs a
+  block of its own for every few painted voxels, so it is scored under at
+  most 32 of its blocks, spread over the paint, and its row says so.
+- A model not loaded is loaded for its score alone, at its smallest block
+  size, and released after: the Models tab, the viewer and the GPU are left
+  as they were. *Show* loads one and adds its layer.
+
+With paint on one object, scores a few points apart are as good as tied, and
+the list says so; a little paint in two or three places ranks them more
+clearly. On ``jrc_jurkat-1``, with a slice of one nucleus painted (4,430
+voxels), ``setup_56`` came first at 62% and ``setup_55``, the volume's own
+model, which sees none of the dataset's nuclei, matched 50%. To finetune the
+model that ranks first, make a volume for it (*New Volume* with it selected)
+and paint there.
 
 Training the whole network
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
