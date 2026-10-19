@@ -223,11 +223,12 @@ describe("GET /api/finetune/models", () => {
     expect(two.selected_model).toBeNull();
   });
 
-  it("offers a 3D model's whole network in block sides with what a step costs, one block a step", async () => {
+  it("offers a 3D model's whole network in its files' block sides with what a step costs, one block a step, and trains the file of the block", async () => {
     // setup_53 served from its 124³ fp32 file, its manifest's full block as on the Hub since 2026-10-17.
     const file = "setup_53_mito_affinities_16nm_in124_fp32.onnx";
     const raw = rawManifest("setup_53") as { finetune: Record<string, unknown> };
-    const full = { library: "tfjs", files: ["finetune/train_graph.json"], weight_map: "finetune/weight_map.json", torch_params: "finetune/torch_params.json", initializers: "finetune/initializers.json", write_back: [file], frozen: [] };
+    const writeBack = [124, 140, 172].map((n) => `setup_53_mito_affinities_16nm_in${n}_fp32.onnx`);
+    const full = { library: "tfjs", files: ["finetune/train_graph.json"], weight_map: "finetune/weight_map.json", torch_params: "finetune/torch_params.json", initializers: "finetune/initializers.json", write_back: writeBack, frozen: [] };
     const manifest = parseManifest({ ...raw, finetune: { ...raw.finetune, full } });
     const e53 = entryFor("setup_53", manifest, manifest.variants.find((v) => v.file === file)!);
     const ctx = fakeContext();
@@ -239,7 +240,7 @@ describe("GET /api/finetune/models", () => {
     expect(model.finetune_modes).toEqual(["head", "full"]);
     const training = model.full_training;
     expect(training).toMatchObject({ dims: 3, default_tile: 124, context: 88, unavailable: null });
-    expect(training.tiles.map((t: any) => t.side)).toEqual(expect.arrayContaining([124, 140, 172]));
+    expect(training.tiles.map((t: any) => t.side)).toEqual([124, 140, 172]);
     for (const t of training.tiles) expect(t.output).toBe(t.side - 88);
     expect(training.tiles.find((t: any) => t.side === 124)).toMatchObject({ measured: true, step_ms: expect.any(Number), peak_mb: expect.any(Number) });
 
@@ -249,8 +250,17 @@ describe("GET /api/finetune/models", () => {
     const submit = (extra: Record<string, unknown>) => h.handle(request("POST", "/api/finetune/submit", { ...FORM, model_name: e53.name, finetune_mode: "full", ...extra })).then(body);
     expect((await submit({ batch_size: 2, tile_size: 124 })).success).toBe(false);
     expect((await submit({ batch_size: 1, tile_size: 125 })).success).toBe(false);
-    expect((await submit({ batch_size: 1, tile_size: 140 })).success).toBe(true);
+    const submitted = await submit({ batch_size: 1, tile_size: 140 });
+    expect(submitted.success).toBe(true);
     expect(calls.at(-1)!.options).toMatchObject({ mode: "full", batchPatches: 1, tileSize: 140 });
+    // From the 140³ file, not the 124³ one served: the finetune is served at the block it trained on,
+    // and a restart on another block, whose file the trained network is not in, is a new job.
+    expect(calls.at(-1)!.entry.variant.file).toBe(writeBack[1]);
+    await h.jobs.get(submitted.job_id)!.settled();
+    expect((await ctx.catalog.finetuned())[0].entry.variant.source?.file).toBe(writeBack[1]);
+    const restart = await h.handle(request("POST", `/api/finetune/job/${submitted.job_id}/restart`, { ...FORM, finetune_mode: "full", batch_size: 1, tile_size: 172 }));
+    expect(restart).toMatchObject({ status: 409 });
+    expect(body(restart).error).toMatch(/Block Size of 172³ needs a new job/);
     // The job card shows the side as a block's.
     const [job] = body(await h.handle(request("GET", "/api/finetune/jobs"))).jobs;
     expect(job.params).toMatchObject({ block_size: 140 });

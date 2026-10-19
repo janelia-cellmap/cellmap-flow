@@ -295,7 +295,16 @@ model's output is laid over the painted voxels, and each cube that holds
 paint is read with the raw around it, whatever planes you painted in, so
 strokes on a few neighbouring slices teach the model along z too (an
 affinity model's z channel learns from them). The field is then *Block
-Size*, the cube's side: 124³ (the default), 140³, 156³ or 172³. The model
+Size*, the cube's side, in the sides the model's files come in: 124³, 140³
+and 172³ for the UNets (``setup_53``, ``setup_55``), 116³, 132³ and 148³ for
+the ResUNets (``setup_54``, ``setup_56``, ``setup_61``, ``setup_67``), the
+one it is served at by default. The run trains that side's file, at the
+precision served, and the finetune is served from it, so it is served at
+the block it trained on: a ResUNet's InstanceNorm normalizes each block by
+its own statistics, and a network trained on one size of block and served
+at another meets statistics it did not learn on. A *Restart* keeps the
+block; another one is a new job, as the trained network is in its file. A
+model finetuned here trains at its own block only. The model
 reads 88 voxels of context on each axis, so a 124³ block's output is 36³,
 2.4% of it, and a block costs its volume: 172³ takes about three times the
 time and memory of 124³. A 3D model trains one block a step, so *Batch Size*

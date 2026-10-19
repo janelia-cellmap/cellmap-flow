@@ -49,7 +49,7 @@ import type { AppContext, FinetunedRecord, LayerSpec, ModelEntry, PaintVolume } 
 import { MANIFEST_METADATA_KEY, PAINT_ROUTE } from "../../contracts";
 import { type FetchFullFiles, fetchFullFiles } from "../../finetune/full/files";
 import { defaultTile, is3d, tileChoices } from "../../finetune/full/graph";
-import { BLOCK_COSTS, checkTileSide } from "../../finetune/full/run-full";
+import { BLOCK_COSTS, checkTileSide, writableBlocks } from "../../finetune/full/run-full";
 import { webgpuMissing } from "../../finetune/full/tfjs";
 import { finetuneModes, MODE_NOUN, readsOneSlice, refuseMode, sourceOf } from "../../finetune/modes";
 import { withMetadata } from "../../finetune/onnx-proto";
@@ -121,9 +121,11 @@ export function finetuneRoutes(router: Router, deps: Partial<FinetuneDeps> = {})
       const { graph } = await d.fullFiles(sourceOf(entry), spec);
       const unavailable = await refuseGpu();
       const blocks = is3d(graph), costs = blocks ? BLOCK_COSTS.architectures[entry.manifest.architecture] : spec.spike?.full;
-      const tiles = tileChoices(graph, costs);
+      // A 3D model's blocks are its files' (writableBlocks), its default the
+      // one it is served at: the finetune is served from the file it trains.
+      const tiles = tileChoices(graph, costs, blocks ? [...writableBlocks(entry).keys()] : []);
       const measured = blocks ? { measured_on: costs ? BLOCK_COSTS.setup : null, measured_gpu: costs ? BLOCK_COSTS.gpu : null } : { measured_on: spec.spike?.setup ?? null };
-      return { dims: blocks ? 3 : 2, tiles, default_tile: defaultTile(tiles), context: graph.context, ...measured, unavailable };
+      return { dims: blocks ? 3 : 2, tiles, default_tile: defaultTile(tiles, blocks ? entry.variant.input_size[0] : null), context: graph.context, ...measured, unavailable };
     } catch (e) {
       return { tiles: [], default_tile: null, context: null, measured_on: null, error: `The training graph could not be fetched: ${message(e)}` };
     }
