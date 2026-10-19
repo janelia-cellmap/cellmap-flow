@@ -23,6 +23,15 @@ function describeCropImport(p) {
   return p.message || JSON.stringify(p);
 }
 
+// sessionVolumeChanged's way to volumeReady, once initCrops has run.
+let volumeReadyHook = null;
+
+// Another part of the tab made `volumeId` the session's volume (rank.js's
+// Use this model): Download paint and Delete volume act on it from now on.
+export function sessionVolumeChanged(volumeId) {
+  if (volumeReadyHook) volumeReadyHook(volumeId);
+}
+
 // log: the panel's log; picker: the model picker; form: the training form
 // (its state is saved once a volume exists).
 // Returns { addToViewer(cropId, neuroglancerUrl), volumeReady(volumeId) }.
@@ -66,6 +75,7 @@ export function initCrops({ log, picker, form }) {
   function volumeReady(volumeId) {
     if (browser) showVolumeActions(volumeId);
   }
+  volumeReadyHook = volumeReady;
 
   // After a reload the session still has its volume (the backend keeps it
   // for the tab), so the buttons learn which one from the browser's own
