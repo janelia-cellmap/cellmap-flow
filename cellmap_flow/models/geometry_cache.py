@@ -163,8 +163,8 @@ def build_here(model_config):
 
     Refused for a model that runs in another environment (its ``env``, or
     its type's ``default_env``): this process lacks its packages, or has
-    other versions of them (the default environment's cellpose 3 for a
-    Cellpose-SAM model), so building it here fails or, worse, half-works.
+    other versions of them (say, an older Cellpose than a Cellpose-SAM
+    model needs), so building it here fails or, worse, half-works.
     Its geometry comes from its running server.
 
     Raises:
