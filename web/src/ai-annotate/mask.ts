@@ -29,7 +29,7 @@ export function normalizeToUint8(plane: ArrayLike<number>, isUint8: boolean): Ui
 }
 
 /** numpy's default (linear) percentile of sorted values. */
-function percentile(sorted: Float64Array, q: number): number {
+export function percentile(sorted: Float64Array, q: number): number {
   if (sorted.length === 0) return 0;
   const rank = (q / 100) * (sorted.length - 1);
   const lo = Math.floor(rank), hi = Math.ceil(rank);

@@ -15,7 +15,7 @@ import { SUPPORTED_NORMALIZERS } from "../../infer/norms";
 import { SUPPORTED_POSTPROCESSORS } from "../../infer/post";
 import type { Router } from "../router";
 import { badRequest, json, objectBody } from "../router";
-import { allServed, blobFor, serveModels } from "../serving";
+import { blobFor, setChain } from "../serving";
 
 /** A chain from a request body, or the reason it is not one. The steps are
  * kept as given (values are not coerced, like PipelineSpec), only checked:
@@ -50,19 +50,7 @@ export function pipelineRoutes(router: Router): void {
     const read = readChain(body);
     if ("error" in read) return badRequest(read.error);
     const chain = read.chain;
-    const previous = ctx.session.state.chain;
-    const [{ blob, digest }, previousDigest] = await Promise.all([blobFor(chain), blobFor(previous).then((b) => b.digest)]);
-    const entries = ctx.session.state.models;
-    await ctx.session.update({ chain });
-    const answer = (layers: string[]) => json(200, { success: true, pipeline: { input_norm: chain.input_norm, postprocess: chain.postprocess }, digest, layers });
-    if (!ctx.infer.dataset()) return answer([]);
-    // The same chain again, and every model's layer already carries it:
-    // nothing to redraw (and redrawing would reset what the user set in
-    // the viewer, a layer hidden, an opacity).
-    if (digest === previousDigest && allServed(ctx, entries, blob)) return answer(entries.map((e) => e.name));
-    const postprocessChanged = JSON.stringify(previous.postprocess) !== JSON.stringify(chain.postprocess);
-    const served = await serveModels(ctx, entries, chain, { blob, postprocessChanged });
-    ctx.log(`Chain ${digest}: ${served.length ? served.map((s) => s.entry.name).join(", ") : "no model"} drawn through it`);
-    return answer(served.map((s) => s.entry.name));
+    const [served, { digest }] = await Promise.all([setChain(ctx, chain), blobFor(chain)]);
+    return json(200, { success: true, pipeline: { input_norm: chain.input_norm, postprocess: chain.postprocess }, digest, layers: (served ?? []).map((s) => s.entry.name) });
   });
 }
