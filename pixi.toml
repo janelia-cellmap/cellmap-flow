@@ -3,8 +3,11 @@
 # this checkout, and the dashboard then starts inference servers on the
 # cluster with `pixi run cellmap_flow serve` (CELLMAP_FLOW_SERVER_COMMAND
 # below). Python dependencies come from pyproject.toml through the editable
-# install; this file adds what PyPI cannot provide: CUDA, and the MinIO
-# server and client and the neuroglancer fork that annotation painting needs.
+# install, PyTorch's CUDA libraries with them (its Linux wheels bring their
+# own: no CUDA toolkit is installed, as nothing here compiles CUDA); this file
+# adds what PyPI cannot provide: the MinIO server and client and the
+# neuroglancer fork that annotation painting needs, and the compiler that
+# fork is built with.
 #
 # Linux is what deploys (Fileglancer, the cluster); Apple-silicon Macs
 # (osx-arm64) can install it too, to run the viewer and dashboard and serve
@@ -44,9 +47,6 @@ s3fs = "*"
 zarr = "==2.18.4"
 numcodecs = "==0.15.0"
 
-[target.linux-64.dependencies]
-cuda-toolkit = ">=12.0"
-
 [target.osx-arm64.activation.env]
 # Training and serving use Apple's GPU (MPS); an operation PyTorch has no
 # MPS kernel for runs on the CPU instead of failing the run.
@@ -72,6 +72,13 @@ cellmap-flow = { path = ".", editable = true, extras = ["finetune", "postprocess
 minio-server = "*"
 minio-client = "*"
 
+[feature.finetune.target.linux-64.dependencies]
+# The neuroglancer fork below has no wheel: it is built at install, a C++
+# extension among it, with the environment's compiler (CXXFLAGS above). That
+# compiler used to arrive with the CUDA toolkit, which nothing else needed.
+# On a Mac, Apple's command-line tools build it.
+cxx-compiler = "*"
+
 [feature.finetune.pypi-dependencies]
 # The neuroglancer fork with the voxel-annotation tools: the Draw tab, its
 # brush and flood fill (pre-bound to A and F), and the S3 writes that save
@@ -83,16 +90,10 @@ minio-client = "*"
 # not change what deploys.
 neuroglancer = { git = "https://github.com/briossant/neuroglancer.git", rev = "fae54db8c667176a602a34f0d9d1028956009836" }
 
-[feature.cellpose.dependencies]
-numpy = "<2.1"
-
-[feature.cellpose.pypi-dependencies]
-cellpose = "==3.1.1.1"
-
-# Cellpose 4 (Cellpose-SAM) wants a newer torch and numpy than the default
-# environment's cellpose 3 pins allow, so it lives in an environment of its
-# own, solved separately. A model runs in it with `env: cellpose4` in its
-# YAML entry (docs: "Running a model in its own environment").
+# Cellpose (Cellpose-SAM, Cellpose 4) lives in an environment of its own,
+# solved separately, where the `cellpose` model type runs and finetunes by
+# default (CellposeModelConfig.default_env); `env:` in a model's YAML entry
+# picks another (docs: "Running a model in its own environment").
 [feature.cellpose4.pypi-dependencies]
 cellpose = ">=4"
 
@@ -148,8 +149,8 @@ opencv-python-headless = ">=4.8"
 # For the `onnx` model type, which defaults to this environment: the browser
 # mode's ONNX exports, and the models finetuned in the browser, served with
 # ONNX Runtime. On Linux onnxruntime-gpu, whose CUDA provider is built for
-# CUDA 13 from 1.27 on, as the torch wheels and the cuda-toolkit here are; it
-# loads cuDNN and cuBLAS from the nvidia packages torch brings, which the
+# CUDA 13 from 1.27 on, as the torch wheels are; it loads cuDNN and cuBLAS
+# from the nvidia packages torch brings, which the
 # server has loaded by then (configs/onnx.py, _session). PyPI's onnxruntime
 # for Linux is CPU-only, and it is what bioimageio-core[onnx] pulls into the
 # bioimageio environment, so an ONNX model would run on the CPU there. On the
@@ -184,10 +185,11 @@ sphinx-rtd-theme = "*"
 myst-parser = "*"
 
 [environments]
-# What Fileglancer deploys: dashboard, catalog and cellpose models, finetuning.
-default = { features = ["finetune", "cellpose"], solve-group = "default" }
-test = { features = ["finetune", "cellpose", "test"], solve-group = "default" }
-dev = { features = ["finetune", "cellpose", "test", "dev"], solve-group = "default" }
+# What Fileglancer deploys: dashboard, catalog models, finetuning. Cellpose
+# runs in cellpose4.
+default = { features = ["finetune"], solve-group = "default" }
+test = { features = ["finetune", "test"], solve-group = "default" }
+dev = { features = ["finetune", "test", "dev"], solve-group = "default" }
 docs = { features = ["docs"] }
 dacapo = { features = ["finetune", "dacapo"] }
 bioimageio = { features = ["finetune", "bioimageio"] }
@@ -195,8 +197,9 @@ bioimageio = { features = ["finetune", "bioimageio"] }
 # move the deployed environment's packages; not finetunable, so without the
 # finetune feature's MinIO and neuroglancer fork, which only the dashboard uses.
 onnx = { features = ["onnx"] }
-# For models that set `env: cellpose4`; its own solve group, so cellpose 4
-# can have the torch and numpy it needs without moving the default env's.
+# Cellpose's (the `cellpose` model type's default); its own solve group, so
+# cellpose 4 can have the torch and numpy it needs without moving the
+# default env's.
 cellpose4 = { features = ["cellpose4"], solve-group = "cellpose4" }
 # The `fly` model type defaults to it for raw checkpoints and eager model.pt
 # files; TorchScript files run anywhere. Its own solve group: in the default

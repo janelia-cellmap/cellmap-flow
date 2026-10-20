@@ -34,9 +34,9 @@ three times what the same voxels do slice by slice. What the layer shows is
   segmentation; it is not applied here (see ``_masks``). In 3D the masks
   are Cellpose's 3D objects, one id through the chunk's z.
 
-Cellpose 4 cannot share cellmap-flow's default environment, whose cellpose 3
-pins an older numpy, so this type runs in the ``cellpose4`` pixi
-environment unless its entry names another (``default_env``).
+cellmap-flow's default environment has no Cellpose, so this type runs in
+the ``cellpose4`` pixi environment unless its entry names another
+(``default_env``).
 
 It can be finetuned, with LoRA or in full, on painted instances
 (``trainable_model``): the network learns Cellpose's own outputs, the flows
@@ -155,7 +155,7 @@ def tiles_per_volume(shape, tile: int, rescale: float = 1.0, anisotropy: float =
 def _check_cellpose_4():
     """Raise when the installed Cellpose is older than 4.
 
-    Cellpose 3 (the default environment's) does not know cpsam: it would
+    Cellpose 3 (``pip install cellmap-flow[cellpose]``'s) does not know cpsam: it would
     warn and segment with another model, so the layer would look plausible
     and be wrong.
     """
@@ -296,8 +296,8 @@ class CellposeModelConfig(ModelConfig):
     """
 
     cli_name = "cellpose"
-    # Cellpose 4 cannot share cellmap-flow's default environment (see the
-    # module docstring); an entry's explicit env still wins.
+    # cellmap-flow's default environment has no Cellpose (see the module
+    # docstring); an entry's explicit env still wins.
     default_env = "cellpose4"
     finetunable = True
     # Cellpose's eval normalizes each slice to its 1st-99th percentile, and

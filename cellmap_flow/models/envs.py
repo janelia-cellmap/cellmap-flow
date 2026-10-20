@@ -1,10 +1,9 @@
 """Running a model in an environment of its own.
 
 Some models need packages that cannot share cellmap-flow's environment:
-Cellpose 4 (Cellpose-SAM) wants a newer torch and numpy than the default
-environment's cellpose 3 allows, and transformer models pin their own
-stacks. A model entry's ``env`` says where such a model's inference server,
-and its finetuning job, run instead::
+Cellpose 4 (Cellpose-SAM) pins its own torch and numpy, and transformer
+models pin their own stacks. A model entry's ``env`` says where such a
+model's inference server, and its finetuning job, run instead::
 
     models:
       my_model:

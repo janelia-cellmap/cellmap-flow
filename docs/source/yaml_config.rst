@@ -275,8 +275,8 @@ runs there when its entry gives no ``env``; an explicit ``env`` wins, and
      - What it is for
      - Default for
    * - ``default``
-     - The dashboard, the catalog, Cellpose 3 and finetuning; what Fileglancer
-       deploys. ``test`` and ``dev`` add pytest and the linters to it.
+     - The dashboard, the catalog and finetuning; what Fileglancer deploys.
+       ``test`` and ``dev`` add pytest and the linters to it.
      - types without a default of their own, which run where cellmap-flow runs
    * - ``fly``
      - fly_organelles (``mzouink/fly-organelles`` at ``ab89c10``), whose
@@ -293,9 +293,9 @@ runs there when its entry gives no ``env``; an explicit ``env`` wins, and
        mode's ONNX exports and the models finetuned there. Solved on its own.
      - ``onnx``
    * - ``cellpose4``
-     - Cellpose 4 (Cellpose-SAM), which needs a newer torch and numpy than
-       Cellpose 3. Solved on its own.
-     - none: give ``env: cellpose4``
+     - Cellpose 4 (Cellpose-SAM). Solved on its own, so Cellpose's pins do not
+       move the default environment's packages.
+     - ``cellpose``
    * - ``dacapo``
      - ``dacapo-ml``. Its lock does not import DaCapo yet (``dacapo-ml`` 0.3.0
        with fibsem-tools 7, which dropped ``fibsem_tools.metadata``), so a
@@ -577,8 +577,8 @@ Cellpose
 chunk, in 2D, and serves its cell probability, its flows or its instance
 masks. It runs
 in the ``cellpose4`` pixi environment unless the entry gives an ``env``:
-Cellpose 4 cannot share the default environment, whose cellpose 3 pins an
-older numpy. ``example/cellpose_sam.yaml`` serves it on jrc_mus-salivary-1.
+the default environment has no Cellpose. ``example/cellpose_sam.yaml``
+serves it on jrc_mus-salivary-1.
 
 .. code-block:: yaml
 
