@@ -8,8 +8,7 @@
 // voxels of the volume, its prediction read on the volume's grid (each
 // painted voxel takes the model's voxel its centre lies in, as Seed from
 // Prediction reads one: label-it/prediction.ts servedIndices), so a model
-// served at another voxel size is scored on the same paint. Its decision is
-// at 0, as the trainer's: the models' outputs are logits. A model finer
+// served at another voxel size is scored on the same paint. A model finer
 // than the paint (16 nm under 128 nm strokes) needs a block of its own for
 // every few painted voxels, so the route reads at most RANK_BLOCKS of its
 // blocks, spread over the paint, and scores the painted voxels under them.
@@ -26,9 +25,27 @@
 // BCE, label smoothing 0.1) is given beside the score: about 0.69 is
 // guessing, about 0.20 the paint fitted exactly.
 //
+// A model is scored at its own cut-off: the logit above which it calls a
+// voxel object, chosen on the paint as the one of CUTOFFS with the best Dice
+// of its calls against the painted objects (the nearest to 0 among equals,
+// and 0, the trainer's decision, when only one class is painted). A model
+// that sees the objects but is shifted, calling too much or too little at 0,
+// is then ranked as it would be used once its threshold is set; the cut-off
+// is given beside the score, with the score at 0.
+//
+// Raw that spans only a few grey levels (Jurkat's, about 20 of 0-255) is
+// nearly flat by the time a model's MinMaxNormalizer has scaled it, and a
+// model can be blind on it that sees the objects once the raw is stretched.
+// So where the raw under the paint (its 1st to 99th percentiles) is
+// narrower than NARROW_WINDOW of the model's normalizer's range, the model
+// is scored a second time with that normalizer set to the raw's window
+// (windowed), and the window kept only when it scores WINDOW_MARGIN better:
+// a near tie on a little paint is as likely to mislead as to help.
+//
 // A binary model is scored channel by channel and answers with its best:
 // painted nuclei rank a model by its nucleus channel, whatever else it
 // predicts. An affinity model is scored on its channels together.
+import type { Step } from "../contracts";
 import type { PaintedChunk, Targets } from "./types";
 
 /** The label smoothing of the finetune's default loss (FinetuneOptions), which the loss beside the score uses. */
@@ -44,20 +61,53 @@ export function spread<T>(items: readonly T[], count: number): T[] {
   return Array.from({ length: count }, (_, j) => items[Math.floor(((j + 0.5) * items.length) / count)]);
 }
 
-/** One channel's agreement with the paint so far: the targets counted, how
- * many of them the prediction gets right, and the loss summed, apart for
- * object and background targets. */
+/** A window of the raw this much narrower than the model's normalizer's range is tried (see the top of the file). */
+export const NARROW_WINDOW = 0.25;
+
+/** How much better on the paint the raw's window must score to be kept. */
+export const WINDOW_MARGIN = 0.03;
+
+/** `norm` with its MinMaxNormalizer set to the raw's window [lo, hi], or
+ * null: no MinMaxNormalizer, no window (lo = hi), or one not narrower than
+ * NARROW_WINDOW of the normalizer's own range. */
+export function windowed(norm: readonly Step[], lo: number, hi: number): Step[] | null {
+  const k = norm.findIndex((s) => s.name === "MinMaxNormalizer");
+  if (k < 0 || !(hi > lo)) return null;
+  const min = Number(norm[k].min_value ?? 0), max = Number(norm[k].max_value ?? 255);
+  if (!(hi - lo < NARROW_WINDOW * (max - min))) return null;
+  return norm.map((s, i) => (i === k ? { ...s, min_value: lo, max_value: hi } : s));
+}
+
+/** The cut-offs a score is read at: logits from -6 to 6 in quarters (0 among them). */
+export const CUTOFFS = Array.from({ length: 49 }, (_, k) => -6 + k / 4);
+
+/** One channel's agreement with the paint so far: the targets counted, their
+ * logits binned against CUTOFFS (bin b: above b of them), and the loss summed,
+ * apart for object and background targets. */
 export interface Tally {
   objects: number;
-  objectsRight: number;
+  objectBins: number[];
   objectLoss: number;
   background: number;
-  backgroundRight: number;
+  backgroundBins: number[];
   backgroundLoss: number;
 }
 
 export function emptyTallies(channels: number): Tally[] {
-  return Array.from({ length: channels }, () => ({ objects: 0, objectsRight: 0, objectLoss: 0, background: 0, backgroundRight: 0, backgroundLoss: 0 }));
+  const bins = () => new Array<number>(CUTOFFS.length + 1).fill(0);
+  return Array.from({ length: channels }, () => ({ objects: 0, objectBins: bins(), objectLoss: 0, background: 0, backgroundBins: bins(), backgroundLoss: 0 }));
+}
+
+/** How many of CUTOFFS `logit` is above: its bin. Exact for the quarter cut-offs, so a logit of 0 is not above 0. */
+function binOf(logit: number): number {
+  return Math.min(Math.max(Math.ceil((logit - CUTOFFS[0]) * 4), 0), CUTOFFS.length);
+}
+
+/** How many of `bins`' logits are above cut-off k: called object at it. */
+function above(bins: number[], k: number): number {
+  let n = 0;
+  for (let b = k + 1; b < bins.length; b++) n += bins[b];
+  return n;
 }
 
 /** The painted voxels of `chunk` that touch a painted voxel of the other
@@ -107,23 +157,27 @@ export function tallyChunk(tallies: Tally[], chunk: Pick<PaintedChunk, "shape">,
       const softplus = Math.max(logit, 0) + Math.log1p(Math.exp(-Math.abs(logit)));
       if (targets.target[c * n + i] > 0.5) {
         t.objects++;
-        if (logit > 0) t.objectsRight++;
+        t.objectBins[binOf(logit)]++;
         t.objectLoss += softplus - smoothHigh * logit;
       } else {
         t.background++;
-        if (logit <= 0) t.backgroundRight++;
+        t.backgroundBins[binOf(logit)]++;
         t.backgroundLoss += softplus - smoothLow * logit;
       }
     }
   }
 }
 
-/** A model's score on the paint, from its tallies. */
+/** A model's score on the paint, from its tallies, at its cut-off. */
 export interface RankScore {
   /** The balanced accuracy: the mean of objectsFound and backgroundRight, or the one of them the paint has. */
   matches: number;
   objectsFound: number | null;
   backgroundRight: number | null;
+  /** The logit above which the model calls a voxel object, chosen on the paint (see the top of the file). */
+  cutoff: number;
+  /** The balanced accuracy at 0, the model's own decision. */
+  matchesAtZero: number;
   /** The finetune's default loss on the same targets, class-balanced. */
   loss: number;
   scored: number;
@@ -138,9 +192,10 @@ export interface RankScore {
  * null when nothing was counted. */
 export function rankScore(tallies: Tally[], channels: readonly string[], affinity: boolean): RankScore | null {
   if (affinity) {
+    const sum = (p: number[], q: number[]) => p.map((v, b) => v + q[b]);
     const all = tallies.reduce<Tally>((s, t) => ({
-      objects: s.objects + t.objects, objectsRight: s.objectsRight + t.objectsRight, objectLoss: s.objectLoss + t.objectLoss,
-      background: s.background + t.background, backgroundRight: s.backgroundRight + t.backgroundRight, backgroundLoss: s.backgroundLoss + t.backgroundLoss,
+      objects: s.objects + t.objects, objectBins: sum(s.objectBins, t.objectBins), objectLoss: s.objectLoss + t.objectLoss,
+      background: s.background + t.background, backgroundBins: sum(s.backgroundBins, t.backgroundBins), backgroundLoss: s.backgroundLoss + t.backgroundLoss,
     }), emptyTallies(1)[0]);
     return scoreOf(all, null);
   }
@@ -154,13 +209,25 @@ export function rankScore(tallies: Tally[], channels: readonly string[], affinit
 
 function scoreOf(t: Tally, channel: string | null): RankScore | null {
   if (!t.objects && !t.background) return null;
-  const objectsFound = t.objects ? t.objectsRight / t.objects : null;
-  const backgroundRight = t.background ? t.backgroundRight / t.background : null;
-  const rates = [objectsFound, backgroundRight].filter((r): r is number => r !== null);
+  const at = (k: number) => {
+    const found = above(t.objectBins, k), wrong = above(t.backgroundBins, k);
+    const objectsFound = t.objects ? found / t.objects : null;
+    const backgroundRight = t.background ? 1 - wrong / t.background : null;
+    const rates = [objectsFound, backgroundRight].filter((r): r is number => r !== null);
+    return { objectsFound, backgroundRight, matches: rates.reduce((a, b) => a + b, 0) / rates.length, dice: (2 * found) / Math.max(found + t.objects + wrong, 1) };
+  };
+  const zero = CUTOFFS.indexOf(0);
+  let k = zero;
+  if (t.objects && t.background) {
+    for (let j = 0; j < CUTOFFS.length; j++) {
+      const better = at(j).dice - at(k).dice;
+      if (better > 1e-12 || (better > -1e-12 && Math.abs(CUTOFFS[j]) < Math.abs(CUTOFFS[k]))) k = j;
+    }
+  }
+  const { objectsFound, backgroundRight, matches } = at(k);
   const losses = [t.objects ? t.objectLoss / t.objects : null, t.background ? t.backgroundLoss / t.background : null].filter((l): l is number => l !== null);
   return {
-    matches: rates.reduce((a, b) => a + b, 0) / rates.length,
-    objectsFound, backgroundRight,
+    matches, objectsFound, backgroundRight, cutoff: CUTOFFS[k], matchesAtZero: at(zero).matches,
     loss: losses.reduce((a, b) => a + b, 0) / losses.length,
     scored: t.objects + t.background, objects: t.objects, background: t.background,
     channel,

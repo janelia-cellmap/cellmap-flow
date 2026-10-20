@@ -180,6 +180,16 @@ scored in turn, a few seconds to half a minute each, and listed best first.
   of background does not reward a model that calls everything background:
   such a model matches 50%. Beside it are the share of painted objects it
   calls object and of painted background it calls background.
+- Each model is scored at its own cut-off: the threshold on its output that
+  fits the paint best, which the row gives, with the match at the model's own
+  0 when that differs. A model that sees the objects but calls too much or
+  too little at 0 is ranked as it would be used once its threshold is set.
+- Raw that spans only a few grey levels (``jrc_jurkat-1``'s about 20 of
+  0–255) looks almost flat to a model through its usual normalizer. Where
+  the raw under the paint spans less than a quarter of the normalizer's
+  range, the model is scored again with the normalizer stretched to the
+  raw's 1st to 99th percentiles, and that is kept when it matches at least 3
+  points better; the row says so.
 - A model is scored on what its own finetune would train on: a nucleus or
   mitochondria model on its channel (a model of several such channels on the
   one that matches best, which the row names), an affinity model on the pairs
@@ -207,7 +217,10 @@ the ticked models it shows are ranked.
 again: it is loaded with its layer and picked under *Select Model*, a volume
 is made for it, the paint and the good regions are copied into that volume
 on the model's own grid, and its paint layer takes the old one's place (the
-old volume stays, under *Resume Existing Volume*). On the same grid the paint
+old volume stays, under *Resume Existing Volume*). What its score chose comes
+with it: a stretched raw becomes the session's input normalization (the raw
+is the dataset's, so every model reads it so), and its cut-off becomes *Seed
+from Prediction*'s threshold. On the same grid the paint
 is copied voxel for voxel; on a finer one each painted voxel becomes the
 voxels it covers; on a coarser one each voxel takes the label of the painted
 voxels inside it, and is left unpainted where they disagree (object against
