@@ -23,15 +23,16 @@ function body(res: ApiResponse): any {
   return res.json;
 }
 
-/** A 1×4×10 chunk painted object (2) in x < `edge` and background (1) past it, and logits that say object for x < `called`. */
-function stripes(edge: number, called: number) {
+/** A 1×4×10 chunk painted object (2) in x < `edge` and background (1) past
+ * it, and logits that say object for x < `called`: `high` there, `low` past it. */
+function stripes(edge: number, called: number, high = 3, low = -3) {
   const shape = [1, 4, 10], labels = new Uint8Array(40).map((_, i) => (i % 10 < edge ? 2 : 1));
-  const logits = Float32Array.from({ length: 40 }, (_, i) => (i % 10 < called ? 3 : -3));
+  const logits = Float32Array.from({ length: 40 }, (_, i) => (i % 10 < called ? high : low));
   return { chunk: { index: [0, 0, 0], shape, labels }, logits };
 }
 
-function score(edge: number, called: number, forgiveEdges: boolean) {
-  const { chunk, logits } = stripes(edge, called);
+function score(edge: number, called: number, forgiveEdges: boolean, high = 3, low = -3) {
+  const { chunk, logits } = stripes(edge, called, high, low);
   const tallies = emptyTallies(1);
   tallyChunk(tallies, chunk, binaryTargets(1)(chunk), (_c, i) => logits[i], forgiveEdges ? paintEdges(chunk) : null);
   return rankScore(tallies, ["nuc"], false)!;
@@ -41,9 +42,19 @@ describe("a model's score on the paint", () => {
   it("weighs object and background paint alike, so calling everything background scores a half", () => {
     const right = score(1, 1, false), allBackground = score(1, 0, false);
     expect(right.matches).toBe(1);
-    // Nine voxels in ten are background, all called right: 90% of the voxels, half the score.
-    expect(allBackground).toMatchObject({ matches: 0.5, objectsFound: 0, backgroundRight: 1 });
+    // Nine voxels in ten are background, all called right: 90% of the voxels, half the score
+    // (and no cut-off does better: every voxel has the same logit).
+    expect(allBackground).toMatchObject({ matches: 0.5, matchesAtZero: 0.5 });
     expect(allBackground.loss).toBeGreaterThan(right.loss);
+  });
+
+  it("reads a model that sees the objects but calls none of them at 0 at the cut-off that fits the paint", () => {
+    // Objects at -1, background at -3: nothing is called object at 0.
+    const shifted = score(5, 5, false, -1, -3);
+    expect(shifted).toMatchObject({ matchesAtZero: 0.5, matches: 1, objectsFound: 1, backgroundRight: 1 });
+    expect(shifted.cutoff).toBeGreaterThanOrEqual(-3);
+    expect(shifted.cutoff).toBeLessThan(-1);
+    expect(score(5, 5, false).cutoff).toBe(0);  // one that is right at 0 keeps it
   });
 
   it("does not hold a binary model's boundary a voxel off against it", () => {
@@ -85,7 +96,7 @@ describe("the rank routes", () => {
     expect(listed.volume.painted_chunks).toBeGreaterThan(0);
 
     const nuc = body(await handle(request("POST", "/api/finetune/rank/score", { name: NAME_56 })));
-    expect(nuc).toMatchObject({ success: true, matches: 1, objects_found: 1, background_right: 1, channel: "nuc" });
+    expect(nuc).toMatchObject({ success: true, matches: 1, objects_found: 1, background_right: 1, cutoff: 0, matches_at_zero: 1, channel: "nuc" });
     expect(nuc.loss).toBeLessThan(0.3);
     expect(ctx.infer.serves).toHaveLength(1);
 
@@ -95,6 +106,29 @@ describe("the rank routes", () => {
     const servedForScore = ctx.infer.serves.at(-1)!;
     expect(servedForScore).toMatchObject({ name: NAME_54, chain: { input_norm: entry("setup_54").manifest.input_norm, postprocess: [] } });
     expect(ctx.infer.served().map((s) => s.entry.name)).toEqual([NAME_56]);
+  });
+
+  it("score a model again with narrow raw stretched, keep that only when it scores clearly better, and Use this model sets it", async () => {
+    const { ctx, handle } = await painted();
+    // Raw spanning 216 to 236 grey levels, as Jurkat's.
+    ctx.infer.readRaw = async (_level, lo, hi) => Uint8Array.from({ length: hi.reduce((n, h, a) => n * (h - lo[a]), 1) }, (_, i) => 216 + (i % 21)).buffer;
+    // A model that sees the object only when its normalizer stretches the raw.
+    const inside = (z: number, y: number, x: number) => [z, y, x].every((v) => v >= 5 && v < 15);
+    const stretched = (view: string) => ctx.infer.serves.some((s) => view.includes(s.blob) && Number(s.chain.input_norm[0].min_value) > 0);
+    ctx.infer.outputAt = (view, _c, z, y, x) => (stretched(view) && inside(z, y, x) ? 4 : -4);
+    const scored = body(await handle(request("POST", "/api/finetune/rank/score", { name: NAME_54 })));
+    expect(scored.window[0]).toBeGreaterThanOrEqual(216);
+    expect(scored.window[1]).toBeLessThanOrEqual(236);
+    expect(scored.matches).toBeGreaterThan(scored.matches_without_window + 0.03);
+    // Every voxel the same: no window, and nothing served for one.
+    ctx.infer.readRaw = async (_level, lo, hi) => new Uint8Array(hi.reduce((n, h, a) => n * (h - lo[a]), 1)).buffer;
+    const serves = ctx.infer.serves.length;
+    expect(body(await handle(request("POST", "/api/finetune/rank/score", { name: NAME_54 })))).toMatchObject({ success: true, window: null });
+    expect(ctx.infer.serves.length).toBe(serves + 1);
+
+    const used = body(await handle(request("POST", "/api/finetune/rank/use", { name: NAME_54, window: scored.window })));
+    expect(used).toMatchObject({ success: true, window: scored.window });
+    expect(ctx.session.state.chain.input_norm.find((n) => n.name === "MinMaxNormalizer")).toMatchObject({ min_value: scored.window[0], max_value: scored.window[1] });
   });
 
   it("refuse without paint, and for a model the catalog does not have", async () => {

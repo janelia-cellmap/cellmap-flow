@@ -11,31 +11,41 @@
 // has had them computed; any other is served for the score alone, with its
 // manifest's normalizers and no layer, and released after, so a ranking
 // leaves the Models tab and the GPU as they were (its download stays in the
-// catalog's byte cache, and Show serves it at once). POST
-// /api/finetune/rank/use {name} makes the one picked the model to finetune:
+// catalog's byte cache, and Show serves it at once). Where the raw under the
+// paint is narrow, a model is scored a second time through its normalizer
+// stretched to the raw's window, served for that alone (finetune/rank.ts
+// says when that is kept). POST /api/finetune/rank/use {name, window?}
+// makes the one picked the model to finetune, the window its score chose
+// (if any) first made the session's input normalization:
 // served with its layer (as the Models tab's Add serves it), a volume made
 // for it with the session volume's paint carried onto its grid
 // (finetune/carry.ts) and its good regions, and that volume the session's,
 // its paint layer in the old one's place; the old volume stays in the paint
 // store.
-import type { AppContext, Chain, ModelEntry, PaintVolume, ServedModel } from "../../contracts";
+import { TYPED } from "../../../chunkmirage/web/src/asread";
+import { inputBox } from "../../../chunkmirage/web/src/stages";
+import { percentile } from "../../ai-annotate/mask";
+import type { AppContext, Chain, DatasetInfo, ModelEntry, PaintVolume, ServedModel, Step } from "../../contracts";
 import { FINETUNED_REPO } from "../../contracts";
 import { carryPaint, paintedBox } from "../../finetune/carry";
 import { loadGoodRegions, saveGoodRegions } from "../../finetune/good-regions";
 import { readsOneSlice } from "../../finetune/modes";
 import type { PaintedChunk } from "../../finetune/types";
-import { emptyTallies, paintEdges, RANK_BLOCKS, rankScore, spread, tallyChunk } from "../../finetune/rank";
+import { emptyTallies, paintEdges, RANK_BLOCKS, rankScore, type RankScore, spread, tallyChunk, WINDOW_MARGIN, windowed } from "../../finetune/rank";
 import { targetTransformFor } from "../../finetune/targets";
 import { createVolume, hasAffinityChannels, paintedChunkIndices, planVolume, readPaintedChunk, readVolume } from "../../finetune/volume";
-import { geometryOf, outputShape } from "../../infer/geometry";
+import { chooseRawLevel, geometryOf, outputShape, ratio } from "../../infer/geometry";
 import { servedIndices, servedLevel } from "../../label-it/prediction";
 import { entryFor } from "../../models/manifest";
 import { PAINT_TAB, paintLayer, paintLayerName, paintLayerUrl } from "../../viewer/layers";
 import type { Router } from "../router";
 import { badRequest, json, message, objectBody } from "../router";
-import { blobFor, pageBase, serveModels } from "../serving";
+import { blobFor, pageBase, serveModels, setChain } from "../serving";
 
 const NO_DATASET = "No dataset is open. Enter its URL in the viewer panel first; the volume is painted on it.";
+
+/** The most raw voxels the window of the raw under the paint is taken from (every few of them). */
+const RAW_SAMPLE = 1_000_000;
 
 export function rankRoutes(router: Router): void {
   router.get("/api/finetune/rank/candidates", async (_req, _params, ctx) => {
@@ -73,70 +83,45 @@ export function rankRoutes(router: Router): void {
     if (!entry) return json(404, { success: false, error: `${name} is not a model the browser can run` });
 
     const started = performance.now();
-    let held: { served: ServedModel; release: () => Promise<void> };
+    let held: Held;
     try {
       held = await servedForRanking(ctx, entry);
     } catch (e) {
       return json(400, { success: false, error: `${name} could not be served: ${message(e)}` });
     }
     try {
-      const level = servedLevel(dataset, held.served.entry), block = outputShape(geometryOf(held.served.entry));
-      const transform = targetTransformFor(entry), affinity = hasAffinityChannels(entry);
-      // Each painted chunk with the model's voxel under each of its painted
-      // voxels (servedIndices, over the painted voxels' box, which it shrinks
-      // to what the level covers), and the model's blocks those lie in.
-      const placed: { chunk: PaintedChunk; origin: number[]; at: NonNullable<ReturnType<typeof servedIndices>> }[] = [];
-      const blocks = new Map<string, number[]>();
-      let outside = 0;
-      for (const index of indices) {
-        const chunk = await readPaintedChunk(ctx.paint, volume, index);
-        const box = chunk && paintedBox(chunk);
-        if (!chunk || !box) continue;
-        const origin = index.map((i, a) => i * volume.chunk_size[a]);
-        const at = servedIndices(volume, box.lo.map((v, a) => v + origin[a]), box.hi.map((v, a) => v + origin[a]), level);
-        if (!at) { outside++; continue; }
-        placed.push({ chunk, origin, at });
-        forEachPainted(chunk, origin, at, (_i, served) => {
-          const b = served.map((s, a) => Math.floor(s / block[a]));
-          blocks.set(b.join(","), b);
-        });
+      const base = await scorePaint(ctx, dataset, volume, indices, held.served);
+      let score = base.score, window: [number, number] | null = null;
+      // The raw stretched to its own range, when it is narrow (finetune/rank.ts).
+      const range = base.score && (await rawWindow(ctx, dataset, held.served.entry, base.read));
+      const stretched = range && windowed(held.chain.input_norm, range[0], range[1]);
+      if (base.score && range && stretched) {
+        const alt = await servedForRanking(ctx, entry, stretched);
+        try {
+          const s = (await scorePaint(ctx, dataset, volume, indices, alt.served)).score;
+          if (s && s.matches >= base.score.matches + WINDOW_MARGIN) [score, window] = [s, range];
+        } finally {
+          await alt.release();
+        }
       }
-      // At most RANK_BLOCKS of them, spread over the paint, each read whole.
-      const keys = [...blocks.keys()].sort((p, q) => compareIndex(blocks.get(p)!, blocks.get(q)!));
-      const read = new Map<string, { lo: number[]; shape: number[]; data: Float32Array }>();
-      for (const key of spread(keys, RANK_BLOCKS)) {
-        const lo = blocks.get(key)!.map((b, a) => b * block[a]), hi = lo.map((l, a) => Math.min(l + block[a], level.shape[a]));
-        const out = await ctx.infer.readOutput(held.served.view, lo, hi);
-        read.set(key, { lo, shape: out.shape, data: out.data });
-      }
-      const tallies = emptyTallies(entry.manifest.channels.length);
-      for (const { chunk, origin, at } of placed) {
-        const logits = new Map<number, (c: number) => number>();
-        forEachPainted(chunk, origin, at, (i, served) => {
-          const r = read.get(served.map((s, a) => Math.floor(s / block[a])).join(","));
-          if (!r) return;
-          const [, bz, by, bx] = r.shape, [sz, sy, sx] = served.map((s, a) => s - r.lo[a]);
-          logits.set(i, (c) => r.data[((c * bz + sz) * by + sy) * bx + sx]);
-        });
-        tallyChunk(tallies, chunk, transform(chunk), (c, i) => logits.get(i)?.(c) ?? null, affinity ? null : paintEdges(chunk));
-      }
-      const score = rankScore(tallies, entry.manifest.channels, affinity);
       if (!score) {
-        return badRequest(affinity
+        return badRequest(hasAffinityChannels(entry)
           ? `The paint gives ${name} nothing to score: an affinity is between two painted neighbours, so paint strokes, not single voxels.`
           : `The paint gives ${name} nothing to score: only the edges between object and background strokes are painted, and those are not counted.`);
       }
       const notes = [
-        ...(keys.length > RANK_BLOCKS ? [`scored under ${RANK_BLOCKS} of the ${keys.length} blocks of its output the paint reaches, spread over it`] : []),
-        ...(outside ? [`${outside} of ${indices.length} painted chunks lie past its output, and were not scored`] : []),
+        ...(base.blocks > RANK_BLOCKS ? [`scored under ${RANK_BLOCKS} of the ${base.blocks} blocks of its output the paint reaches, spread over it`] : []),
+        ...(base.outside ? [`${base.outside} of ${indices.length} painted chunks lie past its output, and were not scored`] : []),
       ];
       const seconds = (performance.now() - started) / 1000;
       const pct = (v: number | null) => (v === null ? "–" : `${Math.round(v * 100)}%`);
-      ctx.log(`Ranked ${name} on ${score.scored} painted voxels of ${volume.id}: matches ${pct(score.matches)} (objects found ${pct(score.objectsFound)}, background right ${pct(score.backgroundRight)}), loss ${score.loss.toFixed(3)}, ${seconds.toFixed(1)} s`);
+      const stretchedBy = window ? `, the raw stretched from ${window.map((v) => v.toFixed(1)).join("–")} (${pct(base.score!.matches)} as normalized)` : "";
+      ctx.log(`Ranked ${name} on ${score.scored} painted voxels of ${volume.id}: matches ${pct(score.matches)} at cut-off ${score.cutoff} (objects found ${pct(score.objectsFound)}, background right ${pct(score.backgroundRight)}; ${pct(score.matchesAtZero)} at 0)${stretchedBy}, loss ${score.loss.toFixed(3)}, ${seconds.toFixed(1)} s`);
       return json(200, {
         success: true, name,
-        matches: score.matches, objects_found: score.objectsFound, background_right: score.backgroundRight, loss: score.loss,
+        matches: score.matches, objects_found: score.objectsFound, background_right: score.backgroundRight, cutoff: score.cutoff, matches_at_zero: score.matchesAtZero, loss: score.loss,
         scored_voxels: score.scored, object_voxels: score.objects, background_voxels: score.background, channel: score.channel, seconds,
+        window, ...(window ? { matches_without_window: base.score!.matches } : {}),
         ...(notes.length ? { note: notes.join("; ") } : {}),
       });
     } catch (e) {
@@ -163,6 +148,11 @@ export function rankRoutes(router: Router): void {
     if (!entry) return json(404, { success: false, error: `${name} is not a model the browser can run` });
     if (from.model_id === entry.id) return badRequest(`${from.id} is ${name}'s volume already: finetune it as it is.`);
     try {
+      // The raw's window the score chose (window: [lo, hi]), made the session's
+      // normalizer: the raw is the dataset's, so every model reads it so.
+      const w = Array.isArray(body.window) && body.window.length === 2 ? body.window.map(Number) : null;
+      const norm = w && windowed(ctx.session.state.chain.input_norm, w[0], w[1]);
+      if (norm) await setChain(ctx, { ...ctx.session.state.chain, input_norm: norm });
       if (!ctx.infer.served().some((s) => s.entry.id === entry.id)) {
         const entries = [...ctx.session.state.models.filter((m) => m.id !== entry.id), entry];
         await serveModels(ctx, entries, ctx.session.state.chain);
@@ -183,13 +173,85 @@ export function rankRoutes(router: Router): void {
       ctx.viewer.selectLayer(layer, PAINT_TAB);
       ctx.log(`Carried ${from.id}'s paint to ${to.id} for ${name}: ${carried.painted} voxels at ${to.output_voxel_size.join("×")} nm from ${carried.source} at ${from.output_voxel_size.join("×")} nm, in ${carried.chunks} chunk${carried.chunks === 1 ? "" : "s"}${carried.conflicts ? `; ${carried.conflicts} left unpainted where object and background met in one voxel` : ""}`);
       return json(200, {
-        success: true, name, volume_id: to.id, from_volume: from.id, layer_name: layer,
+        success: true, name, volume_id: to.id, from_volume: from.id, layer_name: layer, window: norm ? w : null,
         painted_voxels: carried.painted, source_voxels: carried.source, conflicts: carried.conflicts, chunks: carried.chunks, good_regions: regions.length,
       });
     } catch (e) {
       return json(400, { success: false, error: `Could not make ${name} the model to finetune: ${message(e)}` });
     }
   });
+}
+
+/** `served`'s score on the paint of `volume`'s chunks `indices`, with how
+ * many of its output blocks the paint reaches, which of them were read (at
+ * most RANK_BLOCKS, spread over the paint: [lo, hi) on its level), and how
+ * many painted chunks lie past its output. */
+async function scorePaint(ctx: AppContext, dataset: DatasetInfo, volume: PaintVolume, indices: number[][], served: ServedModel): Promise<{ score: RankScore | null; blocks: number; read: { lo: number[]; hi: number[] }[]; outside: number }> {
+  const entry = served.entry;
+  const level = servedLevel(dataset, entry), block = outputShape(geometryOf(entry));
+  const transform = targetTransformFor(entry), affinity = hasAffinityChannels(entry);
+  // Each painted chunk with the model's voxel under each of its painted
+  // voxels (servedIndices, over the painted voxels' box, which it shrinks
+  // to what the level covers), and the model's blocks those lie in.
+  const placed: { chunk: PaintedChunk; origin: number[]; at: NonNullable<ReturnType<typeof servedIndices>> }[] = [];
+  const blocks = new Map<string, number[]>();
+  let outside = 0;
+  for (const index of indices) {
+    const chunk = await readPaintedChunk(ctx.paint, volume, index);
+    const box = chunk && paintedBox(chunk);
+    if (!chunk || !box) continue;
+    const origin = index.map((i, a) => i * volume.chunk_size[a]);
+    const at = servedIndices(volume, box.lo.map((v, a) => v + origin[a]), box.hi.map((v, a) => v + origin[a]), level);
+    if (!at) { outside++; continue; }
+    placed.push({ chunk, origin, at });
+    forEachPainted(chunk, origin, at, (_i, s) => {
+      const b = s.map((v, a) => Math.floor(v / block[a]));
+      blocks.set(b.join(","), b);
+    });
+  }
+  // At most RANK_BLOCKS of them, spread over the paint, each read whole.
+  const keys = [...blocks.keys()].sort((p, q) => compareIndex(blocks.get(p)!, blocks.get(q)!));
+  const read = new Map<string, { lo: number[]; hi: number[]; shape: number[]; data: Float32Array }>();
+  for (const key of spread(keys, RANK_BLOCKS)) {
+    const lo = blocks.get(key)!.map((b, a) => b * block[a]), hi = lo.map((l, a) => Math.min(l + block[a], level.shape[a]));
+    const out = await ctx.infer.readOutput(served.view, lo, hi);
+    read.set(key, { lo, hi, shape: out.shape, data: out.data });
+  }
+  const tallies = emptyTallies(entry.manifest.channels.length);
+  for (const { chunk, origin, at } of placed) {
+    const logits = new Map<number, (c: number) => number>();
+    forEachPainted(chunk, origin, at, (i, s) => {
+      const r = read.get(s.map((v, a) => Math.floor(v / block[a])).join(","));
+      if (!r) return;
+      const [, bz, by, bx] = r.shape, [sz, sy, sx] = s.map((v, a) => v - r.lo[a]);
+      logits.set(i, (c) => r.data[((c * bz + sz) * by + sy) * bx + sx]);
+    });
+    tallyChunk(tallies, chunk, transform(chunk), (c, i) => logits.get(i)?.(c) ?? null, affinity ? null : paintEdges(chunk));
+  }
+  return { score: rankScore(tallies, entry.manifest.channels, affinity), blocks: keys.length, read: [...read.values()].map(({ lo, hi }) => ({ lo, hi })), outside };
+}
+
+/** The window of the raw under the output blocks `blocks` of `entry`'s
+ * level (scorePaint's read): the 1st and 99th percentiles of the raw it reads
+ * there (every few voxels, at most RAW_SAMPLE), or null when nothing was
+ * read or the raw has more than one channel. */
+async function rawWindow(ctx: AppContext, dataset: DatasetInfo, entry: ModelEntry, blocks: { lo: number[]; hi: number[] }[]): Promise<[number, number] | null> {
+  if (dataset.channels !== 1) return null;
+  const g = geometryOf(entry), level = chooseRawLevel(dataset.levels, g.input_voxel_size), shape = dataset.levels[level].shape;
+  const r = ratio(g), Typed = TYPED[dataset.dtype] ?? Float32Array;
+  const parts: ArrayLike<number | bigint>[] = [];
+  for (const { lo, hi } of blocks) {
+    const box = inputBox(lo, hi, r, r.map(() => 0));
+    const readLo = box.lo.map((v) => Math.max(v, 0)), readHi = box.hi.map((v, a) => Math.min(v, shape[a]));
+    if (readHi.some((h, a) => h <= readLo[a])) continue;
+    parts.push(new Typed(await ctx.infer.readRaw(level, readLo, readHi)));
+  }
+  const total = parts.reduce((n, p) => n + p.length, 0);
+  if (!total) return null;
+  const every = Math.max(1, Math.floor(total / RAW_SAMPLE)), values: number[] = [];
+  for (const p of parts) for (let i = 0; i < p.length; i += every) values.push(Number(p[i]));
+  const sorted = Float64Array.from(values).sort();
+  return [percentile(sorted, 1), percentile(sorted, 99)];
 }
 
 /** `visit(i, served)` for each painted voxel of `chunk` the model's level
@@ -213,19 +275,23 @@ async function sessionVolume(ctx: AppContext): Promise<PaintVolume | null> {
   return id ? readVolume(ctx.paint, id) : null;
 }
 
-/** `entry` served for a score: as it is served already, or served now with
- * its manifest's normalizers and no postprocessing (the model stage's own
- * output is what is read), and released when the score is done. Served
+/** A model served for a score, the chain it is read through, and its release. */
+interface Held { served: ServedModel; chain: Chain; release: () => Promise<void> }
+
+/** `entry` served for a score: as it is served already (through the
+ * session's chain), or served now with `inputNorm` or else its manifest's
+ * normalizers and no postprocessing (the model stage's own output is what
+ * is read), and released when the score is done. Served
  * now, it is its smallest block at the precision this GPU takes
  * (Catalog.chooseVariant without a buffer limit): a 3D model's largest
  * block can hold most of a GPU's memory, beside the models already served,
  * and a GPU run out of memory loses its device and every model with it. */
-async function servedForRanking(ctx: AppContext, entry: ModelEntry): Promise<{ served: ServedModel; release: () => Promise<void> }> {
-  const current = ctx.infer.served().find((s) => s.entry.id === entry.id);
-  if (current) return { served: current, release: async () => {} };
+async function servedForRanking(ctx: AppContext, entry: ModelEntry, inputNorm?: Step[]): Promise<Held> {
+  const current = !inputNorm && ctx.infer.served().find((s) => s.entry.id === entry.id);
+  if (current) return { served: current, chain: ctx.session.state.chain, release: async () => {} };
   const limits = { ...(await ctx.infer.gpuLimits()), maxBufferSize: null };
   const tuned = entryFor(entry.folder, entry.manifest, ctx.catalog.chooseVariant(entry.manifest, limits), entry.repo);
-  const chain: Chain = { input_norm: entry.manifest.input_norm, postprocess: [] };
+  const chain: Chain = { input_norm: inputNorm ?? entry.manifest.input_norm, postprocess: [] };
   const served = await ctx.infer.serve(tuned, chain, (await blobFor(chain)).blob, () => ctx.catalog.modelBytes(tuned));
-  return { served, release: () => served.dispose() };
+  return { served, chain, release: () => served.dispose() };
 }

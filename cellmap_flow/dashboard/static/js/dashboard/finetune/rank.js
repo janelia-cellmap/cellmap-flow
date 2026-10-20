@@ -60,6 +60,23 @@ function isScored(answer) {
   return Boolean(answer.success) && Number.isFinite(answer.matches);
 }
 
+// What a score is at besides the model as it is (web/src/finetune/rank.ts):
+// the raw stretched from its window, when that scored clearly better, and the
+// cut-off that fits the paint best, when it is not the model's own 0; with
+// the score without the change.
+function scoreNote(row) {
+  if (Array.isArray(row.window)) {
+    const cutoff = row.cutoff ? `, cut-off ${row.cutoff}` : "";
+    return ` with the raw stretched from ${row.window.map((v) => Math.round(v)).join("–")}${cutoff} (${percent(row.matches_without_window)} without)`;
+  }
+  return Number.isFinite(row.cutoff) && row.cutoff !== 0 ? ` at cut-off ${row.cutoff} (${percent(row.matches_at_zero)} at 0)` : "";
+}
+
+// A cut-off (a logit) as Seed from Prediction's threshold, a probability.
+function probability(cutoff) {
+  return Math.round(1000 / (1 + Math.exp(-cutoff))) / 1000;
+}
+
 function percent(value) {
   return Number.isFinite(value) ? `${Math.round(value * 100)}%` : "–";
 }
@@ -221,10 +238,11 @@ export function initRank() {
           training && training.name === row.name && h("span", { class: "badge bg-info ms-1" }, "training this")),
         // The buttons go under the name when the column is too narrow for both.
         h("div", { class: "d-flex gap-1 flex-shrink-0 ms-auto" },
-          candidate && scored && !candidate.volume_model && useButton(candidate, row.best),
+          candidate && scored && !candidate.volume_model && useButton(candidate, row),
           candidate && showButton(candidate))),
       scored
         ? h("div", {}, h("strong", {}, `${percent(row.matches)} match`),
+          scoreNote(row),
           ` · objects ${percent(row.objects_found)} · background ${percent(row.background_right)}`)
         : h("div", { class: "small text-danger" }, row.error || "No score in the answer"),
       details && h("small", { class: "d-block text-muted" }, details));
@@ -255,19 +273,21 @@ export function initRank() {
   }
 
   // The best row's is the card's suggestion, filled.
-  function useButton(candidate, best) {
+  function useButton(candidate, row) {
     const button = h("button", {
-      type: "button", class: `btn btn-sm ${best ? "btn-primary" : "btn-outline-secondary"}`, disabled: running || switching !== null,
+      type: "button", class: `btn btn-sm ${row.best ? "btn-primary" : "btn-outline-secondary"}`, disabled: running || switching !== null,
       title: "Finetune this model instead: your paint is copied to a new volume made for it, which becomes the session's, and the current volume is kept",
     }, "Use this model");
     if (switching === candidate.name) setBusy(button, true, "Copying paint...");
-    button.addEventListener("click", () => useModel(candidate));
+    button.addEventListener("click", () => useModel(candidate, row));
     return button;
   }
 
-  // Makes `candidate` the model to finetune. The ranking stays: the new
-  // volume holds the same paint, on the model's grid.
-  async function useModel(candidate) {
+  // Makes `candidate` the model to finetune, as its score (`row`) found it
+  // best: the raw's window, if one was chosen, as the session's normalizer,
+  // and its cut-off as Seed from Prediction's threshold. The ranking stays:
+  // the new volume holds the same paint, on the model's grid.
+  async function useModel(candidate, row) {
     if (running || switching !== null) return;
     if (!confirm(`Make ${candidate.name} the model to finetune? Your paint is copied to a new volume for it; the current volume is kept.`)) return;
     switching = candidate.name;
@@ -276,7 +296,7 @@ export function initRank() {
     say(`Making ${candidate.name} the model to finetune: serving it and copying your paint to a new volume...`);
     let d;
     try {
-      d = await postAnswer("/api/finetune/rank/use", { name: candidate.name });
+      d = await postAnswer("/api/finetune/rank/use", { name: candidate.name, ...(Array.isArray(row.window) ? { window: row.window } : {}) });
     } catch (e) {
       d = { success: false, error: `Could not make ${candidate.name} the model to finetune: ${e}` };
     }
@@ -292,8 +312,18 @@ export function initRank() {
     // As the listing will have them, until it comes.
     for (const c of [...candidates, ...ranked.values()]) c.volume_model = c.name === d.name;
     const dropped = d.conflicts ? ` (${Number(d.conflicts).toLocaleString()} left unpainted where object and background met)` : "";
+    const seedThreshold = document.getElementById("seedThreshold");
+    const threshold = seedThreshold && Number.isFinite(row.cutoff) && row.cutoff !== 0 ? probability(row.cutoff) : null;
+    if (threshold !== null) {
+      seedThreshold.value = threshold;
+      seedThreshold.dispatchEvent(new Event("change"));
+    }
+    const set = [
+      Array.isArray(d.window) && `the input normalization stretches the raw from ${d.window.map((v) => Math.round(v)).join("–")}`,
+      threshold !== null && `Seed from Prediction's threshold is ${threshold}`,
+    ].filter(Boolean);
     summary = {
-      text: `${d.name} is the model to finetune now: ${Number(d.painted_voxels || 0).toLocaleString()} painted voxels carried from ${d.from_volume} to ${d.volume_id}${dropped}.`,
+      text: `${d.name} is the model to finetune now: ${Number(d.painted_voxels || 0).toLocaleString()} painted voxels carried from ${d.from_volume} to ${d.volume_id}${dropped}.${set.length ? ` ${set.join("; ")}, as its score found best.` : ""}`,
       tone: "success",
     };
     rankBtn.disabled = false;

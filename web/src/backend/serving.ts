@@ -45,6 +45,24 @@ export function allServed(ctx: AppContext, entries: ModelEntry[], blob: string):
   return entries.every((e) => served.some((s) => s.entry.id === e.id && blobOf(s) === blob));
 }
 
+/** Make `chain` the session's and draw its models' layers through it
+ * (pipeline.py's _set_chain_and_redraw): the models drawn, or null when no
+ * dataset is open (the chain is kept and nothing drawn). The same chain
+ * again over layers that carry it already draws nothing (it would reset
+ * what the user set in the viewer, a layer hidden, an opacity). */
+export async function setChain(ctx: AppContext, chain: Chain): Promise<ServedModel[] | null> {
+  const previous = ctx.session.state.chain;
+  const [{ blob, digest }, previousDigest] = await Promise.all([blobFor(chain), blobFor(previous).then((b) => b.digest)]);
+  const entries = ctx.session.state.models;
+  await ctx.session.update({ chain });
+  if (!ctx.infer.dataset()) return null;
+  if (digest === previousDigest && allServed(ctx, entries, blob)) return ctx.infer.served().filter((s) => entries.some((e) => e.id === s.entry.id));
+  const postprocessChanged = JSON.stringify(previous.postprocess) !== JSON.stringify(chain.postprocess);
+  const served = await serveModels(ctx, entries, chain, { blob, postprocessChanged });
+  ctx.log(`Chain ${digest}: ${served.length ? served.map((s) => s.entry.name).join(", ") : "no model"} drawn through it`);
+  return served;
+}
+
 export interface ServeOptions {
   /** The chain's blob, when the caller has it already. */
   blob?: string;
