@@ -1,11 +1,14 @@
-// Which model to start from (browser mode only): the models the browser can
-// run, ranked by how well each one's prediction already matches the paint of
-// the session's volume, so the one finetuned is the one with the least to
-// learn. GET /api/finetune/rank/candidates lists them with the volume, and
-// POST /api/finetune/rank/score scores one (web/src/backend/routes/rank.ts).
-// The scores are asked for one at a time, as each can take up to a minute (a
-// download, then a run over the painted chunks), and each is shown as it
-// comes. A filter narrows the models listed; Rank scores the ticked ones it
+// Which model to start from: the models the page can run, ranked by how well
+// each one's prediction already matches the paint of the session's volume, so
+// the one finetuned is the one with the least to learn. GET
+// /api/finetune/rank/candidates lists them with the volume, and POST
+// /api/finetune/rank/score scores one (web/src/backend/routes/rank.ts in the
+// browser, dashboard/routes/finetune/rank_routes.py on a server). The scores
+// are asked for one at a time, as each can take up to a minute in the browser
+// (a download, then a run over the painted chunks) and longer on a server for
+// a model not running (a cluster job started for it), and each is shown as it
+// comes. A server's candidate says how to build it (entry), sent back with
+// each request, and one not running (cluster) starts unticked. A filter narrows the models listed; Rank scores the ticked ones it
 // shows. Show serves a model and adds its layer, as the Models tab's Add
 // does; Use this model (POST /api/finetune/rank/use) makes one the model to
 // finetune: served, a new volume made for it with the paint carried onto its
@@ -112,8 +115,10 @@ export function initRank() {
   const littlePaint = document.getElementById("rankLittlePaint");
 
   let candidates = [];
-  // The models unticked by hand: one listed later starts ticked.
+  // The models unticked, by hand or as listed (ticked false): one listed
+  // later starts as its listing says.
   const unticked = new Set();
+  const seen = new Set();
   // The ranking shown: its score answers in the order they came, the models
   // it scores by name (for Show), the volume it was painted on, and its
   // status line ({ text, tone }), which stays while its table does.
@@ -148,6 +153,10 @@ export function initRank() {
     if (!d.success) return { ready: false, message: `Could not list the models: ${d.error}`, tone: "danger" };
     listed = true;
     candidates = d.candidates || [];
+    for (const candidate of candidates) {
+      if (!seen.has(candidate.name) && candidate.ticked === false) unticked.add(candidate.name);
+      seen.add(candidate.name);
+    }
     const volume = d.volume;
     // (Not while Use this model makes the new volume, which keeps the ranking.)
     if (!running && switching === null && answers.length && rankedOn !== (volume && volume.id)) {
@@ -201,7 +210,7 @@ export function initRank() {
           checked: !unticked.has(candidate.name), disabled: running,
           onChange: (e) => (e.target.checked ? unticked.delete(candidate.name) : unticked.add(candidate.name)),
         }),
-        h("label", { class: "form-check-label", for: id, title: `${candidate.repo}/${candidate.folder}` },
+        h("label", { class: "form-check-label", for: id, title: candidate.source || `${candidate.repo}/${candidate.folder}` },
           candidate.name, candidate.volume_model ? " (painted for)" : "", " ",
           h("small", { class: "text-muted" }, describe(candidate))));
     }));
@@ -248,7 +257,10 @@ export function initRank() {
       details && h("small", { class: "d-block text-muted" }, details));
   }
 
+  // None for a server's model that is not running and has no entry to start
+  // it from: one of the session's, ticked on the Models tab to run it.
   function showButton(candidate) {
+    if (candidate.cluster && !candidate.served && !candidate.entry) return "";
     const button = h("button", {
       type: "button", class: "btn btn-outline-secondary btn-sm", disabled: candidate.served,
       title: candidate.served ? "Served already: its layer is in the viewer" : "Serve this model and add its layer to the viewer",
@@ -259,7 +271,7 @@ export function initRank() {
 
   function showModel(candidate, button) {
     setBusy(button, true);
-    postAnswer("/api/models/add", { entry: { name: candidate.name, repo: candidate.repo, folder: candidate.folder } })
+    postAnswer("/api/models/add", { entry: candidate.entry || { name: candidate.name, repo: candidate.repo, folder: candidate.folder } })
       .then((d) => {
         if (!d.success) throw new Error(d.error);
         candidate.served = true;
@@ -296,7 +308,7 @@ export function initRank() {
     say(`Making ${candidate.name} the model to finetune: serving it and copying your paint to a new volume...`);
     let d;
     try {
-      d = await postAnswer("/api/finetune/rank/use", { name: candidate.name, ...(Array.isArray(row.window) ? { window: row.window } : {}) });
+      d = await postAnswer("/api/finetune/rank/use", { ...request(candidate), ...(Array.isArray(row.window) ? { window: row.window } : {}) });
     } catch (e) {
       d = { success: false, error: `Could not make ${candidate.name} the model to finetune: ${e}` };
     }
@@ -337,10 +349,15 @@ export function initRank() {
     announce(MODELS_CHANGED_EVENT);
   }
 
+  // What names `candidate` to the routes: its name, and how to build it.
+  function request(candidate) {
+    return { name: candidate.name, ...(candidate.entry ? { entry: candidate.entry } : {}) };
+  }
+
   // One model's score answer, with its name; a request that failed is an
   // answer that says so, for its row.
   function score(candidate) {
-    return postAnswer("/api/finetune/rank/score", { name: candidate.name })
+    return postAnswer("/api/finetune/rank/score", request(candidate))
       .then((d) => ({ ...d, name: candidate.name, error: d.success ? undefined : d.error || "no score" }))
       .catch((e) => ({ name: candidate.name, success: false, error: String(e) }));
   }
@@ -371,7 +388,8 @@ export function initRank() {
     showResults();
     const started = performance.now();
     for (let i = 0; i < chosen.length && !stopping; i++) {
-      say(`Scoring ${chosen[i].name} (${i + 1} of ${chosen.length})...`);
+      const starting = chosen[i].cluster && !chosen[i].served ? ", starting it on the cluster first" : "";
+      say(`Scoring ${chosen[i].name} (${i + 1} of ${chosen.length})${starting}...`);
       answers.push(await score(chosen[i]));
       showResults();
     }

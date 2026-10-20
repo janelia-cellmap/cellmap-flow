@@ -302,10 +302,12 @@ def methods_for(output_type, serves_integers):
     return methods + ["components"]
 
 
-def _served_base(host, model_name, postprocess=()):
+def _served_base(host, model_name, postprocess=(), input_norm=None):
     """The URL of the model's served array, with the dashboard's input
-    normalization and ``postprocess`` (none by default)."""
-    blob = PipelineSpec.from_steps(get_session().input_norms, postprocess).to_url_blob()
+    normalization (or ``input_norm``, step dicts) and ``postprocess`` (none by
+    default)."""
+    spec = PipelineSpec.from_steps(get_session().input_norms, postprocess)
+    blob = (spec if input_norm is None else PipelineSpec(input_norm, spec.postprocess)).to_url_blob()
     url = prediction_url(host.rstrip("/"), model_name, blob)
     return url[len("zarr://"):]
 
@@ -385,11 +387,12 @@ def _get(url, timeout=PREDICTION_TIMEOUT_SECONDS):
     return response
 
 
-def read_prediction(host, model_name, volume, lo, hi, info, postprocess=()):
+def read_prediction(host, model_name, volume, lo, hi, info, postprocess=(), input_norm=None):
     """The model's raw output over annotation voxels ``[lo, hi)``.
 
     Read from its server as a layer is, with the dashboard's input
-    normalization and no postprocessing: the trainer's target is set on the
+    normalization (``input_norm``, step dicts, instead: the server runs the
+    chain each request names) and no postprocessing: the trainer's target is set on the
     raw output, and that is where its decision boundary is. (``postprocess``
     asks for one anyway: Cellpose's masks of a flows server's output, for a
     seed of its instances.) Each annotation
@@ -401,7 +404,7 @@ def read_prediction(host, model_name, volume, lo, hi, info, postprocess=()):
     or, when the server serves integer labels, as served (an id past 2^24
     is not exact in float32); and the box, shrunk to what the server covers.
     """
-    base = _served_base(host, model_name, postprocess)
+    base = _served_base(host, model_name, postprocess, input_norm)
     multiscale = _get(f"{base}/.zattrs").json()["multiscales"][0]
     # The channel axis comes first; the axes are found by name all the same.
     names = [axis["name"] for axis in multiscale["axes"]]

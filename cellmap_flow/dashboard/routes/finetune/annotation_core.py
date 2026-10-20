@@ -62,6 +62,33 @@ def serve_new_volume(geometry, corrections_dir, dataset_path, model_name, annota
     return volume_id, zarr_path, rewrite_minio_url_for_proxy(minio_url)
 
 
+def make_volume(model_name, model_config, config, corrections_dir):
+    """A new annotation volume for ``model_name`` (``config`` its geometry,
+    resolve_model_geometry's), over the session's dataset in
+    ``corrections_dir``: written, served, registered as the session's and
+    in its manifest. Returns ``(volume_id, zarr_path, minio_url, geometry)``.
+    Create Volume makes one; so does Which model to start from's Use this
+    model (rank_routes)."""
+    session = get_session()
+    geometry = plan_volume(session.dataset_path, config, resample=session.resample)
+    volume_id, zarr_path, minio_url = serve_new_volume(
+        geometry, corrections_dir, session.dataset_path, model_name, annotation_dtype_for(model_config)
+    )
+    session_store().register_volume(
+        volume_id,
+        **geometry.record(
+            zarr_path,
+            dataset_path=session.dataset_path,
+            model_name=model_name,
+            corrections_dir=corrections_dir,
+        ),
+    )
+    # The trainer finds the volume only through this manifest.
+    write_volume_manifest(session.annotation_volumes[volume_id])
+    refresh_annotated_regions_layer()
+    return volume_id, zarr_path, minio_url, geometry
+
+
 def _get_selected_model_config(model_name):
     if not get_session().models_config:
         return None, (jsonify({"success": False, "error": "No models loaded"}), 400)
@@ -216,28 +243,10 @@ def create_annotation_volume():
         # fallback for when no server is up.
         config = resolve_model_geometry(model_name, model_config)
 
-        session = get_session()
-        dataset_path = session.dataset_path
-        if not dataset_path:
+        if not get_session().dataset_path:
             return jsonify({"success": False, "error": "No dataset path configured"}), 400
-
-        geometry = plan_volume(dataset_path, config, resample=session.resample)
         _, corrections_dir = ensure_corrections_storage(output_path)
-        volume_id, zarr_path, minio_url = serve_new_volume(
-            geometry, corrections_dir, dataset_path, model_name, annotation_dtype_for(model_config)
-        )
-        session_store().register_volume(
-            volume_id,
-            **geometry.record(
-                zarr_path,
-                dataset_path=dataset_path,
-                model_name=model_name,
-                corrections_dir=corrections_dir,
-            ),
-        )
-        # The trainer finds the volume only through this manifest.
-        write_volume_manifest(session.annotation_volumes[volume_id])
-        refresh_annotated_regions_layer()
+        volume_id, zarr_path, minio_url, geometry = make_volume(model_name, model_config, config, corrections_dir)
 
         return jsonify(
             {

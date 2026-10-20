@@ -199,7 +199,11 @@ paint with the engine's own reads: the model served (or the served one
 reused), `readOutput` over at most `RANK_BLOCKS` of its blocks under the
 paint, each painted voxel's model voxel from Label it's `servedIndices`,
 and the targets from `targetTransformFor`; `finetune/rank.ts` is the
-counting alone, so it adds nothing to the engine.
+counting alone, so it adds nothing to the engine. The server dashboard
+answers the same routes (`dashboard/routes/finetune/rank_routes.py`) with
+Python ports of the counting (`cellmap_flow/finetune/rank.py`) and of
+`finetune/carry.ts` (`carry_paint` in `finetune/session/volume.py`): a
+change to one is made to the other.
 `backend/routes/finetune.ts`, `good-regions.ts` and `finetune-jobs.ts` answer the tab's routes
 with the Python routes' JSON (a job is a run in the page; its log streams as
 server-sent events), so the tab's job card, loss plot and log stream are
