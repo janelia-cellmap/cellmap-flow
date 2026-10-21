@@ -1,8 +1,16 @@
-"""The command line that starts an inference server for a model.
+"""Starting an inference server for a model: the one launcher, and the
+command line it runs.
 
-Every launcher builds it here: ``cellmap_flow infer <type>``,
-``cellmap_flow yaml`` and the dashboard's catalog and Hugging Face models.
-It is ``<SERVER_COMMAND> --model <entry> -d <data path>``, where the entry
+``launch(model, data_path, ...)`` is what every launcher calls:
+``cellmap_flow infer <type>``, ``cellmap_flow yaml`` and ``add --run``, the
+dashboard's Models tab (its catalog, Hugging Face, zoo and Cellpose picks,
+Add a model, and a model ticked again) and the Training tab's ranking. It
+applies the one data path and scale rule (``config.yaml.resolve_data_path``),
+falls back to the saved launcher settings for the queue and charge group,
+builds the command and starts the job (``jobs.launch.start_hosts``), which
+it returns.
+
+The command is ``<SERVER_COMMAND> --model <entry> -d <data path>``, where the entry
 is ``ModelConfig.launch_entry`` as JSON, which the server rebuilds as it
 rebuilds a YAML's model entry, then ``--resample`` or ``--no-resample``:
 always one of them, so a server reads the data as its launcher was told to
@@ -30,10 +38,13 @@ quotes: the entry's JSON is full of double quotes and braces, and
 """
 
 import json
+import logging
 import shlex
 
 from cellmap_flow.jobs import launch as jobs_launch
 from cellmap_flow.jobs.spec import shell_join
+
+logger = logging.getLogger(__name__)
 
 
 def _program(env) -> list:
@@ -42,7 +53,6 @@ def _program(env) -> list:
         return shlex.split(jobs_launch.SERVER_COMMAND)
     from cellmap_flow.models import envs
 
-    # Checked again: server_argv_for's params never went through build_model.
     return envs.server_argv(envs.validate(env))
 
 
@@ -65,30 +75,59 @@ def server_argv(model_config, data_path: str, resample: bool = True) -> list:
     return _serve_argv(model_config.launch_entry, envs.model_env(model_config), data_path, resample)
 
 
-def server_argv_for(model_type: str, params: dict, data_path: str, resample: bool = True) -> list:
-    """The server's argv for a model given as its type and constructor arguments.
-
-    For launchers that have no model config to hand and should not build
-    one (a Hugging Face config fetches its repo's metadata); None arguments
-    are left out, as in ``ModelConfig.launch_entry``. An ``env`` among
-    ``params`` serves the model from that environment, else the type's
-    ``default_env`` does. Only a default the class itself sets: one decided
-    per model by a property needs the model, and ``server_argv``.
-    """
-    from cellmap_flow.models import envs
-    from cellmap_flow.models.configs.base import model_entry
-    from cellmap_flow.models.registry import model_type as lookup
-
-    cls = lookup(model_type)
-    env = envs.effective(params.get("env"), envs.type_default(cls), params.get("name") or model_type)
-    return _serve_argv(model_entry(cls, params), env, data_path, resample)
-
-
 def server_command(model_config, data_path: str, resample: bool = True) -> str:
     """``server_argv`` as the shell line start_hosts takes."""
     return shell_join(server_argv(model_config, data_path, resample))
 
 
-def server_command_for(model_type: str, params: dict, data_path: str, resample: bool = True) -> str:
-    """``server_argv_for`` as the shell line start_hosts takes."""
-    return shell_join(server_argv_for(model_type, params, data_path, resample))
+def remembered(queue, charge_group):
+    """``(queue, charge_group)`` for a command-line launch: the ones given,
+    else the saved launcher settings'; the ones given are saved for the next
+    run and the dashboard."""
+    from cellmap_flow.jobs.settings import launcher_settings
+
+    settings = launcher_settings()
+    queue = queue or settings.queue
+    charge_group = charge_group or settings.charge_group
+    settings.queue = queue
+    if charge_group:
+        settings.charge_group = charge_group
+    settings.save()
+    return queue, charge_group
+
+
+def launch(model, data_path: str, *, queue=None, charge_group=None, resample: bool = True, wait_for_host: bool = True):
+    """Start an inference server for ``model`` on ``data_path``, and return its job.
+
+    ``model`` is a model config, or a model entry (``models.entry``), which
+    is built first (``registry.build_model``). The server reads
+    ``data_path`` with the model's ``scale`` applied
+    (``config.yaml.resolve_data_path``), resampling it to the model's voxel
+    size when ``resample``. ``queue`` and ``charge_group`` default to the
+    saved launcher settings (``jobs.settings``). The job is named after the
+    model, and is returned once its server has announced its address, or at
+    once when ``wait_for_host`` is off.
+
+    Raises:
+        ConfigError: ``model`` is an entry that does not describe a model.
+        JobStartError: no queue accepted the job, or its server never came up.
+    """
+    from cellmap_flow.config.yaml import resolve_data_path
+    from cellmap_flow.jobs.settings import launcher_settings
+    from cellmap_flow.models.registry import build_model, cli_name_of
+
+    if isinstance(model, dict):
+        model = build_model(model)
+    name = getattr(model, "name", None) or cli_name_of(type(model))
+    path = resolve_data_path(data_path, getattr(model, "scale", None))
+    if path != data_path:
+        logger.info(f"Model {name} specifies scale {model.scale}; reading {path}")
+    if queue is None or charge_group is None:
+        settings = launcher_settings()
+        queue = queue if queue is not None else settings.queue
+        charge_group = charge_group if charge_group is not None else settings.charge_group
+    command = server_command(model, path, resample)
+    logger.info(f"Starting a server for {name}: {command}")
+    # Through the module, so that a test's stand-in for start_hosts stands in here too.
+    return jobs_launch.start_hosts(command, job_name=name, queue=queue, charge_group=charge_group,
+                                   wait_for_host=wait_for_host)

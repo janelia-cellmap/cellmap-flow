@@ -64,7 +64,8 @@ def test_env_goes_round_the_registry_and_never_reaches_the_server(manifest):
     assert model.env == "cellpose4"
     assert model.to_dict() == {**entry, "name": "cp"} == registry.build_model(model.to_dict(), "cp").to_dict()
     assert model.launch_entry["env"] == "cellpose4"
-    from_form = registry.instantiate_model_config("ScriptModelConfig", {"script_path": "/s.py", "env": "cellpose4"})
+    # The form posted the class name before 0.3.0; the registry still takes it.
+    from_form = registry.build_model({"type": "ScriptModelConfig", "script_path": "/s.py", "env": "cellpose4"})
     assert from_form.env == "cellpose4"
     # The trainer's model too, so the serving YAMLs it writes keep it.
     from cellmap_flow.finetune.model_loading import model_config_from_entry
@@ -75,8 +76,6 @@ def test_env_goes_round_the_registry_and_never_reaches_the_server(manifest):
     assert argv[:9] == ["/opt/pixi", "run", "--frozen", "--manifest-path", str(manifest), "-e", "cellpose4",
                         "cellmap_flow", "serve"]
     assert json.loads(argv[argv.index("--model") + 1]) == {"type": "script", "script_path": "/s.py", "name": "cp"}
-    assert launch.server_argv_for("script", {"script_path": "/s.py", "name": "cp", "env": "cellpose4"},
-                                  "/d/raw.zarr") == argv
 
 
 def test_a_directory_env_serves_with_its_own_python_in_one_lsf_line(venv):
@@ -91,13 +90,12 @@ def test_a_directory_env_serves_with_its_own_python_in_one_lsf_line(venv):
 
 
 def test_infer_takes_env(manifest, monkeypatch):
-    from cellmap_flow.cli import infer
     from cellmap_flow.cli.main import cli
     from cellmap_flow.dashboard.services import startup
     from cellmap_flow.jobs.settings import LauncherSettings
 
     commands = []
-    monkeypatch.setattr(infer, "start_hosts", lambda command, *a, **k: commands.append(command))
+    monkeypatch.setattr(jobs_launch, "start_hosts", lambda command, *a, **k: commands.append(command))
     monkeypatch.setattr(startup, "generate_neuroglancer_url", lambda path, wrap_raw=True: None)
     monkeypatch.setattr(LauncherSettings, "save", lambda self: None)
     result = CliRunner().invoke(cli, ["infer", "script", "-s", "/s.py", "-d", "/d/raw.zarr", "--env", "cellpose4"])

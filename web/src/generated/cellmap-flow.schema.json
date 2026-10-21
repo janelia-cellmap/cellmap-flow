@@ -1357,11 +1357,29 @@
       "type": "object"
     },
     "CreateModelConfig": {
-      "description": "A ModelConfig subclass's name and its constructor's parameters, as the\nbuilder's model form sends them (registry.coerce_form_params parses them).",
+      "description": "A model type and its constructor's parameters, as the builder's model\nform sends them; ``registry.build_model`` builds the config from them as\nfrom any model entry. ``type`` is the type's name (``registry.model_types``,\n\"fly\"); ``class_name``, the class name (\"FlyModelConfig\") the form posted\nbefore 0.3.0, is still taken in its place, with a deprecation warning,\nuntil the release after.",
       "properties": {
+        "type": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "class_name": {
-          "default": null,
-          "type": "string"
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "params": {
           "additionalProperties": true,

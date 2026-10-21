@@ -61,7 +61,7 @@ check(["cellmap_flow.models.registry", "cellmap_flow.config.yaml", "cellmap_flow
       LIGHT + ["cellmap_flow.models.models_config", "cellmap_flow.models.configs",
                "torch", "huggingface_hub", "peft"])
 from cellmap_flow.models.registry import describe_types
-assert {"BioModelConfig", "DaCapoModelConfig"} <= set(describe_types())
+assert {"bioimage", "dacapo"} <= set(describe_types())
 # An onnx entry as the CLIs and the dashboard build one: its file's metadata
 # is read without onnx or onnxruntime.
 from cellmap_flow.models.models_config import OnnxModelConfig

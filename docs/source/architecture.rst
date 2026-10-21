@@ -90,12 +90,18 @@ Models
    * - ``models/models_config.py``
      - The classes' public import path, which the docs and plugins use, and
        ``Config``.
+   * - ``models/entry.py``
+     - A model entry, ``{type, name, env, **arguments}``, the one shape every
+       description of a model takes, and ``coerce``: how its values become a
+       constructor's arguments, by the constructor's annotations, so the
+       same entry gives the same config from a YAML, the command line or the
+       form. The helpers the constructors normalize their arguments with
+       (``voxel_size``, ``sizes``, ``names``).
    * - ``models/registry.py``
-     - The model types (every ``ModelConfig`` subclass, a plugin's included)
-       and how a config is built from a YAML entry, command-line strings or
-       the dashboard's form: ``model_types``, ``build_model(s)``,
-       ``coerce_cli_args``, ``coerce_form_params``, ``click_options``,
-       ``instantiate_model_config``, ``describe_types``.
+     - The model types (every ``ModelConfig`` subclass, a plugin's included,
+       by type name and by class name) and ``build_model(s)``, the one place
+       a config is built from an entry; ``click_options`` and
+       ``describe_types`` for the CLI and the form.
    * - ``models/geometry.py``
      - ``ModelGeometry``: a model's shapes and voxel sizes, read once from its
        config, with the context and block shape derived.
@@ -134,8 +140,9 @@ Serving and jobs
      - ``make_server``, which every place that starts a server builds it
        with, and ``check_server`` (``infer --server-check``).
    * - ``serving/launch.py``
-     - The one place a server's command line is built (``server_argv``,
-       ``server_argv_for``, ``server_command``).
+     - ``launch``, the one launcher every CLI and dashboard path starts a
+       server through, and the one place its command line is built
+       (``server_argv``, ``server_command``).
    * - ``serving/protocol.py``
      - What a layer URL carries to a server: ``ARGS_KEY``,
        ``encode_to_str``, ``decode_to_json``, ``split_dataset_url``; and
@@ -473,16 +480,18 @@ Launching a model server
 
 #. A model config comes from ``cellmap_flow infer <type>`` (``cli/infer.py``:
    a command per type in ``models.registry.model_types()``, its options from
-   ``registry.click_options``, its strings through ``coerce_cli_args``), or
-   from a YAML (``cli/yaml_cli.py``: ``config.yaml.load_config``,
-   ``registry.build_models``). The Models tab's catalog and Hugging Face
-   picks (``POST /api/models``, ``dashboard/services/launch.py``) need no
-   config for the command, only a type and its arguments.
-#. ``serving.launch`` builds the command line: the words of
-   ``jobs.launch.SERVER_COMMAND`` (``cellmap_flow serve`` by default), then
-   ``--model`` and the model's entry as JSON (``ModelConfig.launch_entry``,
-   ``to_dict()`` without None, in ``server_argv``; or the type and
-   arguments, in ``server_argv_for``), then ``-d <data path>``.
+   ``registry.click_options``, its options made a model entry), from a
+   YAML (``cli/yaml_cli.py``: ``config.yaml.load_config``,
+   ``registry.build_models``), or from the Models tab (``POST /api/models``,
+   ``dashboard/services/launch.py``: each catalog, Hugging Face, zoo and
+   Cellpose pick is an entry, built the same way). ``registry.build_model``
+   is the one constructor path.
+#. ``serving.launch.launch`` is the one launcher: it applies the model's
+   ``scale`` to the data path (``config.yaml.resolve_data_path``), falls
+   back to the saved queue and charge group, builds the command line (the
+   words of ``jobs.launch.SERVER_COMMAND``, ``cellmap_flow serve`` by
+   default, then ``--model`` and the model's entry as JSON,
+   ``ModelConfig.launch_entry``, then ``-d <data path>``) and starts the job.
 #. ``jobs.launch.start_hosts`` submits it to LSF with one GPU
    (``submit_bsub_job``, then ``jobs.lsf.submit`` and ``bsub_argv``). When a
    queue does not start the job it tries the next of

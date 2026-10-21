@@ -64,13 +64,13 @@ stat, a file name, a regex, or (only when ``online``) one request.
 
 Anything else is a ValueError that says what was tried.
 
-Importing this module imports only the standard library. Resolving imports
+Importing this module imports only the standard library (and
+``models.entry``, which has no more). Resolving imports
 the model config classes (numpy and funlib, as the registry does), and the
 online checks huggingface_hub; nothing imports torch or a model's framework,
 and ``Resolved.entry()`` is a plain dict.
 """
 
-import inspect
 import os
 import re
 import zipfile
@@ -78,6 +78,8 @@ from dataclasses import asdict, dataclass, field
 from types import SimpleNamespace
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import parse_qs, urlparse
+
+from cellmap_flow.models import entry as model_entry
 
 # Seconds to wait for the Hub before treating them as
 # unreachable: a dashboard request waits this long at most.
@@ -165,7 +167,8 @@ def resolve(ref: str, *, name: str = None, voxel_size=None, online: bool = True)
     if not isinstance(ref, str) or not ref.strip():
         raise ValueError("Give a model reference: a path, a URL, a Hugging Face repo or a model name")
     ref = ref.strip()
-    request = _Request(name=name or None, voxel_size=_voxel_size(voxel_size), online=online)
+    given = None if model_entry.blank(voxel_size) else list(model_entry.voxel_size(voxel_size))
+    request = _Request(name=name or None, voxel_size=given, online=online)
     for check in (_local_path, _prefixed, _cellpose_name, _url, _onnx_ref, _hf_repo, _zoo_id, _onnx_web_folder):
         resolved = check(ref, request)
         if resolved is not None:
@@ -185,26 +188,6 @@ class _Request:
     name: Optional[str]
     voxel_size: Optional[list]
     online: bool
-
-
-def _voxel_size(value) -> Optional[list]:
-    """A voxel size as three numbers, ints kept ints; from one number, one per axis or "8,8,8"."""
-    if value is None or value == "" or value == []:
-        return None
-    if isinstance(value, str):
-        # "8", "16,8,8", "(16, 8, 8)" or "[16, 8, 8]", as a form field or a flag has it.
-        value = re.findall(r"[^\s,()\[\]]+", value)
-    if not isinstance(value, (list, tuple)):
-        value = [value]
-    try:
-        numbers = [float(v) for v in value]
-    except (TypeError, ValueError):
-        raise ValueError(f"voxel_size must be numbers (one, or one per axis), not {value!r}") from None
-    if len(numbers) == 1:
-        numbers *= 3
-    if len(numbers) != 3 or any(n <= 0 for n in numbers):
-        raise ValueError(f"voxel_size must be one positive number or three, not {value!r}")
-    return [int(n) if n.is_integer() else n for n in numbers]
 
 
 # --- what a Resolved says ------------------------------------------------------
@@ -409,49 +392,28 @@ def _is_cellpose_weights(path: str) -> bool:
 
 # --- the types that need more than a path ----------------------------------------
 
-def bioimage_params(model: str, voxel_size=None, cls=None) -> Tuple[Dict[str, Any], List[str]]:
-    """``BioModelConfig``'s arguments for ``model``, and the ones still needed, from its signature.
-
-    Its model argument is ``model`` or (before) ``model_name``, and its
-    ``voxel_size`` may be required or not; whichever it is, the entry names
-    it as the constructor does. ``voxel_size`` goes in when given and taken,
-    and is needed when not given and required.
-
-    Raises:
-        ValueError: the constructor takes neither ``model`` nor ``model_name``.
-    """
-    if cls is None:
-        cls = _type_class("bioimage")
-    parameters = inspect.signature(cls.__init__).parameters
-    key = next((k for k in ("model", "model_name") if k in parameters), None)
-    if key is None:
-        raise ValueError(f"{cls.__name__} takes neither model nor model_name; cannot say which model it is")
-    params, needs = {key: model}, []
-    takes = parameters.get("voxel_size")
-    if takes is not None:
-        if voxel_size is not None:
-            params["voxel_size"] = voxel_size
-        elif takes.default is inspect.Parameter.empty:
-            needs.append("voxel_size")
-    return params, needs
-
-
-def _bioimage(model: str, name: str, how: str, request: _Request, notes=()) -> Resolved:
-    from cellmap_flow.models.bioimage_catalog import trained_at
+def _bioimage(model: str, name: str, how: str, request: _Request, notes=(), listed=None) -> Resolved:
+    """A bioimage model: its entry, with the voxel size decided as its server
+    decides it (``bioimage_catalog.entry_voxel_size``); ``listed`` is its
+    entry in the zoo's listing, when the reference was found there."""
+    from cellmap_flow.models import bioimage_catalog
 
     notes = list(notes)
-    voxel_size = request.voxel_size
-    trained = trained_at(model) or trained_at(name) or {}
-    if voxel_size is None and trained.get("voxel_size"):
-        voxel_size = trained["voxel_size"]
-        notes.append(f"voxel_size {voxel_size} is what it was trained at, on {trained['trained_on']} "
+    choice = bioimage_catalog.entry_voxel_size(model, request.voxel_size, listed=listed, online=request.online)
+    trained = choice.trained or {}
+    if choice.source == "declared":
+        notes.append(f"reads its voxel size ({choice.declared} nm) from its description")
+    elif choice.source == "trained":
+        notes.append(f"voxel_size {choice.voxel_size} is what it was trained at, on {trained['trained_on']} "
                      f"({trained['confidence']} confidence; {trained['source']})")
+    elif choice.source == "none":
+        notes.append("its description declares no voxel size, and cellmap-flow does not know what it was "
+                     "trained at: give voxel_size (nm), or its server refuses it")
     if trained.get("note"):
         notes.append(trained["note"])
-    params, needs = bioimage_params(model, voxel_size)
-    if request.voxel_size is not None and "voxel_size" not in params:
-        notes.append("voxel_size is not used: this bioimage model type does not take one")
-    return _resolved("bioimage", params, name, how, request, needs=needs, notes=notes, takes_voxel_size=True)
+    entry = bioimage_catalog.bioimage_entry(model, choice.voxel_size)
+    params = {key: value for key, value in entry.items() if key != "type"}
+    return _resolved("bioimage", params, name, how, request, notes=notes, takes_voxel_size=True)
 
 
 def _bioimage_name(source: str) -> str:
@@ -818,10 +780,10 @@ def _zoo_id(ref: str, request: _Request) -> Optional[Resolved]:
         return _bioimage(ref, _bioimage_name(ref), how, request,
                          notes=[f"could not read the zoo's model list to check it ({e}): taken to be a zoo model"])
     wanted = ref.lower()
-    for entry in entries:
-        if wanted in (str(entry.get(k) or "").lower() for k in ("id", "nickname", "key", "concept_doi")):
-            name = entry.get("nickname") or _bioimage_name(str(entry.get("id") or ref))
-            return _bioimage(ref, name, how, request)
+    for listed in entries:
+        if wanted in (str(listed.get(k) or "").lower() for k in ("id", "nickname", "key", "concept_doi")):
+            name = listed.get("nickname") or _bioimage_name(str(listed.get("id") or ref))
+            return _bioimage(ref, name, how, request, listed=listed)
     if shaped:
         raise ValueError(f"{ref!r} is not a model in the BioImage Model Zoo (by id, nickname or DOI)")
     return None

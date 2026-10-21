@@ -19,18 +19,19 @@ EM ones' were looked up by hand, in ``bioimage_voxel_sizes.yaml`` beside
 this module: ``trained_at`` reads it, and each listed model carries its
 row as ``trained`` (None for a model not in it).
 
-``bioimage_entry`` turns a ticked model into ``BioModelConfig``'s
-constructor arguments: the one place that knows their names.
+``bioimage_entry`` is the model entry of a zoo model, and ``entry_voxel_size``
+decides what ``voxel_size`` it carries, by the rule the model's server
+applies (``BioModelConfig._input_voxel_size``): the one place the Models
+tab's Submit and ``models.resolve`` decide it.
 """
 
-import inspect
 import json
 import os
 import re
 import urllib.error
 import urllib.request
 from datetime import datetime, timezone
-from typing import Optional
+from typing import NamedTuple, Optional
 
 ZOO_INDEX_URL = "https://uk1s3.embassy.ebi.ac.uk/public-datasets/bioimage.io/collection.json"
 HYPHA_ARTIFACTS = "https://hypha.aicell.io/bioimage-io/artifacts"
@@ -175,12 +176,16 @@ def _space_axes(axes):
     """
     if isinstance(axes, str):
         return [a for a in axes if a in "zyx"], {}
+    # The one unit table (io.metadata's), read as the model's server reads it.
+    from cellmap_flow.models.configs.bio import nm_per_unit
+
     ids, sizes = [], {}
     for axis in axes if isinstance(axes, list) else []:
         if isinstance(axis, dict) and axis.get("type") == "space":
             ids.append(axis.get("id"))
-            if axis.get("unit") in _NM_PER_UNIT:
-                sizes[axis.get("id")] = float(axis.get("scale", 1.0)) * _NM_PER_UNIT[axis["unit"]]
+            per_unit = nm_per_unit(axis.get("unit"))
+            if per_unit is not None:
+                sizes[axis.get("id")] = float(axis.get("scale", 1.0)) * per_unit
     return ids, sizes
 
 
@@ -333,8 +338,6 @@ def find_bioimage_model(key: str) -> Optional[dict]:
     return None
 
 
-# nm per unit of the RDF's space axes (bioimage.io spec 0.5).
-_NM_PER_UNIT = {"angstrom": 0.1, "nanometer": 1.0, "micrometer": 1e3, "millimeter": 1e6}
 _declared = {}
 
 
@@ -367,37 +370,65 @@ def declared_voxel_size(entry: dict) -> Optional[list]:
     return _declared[source]
 
 
-def _model_parameter(cls) -> str:
-    """The constructor argument naming the zoo model: ``model`` or ``model_name``."""
-    params = inspect.signature(cls.__init__).parameters
-    return "model" if "model" in params else "model_name"
-
-
-def bioimage_entry(model_id: str, voxel_size=None, name: Optional[str] = None, cls=None) -> dict:
-    """``BioModelConfig``'s constructor arguments for the zoo model ``model_id``
-    (an id or nickname bioimageio.core loads), at ``voxel_size`` (nm, z y x)
-    and called ``name``.
-
-    The argument names come from the signature, so this holds whether the
-    model is called ``model_name`` or ``model``. A ``voxel_size`` of None
-    is left out when the class can read it from the model; when it cannot,
-    a ValueError says to give it. ``cls`` is for tests.
-    """
-    if cls is None:
-        from cellmap_flow.models.configs.bio import BioModelConfig as cls
-
-    params = inspect.signature(cls.__init__).parameters
-    entry = {_model_parameter(cls): model_id}
+def bioimage_entry(model: str, voxel_size=None, name: Optional[str] = None) -> dict:
+    """The model entry of the zoo model ``model`` (an id or nickname
+    bioimageio.core loads, or a description's path or URL), at ``voxel_size``
+    (nm, z y x; None leaves it to the model's server, see
+    ``entry_voxel_size``) and called ``name``."""
+    entry = {"type": "bioimage", "model": model}
     if voxel_size is not None:
         entry["voxel_size"] = list(voxel_size)
-    elif "voxel_size" in params and params["voxel_size"].default is inspect.Parameter.empty:
-        raise ValueError(f"BioImage model '{model_id}' needs a voxel size: give it in nm, as z,y,x or one number.")
     if name is not None:
         entry["name"] = name
     return entry
 
 
-def entry_model_id(model_config) -> Optional[str]:
-    """The zoo model a ``BioModelConfig`` runs, read from its ``to_dict()``,
-    which ``bioimage_entry``'s names round-trip through."""
-    return model_config.to_dict().get(_model_parameter(type(model_config)))
+class VoxelSizeChoice(NamedTuple):
+    """What ``entry_voxel_size`` decided.
+
+    ``voxel_size`` is what the entry gets, None to leave it to the model's
+    server; ``source`` says why: "given", "declared" (the description
+    declares one, which the server reads), "trained" (cellmap-flow's table
+    says what it was trained at), "none" (it declares none, and the table
+    does not know it: its server would refuse it), "unread" (listed, but its
+    description could not be read) or "unlisted" (not in the cached
+    listing). ``declared`` and ``trained`` are what was found.
+    """
+
+    voxel_size: Optional[list]
+    source: str
+    declared: Optional[list]
+    trained: Optional[dict]
+
+
+def entry_voxel_size(model: str, given=None, *, listed: Optional[dict] = None, online: bool = True) -> VoxelSizeChoice:
+    """The ``voxel_size`` a zoo model's entry gets, by the rule its server
+    applies (``BioModelConfig._input_voxel_size``: the one given, else the
+    description's, else the one it was trained at, else a refusal), with what
+    the launcher can see of it.
+
+    ``given`` is what the user typed, if anything. ``listed`` is the model's
+    entry in the zoo's listing (``find_bioimage_model``), when it is in it:
+    its description's declared voxel size is read from the listing, or
+    fetched when the listing lacks it and ``online``. A declared voxel size
+    is left to the server to read. The one it was trained at is written into
+    the entry, so the server need not find the table's row by another key.
+    """
+    if given is not None:
+        return VoxelSizeChoice(list(given), "given", None, None)
+    trained = trained_at(listed if listed is not None else model)
+    declared, readable = None, listed is not None
+    if listed is not None and ("declared_voxel_size" in listed or online):
+        try:
+            declared = declared_voxel_size(listed)
+        except ZooIndexError:
+            readable = False
+    elif listed is not None:
+        readable = False
+    if declared is not None:
+        return VoxelSizeChoice(None, "declared", declared, trained)
+    if trained and trained.get("voxel_size"):
+        return VoxelSizeChoice(list(trained["voxel_size"]), "trained", None, trained)
+    if listed is None:
+        return VoxelSizeChoice(None, "unlisted", None, trained)
+    return VoxelSizeChoice(None, "none" if readable else "unread", None, trained)

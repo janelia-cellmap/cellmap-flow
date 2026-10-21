@@ -52,7 +52,7 @@ class _InlineThread:
 def models_tab(dashboard, viewer, monkeypatch, tmp_path):
     """``models_tab(**body)`` POSTs /api/models; the commands started are ``models_tab.commands``."""
     commands = []
-    monkeypatch.setattr(launch, "start_hosts", lambda command, *args, **kwargs: commands.append(command))
+    monkeypatch.setattr("cellmap_flow.jobs.launch.start_hosts", lambda command, *args, **kwargs: commands.append(command))
     monkeypatch.setattr(launch.threading, "Thread", _InlineThread)
     monkeypatch.setenv("CELLMAP_FLOW_ENVS_FILE", str(tmp_path / "no-aliases.yaml"))
     process_chain().input_norms, process_chain().postprocess = [], []
@@ -110,8 +110,10 @@ def test_submit_serves_a_ticked_model_from_the_cellpose4_environment(submit, tmp
     (command,) = submit.commands
     argv, entry = served_entry(command)
     assert argv[:7] == ["/opt/pixi", "run", "--frozen", "--manifest-path", str(manifest), "-e", "cellpose4"]
-    assert entry == {"type": "cellpose", "pretrained_model": "cpsam_v2", "voxel_size": [64, 64, 64],
-                     "output": "flows", "name": "cellpose_sam_v2"}
+    # The row's entry, built into its config and served as any model's is (its defaults written out).
+    assert entry.items() >= {"type": "cellpose", "pretrained_model": "cpsam_v2", "voxel_size": [64, 64, 64],
+                             "output": "flows", "name": "cellpose_sam_v2"}.items()
+    assert entry == CellposeModelConfig(voxel_size=64, name="cellpose_sam_v2").launch_entry
     assert [mc.name for mc in get_session().models_config if isinstance(mc, CellposeModelConfig)] == [
         "cellpose_sam_v2"]
 

@@ -3,17 +3,21 @@ or ticked and submitted, the Models tab's Loaded models list with its ✕, the
 exported config and the job logs. Its commands are in test_launch_command, its
 layers in test_layer_sources_snapshot."""
 
+import shlex
 import threading
 from types import SimpleNamespace
 
 import neuroglancer
 import pytest
 import yaml
+import zarr
 
 from cellmap_flow.dashboard.services import launch
 from cellmap_flow.dashboard.state import get_session
+from cellmap_flow.jobs import launch as jobs_launch
 from cellmap_flow.jobs.spec import JobStartError
 from cellmap_flow.models.bioimage_catalog import bioimage_entry
+from cellmap_flow.models.registry import build_model
 from cellmap_flow.process_chain import process_chain
 
 
@@ -34,11 +38,12 @@ class _InlineThread:
 
 
 @pytest.mark.parametrize("resample", [True, False])
-def test_the_resample_box_reaches_the_servers_and_the_exported_config(viewer, dashboard, monkeypatch, resample):
+def test_the_resample_box_reaches_the_servers_and_the_exported_config(viewer, dashboard, monkeypatch,
+                                                                     placeholder_cellmap_folders, resample):
     """The Models tab's box is the session's setting: the servers it submits
     get --resample, and Export Config keeps it for `cellmap_flow yaml`."""
     commands = []
-    monkeypatch.setattr(launch, "start_hosts", lambda command, *args, **kwargs: commands.append(command))
+    monkeypatch.setattr(jobs_launch, "start_hosts", lambda command, *args, **kwargs: commands.append(command))
     monkeypatch.setattr(launch.threading, "Thread", _InlineThread)
     process_chain().input_norms, process_chain().postprocess = [], []
     session = get_session()
@@ -74,7 +79,7 @@ def test_add_builds_a_pasted_models_entry_and_runs_it_in_its_environment(viewer,
     script = tmp_path / "m.py"
     script.write_text("x = 1\n")
     commands = []
-    monkeypatch.setattr(launch, "start_hosts", lambda command, *args, **kwargs: commands.append(command))
+    monkeypatch.setattr(jobs_launch, "start_hosts", lambda command, *args, **kwargs: commands.append(command))
     monkeypatch.setattr(launch.threading, "Thread", _InlineThread)
     from cellmap_flow.dashboard.routes import model_resolve
 
@@ -151,10 +156,7 @@ def test_the_loaded_models_say_where_each_came_from_and_whether_it_can_be_remove
     """One model from each place the Models tab picks them, a finetune's, and
     one still starting; with what the tab's rows know each by, to untick them."""
     from cellmap_flow.finetune.job_manager.state import JobStatus
-    from cellmap_flow.models.models_config import (
-        BioModelConfig, CellposeModelConfig, HuggingFaceModelConfig,
-    )
-    from cellmap_flow.models.registry import build_model
+    from cellmap_flow.models.models_config import CellposeModelConfig, HuggingFaceModelConfig
 
     script = tmp_path / "m.py"
     script.write_text("x = 1\n")
@@ -162,7 +164,7 @@ def test_the_loaded_models_say_where_each_came_from_and_whether_it_can_be_remove
     session.model_catalog = {"Mito": {"mito": "/models/mito"}, "Nuclei": {"nuc": "/models/nuc"}}
     session.models_config = [
         HuggingFaceModelConfig(repo="cellmap/fly_organelles_run08_438000", name="fly_organelles_run08_438000"),
-        BioModelConfig(**bioimage_entry("affable-shark", [8, 8, 8], "affable_shark")),
+        build_model(bioimage_entry("affable-shark", [8, 8, 8], "affable_shark")),
         CellposeModelConfig(pretrained_model="cpsam_v2", voxel_size=[64, 64, 64], output="probability",
                             name="cellpose_sam_v2_probability"),
         build_model({"type": "script", "script_path": str(script)}, "mine"),
@@ -196,12 +198,12 @@ def test_the_loaded_models_say_where_each_came_from_and_whether_it_can_be_remove
     assert {m["source"] for m in models.values()} == set(launch.SOURCES)  # the keys models-tab.js labels
 
 
-def test_remove_stops_that_model_alone_and_leaves_the_others_and_unsubmitted_ticks_alone(viewer, dashboard,
-                                                                                       monkeypatch):
+def test_remove_stops_that_model_alone_and_leaves_the_others_and_unsubmitted_ticks_alone(
+        viewer, dashboard, monkeypatch, placeholder_cellmap_folders):
     """On the page nuc is ticked and sam unticked, neither submitted: the ✕
     of mito sends mito's name alone, so neither of them changes."""
     launched = []
-    monkeypatch.setattr(launch, "run_model", lambda path, name, st: launched.append(name))
+    monkeypatch.setattr(launch, "run_model", lambda config, st: launched.append(config.name))
     monkeypatch.setattr(launch.threading, "Thread", _InlineThread)
     process_chain().input_norms, process_chain().postprocess = [], []
     session = get_session()
@@ -249,12 +251,10 @@ def test_export_config_leaves_out_a_model_taken_off(viewer, dashboard):
 def test_a_model_added_by_reference_and_ticked_again_is_started_again_from_its_config(viewer, monkeypatch, tmp_path):
     """No catalog entry names it, so its ticked box did nothing once it had
     been stopped: removed, or unticked and submitted."""
-    from cellmap_flow.models.registry import build_model
-
     script = tmp_path / "m.py"
     script.write_text("x = 1\n")
     started = []
-    monkeypatch.setattr(launch, "run_model_config", lambda config, st: started.append(config.name))
+    monkeypatch.setattr(launch, "run_model", lambda config, st: started.append(config.name))
     monkeypatch.setattr(launch.threading, "Thread", _InlineThread)
     process_chain().input_norms, process_chain().postprocess = [], []
     session = get_session()
@@ -267,3 +267,24 @@ def test_a_model_added_by_reference_and_ticked_again_is_started_again_from_its_c
     session.jobs = [_Job("mine")]
     launch.update_run_models(["mine"])  # running already: not started twice
     assert started == ["mine"]
+
+
+def test_a_models_scale_picks_the_level_its_server_reads(viewer, monkeypatch, tmp_path):
+    """A config with `scale` launched from the Models tab was served at the
+    session's path, the scale ignored; the CLIs applied it. Every launcher
+    now reads the level the scale names (serving.launch.launch)."""
+    commands = []
+    monkeypatch.setattr(jobs_launch, "start_hosts", lambda command, *args, **kwargs: commands.append(command))
+    monkeypatch.setattr(launch.threading, "Thread", _InlineThread)
+    group = tmp_path / "raw.zarr"
+    zarr.open_group(str(group), mode="w").create_dataset("s1", shape=(4, 4, 4), dtype="u1")
+    script = tmp_path / "m.py"
+    script.write_text("x = 1\n")
+    session = get_session()
+    session.dataset_path, session.jobs = str(group), []
+    session.models_config = [build_model({"type": "script", "script_path": str(script), "scale": "s1"}, "mine")]
+
+    launch.update_run_models(["mine"])
+
+    (argv,) = [shlex.split(c) for c in commands]
+    assert argv[argv.index("-d") + 1] == str(group / "s1")

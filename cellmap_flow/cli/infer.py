@@ -15,15 +15,13 @@ stands for, and runs it.
 import click
 import logging
 import shlex
-import sys
 from typing import Type
-from cellmap_flow.jobs.launch import install_cleanup_handlers, start_hosts
+from cellmap_flow.jobs.launch import install_cleanup_handlers
 from cellmap_flow.jobs.spec import JobStartError
 from cellmap_flow.models import registry
-from cellmap_flow.serving.launch import server_command
+from cellmap_flow.serving.launch import launch, remembered
 from cellmap_flow.models.models_config import ModelConfig
-from cellmap_flow.jobs.settings import launcher_settings
-from cellmap_flow.config.yaml import resolve_data_path
+from cellmap_flow.config.yaml import ConfigError, resolve_data_path
 from cellmap_flow.cli.common import ModelTypeGroup, deprecation_notice, resample_option
 
 logger = logging.getLogger(__name__)
@@ -82,13 +80,9 @@ def run_generic(ctx, model_type, data_path, queue, project, config, server_check
 
 
 def create_dynamic_command(cli_name: str, config_class: Type[ModelConfig]):
-    """
-    Dynamically create a Click command for a ModelConfig subclass.
-    """
-    # Create the command function
+    """A click command for one model type: its constructor arguments as
+    options, built into a model entry and served through ``launch``."""
     def command_func(**kwargs):
-        # Separate model config kwargs from CLI kwargs
-        model_kwargs = {}
         data_path = kwargs.pop("data_path")
         queue = kwargs.pop("queue", None)
         project = kwargs.pop("project", None)
@@ -96,68 +90,33 @@ def create_dynamic_command(cli_name: str, config_class: Type[ModelConfig]):
         resample = kwargs.pop("resample", True)
         env = kwargs.pop("env", None)
 
-        # Fall back to the saved settings if not provided
-        settings = launcher_settings()
-        if project is None:
-            project = settings.charge_group
-        if queue is None:
-            queue = settings.queue
-
-        # Process kwargs for the model config
-        for key, value in kwargs.items():
-            if value is not None:
-                model_kwargs[key] = value
-
-        # Process constructor args (handle list/tuple conversions)
-        processed_kwargs = registry.coerce_cli_args(config_class, model_kwargs)
-
-        # Create model config instance
-        try:
-            model_config = config_class(**processed_kwargs)
-        except TypeError as e:
-            logger.error(f"Error creating {config_class.__name__}: {e}")
-            logger.error(f"Provided arguments: {processed_kwargs}")
-            sys.exit(1)
+        # The options as a model entry, built as a YAML's or the form's is.
+        entry = {"type": cli_name, **{key: value for key, value in kwargs.items() if value is not None}}
         if env:
-            from cellmap_flow.config.yaml import ConfigError
-            from cellmap_flow.models import envs
+            entry["env"] = env
+        try:
+            model_config = registry.build_model(entry)
+        except ConfigError as e:
+            raise click.ClickException(str(e))
+        queue, project = remembered(queue, project)
 
-            try:
-                model_config.env = envs.validate(env, getattr(model_config, "name", None) or cli_name)
-            except ConfigError as e:
-                raise click.BadParameter(str(e), param_hint="'--env'")
-
-        # The scale selects a level of a multiscale data_path; see resolve_data_path.
-        final_data_path = resolve_data_path(
-            data_path, getattr(model_config, "scale", None)
-        )
-
-        # Save them for the next run and the dashboard
-        settings.queue = queue
-        if project:
-            settings.charge_group = project
-        settings.save()
-
-        # Run server check or full inference
         if server_check:
             from cellmap_flow.serving.engine import check_server, make_server
 
-            check_server(make_server(final_data_path, model_config, resample=resample))
+            data_path = resolve_data_path(data_path, getattr(model_config, "scale", None))
+            check_server(make_server(data_path, model_config, resample=resample))
             click.echo("Server check passed")
-        else:
-            command = server_command(model_config, final_data_path, resample=resample)
-            logger.info(f"Executing command: {command}")
-            base_name = getattr(model_config, "name", None) or cli_name
-            # Ctrl+C or SIGTERM from here on kills the job this starts.
-            install_cleanup_handlers()
-            try:
-                start_hosts(command, queue, project, base_name)
-            except JobStartError as e:
-                raise click.ClickException(str(e))
-            from cellmap_flow.dashboard.services.startup import generate_neuroglancer_url
+            return
+        # Ctrl+C or SIGTERM from here on kills the job this starts.
+        install_cleanup_handlers()
+        try:
+            launch(model_config, data_path, queue=queue, charge_group=project, resample=resample)
+        except JobStartError as e:
+            raise click.ClickException(str(e))
+        from cellmap_flow.dashboard.services.startup import generate_neuroglancer_url
 
-            # Serves the dashboard; does not return.
-            generate_neuroglancer_url(final_data_path)
+        # Serves the dashboard, on the level the model reads; does not return.
+        generate_neuroglancer_url(resolve_data_path(data_path, getattr(model_config, "scale", None)))
 
     # Add docstring
     command_func.__doc__ = f"""

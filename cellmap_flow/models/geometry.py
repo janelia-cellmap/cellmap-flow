@@ -25,14 +25,10 @@ from cellmap_flow.io.ome import CHANNEL_AXIS_NAMES
 DEFAULT_OUTPUT_AXES = ("c", "z", "y", "x")
 
 
-def number(value):
-    """``value`` as an int when it is whole, else as a float.
-
-    ``int()`` truncated a 5.24 nm voxel size to 5, which put crops and
-    layers on the wrong grid.
-    """
-    value = float(value)
-    return int(value) if value.is_integer() else value
+# number: an int when whole, else a float (int() truncated a 5.24 nm voxel to 5).
+# Defined in models.entry, which has no numpy, and read from here by the
+# modules that take a geometry's numbers.
+from cellmap_flow.models.entry import number  # noqa: E402, F401
 
 
 def _numbers(values) -> tuple:

@@ -88,30 +88,32 @@ def test_a_bad_request_is_a_400_that_says_why_and_changes_nothing(dashboard, mon
 
 
 @pytest.mark.parametrize(
-    "class_name, params, status, expected",
+    "type_name, params, status, expected",
     [
-        # Form tuples become floats, a whole voxel size an int again, and a
-        # list of strings is split on commas when it is not JSON.
-        ("FlyModelConfig",
+        # Form tuples become numbers, whole ones ints, and a list of strings
+        # is split on commas when it is not JSON.
+        ("fly",
          {"checkpoint_path": "/c.ts", "channels": "mito, er", "input_voxel_size": "16,16,16",
           "output_voxel_size": "[8, 8, 8]", "input_size": "", "name": "fly"},
          200,
          {"type": "fly", "checkpoint_path": "/c.ts", "channels": ["mito", "er"],
           "input_voxel_size": [16, 16, 16], "output_voxel_size": [8, 8, 8], "name": "fly"}),
         ("NoSuchModelConfig", {}, 400, "NoSuchModelConfig"),
-        ("DaCapoModelConfig", {"run_name": "r", "iteration": ""}, 400, "iteration"),
-        ("DaCapoModelConfig", {"run_name": "r"}, 400, "DaCapoModelConfig"),
+        ("dacapo", {"run_name": "r", "iteration": ""}, 400, "iteration"),
+        ("dacapo", {"run_name": "r", "iteration": "ten"}, 400, "iteration"),
     ],
-    ids=["parsed", "unknown-class", "empty-required", "constructor-error"],
+    ids=["parsed", "unknown-type", "empty-required", "not-a-number"],
 )
-def test_the_model_form_parses_and_rejects_the_same_way(dashboard, class_name, params, status, expected):
+def test_the_model_form_parses_and_rejects_the_same_way(dashboard, type_name, params, status, expected):
     """The model form sends every field as a string: parsed, they make the
-    config the session serves; a class or field it cannot use is a 400."""
-    response = dashboard.post("/api/create-model-config", json={"class_name": class_name, "params": params})
+    config the session serves; a type or field it cannot use is a 400."""
+    from cellmap_flow.models.registry import cli_name_of
+
+    response = dashboard.post("/api/create-model-config", json={"type": type_name, "params": params})
     assert response.status_code == status, response.get_json()
     if status == 200:
         assert response.get_json()["config_dict"] == expected
-        assert [type(m).__name__ for m in get_session().models_config] == [class_name]
+        assert [cli_name_of(type(m)) for m in get_session().models_config] == [type_name]
     else:
         assert expected in response.get_json()["error"]
 

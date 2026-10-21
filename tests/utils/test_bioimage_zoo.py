@@ -135,3 +135,21 @@ def test_a_blank_voxel_size_is_the_one_the_model_was_trained_at_when_cellmap_flo
     assert submit({"id": "kind-seashell"}).status_code == 200
     (command,) = submit.commands
     assert served_entry(command)[1]["voxel_size"] == [30, 8, 8]
+
+
+@pytest.mark.parametrize("unit, scale", [("picometer", 8000), ("centimeter", 8e-7), ("meter", 8e-9)])
+def test_a_model_whose_axes_are_in_picometres_centimetres_or_metres_declares_its_voxel_size(submit, zoo, unit, scale):
+    """The picker read units from a table of its own, which lacked these, so
+    it refused a blank voxel size for a model the server would have served;
+    both read io.metadata's table now. The declared size is left to the
+    server, which reads it from the description as the one rule."""
+    zoo.hypha = [{"alias": "tiny-newt", "manifest": {
+        "id": "tiny-newt", "name": "Newt", "type": "model", "description": "", "tags": [], "inputs": [{"axes": [
+            {"type": "space", "id": "y", "scale": scale, "unit": unit},
+            {"type": "space", "id": "x", "scale": scale, "unit": unit}]}]}}]
+    (newt,) = catalog.refresh_bioimage_models()["models"]
+    assert newt["declared_voxel_size"] == pytest.approx([8.0, 8.0, 8.0])
+
+    assert submit({"id": "tiny-newt"}).status_code == 200
+    (command,) = submit.commands
+    assert "voxel_size" not in served_entry(command)[1]

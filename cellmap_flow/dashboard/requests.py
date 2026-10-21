@@ -27,6 +27,7 @@ message is pydantic's, after the field's name.
   which answer through ``check`` instead (see there)
 """
 
+import logging
 from typing import Annotated, Any, Optional
 
 from flask import jsonify
@@ -45,6 +46,7 @@ from pydantic import (
 from cellmap_flow.blockwise.bounding_box import BoundingBox
 from cellmap_flow.jobs.settings import SERVER_CONFIG_KEYS
 from cellmap_flow.jobs.site import current_site
+from cellmap_flow.models import entry as model_entry
 
 
 def _number(value, kind, name):
@@ -131,11 +133,32 @@ class BlockwiseSettings(BaseModel):
 
 
 class CreateModelConfig(BaseModel):
-    """A ModelConfig subclass's name and its constructor's parameters, as the
-    builder's model form sends them (registry.coerce_form_params parses them)."""
+    """A model type and its constructor's parameters, as the builder's model
+    form sends them; ``registry.build_model`` builds the config from them as
+    from any model entry. ``type`` is the type's name (``registry.model_types``,
+    "fly"); ``class_name``, the class name ("FlyModelConfig") the form posted
+    before 0.3.0, is still taken in its place, with a deprecation warning,
+    until the release after."""
 
-    class_name: Annotated[str, _required("class_name")] = Field(None, validate_default=True)
+    type: Optional[str] = None
+    class_name: Optional[str] = None
     params: dict = {}
+
+    @model_validator(mode="after")
+    def _one_name(self):
+        if not (self.type or self.class_name):
+            raise ValueError("type is required")
+        return self
+
+    def type_name(self) -> str:
+        """The model type to build: ``type``, else the deprecated ``class_name``."""
+        if self.type:
+            return self.type
+        logging.getLogger(__name__).warning(
+            f"POST /api/create-model-config: class_name ({self.class_name}) is deprecated and goes in the "
+            "release after 0.3.0; post type, the model type's name"
+        )
+        return self.class_name
 
 
 class SetData(BaseModel):
@@ -145,18 +168,11 @@ class SetData(BaseModel):
 
 
 def _voxel_size(value):
-    """[z, y, x] in nm from "8", "4,4,8", 8 or [4, 4, 8]; None when blank.
-    Whole numbers stay ints: the model's server makes a Coordinate of them."""
-    if value is None or (isinstance(value, str) and not value.strip()):
+    """[z, y, x] in nm from "8", "4,4,8", 8 or [4, 4, 8]; None when blank
+    (``models.entry.voxel_size``, as the model's constructor reads it)."""
+    if model_entry.blank(value):
         return None
-    parts = value.replace(",", " ").split() if isinstance(value, str) else value
-    if not isinstance(parts, (list, tuple)):
-        parts = [parts]
-    sizes = [_number(p, float, "voxel_size") for p in parts]
-    if len(sizes) not in (1, 3) or any(s <= 0 for s in sizes):
-        raise ValueError(f"voxel_size must be one positive number or three (z,y,x), got {value!r}")
-    sizes = sizes * 3 if len(sizes) == 1 else sizes
-    return [int(s) if s.is_integer() else s for s in sizes]
+    return list(model_entry.voxel_size(value))
 
 
 class BioimageSelection(BaseModel):

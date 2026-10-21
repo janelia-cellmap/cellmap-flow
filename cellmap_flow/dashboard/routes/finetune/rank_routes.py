@@ -232,29 +232,27 @@ def _serving(name, config):
     """``(host, job)``: the running server of ``name``, or one started now for
     a score (its job, to stop after), as the dashboard starts any model."""
     from cellmap_flow.dashboard.services.launch import running_names
-    from cellmap_flow.jobs.launch import start_hosts
+    from cellmap_flow.serving.launch import launch
 
     host = running_job_host(name)
     if host:
         return host, None
     if name in running_names():
         raise RuntimeError("it is starting on the Models tab; score it once its server is up")
-    from cellmap_flow.serving.launch import server_command
-
     session = get_session()
-    job = start_hosts(server_command(config, session.dataset_path, session.resample), job_name=name,
-                      queue=session.queue, charge_group=session.charge_group, wait_for_host=True)
+    job = launch(config, session.dataset_path, queue=session.queue, charge_group=session.charge_group,
+                 resample=session.resample)
     return job.host, job
 
 
 def _start_for_good(name, config):
     """Start ``name`` as the Models tab's Add does: among the session's models and jobs, with its layer."""
-    from cellmap_flow.dashboard.services.launch import _launch, drop_config, run_model_config
+    from cellmap_flow.dashboard.services.launch import _launch, drop_config, run_model
 
     session = get_session()
     drop_config(name)
     session.models_config.append(config)
-    _launch(name, run_model_config, config, session.layer_blob(), daemon=True)
+    _launch(name, run_model, config, session.layer_blob(), daemon=True)
 
 
 def _offsets(offsets):
