@@ -29,7 +29,6 @@ from cellmap_flow.finetune.job_manager.persistence import finetune_export_kwargs
 from cellmap_flow.jobs.lsf import LSFJob
 from cellmap_flow.jobs.spec import JobStatus, public_server_url
 from cellmap_flow.models.models_config import FinetuneModelConfig
-from cellmap_flow.pipeline_spec import PipelineSpec
 from cellmap_flow.serving.client import fetch_model_info
 from cellmap_flow.viewer.layers import prediction_layer, replace_layer
 
@@ -86,8 +85,8 @@ def add_finetuned_layer(job, model_name):
     ] + [inference_job]
     logger.info(f"Added finetuned job to the session's jobs: {model_name}")
 
-    # Get pre/post processing args (same hash as other models)
-    st_data = PipelineSpec.from_steps(session.input_norms, session.postprocess).to_url_blob()
+    # The chain as every other model's layer carries it.
+    st_data = session.layer_blob()
 
     viewer = session.viewer
     if viewer is None:

@@ -176,7 +176,8 @@ def _set_chain_and_redraw(spec, dashboard_url, *, built=None, builder=None) -> l
     changed. ``builder``, the pipeline builder's canvas as a BuilderCanvas
     dict, is kept when given. Then the raw layer and each prediction layer
     are rebuilt: a prediction layer's URL carries the chain (the args blob,
-    with ``dashboard_url`` and the chain's digest), and its server runs the
+    with the dashboard's address, or else ``dashboard_url``, the request's,
+    and the chain's digest: Session.layer_blob), and its server runs the
     chain of the layer it is asked for.
 
     The viewer is left alone when the chain is the one it already shows: the
@@ -213,7 +214,9 @@ def _set_chain_and_redraw(spec, dashboard_url, *, built=None, builder=None) -> l
     # same settings gives the same layer source, so neuroglancer keeps the
     # chunks it has and each server reuses the chain it already built (with
     # any merger state in it). Changed settings still give a new source.
-    st_data = spec.to_url_blob(dashboard_url=dashboard_url, digest=spec.digest())
+    # The blob every other path gives a layer (Session.layer_blob), so a
+    # layer a launch drew over this chain is left as it is.
+    st_data = session.layer_blob(dashboard_url)
     if spec.digest() == previous_digest and _shows(session.viewer, session.jobs, st_data):
         logger.debug("The viewer already shows this chain; it is left as it is")
         return [job.model_name for job in session.jobs if job.host]

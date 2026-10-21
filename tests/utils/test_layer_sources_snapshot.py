@@ -133,23 +133,46 @@ def _viewer(viewer, predictions=()):
     return {**pinned, **{name: layer for name, (_, layer) in layers.items()}}
 
 
+DASHBOARD = "http://10.0.0.1:5000"
+
+
+def _bound_dashboard(monkeypatch, startup):
+    """bind_dashboard and create_and_run_app stood in for: the dashboard is
+    bound at DASHBOARD and never served. What create_and_run_app was given."""
+    served = []
+
+    def bind():
+        get_session().dashboard_url = DASHBOARD
+        return "server"
+
+    monkeypatch.setattr(startup, "bind_dashboard", bind)
+    monkeypatch.setattr(startup, "create_and_run_app",
+                        lambda neuroglancer_url, server: served.append((neuroglancer_url, server)))
+    return served
+
+
+def _carried(chain, dashboard_url=DASHBOARD):
+    """``chain`` as a layer's URL carries it: with the dashboard's address (None: no dashboard bound) and the chain's digest."""
+    address = {"dashboard_url": dashboard_url} if dashboard_url else {}
+    return dict(chain, **address, digest=get_session().pipeline_spec.digest())
+
+
 def test_the_startup_viewer(servers, monkeypatch):
     from cellmap_flow.dashboard.services import startup
 
-    served = []
-    monkeypatch.setattr(startup, "create_and_run_app", lambda neuroglancer_url: served.append(neuroglancer_url))
+    served = _bound_dashboard(monkeypatch, startup)
     # Not up yet: a zarr://None/... layer would never load, and nothing replaces it later.
     get_session().jobs = get_session().jobs + [SimpleNamespace(model_name="queued", host=None)]
     get_session().extra_layers = {"extra": neuroglancer.ImageLayer(source="zarr://http://files/extra.zarr")}
 
     startup.generate_neuroglancer_url(servers)
 
-    assert served == [viewer_url(get_session().viewer)]
+    assert served == [(viewer_url(get_session().viewer), "server")]
     assert _viewer(get_session().viewer, MODELS) == {
         "layers": [("data", "image"), ("old", "image"), ("new", "image"), ("flat", "image"), ("silent", "image"),
                    ("extra", "image")],
         "dimensions": {"z": 24.0, "y": 12.0, "x": 12.0},
-        "chain": CHAIN,
+        "chain": _carried(CHAIN),
         "old": ("image", "zarr://http://old:8000/old", OVERLAID, _unit("red")),
         "new": ("image", "zarr://http://new:8000/new", None, _unit("green")),
         "flat": ("image", "zarr://http://flat:8000/flat", OVERLAID_3D, _unit("blue")),
@@ -160,7 +183,7 @@ def test_the_startup_viewer(servers, monkeypatch):
 def test_the_startup_viewer_shows_a_labelling_chain_as_segmentations(servers, monkeypatch):
     from cellmap_flow.dashboard.services import startup
 
-    monkeypatch.setattr(startup, "create_and_run_app", lambda neuroglancer_url: None)
+    _bound_dashboard(monkeypatch, startup)
     get_session().set_pipeline(PipelineSpec.from_steps(INPUT_NORM, [ThresholdPostprocessor(0.5)]))
 
     startup.generate_neuroglancer_url(servers)
@@ -169,7 +192,7 @@ def test_the_startup_viewer_shows_a_labelling_chain_as_segmentations(servers, mo
         "layers": [("data", "image"), ("old", "segmentation"), ("new", "segmentation"), ("flat", "segmentation"),
                    ("silent", "segmentation")],
         "dimensions": {"z": 24.0, "y": 12.0, "x": 12.0},
-        "chain": dict(CHAIN, postprocess=THRESHOLD),
+        "chain": _carried(dict(CHAIN, postprocess=THRESHOLD)),
         "old": ("segmentation", "zarr://http://old:8000/old", OVERLAID, None),
     }
 
@@ -251,6 +274,35 @@ def test_a_model_started_from_the_models_tab(servers, viewer, monkeypatch, launc
     }
 
 
+def test_submits_layers_carry_the_dashboards_address_and_the_chains_digest(servers, viewer, monkeypatch):
+    """As Submit's redraw gives them (test_submit): a merging postprocessor's
+    server posts its merged ids to the dashboard from the start, and the
+    first redraw of an unchanged chain leaves the layer as it is."""
+    import threading
+
+    from cellmap_flow.dashboard.services import launch
+
+    class InlineThread(threading.Thread):
+        def start(self):
+            self.run()
+
+    def start_hosts(command, job_name, queue=None, charge_group=None):
+        job = SimpleNamespace(model_name=job_name, host=f"http://{job_name}:8000")
+        get_session().jobs = get_session().jobs + [job]
+        return job
+
+    monkeypatch.setattr(launch, "start_hosts", start_hosts)
+    monkeypatch.setattr(launch.threading, "Thread", InlineThread)
+    get_session().jobs = []
+    get_session().dashboard_url = DASHBOARD
+    get_session().model_catalog = {"catalog": {"old": "/models/old"}}
+
+    launch.update_run_models(["old"])
+
+    chain, _ = _layer(viewer.state.layers["old"])
+    assert chain == _carried(CHAIN)
+
+
 @pytest.mark.parametrize("server, postprocess, layer", [
     pytest.param("old", [], ("image", OVERLAID, _unit("red")), id="old"),
     pytest.param("new", [], ("image", None, _unit("red")), id="new"),
@@ -271,7 +323,8 @@ def test_a_finetuned_models_layer(servers, viewer, server, postprocess, layer):
     assert _viewer(viewer, [name]) == {
         "layers": [(name, kind)],
         "dimensions": EIGHT_NM,
-        "chain": dict(CHAIN, postprocess=[step.to_dict() for step in postprocess]),
+        # No dashboard bound in this test: the layer carries the chain's digest alone.
+        "chain": _carried(dict(CHAIN, postprocess=[step.to_dict() for step in postprocess]), dashboard_url=None),
         name: (kind, f"zarr://http://{server}:8000/{name}", scales, shader),
     }
 

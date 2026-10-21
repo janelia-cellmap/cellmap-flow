@@ -386,9 +386,11 @@ A chunk served to Neuroglancer
    ``zarr://<server>/<model>__CFLOW_ARGS__<blob>__CFLOW_ARGS__/zarr``
    (``viewer.layers.prediction_source``): the layer's name, then the format
    the server serves it in (``serving.protocol.FORMAT``). The blob is the
-   layer's chain, ``PipelineSpec.to_url_blob(...)``: minified JSON in
-   URL-safe base64 (``serving.protocol.encode_to_str``). Every request
-   Neuroglancer makes for the layer carries it.
+   layer's chain with the dashboard's address and the chain's digest,
+   ``Session.layer_blob()`` (``PipelineSpec.to_url_blob``): minified JSON
+   in URL-safe base64 (``serving.protocol.encode_to_str``). Every request
+   Neuroglancer makes for the layer carries it, and every path that draws a
+   layer builds it the same way.
 #. The server is ``serving.chunkmirage_server.ChunkmirageServer``, built on
    `chunkmirage <https://github.com/JaneliaSciComp/chunkmirage>`_, which
    reads, caches, schedules and serves; cellmap-flow keeps the model, its
@@ -453,9 +455,9 @@ Submit, or ``PUT /api/pipeline``, and the layers
    together, and keeps the canvas if one was sent. With no viewer yet (no
    dataset opened) it stops there.
 #. The layers' source is named by the chain's digest,
-   ``spec.to_url_blob(dashboard_url=..., digest=spec.digest())``. The same
-   chain sent again gives the same URL, so Neuroglancer keeps the chunks it
-   has, and each server reuses the chain it built.
+   ``Session.layer_blob()``. The same chain sent again gives the same URL,
+   so Neuroglancer keeps the chunks it has, and each server reuses the
+   chain it built; a layer a launch drew over this chain is left alone.
 #. It keeps the shaders the user set in the viewer, dropping a layer's
    contrast range when its chain changed. Then, in one ``viewer.txn()``, it
    rebuilds the raw layer (``viewer.layers.raw_layer``) and a prediction

@@ -375,6 +375,24 @@ def test_remove_stops_that_model_alone_and_leaves_the_others_and_unsubmitted_tic
     assert not sam.killed
 
 
+def test_export_config_leaves_out_a_model_taken_off(viewer, dashboard):
+    """The ✕ takes the model's config with it: a config exported after it,
+    loaded with `cellmap_flow yaml`, starts only the models that were kept."""
+    from cellmap_flow.models.models_config import HuggingFaceModelConfig
+
+    session = get_session()
+    session.dataset_path = "/data/raw.zarr"
+    session.models_config = [HuggingFaceModelConfig(repo=f"cellmap/{name}", name=name) for name in ("mito", "nuc")]
+    session.jobs = [_Job("mito"), _Job("nuc")]
+
+    def exported():
+        return [m["name"] for m in yaml.safe_load(dashboard.get("/api/export-config").data)["models"]]
+
+    assert exported() == ["mito", "nuc"]
+    assert dashboard.post("/api/models/remove", json={"name": "mito"}).status_code == 200
+    assert exported() == ["nuc"]
+
+
 def test_a_finetune_jobs_model_is_removed_only_once_its_job_has_ended(viewer, dashboard, monkeypatch):
     """While the job is alive its model is its server, which Restart trains
     again: the Finetune tab stops it. Once the job has ended its server has

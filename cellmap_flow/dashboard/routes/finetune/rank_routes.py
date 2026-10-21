@@ -249,11 +249,12 @@ def _serving(name, config):
 
 def _start_for_good(name, config):
     """Start ``name`` as the Models tab's Add does: among the session's models and jobs, with its layer."""
-    from cellmap_flow.dashboard.services.launch import _launch, run_model_config
+    from cellmap_flow.dashboard.services.launch import _launch, drop_config, run_model_config
 
     session = get_session()
-    session.models_config = [c for c in session.models_config if getattr(c, "name", None) != name] + [config]
-    _launch(name, run_model_config, config, session.pipeline_spec.to_url_blob(), daemon=True)
+    drop_config(name)
+    session.models_config.append(config)
+    _launch(name, run_model_config, config, session.layer_blob(), daemon=True)
 
 
 def _offsets(offsets):
