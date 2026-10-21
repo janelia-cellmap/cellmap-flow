@@ -50,7 +50,7 @@ class ServedModel:
 
     ``runner``: the warmed-up Inferencer (with no device slots: the
     InferenceOp's ``slots`` bound the device). ``grid``: the raw data's voxels
-    as the model reads them, in nm (``ImageDataInterface._grid``: for a level
+    as the model reads them, in nm (``ImageDataInterface.read_grid``: for a level
     read as if it were at the model's voxel size, its corner rescaled too).
     ``level_shape``: that level's voxels (its resampled ones when resampled).
     ``origin``: output voxel 0's lower corner in nm, where the chunk grid

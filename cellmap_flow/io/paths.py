@@ -16,14 +16,10 @@ import os
 import re
 from typing import Optional, Tuple
 
+# An http(s), s3 or gs URL, also after ``precomputed://`` (worldarray's rule).
+from worldarray.store import is_remote  # noqa: F401
+
 ZARR_JSON = "zarr.json"
-
-_REMOTE_PREFIXES = ("http://", "https://", "s3://", "gs://")
-
-
-def is_remote(path: str) -> bool:
-    """An http(s), s3 or gs URL."""
-    return path.startswith(_REMOTE_PREFIXES)
 
 
 def is_precomputed(path: str) -> bool:
@@ -97,18 +93,6 @@ def find_v3_container(path: str) -> Optional[str]:
             return current
         current = os.path.dirname(current)
     return None
-
-
-def is_zarr_container(path: str) -> bool:
-    """A local zarr (v2 or v3) group or array, with or without a .zarr suffix."""
-    if is_remote(path):
-        return False
-    return os.path.isdir(path) and (
-        os.path.exists(os.path.join(path, ".zgroup"))
-        or os.path.exists(os.path.join(path, ".zarray"))
-        or os.path.exists(os.path.join(path, ".zattrs"))
-        or is_v3_container(path)
-    )
 
 
 # A path component that ends in .zarr or .n5 (not ERA5's "chunk-1.zarr-v2").
