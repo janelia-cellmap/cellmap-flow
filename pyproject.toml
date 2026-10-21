@@ -18,6 +18,8 @@ dependencies = [
     "fastmorph",
     "flask",
     "tensorstore",
+    # The shared reader: placement, levels, padded and resampled reads.
+    "worldarray>=0.1,<1",
     "funlib.geometry",
     "scikit-image",
     "numcodecs==0.15.0",
