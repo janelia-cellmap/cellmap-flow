@@ -45,6 +45,7 @@
 // offers what the manifest declares (modes.ts) and FinetuneOptions.mode
 // says which a run is.
 import type { Chain, DatasetInfo, Inference, ModelEntry, PaintStore, PaintVolume } from "../contracts";
+import { FINETUNE_DEFAULTS } from "../generated/cellmap-flow";
 import type { FinetuneMode } from "./modes";
 
 /** The labels of a painted chunk of an annotation volume: its grid index
@@ -251,7 +252,10 @@ export type RunFinetune = (run: FinetuneRun) => Promise<Finetuned>;
  * The head's 1e-2 would move two million weights a hundred times as far. */
 export const FULL_LEARNING_RATE = 1e-4;
 
-/** The defaults of the form's parameters where the tab does not send one.
+/** The defaults of the form's parameters where the tab does not send one:
+ * the server form's (FINETUNE_DEFAULTS, generated from the Python's
+ * FinetuneSubmit, which reads a blank field the same way), except where
+ * the browser has a reason of its own, each said beside its value.
  *
  * λ is the server form's default, 0.01, and it means something for a head
  * alone too. The term is in squared logits: a head that moved the
@@ -272,17 +276,22 @@ export const FULL_LEARNING_RATE = 1e-4;
  * slices make few tiles, which a batch of one turns into as many steps. */
 export const DEFAULT_OPTIONS: FinetuneOptions = {
   mode: "head",
-  epochs: 20,
+  epochs: FINETUNE_DEFAULTS.num_epochs,
+  // The head's own rate: a few thousand weights take a step a hundred times LoRA's 1e-4 (the browser form offers 1e-2).
   learningRate: 0.01,
+  // BCE, the head's loss before there was a choice and the browser form's default; the server form picks margin.
   lossType: "bce",
-  margin: 0.3,
-  balanceClasses: true,
+  margin: FINETUNE_DEFAULTS.margin,
+  balanceClasses: FINETUNE_DEFAULTS.balance_classes,
+  // The browser's own, where the server form has 0.1: hard 0/1 targets unless the form asks for smoothing.
   labelSmoothing: 0,
+  // The head's batch, in voxels: a browser-only field.
   batchPixels: 4096,
-  distillationLambda: 0.01,
-  distillationScope: "unlabeled",
+  distillationLambda: FINETUNE_DEFAULTS.distillation_lambda,
+  distillationScope: FINETUNE_DEFAULTS.distillation_scope,
   seed: 0,
+  // One tile a step where the server trains 8 patches: GPU memory, see above.
   batchPatches: 1,
   tileSize: null,
-  augment: false,
+  augment: FINETUNE_DEFAULTS.augment,
 };

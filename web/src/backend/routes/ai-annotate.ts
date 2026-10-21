@@ -39,6 +39,7 @@ import { ACTION, AIAnnotateError, CROP_SIZE_PX, DAILY_CALL_LIMIT, KEY, KEYBINDIN
 import { createUsage, limitMessage, type Usage } from "../../ai-annotate/usage";
 import type { AppContext, PaintVolume } from "../../contracts";
 import { readVolume } from "../../finetune/volume";
+import { LABEL_MAX_CHARS } from "../../generated/cellmap-flow";
 import { defaultKeyValueStore, type KeyValueStore } from "../../models/listing-cache";
 import { AiAnnotateJob, GENERIC_FAILURE, type JobDeps, newAnnotateId, Refused } from "../ai-annotate-job";
 import type { Router } from "../router";
@@ -46,8 +47,8 @@ import { badRequest, json, message, objectBody } from "../router";
 
 const BASE = "/api/finetune/ai-annotate";
 
-/** The longest provider or model id, label and destination the routes take (requests.py's LABEL_MAX_CHARS and the destination's cap). */
-const LABEL_MAX_CHARS = 100;
+// The longest provider or model id and label the routes take is the Python's
+// LABEL_MAX_CHARS, imported from the generated contracts above.
 const DESTINATION_MAX_CHARS = 1000;
 /** The longest credential string taken (a Vertex access token is about 1 KB). */
 const CREDENTIAL_MAX_CHARS = 4096;
