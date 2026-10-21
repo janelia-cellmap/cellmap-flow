@@ -1,7 +1,8 @@
-"""`cellmap_flow infer <type>`: what it launches, and how it fails.
+"""`cellmap_flow infer <type>`: what it launches, and how it fails; and the
+commands before 0.3.0, which still run.
 
-The options themselves, and `run` (its alias before 0.3.0), are pinned in
-test_cli_surface; the commands they build in tests/utils/test_launch_command.
+`run`, its alias before 0.3.0, launches the same way; the commands they build
+are checked in tests/utils/test_launch_command.
 """
 
 import os
@@ -10,7 +11,7 @@ import pytest
 import yaml
 from click.testing import CliRunner
 
-from cellmap_flow.cli import infer
+from cellmap_flow.cli import aliases, infer
 from cellmap_flow.cli.main import cli
 from cellmap_flow.dashboard.services import startup
 from cellmap_flow.jobs import settings
@@ -65,3 +66,13 @@ def test_a_server_that_never_came_up_exits_non_zero_with_the_reason(monkeypatch)
     result = CliRunner().invoke(cli, PER_TYPE + ["--name", "m"])
     assert result.exit_code != 0 and "m never reported a server address" in result.output
     assert viewers == [] and started_jobs() == []
+
+
+def test_an_old_console_script_says_what_replaces_it_and_runs_it(capsys):
+    """An environment installed before 0.3.0 still has `cellmap_flow_yaml`
+    and the other console scripts (cli/aliases.py) until the release after."""
+    with pytest.raises(SystemExit) as exited:
+        aliases.yaml(["--help"])
+    out, err = capsys.readouterr()
+    assert exited.value.code == 0 and "cellmap_flow yaml" in err
+    assert out.startswith("Usage: cellmap_flow yaml ")
