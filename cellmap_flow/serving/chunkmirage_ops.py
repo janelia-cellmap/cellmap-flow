@@ -344,7 +344,7 @@ def layer_ops(model, input_norm, postprocess, dashboard_url=None, dataset=""):
     """The ops of a layer's pipeline: the model on ``input_norm``, then one op
     per step of ``postprocess``, then, if the chain leaves another dtype than
     the one served, chunkmirage's ``cast`` to it (as ``astype``)."""
-    from chunkmirage.ops import Cast
+    from chunkmirage_contrib.ops import Cast
 
     served = served_model(model)
     ops = [InferenceOp(model=model, input_norm=input_norm)]
