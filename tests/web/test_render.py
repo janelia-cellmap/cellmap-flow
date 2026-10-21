@@ -163,12 +163,14 @@ def test_the_default_chain_is_ticked_with_its_values(page):
     ]
     posts = _rows(page, "postprocessor-item", "postProcessCheckbox")
     assert posts[:1] == [("SigmoidPostprocessor", True, {})]
-    # Every other op follows once, unticked, so the chain is complete and
-    # Submit All sends back exactly the default.
+    # Every other op the browser runs follows once, unticked, so the chain is
+    # complete and Submit All sends back exactly the default; an op only a
+    # server runs is not offered.
     for rows, available in ((norms[2:], get_input_normalizers()), (posts[1:], get_postprocessors_list())):
         assert not any(checked for _, checked, _ in rows)
         assert sorted(name for name, _, _ in rows) == sorted(
-            op["name"] for op in available if op["name"] not in {"MinMaxNormalizer", "LambdaNormalizer", "SigmoidPostprocessor"}
+            op["name"] for op in available
+            if op["browser"] and op["name"] not in {"MinMaxNormalizer", "LambdaNormalizer", "SigmoidPostprocessor"}
         )
 
 

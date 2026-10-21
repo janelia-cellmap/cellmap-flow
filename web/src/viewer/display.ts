@@ -1,19 +1,22 @@
 // The shaders of the viewer's layers, and the value range a prediction is
-// drawn over. Ports of cellmap_flow/viewer/raw.py (RAW_SHADER,
-// PREDICTION_SHADER, PREDICTION_COLORS, _invlerp_bounds, prediction_shader)
-// and cellmap_flow/serving/probe.py (output_display_range). The strings they
-// produce are the ones the Python functions produce, so a layer built here
-// shades as the same layer built by the Flask dashboard: test/unit/
-// viewer-display.test.ts holds values printed from the Python.
+// drawn over. Ports of cellmap_flow/viewer/raw.py (_invlerp_bounds,
+// prediction_shader) and cellmap_flow/serving/probe.py
+// (output_display_range), with raw.py's own RAW_SHADER, PREDICTION_SHADER and
+// PREDICTION_COLORS and layers.py's _COLOR_RE, read from the export
+// (generated/python-data.ts). The strings they produce are the ones the
+// Python functions produce, so a layer built here shades as the same layer
+// built by the Flask dashboard: test/unit/viewer-display.test.ts holds
+// values printed from the Python.
 //
 // Not ported: raw.py's flow_shader and layers.py's flow_channels, which
 // colour a Cellpose model's flow channels by direction. The browser serves
 // no Cellpose model (its masks need Cellpose's own dynamics, Python code).
 import type { Step, StepValue } from "../contracts";
+import { PYTHON, pyFormat, pyRegExp } from "../generated/python-data";
 
 /** The colours prediction layers cycle through, in the order models are
  * submitted: PREDICTION_COLORS[index % PREDICTION_COLORS.length]. */
-export const PREDICTION_COLORS: readonly string[] = ["red", "green", "blue", "yellow", "purple", "orange", "cyan", "magenta"];
+export const PREDICTION_COLORS: readonly string[] = PYTHON.viewer.prediction_colors;
 
 /** What each of a model's output classes (serving/probe.py's UNIT, SIGNED_UNIT)
  * means as a value range. "unbounded" (logits, distances) and anything else
@@ -35,7 +38,7 @@ const INTEGER_LIMITS: Record<string, [number, number]> = {
 /** The pattern a shader's colour control is read back through, so a
  * recomputed shader keeps the colour the user navigates by
  * (layers.py's _COLOR_RE). */
-const COLOR_CONTROL = /color\(default="([^"]+)"\)/;
+const COLOR_CONTROL = pyRegExp(PYTHON.viewer.color_control);
 
 /** Python's f"{value:.6g}": six significant digits, trailing zeros dropped,
  * exponent form (1e-07, 2e+06) below 1e-4 and from 1e6. Used so the shader
@@ -85,9 +88,7 @@ export function invlerpBounds(lo: number, hi: number, wlo: number, whi: number, 
 export function predictionShader(color: string, range?: readonly [number, number] | null, dtype?: string | null): string {
   const [lo, hi] = range ?? [0, 1];
   const pad = (hi - lo) * 0.5 || 1.0;
-  return `#uicontrol invlerp normalized(${invlerpBounds(lo, hi, lo - pad, hi + pad, dtype)});\n`
-    + `#uicontrol vec3 color color(default="${color}");\n`
-    + "void main(){emitRGB(color * normalized());}";
+  return pyFormat(PYTHON.viewer.prediction_shader, { bounds: invlerpBounds(lo, hi, lo - pad, hi + pad, dtype), color });
 }
 
 /** The range of what a raw layer of `dtype` holds, as the contrast window
@@ -106,9 +107,7 @@ export function dtypeRange(dtype: string): [number, number] {
  * window equals the range, as Python's fallback has it. */
 export function rawShader(dtype: string): string {
   const [lo, hi] = dtypeRange(dtype);
-  return `#uicontrol invlerp normalized(${invlerpBounds(lo, hi, lo, hi, dtype)});\n`
-    + '#uicontrol vec3 color color(default="white");\n'
-    + "void main(){emitRGB(color * normalized());}";
+  return pyFormat(PYTHON.viewer.raw_shader, { bounds: invlerpBounds(lo, hi, lo, hi, dtype) });
 }
 
 /** The colour a shader's colour control defaults to, or null when it has

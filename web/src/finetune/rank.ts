@@ -45,15 +45,19 @@
 // A binary model is scored channel by channel and answers with its best:
 // painted nuclei rank a model by its nucleus channel, whatever else it
 // predicts. An affinity model is scored on its channels together.
+//
+// The constants are cellmap_flow/finetune/rank.py's, exported
+// (generated/python-data.ts), so the server's port ranks alike.
 import type { Step } from "../contracts";
+import { PYTHON } from "../generated/python-data";
 import type { PaintedChunk, Targets } from "./types";
 
 /** The label smoothing of the finetune's default loss (FinetuneOptions), which the loss beside the score uses. */
-export const RANK_SMOOTHING = 0.1;
+export const RANK_SMOOTHING = PYTHON.finetune.rank_smoothing;
 
 /** The most blocks of a model's output one score reads: 32 passes of a 3D
  * model take half a minute on a laptop GPU. */
-export const RANK_BLOCKS = 32;
+export const RANK_BLOCKS = PYTHON.finetune.rank_blocks;
 
 /** `count` of `items`, spread evenly over them in their order; all of them when there are no more. */
 export function spread<T>(items: readonly T[], count: number): T[] {
@@ -62,10 +66,10 @@ export function spread<T>(items: readonly T[], count: number): T[] {
 }
 
 /** A window of the raw this much narrower than the model's normalizer's range is tried (see the top of the file). */
-export const NARROW_WINDOW = 0.25;
+export const NARROW_WINDOW = PYTHON.finetune.narrow_window;
 
 /** How much better on the paint the raw's window must score to be kept. */
-export const WINDOW_MARGIN = 0.03;
+export const WINDOW_MARGIN = PYTHON.finetune.window_margin;
 
 /** `norm` with its MinMaxNormalizer set to the raw's window [lo, hi], or
  * null: no MinMaxNormalizer, no window (lo = hi), or one not narrower than
@@ -79,7 +83,7 @@ export function windowed(norm: readonly Step[], lo: number, hi: number): Step[] 
 }
 
 /** The cut-offs a score is read at: logits from -6 to 6 in quarters (0 among them). */
-export const CUTOFFS = Array.from({ length: 49 }, (_, k) => -6 + k / 4);
+export const CUTOFFS: readonly number[] = PYTHON.finetune.cutoffs;
 
 /** One channel's agreement with the paint so far: the targets counted, their
  * logits binned against CUTOFFS (bin b: above b of them), and the loss summed,

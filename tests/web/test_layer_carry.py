@@ -6,27 +6,18 @@ drawn) builds the layer anew, and neuroglancer showed it as built: the
 user's additive blending, opacity or segment colouring were back at their
 defaults. cellmap_flow.viewer.layers.replace_layer keeps them in the Python
 dashboard and web/src/viewer/state.ts's replaceLayers in the browser's, by
-one rule (carried_layer_json, carriedLayer), whose list of the properties
-that belong to a source's data must be the same in both: checked here. The
-rule's cases are the vitest suite's (web/test/unit/viewer-state.test.ts),
-and the Python dashboard's redraws keep the user's settings at the route
+one rule (carried_layer_json, carriedLayer), over one list of the
+properties that belong to a source's data: the browser reads
+SOURCE_BOUND_LAYER_KEYS from the Python's, exported (web/build/export_data.py,
+kept fresh by tests/web/test_python_data_fresh.py). The rule's cases are
+the vitest suite's (web/test/unit/viewer-state.test.ts), and the Python
+dashboard's redraws keep the user's settings at the route
 (tests/utils/test_pipeline_route.py).
 """
 
-import re
-from pathlib import Path
-
 import neuroglancer
 
-from cellmap_flow.viewer.layers import SOURCE_BOUND_LAYER_KEYS, replace_layer
-
-STATE_TS = Path(__file__).resolve().parents[2] / "web" / "src" / "viewer" / "state.ts"
-
-
-def test_the_browser_keeps_the_same_properties_with_their_source():
-    block = re.search(r"SOURCE_BOUND_LAYER_KEYS: readonly string\[\] = \[(.*?)\];", STATE_TS.read_text(), re.S)
-    assert block, "web/src/viewer/state.ts no longer declares SOURCE_BOUND_LAYER_KEYS as a list"
-    assert set(re.findall(r'"([^"]+)"', block.group(1))) == SOURCE_BOUND_LAYER_KEYS
+from cellmap_flow.viewer.layers import replace_layer
 
 
 def test_replace_layer_keeps_the_users_settings_and_hands_a_layer_over():

@@ -55,6 +55,7 @@ import { relabelObjects, seedLabels } from "../../ai-annotate/labels";
 import { AIAnnotateError, type Labels, type UndoEntry } from "../../ai-annotate/types";
 import type { AppContext, PaintVolume, ServedModel } from "../../contracts";
 import { readVolume } from "../../finetune/volume";
+import { PYTHON } from "../../generated/python-data";
 import { asConnectivity, asBoolLike, asInt } from "../../infer/label";
 import { readPrediction, servedLevel } from "../../label-it/prediction";
 import { methodsFor, outputTypeOf, SEED_METHODS, type SeedMethod, seedPlan, segmentPrediction } from "../../label-it/segment";
@@ -68,7 +69,7 @@ const BASE = "/api/finetune/view-labels";
  * (view_labels.LARGE_BOX_VOXELS): a seed of that size is a lot to clean up,
  * and all-background a lot to undo. One output patch, the default box, is
  * well under it for every model the browser runs. */
-export const LARGE_BOX_VOXELS = 128 ** 3;
+export const LARGE_BOX_VOXELS = PYTHON.finetune.large_box_voxels;
 
 /** A request these routes will not act on (view_labels._Refused): the
  * status, a message the page shows, and extra answer fields. */

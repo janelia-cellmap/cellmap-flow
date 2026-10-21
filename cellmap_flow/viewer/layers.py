@@ -236,9 +236,9 @@ def raw_layer(dataset_path, *, wrap_raw=True, shader=None, shader_controls=None,
 # name segments of that data; the channel shown (local dimensions, position,
 # channel dimensions) counts that data's channels; the shader and its
 # controls are over its range (the dashboard sets its own for a new chain);
-# annotations and a legacy top-level transform are the source's own. The same
-# list as web/src/viewer/state.ts's SOURCE_BOUND_LAYER_KEYS
-# (tests/web/test_layer_carry.py holds them equal).
+# annotations and a legacy top-level transform are the source's own. The
+# browser's carriedLayer reads this list (web/build/export_data.py exports it
+# for web/src/viewer/state.ts).
 SOURCE_BOUND_LAYER_KEYS = frozenset({
     "annotations",
     "channelDimensions",

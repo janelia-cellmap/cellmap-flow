@@ -61,6 +61,12 @@ def _record_init_params(init):
 
 class SerializableInterface:
 
+    # Whether the browser mode runs this op too: True on the ops ported to
+    # web/src/infer/norms.ts and post.ts. The browser page offers only those
+    # (web/build/export_data.py exports the flag, and web/test/unit/
+    # python-data.test.ts holds it equal to what the ports run).
+    browser = False
+
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
         init = cls.__dict__.get("__init__")
@@ -242,6 +248,8 @@ class EuclideanDistance(InputNormalizer):
 
 
 class MinMaxNormalizer(InputNormalizer):
+    browser = True
+
     def __init__(self, min_value=0.0, max_value=255.0, invert=False):
         self.min_value = float(min_value)
         self.max_value = float(max_value)
@@ -263,6 +271,8 @@ class MinMaxNormalizer(InputNormalizer):
 
 
 class LambdaNormalizer(InputNormalizer):
+    browser = True
+
     def __init__(self, expression: str):
         self.expression = expression
         # Reject anything outside the safe subset now, not on the first chunk.
@@ -296,6 +306,7 @@ class LambdaNormalizer(InputNormalizer):
 
 
 class ZScoreNormalizer(InputNormalizer):
+    browser = True
 
     def __init__(self, mean=0.0, std=1.0):
         self.mean = float(mean)
@@ -309,28 +320,23 @@ class ZScoreNormalizer(InputNormalizer):
         return (data - self.mean) / self.std
 
 
+def op_listing(classes) -> list[dict]:
+    """The registry entries of ``classes``, in that order: each op's name, its
+    constructor's parameters with their defaults ("" for one without), and
+    whether the browser mode runs it too (``browser``)."""
+    listing = []
+    for cls in classes:
+        params = {
+            name: "" if param.default is inspect.Parameter.empty else param.default
+            for name, param in inspect.signature(cls.__init__).parameters.items()
+            if name != "self"
+        }
+        listing.append({"class_name": cls.__name__, "name": cls.__name__, "params": params, "browser": cls.browser})
+    return listing
+
+
 def get_input_normalizers() -> list[dict]:
-    normalizer_classes = InputNormalizer.__subclasses__()
-    normalizers = []
-    for norm_cls in normalizer_classes:
-        norm_name = norm_cls.__name__
-        sig = inspect.signature(norm_cls.__init__)
-        params = {}
-        for param_name, param_obj in sig.parameters.items():
-            if param_name == "self":
-                continue
-            default_val = param_obj.default
-            if default_val is inspect._empty:
-                default_val = ""
-            params[param_name] = default_val
-        normalizers.append(
-            {
-                "class_name": norm_cls.__name__,
-                "name": norm_name,
-                "params": params,
-            }
-        )
-    return normalizers
+    return op_listing(InputNormalizer.__subclasses__())
 
 
 def deserialize_list(elms, T: type) -> list:

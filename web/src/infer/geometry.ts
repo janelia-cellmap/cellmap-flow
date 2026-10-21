@@ -12,6 +12,7 @@
 // Python's ModelGeometry has them; a shape in voxels says so.
 import type { DatasetInfo, ModelEntry } from "../contracts";
 import type { SourceInfo } from "../../chunkmirage/web/src/types";
+import { PYTHON } from "../generated/python-data";
 
 /** What a model reads and writes, in nm (models/geometry.py: ModelGeometry). */
 export interface BlockGeometry {
@@ -175,17 +176,12 @@ export function effectiveOutputVoxelSize(raw: Level, g: BlockGeometry): number[]
 // ---------------------------------------------------------------------------
 
 /** nm per unit of each length unit a source may declare: OME-Zarr's long
- * names, the short forms chunkmirage's engine maps (its OME_UNIT), and the
- * micro sign. An empty unit is taken as nm, which is what CellMap's own
- * volumes are. */
-export const NM_PER_UNIT: Record<string, number> = {
-  "": 1, nm: 1, nanometer: 1, nanometre: 1,
-  angstrom: 0.1, picometer: 1e-3, picometre: 1e-3,
-  um: 1e3, "µm": 1e3, "μm": 1e3, micrometer: 1e3, micrometre: 1e3, micron: 1e3,
-  mm: 1e6, millimeter: 1e6, millimetre: 1e6,
-  cm: 1e7, centimeter: 1e7, centimetre: 1e7,
-  m: 1e9, meter: 1e9, metre: 1e9,
-};
+ * names in both spellings, the short forms chunkmirage's engine maps (its
+ * OME_UNIT), the micro sign and the Greek mu; cellmap_flow/io/metadata.py's
+ * table, exported (generated/python-data.ts). An empty unit is taken as nm,
+ * which is what CellMap's own volumes are (metadata.nm_per_unit says so
+ * before it reads the table). */
+export const NM_PER_UNIT: Readonly<Record<string, number>> = { "": 1, ...PYTHON.units.nm_per_unit };
 
 /** The dataset's levels in nm, from the engine's SourceInfo for its "raw"
  * view: voxel sizes and origins converted by each axis's unit, and the axes
