@@ -288,37 +288,26 @@ class ImageDataInterface:
         norms = view.norms_to_apply()
         array = self.array
         store = self.source.ts
-        channel = None
+        select, axis, chain = None, None, None
         if store.ndim > len(self.shape):
             # select_channel's rule: the axis labelled c/c^/channel, else the first
             labels = list(getattr(store.domain, "labels", None) or [])
-            channel = (
-                next((i for i, lab in enumerate(labels) if lab in CHANNEL_AXIS_NAMES), 0),
-                selected_channel(view.chain()),
-            )
+            axis = next((i for i, lab in enumerate(labels) if lab in CHANNEL_AXIS_NAMES), 0)
+            select = {array.axes[axis]: selected_channel(view.chain())}
+        if norms:
+            def chain(data):
+                # worldarray hands the (post_)transform the pinned axis, of size 1, and
+                # drops it after: the chain sees the one channel without it
+                if axis is None:
+                    return apply_norms(data, norms)
+                return np.expand_dims(apply_norms(np.take(data, 0, axis=axis), norms), axis)
         if not self.resampled:
-            return array.read_index(
-                box.begin,
-                box.end,
-                padding=fill,
-                select=None if channel is None else {array.axes[channel[0]]: channel[1]},
-                transform=(lambda data: apply_norms(data, norms)) if norms else None,
-            )
-        # The target voxels' world box (their centres are where worldarray reads), the
-        # channel pinned to one voxel on a box over every axis.
-        begin = list(np.asarray(array.corner) + np.asarray(box.begin) * np.asarray(self.voxel_size, dtype=float))
-        end = list(np.asarray(array.corner) + np.asarray(box.end) * np.asarray(self.voxel_size, dtype=float))
-        post = (lambda data: apply_norms(data, norms)) if norms else None
-        if channel is not None:
-            axis, index = channel
-            t, s = array.grid.translation[axis], array.grid.voxel_size[axis]
-            begin.insert(axis, t + (index - 0.5) * s)
-            end.insert(axis, t + (index + 0.5) * s)
-            if norms:
-                def post(data):  # noqa: E306 -- the chain sees the one channel
-                    return np.expand_dims(apply_norms(np.take(data, 0, axis=axis), norms), axis)
-        data = array.read((tuple(begin), tuple(end)), padding=fill, post_transform=post)
-        return data if channel is None else np.take(data, 0, axis=channel[0])
+            return array.read_index(box.begin, box.end, padding=fill, select=select, transform=chain)
+        # The target voxels' world box: their centres are where worldarray reads.
+        voxel_size = np.asarray(self.voxel_size, dtype=float)
+        corner = np.asarray(array.corner)
+        world = (tuple(corner + np.asarray(box.begin) * voxel_size), tuple(corner + np.asarray(box.end) * voxel_size))
+        return array.read(world, padding=fill, select=select, post_transform=chain)
 
     def read_box(self, box: Box, fill=None) -> np.ndarray:
         """The voxels of ``box`` (a ``Box`` of voxel indices at ``voxel_size``)

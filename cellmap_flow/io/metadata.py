@@ -1,7 +1,7 @@
 """Array metadata for every format cellmap-flow reads, as one ``ArrayMeta``.
 
 worldarray parses the metadata: zarr v2 and v3, N5 and neuroglancer
-precomputed, on disk or at an http(s), s3 or gs URL (``worldarray.metadata``,
+precomputed, on disk or at an http(s), s3 or gs URL (``worldarray.placement``,
 its spec's Conventions 1 and 4). This module turns worldarray's record (the
 store's own units, ``translation`` the *centre* of voxel 0) into
 cellmap-flow's: every axis kept, in the array's own (C) order; spatial sizes
@@ -297,11 +297,8 @@ def pyramid(group_path: str, units=None) -> Tuple[str, "wa.Pyramid"]:
 def list_levels(group_path: str) -> List[Tuple[str, ArrayMeta]]:
     """``[(dataset path, ArrayMeta)]`` for each level of the OME multiscale
     group at ``group_path``, in the order its ``datasets`` list them, or of
-    the precomputed volume there (``s<N>`` for scale N).
-
-    An ArrayMeta needs each level's shape, dtype and chunks, which the group's
-    document does not hold (``Pyramid.placements`` gives only voxel sizes and
-    translations), so every level is opened, each on a context of its own.
+    the precomputed volume there (``s<N>`` for scale N), from the documents
+    alone (``worldarray.Pyramid.metas``): no level is opened.
 
     Raises when there is no such group (KeyError for a v2 group without
     multiscales, ValueError for a v3 one, or for one scale of a precomputed
@@ -309,11 +306,8 @@ def list_levels(group_path: str) -> List[Tuple[str, ArrayMeta]]:
     """
     group_path, pyramid_ = pyramid(group_path)
     return [
-        (name, from_world_array(
-            wa.open(pyramid_.path, level=key, units=None, strict_units=False,
-                    context=wa.capped_context(network=False)).meta,
-            paths.join(group_path, name)))
-        for name, key in zip(level_names(group_path, pyramid_), pyramid_.names)
+        (name, from_world_array(meta, paths.join(group_path, name)))
+        for name, meta in zip(level_names(group_path, pyramid_), pyramid_.metas())
     ]
 
 

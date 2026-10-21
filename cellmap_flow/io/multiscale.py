@@ -14,8 +14,8 @@ of its level.
 import logging
 from typing import List, Literal, Optional, Sequence, Tuple
 
+from worldarray import select_level as _select_level
 from worldarray.levels import coarser_anywhere, same_voxel_size  # noqa: F401
-from worldarray.levels import select_level as _select_level
 
 from cellmap_flow.io import metadata, paths
 from cellmap_flow.io.metadata import ArrayMeta

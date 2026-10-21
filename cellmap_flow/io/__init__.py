@@ -1,7 +1,7 @@
 """Reading datasets: paths, metadata, multiscale levels and OME attributes.
 
-The reading itself is worldarray's (``worldarray.store``, ``.metadata``,
-``Pyramid.voxel_sizes``, ``list_chunk_keys``, ``WorldArray.read_index`` and
+The reading itself is worldarray's (``worldarray.store``, ``.placement``,
+``Pyramid.voxel_sizes`` and ``.metas``, ``list_chunk_keys``, ``WorldArray.read_index`` and
 ``.read``); these modules keep cellmap-flow's names and conventions over it
 (a corner-based ``ArrayMeta``, ``s<N>`` names for precomputed scales, the
 corner ``Grid`` and its index ``Box``) and what worldarray lacks (the OME
