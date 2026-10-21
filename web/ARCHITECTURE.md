@@ -445,6 +445,7 @@ web/
   chunkmirage.lock           the chunkmirage commit; scripts/fetch-chunkmirage.sh clones it
   neuroglancer.lock          the Neuroglancer fork's commit; scripts/fetch-neuroglancer.sh builds it
   build/render.py            renders cellmap_flow/dashboard/templates/index.html → web/index.html
+  build/export_data.py       the constants and catalogs shared with Python → src/generated/python-data.json
   build/vite-plugins.ts      the service worker bundle; serves/copies the dashboard's static files and a Neuroglancer build
   chunkmirage/               (gitignored) the clone; we import web/chunkmirage/web/src/{engine,stages,onnx,relay,routes,asread,materialize}.ts
                              and its Vite plugin web/vite-ort.ts (onnxruntime-web's wasm files served/copied under ./ort/)
@@ -453,6 +454,10 @@ web/
   src/
     main.ts                  boot
     contracts.ts             the types the modules share
+    generated/               python-data.json (written by build/export_data.py, committed; never edited by hand) and
+                             python-data.ts, which gives it to the modules: the op registry and which ops the browser runs,
+                             the default chain, the organelle catalog and prompt sentences, the shaders and colours, the
+                             ranking's and the finetune log's constants, the unit table
     rebase.ts                root-relative /api/ URLs → the page's directory
     browser.css              hides .server-only under data-mode="browser"
     sw.ts                    the service worker: chunkmirage's relay for /api/* and /virtual/*, its store cache, our local/ files and paint/ store

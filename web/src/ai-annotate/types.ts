@@ -15,6 +15,11 @@
 // organelles.ts and mask.ts are pure (no DOM); images.ts is the canvas
 // ImageCodec; gemini.ts, fake.ts and providers.ts the Providers;
 // backend/ai-annotate-job.ts and backend/routes/ai-annotate.ts the routes.
+// The constants with a Python twin are the Python's, exported
+// (generated/python-data.ts).
+import { PYTHON } from "../generated/python-data";
+
+const AI = PYTHON.ai_annotate;
 
 // ---------------------------------------------------------------------------
 // Planes
@@ -50,10 +55,10 @@ export interface PlanePlan {
 
 /** The longest side of an image sent to a model (geometry.py MAX_IMAGE_SIDE):
  * a hosted image model bills an image by the image, not by its pixels. */
-export const MAX_IMAGE_SIDE = 1024;
+export const MAX_IMAGE_SIDE = AI.max_image_side;
 
 /** The plane's size on a side, in annotation voxels (config.py DEFAULT_CROP_SIZE_PX). */
-export const CROP_SIZE_PX = 512;
+export const CROP_SIZE_PX = AI.crop_size_px;
 
 // ---------------------------------------------------------------------------
 // Errors (errors.py)
@@ -105,7 +110,7 @@ export interface RgbaImage {
 }
 
 /** The most pixels a model's image may have before it is decoded (images.py MAX_PIXELS). */
-export const MAX_IMAGE_PIXELS = 4096 * 4096;
+export const MAX_IMAGE_PIXELS = AI.max_image_pixels;
 
 /** The formats a model's image may be in. */
 export const ALLOWED_IMAGE_TYPES: readonly string[] = ["image/png", "image/jpeg", "image/webp"];
@@ -141,7 +146,7 @@ export interface OrganelleProfile {
 }
 
 /** The longest editable prompt (prompts.py MAX_PROMPT_CHARS). */
-export const MAX_PROMPT_CHARS = 4000;
+export const MAX_PROMPT_CHARS = AI.max_prompt_chars;
 
 // ---------------------------------------------------------------------------
 // Providers (backends/base.py): one RGB EM plane and a prompt in, a mask out
@@ -216,7 +221,7 @@ export const DEFAULT_GEMINI_MODELS: readonly string[] = ["gemini-3-pro-image", "
 export const FAKE_MODEL = "fake-threshold";
 
 /** How long one model call may take (config.py DEFAULT_TIMEOUT_S). */
-export const CALL_TIMEOUT_MS = 120_000;
+export const CALL_TIMEOUT_MS = AI.timeout_s * 1000;
 
 // ---------------------------------------------------------------------------
 // Settings, limits and the job, as the routes answer them
@@ -233,24 +238,17 @@ export interface AiSettings {
 }
 
 /** The most model calls one browser makes in a day (config.py DEFAULT_DAILY_CALL_LIMIT). */
-export const DAILY_CALL_LIMIT = 200;
+export const DAILY_CALL_LIMIT = AI.daily_call_limit;
 
 /** The key bound in the viewer, in Neuroglancer's spelling, the action it
  * names and how the page shows it (ai_annotate.py KEY, ACTION, KEYBINDING). */
-export const KEY = "shift+keyg";
-export const ACTION = "ai-annotate";
-export const KEYBINDING = "Shift+G";
+export const { key: KEY, action: ACTION, keybinding: KEYBINDING } = AI;
 
 export type JobStatus = "idle" | "running" | "ready" | "failed" | "accepting";
 export type Stage = "fetching_crop" | "sending" | "extracting_mask" | "staging_preview";
 
 /** The stages of a job as the page names them (ai_annotate.py STAGE_LABELS). */
-export const STAGE_LABELS: Record<Stage, string> = {
-  fetching_crop: "Reading the EM plane...",
-  sending: "Waiting for the model...",
-  extracting_mask: "Turning the model's image into a mask...",
-  staging_preview: "Building the preview...",
-};
+export const STAGE_LABELS: Readonly<Record<Stage, string>> = AI.stage_labels;
 
 /** The review's images, base64 PNG (staging.py preview). */
 export interface Preview {
@@ -299,4 +297,4 @@ export interface UndoEntry {
 }
 
 /** How many one-click label actions per volume Undo can take back (view_labels.py UNDO_DEPTH). */
-export const UNDO_DEPTH = 10;
+export const UNDO_DEPTH = PYTHON.finetune.undo_depth;

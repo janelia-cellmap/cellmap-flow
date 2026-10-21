@@ -50,22 +50,32 @@ NANOMETER = "nanometer"
 # Units and axes
 # ---------------------------------------------------------------------------
 
+# The browser reads this table too (web/build/export_data.py exports it for
+# web/src/infer/geometry.ts). "µm" is the micro sign (U+00B5), "μm" the Greek
+# mu (U+03BC): both are written for micrometres.
 _NM_PER_UNIT = {
     "nanometer": 1.0,
+    "nanometre": 1.0,
     "nm": 1.0,
     "micrometer": 1e3,
+    "micrometre": 1e3,
     "micron": 1e3,
     "um": 1e3,
-    "µm": 1e3,
+    "\u00b5m": 1e3,
+    "\u03bcm": 1e3,
     "millimeter": 1e6,
+    "millimetre": 1e6,
     "mm": 1e6,
     "centimeter": 1e7,
+    "centimetre": 1e7,
     "cm": 1e7,
     "meter": 1e9,
+    "metre": 1e9,
     "m": 1e9,
     "angstrom": 0.1,
     "å": 0.1,
     "picometer": 1e-3,
+    "picometre": 1e-3,
     "pm": 1e-3,
 }
 _NON_SPATIAL_AXIS_NAMES = CHANNEL_AXIS_NAMES + ("t", "time")

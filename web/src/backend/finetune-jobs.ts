@@ -30,6 +30,7 @@ import { trainingEntry } from "../finetune/full/run-full";
 import { loadGoodRegions } from "../finetune/good-regions";
 import { MODE_NOUN, MODE_WORDS } from "../finetune/modes";
 import type { Finetuned, FinetuneOptions, FinetuneRun, RunFinetune, RunReporter } from "../finetune/types";
+import { PYTHON, pyRegExp } from "../generated/python-data";
 import { finetunedRecord, nextFinetunedName } from "../models/finetuned";
 import { stamp } from "../shared/format";
 import { message } from "./router";
@@ -38,7 +39,7 @@ import { serveModels } from "./serving";
 export type JobStatus = "PENDING" | "RUNNING" | "COMPLETED" | "FAILED" | "CANCELLED" | "WAITING_FOR_RESTART";
 
 /** state.py's TERMINAL_STATUSES: once a job has one of these, neither a run nor a request moves it. */
-export const TERMINAL_STATUSES: ReadonlySet<JobStatus> = new Set<JobStatus>(["COMPLETED", "FAILED", "CANCELLED"]);
+export const TERMINAL_STATUSES: ReadonlySet<JobStatus> = new Set(PYTHON.finetune.terminal_statuses as JobStatus[]);
 
 /** Where a job's output goes, where the server's jobs have a run directory:
  * the finetuned model is a catalog entry in this browser's IndexedDB. */
@@ -103,14 +104,15 @@ export function canRestart(job: FinetuneJob): boolean {
 }
 
 // The trainer's lines the monitor reads the progress from (markers.py's
-// EPOCH_START_RE and EPOCH_SUMMARY_RE): the start of an epoch moves the
-// counter on as soon as it begins; the summary at its end carries the loss,
-// which is that epoch's.
-const EPOCH_START = /Starting\s+epoch\s+(\d+)\s+of\s+(\d+)/i;
-const EPOCH_SUMMARY = /Epoch\s+(\d+)\/(\d+)\s*-\s*Loss:\s*([\d.]+)/i;
+// EPOCH_START_RE and EPOCH_SUMMARY_RE, exported): the start of an epoch
+// moves the counter on as soon as it begins; the summary at its end carries
+// the loss, which is that epoch's.
+const EPOCH_START = pyRegExp(PYTHON.finetune.epoch_start);
+const EPOCH_SUMMARY = pyRegExp(PYTHON.finetune.epoch_summary);
 
-/** The marker job-card.js resets the card on, printed as the first line of a restarted run. */
-export const RESTARTING_MARKER = "RESTARTING_TRAINING";
+/** The marker job-card.js resets the card on, printed as the first line of a
+ * restarted run (markers.py's RESTARTING_TRAINING). */
+export const RESTARTING_MARKER = PYTHON.finetune.restarting_marker;
 
 export class FinetuneJob {
   status: JobStatus = "PENDING";

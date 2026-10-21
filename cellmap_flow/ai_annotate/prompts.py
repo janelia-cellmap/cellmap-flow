@@ -15,20 +15,30 @@ from cellmap_flow.ai_annotate.organelles import OrganelleProfile
 
 MAX_PROMPT_CHARS = 4000
 
-# Asked of the model rather than fixed afterwards (say, by eroding the mask):
-# the model sees where one instance ends and the next begins, which a fixed
-# erosion only approximates. Accept labels the mask by connected component,
-# which needs this gap to split touching instances instead of merging them.
-_INSTANCE_SEPARATION_INSTRUCTION = (
-    "Where two individual instances are adjacent or touching, leave a thin black "
-    "border between them so each instance stays visually separate -- never merge "
-    "touching instances into one connected blob."
-)
-
-
-def _resolution_sentence(resolution_nm):
-    # ``g``: 8 nm says "8", 3.5 nm says "3.5", where ``.0f`` would round it to 4.
-    return f"The image resolution is {resolution_nm:.3g} nm/px."
+# The prompt's fixed sentences, as str.format templates. The browser builds
+# the same prompt from these (web/build/export_data.py exports them), so the
+# two modes ask the model in the same words.
+SENTENCES = {
+    "intro": "This is an EM image of cell(s).",
+    "appearance": "In EM, {name} appear as: {description}",
+    "instruction": (
+        "Create a segmentation mask: color all the {name} in {color_name} and make everything else black."
+    ),
+    # ``resolution`` is formatted ``.3g``: 8 nm says "8", 3.5 nm says "3.5",
+    # where ``.0f`` would round it to 4.
+    "resolution": "The image resolution is {resolution} nm/px.",
+    # Asked of the model rather than fixed afterwards (say, by eroding the
+    # mask): the model sees where one instance ends and the next begins,
+    # which a fixed erosion only approximates. Accept labels the mask by
+    # connected component, which needs this gap to split touching instances
+    # instead of merging them.
+    "instance_separation": (
+        "Where two individual instances are adjacent or touching, leave a thin black "
+        "border between them so each instance stays visually separate -- never merge "
+        "touching instances into one connected blob."
+    ),
+    "too_long": "The prompt is longer than {max_chars} characters.",
+}
 
 
 def editable_prompt(profile: OrganelleProfile) -> str:
@@ -38,13 +48,10 @@ def editable_prompt(profile: OrganelleProfile) -> str:
     unedited as ``prompt_override`` gives exactly the prompt no override
     gives, so prefilling never changes what the model is asked.
     """
-    parts = ["This is an EM image of cell(s)."]
+    parts = [SENTENCES["intro"]]
     if profile.description:
-        parts.append(f"In EM, {profile.name} appear as: {profile.description}")
-    parts.append(
-        f"Create a segmentation mask: color all the {profile.name} in "
-        f"{profile.color_name} and make everything else black."
-    )
+        parts.append(SENTENCES["appearance"].format(name=profile.name, description=profile.description))
+    parts.append(SENTENCES["instruction"].format(name=profile.name, color_name=profile.color_name))
     return " ".join(parts)
 
 
@@ -67,13 +74,13 @@ def build_recolor_prompt(
         editable = prompt_override.strip()
         if len(editable) > MAX_PROMPT_CHARS:
             raise AIAnnotateError(
-                "refused", f"The prompt is longer than {MAX_PROMPT_CHARS} characters.", http_status=400
+                "refused", SENTENCES["too_long"].format(max_chars=MAX_PROMPT_CHARS), http_status=400
             )
     else:
         editable = editable_prompt(profile)
     parts = []
     if resolution_nm is not None:
-        parts.append(_resolution_sentence(resolution_nm))
+        parts.append(SENTENCES["resolution"].format(resolution=f"{resolution_nm:.3g}"))
     parts.append(editable)
-    parts.append(_INSTANCE_SEPARATION_INSTRUCTION)
+    parts.append(SENTENCES["instance_separation"])
     return " ".join(parts)

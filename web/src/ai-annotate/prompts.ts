@@ -1,6 +1,7 @@
 // The prompt that asks an image model to paint one structure in an EM plane:
-// the port of cellmap_flow/ai_annotate/prompts.py, sentence for sentence (the
-// prompt is what the model is asked, so the browser must ask the same).
+// the port of cellmap_flow/ai_annotate/prompts.py, built from its own
+// sentences (prompts.SENTENCES, exported in generated/python-data.ts): the
+// prompt is what the model is asked, so the browser asks in the same words.
 //
 // Adapted there from ask-to-mask's detailed prompt: what the image is, its
 // resolution, how the structure looks in EM (when the catalog knows it), and
@@ -8,23 +9,11 @@
 // description and instruction with their own text; the resolution and the
 // instance-separation sentence are added either way, since the first depends
 // on the plane actually sent and the second on how the mask is used.
+import { PYTHON, pyFormat } from "../generated/python-data";
 import { formatG } from "./geometry";
 import { AIAnnotateError, MAX_PROMPT_CHARS, type OrganelleProfile } from "./types";
 
-// Asked of the model rather than fixed afterwards (say, by eroding the mask):
-// the model sees where one instance ends and the next begins, which a fixed
-// erosion only approximates. Accept labels the mask by connected component,
-// which needs this gap to split touching instances instead of merging them.
-const INSTANCE_SEPARATION_INSTRUCTION =
-  "Where two individual instances are adjacent or touching, leave a thin black " +
-  "border between them so each instance stays visually separate -- never merge " +
-  "touching instances into one connected blob.";
-
-/** `f"The image resolution is {resolution_nm:.3g} nm/px."`: 8 nm says "8",
- * 3.5 nm says "3.5", where a fixed decimal count would round it to 4. */
-function resolutionSentence(resolutionNm: number): string {
-  return `The image resolution is ${formatG(resolutionNm, 3)} nm/px.`;
-}
+const SENTENCES = PYTHON.ai_annotate.sentences;
 
 /** The part of the prompt the user may edit, as the catalog writes it
  * (prompts.editable_prompt). This is what the dashboard prefills the prompt
@@ -32,9 +21,9 @@ function resolutionSentence(resolutionNm: number): string {
  * prompt no override gives, so prefilling never changes what the model is
  * asked. */
 export function editablePrompt(profile: OrganelleProfile): string {
-  const parts = ["This is an EM image of cell(s)."];
-  if (profile.description) parts.push(`In EM, ${profile.name} appear as: ${profile.description}`);
-  parts.push(`Create a segmentation mask: color all the ${profile.name} in ${profile.color_name} and make everything else black.`);
+  const parts = [SENTENCES.intro];
+  if (profile.description) parts.push(pyFormat(SENTENCES.appearance, { name: profile.name, description: profile.description }));
+  parts.push(pyFormat(SENTENCES.instruction, { name: profile.name, color_name: profile.color_name }));
   return parts.join(" ");
 }
 
@@ -51,12 +40,13 @@ export function buildRecolorPrompt(profile: OrganelleProfile, resolutionNm: numb
   let editable: string;
   if (promptOverride && promptOverride.trim()) {
     editable = promptOverride.trim();
-    if (editable.length > MAX_PROMPT_CHARS) throw new AIAnnotateError("refused", `The prompt is longer than ${MAX_PROMPT_CHARS} characters.`, 400);
+    if (editable.length > MAX_PROMPT_CHARS) throw new AIAnnotateError("refused", pyFormat(SENTENCES.too_long, { max_chars: String(MAX_PROMPT_CHARS) }), 400);
   } else {
     editable = editablePrompt(profile);
   }
   const parts: string[] = [];
-  if (resolutionNm !== null) parts.push(resolutionSentence(resolutionNm));
-  parts.push(editable, INSTANCE_SEPARATION_INSTRUCTION);
+  // `.3g`, as the Python formats it: 8 nm says "8", 3.5 nm says "3.5".
+  if (resolutionNm !== null) parts.push(pyFormat(SENTENCES.resolution, { resolution: formatG(resolutionNm, 3) }));
+  parts.push(editable, SENTENCES.instance_separation);
   return parts.join(" ");
 }

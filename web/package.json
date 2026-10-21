@@ -6,7 +6,8 @@
   "description": "cellmap-flow in the browser: the dashboard as a static page, inference with onnxruntime-web on chunkmirage's browser engine, served to Neuroglancer by a service worker",
   "scripts": {
     "fetch:chunkmirage": "bash scripts/fetch-chunkmirage.sh",
-    "render": "${PYTHON:-python} build/render.py",
+    "render": "${PYTHON:-python} build/render.py && ${PYTHON:-python} build/export_data.py",
+    "export:data": "${PYTHON:-python} build/export_data.py",
     "gen": "${PYTHON:-python} -m cellmap_flow.schema --out src/generated --docs ../docs/api.md",
     "gen:check": "${PYTHON:-python} -m cellmap_flow.schema --check",
     "prepare:all": "npm run fetch:chunkmirage && npm run render",

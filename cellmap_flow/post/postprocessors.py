@@ -5,13 +5,12 @@
 # live in post.segment, shared with the Finetune tab's seeding, which
 # imports them the same way.
 import ast
-import inspect
 import logging
 import threading
 
 import numpy as np
 
-from cellmap_flow.norm.input_normalize import SerializableInterface, deserialize_list
+from cellmap_flow.norm.input_normalize import SerializableInterface, deserialize_list, op_listing
 from cellmap_flow.norm.safe_expression import compile_expression
 from cellmap_flow.post import segment
 
@@ -43,6 +42,8 @@ class PostProcessor(SerializableInterface):
 class SigmoidPostprocessor(PostProcessor):
     """Apply sigmoid activation to convert logits to probabilities."""
 
+    browser = True
+
     def _process(self, data):
         return 1.0 / (1.0 + np.exp(-data.astype(np.float32)))
 
@@ -52,6 +53,8 @@ class SigmoidPostprocessor(PostProcessor):
 
 
 class DefaultPostprocessor(PostProcessor):
+    browser = True
+
     def __init__(
         self,
         clip_min: float = -1.0,
@@ -79,6 +82,8 @@ class DefaultPostprocessor(PostProcessor):
 
 
 class ThresholdPostprocessor(PostProcessor):
+    browser = True
+
     def __init__(self, threshold: float = 0.5):
         self.threshold = float(threshold)
 
@@ -143,6 +148,8 @@ class LabelPostprocessor(PostProcessor):
     channels pass through, as uint32.
     """
 
+    browser = True
+
     def __init__(self, channel: int = 0, connectivity: int = 1, min_size: int = 0, per_slice: bool = False):
         self.channel = int(channel)
         self.connectivity = segment.as_connectivity(connectivity)
@@ -170,6 +177,8 @@ class LabelPostprocessor(PostProcessor):
 
 
 class MortonSegmentationRelabeling(PostProcessor):
+    browser = True
+
     def __init__(self, channel: int = 0):
         use_exact = "True"
         self.channel = int(channel)
@@ -212,6 +221,8 @@ class AffinityPostprocessor(PostProcessor):
     model was trained with. Ids are offset by the chunk's Morton index, so
     they are unique across chunks.
     """
+
+    browser = True
 
     def __init__(
         self,
@@ -278,6 +289,8 @@ class AffinityPostprocessor(PostProcessor):
 
 
 class SimpleBlockwiseMerger(PostProcessor):
+    browser = True
+
     # NOTE: Need to be careful since this can be called in parallel and some things may change size during loops etc.
     def __init__(
         self,
@@ -517,6 +530,8 @@ class CellposeMasksPostprocessor(PostProcessor):
 
 
 class ChannelSelection(PostProcessor):
+    browser = True
+
     def __init__(self, channels: str = "0"):
         # "0,2" from the dashboard form; YAML may also give 2 or [0, 2].
         if isinstance(channels, str):
@@ -535,6 +550,8 @@ class ChannelSelection(PostProcessor):
 
 
 class LambdaPostprocessor(PostProcessor):
+    browser = True
+
     def __init__(self, expression: str):
         self.expression = expression
         self._lambda = compile_expression(expression)
@@ -570,33 +587,13 @@ LISTING_ORDER = [
 
 
 def get_postprocessors_list() -> list[dict]:
-    """Returns a list of dictionaries containing the names and parameters of all subclasses of PostProcessor, in LISTING_ORDER."""
-    postprocess_classes = sorted(
+    """The postprocessors' registry entries (input_normalize.op_listing), in LISTING_ORDER."""
+    return op_listing(sorted(
         PostProcessor.__subclasses__(),
         key=lambda cls: (
             LISTING_ORDER.index(cls.__name__) if cls.__name__ in LISTING_ORDER else len(LISTING_ORDER)
         ),
-    )
-    postprocessors = []
-    for post_cls in postprocess_classes:
-        post_name = post_cls.__name__
-        sig = inspect.signature(post_cls.__init__)
-        params = {}
-        for param_name, param_obj in sig.parameters.items():
-            if param_name == "self":
-                continue
-            default_val = param_obj.default
-            if default_val is inspect._empty:
-                default_val = ""
-            params[param_name] = default_val
-        postprocessors.append(
-            {
-                "class_name": post_cls.__name__,
-                "name": post_name,
-                "params": params,
-            }
-        )
-    return postprocessors
+    ))
 
 
 def get_postprocessors(elms) -> list[PostProcessor]:
