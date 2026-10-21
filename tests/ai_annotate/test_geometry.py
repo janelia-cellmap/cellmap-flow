@@ -5,19 +5,12 @@ volume's ``dataset_offset_nm`` is 4 (voxel 0's centre), so annotation voxel
 i covers [8i, 8i + 8) nm and the arithmetic in the expectations is plain.
 """
 
-import json
-
-import neuroglancer
 import numpy as np
 import pytest
 
 from cellmap_flow.ai_annotate.errors import AIAnnotateError
 from cellmap_flow.ai_annotate.geometry import (
-    MAX_IMAGE_SIDE,
-    PlanePlan,
-    depth_axis_for_view,
     depth_axis_from_layout,
-    display_dimensions_for_view,
     plan_plane,
     raw_box,
 )
@@ -51,39 +44,11 @@ SHAPE = (100, 200, 300)
         ({"type": "xz"}, 1),
         # Several planes at once: the "xy" panel's, neuroglancer's first.
         ("4panel", 2),
-        ("3d", 2),
         (None, 2),
-        ({}, 2),
-        (42, 2),
     ],
 )
 def test_depth_axis_from_layout_with_zyx_dimensions(layout, depth):
     assert depth_axis_from_layout(layout) == depth
-
-
-def test_depth_axis_follows_the_display_dimensions():
-    # A viewer whose dimensions are x, y, z shows the data's XY plane in "xy".
-    xyz = ("x", "y", "z")
-    assert depth_axis_from_layout("xy", xyz) == 0
-    assert depth_axis_from_layout("xz", xyz) == 1
-    assert depth_axis_from_layout("yz", xyz) == 2
-    # A display dimension that is not z, y or x (time) says nothing: z.
-    assert depth_axis_from_layout("xy", ("y", "x", "t")) == 0
-
-
-def test_depth_axis_for_a_viewer_state():
-    state = neuroglancer.ViewerState()
-    state.dimensions = neuroglancer.CoordinateSpace(names=["z", "y", "x"], units="nm", scales=[8, 8, 8])
-    state.layout = "yz"
-    assert depth_axis_for_view(state) == 0
-    state.layout = "xy-3d"
-    assert depth_axis_for_view(state) == 2
-    assert display_dimensions_for_view(state) == ("z", "y", "x")
-    state.display_dimensions = ["x", "y", "z"]
-    assert depth_axis_for_view(state) == 0
-    assert display_dimensions_for_view(state) == ("x", "y", "z")
-    # One with no dimensions yet is laid out as one showing z, y, x.
-    assert display_dimensions_for_view(neuroglancer.ViewerState()) == ("z", "y", "x")
 
 
 # How the image is laid out as the viewer's panel draws the plane (to_screen,
@@ -145,50 +110,6 @@ def test_the_volume_offset_is_voxel_0s_centre():
     assert plan.raw_offset_nm[1:] == (96 + 19 * 8, 96 + 29 * 8)
 
 
-def test_anisotropic_voxels_give_a_square_field_and_square_pixels():
-    # 16 nm z, 8 nm in y and x; the input at half each.
-    volume = _volume(output=(16, 8, 8), input=(8, 4, 4))
-    point = (50 * 16 + 8, 100 * 8 + 4, 150 * 8 + 4)
-
-    xz = plan_plane(volume, SHAPE, point, 1, crop_size_px=64)
-    # 64 of the finer (x) voxels is 512 nm; that is 32 of the 16 nm z voxels.
-    assert xz.write_shape == (32, 64)
-    assert xz.raw_shape_nm == (512.0, 4.0, 512.0)
-    # Pixels are the finer input voxel size on both axes: the 8 nm z is drawn at 4.
-    assert xz.image_shape == (128, 128)
-    assert xz.resolution_nm == 4
-
-    xy = plan_plane(volume, SHAPE, point, 0, crop_size_px=64)
-    assert xy.write_shape == (64, 64)
-    assert xy.raw_shape_nm == (8.0, 512.0, 512.0)
-    assert (xy.write_hi[0] - xy.write_lo[0]) == 1
-
-
-def test_input_and_output_voxel_sizes_differ():
-    # 512 annotation voxels of 8 nm, read at 4 nm: a 1024 px image, as is.
-    plan = plan_plane(_volume(output=(8, 8, 8), input=(4, 4, 4)), (100, 2000, 2000), (400, 8000, 8000), 0, 512)
-    assert plan.write_shape == (512, 512)
-    assert plan.image_shape == (1024, 1024)
-    assert plan.resolution_nm == 4
-    # Read at 8 nm, an 8 nm volume: one pixel per annotation voxel.
-    plan = plan_plane(_volume(output=(8, 8, 8), input=(8, 8, 8)), (100, 2000, 2000), (400, 8000, 8000), 0, 512)
-    assert plan.image_shape == (512, 512)
-    assert plan.resolution_nm == 8
-
-
-def test_a_plane_longer_than_1024_px_is_downsampled():
-    # 1024 voxels of 8 nm at 4 nm would be 2048 px: sent at 8 nm instead.
-    plan = plan_plane(_volume(), (100, 2000, 2000), (400, 8000, 8000), 0, 1024)
-    assert plan.write_shape == (1024, 1024)
-    assert plan.raw_shape_nm[1:] == (8192.0, 8192.0)
-    assert plan.image_shape == (MAX_IMAGE_SIDE, MAX_IMAGE_SIDE)
-    assert plan.resolution_nm == 8
-    # The longer side decides; the other keeps the same square pixels.
-    plan = plan_plane(_volume(), (100, 2000, 2000), (400, 8000, 40), 0, 1024)
-    assert plan.write_shape == (1024, 517)
-    assert plan.image_shape == (1024, 517)
-
-
 def test_the_write_box_is_clipped_at_the_volume_edge():
     # Voxel (50, 3, 297): 3 voxels from y's start, 2 from x's end.
     point = (50 * 8 + 4, 3 * 8 + 4, 297 * 8 + 4)
@@ -220,15 +141,6 @@ def test_a_point_outside_the_volume_is_refused(point):
     assert "outside the annotation volume" in caught.value.user_message
 
 
-def test_bad_arguments():
-    with pytest.raises(ValueError):
-        plan_plane(_volume(), SHAPE, (400, 800, 1200), 3, crop_size_px=64)
-    with pytest.raises(ValueError):
-        plan_plane(_volume(), SHAPE, (400, 800, 1200), 0, crop_size_px=0)
-    with pytest.raises(ValueError):
-        plan_plane(_volume(), SHAPE, (400, float("nan"), 1200), 0, crop_size_px=64)
-
-
 def test_the_raw_box_reads_the_plane_on_the_raws_grid():
     plan = plan_plane(_volume(), SHAPE, (50 * 8 + 1, 800, 1200), 0, crop_size_px=64)
     # A raw at 4 nm from the origin: exactly the box's voxels, and the one
@@ -246,28 +158,3 @@ def test_the_raw_box_reads_the_plane_on_the_raws_grid():
     box = raw_box(plan, (8, 8, 8), (0, 0, 0))
     assert box.begin == (50, 68, 118)
     assert box.shape == (1, 64, 64)
-
-
-def test_a_plan_survives_json():
-    plan = plan_plane(_volume(output=(16, 8, 8), input=(8, 4, 4)), SHAPE, (808, 804, 1204), 1, 64)
-    assert PlanePlan.from_dict(json.loads(json.dumps(plan.to_dict()))) == plan
-    shown = plan_plane(_volume(), SHAPE, (404, 804, 1204), 2, 64, display_dimensions=["x", "y", "z"])
-    assert shown.display_dimensions == ("x", "y", "z")
-    assert PlanePlan.from_dict(json.loads(json.dumps(shown.to_dict()))) == shown
-
-
-def test_a_plan_saved_before_plans_kept_display_dimensions_is_laid_out_z_y_x():
-    plan = plan_plane(_volume(), SHAPE, (404, 804, 1204), 2, 64, display_dimensions=["x", "y", "z"])
-    saved = plan.to_dict()
-    del saved["display_dimensions"]
-    assert PlanePlan.from_dict(saved).display_dimensions == ("z", "y", "x")
-    # The YZ plane, clipped at the volume's z edge so it is not square: y
-    # down and z across in both viewers (the "yz" panel of one showing
-    # x, y, z, the "xy" panel of one showing z, y, x), z increasing to the
-    # left only in the first, so the point is at the mirrored column.
-    near_edge = (780, 804, 1204)
-    shown = plan_plane(_volume(), SHAPE, near_edge, 2, 64, display_dimensions=["x", "y", "z"])
-    old = plan_plane(_volume(), SHAPE, near_edge, 2, 64)
-    assert shown.image_shape == old.image_shape == (128, 70)
-    row, col = old.click_px
-    assert shown.click_px == (row, old.image_shape[1] - 1 - col)

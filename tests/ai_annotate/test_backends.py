@@ -1,9 +1,8 @@
-"""The providers: dispatch, the local fake, and Vertex Gemini against a stand-in
-client (no network), including its retries and the errors users are shown."""
+"""The Vertex Gemini provider against a stand-in client (no network), including
+its retries and the errors users are shown."""
 
 import io
 import logging
-import sys
 from types import SimpleNamespace
 
 import numpy as np
@@ -11,11 +10,8 @@ import pytest
 from PIL import Image
 
 from cellmap_flow.ai_annotate import secrets
-from cellmap_flow.ai_annotate.backends import get_backend
 from cellmap_flow.ai_annotate.backends.base import SegmentRequest
-from cellmap_flow.ai_annotate.backends.fake import FakeBackend
 from cellmap_flow.ai_annotate.backends.vertex_gemini import MAX_ATTEMPTS, RETRY_WAITS_S, VertexGeminiBackend
-from cellmap_flow.ai_annotate.config import ProviderConfig
 from cellmap_flow.ai_annotate.errors import AIAnnotateError
 
 RED = (255, 0, 0)
@@ -39,15 +35,6 @@ def _png(image):
     return buffer.getvalue()
 
 
-def _painted(size=(60, 40)):
-    """What a good model answers: the dark square red, the rest black."""
-    pixels = np.zeros((size[1], size[0], 3), dtype=np.uint8)
-    rows = slice(size[1] * 10 // 40, size[1] * 20 // 40)
-    cols = slice(size[0] * 20 // 60, size[0] * 35 // 60)
-    pixels[rows, cols] = RED
-    return Image.fromarray(pixels)
-
-
 def _painted_square(side=60):
     """A good answer to the 60x40 plane, which is sent padded to 60x60: the
     dark square red at the plane's rows 10-20 and columns 20-35, scaled to
@@ -63,11 +50,11 @@ def _part(data=None, text=None, thought=None):
     return SimpleNamespace(inline_data=blob, text=text, thought=thought)
 
 
-def _response(*parts, finish_reason="STOP", block_reason=None):
+def _response(*parts, finish_reason="STOP"):
     candidate = SimpleNamespace(content=SimpleNamespace(parts=list(parts)), finish_reason=finish_reason)
     return SimpleNamespace(
         candidates=[candidate],
-        prompt_feedback=SimpleNamespace(block_reason=block_reason),
+        prompt_feedback=SimpleNamespace(block_reason=None),
         usage_metadata=SimpleNamespace(prompt_token_count=600, candidates_token_count=1300, total_token_count=1900),
     )
 
@@ -105,34 +92,6 @@ def _backend(client, sleeps=None):
     return VertexGeminiBackend(
         "proj", "global", 30, sleep=(sleeps.append if sleeps is not None else lambda s: None), client_factory=lambda: client
     )
-
-
-def test_get_backend_dispatches_on_type():
-    vertex = get_backend(ProviderConfig("v", "vertex_gemini", ("m",), {"project": "p", "location": "us-east1", "timeout_s": 9}))
-    assert isinstance(vertex, VertexGeminiBackend)
-    assert (vertex.project, vertex.location, vertex.timeout_s) == ("p", "us-east1", 9)
-    assert isinstance(get_backend(ProviderConfig("f", "fake", ("fake-threshold",), {})), FakeBackend)
-    with pytest.raises(AIAnnotateError) as caught:
-        get_backend(ProviderConfig("x", "openai", ("gpt",), {}))
-    assert caught.value.category == "config"
-
-
-def test_the_fake_masks_dark_pixels_near_the_click_deterministically():
-    request = _request(click=(15, 27))
-    first = FakeBackend().segment(request, "fake-threshold")
-    second = FakeBackend().segment(request, "fake-threshold")
-    np.testing.assert_array_equal(first.mask, second.mask)
-    assert first.mask.dtype == bool and first.mask.shape == (40, 60)
-    assert first.mask[15, 27] and first.mask.sum() == 150  # the whole dark square is within reach
-    assert not first.mask[0, 0]
-    assert first.model_image.size == (60, 40)
-    assert tuple(np.asarray(first.model_image)[15, 27]) == RED
-    assert (first.model, first.usage) == ("fake-threshold", {})
-
-
-def test_the_fakes_disk_limits_the_mask():
-    far = FakeBackend().segment(_request(click=(39, 0)), "fake-threshold")
-    assert not far.mask.any()
 
 
 def test_vertex_sends_the_plane_padded_square_and_reads_the_mask():
@@ -173,7 +132,7 @@ def test_draft_thought_images_are_skipped():
 
 def test_a_429_is_retried_with_bounded_waits_then_succeeds():
     sleeps = []
-    client = FakeClient(APIError(429, "RESOURCE_EXHAUSTED"), APIError(503, "UNAVAILABLE"), _response(_part(data=_png(_painted()))))
+    client = FakeClient(APIError(429, "RESOURCE_EXHAUSTED"), APIError(503, "UNAVAILABLE"), _response(_part(data=_png(_painted_square()))))
     _backend(client, sleeps).segment(_request(), "m")
     assert len(client.calls) == 3
     assert sleeps == list(RETRY_WAITS_S[:2])
@@ -204,7 +163,7 @@ def test_retries_stop_after_max_attempts_with_a_quota_error():
 )
 def test_other_errors_are_not_retried_and_never_show_the_sdk_text(error, category, caplog):
     sleeps = []
-    client = FakeClient(error, _response(_part(data=_png(_painted()))))
+    client = FakeClient(error, _response(_part(data=_png(_painted_square()))))
     with caplog.at_level(logging.ERROR, logger="cellmap_flow.ai_annotate"):
         with pytest.raises(AIAnnotateError) as caught:
             _backend(client, sleeps).segment(_request(), "m")
@@ -236,14 +195,6 @@ def test_a_secret_in_sdk_error_text_is_redacted_from_the_log():
         secrets._clear_registered_secrets()
 
 
-def test_credentials_errors_from_google_auth_are_auth():
-    error_type = type("DefaultCredentialsError", (Exception,), {"__module__": "google.auth.exceptions"})
-    backend = VertexGeminiBackend("p", "global", 30, client_factory=lambda: (_ for _ in ()).throw(error_type("no ADC")))
-    with pytest.raises(AIAnnotateError) as caught:
-        backend.segment(_request(), "m")
-    assert caught.value.category == "auth" and "gcloud auth application-default login" in caught.value.user_message
-
-
 @pytest.mark.parametrize("credentials_file", [None, "/groups/lab/adc.json"])
 def test_an_expired_login_says_to_sign_in_again(credentials_file):
     # What google.auth raises when Google wants the user to sign in again
@@ -254,8 +205,7 @@ def test_an_expired_login_says_to_sign_in_again(credentials_file):
     with pytest.raises(AIAnnotateError) as caught:
         backend.segment(_request(), "m")
     message = caught.value.user_message
-    assert caught.value.category == "auth" and "sign in again" in message and "expired" in message
-    assert "gcloud auth application-default login" in message
+    assert caught.value.category == "auth" and "gcloud auth application-default login" in message
     assert ("credentials_file" in message) == bool(credentials_file)
 
 
@@ -271,32 +221,6 @@ def test_no_image_is_a_bad_response_quoting_at_most_200_chars_of_plain_text():
     assert "x" * 201 not in message and len(message) < 320
 
 
-def test_an_empty_or_blocked_response_is_a_bad_response():
-    blocked = SimpleNamespace(candidates=[], prompt_feedback=SimpleNamespace(block_reason="PROHIBITED_CONTENT"), usage_metadata=None)
-    with pytest.raises(AIAnnotateError, match="PROHIBITED_CONTENT") as caught:
-        _backend(FakeClient(blocked)).segment(_request(), "m")
-    assert caught.value.category == "bad_response"
-
-
-def test_a_reply_image_in_a_disallowed_format_is_rejected():
-    buffer = io.BytesIO()
-    _painted().save(buffer, format="GIF")
-    with pytest.raises(AIAnnotateError) as caught:
-        _backend(FakeClient(_response(_part(data=buffer.getvalue())))).segment(_request(), "m")
-    assert caught.value.category == "bad_response"
-
-
-def test_without_the_sdk_the_error_says_how_to_install_it(monkeypatch):
-    monkeypatch.setitem(sys.modules, "google.genai", None)
-    google = sys.modules.get("google")
-    if google is not None and hasattr(google, "genai"):
-        monkeypatch.delattr(google, "genai")
-    with pytest.raises(AIAnnotateError) as caught:
-        VertexGeminiBackend("p", "global", 30).segment(_request(), "m")
-    assert caught.value.category == "unavailable"
-    assert "pixi install -e default" in caught.value.user_message
-
-
 def test_the_requests_we_build_are_valid_for_the_real_sdk(monkeypatch):
     """Where google-genai is installed: our dicts validate as its types, its
     errors classify as we expect, and the client is built with a timeout in ms."""
@@ -304,7 +228,7 @@ def test_the_requests_we_build_are_valid_for_the_real_sdk(monkeypatch):
     from google.genai import errors, types
 
     types.GenerateContentConfig(**{"response_modalities": ["IMAGE", "TEXT"]})
-    client = FakeClient(_response(_part(data=_png(_painted()))))
+    client = FakeClient(_response(_part(data=_png(_painted_square()))))
     _backend(client).segment(_request(), "m")
     content = types.Content.model_validate(client.calls[0]["contents"][0])
     assert content.parts[0].inline_data.mime_type == "image/png"

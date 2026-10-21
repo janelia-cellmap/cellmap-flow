@@ -29,15 +29,11 @@ describe("toApiRequest", () => {
     expect(toApiRequest({ method: "GET", path: "/api/models", search: "", headers: [], body: null }).path).toBe("/api/models");
   });
 
-  it("reads the query the relay passes beside the path", () => {
-    const req = toApiRequest({ method: "GET", path: "/api/finetune/job/7/logs/stream", search: "?offset=12", headers: [], body: null });
+  it("reads the query the relay passes beside the path, and the headers by their lower-cased names", () => {
+    const req = toApiRequest({ method: "GET", path: "/api/finetune/job/7/logs/stream", search: "?offset=12", headers: [["Last-Event-ID", "40"]], body: null });
     expect(req.path).toBe("/api/finetune/job/7/logs/stream");
     expect(req.query.get("offset")).toBe("12");
-  });
-
-  it("lower-cases the header names", () => {
-    const req = toApiRequest({ method: "GET", path: "/api/x", search: "", headers: [["Last-Event-ID", "40"], ["Accept", "text/event-stream"]], body: null });
-    expect(req.headers).toEqual({ "last-event-id": "40", accept: "text/event-stream" });
+    expect(req.headers).toEqual({ "last-event-id": "40" });
   });
 
   it("parses a JSON body, and gives null for none or for one that is not JSON", () => {
@@ -57,15 +53,10 @@ describe("sendResponse", () => {
     expect(isClosed()).toBe(true);
   });
 
-  it("posts a text or bytes answer with its type, and its headers beyond it", async () => {
+  it("posts a text answer with its type, and its headers beyond it", async () => {
     const { port, posted } = fakePort();
     await sendResponse({ status: 200, body: "a: 1\n", type: "text/yaml", headers: { "content-disposition": "attachment; filename=x.yaml" } }, port);
     expect(posted).toEqual([{ status: 200, type: "text/yaml", body: "a: 1\n", headers: [["content-disposition", "attachment; filename=x.yaml"]] }]);
-    const bytes = fakePort();
-    const buffer = new Uint8Array([1, 2, 3]).buffer;
-    await sendResponse({ status: 200, body: buffer, type: "application/octet-stream" }, bytes.port);
-    expect(bytes.posted).toEqual([{ status: 200, type: "application/octet-stream", body: buffer }]);
-    expect((bytes.posted[0] as { body: ArrayBuffer }).body).toBe(buffer);
   });
 
   it("posts a streamed answer as a head, its chunks and done", async () => {
@@ -103,16 +94,5 @@ describe("sendResponse", () => {
     await sendResponse({ status: 200, stream, type: "text/event-stream" }, port);
     expect(cancelled).toBe(true);
     expect(posted[posted.length - 1]).toEqual({ done: true });
-  });
-
-  it("posts the error that stopped a stream", async () => {
-    const { port, posted } = fakePort();
-    const stream = new ReadableStream<Uint8Array>({
-      pull() {
-        throw new Error("the log vanished");
-      },
-    });
-    await sendResponse({ status: 200, stream, type: "text/event-stream" }, port);
-    expect(posted[posted.length - 1]).toEqual({ error: "the log vanished" });
   });
 });

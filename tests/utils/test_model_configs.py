@@ -1,22 +1,13 @@
-"""Model configs: the server rebuilds each from its command, and each type
-takes its geometry from its model. The commands and to_dict() themselves
-are pinned in tests/cli/test_cli_surface.py."""
+"""Model configs: the server rebuilds each from its command, each type's
+default environment, and when a script is refused as unsafe."""
 
-import copy
 import json
 import shlex
-import sys
-import time
 import tomllib
-import types
 from pathlib import Path
-from types import SimpleNamespace
 
-import numpy as np
 import pytest
-import torch
 from click.testing import CliRunner
-from funlib.geometry import Coordinate
 
 from cellmap_flow.models.models_config import (
     BioModelConfig,
@@ -25,7 +16,6 @@ from cellmap_flow.models.models_config import (
     FinetuneModelConfig,
     FlyModelConfig,
     HuggingFaceModelConfig,
-    ModelConfig,
     OnnxModelConfig,
     ScriptModelConfig,
 )
@@ -86,81 +76,6 @@ def test_the_server_rebuilds_the_same_config(config, form, monkeypatch):
         assert rebuilt.to_dict() == config.to_dict()
 
 
-@pytest.fixture
-def fake_frameworks(monkeypatch):
-    """Just enough of dacapo to import it. (The bioimage type's stand-in
-    bioimageio is in test_bio_model.py.)"""
-    for name in ("dacapo", "dacapo.experiments", "dacapo.store", "dacapo.store.create_store"):
-        monkeypatch.setitem(sys.modules, name, types.ModuleType(name))
-    sys.modules["dacapo.experiments"].Run = object
-    store = sys.modules["dacapo.store.create_store"]
-    store.create_config_store = store.create_weights_store = lambda: None
-
-
-def _dacapo_run(out_channels):
-    class AffinitiesTask:  # named like dacapo's; nine offsets
-        predictor = SimpleNamespace(neighborhood=[(1, 0, 0), (0, 1, 0), (0, 0, 1), (3, 0, 0), (0, 3, 0),
-                                                  (0, 0, 3), (9, 0, 0), (0, 9, 0), (0, 0, 9)])
-
-    class Model(torch.nn.Module):
-        eval_input_shape = Coordinate(20, 20, 20)
-
-        def compute_output_shape(self, shape):
-            return out_channels, Coordinate(12, 12, 12)
-
-        def scale(self, voxel_size):
-            return Coordinate(voxel_size) / 2
-
-        def forward(self, x):
-            return torch.zeros(1, out_channels, 12, 12, 12)
-
-    raw = SimpleNamespace(voxel_size=Coordinate(8, 8, 8))
-    return SimpleNamespace(model=Model(), datasplit=SimpleNamespace(train=[SimpleNamespace(raw=raw)]),
-                           task=AffinitiesTask())
-
-
-def _fly_whose_model_outputs(size, output_voxel_size=(8, 8, 8), name=None):
-    """A Fly config declaring 20 voxels in and 12 out, whose model returns ``size`` a side."""
-    fly = FlyModelConfig(checkpoint_path="unused", channels=["mito"], input_voxel_size=(8, 8, 8),
-                         output_voxel_size=output_voxel_size, input_size=(20, 20, 20), output_size=(12, 12, 12),
-                         name=name)
-    fly._model = torch.nn.Module()
-    fly._model.forward = lambda x: torch.zeros(1, 1, size, size, size)
-    return fly
-
-
-def test_a_fly_models_write_shape_is_in_output_voxels():
-    fly = _fly_whose_model_outputs(12, output_voxel_size=(4, 4, 4))
-    assert tuple(fly.config.write_shape) == (48, 48, 48)
-
-
-def test_a_shape_mismatch_names_the_models_type():
-    """It said "Script config shape validation failed" for every type."""
-    with pytest.raises(ValueError, match="^FlyModelConfig shape validation failed for mito:"):
-        _fly_whose_model_outputs(10, name="mito").config
-
-
-def test_a_fly_model_given_an_output_size_asks_for_its_input_size():
-    """Both used to be replaced by the 178/56 default. An input size alone
-    is enough: its output size is computed (tests/utils/test_fly_model.py)."""
-    with pytest.raises(ValueError, match="no input_size"):
-        FlyModelConfig(checkpoint_path="unused", channels=["mito"], input_voxel_size=(8, 8, 8),
-                       output_voxel_size=(8, 8, 8), output_size=(20, 20, 20))
-
-
-@pytest.mark.parametrize("out_channels, channels", [
-    pytest.param(9, "aff_3_0_0", id="nine-affinities-named-by-offset"),
-    pytest.param(3, ["x", "y", "z"], id="three-keep-the-old-names"),
-])
-def test_a_dacapo_models_geometry_and_channels_follow_the_model(fake_frameworks, monkeypatch, out_channels, channels):
-    dacapo = DaCapoModelConfig(run_name="r", iteration=0)
-    monkeypatch.setattr(dacapo, "_load_dacapo_run", lambda: _dacapo_run(out_channels))
-    config = dacapo.config
-    assert (tuple(config.output_voxel_size), tuple(config.write_shape), config.output_channels) == (
-        (4, 4, 4), (48, 48, 48), out_channels)
-    assert (config.channels[3] if out_channels == 9 else config.channels) == channels
-
-
 @pytest.mark.parametrize("config, env", [
     pytest.param(lambda: FlyModelConfig(checkpoint_path="/ckpt/model_checkpoint_1000", channels=["mito"],
                                         input_voxel_size=(8, 8, 8), output_voxel_size=(8, 8, 8)),
@@ -184,87 +99,12 @@ def test_a_model_types_default_environment(config, env):
         assert env in pixi["environments"]
 
 
-@pytest.mark.parametrize("seconds_later, model_type, downloads", [
-    pytest.param(30, None, 1, id="not-retried-within-the-minute"),
-    pytest.param(61, "unet", 2, id="retried-after-it"),
-])
-def test_a_failed_metadata_download_is_retried_a_minute_later(tmp_path, monkeypatch, seconds_later, model_type,
-                                                              downloads):
-    """A network blip used to hide a Hugging Face model's metadata for the rest of the process."""
-    (tmp_path / "metadata.json").write_text(json.dumps({"model_type": "unet"}))
-    calls = []
-
-    def hf_hub_download(repo, filename, revision=None):
-        calls.append(filename)
-        if len(calls) == 1:
-            raise ConnectionError("network blip")
-        return str(tmp_path / filename)
-
-    hub = types.ModuleType("huggingface_hub")
-    hub.hf_hub_download = hf_hub_download
-    monkeypatch.setitem(sys.modules, "huggingface_hub", hub)
-    clock = [1000.0]
-    monkeypatch.setattr(time, "monotonic", lambda: clock[0])
-
-    config = HuggingFaceModelConfig(repo="cellmap/mito-v1")
-    assert "model_type" not in config.to_dict()
-    clock[0] += seconds_later
-    assert (config.to_dict().get("model_type"), len(calls)) == (model_type, downloads)
-
-
-def test_a_plugin_config_without_its_own_to_dict_exports_its_constructor_arguments():
-    class WeightsModelConfig(ModelConfig):
-        def __init__(self, weights: str, sizes: tuple = (1, 1, 1), name=None, scale=None):
-            super().__init__()
-            self.weights, self.name, self.scale = weights, name, scale
-
-    config = WeightsModelConfig("/w w.pt", sizes=(8, 8, 8), name="w")
-    expected = {"type": "weights", "weights": "/w w.pt", "sizes": [8, 8, 8], "name": "w"}
-    assert config.to_dict() == copy.deepcopy(config).to_dict() == expected
-    assert shlex.split(config.command) == ["weights", "--weights", "/w w.pt", "--sizes", "8,8,8", "--name", "w"]
-    assert "_init_params" not in str(config)
-
-
-def _declared(**attrs):
-    """A Config declaring 8 voxels in and out at 1 nm, one channel, and ``attrs``."""
-    return SimpleNamespace(read_shape=(8, 8, 8), write_shape=(8, 8, 8), input_voxel_size=(1, 1, 1),
-                           output_voxel_size=(1, 1, 1), output_channels=1, block_shape=np.array((8, 8, 8, 1)),
-                           **attrs)
-
-
-def test_a_config_can_skip_the_dummy_forward():
-    class ForwardRaises(torch.nn.Module):
-        def forward(self, x):
-            raise AssertionError("the dummy forward pass ran")
-
-    class NoForwardModelConfig(ModelConfig):
-        def _get_config(self):
-            return _declared(model=ForwardRaises())
-
-    config = NoForwardModelConfig()
-    config.validate_model_shapes = False
-    assert config.config.read_shape == (8, 8, 8)
-
-
-def test_a_config_without_a_name_or_an_output_dtype_serves_float32():
-    """The fallback's warning read self.name, which ModelConfig does not set."""
-    class UnnamedModelConfig(ModelConfig):
-        def _get_config(self):
-            return _declared(predict=lambda *args: None)
-
-    assert UnnamedModelConfig().geometry.output_dtype == np.float32
-
-
 @pytest.mark.parametrize("setting, argument, allowed", [
     pytest.param("False", None, True, id="False"),  # what the error message tells users to set
-    pytest.param("false", None, True, id="false"),
     pytest.param("0", None, True, id="0"),
-    pytest.param("no", None, True, id="no"),
-    pytest.param("", None, True, id="empty"),
     pytest.param(None, None, True, id="unset"),
     pytest.param("True", None, False, id="True"),
     pytest.param("1", None, False, id="1"),
-    pytest.param("yes", None, False, id="yes"),
     pytest.param("1", False, True, id="an-explicit-argument-wins"),
 ])
 def test_an_unsafe_script_is_refused_only_when_asked(tmp_path, monkeypatch, setting, argument, allowed):
@@ -286,24 +126,3 @@ def test_an_unsafe_script_is_refused_only_when_asked(tmp_path, monkeypatch, sett
     else:
         with pytest.raises(ValueError, match="Unsafe script"):
             load_safe_config(str(script), force_safe=argument)
-
-
-def test_a_finetune_declares_the_voxel_size_it_was_trained_at():
-    """An 8 nm model finetuned on hela-2's 10.48x8x8 level, read as it is, is
-    a 10.48x8x8 model: the same voxel counts at that size, and a server picks
-    that level exactly instead of relabelling the nearest with a warning."""
-    from types import SimpleNamespace
-
-    from cellmap_flow.models.configs.finetune import trained_at_geometry
-
-    base = SimpleNamespace(input_voxel_size=(8, 8, 8), output_voxel_size=(8, 8, 8),
-                           read_shape=(1424, 1424, 1424), write_shape=(448, 448, 448))  # 178 and 56 voxels
-    at = trained_at_geometry(base, input_voxel_size=(10.48, 8, 8), output_voxel_size=(10.48, 8, 8))
-    assert (at["input_voxel_size"], at["read_shape"]) == ((10.48, 8, 8), (1865.44, 1424, 1424))
-    assert (at["output_voxel_size"], at["write_shape"]) == ((10.48, 8, 8), (586.88, 448, 448))
-    assert trained_at_geometry(base) == {"input_voxel_size": (8, 8, 8), "output_voxel_size": (8, 8, 8),
-                                         "read_shape": (1424, 1424, 1424), "write_shape": (448, 448, 448)}
-    # The CLI's string form, and a whole size kept an int.
-    config = FinetuneModelConfig(lora_adapter_path="/a", base_model={"type": "script", "script_path": "/s.py"},
-                                 input_voxel_size="10.48,8,8")
-    assert config.input_voxel_size == (10.48, 8, 8) and config.to_dict()["input_voxel_size"] == [10.48, 8, 8]

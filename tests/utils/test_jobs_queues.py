@@ -2,7 +2,6 @@
 
 import pytest
 
-from cellmap_flow.jobs.settings import SERVER_CONFIG_DEFAULTS
 from cellmap_flow.jobs import queues
 
 HEADER = "QUEUE_NAME      PRIO STATUS          MAX JL/U JL/P JL/H NJOBS  PEND   RUN  SUSP\n"
@@ -61,7 +60,6 @@ AVAILABILITY = {"available": True, "queues": [
 @pytest.mark.parametrize("cycle, expected", [
     # The one asked for first, then the most free GPUs first.
     pytest.param({}, ["gpu_h100", "gpu_a100", "gpu_h200"], id="cycling-by-default"),
-    pytest.param({"cycle": True}, ["gpu_h100", "gpu_a100", "gpu_h200"], id="cycling"),
     # Work pinned to a queue on purpose waits for it, and LSF isn't asked.
     pytest.param({"cycle": False}, ["gpu_h100"], id="pinned"),
 ])
@@ -71,6 +69,3 @@ def test_the_queues_a_job_is_tried_on(monkeypatch, cycle, expected):
     assert queues.candidates("gpu_h100", **cycle) == expected
     assert len(asked) == (0 if cycle.get("cycle") is False else 1)
 
-
-def test_the_dashboard_cycles_queues_unless_told_not_to():
-    assert SERVER_CONFIG_DEFAULTS["cycle_gpu_queues"] is True

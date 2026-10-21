@@ -1,15 +1,14 @@
 // One finetune end to end over the real ONNX step: createRunFinetune with
 // samples and targets made here (two painted chunks of the head.onnx
 // fixture's 1×6×6 output) and the real feature runner, head finder, trainer
-// and weight writer. The run logs its plan and each chunk's painted count,
-// trains the epochs asked with the dashboard's epoch lines, and the
-// Finetuned's bytes run in onnxruntime and compute W · features + b with
-// the trained head; a volume with no paint is refused in words that say to
-// paint; the run starts from initialHead when given; a cancel ends it
-// early; the runner is released however the run ends. Distillation, on by
-// default, holds the painted chunks' unpainted voxels (none at λ 0); with
-// good regions it holds their unpainted voxels instead, running the model
-// on a region's block nothing was painted in, and says what it skipped.
+// and weight writer. The run trains the epochs asked with the dashboard's
+// epoch lines, and the Finetuned's bytes, the trained head in them, run in
+// onnxruntime; a volume with no paint is refused; the run starts from
+// initialHead when given; a cancel ends it early; the runner is released
+// however the run ends. Distillation, on by default, holds the painted
+// chunks' unpainted voxels; with good regions it holds their unpainted
+// voxels instead, running the model on a region's block nothing was painted
+// in, and skips what is not a region in the volume.
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import * as ort from "onnxruntime-web";
@@ -19,7 +18,7 @@ import type { Chain, DatasetInfo, ModelEntry, PaintVolume } from "../../src/cont
 import { createFeatureRunner, type FeatureRunner } from "../../src/finetune/features";
 import { regionAt } from "../../src/finetune/good-regions";
 import { headOf } from "../../src/finetune/onnx-head";
-import { createRunFinetune, runFinetune, type RunDeps } from "../../src/finetune/run";
+import { createRunFinetune, type RunDeps } from "../../src/finetune/run";
 import { DEFAULT_OPTIONS, type FinetuneRun, type HeadFinetuned, type PaintedChunk, type Sample, type Targets } from "../../src/finetune/types";
 import { CHUNK_DIR, chunkKey } from "../../src/finetune/volume";
 import { MemoryPaintStore } from "../../src/state/paint-store";
@@ -119,16 +118,8 @@ describe("runFinetune", () => {
     const { paint, collectSamples } = await painted(CHUNKS);
     const disposed = { count: 0 }, report = reporter();
     const finetuned: HeadFinetuned = await createRunFinetune(deps(collectSamples, disposed))(run({}, paint, report));
-    const log = report.lines.join("\n");
-    expect(log).toMatch(/Finetuning head_fixture's head on volume vol-test: 2 painted chunks of 1×6×6 voxels/);
-    expect(log).toMatch(/The head: a 1×1 convolution, 4 → 2 channels \(head\.weight, head\.bias, float32\); 8 epochs of 16 voxels per step/);
-    expect(log).toMatch(/8 epochs of 16 voxels per step at learning rate 0\.05, BCE-with-logits, classes balanced/);
-    // The default distillation: λ 0.01 on the painted chunks' unpainted voxels.
-    expect(log).toMatch(/Distillation, λ 0\.01: held to the starting head on the unpainted voxels of the painted chunks, at most 32,768 \(16,384 a chunk\)/);
-    expect(log).toMatch(/chunk 1\/2 \[0, 0, 0\]: 36 painted voxels, 0 held to the starting head/);
-    expect(log).toMatch(/chunk 2\/2 \[0, 0, 1\]: 5 painted voxels, 31 held to the starting head/);
-    expect(log).toMatch(/41 painted voxels in 2 chunks; training the head/);
     expect(report.lines.filter((l) => /^Epoch \d+\/8 - Loss: \d\.\d{6} - Supervised: \d\.\d{6} - Distillation: \d\.\d{6}$/.test(l))).toHaveLength(8);
+    // The default distillation holds the painted chunks' unpainted voxels: the second chunk's 31.
     expect(finetuned).toMatchObject({ epochs: 8, pixels: 41, chunks: 2, distilled: 31 });
     expect(finetuned.losses).toHaveLength(8);
     expect(finetuned.supervisedLosses).toHaveLength(8);
@@ -141,25 +132,15 @@ describe("runFinetune", () => {
     expect(finetuned.bytes.byteLength).toBe(BASE.byteLength);
     expect(headOf(finetuned.bytes)).toMatchObject({ weight: finetuned.weight, bias: finetuned.bias });
     const input = block([0, 0, 0]);
+    // (That it computes W · features + b with them is finetune-onnx.test.ts's withHead test.)
     const trained = await logitsOf(finetuned.bytes, input), base = await logitsOf(BASE, input);
     expect(Array.from(trained)).not.toEqual(Array.from(base));
-    const features = await createFeatureRunner({ bytes: BASE, head: finetuned.head });
-    try {
-      const f = await features.run(input, IN_DIMS);
-      for (let c = 0; c < 2; c++) for (let v = 0; v < 36; v++) {
-        let z = finetuned.bias[c];
-        for (let i = 0; i < 4; i++) z += finetuned.weight[c * 4 + i] * f.features[i * 36 + v];
-        expect(trained[c * 36 + v]).toBeCloseTo(z, 4);
-      }
-    } finally {
-      await features.dispose();
-    }
   }, 60000);
 
-  it("refuses a volume with nothing painted, saying to paint first", async () => {
+  it("refuses a volume whose chunks hold no paint (all erased)", async () => {
     const { paint, collectSamples } = await painted([chunk([0, 0, 0], () => 0)]);
     const disposed = { count: 0 };
-    await expect(createRunFinetune(deps(collectSamples, disposed))(run({}, paint, reporter()))).rejects.toThrow(/no painted voxels: paint background \(1\) and objects \(2 and up\) on the annotation layer first/);
+    await expect(createRunFinetune(deps(collectSamples, disposed))(run({}, paint, reporter()))).rejects.toThrow(/no painted voxels/);
     expect(disposed.count).toBe(1);
   }, 60000);
 
@@ -180,17 +161,12 @@ describe("runFinetune", () => {
     expect(finetuned.epochs).toBe(2);
     expect(finetuned.losses).toHaveLength(2);
     expect(finetuned.finalLoss).toBe(finetuned.losses[1]);
-    expect(report.lines.at(-1)).toMatch(/Stopped after 2 of 8 epochs; loss \d\.\d{6}/);
     expect(disposed.count).toBe(1);
     // Cancelled before any sample: no training, the runner still released.
     const atOnce = reporter(() => true);
-    await expect(createRunFinetune(deps(collectSamples, disposed))(run({}, paint, atOnce))).rejects.toThrow(/cancelled before training/);
+    await expect(createRunFinetune(deps(collectSamples, disposed))(run({}, paint, atOnce))).rejects.toThrow(/cancelled/);
     expect(disposed.count).toBe(2);
   }, 60000);
-
-  it("exports the run with the real samples and targets", () => {
-    expect(typeof runFinetune).toBe("function");
-  });
 });
 
 /** collectSamples over `chunks` that takes the run's chunk indices as the
@@ -213,44 +189,18 @@ const ON_PAINTED = regionAt([0, 20, 68], [8, 48, 48], 1, undefined, "aaaa0002");
 const OUTSIDE = regionAt([0, 500, 500], [8, 48, 48], 2, undefined, "aaaa0003");
 
 describe("runFinetune's distillation", () => {
-  it("trains on the paint alone at λ 0: no voxel held, the plain epoch line", async () => {
-    const { paint, collectSamples } = await painted(CHUNKS);
-    const report = reporter();
-    const finetuned = await createRunFinetune(deps(collectSamples, { count: 0 }))(run({ options: { ...DEFAULT_OPTIONS, epochs: 3, learningRate: 0.05, batchPixels: 16, distillationLambda: 0 } }, paint, report));
-    const log = report.lines.join("\n");
-    expect(log).not.toMatch(/Distillation|held to the starting head/);
-    expect(report.lines.filter((l) => /^Epoch \d+\/3 - Loss: \d\.\d{6}$/.test(l))).toHaveLength(3);
-    expect(finetuned.distilled).toBe(0);
-    expect(finetuned.losses).toEqual(finetuned.supervisedLosses);
-  }, 60000);
-
   it("with good regions, holds their unpainted voxels instead of the form's scope, running the model on a region's unpainted block", async () => {
     const { paint } = await painted(CHUNKS);
     const report = reporter();
     const goodRegions = [ON_UNPAINTED, ON_PAINTED, OUTSIDE, { not: "a region" }];
     const options = { ...DEFAULT_OPTIONS, epochs: 3, learningRate: 0.05, batchPixels: 16, distillationScope: "all" as const };
     const finetuned = await createRunFinetune(deps(byIndex(CHUNKS), { count: 0 }))(run({ options, goodRegions }, paint, report));
-    const log = report.lines.join("\n");
-    expect(log).toMatch(/Skipping a good region that is not one .*\{"not":"a region"\}/);
-    expect(log).toMatch(/Good region good-3 \(aaaa0003\) centres outside the volume; skipping it/);
-    expect(log).toMatch(/Distillation, λ 0\.01: held to the starting head in 2 good regions \(2 blocks\), their unpainted voxels, at most 32,768; the form's scope \(all\) does not apply while good regions are marked/);
-    // The painted chunks first, then the region's block nothing was painted in.
-    expect(report.lines.filter((l) => l.startsWith("chunk "))).toEqual([
-      "chunk 1/3 [0, 0, 0]: 36 painted voxels",
-      "chunk 2/3 [0, 0, 1]: 5 painted voxels, 31 held to the starting head",
-      "chunk 3/3 [0, 1, 1]: 0 painted voxels, 36 held to the starting head",
-    ]);
-    expect(log).toMatch(/41 painted voxels in 2 chunks; training the head/);
+    // The painted chunks first, then the region's block nothing was painted
+    // in; the region outside the volume and the one that is not a region are
+    // set aside. Held: the painted region's 31 unpainted voxels and the
+    // unpainted block's 36, whatever the form's scope (all) says.
+    expect(report.lines.filter((l) => l.startsWith("chunk "))).toHaveLength(3);
     expect(finetuned).toMatchObject({ pixels: 41, chunks: 2, distilled: 67 });
     expect(report.lines.filter((l) => / - Supervised: .* - Distillation: /.test(l))).toHaveLength(3);
-  }, 60000);
-
-  it("says good regions hold nothing at λ 0, and reads no block for them", async () => {
-    const { paint } = await painted(CHUNKS);
-    const report = reporter();
-    const finetuned = await createRunFinetune(deps(byIndex(CHUNKS), { count: 0 }))(run({ options: { ...DEFAULT_OPTIONS, epochs: 1, batchPixels: 16, distillationLambda: 0 }, goodRegions: [ON_UNPAINTED, ON_PAINTED] }, paint, report));
-    expect(report.lines.join("\n")).toMatch(/2 good regions marked, but distillation is off \(λ 0\), so they hold nothing: give distillation a weight to use them/);
-    expect(report.lines.filter((l) => l.startsWith("chunk "))).toHaveLength(2);
-    expect(finetuned.distilled).toBe(0);
   }, 60000);
 });

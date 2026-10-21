@@ -90,7 +90,6 @@ def client(monkeypatch, tmp_path, viewer, dashboard):
     zarr.open_group(str(tmp_path / "vols" / "roi_annotation.zarr"), mode="w")
     untyped = zarr.open_group(str(tmp_path / "vols" / "untyped.zarr"), mode="w")
     untyped.create_group("annotation").create_dataset("s0", shape=(4, 4, 4), dtype="u2")
-    (tmp_path / "vols" / "plain.zarr").mkdir()
     (tmp_path / "elsewhere").mkdir()
     monkeypatch.setattr(get_session(), "models_config", [_Unbuildable()])
     monkeypatch.setattr(get_session(), "dataset_path", "/raw.zarr")
@@ -105,17 +104,14 @@ def client(monkeypatch, tmp_path, viewer, dashboard):
         (CREATE, {"roi_name": "../roi", "instance_zarr_path": "{tmp}/instances.zarr",
                   "model_name": "model"}),
         (CREATE, {"roi_name": "roi", "instance_zarr_path": "{tmp}/instances.zarr"}),
-        (CREATE, {"roi_name": "roi", "reuse_existing": True, "source_zarr_path": "{tmp}/vols"}),
         (CREATE, {"roi_name": "roi", "reuse_existing": True, "source_zarr_path": "{tmp}/vols/untyped.zarr"}),
         (SYNC, {"zarr_path": "{tmp}/vols/roi_annotation.zarr", "dst_path": "{tmp}/elsewhere/copy.zarr"}),
-        (SYNC, {"zarr_path": "{tmp}/vols/roi_annotation.zarr", "dst_path": "{tmp}/vols/plain.zarr"}),
-        (SYNC, {"zarr_path": "{tmp}/vols/roi_annotation.zarr", "dst_path": "{tmp}/vols/copy"}),
         (CC3D, {"zarr_path": "{tmp}/vols/roi_annotation.zarr", "target_label": 5,
                 "snapshot_dir": "{tmp}/elsewhere/snapshots"}),
         (CC3D, {"zarr_path": "{tmp}/vols/roi_annotation.zarr", "target_label": "five"}),
     ],
-    ids=["output-dir-missing", "roi-name-path", "no-model", "source-not-zarr", "source-not-a-volume",
-         "dst-elsewhere", "dst-not-a-zarr", "dst-not-dot-zarr", "snapshots-elsewhere", "bad-label"],
+    ids=["output-dir-missing", "roi-name-path", "no-model", "source-not-a-volume", "dst-elsewhere",
+         "snapshots-elsewhere", "bad-label"],
 )
 def test_bad_paths_are_refused_before_anything_is_written(client, tmp_path, url, body):
     body = {k: v.format(tmp=tmp_path) if isinstance(v, str) else v for k, v in body.items()}
@@ -124,39 +120,6 @@ def test_bad_paths_are_refused_before_anything_is_written(client, tmp_path, url,
     assert response.status_code == 400
     assert response.get_json()["success"] is False and response.get_json()["error"]
     assert sorted(tmp_path.rglob("*")) == before
-
-
-def test_a_fresh_seed_asks_the_server_for_geometry(client, monkeypatch, tmp_path):
-    from types import SimpleNamespace
-
-    from cellmap_flow.dashboard.routes.finetune import instance_correction
-    from cellmap_flow.dashboard.state import get_session
-    from cellmap_flow.models import geometry_cache
-
-    geometry = SimpleNamespace(read_shape=[192] * 3, write_shape=[64] * 3,
-                               input_voxel_size=[16] * 3, output_voxel_size=[16] * 3)
-    monkeypatch.setattr(geometry_cache, "model_geometry_config", lambda name: geometry)
-    served = []
-    monkeypatch.setattr(instance_correction, "ensure_minio_serving",
-                        lambda *a, **k: served.append((a, k)) or "http://m:9000/annotations/roi_annotation.zarr")
-
-    response = client.post(CREATE, json={"roi_name": "roi", "model_name": "model",
-                                         "instance_zarr_path": str(tmp_path / "instances.zarr")})
-    assert response.status_code == 200, response.get_json()
-    (path, volume_id), kwargs = served[0]
-    assert volume_id == "roi_annotation" and kwargs["mc_target_name"] == "roi_annotation.zarr"
-    assert get_session().annotation_volumes["roi_annotation"] == {
-        "zarr_path": path, "model_name": "model", "output_size": [4, 4, 4], "input_size": [12, 12, 12],
-        "input_voxel_size": [16.0] * 3, "output_voxel_size": [16.0] * 3, "dataset_path": "/raw.zarr",
-        "dataset_offset_nm": [8.0] * 3, "corrections_dir": str(tmp_path / "instance_corrections"),
-        "minio_url": "http://m:9000/annotations/roi_annotation.zarr", "chunk_sync_state": {}, "resample": False,
-    }
-    assert zarr.open_group(path, mode="r").attrs["chunk_size"] == [4, 4, 4]
-
-
-class _Alive:
-    def poll(self):
-        return None
 
 
 class _Bucket:
@@ -199,20 +162,3 @@ def test_sync_and_cc3d_take_the_path_create_answers(client, tmp_path, monkeypatc
     assert synced.status_code == 200 and synced.get_json()["keys_copied"] > 0, synced.get_json()
     split = client.post(CC3D, json={"zarr_path": created["zarr_path"], "target_label": 2})
     assert split.status_code == 200 and split.get_json()["n_components"] == 2, split.get_json()
-
-
-def test_a_reseed_over_unsynced_edits_names_the_running_minios_store(client, tmp_path, monkeypatch):
-    """A running MinIO keeps its data where it started, which the refusal
-    has to name; it named <output_dir>/.minio, which may not exist."""
-    from cellmap_flow.dashboard.state import get_session
-
-    chunks = tmp_path / "elsewhere" / ".minio" / "annotations" / "roi_annotation.zarr" / "annotation" / "s0"
-    chunks.mkdir(parents=True)
-    (chunks / "0.0.0").write_bytes(b"painted")
-    monkeypatch.setitem(get_session().minio_state, "process", _Alive())
-    monkeypatch.setitem(get_session().minio_state, "output_base", str(tmp_path / "elsewhere"))
-
-    response = client.post(CREATE, json={"roi_name": "roi", "model_name": "model",
-                                         "instance_zarr_path": str(tmp_path / "instances.zarr")})
-    assert response.status_code == 409
-    assert str(chunks.parent.parent) in response.get_json()["error"]

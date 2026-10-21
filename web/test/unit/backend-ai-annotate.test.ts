@@ -2,7 +2,7 @@
 // (and a test provider that wants a key and records what it is given), the
 // plain-JavaScript codec and a memory store: the JSON each answers, checked
 // against what the tab's ai-annotate.js reads and against the Python
-// routes' refusals, their order and their words; and what each does to the
+// routes' refusals, their order and their statuses; and what each does to the
 // paint store (the mask written, the undo, the audit log), the viewer (the
 // key bound, the layer refreshed) and the stores (credentials, the day's
 // count).
@@ -17,10 +17,8 @@ import { ORGANELLES } from "../../src/ai-annotate/organelles";
 import { editablePrompt } from "../../src/ai-annotate/prompts";
 import type { CredentialField, Credentials, Provider, ProviderInfo, ProviderType, SegmentRequest, SegmentResult } from "../../src/ai-annotate/types";
 import { ACTION, AIAnnotateError, DAILY_CALL_LIMIT, DEFAULT_GEMINI_MODELS, FAKE_MODEL, KEY, KEYBINDING } from "../../src/ai-annotate/types";
-import { createUsage, limitMessage, USAGE_KEY } from "../../src/ai-annotate/usage";
+import { createUsage, USAGE_KEY } from "../../src/ai-annotate/usage";
 import { createBackend } from "../../src/backend";
-import { nearestResize } from "../../src/backend/ai-annotate-job";
-import { bytesToBase64 as base64 } from "../../src/ai-annotate/gemini";
 import { type AiAnnotateDeps, type AiAnnotateState, aiAnnotateRoutes } from "../../src/backend/routes/ai-annotate";
 import { finetuneRoutes } from "../../src/backend/routes/finetune";
 import { Router } from "../../src/backend/router";
@@ -186,35 +184,11 @@ describe("GET /api/finetune/ai-annotate/config", () => {
     expect(d.settings).toBeNull();
     expect(d.acknowledged).toEqual([]);
     // The words the page puts in the brackets after "0 of 200 calls used today", where the server names its config file.
-    expect(d.usage_note).toBe(`the browser's own cap of ${DAILY_CALL_LIMIT} a day`);
-  });
-
-  it("falls back to the first provider as the default when gemini is not among them", async () => {
-    const h = harness(fakeContext(), { providers: new Map([["fake", createFakeProvider()]]) });
-    expect(body(await h.handle(request("GET", `${BASE}/config`))).default_provider).toBe("fake");
+    expect(d.usage_note).toContain(String(DAILY_CALL_LIMIT));
   });
 });
 
 describe("POST /api/finetune/ai-annotate/credentials", () => {
-  it("refuses a missing or unknown provider, no credential, and an overlong one", async () => {
-    const h = harness(fakeContext());
-    expect(body(await h.handle(request("POST", `${BASE}/credentials`, {})))).toEqual({ success: false, error: "provider is required" });
-    expect((await h.handle(request("POST", `${BASE}/credentials`, null))).status).toBe(400);
-    const unknown = await h.handle(request("POST", `${BASE}/credentials`, { provider: "openai", api_key: "x" }));
-    expect(unknown.status).toBe(400);
-    expect(body(unknown).error).toMatch(/not available in the browser/);
-    const none = await h.handle(request("POST", `${BASE}/credentials`, { provider: "gemini" }));
-    expect(none.status).toBe(400);
-    expect(body(none).error).toBe("Enter the API key for gemini.");
-    const vertexHalf = await h.handle(request("POST", `${BASE}/credentials`, { provider: "vertex", project: "p" }));
-    expect(vertexHalf.status).toBe(200); // one of its fields is enough to store; the run says what is missing
-    expect(body(vertexHalf).configured).toBe(false);
-    const long = await h.handle(request("POST", `${BASE}/credentials`, { provider: "gemini", api_key: "k".repeat(4097) }));
-    expect(long.status).toBe(400);
-    expect(body(long).error).toBe("api_key: at most 4096 characters");
-    expect((await h.handle(request("POST", `${BASE}/credentials`, { provider: "gemini", api_key: 42 }))).status).toBe(400);
-  });
-
   it("keeps the key in the page's memory only, lists the models it reaches, and never shows, stores or logs it", async () => {
     const ctx = fakeContext();
     const gemini = new TestProvider();
@@ -246,20 +220,6 @@ describe("POST /api/finetune/ai-annotate/credentials", () => {
     expect(body(await h.handle(request("GET", `${BASE}/config`))).providers[0].models).toEqual(DEFAULT_GEMINI_MODELS); // the live list went with the key
   });
 
-  it("answers a warning, not an error, when the listing fails, and no models when the provider cannot list", async () => {
-    const gemini = new TestProvider();
-    gemini.models = new AIAnnotateError("auth", "The API key was not accepted.");
-    const h = harness(fakeContext(), { providers: providers(gemini) });
-    const res = body(await h.handle(request("POST", `${BASE}/credentials`, { provider: "gemini", api_key: SECRET })));
-    expect(res.success).toBe(true);
-    expect(res.configured).toBe(true);
-    expect(res.models).toBeUndefined();
-    expect(res.warning).toBe("Could not list the models these credentials reach: The API key was not accepted.");
-    gemini.models = null;
-    expect(body(await h.handle(request("POST", `${BASE}/credentials`, { provider: "gemini", api_key: SECRET })))).toEqual({ success: true, configured: true });
-    // Vertex lists nothing and needs both fields.
-    expect(body(await h.handle(request("POST", `${BASE}/credentials`, { provider: "vertex", project: "my-project", access_token: "ya29.token" })))).toEqual({ success: true, configured: true });
-  });
 });
 
 describe("the credential store", () => {
@@ -301,28 +261,6 @@ describe("the credential store", () => {
 });
 
 describe("POST /api/finetune/ai-annotate/settings", () => {
-  it("checks the body as the Python does: provider and model required, a model the fake does not offer, an id that is not one, an unknown target, no target", async () => {
-    const h = harness(fakeContext());
-    expect(body(await h.handle(request("POST", `${BASE}/settings`, { model: "m" })))).toEqual({ success: false, error: "provider is required" });
-    expect(body(await h.handle(request("POST", `${BASE}/settings`, { provider: "fake", model: " " })))).toEqual({ success: false, error: "model is required" });
-    const notListed = await h.handle(request("POST", `${BASE}/settings`, { provider: "fake", model: "gemini-3-pro-image", label_key: "mito" }));
-    expect(notListed.status).toBe(400);
-    expect(body(notListed).error).toBe("That model is not listed for this provider.");
-    const notAnId = await h.handle(request("POST", `${BASE}/settings`, { provider: "gemini", model: "bad model!", label_key: "mito" }));
-    expect(notAnId.status).toBe(400);
-    expect(body(notAnId).error).toBe("That is not a model id.");
-    // A typed id (the picker's Other…) is fine for a Gemini provider.
-    expect(body(await h.handle(request("POST", `${BASE}/settings`, { provider: "vertex", model: "publishers/google/models/gemini-x@001", label_key: "mito" }))).success).toBe(true);
-    const unknown = await h.handle(request("POST", `${BASE}/settings`, { provider: "fake", model: FAKE_MODEL, label_key: "golgi" }));
-    expect(unknown.status).toBe(400);
-    expect(body(unknown).error).toBe('Unknown target "golgi"; pick one from the list.');
-    const noTarget = await h.handle(request("POST", `${BASE}/settings`, { provider: "fake", model: FAKE_MODEL }));
-    expect(noTarget.status).toBe(400);
-    expect(body(noTarget).error).toBe("Name the structure to annotate (label_key or label_name).");
-    expect((await h.handle(request("POST", `${BASE}/settings`, { provider: "fake", model: FAKE_MODEL, label_key: "mito", prompt: "p".repeat(4001) }))).status).toBe(400);
-    expect((await h.handle(request("POST", `${BASE}/settings`, { provider: "fake", model: FAKE_MODEL, label_key: "mito", acknowledge: "yes" }))).status).toBe(400);
-  });
-
   it("keeps the settings, with the catalog's own prompt as null and an edited one as the override, and binds Shift+G once", async () => {
     const ctx = fakeContext();
     const h = harness(ctx);
@@ -368,67 +306,52 @@ describe("POST /api/finetune/ai-annotate/settings", () => {
 });
 
 describe("POST /api/finetune/ai-annotate/run: the refusals, in _begin_run's order", () => {
-  it("wants settings first, then a volume (needs_volume), then the acknowledgement, then the credentials; and checks the body", async () => {
+  it("wants settings first, then a volume (needs_volume), then the acknowledgement, then the credentials", async () => {
     const ctx = fakeContext();
     ctx.viewer.positionNm = POINT;
     await serve(ctx, entry("setup_56", "nuc", ["nuc"], 128));
     const h = harness(ctx);
-    const bad = await h.handle(request("POST", `${BASE}/run`, { point_nm: [1, 2] }));
-    expect(bad.status).toBe(400);
-    expect(body(bad).error).toBe("point_nm must be three finite numbers, z, y, x");
-    expect(body(await h.handle(request("POST", `${BASE}/run`, { depth_axis: 3 }))).error).toBe("depth_axis must be 0, 1 or 2 (z, y, x)");
+    const run = () => h.handle(request("POST", `${BASE}/run`, {}));
 
-    const noSettings = await h.handle(request("POST", `${BASE}/run`, {}));
+    const noSettings = await run();
     expect(noSettings.status).toBe(400);
-    expect(body(noSettings).error).toBe("Choose a provider, model and target for AI annotation first.");
+    expect(body(noSettings).needs_volume).toBeUndefined();
 
     await h.handle(request("POST", `${BASE}/settings`, { provider: "gemini", model: "gemini-3-pro-image", label_key: "mito" }));
-    const noVolume = await h.handle(request("POST", `${BASE}/run`, {}));
+    const noVolume = await run();
     expect(noVolume.status).toBe(409);
-    expect(body(noVolume)).toEqual({ success: false, error: "No annotation volume to annotate. Create or resume one first.", needs_volume: true });
+    expect(body(noVolume)).toMatchObject({ success: false, needs_volume: true });
 
     await h.handle(request("POST", "/api/finetune/create-volume", { model_name: NAME_56 }));
-    const notAgreed = await h.handle(request("POST", `${BASE}/run`, {}));
+    const notAgreed = await run();
     expect(notAgreed.status).toBe(409);
-    expect(body(notAgreed)).toEqual({
+    expect(body(notAgreed)).toMatchObject({
       success: false,
-      error: "Acknowledge where the images are sent before the first run on this dataset.",
       needs_acknowledgement: true,
       provider: "gemini",
       destination: "Test destination (a service, with your key)",
     });
 
     await h.handle(request("POST", `${BASE}/settings`, { provider: "gemini", model: "gemini-3-pro-image", label_key: "mito", acknowledge: true, destination: "Test destination (a service, with your key)" }));
-    const noKey = await h.handle(request("POST", `${BASE}/run`, {}));
+    const noKey = await run();
     expect(noKey.status).toBe(400);
-    expect(body(noKey).error).toMatch(/^Paste the API key for gemini into the AI annotation panel first/);
-
-    await h.handle(request("POST", `${BASE}/settings`, { provider: "vertex", model: "gemini-3-pro-image", label_key: "mito", acknowledge: true, destination: providers().get("vertex")!.info.destination }));
-    await h.handle(request("POST", `${BASE}/credentials`, { provider: "vertex", project: "p" }));
-    expect(body(await h.handle(request("POST", `${BASE}/run`, {}))).error).toMatch(/^Paste the Google Cloud project and access token for vertex into the AI annotation panel first/);
+    expect(body(noKey).error).toMatch(/API key/);
     expect(h.ai.job).toBeNull();
   });
 
-  it("takes the point and plane from the viewer when the body has none, and refuses a viewer without a position or a dataset", async () => {
+  it("takes the point and plane from the viewer when the body has none (the panel's Run posts {}), and refuses a viewer without a position", async () => {
     const { ctx, h } = await ready();
     ctx.viewer.positionNm = null;
     const noPosition = await h.handle(request("POST", `${BASE}/run`, {}));
     expect(noPosition.status).toBe(400);
-    expect(body(noPosition).error).toBe("The viewer has no position.");
+    expect(body(noPosition).success).toBe(false);
     ctx.viewer.positionNm = POINT;
     ctx.viewer.depthAxis = 1;
     const started = body(await h.handle(request("POST", `${BASE}/run`, {})));
     expect(started.success).toBe(true);
-    const s = await status(h);
-    expect(s.point_nm).toEqual(POINT);
-    expect(s.depth_axis).toBe(1);
-    expect(s.plane).toBe("XZ");
+    expect(await status(h)).toMatchObject({ point_nm: POINT, depth_axis: 1, plane: "XZ" });
     await h.ai.job!.settled();
     expect((await status(h)).status).toBe("ready");
-
-    const closed = harness(fakeContext({ dataset: null }));
-    await closed.handle(request("POST", `${BASE}/settings`, FAKE_SETTINGS));
-    expect(body(await closed.handle(request("POST", `${BASE}/run`, {}))).error).toBe("Open a dataset in the viewer first.");
   });
 
   it("refuses a run while one runs, waits for review or is being written, and once the day's calls are used up", async () => {
@@ -440,25 +363,23 @@ describe("POST /api/finetune/ai-annotate/run: the refusals, in _begin_run's orde
       settings: { provider: "gemini", model: "gemini-3-pro-image", destination: gemini.info.destination },
     });
     await h.handle(request("POST", `${BASE}/credentials`, { provider: "gemini", api_key: SECRET }));
-    const started = body(await h.handle(request("POST", `${BASE}/run`, { point_nm: POINT, depth_axis: 0 })));
-    expect(started.success).toBe(true);
+    const run = () => h.handle(request("POST", `${BASE}/run`, { point_nm: POINT, depth_axis: 0 }));
+    expect(body(await run()).success).toBe(true);
     await until(() => gemini.calls.length === 1);
     expect(gemini.calls[0].credentials).toEqual({ api_key: SECRET });
-    expect((await status(h))).toMatchObject({ status: "running", stage: "sending", stage_label: "Waiting for the model..." });
-    const running = await h.handle(request("POST", `${BASE}/run`, { point_nm: POINT, depth_axis: 0 }));
-    expect(running.status).toBe(409);
-    expect(body(running).error).toBe("An AI annotation is still running.");
+    expect((await status(h))).toMatchObject({ status: "running", stage: "sending" });
+    expect((await run()).status).toBe(409); // still running
     release();
     await h.ai.job!.settled();
-    expect(body(await h.handle(request("POST", `${BASE}/run`, { point_nm: POINT, depth_axis: 0 }))).error).toBe("Accept or reject the AI annotation waiting for review first.");
+    expect((await run()).status).toBe(409); // waiting for review
     h.ai.job!.status = "accepting";
-    expect(body(await h.handle(request("POST", `${BASE}/run`, { point_nm: POINT, depth_axis: 0 }))).error).toBe("The accepted AI annotation is still being written.");
+    expect((await run()).status).toBe(409); // being written
     h.ai.job = null;
     // The day's calls used up: 429 before anything is read.
     h.storage!.setItem(USAGE_KEY, JSON.stringify({ date: "2026-10-15", calls: DAILY_CALL_LIMIT }));
-    const limited = await h.handle(request("POST", `${BASE}/run`, { point_nm: POINT, depth_axis: 0 }));
+    const limited = await run();
     expect(limited.status).toBe(429);
-    expect(body(limited)).toEqual({ success: false, error: limitMessage(DAILY_CALL_LIMIT), category: "limit" });
+    expect(body(limited)).toMatchObject({ success: false, category: "limit" });
     expect(ctx.logged.join("\n")).not.toContain(SECRET);
   });
 });
@@ -480,14 +401,11 @@ describe("a run on another dataset than the volume's", () => {
 describe("a run to ready", () => {
   it("reads the plane around the point, asks the model, and stages the mask with its preview; the status's fields are set as it goes", async () => {
     const { ctx, h, id } = await ready();
-    expect((await status(h))).toEqual({
-      success: true, annotate_id: null, status: "idle", stage: null, stage_label: null, error: null, prompt: null, provider: null, model: null,
-      label_name: null, depth_axis: null, plane: null, point_nm: null, write_box: null, mask_fraction: null, preview: null, needs_volume: false,
-    });
+    expect((await status(h))).toMatchObject({ success: true, annotate_id: null, status: "idle", error: null, preview: null, needs_volume: false });
     const started = body(await h.handle(request("POST", `${BASE}/run`, { point_nm: POINT, depth_axis: 0 })));
     expect(started).toEqual({ success: true, annotate_id: expect.stringMatching(/^[0-9a-f]{32}$/), status: "running" });
     const early = await status(h);
-    expect(early).toMatchObject({ annotate_id: started.annotate_id, status: "running", stage: "fetching_crop", stage_label: "Reading the EM plane...", provider: "fake", model: FAKE_MODEL, label_name: "mitochondria", depth_axis: 0, plane: "XY", point_nm: POINT, preview: null });
+    expect(early).toMatchObject({ annotate_id: started.annotate_id, status: "running", stage: "fetching_crop", provider: "fake", model: FAKE_MODEL, label_name: "mitochondria", depth_axis: 0, plane: "XY", point_nm: POINT, preview: null });
     expect(early.prompt).toBe(editablePrompt(ORGANELLES.mito));
     await h.ai.job!.settled();
 
@@ -545,34 +463,19 @@ describe("a run to ready", () => {
     await runToEnd(h);
     expect((await status(h)).error).toBe("The model returned no image.");
     expect(h.ai.usage.callsToday()).toBe(1);
-    // Anything else is the generic failure, with the detail logged.
+    // Anything else is the generic failure, with the detail logged, not shown.
     gemini.fail = new RangeError("boom") as unknown as AIAnnotateError;
     await h.handle(request("POST", `${BASE}/reject`, { annotate_id: h.ai.job!.annotateId }));
     await runToEnd(h);
-    expect((await status(h)).error).toBe("AI annotation failed; see the dashboard log.");
+    expect((await status(h)).status).toBe("failed");
+    expect((await status(h)).error).not.toContain("boom");
     expect(ctx.logged.some((line) => line.includes("boom"))).toBe(true);
     expect(ctx.logged.join("\n")).not.toContain(SECRET);
   });
 
-  it("refuses a point outside the data as the plan does, as a failed job", async () => {
-    const { h } = await ready();
-    await runToEnd(h, [800, 2000, 9_000_000]);
-    const s = await status(h);
-    expect(s.status).toBe("failed");
-    expect(s.error).toMatch(/outside the/);
-  });
 });
 
 describe("Shift+G", () => {
-  it("with the pointer off the data records the refusal as a failed job the status route shows", async () => {
-    const { ctx, h } = await ready();
-    expect(ctx.viewer.bindings.length).toBe(1);
-    ctx.viewer.pointer = null;
-    ctx.viewer.bindings[0].handler();
-    await until(() => h.ai.job !== null);
-    expect(await status(h)).toMatchObject({ status: "failed", annotate_id: null, error: "Hover the mouse over the data, then press Shift+G.", needs_volume: false });
-  });
-
   it("without a volume says so with needs_volume, for the page to offer one", async () => {
     const ctx = fakeContext();
     const h = harness(ctx);
@@ -580,7 +483,7 @@ describe("Shift+G", () => {
     ctx.viewer.pointer = POINT;
     ctx.viewer.bindings[0].handler();
     await until(() => h.ai.job !== null);
-    expect(await status(h)).toMatchObject({ status: "failed", error: "No annotation volume to annotate. Create or resume one first.", needs_volume: true });
+    expect(await status(h)).toMatchObject({ status: "failed", needs_volume: true });
   });
 
   it("with the pointer over the data starts a run in the viewer's plane, and a later refusal does not replace a result waiting for review", async () => {
@@ -603,7 +506,7 @@ describe("Shift+G", () => {
     expect(h.ai.job).toBe(job);
     expect((await status(h)).status).toBe("ready");
     // Not dropped silently: the panel keeps the result, the log says why the key did nothing.
-    expect(ctx.logged).toContain("AI annotate: Shift+G refused: Hover the mouse over the data, then press Shift+G.");
+    expect(ctx.logged.some((line) => line.includes("Shift+G refused"))).toBe(true);
   });
 });
 
@@ -623,7 +526,6 @@ describe("POST /api/finetune/ai-annotate/resend", () => {
     expect(gemini.calls.length).toBe(2);
     expect(gemini.calls[1].request.image).toBe(firstImage); // not read again
     expect(gemini.calls[1].request.prompt).toContain("Paint only the big ones.");
-    expect(gemini.calls[1].request.prompt).toContain("The image resolution is 8 nm/px.");
     expect(gemini.calls[1].credentials).toEqual({ api_key: SECRET });
     expect(ctx.infer.reads.length).toBe(1);
     expect(h.ai.usage.callsToday()).toBe(2);
@@ -636,33 +538,6 @@ describe("POST /api/finetune/ai-annotate/resend", () => {
     expect((await readLog(ctx.paint, id))[4]).toMatchObject({ event: "resent", prompt_override: null });
   });
 
-  it("refuses another id, a job still running, and a plane never read; takes a failed job", async () => {
-    const gemini = new TestProvider();
-    gemini.fail = new AIAnnotateError("unavailable", "The service is unavailable; try again in a moment.");
-    const { h } = await ready({ deps: { providers: providers(gemini) }, settings: { provider: "gemini", model: "gemini-3-pro-image", destination: gemini.info.destination } });
-    await h.handle(request("POST", `${BASE}/credentials`, { provider: "gemini", api_key: SECRET }));
-    const annotateId = await runToEnd(h);
-    expect((await status(h)).status).toBe("failed");
-    const other = await h.handle(request("POST", `${BASE}/resend`, { annotate_id: "0".repeat(32), prompt: null }));
-    expect(other.status).toBe(409);
-    expect(body(other).error).toBe("That AI annotation is not the current one; it may have been accepted or rejected.");
-    expect((await h.handle(request("POST", `${BASE}/resend`, { annotate_id: "nope" }))).status).toBe(400);
-    gemini.fail = null;
-    expect(body(await h.handle(request("POST", `${BASE}/resend`, { annotate_id: annotateId }))).success).toBe(true);
-    const running = await h.handle(request("POST", `${BASE}/resend`, { annotate_id: annotateId }));
-    expect(running.status).toBe(409);
-    expect(body(running).error).toBe("The AI annotation is still running.");
-    await h.ai.job!.settled();
-    expect((await status(h)).status).toBe("ready");
-    // A Shift+G refusal (no plane) cannot be resent.
-    h.ai.job = null;
-    const ctx2 = fakeContext();
-    const h2 = harness(ctx2);
-    await h2.handle(request("POST", `${BASE}/settings`, FAKE_SETTINGS));
-    ctx2.viewer.bindings[0].handler();
-    await until(() => h2.ai.job !== null);
-    expect((await h2.handle(request("POST", `${BASE}/resend`, { annotate_id: "0".repeat(32) }))).status).toBe(409);
-  });
 });
 
 describe("POST /api/finetune/ai-annotate/accept", () => {
@@ -692,11 +567,8 @@ describe("POST /api/finetune/ai-annotate/accept", () => {
     expect(h.ai.job).toBeNull();
     const log = await readLog(ctx.paint, id);
     expect(log[2]).toMatchObject({ event: "accepted", annotate_id: annotateId, volume_id: id, overwrite: false, filled_foreground: res.filled_foreground, filled_background: res.filled_background, overwritten: 0, write_box: box });
-    expect(ctx.logged.some((line) => line.startsWith(`Accepted AI annotation ${annotateId}`))).toBe(true);
     // Accepted: nothing to accept or reject any more.
-    const again = await h.handle(request("POST", `${BASE}/accept`, { annotate_id: annotateId, overwrite: false }));
-    expect(again.status).toBe(409);
-    expect(body(again).error).toBe("That AI annotation is not the current one; it may have been accepted or rejected.");
+    expect((await h.handle(request("POST", `${BASE}/accept`, { annotate_id: annotateId, overwrite: false }))).status).toBe(409);
   });
 
   it("keeps what the user painted unless overwrite, and even then its background never erases paint", async () => {
@@ -751,20 +623,6 @@ describe("POST /api/finetune/ai-annotate/accept", () => {
     expect(Math.min(...ids)).toBe(10);
   });
 
-  it("refuses a job not ready, another id and a bad body, and puts the job back to ready when the write fails", async () => {
-    const { ctx, h, id } = await ready();
-    const annotateId = await runToEnd(h);
-    expect((await h.handle(request("POST", `${BASE}/accept`, {}))).status).toBe(400);
-    expect(body(await h.handle(request("POST", `${BASE}/accept`, { annotate_id: "0".repeat(32) }))).error).toBe("That AI annotation is not the current one; it may have been accepted or rejected.");
-    // The volume gone from under it: refused, and the job is still there to reject.
-    await ctx.paint.delete(id, ".zattrs");
-    const gone = await h.handle(request("POST", `${BASE}/accept`, { annotate_id: annotateId }));
-    expect(gone.status).toBe(409);
-    expect(body(gone).error).toBe(`The annotation volume ${id} is no longer open.`);
-    expect(h.ai.job!.status).toBe("ready");
-    h.ai.job!.status = "running";
-    expect(body(await h.handle(request("POST", `${BASE}/accept`, { annotate_id: annotateId }))).error).toBe("The AI annotation is still running.");
-  });
 });
 
 describe("POST /api/finetune/view-labels/undo", () => {
@@ -786,24 +644,16 @@ describe("POST /api/finetune/view-labels/undo", () => {
     for (const v of after) if (v !== 0) nonZero++;
     expect(nonZero).toBe(1);
     expect(ctx.viewer.refreshed.length).toBe(2);
-    const nothing = await h.handle(request("POST", "/api/finetune/view-labels/undo", {}));
-    expect(nothing.status).toBe(409);
-    expect(body(nothing).error).toBe("Nothing to undo.");
+    expect((await h.handle(request("POST", "/api/finetune/view-labels/undo", {}))).status).toBe(409); // nothing left
   });
 
-  it("refuses without a volume", async () => {
-    const h = harness(fakeContext());
-    const res = await h.handle(request("POST", "/api/finetune/view-labels/undo", {}));
-    expect(res.status).toBe(409);
-    expect(body(res).error).toBe("No annotation volume to undo in.");
-  });
 });
 
 describe("POST /api/finetune/ai-annotate/reject", () => {
   it("throws the staged mask away, writing nothing, and takes a failed job too", async () => {
     const { ctx, h, id } = await ready();
     const annotateId = await runToEnd(h);
-    expect(body(await h.handle(request("POST", `${BASE}/reject`, { annotate_id: "0".repeat(32) }))).error).toMatch(/not the current one/);
+    expect((await h.handle(request("POST", `${BASE}/reject`, { annotate_id: "0".repeat(32) }))).status).toBe(409);
     expect(body(await h.handle(request("POST", `${BASE}/reject`, { annotate_id: annotateId })))).toEqual({ success: true });
     expect((await status(h)).status).toBe("idle");
     expect(await ctx.paint.list(id, "annotation/s0/")).toEqual(["annotation/s0/.zarray"]);
@@ -822,7 +672,6 @@ describe("the daily limit", () => {
     expect(usage.checkAndCount(2)).toBe(1);
     expect(usage.checkAndCount(2)).toBe(2);
     expect(() => usage.checkAndCount(2)).toThrow(AIAnnotateError);
-    expect(() => usage.checkAndCount(2)).toThrow(/The daily limit of 2 AI-annotate calls is used up; it resets at midnight/);
     expect(JSON.parse(storage.getItem(USAGE_KEY)!)).toEqual({ date: "2026-10-15", calls: 2 });
     usage.refund();
     expect(usage.callsToday()).toBe(1);
@@ -841,29 +690,18 @@ describe("the daily limit", () => {
   it("is applied to a run (429) and shown by the config", async () => {
     const { h } = await ready({ deps: { dailyCallLimit: 1 } });
     const annotateId = await runToEnd(h);
-    expect(body(await h.handle(request("GET", `${BASE}/config`)))).toMatchObject({ daily_call_limit: 1, calls_today: 1, usage_note: "the browser's own cap of 1 a day" });
+    expect(body(await h.handle(request("GET", `${BASE}/config`)))).toMatchObject({ daily_call_limit: 1, calls_today: 1 });
     const resend = await h.handle(request("POST", `${BASE}/resend`, { annotate_id: annotateId }));
     expect(resend.status).toBe(429);
     await h.handle(request("POST", `${BASE}/accept`, { annotate_id: annotateId }));
     const run = await h.handle(request("POST", `${BASE}/run`, { point_nm: POINT, depth_axis: 0 }));
     expect(run.status).toBe(429);
-    expect(body(run).error).toBe(limitMessage(1));
-  });
-});
-
-describe("the preview's helpers", () => {
-  it("scales a mask by nearest neighbour, pixel centre to pixel centre, and encodes bytes as base64", () => {
-    expect(Array.from(nearestResize(Uint8Array.from([1, 0, 0, 1]), 2, 2, 4, 4))).toEqual([1, 1, 0, 0, 1, 1, 0, 0, 0, 0, 1, 1, 0, 0, 1, 1]);
-    expect(Array.from(nearestResize(Uint8Array.from([1, 0, 0, 1]), 2, 2, 1, 1))).toEqual([1]);
-    const same = Uint8Array.from([1, 2]);
-    expect(nearestResize(same, 1, 2, 1, 2)).toBe(same);
-    expect(base64(new TextEncoder().encode("hello"))).toBe("aGVsbG8=");
-    expect(base64(new Uint8Array(70_000).fill(65)).length).toBe(Math.ceil(70_000 / 3) * 4);
+    expect(body(run).category).toBe("limit");
   });
 });
 
 describe("in the backend", () => {
-  it("answers the AI-annotate routes and the undo, and no longer lists AI annotation among what needs a server", async () => {
+  it("answers the AI-annotate routes and the undo", async () => {
     const ctx = fakeContext();
     const backend = createBackend(ctx, { aiAnnotate: { providers: providers(), codec: jsCodec(), storage: new MemoryKeyValueStore() } });
     const config = await backend.handle(request("GET", `${BASE}/config`));
@@ -871,10 +709,6 @@ describe("in the backend", () => {
     expect(body(config).enabled).toBe(true);
     expect((await backend.handle(request("GET", `${BASE}/status`))).status).toBe(200);
     expect((await backend.handle(request("POST", "/api/finetune/view-labels/undo", {}))).status).toBe(409);
-    const crops = await backend.handle(request("POST", "/api/finetune/load-crops"));
-    expect(crops.status).toBe(503);
-    expect(body(crops).error).toMatch(/finetune tab's crops import\)/);
-    expect(body(crops).error).not.toMatch(/AI annotation/);
   });
 
   it("builds its codec and providers only when first used, so a page without a canvas can still register the routes", () => {

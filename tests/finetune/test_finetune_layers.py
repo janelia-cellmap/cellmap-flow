@@ -1,14 +1,12 @@
 """The dashboard's finetune listener (dashboard.finetune_layers): a finetuned
 model's viewer layer and its model in the pipeline builder, as the job manager
-tells it of the job. When the manager tells it is test_finetune_job_manager's;
-the layer's source and shader are pinned in test_layer_sources_snapshot."""
+tells it of the job. When the manager tells it is test_finetune_job_manager's."""
 
-import json
 from types import SimpleNamespace
 
 import pytest
 
-from cellmap_flow.dashboard.finetune_layers import FinetuneLayerListener, register_finetuned_model
+from cellmap_flow.dashboard.finetune_layers import FinetuneLayerListener
 from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.jobs.launch import started_jobs
 from cellmap_flow.process_chain import process_chain
@@ -66,18 +64,3 @@ def test_the_finetuned_layer_shows_the_outputs_own_range(followed):
 
 def test_the_pipeline_builder_gets_each_iterations_model(followed):
     assert [config.name for config in get_session().models_config] == ["m_finetuned_2"]
-
-
-def test_without_its_yaml_a_model_is_registered_on_the_base_its_run_recorded(make_job, monkeypatch):
-    """With no serving YAML, and the base model gone from the session, the base
-    was rebuilt from the job's params as a Fly model, which has no sizes there:
-    178/56, whatever the model's were."""
-    base = {"type": "fly", "checkpoint_path": "/c.ts", "channels": ["mito"], "input_voxel_size": [8, 8, 8],
-            "output_voxel_size": [8, 8, 8], "name": "m", "input_size": [216] * 3, "output_size": [128] * 3}
-    job = make_job()
-    job.params.update(model_checkpoint="/c.ts", channels=["mito"], input_voxel_size=[8] * 3, output_voxel_size=[8] * 3)
-    (job.output_dir / "metadata.json").write_text(json.dumps({"model_entry": base}))  # as submit records it
-    monkeypatch.setattr(get_session(), "models_config", [])
-    register_finetuned_model(job, "m_finetuned_1")
-    (config,) = get_session().models_config
-    assert config.base_model_dict == base

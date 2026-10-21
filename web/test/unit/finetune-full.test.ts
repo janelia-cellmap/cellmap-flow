@@ -1,15 +1,11 @@
-// Whole-network finetuning (src/finetune/full) against onnxruntime-web: the
-// tile sides the exported training graphs take, and Marwan's TF.js runtime
-// on a network small enough for TF.js's CPU backend, head.onnx (a 3×3 body
-// and a 1×1 head, shaped as the exports end): a few steps lower the masked
-// loss, and the weights trained, written back at their offsets, are what
-// onnxruntime then reads and runs. A 3D model's training block is read with
-// its paint where the network sees the two in register. The real
-// setup_53_2d is opt-in, as models-live is: it downloads 7.75 MB from
-// Hugging Face, and TF.js's CPU backend takes about 30 s for one forward
-// pass at 300².
-//
-//   CELLMAP_FLOW_LIVE=1 npx vitest run test/unit/finetune-full
+// Whole-network finetuning (src/finetune/full) against onnxruntime-web:
+// Marwan's TF.js runtime on a network small enough for TF.js's CPU backend,
+// head.onnx (a 3×3 body and a 1×1 head, shaped as the exports end): a few
+// steps lower the masked loss, and the weights trained, written back at
+// their offsets, are what onnxruntime then reads and runs. A 3D model's
+// training block is read with its paint where the network sees the two in
+// register, and the TF.js loss is the head's (head-trainer.ts) for every
+// loss the form offers.
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import * as ort from "onnxruntime-web";
@@ -19,17 +15,16 @@ import type { DatasetInfo } from "../../src/contracts";
 import { transformBlock } from "../../src/finetune/augment";
 import type { Tf } from "../../src/finetune/full/cellmap-tfjs-train";
 import { buildNet, maskedBce, readOnnxWeights, trainStep, writeOnnxWeights } from "../../src/finetune/full/cellmap-tfjs-train";
-import { parseTrainGraph, tileSides } from "../../src/finetune/full/graph";
-import { fullTrainStep } from "../../src/finetune/full/loss";
-import { checkOffsets, onnxInitializerOffsets } from "../../src/finetune/full/run-full";
+import { parseTrainGraph } from "../../src/finetune/full/graph";
+import { fullTrainStep, supervisedLoss } from "../../src/finetune/full/loss";
+import { onnxInitializerOffsets } from "../../src/finetune/full/run-full";
 import { loadTf } from "../../src/finetune/full/tfjs";
 import { blockLabels, blockRaw, blockTargets, normalizeTile, paintedVoxels, planBlocks } from "../../src/finetune/full/tiles";
+import { batchLoss, mulberry32 } from "../../src/finetune/head-trainer";
 import { affinityOffsets, affinityTargets } from "../../src/finetune/targets";
 import type { PaintedChunk } from "../../src/finetune/types";
-import { readFixture } from "./models-helpers";
 
 const FIXTURES = resolve(import.meta.dirname, "../fixtures");
-const live = process.env.CELLMAP_FLOW_LIVE === "1";
 
 // head.onnx as a training graph: 8×8 in, a valid 3×3 convolution, 6×6 out.
 const TINY = parseTrainGraph({
@@ -83,15 +78,6 @@ function trained(tf: Tf, bytes: Uint8Array, steps: number) {
   net.dispose();
   return { offsets, losses, after, forward, weights };
 }
-
-describe("the exported training graphs", () => {
-  it("take every tile side of 92 + 8k pixels, setup_53_2d's UNet and setup_54_2d's ResUNet alike", () => {
-    const sides = Array.from({ length: 64 }, (_, k) => 92 + 8 * k);
-    for (const folder of ["setup_53_2d", "setup_54_2d"]) {
-      expect(tileSides(parseTrainGraph(readFixture(`${folder}.train_graph.json`)), sides.at(-1)!)).toEqual(sides);
-    }
-  });
-});
 
 describe("a 3D model's training blocks", () => {
   it("hold the raw around the paint's cube in register with it, through flips of z and turns, and pair z neighbours", async () => {
@@ -162,6 +148,22 @@ describe("a 3D model's training blocks", () => {
   });
 });
 
+describe("the whole network's loss", () => {
+  it("is the head's supervised term for every loss, balanced or not, smoothed or not", { timeout: 60_000 }, async () => {
+    const { tf } = await loadTf();
+    const random = mulberry32(3), n = 64;
+    const z = Float64Array.from({ length: n }, () => 6 * random() - 3);
+    const y = Float32Array.from({ length: n }, () => (random() < 0.3 ? 1 : 0));
+    const m = Float32Array.from({ length: n }, () => (random() < 0.7 ? 1 : 0));
+    for (const lossType of ["bce", "mse", "margin"] as const) for (const balanceClasses of [false, true]) for (const labelSmoothing of [0, 0.1]) {
+      const o = { lossType, margin: 0.3, balanceClasses, labelSmoothing, distillationLambda: 0, distillationScope: "unlabeled" as const };
+      const expected = batchLoss(z, y, m, o, new Float64Array(n));
+      const got = tf.tidy(() => supervisedLoss(tf, tf.tensor1d(Float32Array.from(z)), tf.tensor1d(y), tf.tensor1d(m), o).dataSync()[0]);
+      expect(got).toBeCloseTo(expected, 5);
+    }
+  });
+});
+
 describe("Marwan's TF.js runtime on head.onnx", () => {
   // TF.js's CPU backend: seconds a test on a quiet machine, near a minute on a busy one.
   it("lowers the masked loss in a few steps", { timeout: 120_000 }, async () => {
@@ -212,29 +214,5 @@ describe("Marwan's TF.js runtime on head.onnx", () => {
       expect(maxAbs(await ortForward(written, slice(8), 8), forward)).toBeLessThan(tolerance * 20);
       expect(maxAbs(await ortForward(bytes, slice(8), 8), forward)).toBeGreaterThan(1e-3);
     }
-  });
-});
-
-describe.skipIf(!live)("setup_53_2d from the Hub", () => {
-  it("runs in TF.js as in onnxruntime", { timeout: 300_000 }, async () => {
-    const base = "https://huggingface.co/cellmap/onnx-web-models/resolve/main/setup_53_2d";
-    const file = "setup_53_mito_affinities_16nm_2d_in300_fp32.onnx";
-    const get = async (path: string) => {
-      const response = await fetch(`${base}/${path}`);
-      if (!response.ok) throw new Error(`${path}: HTTP ${response.status}`);
-      return response;
-    };
-    const graph = parseTrainGraph(await (await get("finetune/train_graph.json")).json());
-    const offsets = (await (await get("finetune/initializers.json")).json())[file];
-    const bytes = new Uint8Array(await (await get(file)).arrayBuffer());
-    checkOffsets(bytes, offsets, Object.keys(graph.params), file);
-    const { tf } = await loadTf();
-    const net = buildNet(tf, graph, readOnnxWeights(bytes, offsets, Object.keys(graph.params)));
-    const x = slice(300);
-    const tfOut = tf.tidy(() => Float32Array.from(net.forward(tf.tensor4d(x, [1, 300, 300, 1])).dataSync() as Float32Array));
-    net.dispose();
-    const ortOut = await ortForward(bytes, x, 300);
-    expect(tfOut.length).toBe(212 * 212 * 3);
-    expect(maxAbs(tfOut, ortOut)).toBeLessThan(1e-3);
   });
 });

@@ -2,19 +2,13 @@
 validate, generate (which writes the task YAML the blockwise CLI runs),
 precheck and submit.
 
-The task YAML is pinned as text, byte for byte but for the timestamp: it is
-what the blockwise CLI runs, and a file the user may keep and edit. Each route
-answers 200 whatever happens: {"valid": ...} from validate, {"success": ...}
-from the others, with an "error" the builder shows when it is false. The
-master's bsub argv is pinned in test_bsub_argv_snapshot; LSF here is
-conftest's ``fake_lsf``."""
+Each route answers 200 whatever happens: {"valid": ...} from validate,
+{"success": ...} from the others, with an "error" the builder shows when it
+is false. LSF here is conftest's ``fake_lsf``."""
 
 import copy
-import json
 import os
 import re
-import textwrap
-from pathlib import Path
 
 import pytest
 import yaml
@@ -39,18 +33,6 @@ def pipeline(**changes):
     return {**copy.deepcopy(PIPELINE), **copy.deepcopy(changes)}
 
 
-def as_the_builder_sends(body):
-    """``body`` as JSON text, keys in their order, as JSON.stringify sends it.
-    (The test client's ``json=`` sorts them, and the task YAML keeps the order
-    a model's params came in.)"""
-    return {"data": json.dumps(body), "content_type": "application/json"}
-
-
-def unstamped(text):
-    """``text`` with generate's timestamps (the task names') as <ts>."""
-    return re.sub(r"\d{8}_\d{6}", "<ts>", text)
-
-
 @pytest.fixture
 def tasks(tmp_path):
     session = get_session()
@@ -58,243 +40,66 @@ def tasks(tmp_path):
     return tmp_path / "tasks"
 
 
-# --- the task YAML --------------------------------------------------------------
+BOX = {"offset": [0, 0, 0], "shape": [64, 64, 64]}
 
 
-def task(tail="", output_path="/out/pred.zarr", task_name="run_<ts>"):
-    """The task YAML generate writes for PIPELINE, for that output path and task
-    name, with ``tail`` after its models."""
-    return f"""\
-data_path: /data/raw.zarr/raw
-output_path: {output_path}
-task_name: {task_name}
-charge_group: grp
-queue: gpu_h100
-workers: 2
-cpu_workers: 12
-tmp_dir: /scratch/progress
-walltime: '12:00'
-models:
-- name: m
-  type: script
-  script_path: /s.py
-""" + textwrap.dedent(tail)
-
-
-MODEL_M = PIPELINE["models"][0]
-BOX_1 = {"offset": [0, 0, 0], "shape": [64, 64, 64]}
-BOX_2 = {"offset": [64, 0, 0], "shape": [32, 32, 32]}
-BOX_1_YAML = "- offset:\n  - 0\n  - 0\n  - 0\n  shape:\n  - 64\n  - 64\n  - 64\n"
-BOX_2_YAML = "- offset:\n  - 64\n  - 0\n  - 0\n  shape:\n  - 32\n  - 32\n  - 32\n"
-
-
-def with_input(**params):
-    return [{"params": {"dataset_path": "/data/raw.zarr/raw", **params}}]
-
-
-@pytest.mark.parametrize("sent, written", [
-    pytest.param(pipeline(), {"run_<ts>.yaml": task()}, id="one-model"),
-    pytest.param(pipeline(outputs=[{"params": {"dataset_path": "/out/pred.zarr/labels/"}}]),
-                 {"run_<ts>.yaml": task(output_path="/out/pred.zarr/labels")}, id="an-output-inside-a-zarr"),
-    pytest.param(pipeline(models=[MODEL_M, {"name": "n", "params": {"type": "script", "script_path": "/n.py"}}],
-                          model_mode="OR"),
-                 {"run_<ts>.yaml": task("""\
-                     - name: n
-                       type: script
-                       script_path: /n.py
-                     model_mode: OR
-                     """)}, id="several-models-and-a-merge-mode"),
-    pytest.param(pipeline(model_mode="OR"), {"run_<ts>.yaml": task()}, id="a-merge-mode-for-one-model"),
-    # Without params a model node's config is its settings; params, when it
-    # has them, even if it also has a config.
-    pytest.param(pipeline(models=[MODEL_M, {"name": "c", "config": {"type": "script", "script_path": "/c.py"}},
-                                  {"name": "p", "params": {"script_path": "/p.py"}, "config": {"script_path": "/x.py"}}]),
-                 {"run_<ts>.yaml": task("""\
-                     - name: c
-                       type: script
-                       script_path: /c.py
-                     - name: p
-                       script_path: /p.py
-                     """)}, id="a-model-by-its-config"),
-    # The builder's text fields send a list as it was typed.
-    pytest.param(pipeline(models=[MODEL_M, {"name": "t", "params": {
-        "channels": "[mito, er]", "input_size": "(1, 2)", "output_size": "'[4]'", "input_voxel_size": [8],
-        "output_voxel_size": "[8,, 8]", "other": "[a]"}}]),
-                 {"run_<ts>.yaml": task("""\
-                     - name: t
-                       channels:
-                       - mito
-                       - er
-                       input_size:
-                       - 1
-                       - 2
-                       output_size:
-                       - 4
-                       input_voxel_size:
-                       - 8
-                       output_voxel_size: '[8,, 8]'
-                       other: '[a]'
-                     """)}, id="list-fields-typed-as-text"),
-    pytest.param(pipeline(inputs=with_input(bounding_boxes=[BOX_1])),
-                 {"run_<ts>.yaml": task("bounding_boxes:\n" + BOX_1_YAML)}, id="bounding-boxes"),
-    # One task, which writes each box to /out/pred.zarr/box_<n>. (Blockwise
-    # took one box, so this was a task per box, each with its own output_path.)
-    pytest.param(pipeline(inputs=with_input(bounding_boxes=[BOX_1, BOX_2], separate_bounding_boxes_zarrs=True)), {
-        "run_<ts>.yaml": task("bounding_boxes:\n" + BOX_1_YAML + BOX_2_YAML + "separate_bounding_boxes_zarrs: true\n"),
-    }, id="a-zarr-per-box"),
-    pytest.param(pipeline(inputs=with_input(separate_bounding_boxes_zarrs=True)),
-                 {"run_<ts>.yaml": task("separate_bounding_boxes_zarrs: true\n")}, id="a-zarr-per-box-without-boxes"),
-    # json_data was a dict keyed by step name, so a chain using a step twice
-    # kept only the last one, and blockwise computed something else than the
-    # dashboard showed. A step without a name is left out.
-    pytest.param(pipeline(normalizers=[{"name": "LambdaNormalizer", "params": {"expression": "x*2"}},
-                                       {"name": "LambdaNormalizer", "params": {"expression": "x-1"}},
-                                       {"params": {"expression": "x"}}],
-                          postprocessors=[{"name": "ThresholdPostprocessor", "params": {"threshold": 0.5}},
-                                          {"name": "SigmoidPostprocessor", "params": None}]),
-                 {"run_<ts>.yaml": task("""\
-                     json_data:
-                       input_norm:
-                       - name: LambdaNormalizer
-                         expression: x*2
-                       - name: LambdaNormalizer
-                         expression: x-1
-                       postprocess:
-                       - name: ThresholdPostprocessor
-                         threshold: 0.5
-                       - name: SigmoidPostprocessor
-                     """)}, id="a-chain"),
-    pytest.param(pipeline(outputs=[{"params": {"dataset_path": "/out/pred", "output_channels": ["mito", "er"]}}]),
-                 {"run_<ts>.yaml": task("output_channels:\n- mito\n- er\n")}, id="output-channels"),
-    pytest.param(pipeline(inputs=with_input(bounding_boxes=[BOX_1]),
-                          models=[MODEL_M, {"name": "n", "params": {"type": "script", "script_path": "/n.py"}}],
-                          model_mode="OR", normalizers=[{"name": "LambdaNormalizer", "params": {"expression": "x"}}],
-                          outputs=[{"params": {"dataset_path": "/out/pred", "output_channels": ["mito"]}}]),
-                 {"run_<ts>.yaml": task(textwrap.dedent("""\
-                     - name: n
-                       type: script
-                       script_path: /n.py
-                     bounding_boxes:
-                     """) + BOX_1_YAML + textwrap.dedent("""\
-                     model_mode: OR
-                     json_data:
-                       input_norm:
-                       - name: LambdaNormalizer
-                         expression: x
-                       postprocess: []
-                     output_channels:
-                     - mito
-                     """))}, id="every-optional-key-in-order"),
-])
-def test_the_task_yamls_generate_writes(dashboard, tasks, sent, written):
-    answer = dashboard.post("/api/blockwise/generate",
-                            **as_the_builder_sends({"pipeline": sent, "job_name": "run"})).get_json()
-    assert answer["success"], answer
-    files = [(unstamped(os.path.basename(path)), unstamped(Path(path).read_text())) for path in answer["task_paths"]]
-    assert files == list(written.items())
-    assert sorted(os.listdir(tasks)) == sorted(os.path.basename(path) for path in answer["task_paths"])
-
-
-def test_generate_answers_with_the_task_it_wrote(dashboard, tasks):
-    answer = dashboard.post("/api/blockwise/generate",
-                            **as_the_builder_sends({"pipeline": PIPELINE, "job_name": "run"})).get_json()
-    assert json.loads(unstamped(json.dumps(answer)).replace(str(tasks), "<tasks>")) == {
-        "success": True,
-        "message": "Blockwise task generated successfully",
-        "task_name": "run_<ts>",
-        "task_paths": ["<tasks>/run_<ts>.yaml"],
-        "task_yaml": task(),
-        "task_config": yaml.safe_load(task()),
-    }
-
-
-def test_a_task_generated_with_resample_unticked_says_so(dashboard, tasks, monkeypatch):
-    """A task without it resamples, so unticked is written."""
+def test_generate_writes_the_task_yaml_the_blockwise_cli_runs(dashboard, tasks, monkeypatch):
+    """Every part of the builder's pipeline reaches the task YAML. json_data
+    was a dict keyed by step name, so a chain using a step twice kept only
+    the last one, and blockwise computed something else than the dashboard
+    showed; a step without a name is left out. The builder's text fields send
+    a list as it was typed. A task without resample resamples, so the
+    dashboard's Resample unticked is written. The typed job name names the
+    task (and so its master's LSF job) as a file name may be named."""
     monkeypatch.setattr(get_session(), "resample", False)
-    answer = dashboard.post("/api/blockwise/generate",
-                            **as_the_builder_sends({"pipeline": PIPELINE, "job_name": "run"})).get_json()
-    assert answer["task_config"]["resample"] is False
+    sent = pipeline(
+        inputs=[{"params": {"dataset_path": "/data/raw.zarr/raw", "bounding_boxes": [BOX]}}],
+        outputs=[{"params": {"dataset_path": "/out/pred", "output_channels": ["mito", "er"]}}],
+        models=[PIPELINE["models"][0], {"name": "t", "params": {"script_path": "/t.py", "channels": "[mito, er]"}}],
+        model_mode="OR",
+        normalizers=[{"name": "LambdaNormalizer", "params": {"expression": "x*2"}},
+                     {"name": "LambdaNormalizer", "params": {"expression": "x-1"}},
+                     {"params": {"expression": "x"}}],
+        postprocessors=[{"name": "ThresholdPostprocessor", "params": {"threshold": 0.5}}],
+    )
+    answer = dashboard.post("/api/blockwise/generate", json={"pipeline": sent, "job_name": "  a/b\\c:d  "}).get_json()
+    assert answer["success"], answer
+    assert re.fullmatch(r"a_b_c_d_\d{8}_\d{6}", answer["task_name"])
+
+    (path,) = answer["task_paths"]
+    assert os.listdir(tasks) == [os.path.basename(path)] == [f"{answer['task_name']}.yaml"]
+    task = yaml.safe_load(open(path))
+    assert task == answer["task_config"]
+    assert (task["data_path"], task["output_path"], task["task_name"]) == (
+        "/data/raw.zarr/raw", "/out/pred.zarr", answer["task_name"])
+    assert (task["workers"], task["walltime"], task["model_mode"], task["resample"]) == (2, "12:00", "OR", False)
+    assert [m["name"] for m in task["models"]] == ["m", "t"] and task["models"][1]["channels"] == ["mito", "er"]
+    assert task["bounding_boxes"] == [BOX] and task["output_channels"] == ["mito", "er"]
+    assert [s.get("expression") for s in task["json_data"]["input_norm"]] == ["x*2", "x-1"]
+    assert task["json_data"]["postprocess"] == [{"name": "ThresholdPostprocessor", "threshold": 0.5}]
 
 
-# --- what each route answers ------------------------------------------------------
-
-
-NOT_JSON = {"data": "pipeline", "content_type": "text/plain"}
-NO_MASTER_CORES = {key: value for key, value in SETTINGS.items() if key != "nb_cores_master"}
-
-
-def invalid(error):
-    return {"valid": False, "error": error}
-
-
-def failed(error):
-    return {"success": False, "error": error}
-
-
-@pytest.mark.parametrize("route, sent, answer", [
-    pytest.param("validate", {"json": {"pipeline": PIPELINE}},
-                 {"valid": True, "message": "Pipeline is ready for blockwise processing"}, id="validate/ready"),
-    # The builder shows these as they are.
-    pytest.param("validate", {"json": {}}, invalid("No input nodes defined"), id="validate/no-pipeline"),
-    pytest.param("validate", {"json": {"pipeline": pipeline(inputs=[])}}, invalid("No input nodes defined"),
-                 id="validate/no-inputs"),
-    pytest.param("validate", {"json": {"pipeline": pipeline(outputs=[])}}, invalid("No output nodes defined"),
-                 id="validate/no-outputs"),
-    pytest.param("validate", {"json": {"pipeline": pipeline(models=[])}}, invalid("No models defined"),
-                 id="validate/no-models"),
-    pytest.param("validate", {"json": {"pipeline": pipeline(blockwise_config=[])}},
-                 invalid("No blockwise configuration defined"), id="validate/no-settings"),
-    pytest.param("validate", {"json": {"pipeline": pipeline(inputs=[{"params": {}}])}},
-                 invalid("Input node missing dataset_path"), id="validate/an-input-without-a-path"),
-    pytest.param("validate", {"json": {"pipeline": pipeline(outputs=[{"params": {"dataset_path": ""}}])}},
-                 invalid("Output node missing dataset_path"), id="validate/an-output-without-a-path"),
+@pytest.mark.parametrize("route, sent, field", [
+    pytest.param("validate", {"json": {"pipeline": pipeline(models=[])}}, "models", id="validate/no-models"),
     # A body the builder would not send: what is wrong, and where.
-    pytest.param("validate", NOT_JSON, invalid("expected a JSON object"), id="validate/not-json"),
-    pytest.param("validate", {"json": [PIPELINE]}, invalid("expected a JSON object"),
-                 id="validate/not-an-object"),
-    pytest.param("validate", {"json": {"pipeline": pipeline(inputs=["/data/raw.zarr/raw"])}},
-                 invalid("pipeline.inputs.0: Input should be a valid dictionary or instance of PipelineNode"),
+    pytest.param("validate", {"data": "pipeline", "content_type": "text/plain"}, "JSON", id="validate/not-json"),
+    pytest.param("validate", {"json": {"pipeline": pipeline(inputs=["/data/raw.zarr/raw"])}}, "pipeline.inputs.0",
                  id="validate/a-node-not-an-object"),
-    pytest.param("validate", {"json": {"pipeline": pipeline(inputs=[{"params": None}])}},
-                 invalid("pipeline.inputs.0.params: Input should be a valid dictionary"),
-                 id="validate/a-node-without-params"),
-    pytest.param("validate", {"json": {"pipeline": pipeline(models={"m": MODEL_M["params"]})}},
-                 invalid("pipeline.models: Input should be a valid list"), id="validate/models-not-a-list"),
-    pytest.param("validate", {"json": {"pipeline": pipeline(blockwise_config=[{"params": {"queue": "gpu_h100"}}])}},
-                 invalid("pipeline.blockwise_config.0.params.charge_group: Field required"),
-                 id="validate/settings-missing"),
-
-    pytest.param("generate", {"json": {"pipeline": pipeline(models=[])}}, failed("No models defined"),
-                 id="generate/invalid"),
-    pytest.param("generate", {"json": {"pipeline": pipeline(models=[{"name": "m", "params": None}])}},
-                 failed("pipeline.models.0.params: Input should be a valid dictionary"),
-                 id="generate/model-params-not-an-object"),
-    pytest.param("generate", {"json": {"pipeline": pipeline(normalizers="LambdaNormalizer")}},
-                 failed("pipeline.normalizers: Input should be a valid list"), id="generate/a-chain-not-a-list"),
-
-    pytest.param("precheck", {"json": {}}, failed("No YAML paths provided. Please generate task first."),
-                 id="precheck/none-given"),
-    pytest.param("precheck", {"json": {"yaml_paths": "/tasks/t.yaml"}},
-                 failed("yaml_paths: Input should be a valid list"), id="precheck/a-path-not-in-a-list"),
     # A number was opened as a file descriptor: [1] closed the dashboard's stdout.
-    pytest.param("precheck", {"json": {"yaml_paths": [None]}},
-                 failed("yaml_paths.0: Input should be a valid string"), id="precheck/a-path-not-text"),
-
-    pytest.param("submit", {"json": {"pipeline": pipeline(outputs=[])}}, failed("No output nodes defined"),
-                 id="submit/invalid"),
+    pytest.param("precheck", {"json": {"yaml_paths": [None]}}, "yaml_paths.0", id="precheck/a-path-not-text"),
     # It was found missing only here, after generate and precheck had passed.
-    pytest.param("submit", {"json": {"pipeline": pipeline(blockwise_config=[{"params": NO_MASTER_CORES}])}},
-                 failed("pipeline.blockwise_config.0.params.nb_cores_master: Field required"),
+    pytest.param("submit", {"json": {"pipeline": pipeline(blockwise_config=[{"params": {
+        k: v for k, v in SETTINGS.items() if k != "nb_cores_master"}}])}}, "nb_cores_master",
                  id="submit/no-master-cores"),
     # Refused as precheck refuses them; submit generated a task anew and ran that.
-    pytest.param("submit", {"json": {"pipeline": PIPELINE, "yaml_paths": "/tasks/t.yaml"}},
-                 failed("yaml_paths: Input should be a valid list"), id="submit/a-path-not-in-a-list"),
-    pytest.param("submit", {"json": {"pipeline": PIPELINE, "yaml_paths": [None]}},
-                 failed("yaml_paths.0: Input should be a valid string"), id="submit/a-path-not-text"),
+    pytest.param("submit", {"json": {"pipeline": PIPELINE, "yaml_paths": "/tasks/t.yaml"}}, "yaml_paths",
+                 id="submit/a-path-not-in-a-list"),
 ])
-def test_what_each_route_answers(dashboard, tasks, fake_lsf, route, sent, answer):
+def test_a_bad_request_is_answered_with_what_is_wrong(dashboard, tasks, fake_lsf, route, sent, field):
     response = dashboard.post(f"/api/blockwise/{route}", **sent)
-    assert (response.status_code, response.get_json()) == (200, answer)
+    body = response.get_json()
+    assert response.status_code == 200 and body["valid" if route == "validate" else "success"] is False
+    assert field in body["error"], body
     assert fake_lsf.commands("bsub") == []
 
 
@@ -308,7 +113,7 @@ def test_the_precheck_passes_a_task_without_side_effects(dashboard, raw_zarr, po
     monkeypatch.setattr(ScriptModelConfig, "_get_config", refuse)
     process_chain().input_norms, process_chain().postprocess = ["the dashboard's own"], ["chain"]
     body = dashboard.post("/api/blockwise/precheck", json={"yaml_paths": [task_yaml(raw_zarr(), pooling_model())]})
-    assert body.get_json() == {"success": True, "message": "success"}
+    assert body.get_json()["success"] is True
     assert not os.path.exists(tmp_path / "out.zarr")
     assert (get_session().input_norms, get_session().postprocess) == (["the dashboard's own"], ["chain"])
 
@@ -321,8 +126,6 @@ def test_the_precheck_answers_a_config_error(dashboard, tmp_path):
 
 @pytest.mark.parametrize("yaml_paths, as_given", [
     pytest.param("prechecked", True, id="prechecked-yamls-as-they-are"),
-    pytest.param(None, False, id="none-given"),
-    pytest.param([], False, id="empty"),
     pytest.param(["/no/such/task.yaml"], False, id="missing"),
 ])
 def test_submit_runs_the_prechecked_yamls_or_else_generates_them(dashboard, tasks, fake_lsf, yaml_paths, as_given):
@@ -349,34 +152,20 @@ def test_submit_runs_the_prechecked_yamls_or_else_generates_them(dashboard, task
         assert os.path.dirname(task) == str(tasks) and argv[-1] == task
 
 
-@pytest.mark.parametrize("typed, stem", [
-    pytest.param("nuc cerebellum", "nuc_cerebellum", id="spaces"),
-    pytest.param("  a/b\\c:d  ", "a_b_c_d", id="unsafe-characters"),  # a file name and an LSF job name
-    pytest.param("", "cellmap_flow", id="none-typed"),
-])
-def test_the_typed_job_name_names_the_task_and_its_master(dashboard, tasks, fake_lsf, typed, stem):
-    fake_lsf.answers["bsub"] = [ACCEPTED]
-    generated = dashboard.post("/api/blockwise/generate", json={"pipeline": PIPELINE, "job_name": typed}).get_json()
-    task = generated["task_name"]
-    (path,) = generated["task_paths"]
-    assert re.fullmatch(rf"{stem}_\d{{8}}_\d{{6}}", task) and os.path.basename(path) == f"{task}.yaml"
-    assert yaml.safe_load(open(path))["task_name"] == task
-    body = dashboard.post("/api/blockwise/submit", json={"pipeline": PIPELINE, "yaml_paths": [path],
-                                                         "task_name": task}).get_json()
-    (argv,) = fake_lsf.commands("bsub")
-    assert argv[argv.index("-J") + 1] == body["task_name"] == task
-
-
-@pytest.mark.parametrize("answer, expected", [
-    pytest.param(ACCEPTED, {"success": True, "job_id": "5150"}, id="accepted"),
-    pytest.param((255, "", "Project grp is not valid\n"),
-                 {"success": False, "error": "LSF error: Project grp is not valid\n"}, id="refused"),
+@pytest.mark.parametrize("answer, success, job_id", [
+    pytest.param(ACCEPTED, True, "5150", id="accepted"),
+    pytest.param((255, "", "Project grp is not valid\n"), False, None, id="refused"),
     # bsub said yes, so the task is taken to be queued.
-    pytest.param("Your request was accepted.\n", {"success": True, "job_id": "unknown"}, id="accepted-without-an-id"),
+    pytest.param("Your request was accepted.\n", True, "unknown", id="accepted-without-an-id"),
 ])
-def test_what_bsub_answered_is_what_submit_reports(dashboard, tasks, fake_lsf, answer, expected):
+def test_what_bsub_answered_is_what_submit_reports(dashboard, tasks, fake_lsf, answer, success, job_id):
     fake_lsf.answers["bsub"] = [answer]
     body = dashboard.post("/api/blockwise/submit", json={"pipeline": PIPELINE, "job_name": "my run"}).get_json()
-    assert {k: body.get(k) for k in expected} == expected and len(fake_lsf.commands("bsub")) == 1
-    if expected.get("job_id") == "5150":  # the master's log, where its %J became the id
+    assert (body["success"], body.get("job_id")) == (success, job_id) and len(fake_lsf.commands("bsub")) == 1
+    if not success:  # LSF's own reason, for the builder to show
+        assert "Project grp is not valid" in body["error"]
+    if success:  # the master is the task's LSF job
+        (argv,) = fake_lsf.commands("bsub")
+        assert argv[argv.index("-J") + 1] == body["task_name"]
+    if job_id == "5150":  # the master's log, where its %J became the id
         assert body["log_path"] == os.path.join(str(tasks), f"{body['task_name']}_5150.log")

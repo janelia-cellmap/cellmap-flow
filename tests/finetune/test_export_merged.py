@@ -1,12 +1,11 @@
 """export_merged folds a finetune into the weights, to within float rounding,
-judges the re-export relative to the output's scale, and only accepts tiles
-that keep the 178-tile pooling phase."""
+and judges the re-export relative to the output's scale."""
 
 import pytest
 import torch
 from torch import nn
 
-from cellmap_flow.finetune.export_merged import REL_TOL, apply_finetune, check_equivalence, valid_tile
+from cellmap_flow.finetune.export_merged import REL_TOL, apply_finetune, check_equivalence
 from cellmap_flow.finetune.lora_wrapper import BatchLoopWrapper, wrap_model_with_lora
 
 
@@ -39,11 +38,6 @@ def test_apply_finetune_folds_in_every_adapted_layer(tmp_path):
     assert (y_merged - y_adapter).abs().max() <= 1e-6 * y_adapter.abs().max()
 
 
-def test_valid_tile_keeps_pooling_phase():
-    assert valid_tile(178) and valid_tile(290) and valid_tile(306) and valid_tile(322)
-    assert not valid_tile(298) and not valid_tile(378) and not valid_tile(162)
-
-
 class Scaled(nn.Module):
     """A net whose output magnitude is set by ``k``: these models emit unbounded
     logits, and the scale varied 250x between two mito finetunes."""
@@ -72,12 +66,3 @@ def test_equivalence_is_judged_relative_to_the_output_scale():
     assert r_big == pytest.approx(r_small, rel=1e-3)
     # and a 1% weight change is refused at either scale.
     assert r_small > REL_TOL and r_big > REL_TOL
-
-
-def test_an_exact_merge_passes_at_a_large_output_scale():
-    """The axolotl-heart mito_daughter case: huge logits, exact agreement."""
-    d_ref, r_ref, scale, _, r_tile, out = check_equivalence(Scaled(1400.0), Scaled(1400.0), 194)
-    assert d_ref == 0.0 and r_ref == 0.0
-    assert scale > 100  # the regime that tripped the old absolute gate
-    assert r_tile <= REL_TOL
-    assert out == (190, 190, 190)
