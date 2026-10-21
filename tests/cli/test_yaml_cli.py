@@ -29,14 +29,6 @@ EXAMPLES = sorted(glob.glob(os.path.join(ROOT, "example", "*.yaml")))
 RUN_CONFIGS = [p for p in EXAMPLES if "data_path" in (yaml.safe_load(open(p)) or {})]
 
 
-@pytest.fixture
-def placeholder_cellmap_folders(monkeypatch):
-    """CellMapModelConfig reads its folder's metadata.json when constructed, and
-    the examples use placeholder paths: what is checked is the YAML."""
-    cellmap_model = pytest.importorskip("cellmap_models.model_export.cellmap_model")
-    monkeypatch.setattr(cellmap_model, "CellmapModel", lambda folder_path: None)
-
-
 EXAMPLE_RUN_CONFIGS = [pytest.param(p, id=os.path.basename(p)) for p in RUN_CONFIGS]
 
 
@@ -155,7 +147,7 @@ def test_only_the_servers_that_started_are_shown(monkeypatch, caplog, failing, v
             raise JobStartError(f"{job_name} never reported a server address")
         started.append(job_name)
 
-    monkeypatch.setattr(yaml_cli, "start_hosts", start_hosts)
+    monkeypatch.setattr("cellmap_flow.jobs.launch.start_hosts", start_hosts)
     monkeypatch.setattr(startup, "generate_neuroglancer_url", lambda path, wrap_raw=True: viewers.append(path))
     models = [ScriptModelConfig(script_path=SCRIPT, name=n) for n in ("good", "bad")]
     with caplog.at_level(logging.ERROR):

@@ -241,26 +241,27 @@ def test_submit_shows_a_labelling_chain_as_segmentations(submit):
     }
 
 
-@pytest.mark.parametrize("launch", ["catalog", "huggingface"])
-def test_a_model_started_from_the_models_tab(servers, viewer, monkeypatch, launch):
+@pytest.mark.parametrize("source", ["catalog", "huggingface"])
+def test_a_model_started_from_the_models_tab(servers, viewer, monkeypatch, placeholder_cellmap_folders, source):
     from cellmap_flow.dashboard.services import launch
+    from cellmap_flow.models.registry import build_model
 
     started = []
 
-    def start_hosts(command, job_name, queue=None, charge_group=None):
+    def start_hosts(command, job_name, queue=None, charge_group=None, **_):
         started.append(job_name)
         job = SimpleNamespace(model_name=job_name, host=f"http://{job_name}:8000")
         get_session().jobs = get_session().jobs + [job]
         return job
 
-    monkeypatch.setattr(launch, "start_hosts", start_hosts)
+    monkeypatch.setattr("cellmap_flow.jobs.launch.start_hosts", start_hosts)
     get_session().jobs = []
     blob = PipelineSpec.from_steps(INPUT_NORM, []).to_url_blob()
     for name in MODELS:
-        if launch == "catalog":
-            launch.run_model(f"/models/{name}", name, blob)
+        if source == "catalog":
+            launch.run_model(build_model({"type": "cellmap", "folder_path": f"/models/{name}", "name": name}), blob)
         else:
-            launch.run_hf_model(f"cellmap/{name}", name, blob)
+            launch.run_model(build_model({"type": "huggingface", "repo": f"cellmap/{name}", "name": name}), blob)
 
     assert started == list(MODELS)
     assert _viewer(viewer, MODELS) == {
@@ -274,7 +275,7 @@ def test_a_model_started_from_the_models_tab(servers, viewer, monkeypatch, launc
     }
 
 
-def test_submits_layers_carry_the_dashboards_address_and_the_chains_digest(servers, viewer, monkeypatch):
+def test_submits_layers_carry_the_dashboards_address_and_the_chains_digest(servers, viewer, monkeypatch, placeholder_cellmap_folders):
     """As Submit's redraw gives them (test_submit): a merging postprocessor's
     server posts its merged ids to the dashboard from the start, and the
     first redraw of an unchanged chain leaves the layer as it is."""
@@ -286,12 +287,12 @@ def test_submits_layers_carry_the_dashboards_address_and_the_chains_digest(serve
         def start(self):
             self.run()
 
-    def start_hosts(command, job_name, queue=None, charge_group=None):
+    def start_hosts(command, job_name, queue=None, charge_group=None, **_):
         job = SimpleNamespace(model_name=job_name, host=f"http://{job_name}:8000")
         get_session().jobs = get_session().jobs + [job]
         return job
 
-    monkeypatch.setattr(launch, "start_hosts", start_hosts)
+    monkeypatch.setattr("cellmap_flow.jobs.launch.start_hosts", start_hosts)
     monkeypatch.setattr(launch.threading, "Thread", InlineThread)
     get_session().jobs = []
     get_session().dashboard_url = DASHBOARD

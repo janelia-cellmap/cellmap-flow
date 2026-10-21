@@ -133,7 +133,7 @@ def test_nothing_but_building_the_model_imports_cellpose(monkeypatch):
 
     model = registry.build_model({"type": "cellpose", "voxel_size": 64}, "cp")
     model.to_dict(), model.launch_entry, model.command
-    assert "CellposeModelConfig" in registry.describe_types()
+    assert "cellpose" in registry.describe_types()
     result = CliRunner().invoke(main.cli, ["infer", "cellpose", "--help"])
     assert result.exit_code == 0 and "--pretrained-model" in result.output
     # Only building it imports cellpose. Where pixi provides cellpose4, the

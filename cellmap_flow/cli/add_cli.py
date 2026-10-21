@@ -86,9 +86,9 @@ def _run(resolved, data_path, queue, project, resample):
     from cellmap_flow.config.yaml import ConfigError
     from cellmap_flow.dashboard.state import get_session
     from cellmap_flow.jobs.launch import install_cleanup_handlers
-    from cellmap_flow.jobs.settings import launcher_settings
     from cellmap_flow.jobs.spec import JobStartError
     from cellmap_flow.models.registry import build_model
+    from cellmap_flow.serving.launch import remembered
 
     if resolved.needs:
         raise click.ClickException(
@@ -100,13 +100,7 @@ def _run(resolved, data_path, queue, project, resample):
     except ConfigError as e:
         raise click.ClickException(str(e))
 
-    settings = launcher_settings()
-    queue = queue or settings.queue
-    project = project or settings.charge_group
-    settings.queue = queue
-    if project:
-        settings.charge_group = project
-    settings.save()
+    queue, project = remembered(queue, project)
 
     session = get_session()
     session.models_config = [model]

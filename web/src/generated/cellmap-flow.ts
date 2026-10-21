@@ -336,11 +336,16 @@ export interface BoundingBox {
   shape?: [number, number, number];
 }
 /**
- * A ModelConfig subclass's name and its constructor's parameters, as the
- * builder's model form sends them (registry.coerce_form_params parses them).
+ * A model type and its constructor's parameters, as the builder's model
+ * form sends them; ``registry.build_model`` builds the config from them as
+ * from any model entry. ``type`` is the type's name (``registry.model_types``,
+ * "fly"); ``class_name``, the class name ("FlyModelConfig") the form posted
+ * before 0.3.0, is still taken in its place, with a deprecation warning,
+ * until the release after.
  */
 export interface CreateModelConfig {
-  class_name?: string;
+  type?: string | null;
+  class_name?: string | null;
   params?: {
     [k: string]: unknown;
   };

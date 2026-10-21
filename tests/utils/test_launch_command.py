@@ -1,12 +1,13 @@
-"""Every launcher builds its server command through serving.launch.
+"""Every launcher starts its server through serving.launch.launch.
 
-It is SERVER_COMMAND, then `--model <the model's launch entry, as JSON>`
-and the data path. SERVER_COMMAND is read when a command is built and split
-into words, so a deploy's override (fileglancer's "pixi run cellmap_flow
-serve") reaches every launcher; cellmap_flow and cellmap_flow_yaml used to
-copy it at import, and the dashboard quoted it as one word. The data path,
-with a space in it, goes through the one data_path + scale rule: the YAML's
-`scale: s3` next to a path ending in s3 used to become .../s3/s3.
+The command is SERVER_COMMAND, then `--model <the model's launch entry, as
+JSON>` and the data path. SERVER_COMMAND is read when a command is built and
+split into words, so a deploy's override (fileglancer's "pixi run
+cellmap_flow serve") reaches every launcher; cellmap_flow and
+cellmap_flow_yaml used to copy it at import, and the dashboard quoted it as
+one word. The data path, with a space in it, goes through the one data_path
++ scale rule: the YAML's `scale: s3` next to a path ending in s3 used to
+become .../s3/s3.
 """
 
 import json
@@ -18,14 +19,14 @@ import pytest
 import zarr
 from click.testing import CliRunner
 
-from cellmap_flow.cli import infer, yaml_cli
+from cellmap_flow.cli import yaml_cli
 from cellmap_flow.cli.main import cli
 from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.dashboard.services import launch as dashboard_launch
-from cellmap_flow.models.models_config import ScriptModelConfig
+from cellmap_flow.models.models_config import HuggingFaceModelConfig, ScriptModelConfig
 from cellmap_flow.jobs import launch as jobs_launch
 from cellmap_flow.jobs.settings import LauncherSettings
-from cellmap_flow.jobs.spec import JobSpec, JobStartError
+from cellmap_flow.jobs.spec import JobSpec
 
 def _cli(*argv):
     result = CliRunner().invoke(cli, list(argv))
@@ -46,7 +47,7 @@ LAUNCHERS = {
         ["--resample"],
     ),
     "dashboard-huggingface": (
-        lambda data: dashboard_launch.run_hf_model("cellmap/mito-v1", "mito v1", "blob"),
+        lambda data: dashboard_launch.run_model(HuggingFaceModelConfig(repo="cellmap/mito-v1", name="mito_v1"), "blob"),
         {"type": "huggingface", "repo": "cellmap/mito-v1", "name": "mito_v1"},
         ["--resample"],
     ),
@@ -66,14 +67,9 @@ def launched(monkeypatch, tmp_path):
         commands.append(command)
         return object()
 
-    def refused(command, *args, **kwargs):  # the dashboard logs it and stops before the viewer
-        commands.append(command)
-        raise JobStartError("recorded")
-
     monkeypatch.setattr(jobs_launch, "SERVER_COMMAND", "pixi run cellmap_flow serve")
-    monkeypatch.setattr(infer, "start_hosts", started)
-    monkeypatch.setattr(yaml_cli, "start_hosts", started)
-    monkeypatch.setattr(dashboard_launch, "start_hosts", refused)
+    monkeypatch.setattr(jobs_launch, "start_hosts", started)
+    monkeypatch.setattr(dashboard_launch, "_show", lambda job, st_data: None)
     monkeypatch.setattr(startup, "generate_neuroglancer_url", lambda path, wrap_raw=True: None)
     monkeypatch.setattr(LauncherSettings, "save", lambda self: None)
     get_session().dataset_path = data

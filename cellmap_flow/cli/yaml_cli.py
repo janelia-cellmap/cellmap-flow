@@ -13,10 +13,10 @@ import click
 from typing import TYPE_CHECKING, List
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from cellmap_flow.jobs.launch import install_cleanup_handlers, start_hosts
+from cellmap_flow.jobs.launch import install_cleanup_handlers
 from cellmap_flow.jobs.spec import JobStartError
-from cellmap_flow.serving.launch import server_command
-from cellmap_flow.config.yaml import ConfigError, load_config, resolve_data_path
+from cellmap_flow.serving.launch import launch
+from cellmap_flow.config.yaml import ConfigError, load_config
 from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.jobs.settings import launcher_settings
 from cellmap_flow.cli.common import log_level_option
@@ -101,35 +101,20 @@ def run_multiple(
     resample: bool = True,
 ) -> None:
     """
-    Submit multiple model inference jobs.
+    Submit multiple model inference jobs, then serve the dashboard.
 
     Args:
-        models: List of ModelConfig instances to run
+        models: List of ModelConfig instances to run, each through
+            ``serving.launch.launch`` (which applies its ``scale``)
         dataset_path: Base path to the dataset
         charge_group: Billing/chargeback group
         queue: Job queue name
         resample: start each server with --resample, else --no-resample (the YAML's ``resample``)
     """
-    settings = launcher_settings()
-    settings.queue = queue
-    settings.charge_group = charge_group
-
     def _submit_model(model):
-        current_data_path = resolve_data_path(dataset_path, getattr(model, "scale", None))
-        if current_data_path != dataset_path:
-            logger.info(
-                f"Model {getattr(model, 'name', type(model).__name__)} specifies "
-                f"scale {model.scale}; reading {current_data_path}"
-            )
-
-        command = server_command(model, current_data_path, resample=resample)
         model_name = getattr(model, "name", None) or type(model).__name__
-
         logger.info(f"Submitting job for model: {model_name}")
-        logger.warning(f"Executing command: {command}")
-        start_hosts(
-            command, job_name=model_name, queue=queue, charge_group=charge_group
-        )
+        launch(model, dataset_path, queue=queue, charge_group=charge_group, resample=resample)
         return model_name
 
     failed = []

@@ -68,7 +68,7 @@ def add_model():
     wrong with the entry; a 409, a model of that name already running.
     """
     from cellmap_flow.config.yaml import ConfigError
-    from cellmap_flow.dashboard.services.launch import _launch, drop_config, run_model_config, running_names
+    from cellmap_flow.dashboard.services.launch import _launch, drop_config, run_model, running_names
     from cellmap_flow.dashboard.state import get_session
     from cellmap_flow.models.registry import build_model
 
@@ -88,6 +88,6 @@ def add_model():
         return jsonify({"success": False, "error": str(e)}), 400
     drop_config(name)
     session.models_config.append(model_config)
-    _launch(name, run_model_config, model_config, session.layer_blob(), daemon=True)
+    _launch(name, run_model, model_config, session.layer_blob(), daemon=True)
     logger.info(f"Adding model {name} ({entry.get('type')})")
     return jsonify({"success": True, "name": name})

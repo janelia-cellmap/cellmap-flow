@@ -11,7 +11,7 @@ import pytest
 import yaml
 from click.testing import CliRunner
 
-from cellmap_flow.cli import aliases, infer
+from cellmap_flow.cli import aliases
 from cellmap_flow.cli.main import cli
 from cellmap_flow.dashboard.services import startup
 from cellmap_flow.jobs import settings
@@ -35,7 +35,8 @@ def test_without_q_or_P_the_saved_queue_and_project_are_used_and_kept(monkeypatc
     model without -q replaced the queue chosen in the dashboard or a YAML."""
     launched = []
     monkeypatch.setattr(settings, "SERVER_CONFIG_PATH", str(tmp_path / "server_config.yaml"))
-    monkeypatch.setattr(infer, "start_hosts", lambda command, queue, project, name: launched.append((queue, project)))
+    monkeypatch.setattr("cellmap_flow.jobs.launch.start_hosts",
+                        lambda command, queue, charge_group, job_name, **_: launched.append((queue, charge_group)))
     monkeypatch.setattr(startup, "generate_neuroglancer_url", lambda path: None)
     settings.launcher_settings().queue = "gpu_a100"
     settings.launcher_settings().charge_group = "saved_grp"
@@ -58,10 +59,10 @@ def test_a_server_that_never_came_up_exits_non_zero_with_the_reason(monkeypatch)
     """start_hosts returned a job with no host, and the viewer got zarr://None/..."""
     viewers = []
 
-    def fail(command, queue=None, project=None, name=None, **_):
-        raise JobStartError(f"{name} never reported a server address")
+    def fail(command, job_name=None, **_):
+        raise JobStartError(f"{job_name} never reported a server address")
 
-    monkeypatch.setattr(infer, "start_hosts", fail)
+    monkeypatch.setattr("cellmap_flow.jobs.launch.start_hosts", fail)
     monkeypatch.setattr(startup, "generate_neuroglancer_url", lambda *a, **k: viewers.append(a))
     result = CliRunner().invoke(cli, PER_TYPE + ["--name", "m"])
     assert result.exit_code != 0 and "m never reported a server address" in result.output

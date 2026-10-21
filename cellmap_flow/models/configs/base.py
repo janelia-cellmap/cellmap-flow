@@ -1,5 +1,10 @@
 """``ModelConfig``, the base of every model type, and the helpers the types share.
 
+The constructors normalize their arguments with ``models.entry``'s
+``voxel_size``, ``sizes``, ``per_axis``, ``as_given`` and ``names``, which
+read the same values from a number, a sequence or the text a command line
+or form sends.
+
 A model type is a ModelConfig subclass. The CLIs, YAML ``type:`` entries
 and the dashboard's model form are built from its constructor's signature,
 and its ``_get_config`` builds the model and returns a ``Config`` that
@@ -33,7 +38,7 @@ from typing import Any
 
 import numpy as np
 
-from cellmap_flow.models.geometry import DEFAULT_OUTPUT_AXES, ModelGeometry, _numbers, _voxels
+from cellmap_flow.models.geometry import DEFAULT_OUTPUT_AXES, ModelGeometry, _voxels
 
 logger = logging.getLogger(__name__)
 
@@ -45,84 +50,6 @@ def _get_device():
     device = best_device()
     logger.info(f"Using device: {device}")
     return device
-
-
-def _as_int_tuple(value):
-    """(178, 178, 178) from 178, "178,178,178", [178, 178, 178] or a Coordinate.
-
-    The server CLI hands unannotated constructor arguments over as strings.
-    """
-    if value is None:
-        return None
-    if isinstance(value, str):
-        parts = [p for p in value.replace("(", "").replace(")", "").split(",") if p.strip()]
-        value = [float(p) for p in parts]
-        if len(value) == 1:
-            value = value[0]
-    if isinstance(value, (int, float, np.integer, np.floating)):
-        return (int(value),) * 3
-    return tuple(int(v) for v in value)
-
-
-def _voxel_size(value):
-    """A voxel size given as one number, "5.24,4,4" or one per axis: three numbers, ints kept ints.
-
-    Unlike _as_int_tuple, which truncates a 5.24 nm voxel to 5.
-    """
-    if isinstance(value, str):
-        value = [float(v) for v in value.replace("(", "").replace(")", "").split(",") if v.strip()]
-    if np.ndim(value) == 0:
-        value = [value] * 3
-    elif len(value) == 1:
-        value = list(value) * 3
-    return _numbers(float(v) for v in value)
-
-
-def _sizes(value, *, min=0, lengths=None):
-    """None, or ``value`` (one number, "148", "20,256,256" or a list) as a tuple of ints.
-
-    One number stays one (``_per_axis`` widens it), so that ``_as_given``
-    writes it back as it was given. Each must be at least ``min``, and when
-    ``lengths`` is given, their count must be one of them.
-    """
-    if value is None:
-        return None
-    if isinstance(value, str):
-        value = [v for v in value.replace("(", "").replace(")", "").split(",") if v.strip()]
-    if np.ndim(value) == 0:
-        value = [value]
-    sizes = tuple(int(float(v)) for v in value)
-    if lengths is not None and len(sizes) not in lengths:
-        counts = " or ".join(str(n) for n in lengths)
-        raise ValueError(f"sizes are {counts} whole numbers, got {list(sizes)}")
-    if any(s < min for s in sizes):
-        raise ValueError(f"sizes must be at least {min}, got {list(sizes)}")
-    return sizes
-
-
-def _per_axis(sizes, n: int, what: str):
-    """``sizes`` (``_sizes``'s) for each of ``n`` axes: one number is every axis's; None stays None."""
-    if sizes is None:
-        return None
-    if len(sizes) == 1:
-        return tuple(sizes) * n
-    if len(sizes) != n:
-        raise ValueError(f"{what} needs one number or {n} (one per space axis of the model), got {list(sizes)}")
-    return tuple(sizes)
-
-
-def _as_given(sizes):
-    """``sizes`` (``_sizes``'s) as a model entry writes them: one number as itself, more as a list."""
-    return sizes[0] if len(sizes) == 1 else list(sizes)
-
-
-def _names(value):
-    """None, or channel names from a list or the "mito, er" the server CLI and the model form send."""
-    if value is None:
-        return None
-    if isinstance(value, str):
-        value = [v.strip() for v in value.split(",") if v.strip()]
-    return [str(v) for v in value]
 
 
 def _plain(value):
