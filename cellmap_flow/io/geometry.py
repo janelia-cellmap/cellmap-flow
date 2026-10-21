@@ -13,25 +13,24 @@ range of voxel indices, which may start before the array or run past it.
   ``world_to_box`` maps back to the same box.
 - ``coordinate_or_floats``: a voxel size or offset as a ``Coordinate`` when
   it is whole, else as floats.
-- ``list_populated_chunks``: the chunks of an array that are stored, by
-  index (worldarray's ``list_chunks``).
+- ``list_populated_chunks``: the chunks of a local zarr v2 array that have a
+  file, by index.
 """
 
 import logging
+import os
 import re
 from dataclasses import dataclass
 from typing import List, Tuple
 
 import numpy as np
-import worldarray as wa
 from funlib.geometry import Coordinate, Roi
 
 from cellmap_flow.io.metadata import is_integral, snap_integral
 
 logger = logging.getLogger(__name__)
 
-# A chunk file of a three-dimensional zarr v2 array with "." separators: z.y.x
-# (finetune/session/sync.py copies those).
+# A chunk file of a three-dimensional zarr v2 array with "." separators: z.y.x.
 CHUNK_KEY_RE = re.compile(r"^\d+\.\d+\.\d+$")
 
 
@@ -133,10 +132,16 @@ def coordinate_or_floats(values, what="voxel size", where=""):
 
 
 def list_populated_chunks(array_dir) -> List[Tuple[int, ...]]:
-    """The indices of the chunks of the array at ``array_dir`` that are stored,
-    in index order (worldarray's ``WorldArray.list_chunks``: any format and
-    separator, a URL too), not ``os.listdir``'s: that order differs between
+    """The indices of the chunks of a local zarr v2 array that have a file.
+
+    ``array_dir`` is the array's directory; its chunk files are the names
+    ``CHUNK_KEY_RE`` matches, and ``.zarray`` and the rest are not chunks.
+    In index order, not ``os.listdir``'s: that order differs between
     filesystems (ext4 orders names by a per-filesystem hash), so the same
     seed would draw different patches on another machine.
     """
-    return wa.open(str(array_dir), units=None, strict_units=False).list_chunks()
+    return sorted(
+        tuple(int(i) for i in name.split("."))
+        for name in os.listdir(array_dir)
+        if CHUNK_KEY_RE.match(name)
+    )
