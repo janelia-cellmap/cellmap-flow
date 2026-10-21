@@ -29,13 +29,15 @@ import torch
 
 from cellmap_flow.finetune import markers, run_outputs
 from cellmap_flow.finetune.adaptation import strategy_for
-from cellmap_flow.finetune.cli import apply_restart_params, build_target_transform, update_run_metadata
+from cellmap_flow.finetune.cli import apply_restart_params, build_target_transform, options_of, update_run_metadata
 from cellmap_flow.finetune.data import create_dataloader
 from cellmap_flow.finetune.data.loader import training_patch_voxels
-from cellmap_flow.finetune.lora_trainer import LoRAFinetuner
+from cellmap_flow.finetune.trainer import Finetuner
+from cellmap_flow.finetune.trainer.supervised import probe_output_class
 from cellmap_flow.io.paths import is_remote
 from cellmap_flow.models.models_config import ModelConfig
 from cellmap_flow.serving.restart_token import read_or_create_restart_token
+from cellmap_flow.utils.device import best_device
 
 logger = logging.getLogger(__name__)
 
@@ -286,6 +288,9 @@ class TrainingSession:
         self.args = args
         self.model_config = model_config
         self.model = model
+        # Where the job trains: the model is moved there before its output
+        # is probed, and every trainer is built on it.
+        self.device = best_device()
         # Given to the inference server when it starts, which hands it the
         # restarts it is sent.
         self.restart_controller = RestartController()
@@ -404,7 +409,7 @@ class TrainingSession:
         finally:
             # None again if an OOM made the trainer drop distillation.
             self.teacher_model = trainer.teacher_model
-            self.tb_position = (trainer._tb_step, trainer._tb_epoch)
+            self.tb_position = (trainer.tb.step, trainer.tb.epoch)
             trainer.close()
 
     def _keep_serving_after(self, error) -> bool:
@@ -428,18 +433,19 @@ class TrainingSession:
         logger.warning(f"Serving {self.model_holds} until a restart with settings that work.")
         return self._await_restart()
 
-    def _set_up_iteration(self) -> LoRAFinetuner:
+    def _set_up_iteration(self) -> Finetuner:
         """This iteration's data, target and trainer, with the model reset if a restart asked."""
         args = self.args
+        options = options_of(args)
         # Re-created each iteration, to pick up new annotations.
         if self.iteration > 1:
             markers.emit(markers.RESTART_STATUS, "Loading corrections...")
         logger.info(f"Loading corrections from {args.corrections}...")
         dataloader = create_dataloader(
             args.corrections,
-            batch_size=args.batch_size,
-            augment=not args.no_augment,
-            num_workers=args.num_workers,
+            batch_size=options.batch_size,
+            augment=options.augment,
+            num_workers=options.num_workers,
             # A network that trains on its own patch (a fixed tile) gets it.
             patch_voxels=training_patch_voxels(self.model_config),
         )
@@ -450,9 +456,10 @@ class TrainingSession:
         # Measured at the annotation's voxel size, which the reader knows.
         reader = getattr(dataloader.dataset, "reader", None)
         target_transform = build_target_transform(
-            args, self.model_config, output_voxel_size_nm=getattr(reader, "output_voxel_size", None)
+            options, self.model_config,
+            output_voxel_size_nm=getattr(reader, "output_voxel_size", None), script=args.model_script,
         )
-        logger.info(f"output_type={args.output_type}, select_channel={args.select_channel}")
+        logger.info(f"output_type={options.output_type}, select_channel={options.select_channel}")
 
         # Only now that its data and target are built: put the model back
         # where training started (see _reset_model). Until here it is still
@@ -462,29 +469,28 @@ class TrainingSession:
         if self.pending_reset:
             self._reset_model()
 
+        # What the model's output is (a sigmoid baked in, a tanh, or logits),
+        # which the losses compare it by: as its server reports it when the
+        # dashboard knew (--output-class), else probed here, once per job --
+        # the model is built once and a restart does not change its head.
+        self.model.to(self.device)
+        if options.output_class is None:
+            args.output_class = probe_output_class(
+                self.model, next(iter(dataloader))[0], select_channel=options.select_channel
+            )
+            options = options.replaced(output_class=args.output_class)
+
         # Re-created each iteration, for a fresh optimizer and scheduler.
         if self.iteration > 1:
             markers.emit(markers.RESTART_STATUS, "Preparing trainer...")
         logger.info("Creating trainer...")
-        trainer = LoRAFinetuner(
+        trainer = Finetuner(
             self.model,
             dataloader,
             output_dir=args.output_dir,
-            learning_rate=args.learning_rate,
-            num_epochs=args.num_epochs,
-            gradient_accumulation_steps=args.gradient_accumulation_steps,
-            use_mixed_precision=not args.no_mixed_precision,
-            loss_type=args.loss_type,
-            select_channel=args.select_channel,
-            mask_unannotated=args.mask_unannotated,
-            label_smoothing=args.label_smoothing,
-            distillation_lambda=args.distillation_lambda,
-            distillation_all_voxels=args.distillation_all_voxels,
-            margin=args.margin,
-            balance_classes=args.balance_classes,
-            slope_weight=args.slope_weight,
+            options=options,
+            device=self.device,
             target_transform=target_transform,
-            tensorboard=not args.no_tensorboard,
             teacher_model=self.teacher_model,
             initial_state=self.initial_state,
             tb_start_step=self.tb_position[0],
@@ -616,27 +622,6 @@ class TrainingSession:
         markers.emit(markers.RESTARTING_TRAINING)
         return True
 
-    def _record_rank(self) -> None:
-        """Put the rank and alpha the job keeps into its metadata.json.
-
-        apply_restart_params recorded the ones the restart asked for, which
-        a dashboard started later would take for the job's.
-        """
-        args = self.args
-        if not args.output_dir:
-            return
-
-        def record(metadata):
-            params = metadata.get("params", {})
-            for key in ("lora_r", "lora_alpha"):
-                if key in params:
-                    params[key] = getattr(args, key)
-
-        try:
-            update_run_metadata(args.output_dir, record)
-        except Exception as e:
-            logger.warning(f"Could not record the kept rank in {args.output_dir}/metadata.json: {e}")
-
     def _reset_model(self) -> None:
         """Put the model back where training started, for the next iteration.
 
@@ -645,28 +630,10 @@ class TrainingSession:
         starting weights back (see the strategies' restart()). The model
         object -- which the inference server shares -- is built once, so a
         restart cannot switch between the two kinds: the model decides, and
-        args.lora_r is made to agree with it.
+        a restart asking for the other kind is refused before it gets here
+        (cli.apply_restart_params).
         """
         args = self.args
-        kept = strategy_for(self.model)
-        if kept.kind == "lora" and args.lora_r <= 0:
-            logger.warning("Restart asked for lora_r=0 (full finetune) but this job trains a LoRA adapter; "
-                           "submit a new job for that. Keeping the current adapter setup.")
-            args.lora_r = max(1, int(kept.r))
-            # Its alpha too: the restart derived 2 x 0 = 0 for it, and an
-            # adapter scaled by alpha / r = 0 trains nothing.
-            args.lora_alpha = kept.alpha
-            self._record_rank()
-        elif kept.kind == "full" and args.lora_r > 0:
-            # The mirror image of the case above. Left alone, args.lora_r > 0
-            # made the next iteration's YAML point at a lora_adapter/ this job
-            # never writes. A full finetune has no adapter for an alpha to
-            # scale: 0, as submit records it.
-            logger.warning(f"Restart asked for LoRA rank {args.lora_r} but this job is a full finetune; "
-                           "submit a new job for that. Keeping the full finetune.")
-            args.lora_r = args.lora_alpha = 0
-            self._record_rank()
-
         strategy = strategy_for(
             self.model,
             args.lora_r,

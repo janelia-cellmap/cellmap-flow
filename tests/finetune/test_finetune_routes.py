@@ -129,7 +129,7 @@ def test_submit_trains_scribbles_as_scribbles(submit, volume, request_data, sent
     more, so it never fired: painted sessions trained as dense labels, with
     unannotated voxels taken for background. It is read from the volume now."""
     job = submit(volume, **request_data)
-    assert {key: job.sent[key] for key in sent} == sent
+    assert {key: getattr(job.sent["options"], key) for key in sent} == sent
 
 
 def test_submit_reads_the_strokes_still_in_minio(submit):
@@ -138,14 +138,14 @@ def test_submit_reads_the_strokes_still_in_minio(submit):
     a stroke painted just before Submit trained as dense labels."""
     job = submit(CROPPED, pulled=STROKE_BESIDE[0])
     assert job.syncs == [False], "a diff of the chunks"
-    assert job.sent["mask_unannotated"] is True
+    assert job.sent["options"].mask_unannotated is True
 
 
 def test_an_affinity_model_is_told_by_the_offsets_its_script_names(submit):
     """With the affinity offsets from the model's script: output_type and
     offsets are sent only for affinity models, which say so there."""
     job = submit()
-    assert (job.sent["output_type"], job.sent["offsets"]) == ("affinities", "[[1, 0, 0], [0, 1, 0]]")
+    assert (job.sent["options"].output_type, job.sent["options"].offsets) == ("affinities", "[[1, 0, 0], [0, 1, 0]]")
 
 
 def test_submit_gives_the_manifest_the_dashboards_chain(submit):

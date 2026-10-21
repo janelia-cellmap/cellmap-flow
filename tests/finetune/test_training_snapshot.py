@@ -18,7 +18,7 @@ import torch.nn as nn
 import yaml
 from torch.utils.data import DataLoader, TensorDataset
 
-from cellmap_flow.finetune.lora_trainer import LoRAFinetuner
+from cellmap_flow.finetune.trainer import Finetuner
 from cellmap_flow.finetune.lora_wrapper import BatchLoopWrapper
 from cellmap_flow.finetune.target_transforms import (
     BinaryTargetTransform,
@@ -57,8 +57,9 @@ def _data(n, anchors=False):
 
 
 # name: (net, LoRA?, trainer settings, samples, anchors). The head net emits
-# logits, the BatchNorm net probabilities, which switches the losses' sigmoid
-# off and BCE-with-logits to BCE.
+# logits, the BatchNorm net probabilities (output_class unit, as its server
+# would report), which switches the losses' sigmoid off and BCE-with-logits
+# to BCE.
 CASES = {
     "head-lora": ("head", True, dict(
         loss_type="bce", target_transform=BroadcastBinaryTargetTransform(2),
@@ -66,10 +67,10 @@ CASES = {
     ), 4, False),
     "bn-lora": ("bn", True, dict(
         loss_type="margin", target_transform=BinaryTargetTransform(), balance_classes=True,
-        distillation_lambda=1.0,
+        distillation_lambda=1.0, output_class="unit",
     ), 4, True),
     "bn-full": ("bn", False, dict(
-        loss_type="bce", target_transform=BinaryTargetTransform(), learning_rate=1e-2,
+        loss_type="bce", target_transform=BinaryTargetTransform(), learning_rate=1e-2, output_class="unit",
     ), 4, False),
 }
 
@@ -82,9 +83,9 @@ def _train(case, tmp_path):
 
         model = wrap_model_with_lora(model, lora_r=4, lora_alpha=8, lora_dropout=0.1)
     loader = DataLoader(_data(n, anchors), batch_size=2)
-    trainer = LoRAFinetuner(
+    trainer = Finetuner(
         model, loader, output_dir=str(tmp_path / "run"), num_epochs=3, device="cpu",
-        use_mixed_precision=False, tensorboard=False, **settings,
+        mixed_precision=False, tensorboard=False, **settings,
     )
     trainer.train()
     exported = Path(trainer.save_adapter(export_dir=str(tmp_path / "export")))

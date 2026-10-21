@@ -38,11 +38,11 @@ from pydantic import (
     Field,
     ValidationError,
     ValidationInfo,
-    field_validator,
     model_validator,
 )
 
 from cellmap_flow.blockwise.bounding_box import BoundingBox
+from cellmap_flow.finetune.options import MANIFEST_FIELDS, MODES, OutputType, TrainingOptions
 from cellmap_flow.jobs.settings import SERVER_CONFIG_KEYS
 from cellmap_flow.jobs.site import current_site
 
@@ -230,83 +230,51 @@ class BbxGenerator(BaseModel):
 # --- The finetune tab's ------------------------------------------------------------
 
 
-def _form_number(kind, default):
-    """A number field of the finetune tab's forms, of type ``kind`` (int or float).
-
-    The form sends what its fields hold, so an emptied field arrives as null
-    or "", and is ``default`` here (it reached the trainer as "--num-epochs
-    None", which failed only once the job ran). A whole number may come as
-    "25" or 25.0, but not 2.5. Anything else is refused with the field's
-    name and what was sent.
-    """
-    def read(value, info: ValidationInfo):
-        if value is None or value == "":
-            return default
-        return _number(value, kind, info.field_name)
-
-    return Annotated[kind if default is not None else Optional[kind], Field(default=default), BeforeValidator(read)]
-
-
-_OVERRIDES = ("patches_per_epoch", "rehearsal_fraction")
-
-
-class _ManifestOverrides(BaseModel):
-    """What a run may change in its session's manifest, at submit and at each
-    restart: ``patches_per_epoch`` (a count, or 0 for one patch per
-    populated chunk, stored as None) and ``rehearsal_fraction`` (between 0
-    and 1; 0 turns rehearsal off without dropping the good regions). One
-    that is absent or blank leaves the manifest's value as it is; see
-    ``overrides()``. Every other key of the body is kept as sent."""
+class _FinetuneBody(TrainingOptions):
+    """A body of the Finetune tab's training forms: ``TrainingOptions``' fields, as the
+    form sends them. An emptied field arrives as null or "", and takes the default
+    (it reached the trainer as "--num-epochs None", which failed only once the job
+    ran). A LoRA rank of 0 is ``mode`` full, and the browser form's ``finetune_mode``
+    is ``mode`` too. ``output_type`` left blank is detected from the model
+    (common.autodetect_output_type). Every other key of the body is kept as sent."""
 
     model_config = ConfigDict(extra="allow")
 
-    patches_per_epoch: Optional[int] = None
-    rehearsal_fraction: Optional[float] = None
+    output_type: Optional[OutputType] = Field(None, description=(
+        "The training target (TrainingOptions.output_type); blank, the route detects it from the model."
+    ))
 
     @model_validator(mode="before")
     @classmethod
-    def _blank_is_not_given(cls, body):
+    def _blank_fields_take_the_default(cls, body):
         if isinstance(body, dict):
-            body = {k: v for k, v in body.items() if not (k in _OVERRIDES and v in (None, ""))}
+            body = {key: value for key, value in body.items() if value not in (None, "")}
+            if "mode" not in body and body.get("finetune_mode") in MODES:
+                body["mode"] = body["finetune_mode"]
         return body
 
-    @field_validator("patches_per_epoch", mode="before")
-    @classmethod
-    def _count_or_auto(cls, value):
-        try:
-            count = int(value)
-        except (TypeError, ValueError):
-            count = -1
-        if count < 0:
-            raise ValueError("patches_per_epoch must be a non-negative integer")
-        return None if count == 0 else count
-
-    @field_validator("rehearsal_fraction", mode="before")
-    @classmethod
-    def _fraction(cls, value):
-        try:
-            fraction = float(value)
-        except (TypeError, ValueError):
-            fraction = -1.0
-        if not 0.0 <= fraction <= 1.0:
-            raise ValueError("rehearsal_fraction must be a number between 0 and 1")
-        return fraction
+    def changes(self) -> dict:
+        """The training settings the body gave, by name (the manifest's aside)."""
+        return {
+            name: getattr(self, name) for name in TrainingOptions.model_fields
+            if name in self.model_fields_set and name not in MANIFEST_FIELDS
+        }
 
     def overrides(self) -> dict:
-        """{override: value} for each one the body gave."""
-        return {key: getattr(self, key) for key in _OVERRIDES if key in self.model_fields_set}
+        """The manifest's settings the body gave (TrainingOptions' MANIFEST_FIELDS): a blank
+        one leaves the manifest's value as it is."""
+        return {key: getattr(self, key) for key in MANIFEST_FIELDS if key in self.model_fields_set}
 
 
-class FinetuneSubmit(_ManifestOverrides):
+class FinetuneSubmit(_FinetuneBody):
     """A new training job: ``model_name`` trained on the corrections at
     ``corrections_path``, a session's corrections directory or the base
-    output path of its sessions.
-
-    The defaults are the server form's (_finetune_tab.html's values and
-    selected options, checked against these by tests/web/test_schema.py);
-    cellmap_flow.schema exports them to the browser as FINETUNE_DEFAULTS.
-    The rest of the fields are passed on as sent, and the route adjusts the
-    loss for painted annotations and for a distance target.
+    output path of its sessions, with the training settings of
+    ``finetune.options.TrainingOptions``, whose defaults are the server
+    form's (_finetune_tab.html's values and selected options, checked
+    against them by tests/web/test_schema.py; cellmap_flow.schema exports
+    them to the browser as FINETUNE_DEFAULTS). The route adjusts them for
+    painted annotations and for the model's target (TrainingOptions.for_session).
     """
 
     model_name: Annotated[str, _required("model_name")] = Field(None, validate_default=True)
@@ -314,34 +282,23 @@ class FinetuneSubmit(_ManifestOverrides):
         "corrections_path",
         message="corrections_path is required. Please specify the output path where annotation crops are saved.",
     )] = Field(None, validate_default=True)
-    lora_r: _form_number(int, 64)
-    num_epochs: _form_number(int, 20)
-    batch_size: _form_number(int, 8)
-    learning_rate: _form_number(float, 1e-4)
-    loss_type: Any = "margin"
-    label_smoothing: _form_number(float, 0.1)
-    # 0 switches distillation off.
-    distillation_lambda: _form_number(float, 0.01)
-    distillation_scope: Any = "unlabeled"
-    margin: _form_number(float, 0.3)
-    balance_classes: Any = True
-    # Default off: these interactive runs are a few dozen gradient steps,
-    # where augmentation adds variance without the many repeat views it
-    # needs to pay for itself.
-    augment: Any = False
-    output_type: Any = None
-    offsets: Any = None
-    select_channel: _form_number(int, None)
-    checkpoint_path: Any = None
-    auto_serve: Any = True
-    queue: Any = Field(default_factory=lambda: current_site().default_queue)
-    charge_group: Any = None
+    checkpoint_path: Optional[str] = None
+    auto_serve: bool = True
+    queue: Optional[str] = Field(default_factory=lambda: current_site().default_queue)
+    charge_group: Optional[str] = None
+
+    def options(self, **resolved) -> TrainingOptions:
+        """The settings this body asks for: TrainingOptions with the fields the body gave,
+        and ``resolved`` over them (what the route worked out: the output type and
+        offsets, the model's output class)."""
+        return TrainingOptions.model_validate({**self.changes(), **self.overrides(), **resolved})
 
 
-class FinetuneRestart(_ManifestOverrides):
-    """The next iteration of a job: the manifest overrides, and the training
-    settings to change (common.build_restart_params picks those; the
-    trainer checks them)."""
+class FinetuneRestart(_FinetuneBody):
+    """The next iteration of a job: the training settings to change, each checked as
+    TrainingOptions checks it (``changes``; the trainer applies them, cli.apply_restart_params),
+    and the manifest overrides. Nothing is required: the job's model and corrections
+    stay as launched."""
 
 
 class CreateVolume(BaseModel):

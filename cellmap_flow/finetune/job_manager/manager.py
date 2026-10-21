@@ -30,6 +30,8 @@ from cellmap_flow.finetune.job_manager.state import FinetuneJob, JobStatus
 from cellmap_flow.jobs.site import current_site
 from cellmap_flow.serving.restart_token import write_restart_token
 
+from cellmap_flow.finetune.options import TrainingOptions
+
 logger = logging.getLogger(__name__)
 
 
@@ -67,28 +69,14 @@ class FinetuneJobManager:
         self,
         model_config,
         corrections_path: Path,
-        lora_r: int = 8,
-        num_epochs: int = 10,
-        batch_size: int = 8,
-        learning_rate: float = 1e-4,
+        options: Optional[TrainingOptions] = None,
+        *,
         output_base: Optional[Path] = None,
         queue: Optional[str] = None,
         charge_group: Optional[str] = None,
         walltime: Optional[str] = None,
         checkpoint_path_override: Optional[Path] = None,
         auto_serve: bool = True,
-        mask_unannotated: bool = False,
-        loss_type: str = "combined",
-        label_smoothing: float = 0.0,
-        # None leaves it to the trainer: 1.0 with good regions, else 0.
-        distillation_lambda: Optional[float] = None,
-        distillation_scope: str = "unlabeled",
-        margin: float = 0.3,
-        balance_classes: bool = False,
-        augment: bool = False,
-        output_type: str = "binary",
-        select_channel: Optional[int] = None,
-        offsets: Optional[str] = None,
     ) -> FinetuneJob:
         """
         Submit finetuning job to LSF cluster.
@@ -96,10 +84,7 @@ class FinetuneJobManager:
         Args:
             model_config: Model configuration object (FlyModelConfig, etc.)
             corrections_path: Path to corrections.zarr directory
-            lora_r: LoRA rank (default: 8)
-            num_epochs: Number of training epochs (default: 10)
-            batch_size: Training batch size (default: 8)
-            learning_rate: Learning rate (default: 1e-4)
+            options: The training settings (finetune/options.py); the defaults if None
             output_base: Base directory for outputs (default: output/finetuning)
             queue: LSF queue name (default: the site's, gpu_h100 at Janelia)
             charge_group: LSF charge group (default: the site's, cellmap at Janelia)
@@ -115,6 +100,7 @@ class FinetuneJobManager:
             ValueError: If validation fails
             RuntimeError: If job submission fails
         """
+        options = TrainingOptions() if options is None else options
         # === Validation ===
 
         # 1. Check model config
@@ -187,23 +173,9 @@ class FinetuneJobManager:
             channels=channels,
             input_voxel_size=input_voxel_size,
             output_voxel_size=output_voxel_size,
-            lora_r=lora_r,
-            num_epochs=num_epochs,
-            batch_size=batch_size,
-            learning_rate=learning_rate,
-            loss_type=loss_type,
-            label_smoothing=label_smoothing,
-            distillation_lambda=distillation_lambda,
-            distillation_scope=distillation_scope,
-            margin=margin,
+            options=options,
             auto_serve=auto_serve,
             serve_data_path=serve_data_path,
-            mask_unannotated=mask_unannotated,
-            balance_classes=balance_classes,
-            augment=augment,
-            output_type=output_type,
-            select_channel=select_channel,
-            offsets=offsets,
             models_dir=models_dir,
             queue=queue,
             charge_group=charge_group,
@@ -220,21 +192,10 @@ class FinetuneJobManager:
             corrections_path=corrections_path,
             num_corrections=num_corrections,
             output_dir=output_dir,
-            lora_r=lora_r,
-            num_epochs=num_epochs,
-            batch_size=batch_size,
-            learning_rate=learning_rate,
-            loss_type=loss_type,
-            label_smoothing=label_smoothing,
-            distillation_lambda=distillation_lambda,
-            distillation_scope=distillation_scope,
-            margin=margin,
-            balance_classes=balance_classes,
-            augment=augment,
+            options=options,
             channels=channels,
             input_voxel_size=input_voxel_size,
             output_voxel_size=output_voxel_size,
-            output_type=output_type,
             queue=queue,
             charge_group=charge_group,
             command=cli_command,
@@ -263,7 +224,7 @@ class FinetuneJobManager:
             status=JobStatus.PENDING,
             created_at=datetime.now(),
             log_file=log_file,
-            total_epochs=num_epochs,
+            total_epochs=options.num_epochs,
             corrections_path=corrections_path,
         )
 

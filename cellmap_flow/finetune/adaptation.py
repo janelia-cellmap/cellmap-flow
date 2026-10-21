@@ -10,7 +10,9 @@ Everything that differs between the two lives here, behind one interface:
   in place (the trainer's retry after a NaN);
 - ``restart``: the model the next iteration of a job trains (the CLI's
   restart, which for LoRA re-makes the adapter so its rank can change);
-- ``trainable_state`` / ``checkpoint``: what a checkpoint keeps;
+- ``trainable_state`` / ``checkpoint``: what a checkpoint keeps, and
+  ``save_checkpoint`` / ``load_checkpoint``: the file itself, with the
+  run's progress (``_Checkpoints``, shared by both);
 - ``export``: what is written for serving, under ``export_name``;
 - ``merge``: the finetune folded into plain weights (export_merged).
 
@@ -18,10 +20,7 @@ The request decides the strategy once, when the model is prepared
 (``--lora-r``, 0 for full). After that the model does (``strategy_for``): a
 restart can change ``args.lora_r`` but not the model.
 
-The adapter's names depend on the module tree it was trained on --
-``BatchLoopWrapper``'s ``model.`` prefix included -- so the wrappers stay in
-lora_wrapper, and this module only calls them. peft is imported lazily, as
-everywhere: a full finetune never needs it.
+peft is imported lazily, as everywhere: a full finetune never needs it.
 """
 
 import copy
@@ -91,8 +90,43 @@ class AdaptationStrategy(Protocol):
     def restart(self, model: nn.Module, initial_state) -> nn.Module: ...
     def trainable_state(self, model: nn.Module) -> dict: ...
     def checkpoint(self, model: nn.Module, optimizer, scaler, is_best: bool) -> Optional[dict]: ...
+    def save_checkpoint(self, path, model: nn.Module, optimizer, scaler, is_best: bool, **progress) -> bool: ...
+    def load_checkpoint(self, path, model: nn.Module, optimizer=None, scaler=None, device=None) -> dict: ...
     def export(self, model: nn.Module, export_dir: Path, path=None) -> Path: ...
     def merge(self, model: nn.Module) -> nn.Module: ...
+
+
+class _Checkpoints:
+    """The checkpoint files, as both strategies write and read them."""
+
+    def save_checkpoint(self, path, model, optimizer, scaler, is_best, **progress) -> bool:
+        """Write ``path``: what ``checkpoint`` keeps, with the run's ``progress``
+        (epoch, global_step, best_loss, training_stats); False when this strategy
+        keeps nothing for it (a full finetune's periodic checkpoint)."""
+        state = self.checkpoint(model, optimizer, scaler, is_best)
+        if state is None:
+            return False
+        torch.save({**progress, **state}, path)
+        logger.debug(f"Checkpoint saved: {path}")
+        return True
+
+    @staticmethod
+    def load_checkpoint(path, model, optimizer=None, scaler=None, device=None) -> dict:
+        """Load ``path`` into ``model`` -- the adapter's weights over the model's
+        (``lora_only``), or every weight -- and, when given and kept, the
+        optimizer's and scaler's states; the checkpoint, with the run's progress.
+
+        The scaler's state is empty when the checkpoint's run had no loss
+        scaling (bf16, fp32, or after the fp32 fallback), and an fp16 trainer's
+        scaler refuses an empty state; it then starts from its defaults.
+        """
+        checkpoint = torch.load(path, map_location=device)
+        model.load_state_dict(checkpoint['model_state_dict'], strict=not checkpoint.get('lora_only', False))
+        if optimizer is not None and 'optimizer_state_dict' in checkpoint:
+            optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        if scaler is not None and checkpoint.get('scaler_state_dict'):
+            scaler.load_state_dict(checkpoint['scaler_state_dict'])
+        return checkpoint
 
 
 class _AdapterOff:
@@ -122,7 +156,7 @@ class _AdapterOff:
         return False
 
 
-class LoraStrategy:
+class LoraStrategy(_Checkpoints):
     """Train a LoRA adapter on the frozen model; export only the adapter."""
 
     kind = "lora"
@@ -239,7 +273,7 @@ class LoraStrategy:
         return _merge_existing_adapters(model)
 
 
-class FullStrategy:
+class FullStrategy(_Checkpoints):
     """Train every weight; export the whole state dict.
 
     Measured against LoRA r=64 on mito-aff-unet-setup-16 (2026-09-23): faster

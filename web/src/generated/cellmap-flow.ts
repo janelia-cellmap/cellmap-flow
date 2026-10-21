@@ -367,46 +367,252 @@ export interface LoadCrops {
 /**
  * A new training job: ``model_name`` trained on the corrections at
  * ``corrections_path``, a session's corrections directory or the base
- * output path of its sessions.
- *
- * The defaults are the server form's (_finetune_tab.html's values and
- * selected options, checked against these by tests/web/test_schema.py);
- * cellmap_flow.schema exports them to the browser as FINETUNE_DEFAULTS.
- * The rest of the fields are passed on as sent, and the route adjusts the
- * loss for painted annotations and for a distance target.
+ * output path of its sessions, with the training settings of
+ * ``finetune.options.TrainingOptions``, whose defaults are the server
+ * form's (_finetune_tab.html's values and selected options, checked
+ * against them by tests/web/test_schema.py; cellmap_flow.schema exports
+ * them to the browser as FINETUNE_DEFAULTS). The route adjusts them for
+ * painted annotations and for the model's target (TrainingOptions.for_session).
  */
 export interface FinetuneSubmit {
+  /**
+   * What trains: a LoRA adapter on the frozen network (lora), every weight (full), or the network's last layer (head), which only the browser offers. A LoRA rank of 0 means full.
+   */
+  mode?: "lora" | "full" | "head";
+  /**
+   * LoRA rank; 0 is a full finetune (every parameter trainable, no adapter), which exports full_finetune/model_state_dict.pt instead of lora_adapter/. Low rank is itself the anti-forgetting mechanism: the adapter wants just enough capacity to fix the bad regions and not enough to rewrite the good ones.
+   */
+  lora_r?: number;
+  /**
+   * LoRA alpha, the adapter's scaling (alpha / rank); left blank it is twice the rank, so the scaling stays 2 whatever the rank.
+   */
+  lora_alpha?: number | null;
+  /**
+   * LoRA dropout.
+   */
+  lora_dropout?: number;
+  /**
+   * Skip LoRA on layers narrower than this on either side. Narrow full-resolution layers are where the adapter is expensive and nearly parameter-free: on mito-aff-unet-setup-16, 96 skips 7 of 19 layers (~1% of adapter params) for a 1.7x faster step. 0 adapts every layer.
+   */
+  lora_min_channels?: number;
+  /**
+   * Number of training epochs.
+   */
+  num_epochs?: number;
+  /**
+   * Patches per batch.
+   */
+  batch_size?: number;
+  /**
+   * Learning rate (AdamW).
+   */
+  learning_rate?: number;
+  /**
+   * Batches to accumulate gradients over before each optimizer step.
+   */
+  gradient_accumulation_steps?: number;
+  /**
+   * The supervised loss. 'interval' is for a distance model (output_type distance) on scribbles: each painted voxel is held between the bounds the paint implies on its distance to the boundary, exact where the paint is dense, and the field's slope is limited (slope_weight). 'flow' is for a flow model such as Cellpose (output_type flows): MSE of the flows, halved, plus BCE of the foreground, each over the voxels it can be known at.
+   */
+  loss_type?: "dice" | "bce" | "combined" | "mse" | "margin" | "interval" | "flow";
+  /**
+   * s moves the targets from 0 and 1 to s/2 and 1 - s/2, which keeps the model from being pushed to extreme outputs and preserves gradual, distance-like predictions. The margin, interval and flow losses take none.
+   */
+  label_smoothing?: number;
+  /**
+   * Weight of the distillation term, which holds the model to the one it started from where the paint says nothing; 0 switches it off. Try 0.5 to 1 for sparse scribbles. Blank leaves it to the trainer: 1 when the session has good regions, else 0.
+   */
+  distillation_lambda?: number | null;
+  /**
+   * Where the distillation term applies: the unlabeled voxels only, or all voxels. Good regions, when the session has any, decide instead.
+   */
+  distillation_scope?: "unlabeled" | "all";
+  /**
+   * The margin loss's margin: foreground must exceed 1 - margin, background stay below it.
+   */
+  margin?: number;
+  /**
+   * Weight foreground and background voxels equally, however many of each were painted; keeps the foreground from being over-predicted.
+   */
+  balance_classes?: boolean;
+  /**
+   * Weight of the interval loss's slope limit, which keeps the predicted field from getting steeper than a distance field. Without it the bounds alone let the field collapse into a step.
+   */
+  slope_weight?: number;
+  /**
+   * Random flips, XY rotations, brightness and noise on each patch (patch-centre jitter is always applied). Augmentation pays off when a run revisits the same patches many times; below a few hundred gradient steps it mostly adds variance, which is why it is off by default.
+   */
+  augment?: boolean;
+  /**
+   * Mixed precision on CUDA: bf16 where the GPU has it, else fp16 with a GradScaler, falling back to fp32 when the model NaNs under either. Off on other devices.
+   */
+  mixed_precision?: boolean;
+  /**
+   * DataLoader workers.
+   */
+  num_workers?: number;
+  /**
+   * Write TensorBoard event files to <output-dir>/tensorboard (view with `tensorboard --logdir <training dir>`).
+   */
+  tensorboard?: boolean;
+  /**
+   * Sparse annotations: only annotated voxels count in the loss (0 unannotated, 1 background, 2 and up foreground). The dashboard sets it when the session is painted.
+   */
+  mask_unannotated?: boolean;
+  /**
+   * The training target (TrainingOptions.output_type); blank, the route detects it from the model.
+   */
+  output_type?: ("binary" | "binary_broadcast" | "affinities" | "distance" | "flows") | null;
+  /**
+   * tanh scale in output voxels of the distance target. The cellmap distance models were trained with 6.
+   */
+  distance_sigma?: number;
+  /**
+   * Train one channel of a multi-channel model (output_type binary only); blank trains all.
+   */
+  select_channel?: number | null;
+  /**
+   * JSON list of [dz, dy, dx] offsets for affinity targets, e.g. '[[1,0,0],[0,1,0],[0,0,1]]'. Blank with output_type affinities reads 'offsets' from the model script.
+   */
+  offsets?: string | null;
+  /**
+   * What the model's output is, as its server reports it (serving.probe): unit for a sigmoid baked in ([0, 1]), signed_unit for a tanh ([-1, 1]), unbounded for logits. The losses then compare probabilities or logits accordingly, as ranking and seeding read the same output. Blank, the training job probes the model once.
+   */
+  output_class?: ("unit" | "signed_unit" | "unbounded") | null;
+  /**
+   * Patches drawn per epoch; blank or 0 draws one per populated chunk. Kept in the session's manifest.
+   */
   patches_per_epoch?: number | null;
+  /**
+   * The share of each epoch's patches drawn from the good regions, 0 to 1; 0 turns rehearsal off without dropping the regions. Blank keeps the manifest's value.
+   */
   rehearsal_fraction?: number | null;
   model_name?: string;
   corrections_path?: string;
-  lora_r?: number;
-  num_epochs?: number;
-  batch_size?: number;
-  learning_rate?: number;
-  loss_type?: unknown;
-  label_smoothing?: number;
-  distillation_lambda?: number;
-  distillation_scope?: unknown;
-  margin?: number;
-  balance_classes?: unknown;
-  augment?: unknown;
-  output_type?: unknown;
-  offsets?: unknown;
-  select_channel?: number | null;
-  checkpoint_path?: unknown;
-  auto_serve?: unknown;
-  queue?: unknown;
-  charge_group?: unknown;
+  checkpoint_path?: string | null;
+  auto_serve?: boolean;
+  queue?: string | null;
+  charge_group?: string | null;
   [k: string]: unknown;
 }
 /**
- * The next iteration of a job: the manifest overrides, and the training
- * settings to change (common.build_restart_params picks those; the
- * trainer checks them).
+ * The next iteration of a job: the training settings to change, each checked as
+ * TrainingOptions checks it (``changes``; the trainer applies them, cli.apply_restart_params),
+ * and the manifest overrides. Nothing is required: the job's model and corrections
+ * stay as launched.
  */
 export interface FinetuneRestart {
+  /**
+   * What trains: a LoRA adapter on the frozen network (lora), every weight (full), or the network's last layer (head), which only the browser offers. A LoRA rank of 0 means full.
+   */
+  mode?: "lora" | "full" | "head";
+  /**
+   * LoRA rank; 0 is a full finetune (every parameter trainable, no adapter), which exports full_finetune/model_state_dict.pt instead of lora_adapter/. Low rank is itself the anti-forgetting mechanism: the adapter wants just enough capacity to fix the bad regions and not enough to rewrite the good ones.
+   */
+  lora_r?: number;
+  /**
+   * LoRA alpha, the adapter's scaling (alpha / rank); left blank it is twice the rank, so the scaling stays 2 whatever the rank.
+   */
+  lora_alpha?: number | null;
+  /**
+   * LoRA dropout.
+   */
+  lora_dropout?: number;
+  /**
+   * Skip LoRA on layers narrower than this on either side. Narrow full-resolution layers are where the adapter is expensive and nearly parameter-free: on mito-aff-unet-setup-16, 96 skips 7 of 19 layers (~1% of adapter params) for a 1.7x faster step. 0 adapts every layer.
+   */
+  lora_min_channels?: number;
+  /**
+   * Number of training epochs.
+   */
+  num_epochs?: number;
+  /**
+   * Patches per batch.
+   */
+  batch_size?: number;
+  /**
+   * Learning rate (AdamW).
+   */
+  learning_rate?: number;
+  /**
+   * Batches to accumulate gradients over before each optimizer step.
+   */
+  gradient_accumulation_steps?: number;
+  /**
+   * The supervised loss. 'interval' is for a distance model (output_type distance) on scribbles: each painted voxel is held between the bounds the paint implies on its distance to the boundary, exact where the paint is dense, and the field's slope is limited (slope_weight). 'flow' is for a flow model such as Cellpose (output_type flows): MSE of the flows, halved, plus BCE of the foreground, each over the voxels it can be known at.
+   */
+  loss_type?: "dice" | "bce" | "combined" | "mse" | "margin" | "interval" | "flow";
+  /**
+   * s moves the targets from 0 and 1 to s/2 and 1 - s/2, which keeps the model from being pushed to extreme outputs and preserves gradual, distance-like predictions. The margin, interval and flow losses take none.
+   */
+  label_smoothing?: number;
+  /**
+   * Weight of the distillation term, which holds the model to the one it started from where the paint says nothing; 0 switches it off. Try 0.5 to 1 for sparse scribbles. Blank leaves it to the trainer: 1 when the session has good regions, else 0.
+   */
+  distillation_lambda?: number | null;
+  /**
+   * Where the distillation term applies: the unlabeled voxels only, or all voxels. Good regions, when the session has any, decide instead.
+   */
+  distillation_scope?: "unlabeled" | "all";
+  /**
+   * The margin loss's margin: foreground must exceed 1 - margin, background stay below it.
+   */
+  margin?: number;
+  /**
+   * Weight foreground and background voxels equally, however many of each were painted; keeps the foreground from being over-predicted.
+   */
+  balance_classes?: boolean;
+  /**
+   * Weight of the interval loss's slope limit, which keeps the predicted field from getting steeper than a distance field. Without it the bounds alone let the field collapse into a step.
+   */
+  slope_weight?: number;
+  /**
+   * Random flips, XY rotations, brightness and noise on each patch (patch-centre jitter is always applied). Augmentation pays off when a run revisits the same patches many times; below a few hundred gradient steps it mostly adds variance, which is why it is off by default.
+   */
+  augment?: boolean;
+  /**
+   * Mixed precision on CUDA: bf16 where the GPU has it, else fp16 with a GradScaler, falling back to fp32 when the model NaNs under either. Off on other devices.
+   */
+  mixed_precision?: boolean;
+  /**
+   * DataLoader workers.
+   */
+  num_workers?: number;
+  /**
+   * Write TensorBoard event files to <output-dir>/tensorboard (view with `tensorboard --logdir <training dir>`).
+   */
+  tensorboard?: boolean;
+  /**
+   * Sparse annotations: only annotated voxels count in the loss (0 unannotated, 1 background, 2 and up foreground). The dashboard sets it when the session is painted.
+   */
+  mask_unannotated?: boolean;
+  /**
+   * The training target (TrainingOptions.output_type); blank, the route detects it from the model.
+   */
+  output_type?: ("binary" | "binary_broadcast" | "affinities" | "distance" | "flows") | null;
+  /**
+   * tanh scale in output voxels of the distance target. The cellmap distance models were trained with 6.
+   */
+  distance_sigma?: number;
+  /**
+   * Train one channel of a multi-channel model (output_type binary only); blank trains all.
+   */
+  select_channel?: number | null;
+  /**
+   * JSON list of [dz, dy, dx] offsets for affinity targets, e.g. '[[1,0,0],[0,1,0],[0,0,1]]'. Blank with output_type affinities reads 'offsets' from the model script.
+   */
+  offsets?: string | null;
+  /**
+   * What the model's output is, as its server reports it (serving.probe): unit for a sigmoid baked in ([0, 1]), signed_unit for a tanh ([-1, 1]), unbounded for logits. The losses then compare probabilities or logits accordingly, as ranking and seeding read the same output. Blank, the training job probes the model once.
+   */
+  output_class?: ("unit" | "signed_unit" | "unbounded") | null;
+  /**
+   * Patches drawn per epoch; blank or 0 draws one per populated chunk. Kept in the session's manifest.
+   */
   patches_per_epoch?: number | null;
+  /**
+   * The share of each epoch's patches drawn from the good regions, 0 to 1; 0 turns rehearsal off without dropping the regions. Blank keeps the manifest's value.
+   */
   rehearsal_fraction?: number | null;
   [k: string]: unknown;
 }
@@ -499,7 +705,7 @@ export const UNDO_DEPTH = 10;
 export const PROMPT_MAX_CHARS = 4000;
 /** The longest provider or model id and target name the AI-annotation routes take (requests.py). */
 export const LABEL_MAX_CHARS = 100;
-/** The Finetune tab's form at its defaults: what FinetuneSubmit reads a blank field as. */
+/** The Finetune tab's form at its defaults: what a blank field trains with (finetune/options.py TrainingOptions). */
 export const FINETUNE_DEFAULTS = { lora_r: 64, num_epochs: 20, batch_size: 8, learning_rate: 0.0001, loss_type: "margin", margin: 0.3, label_smoothing: 0.1, distillation_lambda: 0.01, distillation_scope: "unlabeled", balance_classes: true, augment: false } as const;
 
 export type Availability = Route["availability"];

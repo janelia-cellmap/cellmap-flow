@@ -20,6 +20,7 @@ import torch
 import torch.nn as nn
 
 from cellmap_flow.finetune.target_transforms import SATURATION_SIGMAS
+from cellmap_flow.serving.probe import SIGNED_UNIT, UNIT
 
 __all__ = [
     "masked_mean",
@@ -52,24 +53,33 @@ def balanced_mean(x, hard_target, mask):
     return (fg + bg) / 2.0
 
 
-def as_probabilities(pred, model_has_sigmoid):
-    """The model's output as probabilities.
+def as_probabilities(pred, output_class):
+    """The model's output as probabilities, by what it is (serving.probe's classes).
 
-    Left alone when the model already ends in a sigmoid (the cellmap
+    Left alone when the model ends in a sigmoid (UNIT: the cellmap
     *_distance_* UNets do); a second sigmoid would squash [0, 1] into
-    [0.5, 0.73] and make a well-fitting prediction look like a constant.
+    [0.5, 0.73] and make a well-fitting prediction look like a constant. A
+    tanh's [-1, 1] (SIGNED_UNIT) is moved to [0, 1]; logits (UNBOUNDED, or
+    None) go through the sigmoid. The reading the dashboard's ranking and
+    seeding use (view_labels.probability).
     """
-    return pred if model_has_sigmoid else torch.sigmoid(pred)
+    if output_class == UNIT:
+        return pred
+    if output_class == SIGNED_UNIT:
+        return (pred + 1) / 2
+    return torch.sigmoid(pred)
 
 
-def as_logits(pred, model_has_sigmoid):
+def as_logits(pred, output_class):
     """The model's output as logits: ``as_probabilities``' inverse.
 
-    A model ending in a sigmoid is taken back through it. The clamp keeps
+    A bounded output is taken back through the logit. The clamp keeps
     log(0) out; it costs no gradient short of |logit| ~16, far past where any
     distance bound sits (SATURATION_SIGMAS is a logit of 6).
     """
-    return torch.logit(pred, eps=1e-7) if model_has_sigmoid else pred
+    if output_class in (UNIT, SIGNED_UNIT):
+        return torch.logit(as_probabilities(pred, output_class), eps=1e-7)
+    return pred
 
 
 def soft_target_entropy(target, eps=1e-7):

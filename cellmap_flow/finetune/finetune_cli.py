@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-Command-line interface for LoRA finetuning.
+Command-line interface of a finetune training job: a LoRA adapter, or every weight.
 
 Usage:
     python -m cellmap_flow.finetune.finetune_cli \
@@ -20,7 +20,8 @@ Usage:
 
 The job manager launches this module path, and a running job outlives a
 dashboard upgrade, so the path, its flags and what it prints only change
-compatibly. The flags are finetune.cli's, the job's loop is
+compatibly. The flags are finetune.cli's (the training settings' from
+finetune.options.TrainingOptions), the job's loop is
 finetune.session_loop.TrainingSession, what each iteration writes is
 finetune.run_outputs', and its stdout markers are finetune.markers'.
 """
@@ -29,7 +30,7 @@ import logging
 import sys
 
 from cellmap_flow.finetune.adaptation import FullStrategy, LoraStrategy
-from cellmap_flow.finetune.cli import model_config_from_args, parse_args
+from cellmap_flow.finetune.cli import model_config_from_args, options_of, parse_args
 from cellmap_flow.finetune.model_loading import load_trainable_model
 from cellmap_flow.finetune.session_loop import TrainingSession
 from cellmap_flow.finetune.trainable import LORA, finetune_modes
@@ -51,21 +52,30 @@ def main():
     # entry and the chain it serves with may name.
     load_plugins()
 
+    options = options_of(args)
+    if options.mode == "head":
+        raise SystemExit(
+            "The last layer (--mode head) is trained in the browser; a training job trains "
+            "a LoRA adapter (--mode lora) or every weight (--mode full)."
+        )
+
     # Print configuration
     logger.info("=" * 60)
-    logger.info("LoRA Finetuning Configuration")
+    logger.info("Finetuning Configuration")
     logger.info("=" * 60)
     logger.info(f"Model type: {args.model_type}")
     logger.info(f"Model checkpoint: {args.model_checkpoint}")
     logger.info(f"Corrections: {args.corrections}")
     logger.info(f"Output directory: {args.output_dir}")
-    logger.info(
-        f"LoRA rank: {args.lora_r} (alpha: {args.lora_alpha}, "
-        f"min_channels: {args.lora_min_channels})"
-    )
-    logger.info(f"Batch size: {args.batch_size}")
-    logger.info(f"Epochs: {args.num_epochs}")
-    logger.info(f"Learning rate: {args.learning_rate}")
+    logger.info(f"Mode: {options.mode}")
+    if options.mode == "lora":
+        logger.info(
+            f"LoRA rank: {options.lora_r} (alpha: {options.lora_alpha}, "
+            f"min_channels: {options.lora_min_channels})"
+        )
+    logger.info(f"Batch size: {options.batch_size}")
+    logger.info(f"Epochs: {options.num_epochs}")
+    logger.info(f"Learning rate: {options.learning_rate}")
     logger.info("")
 
     # === Load model (once) ===
@@ -75,24 +85,24 @@ def main():
     base_model = load_trainable_model(model_config)
 
     # === Wrap with LoRA (once - same object is reused across restarts) ===
-    # The request decides, here only: --lora-r 0 is a full finetune (see
-    # FullStrategy). From here on the model does (strategy_for). A finetuned
-    # model given as the base still carries its adapter; either way it is
-    # folded into the weights first.
+    # The request decides, here only: --mode full (or a rank of 0) is a full
+    # finetune (see FullStrategy). From here on the model does (strategy_for).
+    # A finetuned model given as the base still carries its adapter; either
+    # way it is folded into the weights first.
     modes = finetune_modes(base_model)
     if not modes:
         raise SystemExit(f"{type(base_model).__name__} has no parameters to train: this model cannot be finetuned")
-    if args.lora_r > 0 and LORA not in modes:
+    if options.mode == "lora" and LORA not in modes:
         raise SystemExit(
             f"This model ({type(base_model).__name__}) can only be fully finetuned, not with LoRA: its "
             "network is compiled (TorchScript), so adapters cannot be attached to its layers. "
             "Set the LoRA rank to 0 (full finetune)."
         )
-    if args.lora_r <= 0:
+    if options.mode == "full":
         strategy = FullStrategy()
     else:
         strategy = LoraStrategy(
-            args.lora_r, args.lora_alpha, args.lora_dropout, min_channels=args.lora_min_channels
+            options.lora_r, options.lora_alpha, options.lora_dropout, min_channels=options.lora_min_channels
         )
     model = strategy.prepare(base_model)
 

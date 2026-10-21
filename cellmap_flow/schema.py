@@ -26,7 +26,7 @@ The schema holds:
   added without a declaration is an error naming it (``routes()``);
 - ``x-constants``: the numbers both modes share (``finetune/rank.py``'s,
   ``UNDO_DEPTH``, the AI annotation's caps) and the Finetune tab's defaults
-  for a blank field, read from ``FinetuneSubmit``;
+  for a blank field, read from ``finetune/options.py``'s ``TrainingOptions``;
 - ``x-steps``: each normalizer's and postprocessor's parameters and defaults
   (a ``StepSpec``), from their registries.
 """
@@ -225,7 +225,7 @@ REQUEST_MODELS: dict[str, str] = {
     "POST /api/finetune/ai-annotate/reject": "AIAnnotateDecision",
 }
 
-# The Finetune tab's fields whose default for a blank value is FinetuneSubmit's
+# The Finetune tab's fields whose default for a blank value is TrainingOptions'
 # (x-constants' FINETUNE_DEFAULTS), which the server form shows and the
 # browser's DEFAULT_OPTIONS (web/src/finetune/types.ts) takes where it has
 # no reason of its own.
@@ -244,7 +244,7 @@ CONSTANT_DOCS = {
     "UNDO_DEPTH": "How many Label it actions per volume Undo takes back (view_labels.py).",
     "PROMPT_MAX_CHARS": "The longest AI-annotation prompt the routes take (requests.py).",
     "LABEL_MAX_CHARS": "The longest provider or model id and target name the AI-annotation routes take (requests.py).",
-    "FINETUNE_DEFAULTS": "The Finetune tab's form at its defaults: what FinetuneSubmit reads a blank field as.",
+    "FINETUNE_DEFAULTS": "The Finetune tab's form at its defaults: what a blank field trains with (finetune/options.py TrainingOptions).",
 }
 
 
@@ -313,9 +313,10 @@ def routes(rules: Optional[list[tuple[str, str]]] = None) -> list[Route]:
 
 
 def constants() -> dict:
-    from cellmap_flow.dashboard.requests import LABEL_MAX_CHARS, PROMPT_MAX_CHARS, FinetuneSubmit
+    from cellmap_flow.dashboard.requests import LABEL_MAX_CHARS, PROMPT_MAX_CHARS
     from cellmap_flow.dashboard.routes.finetune.view_labels import UNDO_DEPTH
     from cellmap_flow.finetune import rank
+    from cellmap_flow.finetune.options import TrainingOptions
 
     return {
         "RANK_BLOCKS": rank.RANK_BLOCKS,
@@ -326,7 +327,7 @@ def constants() -> dict:
         "UNDO_DEPTH": UNDO_DEPTH,
         "PROMPT_MAX_CHARS": PROMPT_MAX_CHARS,
         "LABEL_MAX_CHARS": LABEL_MAX_CHARS,
-        "FINETUNE_DEFAULTS": {name: FinetuneSubmit.model_fields[name].default for name in FINETUNE_FORM_FIELDS},
+        "FINETUNE_DEFAULTS": {name: TrainingOptions.model_fields[name].default for name in FINETUNE_FORM_FIELDS},
     }
 
 
