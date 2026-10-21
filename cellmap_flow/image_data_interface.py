@@ -288,19 +288,17 @@ class ImageDataInterface:
         norms = view.norms_to_apply()
         array = self.array
         store = self.source.ts
-        select, axis, chain = None, None, None
+        select, chain = None, None
         if store.ndim > len(self.shape):
             # select_channel's rule: the axis labelled c/c^/channel, else the first
             labels = list(getattr(store.domain, "labels", None) or [])
             axis = next((i for i, lab in enumerate(labels) if lab in CHANNEL_AXIS_NAMES), 0)
             select = {array.axes[axis]: selected_channel(view.chain())}
         if norms:
+            # worldarray drops the pinned axis before the (post_)transform runs,
+            # so the chain sees the one channel as a spatial array
             def chain(data):
-                # worldarray hands the (post_)transform the pinned axis, of size 1, and
-                # drops it after: the chain sees the one channel without it
-                if axis is None:
-                    return apply_norms(data, norms)
-                return np.expand_dims(apply_norms(np.take(data, 0, axis=axis), norms), axis)
+                return apply_norms(data, norms)
         if not self.resampled:
             return array.read_index(box.begin, box.end, padding=fill, select=select, transform=chain)
         # The target voxels' world box: their centres are where worldarray reads.
