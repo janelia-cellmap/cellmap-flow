@@ -15,6 +15,8 @@ from typing import List, Optional
 import torch
 import torch.nn as nn
 
+from cellmap_flow.finetune.trainable import BatchLoopWrapper, SequentialWrapper  # noqa: F401  (re-exported)
+
 logger = logging.getLogger(__name__)
 
 
@@ -248,45 +250,6 @@ def _replace_interpreter_modules(model: nn.Module) -> int:
     if count > 0:
         logger.info(f"Replaced {count} non-standard modules with nn.Conv/Linear for PEFT compatibility")
     return count
-
-
-class BatchLoopWrapper(nn.Module):
-    """Wraps a model with fixed batch_size=1 (e.g. UnflattenedModule from
-    torch.export without dynamic shapes) so it accepts arbitrary batch sizes
-    by looping over the batch dim.
-    """
-
-    def __init__(self, model: nn.Module):
-        super().__init__()
-        self.model = model
-
-    def forward(self, x, *args, **kwargs):
-        if x.shape[0] == 1:
-            return self.model(x, *args, **kwargs)
-        outs = [self.model(x[i:i + 1], *args, **kwargs) for i in range(x.shape[0])]
-        return torch.cat(outs, dim=0)
-
-
-class SequentialWrapper(nn.Module):
-    """
-    Wrapper for Sequential models to make them compatible with PEFT.
-
-    PEFT expects models to accept **kwargs, but Sequential only accepts
-    positional args. This wrapper provides that interface.
-    """
-    def __init__(self, model: nn.Module):
-        super().__init__()
-        self.model = model
-
-    def forward(self, x=None, input_ids=None, **kwargs):
-        # PEFT may pass input as 'input_ids' kwarg for transformers
-        # For vision models, we expect 'x' as positional or kwarg
-        if x is None and input_ids is not None:
-            x = input_ids
-        if x is None:
-            raise ValueError("Input tensor not provided")
-        # Ignore other kwargs and just pass x
-        return self.model(x)
 
 
 def wrap_model_with_lora(

@@ -9,6 +9,11 @@ its network in these, composed with ``torch.nn.Sequential``, rather than
 writing its own wrapper; they hold no parameters of their own, so what is
 trained is the network's.
 
+``BatchLoopWrapper`` and ``SequentialWrapper`` make a network trainable
+too: one that takes a batch of one, and one whose forward PEFT cannot call.
+The adapter's names depend on the module tree it was trained on,
+``BatchLoopWrapper``'s ``model.`` prefix included, so neither changes.
+
 ``finetune_modes`` says what a module can be finetuned with: LoRA attaches
 adapters beside a network's Conv and Linear layers, which needs a Python
 module tree, while a full finetune trains every parameter, which a
@@ -190,3 +195,42 @@ class Clip(nn.Module):
 
     def forward(self, x):
         return x.clamp(min=self.min, max=self.max)
+
+
+class BatchLoopWrapper(nn.Module):
+    """Wraps a model with fixed batch_size=1 (e.g. UnflattenedModule from
+    torch.export without dynamic shapes) so it accepts arbitrary batch sizes
+    by looping over the batch dim.
+    """
+
+    def __init__(self, model: nn.Module):
+        super().__init__()
+        self.model = model
+
+    def forward(self, x, *args, **kwargs):
+        if x.shape[0] == 1:
+            return self.model(x, *args, **kwargs)
+        outs = [self.model(x[i:i + 1], *args, **kwargs) for i in range(x.shape[0])]
+        return torch.cat(outs, dim=0)
+
+
+class SequentialWrapper(nn.Module):
+    """
+    Wrapper for Sequential models to make them compatible with PEFT.
+
+    PEFT expects models to accept **kwargs, but Sequential only accepts
+    positional args. This wrapper provides that interface.
+    """
+    def __init__(self, model: nn.Module):
+        super().__init__()
+        self.model = model
+
+    def forward(self, x=None, input_ids=None, **kwargs):
+        # PEFT may pass input as 'input_ids' kwarg for transformers
+        # For vision models, we expect 'x' as positional or kwarg
+        if x is None and input_ids is not None:
+            x = input_ids
+        if x is None:
+            raise ValueError("Input tensor not provided")
+        # Ignore other kwargs and just pass x
+        return self.model(x)
