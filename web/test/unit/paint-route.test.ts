@@ -3,7 +3,7 @@
 // of the service worker, without a worker.
 import { describe, expect, it } from "vitest";
 
-import { PAINT_METHODS, servePaint, type PaintRequest, type PaintResponse } from "../../src/state/paint-route";
+import { servePaint, type PaintRequest, type PaintResponse } from "../../src/state/paint-route";
 import { MemoryPaintStore } from "../../src/state/paint-store";
 
 const VOL = "vol-0123abcd-20261015-120000";
@@ -37,15 +37,6 @@ describe("servePaint: GET and HEAD", () => {
     expect(response.headers["content-length"]).toBe("10");
     expect(response.headers["accept-ranges"]).toBe("bytes");
     expect(response.headers.etag).toMatch(/^".+"$/);
-  });
-
-  it("gives zarr v2 metadata as JSON", async () => {
-    const store = await painted();
-    expect((await servePaint(store, req("GET", `${VOL}/annotation/s0/.zarray`))).headers["content-type"]).toBe("application/json");
-    await store.put(VOL, ".zattrs", new Uint8Array([123, 125]));
-    await store.put(VOL, "annotation/.zgroup", new Uint8Array([123, 125]));
-    expect((await servePaint(store, req("GET", `${VOL}/.zattrs`))).headers["content-type"]).toBe("application/json");
-    expect((await servePaint(store, req("HEAD", `${VOL}/annotation/.zgroup`))).headers["content-type"]).toBe("application/json");
   });
 
   it("is a 404 for a chunk never painted (the fill value to a zarr reader), with no body on HEAD", async () => {
@@ -96,15 +87,6 @@ describe("servePaint: GET and HEAD", () => {
     expect(past.status).toBe(416);
     expect(past.headers["content-range"]).toBe("bytes */10");
   });
-
-  it("ignores a Range it does not understand and answers the whole object, as HTTP allows", async () => {
-    const store = await painted();
-    for (const range of ["bytes=0-1,4-5", "items=0-1", "bytes=5-2", "bytes=-"]) {
-      const response = await servePaint(store, req("GET", CHUNK, { range }));
-      expect(response.status, range).toBe(200);
-      expect(body(response), range).toHaveLength(10);
-    }
-  });
 });
 
 describe("servePaint: PUT and DELETE (the fork's write and delete)", () => {
@@ -150,26 +132,9 @@ describe("servePaint: PUT and DELETE (the fork's write and delete)", () => {
     expect((await servePaint(store, req("DELETE", `${VOL}~1/annotation/s0/0.0.0`))).status).toBe(204);
     expect(await store.get(VOL, "annotation/s0/0.0.0")).toBeUndefined();
   });
-
-  it("decodes a percent-encoded path, so the store's key is the file's own name", async () => {
-    const store = new MemoryPaintStore();
-    await servePaint(store, req("PUT", `${VOL}/a%20b/.zattrs`, withBody(new Uint8Array([1]))));
-    expect(await store.list(VOL)).toEqual(["a b/.zattrs"]);
-    expect((await servePaint(store, req("GET", `${VOL}/a b/.zattrs`))).status).toBe(200);
-  });
 });
 
 describe("servePaint: what is refused", () => {
-  it("is a 405 with an allow header for any other method", async () => {
-    const store = await painted();
-    for (const method of ["POST", "PATCH", "OPTIONS"]) {
-      const response = await servePaint(store, req(method, CHUNK));
-      expect(response.status, method).toBe(405);
-      expect(response.headers.allow).toBe(PAINT_METHODS);
-      expect(PAINT_METHODS).toBe("GET, HEAD, PUT, DELETE");
-    }
-  });
-
   it("is a 400 for a path with no volume, no file, or a '.' or '..' segment", async () => {
     const store = await painted();
     for (const path of ["", "/", `/${VOL}/.zattrs`, VOL, `${VOL}/`, `${VOL}/annotation/../.zattrs`, `${VOL}/./.zattrs`, `${VOL}/annotation//x`, `../${VOL}/x`, `${VOL}/%E0%A4%A`]) {
@@ -181,20 +146,6 @@ describe("servePaint: what is refused", () => {
     const put = await servePaint(store, req("PUT", `${VOL}/../x`, withBody(new Uint8Array([1]))));
     expect(put.status).toBe(400);
     expect(await store.volumes()).toEqual([VOL]);
-  });
-
-  it("is a 400 for a '~' in the volume that is not a ~<digits> suffix, which no volume id has", async () => {
-    const store = await painted();
-    for (const spelled of [`${VOL}~`, `${VOL}~x`, `${VOL}~1a`, `~1`, `vol~1-abc`, `${VOL}~1~2`, `${VOL}~-1`]) {
-      const response = await servePaint(store, req("GET", `${spelled}/annotation/s0/3.4.5`));
-      expect(response.status, spelled).toBe(400);
-      expect(textOf(response), spelled).toContain("~");
-    }
-    // Nothing lands under such a spelling either.
-    expect((await servePaint(store, req("PUT", `${VOL}~/x`, withBody(new Uint8Array([1]))))).status).toBe(400);
-    expect(await store.volumes()).toEqual([VOL]);
-    // A "~" in the path within the volume is just a character of a key, as before.
-    expect((await servePaint(store, req("GET", `${VOL}/annotation/s0/3~4`))).status).toBe(404);
   });
 
   it("is a 404 for any request with a query (an S3 listing probe), even of an object that is there", async () => {

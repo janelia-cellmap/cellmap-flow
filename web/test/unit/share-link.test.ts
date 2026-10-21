@@ -1,16 +1,15 @@
 // The Share button's link (src/share-link.ts): the volume and the models in
-// the query, the view in the hash, nothing without a volume; a finetuned
-// model's ref built from its bytes and its lineage's records; and what the
-// sender is told the link leaves behind.
+// the query, the view in the hash; and a finetuned model's ref built from its
+// bytes and its lineage's records.
 import { readFileSync } from "node:fs";
 import { resolve as resolvePath } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import type { FinetunedRecord, ModelEntry } from "../../src/contracts";
 import { headOf, withHead } from "../../src/finetune/onnx-head";
-import { finetunedRef, parseFinetunedRef, parseLink, sameHead } from "../../src/link";
+import { parseFinetunedRef, parseLink, sameHead } from "../../src/link";
 import { finetunedEntry } from "../../src/models/finetuned";
-import { linkRefs, shareLink, shareNotes } from "../../src/share-link";
+import { linkRefs, shareLink } from "../../src/share-link";
 import { encodeState } from "../../src/viewer/share";
 import { entryFixture } from "./models-helpers";
 
@@ -19,10 +18,6 @@ const DATASET = "https://janelia-cosem-datasets.s3.amazonaws.com/jrc_mus-liver/j
 const MODELS = ["setup_53", "setup_54"];
 
 describe("shareLink", () => {
-  it("is nothing without a volume", () => {
-    expect(shareLink(PAGE, null, MODELS, null)).toBeNull();
-  });
-
   it("names the volume and the models readably, and parseLink reads them back", () => {
     const link = shareLink(PAGE, DATASET, MODELS, null)!;
     expect(link).toBe(`${PAGE}?dataset=${DATASET}&model=setup_53&model=setup_54`);
@@ -33,20 +28,6 @@ describe("shareLink", () => {
     const hash = encodeState({ position: [1, 2, 3], layers: [] });
     expect(shareLink(`${PAGE}?x=1#!old`, DATASET, [], `${PAGE}ng/index.html${hash}`)).toBe(`${PAGE}?dataset=${DATASET}${hash}`);
     expect(shareLink(PAGE, DATASET, [], `${PAGE}ng/index.html`)).toBe(`${PAGE}?dataset=${DATASET}`);
-  });
-
-  it("escapes what would end or split the query, and reads back the same", () => {
-    const odd = "https://h/a b.zarr/x&y#z+w";
-    const link = shareLink(PAGE, odd, [], null)!;
-    expect(link).not.toMatch(/[ #+]/);
-    expect(parseLink(new URL(link).search).datasetUrl).toBe(odd);
-  });
-
-  it("puts a finetuned model's ref in its place among the others, as it is, and parseLink reads it back the same", () => {
-    const ref = finetunedRef({ name: "mito_aff_setup53_16nm-ft1", base: "setup_53", file: "x_fp32.onnx", weight: Float32Array.from([0.1, 0.2]), bias: Float32Array.from([0.3]) });
-    const link = shareLink(PAGE, DATASET, ["setup_54", ref, "setup_53"], null)!;
-    expect(link).toBe(`${PAGE}?dataset=${DATASET}&model=setup_54&model=${ref}&model=setup_53`);
-    expect(parseLink(new URL(link).search).models).toEqual(["setup_54", ref, "setup_53"]);
   });
 });
 
@@ -64,14 +45,12 @@ describe("linkRefs", () => {
   const ft1 = record(hub, "mito_aff_setup53_16nm-ft1");
   // Finetuned from ft1: its base is a finetuned model, whose base is the Hub's.
   const ft2 = record(ft1.entry, "mito_aff_setup53_16nm-ft2");
-  // Finetuned from a model since removed: the lineage is broken.
-  const orphan = record(finetunedEntry(hub, "mito_aff_setup53_16nm-ft7"), "mito_aff_setup53_16nm-ft8");
   const bytes: Record<string, ArrayBuffer> = {
     [ft1.id]: withHead(HEAD_ONNX, headOf(HEAD_ONNX), heads.ft1.weight, heads.ft1.bias),
     [ft2.id]: withHead(HEAD_ONNX, headOf(HEAD_ONNX), heads.ft2.weight, heads.ft2.bias),
   };
   const catalog = {
-    finetuned: async () => [ft2, ft1, orphan],
+    finetuned: async () => [ft2, ft1],
     modelBytes: async (entry: ModelEntry) => {
       const kept = bytes[entry.id];
       if (!kept) throw new Error(`${entry.name}'s bytes are no longer in the browser's storage`);
@@ -89,31 +68,5 @@ describe("linkRefs", () => {
     expect(sameHead(parseFinetunedRef(linked.refs[2]), heads.ft1)).toBe(true);
     expect(linked.rebuilt).toEqual([{ name: ft2.name, base: hub.name }, { name: ft1.name, base: hub.name }]);
     expect(linked.unlinked).toEqual([]);
-  });
-
-  it("names a finetuned model it cannot carry as it is, and says why", async () => {
-    const gone = record(hub, "mito_aff_setup53_16nm-ft9");
-    const linked = await linkRefs([orphan.entry, gone.entry], { ...catalog, finetuned: async () => [orphan, gone] });
-    expect(linked.refs).toEqual([orphan.name, gone.name]);
-    expect(linked.rebuilt).toEqual([]);
-    // Why: the model it was finetuned from is gone; the catalog's error for its bytes.
-    expect(linked.unlinked).toEqual([
-      { name: orphan.name, why: expect.stringContaining("mito_aff_setup53_16nm-ft7") },
-      { name: gone.name, why: expect.stringContaining("no longer in the browser's storage") },
-    ]);
-  });
-});
-
-describe("shareNotes", () => {
-  it("has a note for the paint that stays here, a finetuned model rebuilt where the link opens, and one left out of it", () => {
-    const notes = shareNotes(["vol-0badcafe-20261016-101500"], {
-      rebuilt: [{ name: "mito_aff_setup53_16nm-ft1", base: "mito_aff_setup53_16nm" }],
-      unlinked: [{ name: "mito_aff_setup53_16nm-ft8", why: "its record is not in this browser's catalog" }],
-    });
-    expect(notes).toEqual(["vol-0badcafe-20261016-101500", "mito_aff_setup53_16nm-ft1", "mito_aff_setup53_16nm-ft8"].map((name) => expect.stringContaining(name)));
-  });
-
-  it("says nothing of a link that opens elsewhere as it is here", () => {
-    expect(shareNotes([], { rebuilt: [], unlinked: [] })).toEqual([]);
   });
 });

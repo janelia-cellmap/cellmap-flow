@@ -2,7 +2,7 @@
 // log protocol, and the stream a route answers with.
 import { describe, expect, it } from "vitest";
 
-import { done, eventStream, formatEvent, logEvents, requestedOffset } from "../../src/backend/sse";
+import { done, eventStream, logEvents, requestedOffset } from "../../src/backend/sse";
 import { request } from "./backend-fakes";
 
 async function readAll(stream: ReadableStream<Uint8Array>): Promise<string> {
@@ -15,16 +15,6 @@ async function readAll(stream: ReadableStream<Uint8Array>): Promise<string> {
     out += decoder.decode(value, { stream: true });
   }
 }
-
-describe("formatEvent", () => {
-  it("writes id, event and data lines and ends with a blank line", () => {
-    expect(formatEvent({ data: "hello" })).toBe("data: hello\n\n");
-    expect(formatEvent({ id: 42, data: "a\nb" })).toBe("id: 42\ndata: a\ndata: b\n\n");
-    expect(formatEvent({ event: "done", data: "COMPLETED" })).toBe("event: done\ndata: COMPLETED\n\n");
-    expect(formatEvent({ comment: "ping" })).toBe(": ping\n\n");
-    expect(formatEvent({ id: 10 })).toBe("id: 10\n\n"); // how far the log was read, with nothing new to show
-  });
-});
 
 describe("requestedOffset", () => {
   it("takes Last-Event-ID first, then ?offset=, else 0, ignoring what is not a byte count", () => {

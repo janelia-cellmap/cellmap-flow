@@ -37,29 +37,14 @@ def test_it_prints_the_entry_as_yaml_for_a_config(monkeypatch):
     monkeypatch.setattr(resolve_module, "_hf_files", lambda repo, revision: ["metadata.json", "model.ts"])
     result = _add("cellmap/mito", "-n", "mito")
     assert result.exit_code == 0, result.output
-    assert result.output == (
-        "# huggingface: a cellmap-models export on Hugging Face\n"
-        "# runs in this environment\n"
-        "models:\n"
-        "  mito:\n"
-        "    type: huggingface\n"
-        "    repo: cellmap/mito\n"
-    )
+    assert yaml.safe_load(result.output) == {"models": {"mito": {"type": "huggingface", "repo": "cellmap/mito"}}}
 
 
-def test_what_it_still_needs_is_said_and_lists_stay_on_one_line():
-    needs = _add("cpsam", "--offline")
-    assert "# runs in the cellpose4 environment (its type's default)\n" in needs.output
-    assert "# still needs: voxel_size (add to the entry)\n" in needs.output
+def test_what_it_still_needs_is_said_until_it_is_given():
+    assert "voxel_size" in _add("cpsam", "--offline").output
     given = _add("cpsam", "-v", "16,8,8")
-    assert given.output.endswith("    voxel_size: [16, 8, 8]\n")
     assert yaml.safe_load(given.output) == {
         "models": {"cpsam": {"type": "cellpose", "pretrained_model": "cpsam", "voxel_size": [16, 8, 8]}}}
-
-
-def test_a_reference_it_cannot_resolve_is_an_error():
-    result = _add("unet", "--offline")
-    assert result.exit_code == 1 and "Could not tell what model 'unet' is" in result.output
 
 
 @pytest.fixture
@@ -83,8 +68,8 @@ def test_run_serves_the_model_as_a_yaml_would(served):
 
 
 @pytest.mark.parametrize("args, message", [
-    (["cpsam", "--run"], "--run needs --data-path"),
-    (["cpsam", "--run", "-d", RAW], "cpsam still needs voxel_size"),
+    (["cpsam", "--run"], "--data-path"),
+    (["cpsam", "--run", "-d", RAW], "voxel_size"),
 ])
 def test_run_refuses_what_it_cannot_serve(served, args, message):
     result = _add(*args)

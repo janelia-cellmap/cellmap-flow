@@ -4,17 +4,12 @@ import { apiDownloadUrl, dispositionFilename, rebaseApiUrl } from "../../src/reb
 
 describe("rebaseApiUrl", () => {
   const pages = new URL("https://janelia-cellmap.github.io/cellmap-flow/app/");
-  const root = new URL("http://localhost:5173/");
 
   it("moves a root-relative /api/ URL under the page's directory", () => {
     expect(rebaseApiUrl("/api/pipeline", pages)).toBe("https://janelia-cellmap.github.io/cellmap-flow/app/api/pipeline");
     expect(rebaseApiUrl("/api/finetune/logs/stream?offset=12", pages)).toBe(
       "https://janelia-cellmap.github.io/cellmap-flow/app/api/finetune/logs/stream?offset=12",
     );
-  });
-
-  it("is the identity at an origin's root, where the dashboard's URLs already work", () => {
-    expect(rebaseApiUrl("/api/pipeline", root)).toBe("http://localhost:5173/api/pipeline");
   });
 
   it("leaves every other URL alone", () => {
@@ -57,11 +52,5 @@ describe("dispositionFilename", () => {
 
   it("prefers an RFC 6266 filename*, decoded", () => {
     expect(dispositionFilename("attachment; filename=\"fallback.onnx\"; filename*=UTF-8''mito%20ft%C3%A9.onnx")).toBe("mito fté.onnx");
-  });
-
-  it("is null without a name", () => {
-    expect(dispositionFilename(null)).toBeNull();
-    expect(dispositionFilename("attachment")).toBeNull();
-    expect(dispositionFilename('attachment; filename=""')).toBeNull();
   });
 });

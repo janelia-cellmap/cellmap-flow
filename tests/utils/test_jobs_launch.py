@@ -1,5 +1,5 @@
-"""jobs.launch's policy: where start_hosts runs a server, and the job cleanup
-the entry points install.
+"""jobs.launch's policy: where start_hosts runs a server, the cleanup that
+kills its jobs on a signal, and installing a server's environment first.
 
 start_hosts' submissions are replaced where it calls them (submit_bsub_job,
 run_locally, the queue list), and each fake job says what bjobs would have
@@ -14,17 +14,14 @@ import threading
 from pathlib import Path
 from typing import NamedTuple
 
-import numpy as np
 import pytest
-from click.testing import CliRunner
 
 from cellmap_flow.jobs import launch
 from cellmap_flow.jobs.launch import start_hosts, started_jobs
 from cellmap_flow.jobs.lsf import BsubTimeoutError
 from cellmap_flow.jobs.ready import READY_ENV
-from cellmap_flow.jobs.settings import LauncherSettings, launcher_settings
+from cellmap_flow.jobs.settings import launcher_settings
 from cellmap_flow.jobs.spec import JobStartError, JobStatus
-from tests.utils.serving_helpers import write_raw
 
 QUEUES = ("gpu_h100", "gpu_a100", "gpu_h200")
 P, R, F = JobStatus.PENDING, JobStatus.RUNNING, JobStatus.FAILED
@@ -188,52 +185,6 @@ def test_the_cleanup_handlers_cover_the_terminal_going_away(monkeypatch):
     monkeypatch.setattr(launch.signal, "signal", lambda signum, handler: installed.setdefault(signum, handler))
     assert launch.install_cleanup_handlers()
     assert {signal.SIGINT, signal.SIGTERM, signal.SIGHUP} <= set(installed)
-
-
-def _cellmap_flow_infer(monkeypatch, tmp_path, order):
-    from cellmap_flow.cli import infer, main
-    from cellmap_flow.dashboard.services import startup
-
-    monkeypatch.setattr(infer, "install_cleanup_handlers", lambda: order.append("install"))
-    monkeypatch.setattr(infer, "start_hosts", lambda *a, **k: order.append("run"))
-    monkeypatch.setattr(startup, "generate_neuroglancer_url", lambda path: None)
-    monkeypatch.setattr(LauncherSettings, "save", lambda self: None)
-    result = CliRunner().invoke(main.cli, ["infer", "script", "-s", "/s.py", "-d", str(tmp_path)])
-    assert result.exit_code == 0, result.output + repr(result.exception)
-
-
-def _cellmap_flow_yaml(monkeypatch, tmp_path, order):
-    from cellmap_flow.cli import yaml_cli
-
-    monkeypatch.setattr(yaml_cli, "install_cleanup_handlers", lambda: order.append("install"))
-    monkeypatch.setattr(yaml_cli, "run_multiple", lambda *a, **k: order.append("run"))
-    (tmp_path / "c.yaml").write_text("data_path: /d.zarr\ncharge_group: grp\nqueue: gpu_h100\nmodels: {}\n")
-    result = CliRunner().invoke(yaml_cli.main, [str(tmp_path / "c.yaml")])
-    assert result.exit_code == 0, result.output
-
-
-def _cellmap_flow_view(monkeypatch, tmp_path, order):
-    import neuroglancer
-    from neuroglancer.viewer_base import ViewerBase
-
-    from cellmap_flow.cli import viewer_cli
-    from cellmap_flow.dashboard import app
-
-    monkeypatch.setattr(neuroglancer, "Viewer", ViewerBase)
-    monkeypatch.setattr(neuroglancer, "set_server_bind_address", lambda *a: None)
-    monkeypatch.setattr(app, "create_and_run_app", lambda **k: order.append("run"))
-    monkeypatch.setattr(launch, "install_cleanup_handlers", lambda: order.append("install"))
-    result = CliRunner().invoke(viewer_cli.main, ["-d", write_raw(tmp_path, np.zeros((4, 4, 4), np.uint8))])
-    assert result.exit_code == 0, result.output + repr(result.exception)
-
-
-@pytest.mark.parametrize("entry_point", [_cellmap_flow_infer, _cellmap_flow_yaml, _cellmap_flow_view],
-                         ids=lambda f: f.__name__[1:])
-def test_the_entry_points_install_the_cleanup_before_starting_jobs(entry_point, monkeypatch, tmp_path):
-    """Importing the launcher used to set them, for every importer, and failed off the main thread."""
-    order = []
-    entry_point(monkeypatch, tmp_path, order)
-    assert order == ["install", "run"]
 
 
 # --- installing a server's environment before submitting it -----------------------

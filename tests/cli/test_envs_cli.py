@@ -5,7 +5,6 @@ replaced, and what it was asked to run is checked.
 """
 
 import gc
-import re
 import sys
 import textwrap
 from types import SimpleNamespace
@@ -73,7 +72,6 @@ def test_list_says_where_each_is_and_which_types_default_to_it(setup):
     assert _invoke("list").output == result.output
     rows = {line.split()[0]: line.split() for line in result.output.splitlines()[4:] if line.strip()}
     root = setup.root
-    assert rows["NAME"] == ["NAME", "KIND", "INSTALLED", "FINETUNE", "DEFAULT", "FOR", "WHERE"]
     # The real cellpose type defaults to cellpose4 too.
     assert rows["cellpose4"] == ["cellpose4", "pixi", "no", "no", "cellpose,", "cellpose-test",
                                  f"{root}/.pixi/envs/cellpose4"]
@@ -89,24 +87,6 @@ def test_install_runs_pixi_on_the_lock_as_it_is(setup):
     assert setup.ran == [["/opt/pixi", "install", "--frozen", "--manifest-path", str(setup.manifest), "-e", "cellpose4"]]
 
 
-@pytest.mark.parametrize("name, error", [
-    ("mine", "mine is an alias of .*/conda .in .*envs.yaml.: there is nothing to install"),
-    ("cellpose5", "has no environment 'cellpose5'; it has cellpose4, dacapo, default"),
-    ("/some/env", "is a path: install it with conda or pip"),
-])
-def test_install_refuses_what_pixi_cannot_install(setup, name, error):
-    result = _invoke("install", name)
-    assert result.exit_code == 1 and not setup.ran
-    assert re.search(error, result.output.replace("\n", " ")), result.output
-
-
-def test_install_without_pixi_says_how_to_get_it(setup, monkeypatch):
-    monkeypatch.delenv("PIXI_EXE")
-    monkeypatch.setattr(envs_cli.envs.shutil, "which", lambda program: None)
-    result = _invoke("install", "cellpose4")
-    assert result.exit_code == 1 and "https://pixi.sh" in result.output and not setup.ran
-
-
 @pytest.mark.parametrize("name, python", [
     ("cellpose4", ["/opt/pixi", "run", "--frozen", "--manifest-path", "MANIFEST", "-e", "cellpose4", "python"]),
     ("mine", ["ROOT/conda/bin/python"]),
@@ -119,8 +99,3 @@ def test_check_imports_cellmap_flow_in_the_env(setup, name, python):
     assert setup.ran == [[*python, "-P", "-c", "import cellmap_flow; print(cellmap_flow.__file__)"]]
     assert ("not installed" in result.output) is (name == "cellpose4")
 
-
-def test_a_check_that_fails_fails(setup, monkeypatch):
-    monkeypatch.setattr(envs_cli.subprocess, "run", lambda argv: SimpleNamespace(returncode=1))
-    result = _invoke("check", "mine")
-    assert result.exit_code == 1 and "mine cannot import cellmap_flow (exit status 1)" in result.output

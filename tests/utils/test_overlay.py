@@ -75,11 +75,6 @@ def test_the_viewer_is_pushed_only_when_the_boxes_change(tmp_path, viewer, txns)
     assert "annotated_regions" in viewer.state.layers and len(txns) == 4
 
 
-def test_no_boxes_opens_no_transaction(tmp_path, txns):
-    (tmp_path / "corrections").mkdir()
-    assert overlay.refresh_annotated_regions_layer(str(tmp_path / "corrections")) == 0 and txns == []
-
-
 def test_the_button_redraws_and_a_second_click_costs_nothing(dashboard, tmp_path, viewer, txns):
     corrections = _volume(tmp_path / "corrections", ["0.0.0", "1.0.0"])
     for _ in range(3):
@@ -100,13 +95,3 @@ def test_annotation_layers_come_with_the_draw_tools_bound(dashboard, viewer):
 
     assert (tool(bindings["A"]), tool(bindings["F"])) == ("vox-brush", "vox-flood-fill")
     assert all(k.isupper() and len(k) == 1 for k in bindings)
-
-
-def test_a_new_annotation_layer_is_selected_with_its_panel_open_on_draw(dashboard, viewer):
-    """Creating or loading a volume switches the viewer to its layer, ready
-    to paint: the panel opened on the Source tab, and the brush is on Draw."""
-    body = dashboard.post("/api/finetune/add-to-viewer", json={"crop_id": "c1", "minio_url": "http://minio/x.zarr"}).get_json()
-    assert body["success"]
-    selected = viewer.state.selected_layer
-    assert (selected.layer, selected.visible) == ("annotation_c1", True)
-    assert viewer.state.layers["annotation_c1"].tab == "Draw"

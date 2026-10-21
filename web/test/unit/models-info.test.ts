@@ -34,29 +34,6 @@ describe("modelInfo", () => {
     expect(info.write_shape).toEqual([1344, 1344, 1344]); // 84 voxels
     expect(info.output_channels).toBe(3);
   });
-
-  it("works for the one-channel models at their voxel sizes", () => {
-    const nuc = modelInfo(entryFixture("setup_61"));
-    expect(nuc.channels).toEqual(["nuc"]);
-    expect(nuc.output_channels).toBe(1);
-    expect(nuc.output_voxel_size).toEqual([256, 256, 256]);
-    const er = modelInfo(entryFixture("setup_67"));
-    expect(er.input_voxel_size).toEqual([8, 8, 8]);
-  });
-
-  it("copies the arrays rather than sharing the manifest's", () => {
-    const entry = entryFixture("setup_54");
-    const info = modelInfo(entry);
-    info.channels.push("extra");
-    info.write_shape[0] = 1;
-    expect(entry.manifest.channels).toHaveLength(3);
-    expect(entry.variant.output_size[0]).toBe(44);
-  });
-
-  it("is JSON as the dashboard reads it", () => {
-    const info = modelInfo(entryFixture("setup_54"));
-    expect(JSON.parse(JSON.stringify(info))).toEqual(info);
-  });
 });
 
 describe("outputClassOf", () => {

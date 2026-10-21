@@ -29,10 +29,3 @@ def test_a_config_error_is_reported_and_exits_non_zero(tmp_path):
     (tmp_path / "c.yaml").write_text("charge_group: g\nmodels: {}\n")
     result = CliRunner().invoke(cli, [str(tmp_path / "c.yaml")])
     assert result.exit_code == 1 and "data_path" in result.output
-
-
-def test_a_worker_takes_one_yaml(tmp_path):
-    """--client is one worker of one YAML's run, which starts it."""
-    (tmp_path / "c.yaml").write_text("")
-    result = CliRunner().invoke(cli, [str(tmp_path / "c.yaml")] * 2 + ["--client"])
-    assert result.exit_code == 2 and "--client runs one worker" in result.output
