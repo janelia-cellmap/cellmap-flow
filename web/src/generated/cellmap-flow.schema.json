@@ -1409,8 +1409,228 @@
     },
     "FinetuneRestart": {
       "additionalProperties": true,
-      "description": "The next iteration of a job: the manifest overrides, and the training\nsettings to change (common.build_restart_params picks those; the\ntrainer checks them).",
+      "description": "The next iteration of a job: the training settings to change, each checked as\nTrainingOptions checks it (``changes``; the trainer applies them, cli.apply_restart_params),\nand the manifest overrides. Nothing is required: the job's model and corrections\nstay as launched.",
       "properties": {
+        "mode": {
+          "default": "lora",
+          "description": "What trains: a LoRA adapter on the frozen network (lora), every weight (full), or the network's last layer (head), which only the browser offers. A LoRA rank of 0 means full.",
+          "enum": [
+            "lora",
+            "full",
+            "head"
+          ],
+          "type": "string"
+        },
+        "lora_r": {
+          "default": 64,
+          "description": "LoRA rank; 0 is a full finetune (every parameter trainable, no adapter), which exports full_finetune/model_state_dict.pt instead of lora_adapter/. Low rank is itself the anti-forgetting mechanism: the adapter wants just enough capacity to fix the bad regions and not enough to rewrite the good ones.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "lora_alpha": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "LoRA alpha, the adapter's scaling (alpha / rank); left blank it is twice the rank, so the scaling stays 2 whatever the rank."
+        },
+        "lora_dropout": {
+          "default": 0.1,
+          "description": "LoRA dropout.",
+          "exclusiveMaximum": 1.0,
+          "minimum": 0.0,
+          "type": "number"
+        },
+        "lora_min_channels": {
+          "default": 0,
+          "description": "Skip LoRA on layers narrower than this on either side. Narrow full-resolution layers are where the adapter is expensive and nearly parameter-free: on mito-aff-unet-setup-16, 96 skips 7 of 19 layers (~1% of adapter params) for a 1.7x faster step. 0 adapts every layer.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "num_epochs": {
+          "default": 20,
+          "description": "Number of training epochs.",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "batch_size": {
+          "default": 8,
+          "description": "Patches per batch.",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "learning_rate": {
+          "default": 0.0001,
+          "description": "Learning rate (AdamW).",
+          "exclusiveMinimum": 0,
+          "type": "number"
+        },
+        "gradient_accumulation_steps": {
+          "default": 1,
+          "description": "Batches to accumulate gradients over before each optimizer step.",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "loss_type": {
+          "default": "margin",
+          "description": "The supervised loss. 'interval' is for a distance model (output_type distance) on scribbles: each painted voxel is held between the bounds the paint implies on its distance to the boundary, exact where the paint is dense, and the field's slope is limited (slope_weight). 'flow' is for a flow model such as Cellpose (output_type flows): MSE of the flows, halved, plus BCE of the foreground, each over the voxels it can be known at.",
+          "enum": [
+            "dice",
+            "bce",
+            "combined",
+            "mse",
+            "margin",
+            "interval",
+            "flow"
+          ],
+          "type": "string"
+        },
+        "label_smoothing": {
+          "default": 0.1,
+          "description": "s moves the targets from 0 and 1 to s/2 and 1 - s/2, which keeps the model from being pushed to extreme outputs and preserves gradual, distance-like predictions. The margin, interval and flow losses take none.",
+          "exclusiveMaximum": 1.0,
+          "minimum": 0.0,
+          "type": "number"
+        },
+        "distillation_lambda": {
+          "anyOf": [
+            {
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": 0.01,
+          "description": "Weight of the distillation term, which holds the model to the one it started from where the paint says nothing; 0 switches it off. Try 0.5 to 1 for sparse scribbles. Blank leaves it to the trainer: 1 when the session has good regions, else 0."
+        },
+        "distillation_scope": {
+          "default": "unlabeled",
+          "description": "Where the distillation term applies: the unlabeled voxels only, or all voxels. Good regions, when the session has any, decide instead.",
+          "enum": [
+            "unlabeled",
+            "all"
+          ],
+          "type": "string"
+        },
+        "margin": {
+          "default": 0.3,
+          "description": "The margin loss's margin: foreground must exceed 1 - margin, background stay below it.",
+          "maximum": 0.5,
+          "minimum": 0.0,
+          "type": "number"
+        },
+        "balance_classes": {
+          "default": true,
+          "description": "Weight foreground and background voxels equally, however many of each were painted; keeps the foreground from being over-predicted.",
+          "type": "boolean"
+        },
+        "slope_weight": {
+          "default": 1.0,
+          "description": "Weight of the interval loss's slope limit, which keeps the predicted field from getting steeper than a distance field. Without it the bounds alone let the field collapse into a step.",
+          "minimum": 0.0,
+          "type": "number"
+        },
+        "augment": {
+          "default": false,
+          "description": "Random flips, XY rotations, brightness and noise on each patch (patch-centre jitter is always applied). Augmentation pays off when a run revisits the same patches many times; below a few hundred gradient steps it mostly adds variance, which is why it is off by default.",
+          "type": "boolean"
+        },
+        "mixed_precision": {
+          "default": true,
+          "description": "Mixed precision on CUDA: bf16 where the GPU has it, else fp16 with a GradScaler, falling back to fp32 when the model NaNs under either. Off on other devices.",
+          "type": "boolean"
+        },
+        "num_workers": {
+          "default": 4,
+          "description": "DataLoader workers.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "tensorboard": {
+          "default": true,
+          "description": "Write TensorBoard event files to <output-dir>/tensorboard (view with `tensorboard --logdir <training dir>`).",
+          "type": "boolean"
+        },
+        "mask_unannotated": {
+          "default": false,
+          "description": "Sparse annotations: only annotated voxels count in the loss (0 unannotated, 1 background, 2 and up foreground). The dashboard sets it when the session is painted.",
+          "type": "boolean"
+        },
+        "output_type": {
+          "anyOf": [
+            {
+              "enum": [
+                "binary",
+                "binary_broadcast",
+                "affinities",
+                "distance",
+                "flows"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The training target (TrainingOptions.output_type); blank, the route detects it from the model."
+        },
+        "distance_sigma": {
+          "default": 6.0,
+          "description": "tanh scale in output voxels of the distance target. The cellmap distance models were trained with 6.",
+          "exclusiveMinimum": 0,
+          "type": "number"
+        },
+        "select_channel": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Train one channel of a multi-channel model (output_type binary only); blank trains all."
+        },
+        "offsets": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "JSON list of [dz, dy, dx] offsets for affinity targets, e.g. '[[1,0,0],[0,1,0],[0,0,1]]'. Blank with output_type affinities reads 'offsets' from the model script."
+        },
+        "output_class": {
+          "anyOf": [
+            {
+              "enum": [
+                "unit",
+                "signed_unit",
+                "unbounded"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "What the model's output is, as its server reports it (serving.probe): unit for a sigmoid baked in ([0, 1]), signed_unit for a tanh ([-1, 1]), unbounded for logits. The losses then compare probabilities or logits accordingly, as ranking and seeding read the same output. Blank, the training job probes the model once."
+        },
         "patches_per_epoch": {
           "anyOf": [
             {
@@ -1420,18 +1640,22 @@
               "type": "null"
             }
           ],
-          "default": null
+          "default": null,
+          "description": "Patches drawn per epoch; blank or 0 draws one per populated chunk. Kept in the session's manifest."
         },
         "rehearsal_fraction": {
           "anyOf": [
             {
+              "maximum": 1.0,
+              "minimum": 0.0,
               "type": "number"
             },
             {
               "type": "null"
             }
           ],
-          "default": null
+          "default": null,
+          "description": "The share of each epoch's patches drawn from the good regions, 0 to 1; 0 turns rehearsal off without dropping the regions. Blank keeps the manifest's value."
         }
       },
       "title": "FinetuneRestart",
@@ -1439,8 +1663,228 @@
     },
     "FinetuneSubmit": {
       "additionalProperties": true,
-      "description": "A new training job: ``model_name`` trained on the corrections at\n``corrections_path``, a session's corrections directory or the base\noutput path of its sessions.\n\nThe defaults are the server form's (_finetune_tab.html's values and\nselected options, checked against these by tests/web/test_schema.py);\ncellmap_flow.schema exports them to the browser as FINETUNE_DEFAULTS.\nThe rest of the fields are passed on as sent, and the route adjusts the\nloss for painted annotations and for a distance target.",
+      "description": "A new training job: ``model_name`` trained on the corrections at\n``corrections_path``, a session's corrections directory or the base\noutput path of its sessions, with the training settings of\n``finetune.options.TrainingOptions``, whose defaults are the server\nform's (_finetune_tab.html's values and selected options, checked\nagainst them by tests/web/test_schema.py; cellmap_flow.schema exports\nthem to the browser as FINETUNE_DEFAULTS). The route adjusts them for\npainted annotations and for the model's target (TrainingOptions.for_session).",
       "properties": {
+        "mode": {
+          "default": "lora",
+          "description": "What trains: a LoRA adapter on the frozen network (lora), every weight (full), or the network's last layer (head), which only the browser offers. A LoRA rank of 0 means full.",
+          "enum": [
+            "lora",
+            "full",
+            "head"
+          ],
+          "type": "string"
+        },
+        "lora_r": {
+          "default": 64,
+          "description": "LoRA rank; 0 is a full finetune (every parameter trainable, no adapter), which exports full_finetune/model_state_dict.pt instead of lora_adapter/. Low rank is itself the anti-forgetting mechanism: the adapter wants just enough capacity to fix the bad regions and not enough to rewrite the good ones.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "lora_alpha": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "LoRA alpha, the adapter's scaling (alpha / rank); left blank it is twice the rank, so the scaling stays 2 whatever the rank."
+        },
+        "lora_dropout": {
+          "default": 0.1,
+          "description": "LoRA dropout.",
+          "exclusiveMaximum": 1.0,
+          "minimum": 0.0,
+          "type": "number"
+        },
+        "lora_min_channels": {
+          "default": 0,
+          "description": "Skip LoRA on layers narrower than this on either side. Narrow full-resolution layers are where the adapter is expensive and nearly parameter-free: on mito-aff-unet-setup-16, 96 skips 7 of 19 layers (~1% of adapter params) for a 1.7x faster step. 0 adapts every layer.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "num_epochs": {
+          "default": 20,
+          "description": "Number of training epochs.",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "batch_size": {
+          "default": 8,
+          "description": "Patches per batch.",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "learning_rate": {
+          "default": 0.0001,
+          "description": "Learning rate (AdamW).",
+          "exclusiveMinimum": 0,
+          "type": "number"
+        },
+        "gradient_accumulation_steps": {
+          "default": 1,
+          "description": "Batches to accumulate gradients over before each optimizer step.",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "loss_type": {
+          "default": "margin",
+          "description": "The supervised loss. 'interval' is for a distance model (output_type distance) on scribbles: each painted voxel is held between the bounds the paint implies on its distance to the boundary, exact where the paint is dense, and the field's slope is limited (slope_weight). 'flow' is for a flow model such as Cellpose (output_type flows): MSE of the flows, halved, plus BCE of the foreground, each over the voxels it can be known at.",
+          "enum": [
+            "dice",
+            "bce",
+            "combined",
+            "mse",
+            "margin",
+            "interval",
+            "flow"
+          ],
+          "type": "string"
+        },
+        "label_smoothing": {
+          "default": 0.1,
+          "description": "s moves the targets from 0 and 1 to s/2 and 1 - s/2, which keeps the model from being pushed to extreme outputs and preserves gradual, distance-like predictions. The margin, interval and flow losses take none.",
+          "exclusiveMaximum": 1.0,
+          "minimum": 0.0,
+          "type": "number"
+        },
+        "distillation_lambda": {
+          "anyOf": [
+            {
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": 0.01,
+          "description": "Weight of the distillation term, which holds the model to the one it started from where the paint says nothing; 0 switches it off. Try 0.5 to 1 for sparse scribbles. Blank leaves it to the trainer: 1 when the session has good regions, else 0."
+        },
+        "distillation_scope": {
+          "default": "unlabeled",
+          "description": "Where the distillation term applies: the unlabeled voxels only, or all voxels. Good regions, when the session has any, decide instead.",
+          "enum": [
+            "unlabeled",
+            "all"
+          ],
+          "type": "string"
+        },
+        "margin": {
+          "default": 0.3,
+          "description": "The margin loss's margin: foreground must exceed 1 - margin, background stay below it.",
+          "maximum": 0.5,
+          "minimum": 0.0,
+          "type": "number"
+        },
+        "balance_classes": {
+          "default": true,
+          "description": "Weight foreground and background voxels equally, however many of each were painted; keeps the foreground from being over-predicted.",
+          "type": "boolean"
+        },
+        "slope_weight": {
+          "default": 1.0,
+          "description": "Weight of the interval loss's slope limit, which keeps the predicted field from getting steeper than a distance field. Without it the bounds alone let the field collapse into a step.",
+          "minimum": 0.0,
+          "type": "number"
+        },
+        "augment": {
+          "default": false,
+          "description": "Random flips, XY rotations, brightness and noise on each patch (patch-centre jitter is always applied). Augmentation pays off when a run revisits the same patches many times; below a few hundred gradient steps it mostly adds variance, which is why it is off by default.",
+          "type": "boolean"
+        },
+        "mixed_precision": {
+          "default": true,
+          "description": "Mixed precision on CUDA: bf16 where the GPU has it, else fp16 with a GradScaler, falling back to fp32 when the model NaNs under either. Off on other devices.",
+          "type": "boolean"
+        },
+        "num_workers": {
+          "default": 4,
+          "description": "DataLoader workers.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "tensorboard": {
+          "default": true,
+          "description": "Write TensorBoard event files to <output-dir>/tensorboard (view with `tensorboard --logdir <training dir>`).",
+          "type": "boolean"
+        },
+        "mask_unannotated": {
+          "default": false,
+          "description": "Sparse annotations: only annotated voxels count in the loss (0 unannotated, 1 background, 2 and up foreground). The dashboard sets it when the session is painted.",
+          "type": "boolean"
+        },
+        "output_type": {
+          "anyOf": [
+            {
+              "enum": [
+                "binary",
+                "binary_broadcast",
+                "affinities",
+                "distance",
+                "flows"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The training target (TrainingOptions.output_type); blank, the route detects it from the model."
+        },
+        "distance_sigma": {
+          "default": 6.0,
+          "description": "tanh scale in output voxels of the distance target. The cellmap distance models were trained with 6.",
+          "exclusiveMinimum": 0,
+          "type": "number"
+        },
+        "select_channel": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Train one channel of a multi-channel model (output_type binary only); blank trains all."
+        },
+        "offsets": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "JSON list of [dz, dy, dx] offsets for affinity targets, e.g. '[[1,0,0],[0,1,0],[0,0,1]]'. Blank with output_type affinities reads 'offsets' from the model script."
+        },
+        "output_class": {
+          "anyOf": [
+            {
+              "enum": [
+                "unit",
+                "signed_unit",
+                "unbounded"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "What the model's output is, as its server reports it (serving.probe): unit for a sigmoid baked in ([0, 1]), signed_unit for a tanh ([-1, 1]), unbounded for logits. The losses then compare probabilities or logits accordingly, as ranking and seeding read the same output. Blank, the training job probes the model once."
+        },
         "patches_per_epoch": {
           "anyOf": [
             {
@@ -1450,18 +1894,22 @@
               "type": "null"
             }
           ],
-          "default": null
+          "default": null,
+          "description": "Patches drawn per epoch; blank or 0 draws one per populated chunk. Kept in the session's manifest."
         },
         "rehearsal_fraction": {
           "anyOf": [
             {
+              "maximum": 1.0,
+              "minimum": 0.0,
               "type": "number"
             },
             {
               "type": "null"
             }
           ],
-          "default": null
+          "default": null,
+          "description": "The share of each epoch's patches drawn from the good regions, 0 to 1; 0 turns rehearsal off without dropping the regions. Blank keeps the manifest's value."
         },
         "model_name": {
           "default": null,
@@ -1471,44 +1919,10 @@
           "default": null,
           "type": "string"
         },
-        "lora_r": {
-          "default": 64,
-          "type": "integer"
-        },
-        "num_epochs": {
-          "default": 20,
-          "type": "integer"
-        },
-        "batch_size": {
-          "default": 8,
-          "type": "integer"
-        },
-        "learning_rate": {
-          "default": 0.0001,
-          "type": "number"
-        },
-        "loss_type": {},
-        "label_smoothing": {
-          "default": 0.1,
-          "type": "number"
-        },
-        "distillation_lambda": {
-          "default": 0.01,
-          "type": "number"
-        },
-        "distillation_scope": {},
-        "margin": {
-          "default": 0.3,
-          "type": "number"
-        },
-        "balance_classes": {},
-        "augment": {},
-        "output_type": {},
-        "offsets": {},
-        "select_channel": {
+        "checkpoint_path": {
           "anyOf": [
             {
-              "type": "integer"
+              "type": "string"
             },
             {
               "type": "null"
@@ -1516,10 +1930,31 @@
           ],
           "default": null
         },
-        "checkpoint_path": {},
-        "auto_serve": {},
-        "queue": {},
-        "charge_group": {}
+        "auto_serve": {
+          "default": true,
+          "type": "boolean"
+        },
+        "queue": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "charge_group": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
       },
       "title": "FinetuneSubmit",
       "type": "object"
