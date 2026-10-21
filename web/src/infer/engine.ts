@@ -26,6 +26,7 @@
 // stages, caches and demand queue the viewer's requests go through, and
 // writes the OME-Zarr. Nothing of the walk or the zarr is here; this file
 // names the view's one level and the format.
+import { PORTABLE_MODULES } from "../../build/portable";
 import { Engine } from "../../chunkmirage/web/src/engine";
 import { Onnx, type OnnxModel } from "../../chunkmirage/web/src/onnx";
 import type { Stage } from "../../chunkmirage/web/src/stages";
@@ -110,11 +111,17 @@ export class InferenceEngine implements Inference {
     }
     // start() registers the service worker (the one relay.ts registered, by
     // the same name) and opens the source with its reader worker. The raw
-    // view has no ops and our views are computed here, so no Pyodide starts.
+    // view has no ops and our views are computed here; Python (Pyodide with
+    // numpy and cellmap_flow.portable, one worker) loads now, in the
+    // background, for the calls python() makes (the rank's, the carry's), so
+    // the first of them does not pay its start.
     const engine = new Engine(() => this.engineChanged());
-    await engine.start({ [RAW_VIEW]: { source: url, chunk: RAW_CHUNK } }, (line) => this.setStatus(line));
+    await engine.start({ [RAW_VIEW]: { source: url, chunk: RAW_CHUNK } }, (line) => this.setStatus(line), { python: "always", modules: PORTABLE_MODULES, workers: 1 });
     const source = engine.sources[RAW_VIEW];
     if (!source) throw new Error(`the engine opened ${url} but reports no source for it`);
+    // Said when it is there, so a rank that waited can be told apart from a slow one.
+    const pythonStarted = performance.now();
+    engine.ready.then(() => this.opts.log(`Python loaded (Pyodide with numpy and cellmap_flow.portable, ${((performance.now() - pythonStarted) / 1000).toFixed(1)} s): the ranking's calls answer at once`), (e) => this.opts.log(`Python did not load: ${e instanceof Error ? e.message : String(e)}`));
     this.engine = engine;
     this.info = datasetInfoFrom(url, source);
     const finest = this.info.levels[0];
@@ -304,6 +311,13 @@ export class InferenceEngine implements Inference {
       if (!response.ok) throw new Error(`chunk ${index.join(",")} of the model's output: HTTP ${response.status} ${(await response.text()).slice(0, 200)}`);
       return new Float32Array(await response.arrayBuffer());
     });
+  }
+
+  /** A function of cellmap_flow.portable (contracts.ts): chunkmirage's
+   * `Engine.call` by module path, in the worker openDataset started. */
+  python<T>(fn: string, args: Record<string, unknown>, arrays: ArrayBuffer[] = []): Promise<T> {
+    if (!this.engine) return Promise.reject(new Error("open a dataset before calling its Python"));
+    return this.engine.call<T>(fn, args, arrays);
   }
 
   private readonly equivalenceListeners = new Set<(view: string, sets: string[][]) => void>();

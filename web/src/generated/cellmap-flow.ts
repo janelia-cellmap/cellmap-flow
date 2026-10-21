@@ -694,7 +694,7 @@ export interface StepSpec {
 // ---- Values (cellmap_flow/schema.py): the constants both modes share, the route
 // table and the chain steps' parameters, beside the types above.
 
-/** The most painted blocks one rank score reads, spread over the paint (finetune/rank.py). */
+/** The most painted blocks one rank score reads, spread over the paint (portable/rank.py). */
 export const RANK_BLOCKS = 32;
 /** The label smoothing of the balanced BCE given beside a rank score. */
 export const RANK_SMOOTHING = 0.1;

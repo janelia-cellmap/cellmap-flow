@@ -91,7 +91,8 @@ def python_data():
     from cellmap_flow.ai_annotate import organelles, prompts
     from cellmap_flow.dashboard.routes.finetune import ai_annotate as ai_routes
     from cellmap_flow.dashboard.routes.finetune import view_labels
-    from cellmap_flow.finetune import markers, rank
+    from cellmap_flow.finetune import markers
+    from cellmap_flow.portable import rank
     from cellmap_flow.finetune.job_manager.state import TERMINAL_STATUSES, JobStatus
     from cellmap_flow.io import metadata
     from cellmap_flow.norm.input_normalize import get_input_normalizers

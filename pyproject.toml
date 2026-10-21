@@ -45,7 +45,7 @@ dependencies = [
     # queued chunks in the order they were asked for). Not on PyPI yet: a
     # release of cellmap-flow needs one, as PyPI refuses a dependency given
     # by URL.
-    "chunkmirage @ git+https://github.com/JaneliaSciComp/chunkmirage@7331a3fcd0b32a281b74c79766f6d52450a8f2a8",
+    "chunkmirage @ git+https://github.com/JaneliaSciComp/chunkmirage@7307e36b499f099bb0d5fd80f88cb013c0230387",
     ]
 
 # extras

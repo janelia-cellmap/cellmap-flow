@@ -33,6 +33,7 @@ vi.mock("../../chunkmirage/web/src/engine", () => ({
         levels: [{ shape: [1000, 1000, 1000], voxel: [8, 8, 8], origin: [0, 0, 0] }],
       },
     };
+    ready = Promise.resolve();
     async start() {}
     url(view: string) { return `http://localhost/virtual/page/${view}/`; }
     serveStages() {}
