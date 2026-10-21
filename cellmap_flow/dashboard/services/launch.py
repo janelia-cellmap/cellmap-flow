@@ -25,7 +25,6 @@ from cellmap_flow.models import bioimage_catalog
 from cellmap_flow.models.models_config import (
     BioModelConfig, CellposeModelConfig, FinetuneModelConfig, HuggingFaceModelConfig,
 )
-from cellmap_flow.pipeline_spec import PipelineSpec
 from cellmap_flow.viewer.layers import prediction_layer, replace_layer
 import threading
 from typing import List
@@ -433,7 +432,7 @@ def update_run_models(names: List[str], hf_repos: List[str] = None, bioimage_mod
     names_running = running_names() - {j.model_name for j in to_be_killed}
 
     threads = []
-    st_data = PipelineSpec.from_steps(session.input_norms, session.postprocess).to_url_blob()
+    st_data = session.layer_blob()
 
     print(f"Current catalog: {session.model_catalog}")
     _stop_jobs(to_be_killed)

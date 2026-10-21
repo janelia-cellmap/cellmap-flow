@@ -11,12 +11,11 @@ them.
 import itertools
 import logging
 
-from cellmap_flow.dashboard.app import create_and_run_app
+from cellmap_flow.dashboard.app import bind_dashboard, create_and_run_app
 from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.viewer.raw import PREDICTION_COLORS
 from cellmap_flow.serving.client import fetch_model_info
 from cellmap_flow.models.geometry_cache import build_here
-from cellmap_flow.pipeline_spec import PipelineSpec
 from cellmap_flow.viewer.bootstrap import new_viewer, viewer_url
 from cellmap_flow.viewer.layers import prediction_layer, prediction_shader_for, raw_layer
 
@@ -46,7 +45,9 @@ def generate_neuroglancer_url(dataset_path, wrap_raw=True):
     and the YAML's extra layers, then serve the dashboard. Does not return."""
     session = get_session()
     session.dataset_path = dataset_path
-    st_data = PipelineSpec.from_steps(session.input_norms, session.postprocess).to_url_blob()
+    # The dashboard's address first: each layer's URL carries it.
+    server = bind_dashboard()
+    st_data = session.layer_blob()
     layers = {}
     colors = itertools.cycle(PREDICTION_COLORS)
     for job in session.jobs:
@@ -73,4 +74,4 @@ def generate_neuroglancer_url(dataset_path, wrap_raw=True):
     url = viewer_url(session.viewer)
     print("viewer", url)
     # Serves the dashboard; does not return.
-    create_and_run_app(neuroglancer_url=url)
+    create_and_run_app(neuroglancer_url=url, server=server)
