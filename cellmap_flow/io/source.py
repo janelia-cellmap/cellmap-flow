@@ -15,30 +15,11 @@ import logging
 from typing import Optional
 
 import numpy as np
-import tensorstore as ts
 import worldarray as wa
 
 from cellmap_flow.io.geometry import Box
 
 logger = logging.getLogger(__name__)
-
-
-def reader_context(concurrency_limit: Optional[int] = 1, cache_bytes: int = 0):
-    """The tensorstore context an array is read with.
-
-    ``concurrency_limit`` caps the files read and chunks decoded at once, as
-    cellmap-flow always did; network requests are not capped (worldarray's
-    ``capped_context`` caps those too, which would read a remote array one
-    request at a time). ``None`` leaves tensorstore's defaults, on
-    worldarray's process-wide context for ``cache_bytes``.
-    """
-    if not concurrency_limit:
-        return wa.shared_context(cache_bytes)
-    limit = {"limit": int(concurrency_limit)}
-    spec = {"data_copy_concurrency": limit, "file_io_concurrency": limit}
-    if cache_bytes:
-        spec["cache_pool"] = {"total_bytes_limit": int(cache_bytes)}
-    return ts.Context(spec)
 
 
 class ArraySource:
@@ -60,9 +41,12 @@ class ArraySource:
         if self._array is None:
             from cellmap_flow.io.metadata import open_level
 
-            self._array = open_level(
-                self.path, units=None, context=reader_context(self.concurrency_limit, self.cache_bytes)
+            context = (
+                wa.capped_context(self.cache_bytes, self.concurrency_limit, network=False)
+                if self.concurrency_limit
+                else wa.shared_context(self.cache_bytes)
             )
+            self._array = open_level(self.path, units=None, context=context)
         return self._array
 
     @property
@@ -84,7 +68,8 @@ def open_array(path: str, concurrency_limit: Optional[int] = 1, cache_bytes: int
     first read (a missing or unreadable array raises then).
 
     ``concurrency_limit``: how many files tensorstore reads and chunks it
-    decodes at once; ``None`` leaves its defaults (one decode per core).
+    decodes at once (worldarray's ``capped_context(network=False)``: network
+    requests are not capped); ``None`` leaves its defaults (one decode per core).
     ``cache_bytes``: how much decoded data it keeps for later reads of the
     same chunks (0: none).
     """

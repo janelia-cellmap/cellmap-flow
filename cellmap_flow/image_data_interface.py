@@ -7,15 +7,14 @@ is -- reads its metadata and reads its voxels, padded where a read runs past
 it, and resamples. cellmap-flow keeps on top:
 
 - the grid reads are done on (``_grid``, an ``io.geometry.Grid``: voxel size
-  and voxel 0's lower corner in nm), and with it ``voxel_size``, ``offset``,
-  ``roi`` and ``shape`` (spatial) as cellmap-flow has them; a mismatched
-  level is relabelled with its corner rescaled, so voxel i stays voxel i
-  (worldarray's relabel keeps the corner in nm);
+  and voxel 0's lower corner in nm, worldarray's ``voxel_size`` and ``corner``),
+  which maps a ROI to voxels by its corner, and with it ``voxel_size``,
+  ``offset``, ``roi`` and ``shape`` (spatial) as cellmap-flow has them;
 - the input chain: what is read goes through the normalizers and
   ChannelSelector given as ``input_norms``, else the process's chain
   (``process_chain().input_norms``) as it is at read time, which user
-  ``process_chunk`` scripts rely on; padding is added after the chain
-  (worldarray's ``transform``), and a resampled read is resampled before it;
+  ``process_chunk`` scripts rely on; worldarray applies it before padding
+  (``transform``), and to a resampled read after resampling (``post_transform``);
 - the deprecated ``output_voxel_size`` and ``custom_fill_value``.
 """
 
@@ -33,7 +32,7 @@ from cellmap_flow.io.geometry import Box, Grid, coordinate_or_floats
 from cellmap_flow.io.metadata import ArrayMeta, snap_integral
 from cellmap_flow.io.ome import CHANNEL_AXIS_NAMES
 from cellmap_flow.io.resample import is_label_dtype
-from cellmap_flow.io.source import ArraySource, reader_context
+from cellmap_flow.io.source import ArraySource
 from cellmap_flow.process_chain import process_chain
 
 logger = logging.getLogger(__name__)
@@ -116,7 +115,7 @@ class ImageDataInterface:
         at read time.
 
         The reads go through one tensorstore reader thread and no cache
-        (``io.source.reader_context``'s defaults), which is what blockwise
+        (worldarray's ``capped_context(network=False)``), which is what blockwise
         workers, the finetune trainer and scripts want; the inference server
         reads through chunkmirage's own cache.
 
@@ -172,13 +171,13 @@ class ImageDataInterface:
         dataset_path = paths.normalize_path(dataset_path)
         # The level for voxel_size of a group or precomputed volume ("floor"; the
         # "resample" mode when resampling); the path of one level at that level.
-        # A mismatch is resampled by worldarray, or relabelled here.
+        # worldarray resamples or relabels a mismatch; "error" is raised here.
         self.array = metadata.open_level(
             dataset_path,
             voxel_size=None if voxel_size is None else tuple(float(v) for v in voxel_size),
-            on_mismatch="resample" if resample else "keep",
+            on_mismatch={"error": "keep"}.get(on_voxel_size_mismatch, on_voxel_size_mismatch),
             padding="edge",
-            context=reader_context(),
+            context=wa.capped_context(network=False),
         )
         array = self.array
         self.path = _level_path(dataset_path, array, voxel_size)
@@ -187,59 +186,39 @@ class ImageDataInterface:
         self.input_norms = None if input_norms is None else list(input_norms)
         meta = metadata.from_world_array(array.meta, self.path)
         array.method = "nearest" if is_label_dtype(meta.dtype) else "linear"
-        (
-            actual_voxel_size,
-            actual_offset,
-            self.chunk_shape,
-            shape,
-            self.axes_names,
-            self.filetype,
-        ) = legacy_meta(meta)
+        actual_voxel_size, _, self.chunk_shape, _, self.axes_names, self.filetype = legacy_meta(meta)
         actual_voxel_size = snap_integral(actual_voxel_size)
-        actual_offset = snap_integral(actual_offset)
         # What the data really is, and what the caller asked for; voxel_size
         # below is the one reads are done in.
         self.actual_voxel_size = coordinate_or_floats(actual_voxel_size, "voxel size", self.path)
         self.requested_voxel_size = (
             None if voxel_size is None else coordinate_or_floats(voxel_size, "voxel size", self.path)
         )
-        voxel_size_f, offset_f = actual_voxel_size, actual_offset
-        if voxel_size is not None:
-            requested = snap_integral(voxel_size)
-            if not multiscale.same_voxel_size(requested, actual_voxel_size):
-                message = (
-                    f"{self.path} is at {tuple(actual_voxel_size.tolist())} nm "
-                    f"but {tuple(requested.tolist())} nm was requested"
-                )
-                if on_voxel_size_mismatch == "error":
-                    raise ValueError(message)
-                key = (self.path, tuple(requested.tolist()), on_voxel_size_mismatch)
+        if voxel_size is not None and not multiscale.same_voxel_size(snap_integral(voxel_size), actual_voxel_size):
+            requested = tuple(snap_integral(voxel_size).tolist())
+            message = f"{self.path} is at {tuple(actual_voxel_size.tolist())} nm but {requested} nm was requested"
+            if on_voxel_size_mismatch == "error":
+                raise ValueError(message)
+            key = (self.path, requested, on_voxel_size_mismatch)
+            if key not in _warned_relabel:
+                _warned_relabel.add(key)
                 if resample:
-                    # worldarray's target grid starts at the level's own corner,
-                    # so offset_f stays the level's; only the voxels change.
-                    shape = tuple(array.shape[i] for i in array.spatial)
-                    if key not in _warned_relabel:
-                        _warned_relabel.add(key)
-                        logger.info(f"{message}; resampling it ({array.method})")
+                    logger.info(f"{message}; resampling it ({array.method})")
                 else:
-                    if key not in _warned_relabel:
-                        _warned_relabel.add(key)
-                        logger.warning(
-                            f"{message}; reading it as if it were "
-                            f"{tuple(requested.tolist())} nm (the data is not resampled; "
-                            f"{RESAMPLE_HINT})"
-                        )
-                    # Relabel on the real grid: voxel i stays voxel i and only its
-                    # size changes, so the offset scales with it. Keeping the real
-                    # offset against the requested voxel size mixed two unit
-                    # systems in (roi - offset) / voxel_size and shifted every read
-                    # of an offset dataset.
-                    offset_f = actual_offset / actual_voxel_size * requested
-            voxel_size_f = requested
+                    # worldarray relabels voxel for voxel: voxel i stays voxel i,
+                    # so the corner scales with the voxel size.
+                    logger.warning(
+                        f"{message}; reading it as if it were {requested} nm (the data is "
+                        f"not resampled; {RESAMPLE_HINT})"
+                    )
+        # The grid reads are done on: worldarray's (resampled or relabelled)
+        # voxel size and corner on the spatial axes, in exact floats. voxel_size
+        # and offset below are Coordinates when whole, and roi is the whole-nm
+        # box around the data.
+        voxel_size_f = snap_integral(array.voxel_size)
+        offset_f = snap_integral(array.corner)
+        shape = tuple(array.shape[i] for i in array.spatial)
         self.shape = Coordinate(shape)
-        # The grid reads are done on, in exact floats: voxel_size and offset
-        # below are Coordinates when whole, and roi is the whole-nm box
-        # around the data.
         self._grid = Grid(tuple(float(v) for v in voxel_size_f), tuple(float(v) for v in offset_f))
         self.voxel_size = coordinate_or_floats(voxel_size_f, "voxel size", self.path)
         self.offset = coordinate_or_floats(offset_f, "offset", self.path)
@@ -300,12 +279,10 @@ class ImageDataInterface:
         """The voxels of ``box`` (spatial, at ``voxel_size``) through the chain,
         padded with ``fill`` (a value or "edge") past the array.
 
-        A stored level is read by worldarray with the chain as its
-        ``transform``, applied before the padding. A resampled one is read
-        resampled with its border repeated, then through the chain, as a
-        stored level at ``voxel_size`` would be (worldarray's ``transform``
-        would run before the resampling), and what lies past its ``shape``
-        is set to ``fill``.
+        worldarray applies the chain before padding: as ``transform`` to a
+        stored level, and as ``post_transform`` to a resampled one, after the
+        resampling and the cast back to the stored dtype, as a stored level at
+        ``voxel_size`` would be normalized.
         """
         view = self._view()
         norms = view.norms_to_apply()
@@ -327,22 +304,21 @@ class ImageDataInterface:
                 select=None if channel is None else {array.axes[channel[0]]: channel[1]},
                 transform=(lambda data: apply_norms(data, norms)) if norms else None,
             )
-        target = np.asarray(self.voxel_size, dtype=float)
-        corner = np.asarray(array.corner, dtype=float)
-        world = (tuple(corner + np.asarray(box.begin) * target), tuple(corner + np.asarray(box.end) * target))
-        data = array.read(world, padding="edge")
+        # The target voxels' world box (their centres are where worldarray reads), the
+        # channel pinned to one voxel on a box over every axis.
+        begin = list(np.asarray(array.corner) + np.asarray(box.begin) * np.asarray(self.voxel_size, dtype=float))
+        end = list(np.asarray(array.corner) + np.asarray(box.end) * np.asarray(self.voxel_size, dtype=float))
+        post = (lambda data: apply_norms(data, norms)) if norms else None
         if channel is not None:
-            data = np.take(data, channel[1], axis=channel[0])
-        data = apply_norms(data, norms)
-        if fill != "edge":
-            outside = np.zeros(data.shape, dtype=bool)
-            for axis, (b, e, n) in enumerate(zip(box.begin, box.end, self.shape)):
-                j = np.arange(b, e)
-                outside |= ((j < 0) | (j >= n)).reshape([-1 if a == axis else 1 for a in range(data.ndim)])
-            if outside.any():
-                data = np.array(data, copy=True)
-                data[outside] = fill
-        return data
+            axis, index = channel
+            t, s = array.grid.translation[axis], array.grid.voxel_size[axis]
+            begin.insert(axis, t + (index - 0.5) * s)
+            end.insert(axis, t + (index + 0.5) * s)
+            if norms:
+                def post(data):  # noqa: E306 -- the chain sees the one channel
+                    return np.expand_dims(apply_norms(np.take(data, 0, axis=axis), norms), axis)
+        data = array.read((tuple(begin), tuple(end)), padding=fill, post_transform=post)
+        return data if channel is None else np.take(data, 0, axis=channel[0])
 
     def read_box(self, box: Box, fill=None) -> np.ndarray:
         """The voxels of ``box`` (a ``Box`` of voxel indices at ``voxel_size``)

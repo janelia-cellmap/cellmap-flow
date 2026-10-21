@@ -230,7 +230,7 @@ def open_level(path: str, voxel_size=None, **kwargs) -> "wa.WorldArray":
     array as it is, ``…/s<N>`` of a precomputed volume as scale N, and a group
     or precomputed volume at its level for ``voxel_size`` (worldarray chooses
     it from the group's document), its first without one."""
-    path = store.prepare(paths.normalize_path(path))
+    path = paths.normalize_path(path)
     named_scale = paths.is_precomputed(path) and paths.precomputed_scale(path)[1] is not None
     level = None if (named_scale or voxel_size is not None) else "first"
     return wa.open(path, level=level, voxel_size=voxel_size, strict_units=False, **kwargs)
@@ -257,7 +257,7 @@ def read_array_meta(path: str) -> ArrayMeta:
 def _multiscale_group(group_path: str):
     """Check that ``group_path`` is a multiscale group: KeyError for a v2 (or
     N5) group without multiscales, or an array; ValueError for a v3 one."""
-    node = wa.detect(store.prepare(group_path))
+    node = wa.detect(group_path)
     attrs = {}
     if node.kind == "group":
         if node.format == "zarr3":
@@ -291,22 +291,29 @@ def pyramid(group_path: str, units=None) -> Tuple[str, "wa.Pyramid"]:
             raise ValueError(f"{group_path} is scale {scale} of a precomputed volume, not the volume")
     else:
         _multiscale_group(group_path)
-    return group_path, wa.open_pyramid(store.prepare(group_path), units=units, strict_units=False)
+    return group_path, wa.open_pyramid(group_path, units=units, strict_units=False)
 
 
 def list_levels(group_path: str) -> List[Tuple[str, ArrayMeta]]:
     """``[(dataset path, ArrayMeta)]`` for each level of the OME multiscale
     group at ``group_path``, in the order its ``datasets`` list them, or of
-    the precomputed volume there (``s<N>`` for scale N). Opens every level.
+    the precomputed volume there (``s<N>`` for scale N).
+
+    An ArrayMeta needs each level's shape, dtype and chunks, which the group's
+    document does not hold (``Pyramid.placements`` gives only voxel sizes and
+    translations), so every level is opened, each on a context of its own.
 
     Raises when there is no such group (KeyError for a v2 group without
     multiscales, ValueError for a v3 one, or for one scale of a precomputed
     volume).
     """
-    group_path, levels = pyramid(group_path)
+    group_path, pyramid_ = pyramid(group_path)
     return [
-        (name, from_world_array(level.meta, paths.join(group_path, name)))
-        for name, level in zip(level_names(group_path, levels), levels.levels)
+        (name, from_world_array(
+            wa.open(pyramid_.path, level=key, units=None, strict_units=False,
+                    context=wa.capped_context(network=False)).meta,
+            paths.join(group_path, name)))
+        for name, key in zip(level_names(group_path, pyramid_), pyramid_.names)
     ]
 
 
@@ -314,7 +321,7 @@ def node_type(path: str) -> Tuple[str, str]:
     """``(path, "group" or "array")``: what worldarray finds at ``path``.
     FileNotFoundError when there is nothing there."""
     path = paths.normalize_path(path)
-    return path, wa.detect(store.prepare(path)).kind
+    return path, wa.detect(path).kind
 
 
 # ---------------------------------------------------------------------------
