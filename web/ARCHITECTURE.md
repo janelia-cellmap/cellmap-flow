@@ -452,10 +452,11 @@ web/
     viewer/                  createViewer(): ViewerController — iframe (index.ts), layers.ts (port of
                              viewer/layers.py), display.ts (shaders, ranges), state.ts, share.ts (the viewer's state: the tab's copy, a link's hash)
   test/
-    unit/                    vitest, one file per module concern
+    unit/                    vitest: the backend's routes over the fakes in backend-fakes.ts, and what
+                             parity does not cover (the ops that parity checks have no unit file)
     parity/                  the TypeScript ports against test/fixtures/*.json, which
-                             test/fixtures/make_fixtures.py writes from the Python classes
-    e2e/                     Playwright smoke test (E2E=1 npm run e2e)
+                             test/fixtures/make_*.py write from the Python classes
+    e2e/                     Playwright: smoke, downloads, recent datasets, finetune, AI-annotate (E2E=1 npm run e2e)
 ```
 
 ## Running it
