@@ -9876,7 +9876,7 @@ packages:
   - neuroglancer
   - pydantic
   - funlib-persistence==0.6.1
-  - daisy
+  - daisy>=1.2.2,<2
   - cellmap-models
   - huggingface-hub<2
   - requests
