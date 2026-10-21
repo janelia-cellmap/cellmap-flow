@@ -16,8 +16,8 @@
 //   restarts from the viewer), Stop Early, Cancel, and the job restored
 //   after a reload, with job-card.js (the Training Status card),
 //   log-stream.js (the Training Logs text) and loss-plot.js (the loss plot);
-// - rank.js (browser mode only): Which model to start from, the models the
-//   browser can run ranked by how well each one already matches the paint.
+// - rank.js: Which model to start from, the models ranked by how well each
+//   one already matches the paint.
 // They start in this order, which is the order of the tab's first requests:
 // the saved output path, the models, the seed sources, the good-region
 // count, the AI annotation's configuration, and the job to restore. (The GPU
@@ -31,8 +31,7 @@
 // model's download, the AI annotation's credentials, the head's batch). The
 // patch tools, Label it, AI-assisted annotation and Good regions, all run
 // there, their routes answered in the page (web/src/backend/routes/
-// view-labels.ts, ai-annotate.ts and good-regions.ts).
-import { isBrowserMode } from "../../lib/page-data.js";
+// view-labels.ts, ai-annotate.ts, good-regions.ts and rank.ts).
 import { readJSON, writeJSON } from "../../lib/stored.js";
 import { initAiAnnotate } from "./ai-annotate.js";
 import { initCrops } from "./crops.js";
@@ -65,7 +64,7 @@ export function initFinetuneTab() {
   initGoodRegionMarks({ log });
   initAiAnnotate({ log });
   initJobMonitor({ picker, form, log });
-  if (isBrowserMode()) initRank();
+  initRank();
   rememberOpenSections();
 }
 

@@ -394,7 +394,7 @@ READ_CASES = [
 
 
 def make_read_prediction() -> list:
-    view_labels._served_base = lambda host, model_name, postprocess=(): "base"
+    view_labels._served_base = lambda host, model_name, postprocess=(), input_norm=None: "base"
     view_labels.prediction_voxel_override = lambda *args: None
     view_labels.get_session = lambda: SimpleNamespace(dataset_path="data")
     cases = []

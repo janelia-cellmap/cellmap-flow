@@ -150,6 +150,14 @@ Switch to the **Training** tab in the Finetune section.
 
 ![Training tab](screenshots/finetune_training_tab.png)
 
+### Which model to start from
+
+A finetune has least to learn from the model that already gets most of your paint right, and that is not always the one the volume was made for. The Training tab's **Which model to start from** ranks models by how well each one's prediction matches the volume's paint: tick the models, press **Rank models**, and each is scored in turn and listed best first. The score is the browser app's (see *Which model to start from* in the docs' *In the browser* page): the share of painted voxels the model gets right, objects and background counting equally, at the threshold that fits the paint best, with the raw stretched where it spans only a few grey levels and that scores clearly better.
+
+On the server it lists the session's models, the catalog's and Hugging Face's. Only the running ones start ticked: a model that is not running is started on the cluster for its score, which waits for a GPU, and stopped after, so the Models tab is left as it was. Each is scored under at most 32 of the painted chunks, spread over the paint.
+
+**Use this model** makes a ranked model the one to finetune: it is started as the Models tab's Add starts one, a volume is made for it in the same corrections folder (so the good regions stay), your paint is copied onto its grid, and its paint layer takes the old one's place; the old volume stays, under *Resume Existing Volume*. A stretched raw becomes the session's input normalization, and the threshold becomes *Seed from Prediction*'s.
+
 ### Training configuration options
 
 | Parameter | Description |
