@@ -5,8 +5,8 @@ The scripts find their pages' fixed elements by id. A lookup that finds
 nothing only shows up in a browser, as a button that does nothing, or as a
 null that throws and takes the rest of the page's or the tab's setup with it.
 
-Each tab's scripts are the modules in static/js/dashboard/<tab>/ (the Models
-tab's, models-tab.js). They drive the Flask dashboard's page, a cluster's or
+Each tab's scripts are the modules in static/js/dashboard/<tab>/. They
+drive the Flask dashboard's page, a cluster's or
 a laptop's, and the browser build's (web/build/render.py), and each page has
 elements the others do not: the browser's Download and Delete buttons, say,
 are in its browser-mode blocks only. So an id must be on one of the pages;
@@ -34,7 +34,7 @@ BUILDER_LOOKUP = re.compile(
 CREATED = re.compile(r"""\.id\s*=\s*["']([\w-]+)["']|\bid:\s*["']([\w-]+)["']""")
 TAB_LOOKUP = re.compile(r"""(?:getElementById|\$)\(\s*["']([\w-]+)["']\s*\)""")
 TABS = {
-    "models": [JS / "dashboard" / "models-tab.js"],
+    "models": sorted((JS / "dashboard" / "models").glob("*.js")),
     "finetune": sorted((JS / "dashboard" / "finetune").glob("*.js")),
     "review": sorted((JS / "dashboard" / "review").glob("*.js")),
 }

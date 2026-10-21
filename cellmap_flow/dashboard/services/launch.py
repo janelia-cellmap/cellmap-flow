@@ -445,7 +445,7 @@ def update_run_models(names: List[str], hf_repos: List[str] = None, bioimage_mod
 
 
 # Where each model on the Loaded models list came from: the "source" of its
-# entry, which models-tab.js labels. The browser's backend
+# entry, which js/dashboard/models/loaded.js labels. The browser's backend
 # (web/src/backend/routes/models.ts) answers the same keys.
 SOURCES = ("catalog", "huggingface", "bioimage", "cellpose", "added", "finetuned")
 

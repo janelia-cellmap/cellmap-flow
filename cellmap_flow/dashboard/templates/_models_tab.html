@@ -1,6 +1,6 @@
 <form id="modelSelectionForm">
     <!-- Loaded models: every model running or starting, wherever it was
-         picked, with a ✕ that stops that one (models-tab.js; GET
+         picked, with a ✕ that stops that one (js/dashboard/models/loaded.js; GET
          /api/models/loaded and POST /api/models/remove, which the browser
          mode answers too). Filled in by the script. -->
     <section class="loaded-models mb-3" id="loadedModels" aria-labelledby="loadedModelsTitle">
@@ -114,7 +114,7 @@
     </div>
 
     <!-- BioImage Model Zoo Section: loaded when opened, like Hugging Face's.
-         Its rows are built by models-tab.js from the zoo's index. -->
+         Its rows are built by js/dashboard/models/zoo.js from the zoo's index. -->
     <!-- server-only: the zoo's weights are not web (ONNX) exports. -->
     <h5 class="server-only">BioImage Model Zoo</h5>
     <div class="accordion server-only" id="zooModelAccordion">
@@ -167,7 +167,7 @@
     </div>
 
     <!-- Cellpose Section: Cellpose 4's models, served in pixi's cellpose4
-         environment. Its rows are built by models-tab.js from the data
+         environment. Its rows are built by js/dashboard/models/cellpose.js from the data
          below (routes/index_page.cellpose_panel_data): the models listed,
          and the settings of those running, which start ticked. -->
     <!-- server-only: Cellpose runs in its own pixi environment on the server. -->
