@@ -7,7 +7,7 @@ GET /api/finetune/rank/candidates lists the models to rank: the session's
 volume and the model it is for; only the running ones start ticked, as a
 model not running is started on the cluster for its score. POST
 /api/finetune/rank/score {name, entry?} scores one on the session volume's
-paint (finetune/rank.py says how, as the browser does): a running model
+paint (portable/rank.py says how; the browser runs the same Python): a running model
 through its server, any other started for the score alone (``entry``, the
 candidate's, says how to build it) and stopped after, so a ranking leaves
 the Models tab and the cluster as they were. Where the raw under the paint
@@ -32,7 +32,7 @@ from cellmap_flow.dashboard.finetune_utils import sync_annotation_volume_from_mi
 from cellmap_flow.dashboard.routes.finetune.blueprint import finetune_bp
 from cellmap_flow.dashboard.routes.finetune.common import autodetect_output_type, find_model_config, session_store
 from cellmap_flow.dashboard.state import get_session
-from cellmap_flow.finetune import rank
+from cellmap_flow.portable import rank
 from cellmap_flow.finetune.session.volume import volume_corner_nm
 from cellmap_flow.pipeline_spec import PipelineSpec
 from cellmap_flow.serving.client import fetch_model_info, running_job_host
@@ -125,7 +125,7 @@ def rank_score():
         boxes = [box for box in map(lambda index: _painted_box(volume, index), rank.spread(chunks, rank.RANK_BLOCKS)) if box]
         base, outside = _score(host, name, volume, boxes, info, offsets)
         score, window = base, None
-        # The raw stretched to its own range, when it is narrow (finetune/rank.py).
+        # The raw stretched to its own range, when it is narrow (portable/rank.py).
         norm = [dict(s) for s in session.pipeline_spec.input_norm]
         raw = base and _raw_window(volume, boxes)
         stretched = raw and rank.windowed(norm, *raw)
@@ -292,7 +292,7 @@ def _painted_box(volume, index):
 
 
 def _score(host, name, volume, boxes, info, offsets, input_norm=None):
-    """``(score, outside)``: the model's score on ``boxes`` (finetune/rank.py
+    """``(score, outside)``: the model's score on ``boxes`` (portable/rank.py
     rank_score), read through ``input_norm`` (the dashboard's when None),
     and how many boxes lie past what its server covers."""
     import torch

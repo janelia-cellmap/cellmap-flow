@@ -24,7 +24,7 @@ The schema holds:
   ``Route``). The method and path come from the Flask app's ``url_map``, the
   availability from ``AVAILABILITY`` below, and the two must agree: a route
   added without a declaration is an error naming it (``routes()``);
-- ``x-constants``: the numbers both modes share (``finetune/rank.py``'s,
+- ``x-constants``: the numbers both modes share (``portable/rank.py``'s,
   ``UNDO_DEPTH``, the AI annotation's caps) and the Finetune tab's defaults
   for a blank field, read from ``FinetuneSubmit``;
 - ``x-steps``: each normalizer's and postprocessor's parameters and defaults
@@ -236,7 +236,7 @@ FINETUNE_FORM_FIELDS = (
 
 # What each shared constant is, for the generated TypeScript's comments.
 CONSTANT_DOCS = {
-    "RANK_BLOCKS": "The most painted blocks one rank score reads, spread over the paint (finetune/rank.py).",
+    "RANK_BLOCKS": "The most painted blocks one rank score reads, spread over the paint (portable/rank.py).",
     "RANK_SMOOTHING": "The label smoothing of the balanced BCE given beside a rank score.",
     "CUTOFFS": "The logits a rank score is read at, -6 to 6 in quarters; the best by Dice is the model's own cut-off.",
     "NARROW_WINDOW": "A raw narrower than this share of a MinMaxNormalizer's range is scored stretched too.",
@@ -315,7 +315,7 @@ def routes(rules: Optional[list[tuple[str, str]]] = None) -> list[Route]:
 def constants() -> dict:
     from cellmap_flow.dashboard.requests import LABEL_MAX_CHARS, PROMPT_MAX_CHARS, FinetuneSubmit
     from cellmap_flow.dashboard.routes.finetune.view_labels import UNDO_DEPTH
-    from cellmap_flow.finetune import rank
+    from cellmap_flow.portable import rank
 
     return {
         "RANK_BLOCKS": rank.RANK_BLOCKS,

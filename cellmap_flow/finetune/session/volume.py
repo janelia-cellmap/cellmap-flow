@@ -14,7 +14,6 @@ OME translation, since that is where Neuroglancer draws voxel 0 while it is
 painted; ``volume_corner_nm`` gives the corner.
 """
 
-import itertools
 import logging
 import time
 import uuid
@@ -479,46 +478,12 @@ def write_crop_into_volume(volume_meta: dict, entry, *, progress_callback=None) 
     return record
 
 
-def _axis_sources(from_meta: dict, to_meta: dict, from_shape, to_shape, axis: int):
-    """Per voxel of ``to_meta``'s grid along ``axis``, the voxels of
-    ``from_meta``'s it takes, as ``(first, end)`` arrays (end <= first where
-    none lies in the old volume): those whose centres lie inside it, or, when
-    none does (a finer grid), the one its own centre lies in."""
-    fv, tv = float(from_meta["output_voxel_size"][axis]), float(to_meta["output_voxel_size"][axis])
-    fc = volume_corner_nm(from_meta.get("dataset_offset_nm"), from_meta["output_voxel_size"])[axis]
-    tc = volume_corner_nm(to_meta.get("dataset_offset_nm"), to_meta["output_voxel_size"])[axis]
-    lo = tc + np.arange(to_shape[axis]) * tv
-    eps = 1e-6
-    first = np.ceil((lo - fc) / fv - 0.5 - eps).astype(np.int64)
-    end = np.ceil((lo + tv - fc) / fv - 0.5 - eps).astype(np.int64)
-    none = end <= first
-    first[none] = np.floor((lo[none] + tv / 2 - fc) / fv).astype(np.int64)
-    end[none] = first[none] + 1
-    return np.maximum(first, 0), np.minimum(end, from_shape[axis])
-
-
-def _first_visit(visited: dict, chunks, lo, shape) -> np.ndarray:
-    """The voxels of the box ``lo`` + ``shape`` not visited before, marking
-    them visited in ``visited`` (a mask per chunk index of ``chunks``)."""
-    fresh = np.zeros(shape, bool)
-    first = [l // c for l, c in zip(lo, chunks)]
-    last = [(l + n - 1) // c for l, n, c in zip(lo, shape, chunks)]
-    for index in itertools.product(*(range(f, e + 1) for f, e in zip(first, last))):
-        seen = visited.setdefault(index, np.zeros(chunks, bool))
-        corner = [i * c for i, c in zip(index, chunks)]
-        a = [max(l, k) for l, k in zip(lo, corner)]
-        b = [min(l + n, k + c) for l, n, k, c in zip(lo, shape, corner, chunks)]
-        in_chunk = tuple(slice(x - k, y - k) for x, y, k in zip(a, b, corner))
-        fresh[tuple(slice(x - l, y - l) for x, y, l in zip(a, b, lo))] = ~seen[in_chunk]
-        seen[in_chunk] = True
-    return fresh
-
-
 def carry_paint(from_meta: dict, to_meta: dict) -> dict:
     """Copy the paint of the volume ``from_meta`` into ``to_meta``, an empty
     volume over the same dataset on another model's grid: Which model to
-    start from's Use this model, the port of the browser's
-    web/src/finetune/carry.ts.
+    start from's Use this model. The maths is ``cellmap_flow.portable.carry``,
+    which the browser runs too (web/src/backend/routes/rank.ts); here are
+    the zarr reads and writes around it.
 
     Each new voxel takes the paint of the old voxels whose centres lie
     inside it (one for a grid as fine as the old, several for a coarser
@@ -535,57 +500,25 @@ def carry_paint(from_meta: dict, to_meta: dict) -> dict:
     unpainted where their old voxels disagreed, and the new chunks written.
     """
     from cellmap_flow.io.geometry import list_populated_chunks
+    from cellmap_flow.portable.carry import Grid, carry
 
     old = zarr.open(from_meta["zarr_path"], mode="r")["annotation/s0"]
     new = zarr.open(to_meta["zarr_path"], mode="r+")["annotation/s0"]
-    maps = [_axis_sources(from_meta, to_meta, old.shape, new.shape, a) for a in range(3)]
-    cap = np.iinfo(new.dtype).max
-    painted = source = conflicts = 0
-    written, visited = set(), {}
-    for index in list_populated_chunks(str(Path(from_meta["zarr_path"], "annotation", "s0"))):
-        lo = [i * c for i, c in zip(index, old.chunks)]
-        chunk = old[tuple(slice(l, l + c) for l, c in zip(lo, old.chunks))]
-        where = np.nonzero(chunk)
-        if not where[0].size:
-            continue
-        source += where[0].size
-        box_lo = [l + int(w.min()) for l, w in zip(lo, where)]
-        box_hi = [l + int(w.max()) + 1 for l, w in zip(lo, where)]
-        # The new voxels whose sources meet the painted box, along each axis.
-        spans = []
-        for (first, end), a, b in zip(maps, box_lo, box_hi):
-            meets = np.flatnonzero((end > first) & (end > a) & (first < b))
-            spans.append((int(meets[0]), int(meets[-1]) + 1) if meets.size else None)
-        if None in spans:
-            continue
-        firsts = [m[0][s:e] for m, (s, e) in zip(maps, spans)]
-        ends = [m[1][s:e] for m, (s, e) in zip(maps, spans)]
-        read_lo = [int(f.min()) for f in firsts]
-        read_hi = [int(e.max()) for e in ends]
-        src = old[tuple(slice(a, b) for a, b in zip(read_lo, read_hi))]
-        found = np.zeros([e - s for s, e in spans], dtype=src.dtype)
-        clash = np.zeros(found.shape, bool)
-        # Each new voxel's sources, an offset at a time along each axis.
-        reach = [int((e - f).max()) for f, e in zip(firsts, ends)]
-        for dz in range(reach[0]):
-            for dy in range(reach[1]):
-                for dx in range(reach[2]):
-                    inside = [(f + d < e) for f, e, d in zip(firsts, ends, (dz, dy, dx))]
-                    at = [np.minimum(f + d, e - 1) - r for f, e, d, r in zip(firsts, ends, (dz, dy, dx), read_lo)]
-                    v = src[np.ix_(*at)]
-                    valid = inside[0][:, None, None] & inside[1][None, :, None] & inside[2][None, None, :] & (v > 0)
-                    clash |= valid & (found > 0) & (v != found)
-                    found = np.where(valid & (found == 0), v, found)
-        found[clash] = 0
-        target = tuple(slice(s, e) for s, e in spans)
-        current = new[target]
-        current = np.where(found > 0, np.minimum(found, cap), current).astype(new.dtype)
-        new[target] = current
-        # A new voxel two old chunks' boxes reach (a coarser grid) is the
-        # same either time, and counted once.
-        fresh = _first_visit(visited, new.chunks, [s for s, _ in spans], found.shape)
-        painted += int(((found > 0) & fresh).sum())
-        conflicts += int((clash & fresh).sum())
-        nz = np.stack(np.nonzero(found), axis=1) + np.array([s for s, _ in spans])
-        written |= {tuple(i) for i in np.unique(nz // np.array(new.chunks), axis=0).tolist()}
-    return {"painted": painted, "source": int(source), "conflicts": conflicts, "chunks": len(written)}
+    grids = [
+        Grid(tuple(volume_corner_nm(meta.get("dataset_offset_nm"), meta["output_voxel_size"]).tolist()),
+             tuple(float(v) for v in meta["output_voxel_size"]), tuple(array.shape), tuple(array.chunks))
+        for meta, array in ((from_meta, old), (to_meta, new))
+    ]
+    box = lambda lo, hi: tuple(slice(a, b) for a, b in zip(lo, hi))  # noqa: E731
+    painted = (
+        (index, old[box(lo, [l + c for l, c in zip(lo, old.chunks)])])
+        for index in list_populated_chunks(str(Path(from_meta["zarr_path"], "annotation", "s0")))
+        for lo in [[i * c for i, c in zip(index, old.chunks)]]
+    )
+    chunks, counts = carry(*grids, painted, lambda lo, hi: old[box(lo, hi)], new.dtype)
+    for index, labels in chunks.items():
+        lo = [i * c for i, c in zip(index, new.chunks)]
+        target = box(lo, [min(l + c, n) for l, c, n in zip(lo, new.chunks, new.shape)])
+        part = labels[tuple(slice(0, s.stop - s.start) for s in target)]
+        new[target] = np.where(part > 0, part, new[target])
+    return counts
