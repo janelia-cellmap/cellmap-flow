@@ -36,6 +36,7 @@ import { targetTransformFor } from "../../finetune/targets";
 import { createVolume, hasAffinityChannels, paintedChunkIndices, planVolume, readPaintedChunk, readVolume } from "../../finetune/volume";
 import { chooseRawLevel, geometryOf, outputShape, ratio } from "../../infer/geometry";
 import { servedIndices, servedLevel } from "../../label-it/prediction";
+import { probability } from "../../label-it/segment";
 import { entryFor } from "../../models/manifest";
 import { PAINT_TAB, paintLayer, paintLayerName, paintLayerUrl } from "../../viewer/layers";
 import type { Router } from "../router";
@@ -215,7 +216,7 @@ async function scorePaint(ctx: AppContext, dataset: DatasetInfo, volume: PaintVo
   for (const key of spread(keys, RANK_BLOCKS)) {
     const lo = blocks.get(key)!.map((b, a) => b * block[a]), hi = lo.map((l, a) => Math.min(l + block[a], level.shape[a]));
     const out = await ctx.infer.readOutput(served.view, lo, hi);
-    read.set(key, { lo, hi, shape: out.shape, data: out.data });
+    read.set(key, { lo, hi, shape: out.shape, data: logitsOf(out, served.info.output_class) });
   }
   const tallies = emptyTallies(entry.manifest.channels.length);
   for (const { chunk, origin, at } of placed) {
@@ -229,6 +230,22 @@ async function scorePaint(ctx: AppContext, dataset: DatasetInfo, volume: PaintVo
     tallyChunk(tallies, chunk, transform(chunk), (c, i) => logits.get(i)?.(c) ?? null, affinity ? null : paintEdges(chunk));
   }
   return { score: rankScore(tallies, entry.manifest.channels, affinity), blocks: keys.length, read: [...read.values()].map(({ lo, hi }) => ({ lo, hi })), outside };
+}
+
+/** A model's output block as logits, whatever its activation, as the
+ * server's ranking reads it (rank_routes._score): the output as a
+ * probability by the served model's output class (label-it's probability,
+ * so a sigmoid model's 0.9 and a logit model's 2.2 are one and the same),
+ * clipped to [1e-6, 1 - 1e-6], then its logit. A logit model's output comes
+ * back as it was, within float32; a probability's is no longer read as if
+ * 0.1 said object. */
+function logitsOf(out: { data: Float32Array; shape: number[] }, outputClass: string | null | undefined): Float32Array {
+  const p = probability(out, outputClass, null).data;
+  for (let i = 0; i < p.length; i++) {
+    const q = Math.min(Math.max(p[i], 1e-6), 1 - 1e-6);
+    p[i] = Math.log(q / (1 - q));
+  }
+  return p;
 }
 
 /** The window of the raw under the output blocks `blocks` of `entry`'s

@@ -24,6 +24,7 @@ import type {
   ViewerController,
 } from "../../src/contracts";
 import { entryFor } from "../../src/models";
+import { outputClassOf } from "../../src/shared/model-info";
 import { memorySession } from "../../src/state";
 import { MemoryPaintStore } from "../../src/state/paint-store";
 
@@ -115,6 +116,8 @@ export class FakeInference implements Inference {
       has_channel: true,
       output_axes: ["c", "z", "y", "x"],
       available: true,
+      // As the real one reads it off the manifest (shared/model-info.ts).
+      output_class: outputClassOf(entry.manifest.output),
       engine: "browser",
     };
     const view = `${entry.name}${ARGS_KEY}${blob}${ARGS_KEY}`;

@@ -14,9 +14,10 @@ import { carryPaint } from "../../src/finetune/carry";
 import { emptyTallies, paintEdges, rankScore, tallyChunk } from "../../src/finetune/rank";
 import { binaryTargets } from "../../src/finetune/targets";
 import { readVolume } from "../../src/finetune/volume";
+import { entryFor } from "../../src/models";
 import { MemoryPaintStore } from "../../src/state/paint-store";
 import { paintLayerName } from "../../src/viewer/layers";
-import { entry, type FakeContext, fakeContext, NAME_54, NAME_56, request } from "./backend-fakes";
+import { entry, type FakeContext, fakeContext, manifest, NAME_54, NAME_56, request } from "./backend-fakes";
 
 function body(res: ApiResponse): any {
   if (!("json" in res)) throw new Error(`not a JSON answer: ${JSON.stringify(res)}`);
@@ -129,6 +130,25 @@ describe("the rank routes", () => {
     const used = body(await handle(request("POST", "/api/finetune/rank/use", { name: NAME_54, window: scored.window })));
     expect(used).toMatchObject({ success: true, window: scored.window });
     expect(ctx.session.state.chain.input_norm.find((n) => n.name === "MinMaxNormalizer")).toMatchObject({ min_value: scored.window[0], max_value: scored.window[1] });
+  });
+
+  it("read a model's output by its activation, so a sigmoid model scores as the logit model it is equal to", async () => {
+    const { ctx, handle } = await painted();
+    // A nuc model at setup_56's voxel size whose manifest says it outputs probabilities.
+    const m = { ...manifest("setup_60", ["nuc"], 128), task: "nuc", output: "probabilities (sigmoid applied)" };
+    const sigmoid = entryFor("setup_60", m, m.variants[0]);
+    ctx.catalog.entries = [...ctx.catalog.entries, sigmoid];
+    const inside = (z: number, y: number, x: number) => [z, y, x].every((v) => v >= 5 && v < 15);
+    // 0.9 inside the object and 0.1 outside; setup_56 (raw logits) says the same as log(9) and -log(9).
+    const logit = Math.log(9);
+    ctx.infer.outputAt = (view, _c, z, y, x) => (view.startsWith(sigmoid.name) ? (inside(z, y, x) ? 0.9 : 0.1) : inside(z, y, x) ? logit : -logit);
+
+    const asProbability = body(await handle(request("POST", "/api/finetune/rank/score", { name: sigmoid.name })));
+    const asLogits = body(await handle(request("POST", "/api/finetune/rank/score", { name: NAME_56 })));
+    // Read as logits, 0.1 said object too: half the paint right at 0, and a cut-off between the two values.
+    expect(asProbability).toMatchObject({ success: true, matches: 1, matches_at_zero: 1, cutoff: 0 });
+    expect(asLogits).toMatchObject({ success: true, matches: 1, matches_at_zero: 1, cutoff: 0 });
+    expect(asProbability.loss).toBeCloseTo(asLogits.loss, 5);
   });
 
   it("refuse without paint, and for a model the catalog does not have", async () => {
