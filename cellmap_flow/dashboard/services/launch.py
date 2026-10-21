@@ -390,6 +390,14 @@ def configs_by_name() -> dict:
     return {getattr(mc, "name", None): mc for mc in get_session().models_config}
 
 
+def drop_config(name):
+    """Take the model config named ``name`` out of the session's models;
+    nothing when none is. Export Config and the pipeline builder list what
+    is left."""
+    session = get_session()
+    session.models_config = [mc for mc in session.models_config if getattr(mc, "name", None) != name]
+
+
 def _catalog_groups() -> dict:
     return {name: group for group, models in get_session().model_catalog.items() for name in models}
 
@@ -587,8 +595,9 @@ def remove_model(name: str) -> list:
     finetune job's model is that job's server: while the job is alive it
     is the Finetune tab's to stop (NotRemovable); once the job has ended,
     its server has too, and only its layer and its entry among the jobs are
-    left to take away. Its config stays among the session's models, as
-    every stopped model's does, for the pipeline builder.
+    left to take away. The model's config goes with it, so Export Config
+    no longer lists a model taken off (a model unticked on Submit keeps
+    its config, for the Models tab's rows and the pipeline builder).
 
     Raises LookupError when no model of that name is running or starting.
     """
@@ -617,5 +626,6 @@ def remove_model(name: str) -> list:
                 job.kill()
     _stop_jobs(jobs)
     session.forget_layer(name)
+    drop_config(name)
     logger.info(f"Removed model {name}")
     return loaded_models()
