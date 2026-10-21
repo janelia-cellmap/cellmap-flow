@@ -11,14 +11,13 @@ voxel 0; non-spatial axes with unit None, voxel size 1 and translation 0.
 
 What stays here because worldarray has no such thing:
 
-- ``ArrayMeta`` itself (corner-based, ``spatial()`` a method, ``fill_value``);
+- ``ArrayMeta`` itself (corner-based, ``spatial()`` a method);
 - the record's shape for precomputed (a leading ``channel`` axis, even of one
   channel) and for unnamed axes (``c^`` before ``z, y, x``);
-- the ``…/s<N>`` names of precomputed scales (worldarray names them by key);
-- a group path reading its first level, and ``list_levels`` refusing a group
-  without multiscales;
-- ``nm_per_unit``'s lenient rule (a missing, "pixel" or unknown unit is 1 nm),
-  over worldarray's unit table;
+- precomputed levels named ``s<N>`` (worldarray names them by key; it opens
+  ``…/s<N>`` as scale N);
+- ``list_levels`` refusing a group without multiscales;
+- ``nm_per_unit``, over worldarray's unit table (``worldarray.units.TABLE``);
 - the crop loader's attribute helpers (``read_zarr_json``, ``attrs_from_meta``,
   ``legacy_attrs``, ``dataset_transforms``).
 """
@@ -26,14 +25,12 @@ What stays here because worldarray has no such thing:
 from __future__ import annotations
 
 import logging
-import re
 from dataclasses import dataclass, replace
 from typing import List, Optional, Tuple
 
 import numpy as np
 import worldarray as wa
 from worldarray import units as wa_units
-from worldarray.store import Location, detect
 
 from cellmap_flow.io import paths, store
 
@@ -53,29 +50,27 @@ def _nm(metres: float) -> float:
 
 
 # The browser reads this table too (web/build/export_data.py exports it for
-# web/src/infer/geometry.ts). It is worldarray's length table, which keeps it
-# private (``worldarray.units._LENGTH_M``, metres per unit), in nm per unit.
+# web/src/infer/geometry.ts): worldarray's length table, in nm per unit.
 # "µm" is the micro sign (U+00B5), "μm" the Greek mu (U+03BC).
-_NM_PER_UNIT = {unit: _nm(metres) for unit, metres in wa_units._LENGTH_M.items()}
+_NM_PER_UNIT = {unit: _nm(metres) for unit, metres in wa_units.TABLE["length"].items()}
 
 _warned_units = set()
 
 
 def nm_per_unit(unit) -> float:
     """How many nanometers one ``unit`` is; 1 for a missing, "pixel" or unknown
-    unit (worldarray raises on an unknown one; cellmap-flow warns and reads on)."""
+    unit, with a warning for an unknown one."""
     if unit is None:
         return 1.0
     key = str(unit).strip().lower()
     if key in ("", "pixel", "pixels"):
         return 1.0
-    try:
-        return float(f"{wa_units.factor(str(unit), NANOMETER):.12g}")
-    except ValueError:
+    if wa_units.kind(str(unit)) != "space":
         if key not in _warned_units:
             _warned_units.add(key)
             logger.warning(f"Unknown spatial unit {unit!r}; treating it as nanometers")
         return 1.0
+    return float(f"{wa_units.factor(str(unit), NANOMETER):.12g}")
 
 
 def to_nm(values, units) -> Tuple[float, ...]:
@@ -175,22 +170,16 @@ class ArrayMeta:
         )
 
 
-def _fill_value(store_):
-    """The array's fill value as tensorstore reads it, a Python scalar; None when it has none."""
-    value = store_.fill_value
-    return None if value is None else np.asarray(value).item()
-
-
-def from_world_array(array: "wa.WorldArray", path: str) -> ArrayMeta:
-    """cellmap-flow's record of a worldarray array opened at ``path``.
+def from_world_array(native: "wa.ArrayMeta", path: str) -> ArrayMeta:
+    """cellmap-flow's record of worldarray's ``native`` metadata (an array's
+    ``.meta``) of the array at ``path``.
 
     worldarray's spatial axes are those named z, y or x, else the last three;
     the others keep unit None. Unnamed axes get cellmap-flow's names (z, y, x
     from the end, ``c^`` before them); a precomputed volume's channel axis,
     which worldarray drops when there is one channel, is put back.
     """
-    native = array.meta
-    nm = native.in_units(space=NANOMETER)
+    nm = native.in_units(space=NANOMETER, strict=False)
     spatial = set(native.spatial)
     corner = nm.corner
     ndim = native.ndim
@@ -227,7 +216,7 @@ def from_world_array(array: "wa.WorldArray", path: str) -> ArrayMeta:
         units=tuple(units),
         voxel_size=tuple(voxel_size),
         translation=tuple(translation),
-        fill_value=_fill_value(array.ts),
+        fill_value=native.fill_value,
     )
 
 
@@ -235,50 +224,29 @@ def from_world_array(array: "wa.WorldArray", path: str) -> ArrayMeta:
 # Opening a path as worldarray reads it
 # ---------------------------------------------------------------------------
 
-_SCALE_INDEX = re.compile(r"^s(\d+)$")
 
-
-def precomputed_level(path: str) -> Tuple[str, Optional[str]]:
-    """``(volume, scale key)`` worldarray opens for cellmap-flow's precomputed
-    ``path``: its ``…/s<N>`` names scale N (worldarray names a scale by its
-    key), a bare volume is scale 0. ValueError for a scale it does not have."""
-    location, index = paths.precomputed_volume(path)
-    info = store.read_json(location, "info")
-    if info is None:
-        raise FileNotFoundError(f"{path} is not a precomputed volume: it has no info file")
-    scales = info["scales"]
-    if index >= len(scales):
-        raise ValueError(f"{path}: the volume has {len(scales)} scales")
-    return location, str(scales[index].get("key", index))
-
-
-def first_level(path: str) -> Optional[str]:
-    """The name of the level a group path reads (its multiscales' first, else
-    ``s0``, worldarray's discovery); None when ``path`` is an array."""
-    node = detect(store.prepare(path))
-    if node.kind == "array":
-        return None
-    try:
-        return wa.open_pyramid(path, units=None).names[0]
-    except ValueError as e:
-        raise RuntimeError(f"No array found under the group {path}: {e}") from None
-
-
-def open_level(path: str, **kwargs) -> "wa.WorldArray":
-    """The worldarray array ``path`` names, as cellmap-flow names it: a
-    precomputed ``…/s<N>`` its scale N, a group its first level."""
+def open_level(path: str, voxel_size=None, **kwargs) -> "wa.WorldArray":
+    """The worldarray array ``path`` names, as cellmap-flow reads a path: an
+    array as it is, ``…/s<N>`` of a precomputed volume as scale N, and a group
+    or precomputed volume at its level for ``voxel_size`` (worldarray chooses
+    it from the group's document), its first without one."""
     path = store.prepare(paths.normalize_path(path))
-    if paths.is_precomputed(path):
-        volume, key = precomputed_level(path)
-        return wa.open(volume, level=key, **kwargs)
-    return wa.open(path, level=first_level(path), **kwargs)
+    named_scale = paths.is_precomputed(path) and paths.precomputed_scale(path)[1] is not None
+    level = None if (named_scale or voxel_size is not None) else "first"
+    return wa.open(path, level=level, voxel_size=voxel_size, strict_units=False, **kwargs)
 
 
 def read_array_meta(path: str) -> ArrayMeta:
     """Metadata of the array at ``path`` (see the module docstring). A path at
     a group reads its first level: the first its multiscales list, else s0."""
     path = paths.normalize_path(path)
-    return from_world_array(open_level(path, units=None), path)
+    try:
+        array = open_level(path, units=None)
+    except ValueError as e:
+        if "no levels found" in str(e):
+            raise RuntimeError(f"No array found under the group {path}: {e}") from None
+        raise
+    return from_world_array(array.meta, path)
 
 
 # ---------------------------------------------------------------------------
@@ -286,47 +254,59 @@ def read_array_meta(path: str) -> ArrayMeta:
 # ---------------------------------------------------------------------------
 
 
-def _has_multiscales(path: str) -> bool:
-    node = detect(store.prepare(path))
-    if node.format == "zarr3":
-        attrs = node.docs["zarr.json"].get("attributes", {}) or {}
-    elif node.format == "zarr2":
-        attrs = Location(node.path).read_json(".zattrs") or {}
-    else:
-        attrs = node.docs.get("attributes.json", {}) or {}
+def _multiscale_group(group_path: str):
+    """Check that ``group_path`` is a multiscale group: KeyError for a v2 (or
+    N5) group without multiscales, or an array; ValueError for a v3 one."""
+    node = wa.detect(store.prepare(group_path))
+    attrs = {}
+    if node.kind == "group":
+        if node.format == "zarr3":
+            attrs = node.docs["zarr.json"].get("attributes", {}) or {}
+        elif node.format == "zarr2":
+            attrs = store.read_json(node.path, ".zattrs") or {}
+        else:
+            attrs = node.docs.get("attributes.json", {}) or {}
     ome = attrs.get("ome")
-    return bool((ome or {}).get("multiscales") if isinstance(ome, dict) else attrs.get("multiscales"))
+    if not ((ome or {}).get("multiscales") if isinstance(ome, dict) else attrs.get("multiscales")):
+        error = ValueError if node.format == "zarr3" else KeyError
+        raise error(f"No multiscales attribute found at {group_path}")
 
 
-def list_levels(group_path: str) -> List[Tuple[str, ArrayMeta]]:
-    """``[(dataset path, ArrayMeta)]`` for each level of the OME multiscale
-    group at ``group_path``, in the order its ``datasets`` list them, or of
-    the precomputed volume there (``s<N>`` for scale N).
+def level_names(group_path: str, pyramid: "wa.Pyramid") -> List[str]:
+    """cellmap-flow's names of ``pyramid``'s levels: a precomputed volume's
+    scales are ``s<N>``, a group's levels their dataset paths."""
+    if paths.is_precomputed(group_path):
+        return [f"s{i}" for i in range(len(pyramid))]
+    return pyramid.names
 
-    Raises when there is no such group (KeyError for a v2 group without
-    multiscales, ValueError for a v3 one, or for one scale of a precomputed
-    volume).
-    """
+
+def pyramid(group_path: str, units=None) -> Tuple[str, "wa.Pyramid"]:
+    """``(group path, worldarray Pyramid)`` of the multiscale group or
+    precomputed volume at ``group_path``, in ``units`` (native when None);
+    raises as ``list_levels`` does."""
     group_path = paths.normalize_path(group_path)
     if paths.is_precomputed(group_path):
         _, scale = paths.precomputed_scale(group_path)
         if scale is not None:
             raise ValueError(f"{group_path} is scale {scale} of a precomputed volume, not the volume")
-        volume, _ = paths.precomputed_volume(group_path)
-        pyramid = wa.open_pyramid(store.prepare(volume), units=None)
-        return [
-            (f"s{i}", from_world_array(level, paths.join(group_path, f"s{i}")))
-            for i, level in enumerate(pyramid.levels)
-        ]
-    if not _has_multiscales(group_path):
-        node = detect(group_path)
-        if node.format == "zarr3":
-            raise ValueError(f"No multiscales attribute found at {group_path}")
-        raise KeyError(f"No multiscales attribute found at {group_path}")
-    pyramid = wa.open_pyramid(group_path, units=None)
+    else:
+        _multiscale_group(group_path)
+    return group_path, wa.open_pyramid(store.prepare(group_path), units=units, strict_units=False)
+
+
+def list_levels(group_path: str) -> List[Tuple[str, ArrayMeta]]:
+    """``[(dataset path, ArrayMeta)]`` for each level of the OME multiscale
+    group at ``group_path``, in the order its ``datasets`` list them, or of
+    the precomputed volume there (``s<N>`` for scale N). Opens every level.
+
+    Raises when there is no such group (KeyError for a v2 group without
+    multiscales, ValueError for a v3 one, or for one scale of a precomputed
+    volume).
+    """
+    group_path, levels = pyramid(group_path)
     return [
-        (name, from_world_array(level, paths.join(group_path, name)))
-        for name, level in zip(pyramid.names, pyramid.levels)
+        (name, from_world_array(level.meta, paths.join(group_path, name)))
+        for name, level in zip(level_names(group_path, levels), levels.levels)
     ]
 
 
@@ -334,7 +314,7 @@ def node_type(path: str) -> Tuple[str, str]:
     """``(path, "group" or "array")``: what worldarray finds at ``path``.
     FileNotFoundError when there is nothing there."""
     path = paths.normalize_path(path)
-    return path, detect(store.prepare(path)).kind
+    return path, wa.detect(store.prepare(path)).kind
 
 
 # ---------------------------------------------------------------------------

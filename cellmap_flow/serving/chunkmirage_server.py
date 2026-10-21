@@ -160,7 +160,7 @@ class ChunkmirageServer:
         self.served = ServedModel(
             name=f"{getattr(model_config, 'name', None) or type(model_config).__name__}@{id(self):x}",
             runner=self.inferencer,
-            grid=idi.read_grid,
+            grid=idi._grid,
             level_shape=tuple(int(v) for v in idi.shape),
             # Output voxel 0 starts at the corner of the level the model reads,
             # so every output voxel sits exactly on the input voxels it is
@@ -210,7 +210,7 @@ class ChunkmirageServer:
         # failed to start here while the reader above had opened it. A URL,
         # or a ``precomputed://`` location, is left as it is.
         path = idi.path if "://" in idi.path else os.path.abspath(idi.path)
-        grid = idi.read_grid
+        grid = idi._grid
         actual = np.asarray(idi.actual_voxel_size, dtype=float)
         if idi.resampled:
             corner = np.asarray(grid.translation, dtype=float)

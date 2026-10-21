@@ -46,14 +46,14 @@ class ArraySource:
 
     Opened on first use and then kept, so everything sharing the source
     (ImageDataInterface's ``with_input_norms`` views) shares one open store,
-    and its cache.
+    and its cache. ``array``: a worldarray array already open at ``path``.
     """
 
-    def __init__(self, path: str, concurrency_limit: Optional[int] = 1, cache_bytes: int = 0):
+    def __init__(self, path: str, concurrency_limit: Optional[int] = 1, cache_bytes: int = 0, array=None):
         self.path = path
         self.concurrency_limit = concurrency_limit
         self.cache_bytes = cache_bytes
-        self._array = None
+        self._array = array
 
     @property
     def array(self) -> "wa.WorldArray":
@@ -73,8 +73,9 @@ class ArraySource:
     def read(self, box: Optional[Box] = None, fill=0) -> np.ndarray:
         """The voxels of ``box`` (all of the array when None), padded with
         ``fill`` (a value, or "edge") where it runs past the array."""
+        shape = self.array.grid.shape
         if box is None:
-            return self.array.read_index((0,) * len(self.array.shape), self.array.shape)
+            return self.array.read_index((0,) * len(shape), shape)
         return self.array.read_index(box.begin, box.end, padding=fill)
 
 

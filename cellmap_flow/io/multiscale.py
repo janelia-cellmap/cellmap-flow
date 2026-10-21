@@ -4,12 +4,14 @@ The rule is worldarray's ``select_level`` (its spec's Behaviour 3: "floor",
 "exact", "nearest", "resample"), on the levels ``io.metadata.list_levels``
 gives, in the order the group's ``datasets`` list them; a precomputed
 volume's levels are its scales. Voxel sizes are compared as nanometer floats
-on the spatial axes, so 10.48 nm is not 10 nm. What stays here: no voxel size
-picks the first level, and a path resolves to the path of its level.
+on the spatial axes, so 10.48 nm is not 10 nm. ``select_dataset`` and
+``closest_raw_scale`` choose from the group's own document
+(``worldarray.Pyramid.voxel_sizes``), opening no level. What stays here: no
+voxel size picks the first level, and a path resolves to cellmap-flow's path
+of its level.
 """
 
 import logging
-from types import SimpleNamespace
 from typing import List, Literal, Optional, Sequence, Tuple
 
 from worldarray.levels import coarser_anywhere, same_voxel_size  # noqa: F401
@@ -37,11 +39,15 @@ def select_level(levels: Sequence[Level], voxel_size=None, mode: Mode = "floor")
         raise ValueError("no levels to choose from")
     if voxel_size is None:
         return levels[0]
-    # worldarray reads an ArrayMeta's spatial axes as the ``spatial`` indices.
-    views = [(path, SimpleNamespace(spatial=meta.spatial_indices, voxel_size=meta.voxel_size))
-             for path, meta in levels]
-    name, _ = _select_level(views, voxel_size, mode)
+    name, _ = _select_level([(path, meta.spatial().voxel_size) for path, meta in levels], voxel_size, mode)
     return next(level for level in levels if level[0] == name)
+
+
+def _voxel_sizes(group: str) -> List[Tuple[str, Tuple[float, ...]]]:
+    """``(cellmap-flow's level name, nm voxel size)`` per level of ``group``,
+    from its document."""
+    group, pyramid = metadata.pyramid(group, units="nanometer")
+    return list(zip(metadata.level_names(group, pyramid), (vs for _, vs in pyramid.voxel_sizes())))
 
 
 def select_dataset(dataset_path: str, voxel_size=None, mode: Mode = "floor") -> Tuple[str, Optional[str]]:
@@ -66,7 +72,8 @@ def select_dataset(dataset_path: str, voxel_size=None, mode: Mode = "floor") -> 
         if kind != "group":
             return dataset_path, None
         group = node
-    level, _ = select_level(metadata.list_levels(group), voxel_size, mode)
+    sizes = _voxel_sizes(group)
+    level = sizes[0][0] if voxel_size is None else _select_level(sizes, voxel_size, mode)[0]
     return paths.join(group, level), level
 
 
@@ -90,8 +97,8 @@ def closest_raw_scale(dataset_path: str, target_voxel_size) -> Optional[tuple]:
     precomputed volume or one of its scales).
     """
     try:
-        levels: List[Level] = metadata.list_levels(_pyramid_of(dataset_path))
-        return tuple(select_level(levels, target_voxel_size)[1].spatial().voxel_size)
+        sizes = _voxel_sizes(_pyramid_of(dataset_path))
+        return tuple(float(v) for v in _select_level(sizes, target_voxel_size, "floor")[1])
     except Exception as e:
         logger.warning(
             f"Could not determine closest raw scale for {dataset_path} at "

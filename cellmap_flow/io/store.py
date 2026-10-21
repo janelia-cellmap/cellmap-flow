@@ -2,26 +2,18 @@
 
 A location is a local directory or an ``http(s)://``, ``s3://`` or ``gs://``
 URL. worldarray (``worldarray.store``) gives the tensorstore kvstore specs that
-read it, in the order to try them, and moves to the next only when a read is
-refused (s3: anonymous, then the AWS default chain; gs: Google's default
-credentials, then the bucket's public https URL, which
+read it and moves to the next only when a read is refused (s3: anonymous, then
+the AWS default chain, ``AWS_ENDPOINT_URL(_S3)`` and ``AWS_REGION`` honoured;
+gs: Google's default credentials, then the bucket's public https URL, which
 ``TENSORSTORE_GCS_HTTP_URL`` moves); the way that worked is remembered per
-bucket. This module keeps cellmap-flow's location-first signatures over it.
+bucket. This module keeps cellmap-flow's location-first reads over it, and the
+one thing worldarray does not do: ``prepare``.
 """
 
 import os
-from typing import Callable, List, Optional, TypeVar
+from typing import Optional
 
-from worldarray.store import GCS_PUBLIC_URL, Location, kvstore_specs  # noqa: F401
-from worldarray.store import with_access as _with_access
-
-T = TypeVar("T")
-
-URL_SCHEMES = ("http://", "https://", "s3://", "gs://")
-
-
-def is_url(location: str) -> bool:
-    return location.startswith(URL_SCHEMES)
+from worldarray.store import Location
 
 
 def prepare(location: str) -> str:
@@ -31,18 +23,6 @@ def prepare(location: str) -> str:
     if "gs://" in location:
         os.environ.setdefault("GCE_METADATA_ROOT", "metadata.google.internal.invalid")
     return location
-
-
-def kvstores(location: str) -> List[dict]:
-    """The tensorstore kvstore specs that read ``location``, a directory, in
-    the order to try them."""
-    return kvstore_specs(prepare(location))
-
-
-def with_access(location: str, attempt: Callable[[dict], T]) -> T:
-    """``attempt(spec)`` with ``location``'s kvstore specs in turn, moving on
-    only while access is refused."""
-    return _with_access(kvstores(location), attempt)
 
 
 def read(location: str, key: str) -> Optional[bytes]:
