@@ -163,6 +163,43 @@ PUT, DELETE of whole objects), which the Neuroglancer fork's writable zarr
 source paints into as it paints into MinIO in server mode; the Engine
 registers the same `sw.js` by name, so both get one registration.
 
+## One implementation per behaviour
+
+A feature works in both modes only when its logic is written once, where
+both modes run it: a shared Python core, chunkmirage (engine work), the
+dashboard's JavaScript and templates (UI), or the generated contracts
+(`cellmap_flow/schema.py`, below). Only the I/O adapters are written per
+mode. A feature whose logic cannot live in one of those places is
+mode-specific: the other mode answers `unavailable` with a reason
+(`router.ts`), and the template hides its controls (`server-only`,
+`[data-mode]`). A new experiment lands in one mode first and reaches the
+other once its logic is portable; it is not ported by hand.
+
+| both modes (logic written once) | browser only | server only |
+|---|---|---|
+| view; input and postprocess chains; paint volumes; Label it; rank, threshold, norm choice and re-check; targets; good regions; AI annotate (prompt, mask, fill); export config | ORT Web inference; head and TF.js finetune; local folders; Run on a region to disk; share links | LSF model servers; LoRA and whole-network torch training; blockwise; Review tab; crops import; bioimageio, dacapo and Cellpose models; pipeline builder |
+
+Both modes have "a finetune", but not one algorithm: what they share is the
+targets, the sampling plan, the loss definitions and the job card's JSON.
+Several both-mode rows are still ports kept in step by the parity fixtures
+(`test/parity`); the rule says where their one implementation goes next.
+
+The contract is generated, not copied. `cellmap_flow/schema.py` exports a
+JSON Schema of every pydantic request model (`dashboard/requests.py`), the
+table of every route with where it is answered (both, stub, server, browser;
+the method and path from the Flask app's `url_map`, the availability declared
+beside it) and the constants both modes share (the rank score's, Undo's
+depth, the AI annotation's caps, the Finetune form's defaults). `npm run gen`
+writes `src/generated/cellmap-flow.schema.json`, `cellmap-flow.ts` (its types
+by json-schema-to-typescript, with the constants, `ROUTES` and the chain
+steps' parameters as values) and `docs/api.md`. `tests/web/test_schema.py`
+fails when they are stale, when a Flask route is added without a declaration,
+when the router here registers a route the table does not give the browser or
+misses one it does, and when the server form's defaults leave
+`FinetuneSubmit`'s; `test/unit/generated-routes.test.ts` holds the router to
+`ROUTES`. TypeScript imports a shared number (`FINETUNE_DEFAULTS`,
+`LABEL_MAX_CHARS`) from the generated file rather than writing it again.
+
 ## Finetuning (src/finetune/)
 
 The Finetune tab works as on the server with the browser in the server's and
@@ -466,6 +503,7 @@ npm install
 npm run fetch:chunkmirage                 # once, and after bumping chunkmirage.lock
 bash scripts/fetch-neuroglancer.sh        # once (a minute or two): the fork that paints, into web/ng/
 PYTHON=../.pixi/envs/default/bin/python npm run render   # after a template change
+PYTHON=../.pixi/envs/default/bin/python npm run gen      # after changing a request model, a route or a shared constant
 npm run dev                               # http://localhost:5173/  (WebGPU needs localhost or https)
 ```
 

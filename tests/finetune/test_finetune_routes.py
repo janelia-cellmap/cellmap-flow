@@ -113,7 +113,7 @@ def submit(client, trainable_session, monkeypatch):
 
 
 @pytest.mark.parametrize("volume, request_data, sent", [
-    pytest.param(CROPPED, {}, dict(mask_unannotated=False, loss_type="mse"), id="imported crops are dense"),
+    pytest.param(CROPPED, {}, dict(mask_unannotated=False, loss_type="margin"), id="imported crops are dense"),
     # A distance target needs 3D boundaries, which scribbles do not have; they
     # bound the distance instead. The form's distillation of 0.01 held nothing
     # else in place.
@@ -122,7 +122,7 @@ def submit(client, trainable_session, monkeypatch):
                       distillation_lambda=0.5), id="a painted session"),
     pytest.param(PAINTED, {"output_type": "distance", "loss_type": "margin", "distillation_lambda": 10},
                  dict(loss_type="interval", distillation_lambda=10), id="a painted session asking for more distillation"),
-    pytest.param(STROKE_BESIDE, {}, dict(mask_unannotated=True, loss_type="margin", distillation_lambda=0.5),
+    pytest.param(STROKE_BESIDE, {"loss_type": "mse"}, dict(mask_unannotated=True, loss_type="margin", distillation_lambda=0.5),
                  id="a stroke beside the crops"),
     # The CLI takes a distance target only with bce, and a soft target is not smoothed.
     pytest.param(CROPPED, {"output_type": "distance", "loss_type": "margin"},
@@ -160,11 +160,11 @@ def test_a_submit_sends_the_job_manager_the_forms_defaults(submit):
                         "tensorboard_command": f"tensorboard --logdir {job.corrections.parent}",
                         "output_type": "affinities", "message": "Finetuning job submitted successfully"}
     assert job.sent == dict(
-        model_config=get_session().models_config[0], corrections_path=job.corrections, lora_r=8, num_epochs=10,
-        batch_size=2, learning_rate=1e-4, output_base=job.corrections.parent, checkpoint_path_override=None,
+        model_config=get_session().models_config[0], corrections_path=job.corrections, lora_r=64, num_epochs=20,
+        batch_size=8, learning_rate=1e-4, output_base=job.corrections.parent, checkpoint_path_override=None,
         auto_serve=True,
-        mask_unannotated=False, loss_type="mse", label_smoothing=0.1, distillation_lambda=None,
-        distillation_scope="unlabeled", margin=0.3, balance_classes=False, augment=False, queue="gpu_h100",
+        mask_unannotated=False, loss_type="margin", label_smoothing=0.1, distillation_lambda=0.01,
+        distillation_scope="unlabeled", margin=0.3, balance_classes=True, augment=False, queue="gpu_h100",
         charge_group="my_lab", walltime="10:00", output_type="affinities", select_channel=None,
         offsets="[[1, 0, 0], [0, 1, 0]]",
     )
@@ -200,7 +200,7 @@ def test_submit_bills_the_dashboards_charge_group(submit, dashboards, request_da
 
 
 @pytest.mark.parametrize("value, status, epochs", [
-    pytest.param("", 200, 10, id="blank gets the default"),
+    pytest.param("", 200, 20, id="blank gets the default"),
     pytest.param("25", 200, 25, id="a number"),
     pytest.param("ten", 400, None, id="not a number"),
     pytest.param("2.5", 400, None, id="not a whole number"),

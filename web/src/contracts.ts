@@ -70,6 +70,28 @@ export interface Unavailable {
   error: string;
 }
 
+/** The bodies the Python routes parse with pydantic (dashboard/requests.py),
+ * as generated into src/generated/cellmap-flow.ts by `npm run gen`, for the
+ * handlers here that answer the same routes; the route table (Route, ROUTES)
+ * and the constants both modes share come from the same file. */
+export type {
+  AddModel,
+  AIAnnotateDecision,
+  AIAnnotateResend,
+  AIAnnotateRun,
+  AIAnnotateSettings,
+  CreateVolume,
+  FinetuneRestart,
+  FinetuneSubmit,
+  PipelineUpdate,
+  RemoveModel,
+  ResolveModel,
+  Route,
+  ServerConfigUpdate,
+  SetData,
+  SubmitModels,
+} from "./generated/cellmap-flow";
+
 // ---------------------------------------------------------------------------
 // Session state (what dashboard/state.py keeps between requests)
 // ---------------------------------------------------------------------------

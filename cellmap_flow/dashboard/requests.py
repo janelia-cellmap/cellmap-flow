@@ -302,9 +302,11 @@ class FinetuneSubmit(_ManifestOverrides):
     ``corrections_path``, a session's corrections directory or the base
     output path of its sessions.
 
-    The defaults are the form's. The rest of the fields are passed on as
-    sent, and the route adjusts the loss for painted annotations and for a
-    distance target.
+    The defaults are the server form's (_finetune_tab.html's values and
+    selected options, checked against these by tests/web/test_schema.py);
+    cellmap_flow.schema exports them to the browser as FINETUNE_DEFAULTS.
+    The rest of the fields are passed on as sent, and the route adjusts the
+    loss for painted annotations and for a distance target.
     """
 
     model_name: Annotated[str, _required("model_name")] = Field(None, validate_default=True)
@@ -312,17 +314,17 @@ class FinetuneSubmit(_ManifestOverrides):
         "corrections_path",
         message="corrections_path is required. Please specify the output path where annotation crops are saved.",
     )] = Field(None, validate_default=True)
-    lora_r: _form_number(int, 8)
-    num_epochs: _form_number(int, 10)
-    batch_size: _form_number(int, 2)
+    lora_r: _form_number(int, 64)
+    num_epochs: _form_number(int, 20)
+    batch_size: _form_number(int, 8)
     learning_rate: _form_number(float, 1e-4)
-    loss_type: Any = "mse"
+    loss_type: Any = "margin"
     label_smoothing: _form_number(float, 0.1)
-    # None leaves the weight to the trainer; 0 switches it off.
-    distillation_lambda: _form_number(float, None)
+    # 0 switches distillation off.
+    distillation_lambda: _form_number(float, 0.01)
     distillation_scope: Any = "unlabeled"
     margin: _form_number(float, 0.3)
-    balance_classes: Any = False
+    balance_classes: Any = True
     # Default off: these interactive runs are a few dozen gradient steps,
     # where augmentation adds variance without the many repeat views it
     # needs to pay for itself.

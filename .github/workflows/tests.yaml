@@ -183,6 +183,15 @@ jobs:
           cache: pip
           cache-dependency-path: pyproject.toml
       - run: pip install -e . --extra-index-url https://download.pytorch.org/whl/cpu
+      # The browser's types, constants and route table are generated from the
+      # Python (cellmap_flow/schema.py) and committed; a change there must be
+      # regenerated with it. The pytest jobs check the schema and docs/api.md;
+      # the TypeScript needs json2ts from npm ci, so it is checked here.
+      - name: Generated contracts are current
+        run: npm run gen:check
+        working-directory: web
+        env:
+          PYTHON: python
       - name: Render the dashboard page and build the app
         run: npm run render && npm run build
         working-directory: web
