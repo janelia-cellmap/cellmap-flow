@@ -1,9 +1,11 @@
 """The finetune training job's command line: its flags, and what they describe.
 
 - ``build_arg_parser`` and ``parse_args``: every flag of
-  ``python -m cellmap_flow.finetune.finetune_cli``. The job manager builds
-  the command, and a running job outlives a dashboard upgrade, so flags only
-  ever change compatibly.
+  ``python -m cellmap_flow.finetune.finetune_cli``. The training settings'
+  flags are made from ``options.TrainingOptions``, one per field, and
+  ``options_of`` reads them back into one; ``training_flags`` is the
+  inverse, which the job manager builds the command with. A running job
+  outlives a dashboard upgrade, so flags only ever change compatibly.
 - ``model_config_from_args`` and ``build_target_transform``: the model and
   the training target the flags describe.
 - ``RESTARTABLE_ARGS`` and ``apply_restart_params``: which settings a
@@ -13,11 +15,14 @@
 import argparse
 import json
 import logging
-import math
 from pathlib import Path
+from typing import Literal, Union, get_args, get_origin
+
+from pydantic import TypeAdapter, ValidationError
 
 from cellmap_flow.finetune.job_manager.submit import trainable_model_types
 from cellmap_flow.finetune.model_loading import decode_model_entry, model_config_from_entry
+from cellmap_flow.finetune.options import MANIFEST_FIELDS, TrainingOptions
 from cellmap_flow.finetune.target_transforms import read_offsets_from_script
 from cellmap_flow.jobs.site import current_site
 from cellmap_flow.models.models_config import (
@@ -30,15 +35,64 @@ from cellmap_flow.finetune.json_files import write_json_atomically
 
 logger = logging.getLogger(__name__)
 
-# What --loss-type and --output-type take, here once: the flags and what a
-# restart may set them to are the same lists.
-LOSS_TYPES = ("dice", "bce", "combined", "mse", "margin", "interval", "flow")
-OUTPUT_TYPES = ("binary", "binary_broadcast", "affinities", "distance", "flows")
+
+def _flag_type(annotation):
+    """(type, choices) of a field's flag: Optional[X] is X, a Literal is str with its values as the choices."""
+    if get_origin(annotation) is Union:  # Optional[X]
+        annotation = next(a for a in get_args(annotation) if a is not type(None))
+    if get_origin(annotation) is Literal:
+        return str, get_args(annotation)
+    return annotation, None
+
+
+def add_training_flags(parser):
+    """A flag per ``TrainingOptions`` field: ``--<name>`` with the field's default and its
+    description as help, ``--<name>``/``--no-<name>`` for a boolean. The manifest's fields
+    have none (see options.MANIFEST_FIELDS)."""
+    group = parser.add_argument_group("training settings (finetune/options.py)")
+    for name, field in TrainingOptions.model_fields.items():
+        if name in MANIFEST_FIELDS:
+            continue
+        flag = "--" + name.replace("_", "-")
+        kind, choices = _flag_type(field.annotation)
+        help_text = (field.description or "").replace("%", "%%")
+        if kind is bool:
+            group.add_argument(flag, action=argparse.BooleanOptionalAction, default=field.default, help=help_text)
+        else:
+            if field.default is not None:
+                help_text += f" (default: {field.default})"
+            group.add_argument(flag, type=kind, default=field.default, choices=choices, help=help_text)
+    # The flag jobs were started with before --distillation-scope: the same setting.
+    group.add_argument(
+        "--distillation-all-voxels", action="store_const", const="all", dest="distillation_scope",
+        help="The same as --distillation-scope all.",
+    )
+
+
+def options_of(args) -> TrainingOptions:
+    """The training settings the parsed command line ``args`` carries."""
+    return TrainingOptions.model_validate(
+        {name: getattr(args, name) for name in TrainingOptions.model_fields if hasattr(args, name)}
+    )
+
+
+def training_flags(options: TrainingOptions) -> list:
+    """``options`` as the flags ``build_arg_parser`` takes, every setting said so the command
+    stands on its own: ``--<name> <value>``, ``--<name>`` or ``--no-<name>`` for a boolean;
+    a blank value and the manifest's fields have no flag."""
+    flags = []
+    for name, value in options.model_dump(exclude=set(MANIFEST_FIELDS)).items():
+        dashed = name.replace("_", "-")
+        if isinstance(value, bool):
+            flags.append(f"--{dashed}" if value else f"--no-{dashed}")
+        elif value is not None:
+            flags += [f"--{dashed}", str(value)]
+    return flags
 
 
 def build_arg_parser():
     parser = argparse.ArgumentParser(
-        description="Finetune CellMap-Flow models with LoRA using user corrections"
+        description="Finetune a CellMap-Flow model on user corrections: a LoRA adapter, or every weight"
     )
 
     # Model arguments
@@ -121,41 +175,6 @@ def build_arg_parser():
         help="Output voxel size (Z Y X)"
     )
 
-    # LoRA arguments
-    parser.add_argument(
-        "--lora-r",
-        type=int,
-        default=8,
-        # Low rank is itself the anti-forgetting mechanism here: this is
-        # correcting a model that is mostly right, so the adapter wants just
-        # enough capacity to fix the bad regions and not enough to rewrite
-        # the good ones.
-        help="LoRA rank (default: 8). 0 = full finetune: every parameter trainable, no adapter; "
-             "exports full_finetune/model_state_dict.pt instead of lora_adapter/."
-    )
-    parser.add_argument(
-        "--lora-alpha",
-        type=int,
-        default=None,
-        help="LoRA alpha scaling (default: twice --lora-r)"
-    )
-    parser.add_argument(
-        "--lora-dropout",
-        type=float,
-        default=0.1,
-        help="LoRA dropout (default: 0.1)"
-    )
-    parser.add_argument(
-        "--lora-min-channels",
-        type=int,
-        default=0,
-        help="Skip LoRA on layers narrower than this on either side. "
-             "Narrow full-resolution layers are where the adapter is expensive "
-             "and nearly parameter-free: on mito-aff-unet-setup-16, 96 skips "
-             "7 of 19 layers (~1%% of adapter params) for a 1.7x faster step. "
-             "(default: 0, adapt every layer)"
-    )
-
     # Data arguments
     parser.add_argument(
         "--corrections",
@@ -171,16 +190,6 @@ def build_arg_parser():
         help="Unused, and accepted so that older commands still parse: the "
              "patch shape comes from the corrections' manifest."
     )
-    parser.add_argument(
-        "--no-augment",
-        action="store_true",
-        help="Disable data augmentation (random flips, XY rotations, brightness "
-             "and noise). Patch-center jitter is always applied and is not "
-             "affected. Augmentation pays off when a run revisits the same "
-             "patches many times; below a few hundred gradient steps it mostly "
-             "adds variance, which is why the dashboard defaults it off."
-    )
-
     # Training arguments
     parser.add_argument(
         "--output-dir",
@@ -209,102 +218,6 @@ def build_arg_parser():
         help="LSF charge group written into the generated serving YAMLs "
              f"(default: {current_site().default_charge_group})"
     )
-    parser.add_argument(
-        "--batch-size",
-        type=int,
-        default=8,
-        help="Batch size (default: 8)"
-    )
-    parser.add_argument(
-        "--num-epochs",
-        type=int,
-        default=10,
-        help="Number of training epochs (default: 10)"
-    )
-    parser.add_argument(
-        "--learning-rate",
-        type=float,
-        default=1e-4,
-        help="Learning rate (default: 1e-4)"
-    )
-    parser.add_argument(
-        "--gradient-accumulation-steps",
-        type=int,
-        default=1,
-        help="Gradient accumulation steps (default: 1)"
-    )
-    parser.add_argument(
-        "--loss-type",
-        type=str,
-        default="combined",
-        choices=LOSS_TYPES,
-        help="Loss function (default: combined). 'interval' is for a distance model "
-             "(--output-type distance) on scribbles: each painted voxel is held between "
-             "the bounds the paint implies on its distance to the boundary, exact where "
-             "the paint is dense, and the field's slope is limited (--slope-weight). "
-             "'flow' is for a flow model such as Cellpose (--output-type flows): MSE of the "
-             "flows, halved, plus BCE of the foreground, each over the voxels it can be "
-             "known at."
-    )
-    parser.add_argument(
-        "--label-smoothing",
-        type=float,
-        default=0.0,
-        help="Label smoothing factor (e.g., 0.1 maps targets from 0/1 to 0.05/0.95). "
-             "Helps preserve gradual distance-like outputs. (default: 0.0)"
-    )
-    parser.add_argument(
-        "--distillation-lambda",
-        type=float,
-        default=None,
-        help="Teacher distillation weight. Keeps model close to base on unlabeled voxels. "
-             "0.0=disabled, try 0.5-1.0 for sparse scribbles. (default: 1.0 when the "
-             "session has good regions, else 0.0; an explicit 0 disables it either way)"
-    )
-    parser.add_argument(
-        "--distillation-all-voxels",
-        action="store_true",
-        help="Apply distillation loss on all voxels instead of only unlabeled voxels. (default: unlabeled only)"
-    )
-    parser.add_argument(
-        "--margin",
-        type=float,
-        default=0.3,
-        help="Margin threshold for margin loss. "
-             "Foreground must exceed 1-margin, background must stay below margin. (default: 0.3)"
-    )
-    parser.add_argument(
-        "--balance-classes",
-        action="store_true",
-        help="Balance fg/bg loss contribution so each class is weighted equally, "
-             "regardless of scribble voxel counts. Helps prevent foreground overprediction. (default: off)"
-    )
-    parser.add_argument(
-        "--slope-weight",
-        type=float,
-        default=1.0,
-        help="Weight of --loss-type interval's slope limit, which keeps the predicted "
-             "field from getting steeper than a distance field. Without it the bounds "
-             "alone let the field collapse into a step. (default: 1.0)"
-    )
-    parser.add_argument(
-        "--no-mixed-precision",
-        action="store_true",
-        help="Disable mixed precision (FP16) training"
-    )
-    parser.add_argument(
-        "--num-workers",
-        type=int,
-        default=4,
-        help="DataLoader num_workers (default: 4)"
-    )
-    parser.add_argument(
-        "--no-tensorboard",
-        action="store_true",
-        help="Do not write TensorBoard event files to <output-dir>/tensorboard "
-             "(default: write them; view with `tensorboard --logdir <training dir>`)"
-    )
-
     # Resuming
     parser.add_argument(
         "--resume",
@@ -331,75 +244,45 @@ def build_arg_parser():
         default=0,
         help="Port for inference server (0 for auto-assignment)"
     )
-    parser.add_argument(
-        "--mask-unannotated",
-        action="store_true",
-        help="Enable masked loss for sparse annotations (0=ignore, 1=bg, 2+=fg)"
-    )
-
-    # Output type and target transform arguments
-    parser.add_argument(
-        "--output-type",
-        type=str,
-        default="binary",
-        choices=OUTPUT_TYPES,
-        help="How to generate training targets from annotations. "
-             "'binary': single-channel fg/bg (use with --select-channel for multi-channel models). "
-             "'binary_broadcast': broadcast binary target to all output channels. "
-             "'affinities': compute affinity targets from instance labels (requires offsets). "
-             "'distance': soft signed-distance target (tanh(d/sigma)+1)/2 for models trained "
-             "the fly_organelles way, e.g. the cellmap *_distance_* repos; requires --loss-type "
-             "bce, or interval for scribbles. "
-             "'flows': per-slice flows towards each painted instance's centre and a foreground "
-             "channel, for a flow model such as Cellpose; requires --loss-type flow. "
-             "(default: binary)"
-    )
-    parser.add_argument(
-        "--distance-sigma",
-        type=float,
-        default=6.0,
-        help="tanh scale in output voxels for --output-type distance. The cellmap "
-             "distance models were trained with 6. (default: 6.0)"
-    )
-    parser.add_argument(
-        "--select-channel",
-        type=int,
-        default=None,
-        help="Select a single channel from multi-channel model output for binary training. "
-             "Only used with --output-type binary. (default: None, use all channels)"
-    )
-    parser.add_argument(
-        "--offsets",
-        type=str,
-        default=None,
-        help="JSON list of [dz,dy,dx] offsets for affinity target generation. "
-             "Example: '[[1,0,0],[0,1,0],[0,0,1]]'. "
-             "If not provided with --output-type affinities, will try to read 'offsets' "
-             "from the model script."
-    )
-
+    add_training_flags(parser)
     return parser
 
 
 def parse_args(argv=None) -> argparse.Namespace:
-    """The job's flags, with the defaults that depend on other flags filled in."""
-    args = build_arg_parser().parse_args(argv)
-    # Keep the LoRA scaling factor (alpha/r) fixed at 2 regardless of rank,
-    # which is what FinetuneJobManager already does for dashboard-submitted
-    # jobs via lora_alpha = lora_r * 2. A fixed alpha default would silently
-    # change the scaling whenever the rank default moved -- at r=64 an
-    # alpha of 16 is a scaling of 0.25 rather than 2.
-    if args.lora_alpha is None:
-        args.lora_alpha = args.lora_r * 2
+    """The job's flags, the training settings checked and completed as TrainingOptions
+    checks them (a rank of 0 is mode full; alpha is twice the rank unless given)."""
+    parser = build_arg_parser()
+    args = parser.parse_args(argv)
+    try:
+        options = options_of(args)
+    except ValidationError as e:
+        parser.error(_reason(e))
+    for name in TrainingOptions.model_fields:
+        if hasattr(args, name):
+            setattr(args, name, getattr(options, name))
     return args
 
 
-def build_target_transform(args, model_config, output_voxel_size_nm=None):
-    """Build a TargetTransform based on CLI args.
+def _reason(error) -> str:
+    """A ValidationError's first message, with the field it is about."""
+    if isinstance(error, ValidationError):
+        first = error.errors()[0]
+        where = ".".join(str(part) for part in first["loc"])
+        message = first["msg"]
+        if "error" in first.get("ctx", {}):
+            message = str(first["ctx"]["error"])
+        return f"{where}: {message}" if where else message
+    return str(error)
+
+
+def build_target_transform(options: TrainingOptions, model_config, output_voxel_size_nm=None, script=None):
+    """The TargetTransform ``options`` describe (output_type, loss_type, select_channel, offsets).
 
     ``output_voxel_size_nm`` is the annotation patches' voxel size, which
     the distance bounds of ``--loss-type interval`` are measured in; the
-    model's output voxel size when not given.
+    model's output voxel size when not given. ``script`` is the model script
+    an affinity model's offsets are read from when the options name none;
+    the model config's own otherwise.
     """
     from cellmap_flow.finetune.target_transforms import (
         BinaryTargetTransform,
@@ -409,10 +292,11 @@ def build_target_transform(args, model_config, output_voxel_size_nm=None):
         IntervalTargetTransform,
     )
 
-    output_type = args.output_type
+    output_type = options.output_type
+    loss_type = options.loss_type
     num_channels = model_config.config.output_channels
 
-    if getattr(args, "loss_type", None) == "interval" and output_type != "distance":
+    if loss_type == "interval" and output_type != "distance":
         raise ValueError(
             "--loss-type interval bounds a distance model's output; it needs "
             "--output-type distance."
@@ -420,7 +304,7 @@ def build_target_transform(args, model_config, output_voxel_size_nm=None):
     # The flow target and the flow loss only make sense together: the target
     # is flows and a foreground channel, which no other loss reads right, and
     # the loss needs its per-channel masks.
-    if (getattr(args, "loss_type", None) == "flow") != (output_type == "flows"):
+    if (loss_type == "flow") != (output_type == "flows"):
         raise ValueError(
             "--output-type flows and --loss-type flow go together: the flow target is "
             "flows towards each instance's centre and a foreground channel, which only "
@@ -430,7 +314,7 @@ def build_target_transform(args, model_config, output_voxel_size_nm=None):
     # --select-channel slices the prediction to one channel, so the target
     # must have one too. Distance and binary_broadcast built theirs with every
     # channel, and the first batch failed on the size mismatch.
-    select_channel = getattr(args, "select_channel", None)
+    select_channel = options.select_channel
     if select_channel is not None:
         if not 0 <= int(select_channel) < num_channels:
             raise ValueError(
@@ -447,7 +331,7 @@ def build_target_transform(args, model_config, output_voxel_size_nm=None):
 
     if output_type == "binary":
         if num_channels > 1:
-            if getattr(args, "loss_type", None) in ("bce", "mse", "combined"):
+            if loss_type in ("bce", "mse", "combined"):
                 # BCE compares shapes exactly: this failed on the first batch
                 # with "Target size [2, 1, ...] must be the same as input size
                 # [2, 3, ...]". Dice and margin broadcast the one-channel
@@ -455,7 +339,7 @@ def build_target_transform(args, model_config, output_voxel_size_nm=None):
                 raise ValueError(
                     f"The model has {num_channels} output channels but --output-type "
                     f"binary makes a one-channel target, which --loss-type "
-                    f"{args.loss_type} cannot compare with. Train one channel with "
+                    f"{loss_type} cannot compare with. Train one channel with "
                     f"--select-channel, or all of them with --output-type binary_broadcast."
                 )
             logger.warning(
@@ -472,13 +356,12 @@ def build_target_transform(args, model_config, output_voxel_size_nm=None):
     elif output_type == "affinities":
         offsets = None
 
-        # Try CLI arg first
-        if args.offsets:
-            offsets = json.loads(args.offsets)
+        if options.offsets:
+            offsets = json.loads(options.offsets)
 
-        # Try reading from model script (a model with an env comes as
+        # Else from the model script (a model with an env comes as
         # --model-entry, its script path in the config)
-        script = args.model_script or getattr(model_config, "script_path", None)
+        script = script or getattr(model_config, "script_path", None)
         if offsets is None and script:
             offsets = read_offsets_from_script(script)
 
@@ -504,29 +387,23 @@ def build_target_transform(args, model_config, output_voxel_size_nm=None):
         logger.info(f"Using affinity target transform with {len(offsets)} offsets: {offsets}")
         return AffinityTargetTransform(offsets, num_channels=num_channels)
 
-    elif output_type == "distance" and args.loss_type == "interval":
+    elif output_type == "distance" and loss_type == "interval":
         if output_voxel_size_nm is None:
             output_voxel_size_nm = getattr(model_config.config, "output_voxel_size", None)
         logger.info(
-            f"Using distance bounds from the paint (sigma={args.distance_sigma} voxels, "
-            f"voxel size {output_voxel_size_nm} nm, slope weight {args.slope_weight})"
+            f"Using distance bounds from the paint (sigma={options.distance_sigma} voxels, "
+            f"voxel size {output_voxel_size_nm} nm, slope weight {options.slope_weight})"
         )
-        return IntervalTargetTransform(args.distance_sigma, voxel_size_nm=output_voxel_size_nm)
+        return IntervalTargetTransform(options.distance_sigma, voxel_size_nm=output_voxel_size_nm)
 
     elif output_type == "distance":
-        if args.loss_type != "bce":
+        if loss_type != "bce":
             raise ValueError(
                 "--output-type distance produces soft targets in [0, 1]; only "
                 "--loss-type bce (BCE with logits) is supported for them, or "
                 "interval for scribbles. Margin and dice assume hard labels."
             )
-        if args.label_smoothing > 0:
-            logger.warning(
-                "Label smoothing is meaningless on a soft distance target; "
-                f"ignoring --label-smoothing {args.label_smoothing}."
-            )
-            args.label_smoothing = 0.0
-        if getattr(args, "mask_unannotated", False):
+        if options.mask_unannotated:
             logger.warning(
                 "--output-type distance with --mask-unannotated (sparse/scribble "
                 "annotations): a distance transform needs dense 3D labels, and "
@@ -535,20 +412,14 @@ def build_target_transform(args, model_config, output_voxel_size_nm=None):
                 "--loss-type interval for scribbles."
             )
         logger.info(
-            f"Using distance target transform (sigma={args.distance_sigma} voxels, "
+            f"Using distance target transform (sigma={options.distance_sigma} voxels, "
             f"broadcast to {num_channels} channel(s))"
         )
-        return DistanceTargetTransform(args.distance_sigma, num_channels=num_channels)
+        return DistanceTargetTransform(options.distance_sigma, num_channels=num_channels)
 
     elif output_type == "flows":
         from cellmap_flow.finetune.instance_flows import FlowTargetTransform
 
-        if args.label_smoothing > 0:
-            logger.warning(
-                "Label smoothing means nothing to flows; "
-                f"ignoring --label-smoothing {args.label_smoothing}."
-            )
-            args.label_smoothing = 0.0
         logger.info(
             "Using flow targets: per-slice flows towards each painted instance's centre "
             "and a foreground channel (instances cut by the patch edge leave the flow loss)"
@@ -624,116 +495,38 @@ def model_config_from_args(args) -> ModelConfig:
     raise ValueError(f"Unknown model type: {args.model_type}")
 
 
+_BOOL = TypeAdapter(bool)
+
+# The dashboard's names for three settings the CLI once called differently,
+# and the setting each sets: a dashboard restarts jobs started before, so it
+# goes on sending these (common.restart_params), and the CLI goes on
+# taking them.
+RESTART_ALIASES = {
+    "no_augment": ("augment", lambda value: not _BOOL.validate_python(value)),
+    "no_mixed_precision": ("mixed_precision", lambda value: not _BOOL.validate_python(value)),
+    "distillation_all_voxels": ("distillation_scope", lambda value: "all" if _BOOL.validate_python(value) else "unlabeled"),
+}
+
 # What a restart may change: training settings only. The model, the data and
 # every path stay as launched, so a restart request cannot point the job at
-# other files. Matches the dashboard's RESTART_PASSTHROUGH_KEYS, plus the
-# distillation_all_voxels flag it derives from distillation_scope, less
-# patch_shape: the patch geometry comes from the corrections' manifest, and
-# nothing reads --patch-shape.
+# other files; nor can it change the mode or the output class, which are the
+# model's (the inference server shares it, and it is built once), or the
+# manifest's fields, which the dashboard writes into the manifest instead.
 RESTARTABLE_ARGS = frozenset(
-    {
-        "lora_r", "lora_alpha", "num_epochs", "batch_size", "learning_rate",
-        "loss_type", "label_smoothing", "distillation_lambda",
-        "distillation_all_voxels", "margin", "balance_classes", "augment",
-        "mask_unannotated", "gradient_accumulation_steps", "num_workers",
-        "no_augment", "no_mixed_precision", "output_type",
-        "select_channel", "offsets",
-    }
+    (set(TrainingOptions.model_fields) - {"mode", "output_class", *MANIFEST_FIELDS}) | set(RESTART_ALIASES)
 )
-
-
-def _as_bool(value):
-    if isinstance(value, str):
-        lowered = value.strip().lower()
-        if lowered in ("true", "1", "yes", "on"):
-            return True
-        if lowered in ("false", "0", "no", "off", ""):
-            return False
-        raise ValueError(f"not a boolean: {value!r}")
-    return bool(value)
-
-
-def _at_least(minimum):
-    def convert(value):
-        number = int(value)
-        if number < minimum:
-            raise ValueError(f"must be at least {minimum}")
-        return number
-    return convert
-
-
-def _positive(value):
-    number = float(value)
-    if not (math.isfinite(number) and number > 0):
-        raise ValueError("must be a number above 0")
-    return number
-
-
-def _is_offset(offset):
-    """A [z, y, x] of whole numbers."""
-    return (
-        isinstance(offset, list)
-        and len(offset) == 3
-        and all(isinstance(v, int) and not isinstance(v, bool) for v in offset)
-    )
-
-
-def _as_offsets(value):
-    # --offsets is a JSON string. A restart may carry the list itself, which
-    # build_target_transform's json.loads() would then reject.
-    offsets = json.loads(value) if isinstance(value, str) else value
-    if not (isinstance(offsets, list) and offsets and all(_is_offset(o) for o in offsets)):
-        raise ValueError("expected a list of [z, y, x] integer offsets")
-    return json.dumps(offsets)
-
-
-def _one_of(*choices):
-    def convert(value):
-        if value not in choices:
-            raise ValueError(f"{value!r} is not one of {list(choices)}")
-        return value
-    return convert
-
-
-# How each restartable setting is read: the argparse destination it sets and
-# the conversion applied to the requested value. Most keys are the
-# destination itself. The dashboard's "augment" is the inverse of the CLI's
-# --no-augment, and used to be dropped by a hasattr(args, key) filter, so a
-# restart could never switch augmentation on or off.
-#
-# A value that converts but cannot train is refused here, so that the job
-# keeps the setting it has. Found only once training ran, it failed a job
-# that was serving: 0 epochs exported the previous iteration's best
-# checkpoint, 0 accumulation steps was reported as divergence, two-value
-# offsets failed at the first batch.
-_RESTART_ARG_CONVERTERS = {
-    "lora_r": ("lora_r", int),
-    "lora_alpha": ("lora_alpha", int),
-    "num_epochs": ("num_epochs", _at_least(1)),
-    "batch_size": ("batch_size", _at_least(1)),
-    "learning_rate": ("learning_rate", _positive),
-    "loss_type": ("loss_type", _one_of(*LOSS_TYPES)),
-    "label_smoothing": ("label_smoothing", float),
-    "distillation_lambda": ("distillation_lambda", float),
-    "distillation_all_voxels": ("distillation_all_voxels", _as_bool),
-    "margin": ("margin", float),
-    "balance_classes": ("balance_classes", _as_bool),
-    "augment": ("no_augment", lambda value: not _as_bool(value)),
-    "mask_unannotated": ("mask_unannotated", _as_bool),
-    "gradient_accumulation_steps": ("gradient_accumulation_steps", _at_least(1)),
-    "num_workers": ("num_workers", _at_least(0)),
-    "no_augment": ("no_augment", _as_bool),
-    "no_mixed_precision": ("no_mixed_precision", _as_bool),
-    "output_type": ("output_type", _one_of(*OUTPUT_TYPES)),
-    "select_channel": ("select_channel", int),
-    "offsets": ("offsets", _as_offsets),
-}
-assert set(_RESTART_ARG_CONVERTERS) == RESTARTABLE_ARGS
 
 
 def apply_restart_params(args, signal_data: dict):
     """
     Update args with parameters from restart signal and persist to metadata.json.
+
+    Each value is checked as TrainingOptions checks it, so one that cannot
+    train (0 epochs, a learning rate of 0, two-value offsets) is refused
+    here, with its reason, and the job keeps the setting it has; found only
+    once training ran, it failed a job that was serving. A rank for a full
+    finetune, or a rank of 0 for a LoRA job, is refused too: the model is
+    built once, so a job never switches between the two.
 
     Args:
         args: argparse Namespace to update
@@ -743,6 +536,7 @@ def apply_restart_params(args, signal_data: dict):
     refused = sorted(set(params) - RESTARTABLE_ARGS)
     if refused:
         logger.warning(f"Ignoring restart parameters that restarts cannot change: {refused}")
+    options = options_of(args)
     changed = False
     # What was applied, under the name the request used, for metadata.json.
     # Refused keys reach neither args nor metadata.json.
@@ -750,20 +544,30 @@ def apply_restart_params(args, signal_data: dict):
     for key, value in params.items():
         if key not in RESTARTABLE_ARGS or value is None:
             continue
-        dest, convert = _RESTART_ARG_CONVERTERS[key]
-        if not hasattr(args, dest):
+        field, convert = RESTART_ALIASES.get(key, (key, lambda v: v))
+        if not hasattr(args, field):
             logger.warning(f"Restart parameter {key!r} has no matching training setting; ignoring it.")
             continue
         try:
-            new_value = convert(value)
-        except (TypeError, ValueError) as e:
-            logger.warning(f"Ignoring restart parameter {key}={value!r}: {e}")
+            requested = convert(value)
+            updated = options.replaced(**{field: requested})
+        except (ValidationError, TypeError, ValueError) as e:
+            logger.warning(f"Ignoring restart parameter {key}={value!r}: {_reason(e)}")
             continue
-        old_value = getattr(args, dest)
-        setattr(args, dest, new_value)
-        recorded[key] = _as_bool(value) if key == "augment" else new_value
+        if field in ("lora_r", "lora_alpha") and options.mode == "full":
+            logger.warning(f"Ignoring restart parameter {key}={value!r}: this job is a full finetune, "
+                           "which has no adapter; submit a new job for a LoRA adapter.")
+            continue
+        if field == "lora_r" and updated.mode == "full":
+            logger.warning("Restart asked for lora_r=0 (full finetune) but this job trains a LoRA adapter; "
+                           "submit a new job for that. Keeping the current adapter setup.")
+            continue
+        old_value, new_value = getattr(options, field), getattr(updated, field)
+        options = updated
+        setattr(args, field, new_value)
+        recorded[key] = _BOOL.validate_python(value) if key in RESTART_ALIASES else new_value
         if old_value != new_value:
-            logger.info(f"Updated {dest}: {old_value} -> {new_value}")
+            logger.info(f"Updated {field}: {old_value} -> {new_value}")
             changed = True
 
     # alpha is what sets LoRA's step size: peft scales the adapter by

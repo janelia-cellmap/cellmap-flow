@@ -108,14 +108,15 @@ def test_the_trainer_trains_a_flow_model_on_flow_targets(make_trainer):
     ann[:, :, :, 4:8, 4:8] = 2
     trainer = make_trainer(ThreeChannels(), (torch.randn(2, 1, 1, 12, 12), ann), loss_type="flow",
                            target_transform=FlowTargetTransform(centroid_flows), label_smoothing=0.1)
-    assert isinstance(trainer.criterion, FlowLoss) and trainer.label_smoothing == 0
+    assert isinstance(trainer.supervised.criterion, FlowLoss) and trainer.supervised.label_smoothing == 0
     before = trainer.model.conv.weight.detach().clone()
     loss = trainer._train_epoch()
     assert np.isfinite(loss) and not torch.equal(before, trainer.model.conv.weight)
 
 
 def test_the_dashboard_trains_a_cellpose_model_on_flows():
-    from cellmap_flow.dashboard.routes.finetune.common import autodetect_output_type, training_settings
+    from cellmap_flow.dashboard.routes.finetune.common import autodetect_output_type
+    from cellmap_flow.finetune.options import TrainingOptions
     from cellmap_flow.models.configs.finetune import FinetuneModelConfig
     from cellmap_flow.models.models_config import CellposeModelConfig
 
@@ -125,6 +126,6 @@ def test_the_dashboard_trains_a_cellpose_model_on_flows():
     assert autodetect_output_type(finetuned, None, None) == ("flows", None)
     assert autodetect_output_type(cellpose, "binary", None) == ("binary", None)  # asked for, kept
     for sparse in (False, True):
-        settings = training_settings(output_type="flows", loss_type="mse", label_smoothing=0.1,
-                                     distillation_lambda=0.0, sparse=sparse)
+        asked = TrainingOptions(output_type="flows", loss_type="mse", label_smoothing=0.1, distillation_lambda=0.0)
+        settings = asked.for_session(sparse=sparse)
         assert (settings.loss_type, settings.label_smoothing, settings.mask_unannotated) == ("flow", 0.0, sparse)

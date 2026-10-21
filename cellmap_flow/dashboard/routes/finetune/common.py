@@ -3,14 +3,16 @@ import logging
 import os
 from pathlib import Path
 from types import SimpleNamespace
-from typing import NamedTuple
+from typing import Optional
 
 import zarr
 
 from cellmap_flow.dashboard.state import get_session
+from cellmap_flow.finetune.options import OUTPUT_CLASSES, TrainingOptions
 from cellmap_flow.finetune.session.minio import MINIO_PROXY_URL_ENV, proxied_url
 from cellmap_flow.finetune.session.store import SessionStore
 from cellmap_flow.models.geometry import channel_names_of
+from cellmap_flow.serving.client import fetch_model_info, running_job_host
 
 logger = logging.getLogger(__name__)
 
@@ -22,29 +24,6 @@ LOG_FILTER_PATTERNS = [
     r"^Host name:",
     r"^DEBUG trainer:",
 ]
-RESTART_PASSTHROUGH_KEYS = [
-    "lora_r",
-    "lora_alpha",
-    "num_epochs",
-    "batch_size",
-    "learning_rate",
-    "loss_type",
-    "label_smoothing",
-    "distillation_lambda",
-    "margin",
-    "balance_classes",
-    "augment",
-    "mask_unannotated",
-    "gradient_accumulation_steps",
-    "num_workers",
-    "no_augment",
-    "no_mixed_precision",
-    "output_type",
-    "select_channel",
-    "offsets",
-]
-
-
 def find_model_config(model_name):
     for model_config in get_session().models_config or []:
         if model_config.name == model_name:
@@ -335,133 +314,48 @@ def autodetect_output_type(model_config, output_type, offsets):
     return resolved_output_type, resolved_offsets
 
 
-class TrainingSettings(NamedTuple):
-    """The target and loss a job trains with (see ``training_settings``)."""
-
-    output_type: str
-    loss_type: str
-    label_smoothing: float
-    distillation_lambda: float
-    mask_unannotated: bool
-    # The sentence submit's answer carries when the loss was switched for
-    # sparse annotations, else None.
-    note: str = None
-
-
 SPARSE_MSE_NOTE = "Auto-switched to margin loss + distillation (lambda=0.5) for sparse annotations"
 
 
-def training_settings(*, output_type, loss_type, label_smoothing, distillation_lambda, sparse):
-    """What a job trains with, from what was asked for and whether its session is sparse.
-
-    Some combinations cannot train, or would train the wrong thing, so they
-    are replaced here, where the user sees it in the answer, rather than
-    failing on the cluster:
-    - sparse annotations with mse: margin loss, with distillation to the
-      base model at 0.5, which is how sparse annotations train (see the
-      distance case below);
-    - a distance target with sparse annotations: the interval loss, on the
-      bounds the paint sets on each voxel's distance, with distillation of
-      at least 0.5 (see below);
-    - a distance target otherwise: bce, without label smoothing;
-    - a flow target (Cellpose): the flow loss, the only one it goes with,
-      without label smoothing, sparse or not (it masks per channel itself).
-    A sparse session also masks its unannotated voxels out of the loss.
-    """
-    note = None
-    if output_type == "flows":
-        if loss_type != "flow" or label_smoothing:
-            logger.info(
-                f"output_type=flows: using the flow loss without label smoothing "
-                f"(requested loss_type={loss_type}, label_smoothing={label_smoothing})"
-            )
-        return TrainingSettings(
-            output_type=output_type,
-            loss_type="flow",
-            label_smoothing=0.0,
-            distillation_lambda=distillation_lambda,
-            mask_unannotated=bool(sparse),
-        )
-    if sparse and loss_type == "mse":
-        loss_type = "margin"
-        distillation_lambda = 0.5
-        note = SPARSE_MSE_NOTE
-        logger.info(SPARSE_MSE_NOTE)
-
-    if output_type == "distance" and sparse:
-        # A distance target needs the 3D object boundary, and scribbles are
-        # strokes with unannotated voxels all around them: the exact target
-        # would supervise next to nothing. They do bound each painted
-        # voxel's distance, between the nearest voxel not painted as its own
-        # class and the nearest painted as the other, and the interval loss
-        # asks only for that (target_transforms.IntervalTargetTransform,
-        # losses.IntervalLoss). Where the paint is dense the two meet and
-        # the distance is exact.
-        #
-        # It replaced a binary target with margin loss at margin 0.5, which
-        # kept only the sign: no distance at all was learnt from the paint.
-        #
-        # Distillation of at least 0.5 holds the unpainted voxels, which get
-        # no bounds: the form's default, 0.01, held almost nothing.
-        logger.info(
-            "output_type=distance with sparse annotations: using the interval loss "
-            "on the distance bounds the paint sets"
-        )
-        loss_type = "interval"
-        label_smoothing = 0.0
-        distillation_lambda = max(distillation_lambda or 0.0, 0.5)
-        # The form still shows what was entered, so say what was used.
-        note = f"Distance model on scribbles: trained on distance bounds, distillation {distillation_lambda:g}."
-    elif output_type == "distance":
-        # The soft distance target is only defined against BCE-with-logits;
-        # margin/dice assume hard labels and smoothing would blur a target
-        # that is already soft. The CLI rejects anything else.
-        if loss_type != "bce" or label_smoothing:
-            logger.info(
-                f"output_type=distance: using bce loss without label smoothing "
-                f"(requested loss_type={loss_type}, label_smoothing={label_smoothing})"
-            )
-        loss_type = "bce"
-        label_smoothing = 0.0
-
-    return TrainingSettings(
-        output_type=output_type,
-        loss_type=loss_type,
-        label_smoothing=label_smoothing,
-        distillation_lambda=distillation_lambda,
-        mask_unannotated=bool(sparse),
-        note=note,
-    )
+def settings_note(asked: TrainingOptions, used: TrainingOptions) -> Optional[str]:
+    """The sentence submit's answer carries when the loss was switched for sparse
+    annotations (TrainingOptions.for_session), else None: the form still shows
+    what was entered, so say what was used."""
+    if used.loss_type == "interval" and asked.loss_type != "interval":
+        return f"Distance model on scribbles: trained on distance bounds, distillation {used.distillation_lambda:g}."
+    if asked.loss_type == "mse" and used.loss_type == "margin":
+        return SPARSE_MSE_NOTE
+    return None
 
 
-def build_restart_params(data):
-    updated_params = {}
-    for key in RESTART_PASSTHROUGH_KEYS:
-        if key in data and data[key] is not None:
-            updated_params[key] = data[key]
+def served_output_class(model_name) -> Optional[str]:
+    """What the model's running server says its output is (model_info's
+    ``output_class``, serving.probe), the reading ranking and seeding share;
+    None when no server for it is up, or it has not predicted yet, and the
+    training job then probes the model itself."""
+    host = running_job_host(model_name)
+    if not host:
+        return None
+    output_class = fetch_model_info(host).get("output_class")
+    return output_class if output_class in OUTPUT_CLASSES else None
 
-    # The trainer's flag is --no-augment. Send it alongside "augment" so a job
-    # started before the trainer learned to map "augment" -- which it used to
-    # drop -- still gets the toggle.
-    if "augment" in updated_params and "no_augment" not in updated_params:
-        augment = updated_params["augment"]
-        if isinstance(augment, str):
-            augment = augment.strip().lower() in ("true", "1", "yes", "on")
-        updated_params["no_augment"] = not bool(augment)
 
-    # --offsets is a JSON string on the trainer's side; a list would make its
-    # json.loads() fail and kill the restart.
-    if isinstance(updated_params.get("offsets"), (list, tuple)):
-        updated_params["offsets"] = json.dumps(updated_params["offsets"])
-
-    if "distillation_scope" in data and data["distillation_scope"] is not None:
-        scope = str(data["distillation_scope"]).lower()
-        if scope in {"all", "unlabeled"}:
-            updated_params["distillation_all_voxels"] = scope == "all"
-        else:
-            logger.warning(f"Ignoring invalid distillation_scope: {data['distillation_scope']}")
-
-    return updated_params
+def restart_params(body) -> dict:
+    """The training settings a restart body (requests.FinetuneRestart) changes, as
+    the job's trainer takes them (cli.RESTARTABLE_ARGS). A job started before
+    this version knows three of them by other names, so those go beside the
+    new: ``no_augment`` with ``augment`` (a restart could never switch
+    augmentation on or off while the toggle was dropped), ``no_mixed_precision``
+    with ``mixed_precision`` and ``distillation_all_voxels`` with
+    ``distillation_scope``."""
+    params = body.changes()
+    if "augment" in params:
+        params["no_augment"] = not params["augment"]
+    if "mixed_precision" in params:
+        params["no_mixed_precision"] = not params["mixed_precision"]
+    if "distillation_scope" in params:
+        params["distillation_all_voxels"] = params["distillation_scope"] == "all"
+    return params
 
 
 def get_lsf_job_id(finetune_job):

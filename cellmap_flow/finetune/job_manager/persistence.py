@@ -41,6 +41,8 @@ from cellmap_flow.jobs import lsf as jobs_lsf
 from cellmap_flow.jobs.lsf import LSFJob
 from cellmap_flow.jobs.spec import JobStatus as LSFJobStatus
 
+from cellmap_flow.finetune.options import MANIFEST_FIELDS, TrainingOptions
+
 logger = logging.getLogger(__name__)
 
 METADATA_FILE = "metadata.json"
@@ -54,26 +56,21 @@ def submission_metadata(
     corrections_path: Path,
     num_corrections: int,
     output_dir: Path,
-    lora_r: int,
-    num_epochs: int,
-    batch_size: int,
-    learning_rate: float,
-    loss_type: str,
-    label_smoothing: float,
-    distillation_lambda: Optional[float],
-    distillation_scope: str,
-    margin: float,
-    balance_classes: bool,
-    augment: bool,
+    options: TrainingOptions,
     channels: List[str],
     input_voxel_size: List[int],
     output_voxel_size: List[int],
-    output_type: str,
     queue: str,
     charge_group: str,
     command: str,
 ) -> dict:
-    """Build metadata persisted for a submitted finetuning job."""
+    """Build metadata persisted for a submitted finetuning job.
+
+    ``params`` holds every training setting (finetune/options.py; the
+    manifest's two live in the session's manifest instead) with the model's
+    geometry and the job's queue: what the dashboard's job card shows and a
+    restart starts from.
+    """
     return {
         "job_id": str(uuid.uuid4()),
         "model_name": model_config.name,
@@ -89,22 +86,10 @@ def submission_metadata(
         "output_dir": str(output_dir),
         "params": {
             "model_checkpoint": str(checkpoint_path) if checkpoint_path else None,
-            "lora_r": lora_r,
-            "lora_alpha": lora_r * 2,
-            "num_epochs": num_epochs,
-            "batch_size": batch_size,
-            "learning_rate": learning_rate,
-            "loss_type": loss_type,
-            "label_smoothing": label_smoothing,
-            "distillation_lambda": distillation_lambda,
-            "distillation_scope": distillation_scope,
-            "margin": margin,
-            "balance_classes": balance_classes,
-            "augment": augment,
+            **options.model_dump(exclude=set(MANIFEST_FIELDS)),
             "channels": channels,
             "input_voxel_size": input_voxel_size,
             "output_voxel_size": output_voxel_size,
-            "output_type": output_type,
             "queue": queue,
             "charge_group": charge_group,
         },

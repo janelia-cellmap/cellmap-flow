@@ -1,8 +1,9 @@
 """
 Human-in-the-loop finetuning for CellMap-Flow models.
 
-This package provides lightweight LoRA-based finetuning for pre-trained models
-using user corrections as training data.
+This package finetunes pre-trained models on user corrections: a LoRA
+adapter, or every weight. Its settings are ``options.TrainingOptions``, its
+trainer ``trainer.Finetuner``.
 
 The names below are imported when first used (PEP 562): importing a light
 submodule -- ``markers`` or ``job_manager.tailer``, which the dashboard
@@ -21,7 +22,9 @@ _EXPORTS = {
     "save_lora_adapter": "lora_wrapper",
     "VirtualPatchDataset": "data",
     "create_dataloader": "data",
-    "LoRAFinetuner": "lora_trainer",
+    "Finetuner": "trainer",
+    "LoRAFinetuner": "trainer",
+    "TrainingOptions": "options",
     "DiceLoss": "losses",
     "CombinedLoss": "losses",
 }

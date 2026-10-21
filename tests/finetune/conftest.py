@@ -3,7 +3,7 @@
 - ``ome_zarr``: an OME-NGFF group with the given levels.
 - ``annotation_volume``: an annotation volume over a raw zarr, and the
   VirtualPatchDataset that reads it.
-- ``make_trainer``: a LoRAFinetuner on the CPU, in fp32, without TensorBoard.
+- ``make_trainer``: a Finetuner on the CPU, in fp32, without TensorBoard.
 - ``tiny_script`` and ``run_cli``: finetune_cli.main() on a script model, with
   a fake data loader and inference server, and restarts delivered the way the
   job's server delivers them.
@@ -110,14 +110,14 @@ def annotation_volume(tmp_path, ome_zarr):
 @pytest.fixture
 def make_trainer(tmp_path):
     """``make_trainer(model, data, **kw)``: ``data`` is a DataLoader, or (raw, annotation[, anchor]) tensors."""
-    from cellmap_flow.finetune.lora_trainer import LoRAFinetuner
+    from cellmap_flow.finetune.trainer import Finetuner
 
     def make(model, data, batch_size=1, **kw):
         if not isinstance(data, DataLoader):
             data = DataLoader(TensorDataset(*data), batch_size=batch_size)
         args = dict(output_dir=str(tmp_path / "run"), num_epochs=1, device="cpu",
-                    use_mixed_precision=False, loss_type="bce", tensorboard=False)
-        return LoRAFinetuner(model, data, **{**args, **kw})
+                    mixed_precision=False, loss_type="bce", tensorboard=False)
+        return Finetuner(model, data, **{**args, **kw})
 
     return make
 

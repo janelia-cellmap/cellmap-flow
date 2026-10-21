@@ -1,12 +1,14 @@
-"""LoRAFinetuner on the CPU: what it distils toward, and how a run survives a
-NaN, an OOM or the dashboard's stop."""
+"""Finetuner on the CPU: what it distils toward, how it reads the model's
+output, and how a run survives a NaN, an OOM or the dashboard's stop."""
 
 import numpy as np
 import pytest
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 from cellmap_flow.finetune.adaptation import cpu_state_copy, frozen_teacher_copy
+from cellmap_flow.finetune.losses import masked_mean
 from cellmap_flow.finetune.target_transforms import BinaryTargetTransform
 
 
@@ -39,6 +41,29 @@ def test_a_non_finite_batch_never_reaches_the_weights(make_trainer, accumulate):
                            gradient_accumulation_steps=accumulate, target_transform=BinaryTargetTransform())
     assert trainer.train()["diverged"]
     assert all(torch.isfinite(p).all() for p in trainer.model.parameters())
+
+
+def test_a_tanh_model_is_read_as_its_server_reads_it(make_trainer):
+    """The trainer had a sigmoid probe of its own, which took a tanh's [-1, 1]
+    for logits, while ranking and seeding read it as (p + 1) / 2
+    (serving.probe's signed_unit): one model, trained on one reading and
+    thresholded on another. The trainer takes the server's class now, and
+    the job probes with the same classifier when the dashboard had none."""
+    from cellmap_flow.finetune.trainer.supervised import probe_output_class
+    from cellmap_flow.serving.probe import SIGNED_UNIT, classify_output_range
+
+    model = nn.Sequential(nn.Conv3d(1, 1, 1), nn.Tanh())
+    raw = torch.rand(2, 1, 4, 4, 4)
+    out = model(raw).detach()
+    assert probe_output_class(model, raw) == SIGNED_UNIT == classify_output_range(float(out.min()), float(out.max()))
+
+    ann = _annotation(1, n=2, fg=(2, np.s_[:, :, :2]))
+    trainer = make_trainer(model, (raw, ann), output_class=SIGNED_UNIT, target_transform=BinaryTargetTransform(),
+                           balance_classes=False)
+    target, mask, bounds, hard_target = trainer.supervised.targets(ann)
+    loss = trainer.supervised(out, target, mask, bounds, hard_target)
+    expected = masked_mean(F.binary_cross_entropy((out + 1) / 2, target, reduction="none"), mask)
+    assert torch.allclose(loss, expected)
 
 
 class _Anchors(torch.utils.data.Dataset):
@@ -123,16 +148,14 @@ def test_an_out_of_memory_epoch_is_retried_on_half_batches(make_trainer, monkeyp
 
 
 class _StopSignal(nn.Module):
-    """Passes its input on; writes the dashboard's stop signal at its second call, in epoch 1
-    (the first is the output probe's)."""
+    """Passes its input on; writes the dashboard's stop signal at its first call, in epoch 1."""
 
     def __init__(self, signal):
         super().__init__()
-        self.signal, self.calls = signal, 0
+        self.signal = signal
 
     def forward(self, x):
-        self.calls += 1
-        if self.calls == 2 and self.signal is not None:
+        if self.signal is not None:
             self.signal.write_text("{}")
         return x
 
