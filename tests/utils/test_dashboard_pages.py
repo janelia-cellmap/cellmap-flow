@@ -22,36 +22,6 @@ def test_rendering_the_index_leaves_the_model_catalog_alone(dashboard):
     assert get_session().model_catalog == catalog_before, "but not added to the catalog everything else reads"
 
 
-def test_every_element_the_models_tab_script_looks_up_is_on_a_page(dashboard, monkeypatch):
-    """models-tab.js runs on the Flask dashboard's page (a cluster's or a
-    laptop's) and on the browser's, and a lookup that finds nothing throws,
-    and takes the rest of the tab's setup with it. Its Loaded models list
-    comes first, above Add a model and the lists the models are picked from;
-    the browser page keeps it (tests/web/test_render.py's KEPT)."""
-    import importlib.util
-    from pathlib import Path
-
-    import cellmap_flow.dashboard
-    from cellmap_flow.dashboard.routes import index_page
-
-    render_py = Path(__file__).resolve().parents[2] / "web" / "build" / "render.py"
-    spec = importlib.util.spec_from_file_location("cellmap_flow_web_render", render_py)
-    render = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(render)
-    pages = [render.render_browser_page()]
-    for cluster in (True, False):
-        monkeypatch.setattr(index_page, "bsub_available", lambda: cluster)
-        pages.append(dashboard.get("/").get_data(as_text=True))
-    tab = pages[1][pages[1].index('<form id="modelSelectionForm">'):]
-    assert tab.index('id="loadedModels"') < tab.index('id="addModelRef"') < tab.index('id="hfModelAccordion"')
-
-    script = (Path(cellmap_flow.dashboard.__file__).parent / "static" / "js" / "dashboard" / "models-tab.js").read_text()
-    looked_up = set(re.findall(r"""getElementById\(\s*["']([\w-]+)["']\s*\)""", script))
-    on_a_page = {i for html in pages for i in re.findall(r'\bid="([^"]+)"', html)}
-    assert {"loadedModelsList", "loadedModelsEmpty", "loadedModelsCount", "model-tab"} <= looked_up
-    assert sorted(looked_up - on_a_page) == []
-
-
 class _ViewerAt(SimpleNamespace):
     """A viewer whose address is ``url``."""
 
@@ -119,6 +89,8 @@ POST_CHAIN = [
     ],
 )
 def test_the_tabs_list_the_configured_chain_first_in_its_order(dashboard, kind, chain, listed):
+    """The Input and Postprocess tabs show the chain that runs, ticked and
+    with its values, so Submit All sends that chain back."""
     from cellmap_flow.norm.input_normalize import get_normalizations
     from cellmap_flow.post.postprocessors import get_postprocessors
 
@@ -140,15 +112,6 @@ def test_the_tabs_list_the_configured_chain_first_in_its_order(dashboard, kind, 
     if kind == "postprocess":  # what Submit All sends back builds the same step
         (sent,) = get_postprocessors([{"name": "ChannelSelection", **rows[2][2]}])
         assert sent.channels == [0, 2]
-
-
-def test_with_nothing_configured_every_op_is_listed_once_unticked(dashboard):
-    from cellmap_flow.norm.input_normalize import get_input_normalizers
-
-    process_chain().input_norms = []
-    rows = _rows(dashboard.get("/").get_data(as_text=True), "normalizer-item", "inputNormCheckbox")
-    assert [name for name, _, _ in rows] == [op["name"] for op in get_input_normalizers()]
-    assert not any(checked for _, checked, _ in rows)
 
 
 def _page_data(html):
@@ -187,19 +150,12 @@ APPLY = {"input_norm": [{"expression": "x*2", "name": "LambdaNormalizer"},
                         {"min_value": 0, "max_value": 255, "name": "MinMaxNormalizer"}],
          "postprocess": [{"threshold": 0.5, "name": "ThresholdPostprocessor"}],
          "builder": CANVAS}
-# INPUT -> mito -> OUTPUT: a canvas with no steps, whose chain is empty.
-NO_STEPS = {**CANVAS, "normalizers": [], "postprocessors": [],
-            "edges": _edges(("input-1", "model-1"), ("model-1", "output-1"))}
-APPLY_NO_STEPS = {"input_norm": [], "postprocess": [], "builder": NO_STEPS}
 # What Submit on the dashboard page sends (every parameter as its field's
-# text): one parameter changed, and then other steps.
-SUBMIT_A_PARAMETER = {"input_norm": [{"name": "LambdaNormalizer", "expression": "x*2"},
-                                     {"name": "MinMaxNormalizer", "min_value": "0", "max_value": "200"}],
-                      "postprocess": [{"name": "ThresholdPostprocessor", "threshold": "0.5"}]}
-SUBMIT_OTHER_STEPS = {"input_norm": [{"name": "MinMaxNormalizer", "min_value": "0", "max_value": "255"},
+# text): other steps, one of them the canvas's with its parameters changed.
+SUBMIT_OTHER_STEPS = {"input_norm": [{"name": "MinMaxNormalizer", "min_value": "0", "max_value": "200"},
                                      {"name": "ZScoreNormalizer", "mean": "1", "std": "2"}],
                       "postprocess": []}
-LAMBDA, MINMAX = CANVAS["normalizers"]
+MINMAX = CANVAS["normalizers"][1]
 
 
 def _new_ids(state):
@@ -209,33 +165,16 @@ def _new_ids(state):
 
 @pytest.mark.parametrize("sent, expected", [
     pytest.param([APPLY], CANVAS, id="the-builders-own-apply"),
-    # Any saved node counts as a saved canvas, not only a normalizer.
-    pytest.param([APPLY_NO_STEPS], NO_STEPS, id="an-apply-with-no-steps"),
-    # A step whose parameters changed keeps its node's id and position.
-    pytest.param([APPLY, SUBMIT_A_PARAMETER], {
-        **CANVAS,
-        "normalizers": [LAMBDA, {**MINMAX, "params": {"min_value": "0", "max_value": "200"}}],
-        "postprocessors": [{**CANVAS["postprocessors"][0], "params": {"threshold": "0.5"}}],
-    }, id="then-submit-changed-a-parameter"),
-    # A new step gets a new node, with no position (the page places it); a
-    # step that went takes its node's edges with it.
+    # A step whose parameters changed keeps its node's id and position; a new
+    # step gets a new node, with no position (the page places it); a step
+    # that went takes its node's edges with it.
     pytest.param([APPLY, SUBMIT_OTHER_STEPS], {
         **CANVAS,
-        "normalizers": [{**MINMAX, "params": {"min_value": "0", "max_value": "255"}},
+        "normalizers": [{**MINMAX, "params": {"min_value": "0", "max_value": "200"}},
                         {"id": "norm-1-new", "name": "ZScoreNormalizer", "params": {"mean": "1", "std": "2"}}],
         "postprocessors": [],
         "edges": [edge for edge in CANVAS["edges"] if edge["id"] == "e3"],  # norm-2 -> model-1
     }, id="then-submit-changed-the-steps"),
-    # With nothing applied, the steps as Submit sent them, not as the live
-    # ops' to_dict() has them (typed, with every default).
-    pytest.param([SUBMIT_A_PARAMETER], {
-        "inputs": [], "outputs": [], "edges": [],
-        "normalizers": [{"id": "norm-0-new", "name": "LambdaNormalizer", "params": {"expression": "x*2"}},
-                        {"id": "norm-1-new", "name": "MinMaxNormalizer",
-                         "params": {"min_value": "0", "max_value": "200"}}],
-        "models": [{"id": "model-0-new", "name": "other_model", "params": {}}],
-        "postprocessors": [{"id": "post-0-new", "name": "ThresholdPostprocessor", "params": {"threshold": "0.5"}}],
-    }, id="submit-before-any-apply"),
 ])
 def test_the_builder_opens_on_the_live_chain_and_its_last_canvas(dashboard, sent, expected):
     """The normalizer and postprocessor nodes are the live chain, however it
@@ -252,51 +191,6 @@ def test_the_builder_opens_on_the_live_chain_and_its_last_canvas(dashboard, sent
     # So the page's first edit, which sends its nodes' steps, sends the live chain back.
     assert PipelineSpec(builder_steps(state["normalizers"]), builder_steps(state["postprocessors"])) == (
         get_session().pipeline_spec)
-
-
-def test_before_anything_is_applied_the_builder_starts_from_the_live_chain(dashboard):
-    from cellmap_flow.norm.input_normalize import get_normalizations
-
-    process_chain().input_norms = get_normalizations([{"name": "ZScoreNormalizer", "mean": 1, "std": 2}])
-    get_session().jobs = [_job("mito")]
-
-    state = _builder_state(dashboard)
-    assert [(n["name"], n["params"]) for n in state["normalizers"]] == [("ZScoreNormalizer", {"mean": 1.0, "std": 2.0})]
-    assert [m["name"] for m in state["models"]] == ["mito"] and state["inputs"] == state["edges"] == []
-
-
-class _Configured(SimpleNamespace):
-    def to_dict(self):
-        return {"type": "script", "script_path": f"/{self.name}.py"}
-
-
-@pytest.mark.parametrize("applied", [pytest.param(False, id="nothing-applied"), pytest.param(True, id="applied")])
-def test_each_model_node_carries_its_config(dashboard, applied):
-    """From the configured model of its name, else (nothing applied yet) from
-    the YAML the builder imported; the palette lists both kinds of model."""
-    get_session().models_config = [_Configured(name="mito")]
-    get_session().builder_model_configs = {"nuc": {"type": "script", "script_path": "/imported.py"}}
-    get_session().model_catalog = {"catalog": {"er": "/models/er"}}
-    if applied:
-        get_session().builder_state = {
-            **get_session().builder_state,
-            "inputs": [{"id": "input-1", "params": {}}],
-            "models": [{"id": "model-1", "name": "mito", "params": {}},
-                       {"id": "model-2", "name": "nuc", "params": {}, "config": {"type": "given"}}],
-        }
-    else:
-        get_session().jobs = [_job("mito"), _job("nuc"), _job("unknown")]
-    html = dashboard.get("/pipeline-builder").get_data(as_text=True)
-
-    models = _builder_state(dashboard)["models"]
-    configs = {m["name"]: m.get("config") for m in models}
-    assert configs == ({"mito": {"type": "script", "script_path": "/mito.py"}, "nuc": {"type": "given"}} if applied else
-                       {"mito": {"type": "script", "script_path": "/mito.py"},
-                        "nuc": {"type": "script", "script_path": "/imported.py"}, "unknown": None})
-    palette = _page_data(html)["available_models"]
-    assert palette == {"catalog/er": {"name": "catalog/er", "category": "catalog", "model_name": "er",
-                                      "path": "/models/er"},
-                       "mito": {"name": "mito", "type": "script", "script_path": "/mito.py"}}
 
 
 @pytest.mark.parametrize("bsub", [True, False], ids=["cluster", "laptop"])

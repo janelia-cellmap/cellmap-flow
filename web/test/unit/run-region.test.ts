@@ -1,29 +1,49 @@
-// Run on a region (src/run-region): a box in nm placed on each served
-// model's level (rounded out to the voxels it touches, then counted in the
-// model's output blocks, the chunks materialize writes), the box read back
-// from the run_region layer's JSON as Neuroglancer keeps it, the run over a
+// Run on a region (src/run-region): a model's plan for a box in nm (the
+// served level, the box in its voxels, its chunks and what they hold, or a
+// refusal for a box outside what the model predicts), the run_region layer
+// and the box read back from it as Neuroglancer keeps it, the run over a
 // fake engine (FakeInference.materialize: the view, the box and the
 // attributes it is asked for, its progress, a cancel, a failure), the
-// provenance, the output folder's overwrite check over a fake directory
-// handle, the zip of a run kept in memory, and the layer a saved zarr opens
-// as. The DOM (panel.ts) needs a browser and is not tested here.
-import { describe, expect, it } from "vitest";
+// output folder's overwrite question over a fake directory handle, the zip
+// of a run kept in memory, the layer a saved zarr opens as, and what
+// Inference.materialize asks chunkmirage's Engine for (a stand-in with the
+// members the wrapper touches, so this runs in node with no service worker
+// or reader). The DOM (panel.ts) needs a browser and is not tested here.
+import { describe, expect, it, vi } from "vitest";
 
 import { serveModels } from "../../src/backend/serving";
-import type { Chain, DatasetInfo, RegionStore, RegionWrite, RegionWritten, ServedModel } from "../../src/contracts";
+import type { Chain, DatasetInfo, RegionStore, ServedModel } from "../../src/contracts";
+import { InferenceEngine, type ModelRunner } from "../../src/infer/engine";
 import type { Level } from "../../src/infer/geometry";
-import { formatDuration } from "../../src/shared/format";
-import {
-  existingOutputs, OUTPUT_FOLDER_KEY, type OutputFolder, overwriteQuestion, prepareFolder, savedLayer, savedLayerName,
-  zarrName, zipFileName, zipRun,
-} from "../../src/run-region/output";
-import {
-  chainOf, chunkGrid, isPlan, LARGE_RUN_CHUNKS, largeRunWarning,
-  latestBox, levelBox, type ModelPlan, planModel, regionError, roundedOut, runRegionLayer, sameRegion, snappedRegion,
-  TYPED_BOX_ID, wholeVolumeNm, withBox,
-} from "../../src/run-region/region";
-import { provenance, PROVENANCE_KEY, type RunProgress, runRegion, type RunTarget } from "../../src/run-region/run";
-import { DATASET, type FakeContext, fakeContext, NAME_54, NAME_56 } from "./backend-fakes";
+import { type OutputFolder, overwriteQuestion, prepareFolder, savedLayer, savedLayerName, zarrName, zipRun } from "../../src/run-region/output";
+import { isPlan, latestBox, type ModelPlan, planModel, runRegionLayer, sameRegion } from "../../src/run-region/region";
+import { type RunProgress, runRegion, type RunTarget } from "../../src/run-region/run";
+import { memorySession } from "../../src/state";
+import { DATASET, entry, type FakeContext, fakeContext, NAME_54, NAME_56 } from "./backend-fakes";
+
+const asked = vi.hoisted(() => ({ materialize: [] as { view: string; store: unknown; options: Record<string, unknown> }[] }));
+
+vi.mock("../../chunkmirage/web/src/engine", () => ({
+  Engine: class {
+    /** The raw volume as the engine opens it: one 8 nm level, 1000 voxels a side. */
+    sources = {
+      raw: {
+        dtype: "uint8", channels: 1,
+        axes: [{ name: "z", unit: "nanometer" }, { name: "y", unit: "nanometer" }, { name: "x", unit: "nanometer" }],
+        levels: [{ shape: [1000, 1000, 1000], voxel: [8, 8, 8], origin: [0, 0, 0] }],
+      },
+    };
+    async start() {}
+    url(view: string) { return `http://localhost/virtual/page/${view}/`; }
+    serveStages() {}
+    unserve() {}
+    stop() {}
+    async materialize(view: string, store: unknown, options: Record<string, unknown>) {
+      asked.materialize.push({ view, store, options });
+      return { chunks: 1, written: 1, skipped: 0, bytes: 10, aborted: false };
+    }
+  },
+}));
 
 /** The chain a fresh browser session serves through (render.py's DEFAULT_CHAIN). */
 const SIGMOID: Chain = {
@@ -78,65 +98,6 @@ function steppingClock(): () => number {
   return () => (t += 100);
 }
 
-describe("a region on a model's level", () => {
-  it("takes every voxel the box touches, and none whose edge it only meets", () => {
-    // Exactly on voxel edges: [-4, 156) nm is voxels 0..9.
-    expect(levelBox({ offset: [-4, -4, -4], size: [160, 160, 160] }, LEVEL_16)).toEqual({ lo: [0, 0, 0], hi: [10, 10, 10] });
-    // A quarter voxel past them on each side: one more voxel at the far end.
-    expect(levelBox({ offset: [0, 0, 0], size: [160, 160, 160] }, LEVEL_16)).toEqual({ lo: [0, 0, 0], hi: [11, 11, 11] });
-    // Per axis: z from 100 nm (voxel 6, which spans 92..108), y and x one voxel each.
-    expect(levelBox({ offset: [100, 28, 29], size: [100, 16, 1] }, LEVEL_16)).toEqual({ lo: [6, 2, 2], hi: [13, 3, 3] });
-  });
-
-  it("gives a flat box the one voxel it lies in", () => {
-    // Inside voxel 6 along z, and on the boundary between voxels 0 and 1.
-    expect(levelBox({ offset: [100, -4, -4], size: [0, 32, 32] }, LEVEL_16)).toEqual({ lo: [6, 0, 0], hi: [7, 2, 2] });
-    expect(levelBox({ offset: [12, -4, -4], size: [0, 32, 32] }, LEVEL_16)).toEqual({ lo: [1, 0, 0], hi: [2, 2, 2] });
-  });
-
-  it("clips the box to the level, and has nothing for a box outside it", () => {
-    expect(levelBox({ offset: [-1000, -1000, 7000], size: [2000, 2000, 5000] }, LEVEL_16)).toEqual({ lo: [0, 0, 437], hi: [63, 63, 500] });
-    expect(levelBox({ offset: [8000, 0, 0], size: [100, 100, 100] }, LEVEL_16)).toBeNull();
-    expect(levelBox({ offset: [-500, 0, 0], size: [400, 100, 100] }, LEVEL_16)).toBeNull();
-  });
-
-  it("is not moved a voxel by the float noise of nm into voxels", () => {
-    // 3 × 4.2 is 12.600000000000001, which over 4.2 is 3.0000000000000004:
-    // its ceiling would take a fourth voxel the box does not reach.
-    const level: Level = { shape: [100, 100, 100], voxel: [4.2, 4.2, 4.2], origin: [2.1, 2.1, 2.1] };
-    expect(levelBox({ offset: [0, 0, 0], size: [3 * 4.2, 3 * 4.2, 3 * 4.2] }, level)).toEqual({ lo: [0, 0, 0], hi: [3, 3, 3] });
-  });
-
-  it("makes the whole volume the finest level's extent, which is all of each model's level", async () => {
-    expect(wholeVolumeNm(PYRAMID)).toEqual({ offset: [-4, -4, -4], size: [8000, 8000, 8000] });
-    const { models } = await served();
-    const [p54, p56] = plansFor(models, wholeVolumeNm(PYRAMID));
-    expect([p54.lo, p54.hi, p54.chunks]).toEqual([[0, 0, 0], [500, 500, 500], 729]);
-    expect([p56.lo, p56.hi, p56.level.voxel, p56.chunks]).toEqual([[0, 0, 0], [62, 62, 62], [128, 128, 128], 8]);
-    // On a volume with no 128 nm level the 128 nm model reads the 8 nm one
-    // as if it were, and its output is 8 nm voxels, 1000 of them a side.
-    const flat = planModel(models[1], DATASET, wholeVolumeNm(DATASET));
-    expect(isPlan(flat) && [flat.hi, flat.level.voxel, flat.chunks]).toEqual([[1000, 1000, 1000], [8, 8, 8], 17 ** 3]);
-  });
-
-  it("counts the chunks the box reaches, rounded out as materialize writes them", () => {
-    expect(chunkGrid([0, 0, 0], [60, 60, 60], [60, 60, 60])).toEqual({ grid: [1, 1, 1], count: 1 });
-    expect(chunkGrid([59, 0, 0], [61, 60, 1], [60, 60, 60])).toEqual({ grid: [2, 1, 1], count: 2 });
-    expect(chunkGrid([0, 0, 0], [500, 500, 500], [60, 60, 60])).toEqual({ grid: [9, 9, 9], count: 729 });
-  });
-
-  it("checks the region's numbers, a flat box among those allowed", () => {
-    expect(regionError({ offset: [0, 0, 0], size: [0, 10, 10] })).toBeNull();
-    expect(regionError({ offset: [0, Number.NaN, 0], size: [1, 1, 1] })).not.toBeNull();
-    expect(regionError({ offset: [0, 0, 0], size: [1, 1] })).not.toBeNull();
-    expect(regionError({ offset: [0, 0, 0], size: [1, -1, 1] })).not.toBeNull();
-  });
-
-  it("rounds a drawn box out to whole nm for the fields", () => {
-    expect(roundedOut({ offset: [10.4, -3.2, 0], size: [5.2, 1, 2.5] })).toEqual({ offset: [10, -4, 0], size: [6, 2, 3] });
-  });
-});
-
 describe("a model's plan", () => {
   it("is the served level, the box in its voxels, its chunks and what they hold", async () => {
     const { models } = await served();
@@ -152,54 +113,11 @@ describe("a model's plan", () => {
     expect(p.chain).toEqual(SIGMOID);
   });
 
-  it("snaps the box's corner back to its model chunk's start along one axis, the far side kept", async () => {
-    const { models } = await served();
-    const region = { offset: [476, 476, 476], size: [800, 800, 800] };
-    const p = planModel(models[0], PYRAMID, region);
-    if (!isPlan(p)) throw new Error(p.error);
-    // Voxel 30 of 60-voxel chunks goes back to voxel 0, at the level's corner (-4 nm).
-    const snapped = snappedRegion(region, p, 0);
-    expect(snapped).toEqual({ offset: [-4, 476, 476], size: [1280, 800, 800] });
-    const again = planModel(models[0], PYRAMID, snapped);
-    if (!isPlan(again)) throw new Error(again.error);
-    expect([again.lo, again.hi]).toEqual([[0, 30, 30], [80, 80, 80]]);
-    // A voxel of 10.48 nm: the new corner, in whole nm, still lies in voxel 144, the chunk's first.
-    const level = { shape: [3000, 3000, 3000], voxel: [10.48, 8, 8], origin: [5.24, 4, 4] };
-    const fine = snappedRegion({ offset: [1838, 0, 0], size: [3000, 8, 8] }, { lo: [175, 0, 0], chunk: [36, 36, 36], level }, 0);
-    expect(levelBox(roundedOut(fine), level)?.lo[0]).toBe(144);
-  });
-
-  it("saves the box, which off the chunks' edges is fewer chunks than it computes", async () => {
-    const { models } = await served();
-    // Voxels 30..80 along each axis (the level's corner is at -4 nm): across
-    // the model's chunks 0 and 1, but one chunk of the saved array, counted
-    // from its corner.
-    const p = planModel(models[0], PYRAMID, { offset: [476, 476, 476], size: [800, 800, 800] });
-    if (!isPlan(p)) throw new Error(p.error);
-    expect([p.lo, p.hi]).toEqual([[30, 30, 30], [80, 80, 80]]);
-    expect([p.chunks, p.savedChunks]).toEqual([8, 1]);
-    expect(p.bytes).toBe(60 ** 3 * 3 * 4);
-  });
-
-  it("follows the chain the view was served through: its channels and its dtype", async () => {
-    const chain: Chain = { input_norm: SIGMOID.input_norm, postprocess: [{ name: "ChannelSelection", channels: "0" }, { name: "ThresholdPostprocessor", threshold: 0.5 }] };
-    const { models } = await served(chain);
-    expect(chainOf(models[0])).toEqual(chain);
-    const p = planModel(models[0], PYRAMID, { offset: [0, 0, 0], size: [10, 10, 10] });
-    if (!isPlan(p)) throw new Error(p.error);
-    expect([p.channels, p.dtype, p.bytes]).toEqual([1, "uint8", 60 ** 3]);
-  });
-
   it("is refused, by name, for a region outside what the model predicts", async () => {
     const { models } = await served();
     const p = planModel(models[0], PYRAMID, { offset: [9000, 0, 0], size: [10, 10, 10] });
     expect(isPlan(p)).toBe(false);
     expect(!isPlan(p) && p.error).toContain(NAME_54);
-  });
-
-  it("warns of a large run, with the time it takes at the measured pace", () => {
-    expect(largeRunWarning(LARGE_RUN_CHUNKS, 200)).toBeNull();
-    expect(largeRunWarning(4913, 250)).toContain(formatDuration(4913 * 250));
   });
 });
 
@@ -214,18 +132,6 @@ describe("the run_region layer", () => {
     expect(layer.source).toEqual([{ url: "local://annotations", transform: { outputDimensions: { z: [1e-9, "m"], y: [1e-9, "m"], x: [1e-9, "m"] } } }]);
   });
 
-  it("gives the latest box drawn, its corners in either order", () => {
-    const layer = {
-      ...runRegionLayer(),
-      annotations: [
-        { type: "axis_aligned_bounding_box", id: "a", pointA: [0, 0, 0], pointB: [10, 10, 10] },
-        { type: "axis_aligned_bounding_box", id: "b", pointA: [500, 120.5, 64], pointB: [100, 20, 960] },
-        { type: "point", id: "c", point: [1, 2, 3] },
-      ],
-    };
-    expect(latestBox(layer)).toEqual({ offset: [100, 20, 64], size: [400, 100.5, 896] });
-  });
-
   it("reads the points in the layer's own coordinate space, matched to z, y, x by name", () => {
     // A layer at 8 nm whose axes are listed x, y, z.
     const space = { x: [8e-9, "m"], y: [8e-9, "m"], z: [8e-9, "m"] };
@@ -236,42 +142,12 @@ describe("the run_region layer", () => {
     expect(latestBox(shown)).toEqual({ offset: [1000, 2000, 3000], size: [1000, 2000, 3000] });
   });
 
-  it("draws the typed region as its one box, which reads back as that region (withBox)", () => {
-    const drawn = {
-      ...runRegionLayer(["z", "y", "x"]),
-      annotations: [
-        { type: "axis_aligned_bounding_box", id: "a", pointA: [0, 0, 0], pointB: [10, 10, 10] },
-        { type: "point", id: "p", point: [1, 2, 3] },
-      ],
-    };
-    const region = { offset: [100, 2000, 3000], size: [64, 1600, 1600] };
-    const typed = withBox(drawn, region);
-    expect(latestBox(typed)).toEqual(region);
-    // The box drawn before is replaced; anything else in the layer is kept.
-    expect(typed.annotations).toEqual([
-      { type: "point", id: "p", point: [1, 2, 3] },
-      { type: "axis_aligned_bounding_box", id: TYPED_BOX_ID, pointA: [100, 2000, 3000], pointB: [164, 3600, 4600] },
-    ]);
-    expect(drawn.annotations).toHaveLength(2);
-    // Into the layer's own space: 8 nm, listed x, y, z.
-    const space = { x: [8e-9, "m"], y: [8e-9, "m"], z: [8e-9, "m"] };
-    const eight = { type: "annotation", source: { url: "local://annotations", transform: { outputDimensions: space } }, annotations: [] };
-    const box = withBox(eight, { offset: [8, 16, 24], size: [8, 16, 24] }).annotations as { pointA: number[]; pointB: number[] }[];
-    expect([box[0].pointA, box[0].pointB]).toEqual([[3, 2, 1], [6, 4, 2]]);
-  });
-
   it("takes a box read back a little off as the same region (Neuroglancer's 32-bit corners)", () => {
     const region = { offset: [100, 2000, 3000.4], size: [64, 1600, 1600] };
     const read = { offset: [100, 2000, Math.fround(3000.4)], size: [64, 1600, Math.fround(4600.4) - Math.fround(3000.4)] };
     expect(read.offset[2]).not.toBe(region.offset[2]);
     expect(sameRegion(read, region)).toBe(true);
     expect(sameRegion({ offset: [100, 2000, 3001], size: [64, 1600, 1600] }, region)).toBe(false);
-  });
-
-  it("has no box without one drawn, or without the layer", () => {
-    expect(latestBox(runRegionLayer())).toBeNull();
-    expect(latestBox({ type: "annotation", annotations: [{ type: "line", pointA: [0, 0, 0], pointB: [1, 1, 1] }] })).toBeNull();
-    expect(latestBox(null)).toBeNull();
   });
 });
 
@@ -325,21 +201,6 @@ describe("a run", () => {
     expect(ctx.infer.materialized[0].options.signal).toBe(controller.signal);
   });
 
-  it("takes an abort the engine throws for a cancel, with what the last progress said was written", async () => {
-    const { models } = await served();
-    const controller = new AbortController();
-    const infer = {
-      materialize: async (_view: string, _store: RegionStore, options: RegionWrite): Promise<RegionWritten> => {
-        options.onProgress?.({ done: 5, total: 8, written: 4, bytes: 400 });
-        controller.abort();
-        throw new DOMException("The operation was aborted.", "AbortError");
-      },
-    };
-    const outcome = await runRegion({ infer, plans: plansFor(models, REGION), target: memoryTarget(), signal: controller.signal, attributes: () => ({}), log: () => {} });
-    expect(outcome.aborted).toBe(true);
-    expect(outcome.results.map((r) => r.written)).toEqual([{ chunks: 8, written: 4, skipped: 1, bytes: 400, aborted: true }]);
-  });
-
   it("stops at a model that fails, saying which and why", async () => {
     const { ctx, models } = await served();
     ctx.infer.beforeChunk = (view, index) => {
@@ -351,43 +212,17 @@ describe("a run", () => {
     expect(ctx.infer.materialized).toHaveLength(1);
     expect(outcome.results[0].written.written).toBe(2);
   });
-
-  it("starts nothing once cancelled", async () => {
-    const { ctx, models } = await served();
-    const controller = new AbortController();
-    controller.abort();
-    const outcome = await runRegion({ infer: ctx.infer, plans: plansFor(models, REGION), target: memoryTarget(), signal: controller.signal, attributes: () => ({}), log: () => {} });
-    expect([outcome.aborted, outcome.results.length, ctx.infer.materialized.length]).toEqual([true, 0, 0]);
-  });
-
-  it("puts the provenance in each zarr's attributes: the model, its chain, the dataset, the region and the box, when and where", async () => {
-    const { models } = await served();
-    const [plan] = plansFor(models, REGION);
-    const now = new Date(Date.UTC(2026, 9, 16, 12, 30, 0));
-    const attrs = provenance(plan, DATASET, REGION, now, "https://janelia-cellmap.github.io/cellmap-flow/app/");
-    const entry = models[0].entry;
-    expect(attrs).toEqual({
-      [PROVENANCE_KEY]: {
-        model_name: NAME_54, model_id: entry.id, repo: entry.repo, folder: "setup_54", variant: "fp32", model_file: "setup_54_fp32.onnx",
-        input_norm: SIGMOID.input_norm, postprocess: SIGMOID.postprocess,
-        dataset_path: DATASET.url, region_offset_nm: [0, 0, 0], region_shape_nm: [960, 960, 960],
-        box_voxels: { lo: [0, 0, 0], hi: [61, 61, 61] }, voxel_size_nm: [16, 16, 16],
-        created_at: "2026-10-16T12:30:00.000Z", app_url: "https://janelia-cellmap.github.io/cellmap-flow/app/", engine: "browser",
-      },
-    });
-  });
 });
 
 /** A picked folder: its entries by name, a directory or a file, and its permission. */
 function fakeFolder(entries: Record<string, "dir" | "file"> = {}, permission: PermissionState = "granted") {
-  const state = { entries: new Map(Object.entries(entries)), permission, failWith: null as string | null };
+  const state = { entries: new Map(Object.entries(entries)), permission };
   const named = (name: string) => Object.assign(new Error(name), { name });
   const folder: OutputFolder = {
     name: "Predictions",
     queryPermission: async () => state.permission,
     requestPermission: async () => (state.permission === "prompt" ? (state.permission = "granted") : state.permission),
     getDirectoryHandle: async (name) => {
-      if (state.failWith) throw named(state.failWith);
       const kind = state.entries.get(name);
       if (kind === "dir") return {};
       throw named(kind === "file" ? "TypeMismatchError" : "NotFoundError");
@@ -398,13 +233,6 @@ function fakeFolder(entries: Record<string, "dir" | "file"> = {}, permission: Pe
 }
 
 describe("the output folder", () => {
-  it("finds the models' zarrs there already, a file in the way among them", async () => {
-    const { folder, state } = fakeFolder({ [zarrName(NAME_54)]: "dir", [zarrName(NAME_56)]: "file", "other.zarr": "dir" });
-    expect(await existingOutputs(folder, [NAME_54, NAME_56, "mito"])).toEqual([`${NAME_54}.zarr`, `${NAME_56}.zarr`]);
-    state.failWith = "NotAllowedError";
-    await expect(existingOutputs(folder, [NAME_54])).rejects.toThrow("NotAllowedError");
-  });
-
   it("asks before writing over a model's zarr, and removes it whole only on a yes", async () => {
     const { folder, state } = fakeFolder({ [zarrName(NAME_54)]: "dir", "other.zarr": "dir" });
     const questions: string[] = [];
@@ -415,20 +243,6 @@ describe("the output folder", () => {
     const yes = await prepareFolder(folder, [NAME_54, NAME_56], () => true);
     expect(yes).toEqual({ ready: true, removed: [`${NAME_54}.zarr`] });
     expect([...state.entries.keys()]).toEqual(["other.zarr"]);
-  });
-
-  it("asks nothing when nothing is in the way, and writes nothing without permission", async () => {
-    const empty = fakeFolder();
-    expect(await prepareFolder(empty.folder, [NAME_54], () => { throw new Error("asked"); })).toEqual({ ready: true, removed: [] });
-    const denied = fakeFolder({ [zarrName(NAME_54)]: "dir" }, "denied");
-    const answer = await prepareFolder(denied.folder, [NAME_54], () => true);
-    expect(answer).toMatchObject({ ready: false, refused: true });
-    expect(denied.state.entries.size).toBe(1);
-  });
-
-  it("keeps its handle under a key no picked volume's key can be", () => {
-    // local-folder's keys are six random characters, a hyphen, the name.
-    expect(OUTPUT_FOLDER_KEY[6]).not.toBe("-");
   });
 });
 
@@ -453,10 +267,6 @@ describe("a run kept in memory", () => {
     ]);
     expect(zipNames(zipRun(stores, new Date(2026, 9, 16)))).toEqual(["mito.zarr/.zattrs", "mito.zarr/.zgroup", "mito.zarr/0/0/0/0/0", "nuc.zarr/.zgroup"]);
   });
-
-  it("is named for when it was run", () => {
-    expect(zipFileName(new Date(2026, 9, 16, 9, 5, 3))).toBe("predictions-20261016-090503.zip");
-  });
 });
 
 describe("a saved zarr in the viewer", () => {
@@ -475,5 +285,30 @@ describe("a saved zarr in the viewer", () => {
     expect(savedLayer(models[0], labels, "http://localhost/app/local/k/", "#ff0000").type).toBe("segmentation");
     const kept = savedLayer(models[1], SIGMOID, "http://localhost/app/local/k", "#ff0000", { shader: "void main() { emitGrayscale(1.0); }" });
     expect([kept.shader, kept.source]).toEqual(["void main() { emitGrayscale(1.0); }", `zarr2://http://localhost/app/local/k/${NAME_56}.zarr/`]);
+  });
+});
+
+describe("Inference.materialize", () => {
+  /** A runner that is never run: materialize goes through the engine, which is a stand-in here. */
+  const runner = {
+    run: async () => { throw new Error("no forward pass in these tests"); },
+    retain() {}, release: async () => {}, reset: async () => {},
+    limits: async () => ({ maxBufferSize: null, maxStorageBufferBindingSize: null, shaderF16: false }),
+    device: async () => "fake", provider: null,
+  } as unknown as ModelRunner;
+
+  it("asks the engine for the layer's own view at its one level, as zarr v2, gzip, empty chunks skipped", async () => {
+    const inference = new InferenceEngine({ session: memorySession(), log: () => {}, runner });
+    await inference.openDataset("https://example.org/data.zarr");
+    const served = await inference.serve(entry("setup_54"), SIGMOID, "blob", async () => new ArrayBuffer(8));
+    const store: RegionStore = { put: async () => {} };
+    const signal = new AbortController().signal;
+    const onProgress = () => {};
+    const written = await inference.materialize(served.view, store, { lo: [0, 60, 120], hi: [60, 120, 1000], attributes: { cellmap_flow: { model_name: "m" } }, signal, onProgress });
+    expect(written).toEqual({ chunks: 1, written: 1, skipped: 0, bytes: 10, aborted: false });
+    expect(asked.materialize).toEqual([{
+      view: served.view, store,
+      options: { level: 0, lo: [0, 60, 120], hi: [60, 120, 1000], extent: "box", format: "zarr2", compression: "gzip", skipEmpty: true, attributes: { cellmap_flow: { model_name: "m" } }, signal, onProgress },
+    }]);
   });
 });

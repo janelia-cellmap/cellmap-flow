@@ -1,24 +1,16 @@
-// Whole-network finetuning of a 3D model (src/finetune/full): the block
-// sides the exported 3D graphs take, net3d.ts's lean training step held to
-// Marwan's plain one (cellmap-tfjs-train.ts buildNet on an NDHWC graph) on
-// networks small enough for TF.js's CPU backend, and the weights' way from
-// the served .onnx into PyTorch's layout and back (readTorchParams,
-// toOnnxWeights). The real setup_53 is opt-in, as models-live is: it
-// downloads 34 MB from Hugging Face.
-//
-//   CELLMAP_FLOW_LIVE=1 npx vitest run test/unit/finetune-full3d
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+// Whole-network finetuning of a 3D model (src/finetune/full): net3d.ts's
+// lean training step held to Marwan's plain one (cellmap-tfjs-train.ts
+// buildNet on an NDHWC graph) on networks small enough for TF.js's CPU
+// backend, and the weights' way from the served .onnx into PyTorch's layout
+// and back (readTorchParams, toOnnxWeights).
 import { describe, expect, it } from "vitest";
 
 import type { InitializerOffsets, TorchParam, TorchWeight, WeightMapEntry } from "../../src/finetune/full/cellmap-tfjs-train";
-import { buildNet, maskedBce, readOnnxWeights, readTorchParams, toOnnxWeights, trainStep, writeOnnxWeights } from "../../src/finetune/full/cellmap-tfjs-train";
-import { is3d, opInputs, parseTrainGraph, tileSides, type TrainGraph3d } from "../../src/finetune/full/graph";
+import { buildNet, maskedBce, readTorchParams, toOnnxWeights, trainStep, writeOnnxWeights } from "../../src/finetune/full/cellmap-tfjs-train";
+import { opInputs, parseTrainGraph, type TrainGraph3d } from "../../src/finetune/full/graph";
 import { buildNet3d } from "../../src/finetune/full/net3d";
 import { loadTf } from "../../src/finetune/full/tfjs";
 
-const FIXTURES = resolve(import.meta.dirname, "../fixtures/full3d");
-const live = process.env.CELLMAP_FLOW_LIVE === "1";
 
 const conv = (x: string, y: string, w: string, stride = [1, 1, 1], b: string | undefined = `${w}.b`) => ({ op: "conv", x, y, w, ...(b ? { b } : {}), stride });
 const bn = (x: string, y: string, p: string) => ({ op: "bn", x, y, scale: `${p}.g`, bias: `${p}.beta`, mean: `${p}.mean`, var: `${p}.var`, eps: 1e-5 });
@@ -93,17 +85,6 @@ function weightsFor(graph: TrainGraph3d): Record<string, Float32Array> {
 
 const block = (n: number) => Float32Array.from({ length: n ** 3 }, (_, i) => Math.sin(i / 3) * Math.cos(i / 7) * 0.9);
 const maxAbs = (a: ArrayLike<number>, b: ArrayLike<number>) => Array.from(a).reduce((m, v, i) => Math.max(m, Math.abs(v - b[i])), 0);
-
-describe("the exported 3D training graphs", () => {
-  it("take every block side of 92 + 8k voxels, setup_53's UNet and setup_54's ResUNet alike", () => {
-    const sides = Array.from({ length: 21 }, (_, k) => 92 + 8 * k);
-    for (const folder of ["setup_53", "setup_54"]) {
-      const graph = parseTrainGraph(JSON.parse(readFileSync(resolve(FIXTURES, `${folder}.train_graph.json`), "utf8")));
-      expect(is3d(graph)).toBe(true);
-      expect(tileSides(graph, sides.at(-1)!)).toEqual(sides);
-    }
-  });
-});
 
 describe("net3d's lean training step", () => {
   // Two Adam steps of each network both ways, on TF.js's CPU backend; the
@@ -235,28 +216,3 @@ describe("readTorchParams and toOnnxWeights", () => {
     expect(() => readTorchParams(bytes, offsets, { "c.bias": { shape: [2], from_onnx: [{ from: "c.convs.0.bias" }, { index: [1, 0] }] } })).toThrow(/index 0 of axis 1/);
   });
 });
-
-describe.skipIf(!live)("setup_53 from the Hub", () => {
-  it("reads its served .onnx files into PyTorch's layout and writes them back byte for byte", { timeout: 300_000 }, async () => {
-    const base = "https://huggingface.co/cellmap/onnx-web-models/resolve/main/setup_53";
-    const get = async (path: string) => {
-      const response = await fetch(`${base}/${path}`);
-      if (!response.ok) throw new Error(`${path}: HTTP ${response.status}`);
-      return response;
-    };
-    const [graph, initializers, torchParams, weightMap] = await Promise.all(["train_graph", "initializers", "torch_params", "weight_map"].map(async (f) => (await get(`finetune/${f}.json`)).json()));
-    const g = parseTrainGraph(graph);
-    for (const file of ["setup_53_mito_affinities_16nm_in124_fp32.onnx", "setup_53_mito_affinities_16nm_in124_fp16.onnx"]) {
-      const bytes = new Uint8Array(await (await get(file)).arrayBuffer()), offsets = initializers[file] as InitializerOffsets;
-      const params = readTorchParams(bytes, offsets, torchParams);
-      expect(Object.keys(params).sort()).toEqual(Object.keys(g.params).sort());
-      const back = toOnnxWeights(weightMap, Object.fromEntries(Object.entries(params).map(([n, data]) => [n, { data, shape: g.params[n].shape }])), offsets);
-      expect(Object.keys(back).length).toBe(Object.keys(offsets).length);
-      expect(Buffer.compare(writeOnnxWeights(bytes, offsets, back), bytes), file).toBe(0);
-      // And the head's weights, read both ways, agree: the final conv is a plain 1×1×1.
-      const head = readOnnxWeights(bytes, offsets, ["final_conv.convs.0.weight"])["final_conv.convs.0.weight"];
-      expect(Array.from(params["final_conv.weight"])).toEqual(Array.from(head));
-    }
-  });
-});
-

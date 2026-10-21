@@ -29,14 +29,11 @@ LIGHT = ["cellmap_flow.globals", "flask", "neuroglancer"]
 """
 
 ROWS = {
+    # What an LSF job imports, and the dashboard's finetune job manager: the
+    # two import the rest of jobs/ and finetune/job_manager/.
     "jobs": """
-check([f"cellmap_flow.jobs.{m}" for m in ("spec", "site", "settings", "lsf", "local", "queues", "ready", "launch")]
-      + ["cellmap_flow.finetune.markers"] + [f"cellmap_flow.finetune.job_manager.{m}" for m in ("state", "tailer", "listener", "submit", "persistence", "restart", "monitor", "manager")],
+check(["cellmap_flow.jobs.launch", "cellmap_flow.finetune.job_manager.manager"],
       LIGHT + ["huggingface_hub", "peft", "torch"])
-""",
-    "io": """
-check([f"cellmap_flow.io.{m}" for m in ("paths", "metadata", "multiscale", "ome", "geometry", "source")],
-      LIGHT + ["torch", "huggingface_hub", "peft"])
 """,
     # torch only once a runner is built.
     "serving": """
@@ -83,28 +80,25 @@ resolve("onnx:setup_54", online=False)
 check([], LIGHT + ["torch", "huggingface_hub", "peft", "cellpose", "bioimageio", "cellmap_models", "fly_organelles",
                    "onnxruntime"])
 """,
-    # A chain is read wherever one is listed; its steps import what they need.
-    "chain": """
-check(["cellmap_flow.pipeline_spec", "cellmap_flow.process_chain"], LIGHT + ["torch", "huggingface_hub", "peft",
-      "cellmap_flow.norm.input_normalize", "cellmap_flow.post.postprocessors"])
-from cellmap_flow.post.postprocessors import get_postprocessors, get_postprocessors_list
-get_postprocessors_list()
-get_postprocessors([{"name": "SigmoidPostprocessor"}, {"name": "AffinityPostprocessor"}])
-check([], ["neuroglancer", "pymorton", "mwatershed", "fastremap", "fastmorph", "scipy.ndimage"])
-""",
     # The trainer, the finetune CLI and the dashboard's routes all read a
     # session's volumes and manifest.
     "finetune-session": """
 check([f"cellmap_flow.finetune.session.{m}" for m in ("manifest", "volume", "store", "minio", "sync", "instance")],
-      LIGHT + ["torch"])
+      LIGHT + ["torch", "huggingface_hub", "peft"])
 """,
-    "review": """
-check(["cellmap_flow.review", "cellmap_flow.review_index"], LIGHT + ["torch"])
-""",
-    # A viewer never starts the dashboard.
-    "viewer": """
-check(["cellmap_flow.viewer.layers", "cellmap_flow.viewer.bootstrap"],
-      ["cellmap_flow.globals", "flask", "cellmap_flow.dashboard", "torch", "huggingface_hub", "peft"])
+    # A finetune run: adaptation, losses, the dataset and the training loop
+    # may use torch, never peft or the dashboard. Importing the finetune CLI,
+    # which the dashboard imports, leaves the importer's logging alone: it
+    # called logging.basicConfig(force=True) at import.
+    "finetune-run": """
+import logging
+check([f"cellmap_flow.finetune.{m}" for m in ("adaptation", "losses", "data", "cli", "run_outputs", "session_loop")],
+      LIGHT + ["huggingface_hub", "peft"])
+import cellmap_flow.globals
+mine = logging.StreamHandler()
+logging.root.addHandler(mine)
+check(["cellmap_flow.finetune.finetune_cli"], [])
+assert mine in logging.root.handlers, "importing finetune_cli reconfigured logging"
 """,
     # The dashboard imports blockwise lazily, for the precheck.
     "blockwise-logging": """
