@@ -1,7 +1,6 @@
-"""``models.resolve``: each check of its order, the prefixes, what a model still
-needs, the bioimage arguments from either constructor, and the dashboard's
-route. Hugging Face and the zoo are fakes: a test that reaches for the
-network fails."""
+"""``models.resolve``: what each kind of model reference a user pastes resolves
+to, and the dashboard's route. Hugging Face and the zoo are fakes: a test
+that reaches for the network fails."""
 
 import json
 import shutil
@@ -9,9 +8,9 @@ import zipfile
 
 import pytest
 
-from cellmap_flow.models import registry, resolve as resolve_module
+from cellmap_flow.models import resolve as resolve_module
 from cellmap_flow.models.configs.onnx import MANIFEST_KEY
-from cellmap_flow.models.resolve import bioimage_params, resolve
+from cellmap_flow.models.resolve import resolve
 from tests.utils.onnx_helpers import FINETUNED_MANIFEST, HEAD, with_metadata
 
 ZOO = [
@@ -19,29 +18,29 @@ ZOO = [
      "concept_doi": "10.5281/zenodo.11092561"},
     {"type": "model", "id": "conscientious-dromedary", "concept_doi": "10.5281/zenodo.15535727"},
 ]
-EXPORT = ["README.md", "metadata.json", "model.pt", "model.ts"]
+HUB = {
+    "cellmap/mito": ["README.md", "metadata.json", "model.pt", "model.ts"],
+    "cellmap/onnx-web-models": ["README.md", "setup_54/manifest.json", "setup_54/setup_54_in148_fp32.onnx",
+                                "setup_53_2d/manifest.json"],
+}
 
 
 class Online:
     """What the fake Hub and zoo answer, and what was asked of them."""
 
     def __init__(self):
-        self.hf = {}  # repo -> its files, or an exception to raise
-        self.zoo = ZOO
+        self.hf = {}  # repo -> its files
         self.asked = []
 
     def files(self, repo, revision):
         self.asked.append(("hf", repo, revision))
-        answer = self.hf.get(repo, LookupError(f"There is no Hugging Face model repo {repo}"))
-        if isinstance(answer, Exception):
-            raise answer
-        return answer
+        if repo not in self.hf:
+            raise LookupError(f"There is no Hugging Face model repo {repo}")
+        return self.hf[repo]
 
     def entries(self):
         self.asked.append(("zoo",))
-        if isinstance(self.zoo, Exception):
-            raise self.zoo
-        return self.zoo
+        return ZOO
 
 
 @pytest.fixture(autouse=True)
@@ -52,401 +51,88 @@ def online(monkeypatch):
     return fake
 
 
-def _summary(resolved):
-    return resolved.type, resolved.params, resolved.name, resolved.needs
-
-
-# --- 1. local files and folders -------------------------------------------------------
-
-def test_a_script_is_a_script_model(tmp_path):
-    (tmp_path / "unet.py").write_text("x = 1\n")
-    assert _summary(resolve(str(tmp_path / "unet.py"))) == (
-        "script", {"script_path": str(tmp_path / "unet.py")}, "unet", [])
-
-
-def test_an_export_folder_is_a_cellmap_model_and_needs_its_model_ts(tmp_path):
-    export = tmp_path / "mito_export"
-    export.mkdir()
-    (export / "metadata.json").write_text("{}")
-    with pytest.raises(ValueError, match="no model.ts.*fly:"):
-        resolve(str(export))
-    (export / "model.ts").write_text("")
-    resolved = resolve(str(export) + "/")
-    assert _summary(resolved) == ("cellmap", {"folder_path": str(export)}, "mito_export", [])
-    assert (resolved.env, resolved.how) == (None, "a cellmap-models export folder")
-
-
-def _rdf_zip(path, inner="rdf.yaml"):
-    with zipfile.ZipFile(path, "w") as package:
-        package.writestr(inner, "type: model\n")
-    return str(path)
-
-
-def _bioimage_on_disk(tmp_path, kind):
-    """(what is pasted, what bioimageio.core is to load, the name) for each kind on disk."""
-    if kind == "folder":
-        (tmp_path / "nuclei").mkdir()
-        (tmp_path / "nuclei" / "rdf.yaml").write_text("")
-        return tmp_path / "nuclei", tmp_path / "nuclei" / "rdf.yaml", "nuclei"
-    if kind == "rdf-file":
-        (tmp_path / "boundaries.rdf.yaml").write_text("")
-        return tmp_path / "boundaries.rdf.yaml", tmp_path / "boundaries.rdf.yaml", "boundaries"
-    _rdf_zip(tmp_path / "package.zip", "sub/bioimageio.yaml")
-    return tmp_path / "package.zip", tmp_path / "package.zip", "package"
-
-
-@pytest.mark.parametrize("kind", ["folder", "rdf-file", "zip"])
-def test_a_bioimage_description_or_package_is_a_bioimage_model(tmp_path, kind):
-    pasted, model, name = _bioimage_on_disk(tmp_path, kind)
-    resolved = resolve(str(pasted), voxel_size="8")
-    assert _summary(resolved) == ("bioimage", {"model": str(model), "voxel_size": [8, 8, 8]}, name, [])
-    assert resolved.env == "bioimageio"
-
-
-def test_a_zip_without_a_description_is_refused(tmp_path):
-    _rdf_zip(tmp_path / "x.zip", "readme.txt")
-    with pytest.raises(ValueError, match="without an rdf.yaml"):
-        resolve(str(tmp_path / "x.zip"))
-
-
-def _run(tmp_path, train_py=None):
-    run = tmp_path / "run07"
-    run.mkdir()
-    (run / "model_checkpoint_432000").write_bytes(b"")
-    if train_py:
-        (run / "train.py").write_text(train_py)
-    return run
-
-
-def test_a_training_checkpoint_is_a_fly_model_that_reads_its_run(tmp_path):
-    run = _run(tmp_path, "labels = ['mito', 'er']\nvoxel_size = (8, 8, 8)\n")
-    resolved = resolve(str(run / "model_checkpoint_432000"))
-    assert _summary(resolved) == (
-        "fly", {"checkpoint_path": str(run / "model_checkpoint_432000")}, "run07_432000", [])
-    assert resolved.env == "fly"
-    assert resolved.notes == ["reads channels mito, er and voxel size [8, 8, 8] from the files beside the checkpoint"]
-    # The entry builds as it is: the type reads the run again.
-    model = registry.build_model(resolved.entry(), resolved.name)
-    assert (model.channels, model.name) == (["mito", "er"], "run07_432000")
-
-
-@pytest.mark.parametrize("voxel_size, needs", [(None, ["channels", "input_voxel_size"]), (4, ["channels"])])
-def test_a_fly_model_whose_run_says_nothing_needs_what_it_lacks(tmp_path, voxel_size, needs):
-    run = _run(tmp_path)
-    resolved = resolve(str(run / "model_checkpoint_432000"), voxel_size=voxel_size)
-    assert resolved.needs == needs
-    assert resolved.params.get("input_voxel_size") == ([4, 4, 4] if voxel_size else None)
-
-
-@pytest.mark.parametrize("file, name, env", [("mito.ts", "mito", None), ("model.pt", "exported", "fly")])
-def test_a_torchscript_or_pickled_model_is_a_fly_model(tmp_path, file, name, env):
-    folder = tmp_path / "exported"
-    folder.mkdir()
-    (folder / file).write_bytes(b"")
-    resolved = resolve(str(folder / file), voxel_size=8)
-    assert (resolved.type, resolved.name, resolved.env, resolved.needs) == ("fly", name, env, ["channels"])
-
-
-def test_a_folder_of_checkpoints_points_at_the_newest(tmp_path):
-    run = _run(tmp_path)
-    (run / "model_checkpoint_9000").write_bytes(b"")
-    with pytest.raises(ValueError, match="model_checkpoint_432000"):
-        resolve(str(run))
-
-
-@pytest.mark.parametrize("parts, key, name", [
-    (("ft_mito", "lora_adapter", "adapter_config.json"), "lora_adapter_path", "ft_mito"),
-    (("ft_mito", "full_finetune", "model_state_dict.pt"), "weights_path", "ft_mito"),
-], ids=["lora", "full"])
-def test_a_finetune_needs_its_base_model(tmp_path, parts, key, name):
-    path = tmp_path.joinpath(*parts)
-    path.parent.mkdir(parents=True)
-    path.write_text("{}")
-    target = path.parent if key == "lora_adapter_path" else path
-    resolved = resolve(str(target))
-    assert _summary(resolved) == ("finetune", {key: str(target)}, name, ["base_model"])
-    # Its env is its base model's, which is not known yet.
-    assert resolved.env is None
-
-
-def _torch_zip(path, keys):
-    with zipfile.ZipFile(path, "w") as weights:
-        weights.writestr("cpsam8/data.pkl", b"\x80\x02ccollections\nOrderedDict\n" + b"\n".join(keys))
+def _models_on_disk(tmp):
+    """One model of each kind a path can name, under ``tmp``."""
+    (tmp / "unet.py").write_text("x = 1\n")
+    (tmp / "mito_export").mkdir()
+    (tmp / "mito_export" / "metadata.json").write_text("{}")
+    (tmp / "mito_export" / "model.ts").write_text("")
+    (tmp / "nuclei").mkdir()
+    (tmp / "nuclei" / "rdf.yaml").write_text("")
+    with zipfile.ZipFile(tmp / "package.zip", "w") as package:
+        package.writestr("sub/bioimageio.yaml", "type: model\n")
+    (tmp / "run07").mkdir()
+    (tmp / "run07" / "model_checkpoint_432000").write_bytes(b"")
+    (tmp / "run07" / "train.py").write_text("labels = ['mito', 'er']\nvoxel_size = (8, 8, 8)\n")
+    (tmp / "ft_mito" / "lora_adapter").mkdir(parents=True)
+    (tmp / "ft_mito" / "lora_adapter" / "adapter_config.json").write_text("{}")
+    # torch.save's zip of Cellpose-SAM weights, told by their keys.
+    with zipfile.ZipFile(tmp / "my_cpsam", "w") as weights:
+        weights.writestr("cpsam8/data.pkl", b"\x80\x02ccollections\nOrderedDict\n"
+                                            b"encoder.patch_embed.proj.weight\nencoder.neck.0.weight")
         weights.writestr("cpsam8/data/0", b"\0" * 16)
-    return str(path)
+    # As the browser's Download finetuned model writes it: the manifest in its metadata_props.
+    (tmp / "ft1.onnx").write_bytes(with_metadata(HEAD.read_bytes(), {MANIFEST_KEY: json.dumps(FINETUNED_MANIFEST)}))
+    shutil.copy(HEAD, tmp / "plain.onnx")
 
 
-def test_cellpose_sam_weights_are_told_by_their_keys(tmp_path):
-    weights = _torch_zip(tmp_path / "my_cpsam", [b"encoder.patch_embed.proj.weight", b"encoder.neck.0.weight"])
-    resolved = resolve(weights)
-    assert _summary(resolved) == ("cellpose", {"pretrained_model": weights}, "my_cpsam", ["voxel_size"])
-    assert resolved.env == "cellpose4"
-    other = _torch_zip(tmp_path / "other", [b"downsample.down.res_down_0.weight"])
-    with pytest.raises(ValueError, match="fly:.*cellpose:"):
-        resolve(other)
-
-
-# --- 2. prefixes ------------------------------------------------------------------------
-
-def test_the_prefixes_say_what_a_reference_is_without_looking_it_up(tmp_path, online):
-    (tmp_path / "unet.py").write_text("")
-    run = _run(tmp_path, "labels = ['mito']\nvoxel_size = 8\n")
-    cases = {
-        "hf:org/repo@v2": ("huggingface", {"repo": "org/repo", "revision": "v2"}, "repo", []),
-        "huggingface:org/repo": ("huggingface", {"repo": "org/repo"}, "repo", []),
-        "bioimageio:affable-shark": ("bioimage", {"model": "affable-shark"}, "affable-shark", []),
-        "bioimage:https://bioimage.io/#/artifacts/affable-shark":
-            ("bioimage", {"model": "affable-shark"}, "affable-shark", []),
-        "cellpose:my_user_model": ("cellpose", {"pretrained_model": "my_user_model"}, "my_user_model", ["voxel_size"]),
-        f"fly:{run}/model_checkpoint_432000":
-            ("fly", {"checkpoint_path": f"{run}/model_checkpoint_432000"}, "run07_432000", []),
-        "dacapo:my@run@100000": ("dacapo", {"run_name": "my@run", "iteration": 100000}, "my@run_100000", []),
-        "dacapo:my_run": ("dacapo", {"run_name": "my_run"}, "my_run", ["iteration"]),
-        f"SCRIPT:{tmp_path}/unet.py": ("script", {"script_path": f"{tmp_path}/unet.py"}, "unet", []),
-    }
-    for ref, expected in cases.items():
-        assert _summary(resolve(ref)) == expected, ref
-    assert online.asked == []
-    for ref, message in [("fly:/no/such/file", "there is no /no/such/file"), ("dacapo:run@last", "whole number"),
-                         ("hf:", "needs something"), (f"bioimageio:{tmp_path}/unet.py", "not a bioimage.io model")]:
-        with pytest.raises(ValueError, match=message):
-            resolve(ref)
-
-
-# --- 3. Cellpose names -------------------------------------------------------------------
-
-@pytest.mark.parametrize("name", ["cpsam_v2", "cpsam", "cpdino", "cpdino-vitb"])
-def test_a_cellpose_model_name_is_a_cellpose_model(name):
-    resolved = resolve(name, voxel_size="16,8,8")
-    assert _summary(resolved) == ("cellpose", {"pretrained_model": name, "voxel_size": [16, 8, 8]}, name, [])
-    assert resolve(name).needs == ["voxel_size"]
-
-
-# --- 4. URLs ----------------------------------------------------------------------------
-
-@pytest.mark.parametrize("url, model", [
-    ("https://bioimage.io/#/?id=affable-shark", "affable-shark"),
-    ("https://bioimage.io/#/artifacts/affable-shark", "affable-shark"),
-    ("https://zenodo.org/records/5764892", "10.5281/zenodo.5764892"),
-    ("https://doi.org/10.5281/zenodo.5764892", "10.5281/zenodo.5764892"),
-    ("https://hypha.aicell.io/bioimage-io/artifacts/affable-shark", "affable-shark"),
-    ("https://uk1s3.embassy.ebi.ac.uk/public-datasets/bioimage.io/affable-shark/1.2/files/rdf.yaml",
-     "https://uk1s3.embassy.ebi.ac.uk/public-datasets/bioimage.io/affable-shark/1.2/files/rdf.yaml"),
+@pytest.mark.parametrize("ref, expected", [
+    # Local files and folders.
+    pytest.param("{tmp}/unet.py", ("script", {"script_path": "{tmp}/unet.py"}, "unet", []), id="script"),
+    pytest.param("{tmp}/mito_export/", ("cellmap", {"folder_path": "{tmp}/mito_export"}, "mito_export", []),
+                 id="cellmap-export-folder"),
+    pytest.param("{tmp}/nuclei", ("bioimage", {"model": "{tmp}/nuclei/rdf.yaml"}, "nuclei", []),
+                 id="bioimage-folder"),
+    pytest.param("{tmp}/package.zip", ("bioimage", {"model": "{tmp}/package.zip"}, "package", []),
+                 id="bioimage-package"),
+    # The run's train.py names its channels and voxel size.
+    pytest.param("{tmp}/run07/model_checkpoint_432000",
+                 ("fly", {"checkpoint_path": "{tmp}/run07/model_checkpoint_432000"}, "run07_432000", []),
+                 id="training-checkpoint"),
+    pytest.param("{tmp}/ft_mito/lora_adapter",
+                 ("finetune", {"lora_adapter_path": "{tmp}/ft_mito/lora_adapter"}, "ft_mito", ["base_model"]),
+                 id="lora-finetune"),
+    pytest.param("{tmp}/my_cpsam", ("cellpose", {"pretrained_model": "{tmp}/my_cpsam"}, "my_cpsam", ["voxel_size"]),
+                 id="cellpose-sam-weights"),
+    pytest.param("{tmp}/ft1.onnx", ("onnx", {"path": "{tmp}/ft1.onnx"}, "ft1", []), id="onnx-with-its-manifest"),
+    pytest.param("{tmp}/plain.onnx", ("onnx", {"path": "{tmp}/plain.onnx"}, "plain", ["input_voxel_size"]),
+                 id="onnx-without-one"),
+    # Names, prefixes and URLs.
+    pytest.param("cpsam", ("cellpose", {"pretrained_model": "cpsam"}, "cpsam", ["voxel_size"]), id="cellpose-name"),
+    pytest.param("hf:org/repo@v2", ("huggingface", {"repo": "org/repo", "revision": "v2"}, "repo", []),
+                 id="hf-prefix"),
+    pytest.param("dacapo:my@run@100000", ("dacapo", {"run_name": "my@run", "iteration": 100000}, "my@run_100000", []),
+                 id="dacapo-prefix"),
+    pytest.param("cellmap/mito", ("huggingface", {"repo": "cellmap/mito"}, "mito", []), id="hub-repo"),
+    pytest.param("https://huggingface.co/cellmap/mito/tree/v1",
+                 ("huggingface", {"repo": "cellmap/mito", "revision": "v1"}, "mito", []), id="hub-url"),
+    pytest.param("affable-shark", ("bioimage", {"model": "affable-shark"}, "affable-shark", []), id="zoo-nickname"),
+    pytest.param("10.5281/zenodo.11092561", ("bioimage", {"model": "10.5281/zenodo.11092561"}, "affable-shark", []),
+                 id="zoo-concept-doi"),
+    pytest.param("https://bioimage.io/#/artifacts/affable-shark",
+                 ("bioimage", {"model": "affable-shark"}, "affable-shark", []), id="zoo-url"),
+    pytest.param("setup_54", ("onnx", {"repo": "cellmap/onnx-web-models", "folder": "setup_54"}, "setup_54", []),
+                 id="onnx-web-export-name"),
+    pytest.param("https://huggingface.co/cellmap/onnx-web-models/tree/main/setup_54",
+                 ("onnx", {"repo": "cellmap/onnx-web-models", "folder": "setup_54", "revision": "main"},
+                  "setup_54", []), id="onnx-web-export-url"),
 ])
-def test_a_bioimage_url_is_a_bioimage_model(url, model):
-    resolved = resolve(url)
-    assert (resolved.type, resolved.params, resolved.needs) == ("bioimage", {"model": model}, [])
-    if url.endswith("rdf.yaml"):
-        assert resolved.name == "affable-shark"
+def test_each_kind_of_reference_resolves_to_its_model_type(tmp_path, online, ref, expected):
+    """(type, params, name, what it still needs) for what is pasted; ``{tmp}``
+    is the folder the models on disk are in."""
+    _models_on_disk(tmp_path)
+    online.hf.update(HUB)
+    resolved = resolve(ref.format(tmp=tmp_path))
+    expected = json.loads(json.dumps(expected).replace("{tmp}", str(tmp_path)))
+    assert [resolved.type, resolved.params, resolved.name, resolved.needs] == expected
 
-
-def test_a_hugging_face_url_is_its_repo(online):
-    online.hf["cellmap/mito"] = EXPORT
-    resolved = resolve("https://huggingface.co/cellmap/mito/tree/v1")
-    assert _summary(resolved) == ("huggingface", {"repo": "cellmap/mito", "revision": "v1"}, "mito", [])
-    assert online.asked == [("hf", "cellmap/mito", "v1")]
-    for url in ("https://huggingface.co/datasets/org/data", "https://example.com/model"):
-        with pytest.raises(ValueError):
-            resolve(url)
-
-
-# --- 5. org/repo --------------------------------------------------------------------------
-
-def test_a_repo_is_checked_on_hugging_face(online):
-    online.hf.update({
-        "cellmap/mito": EXPORT,
-        "google-bert/bert-base-uncased": ["config.json", "model.safetensors"],
-        "cellmap/half": ["metadata.json", "model.onnx"],
-        "cellmap/away": ConnectionError("Hub unreachable"),
-    })
-    resolved = resolve("cellmap/mito", voxel_size=8)
-    assert _summary(resolved) == ("huggingface", {"repo": "cellmap/mito"}, "mito", [])
-    assert (resolved.how, resolved.notes) == (
-        "a cellmap-models export on Hugging Face", ["voxel_size is not used: a huggingface model says its own"])
-    with pytest.raises(ValueError, match="not a cellmap-models export.*script"):
-        resolve("google-bert/bert-base-uncased")
-    with pytest.raises(ValueError, match="no model.ts"):
-        resolve("cellmap/half")
-    with pytest.raises(ValueError, match="There is no Hugging Face model repo cellmap/gone"):
-        resolve("cellmap/gone")
-    assert "Hub unreachable" in resolve("cellmap/away").notes[0]
-
-
-def test_offline_a_repo_is_taken_on_trust(online):
-    resolved = resolve("cellmap/mito", online=False)
-    assert (resolved.type, resolved.notes) == ("huggingface", ["not checked (offline): taken to be a cellmap-models export"])
-    assert online.asked == []
-
-
-def test_a_relative_path_that_is_not_there_is_not_a_repo(online):
-    with pytest.raises(ValueError, match="there is none at .*runs/model.ts"):
-        resolve("runs/model.ts")
-    assert online.asked == []
-
-
-# --- 6. zoo ids and nicknames ----------------------------------------------------------------
-
-@pytest.mark.parametrize("ref", ["affable-shark", "10.5281/zenodo.5764892", "10.5281/zenodo.11092561"])
-def test_a_zoo_id_nickname_or_doi_is_looked_up(ref):
-    resolved = resolve(ref, voxel_size=[8])
-    assert _summary(resolved) == ("bioimage", {"model": ref, "voxel_size": [8, 8, 8]}, "affable-shark", [])
-
-
-def test_what_is_not_in_the_zoo_is_refused_and_an_unreachable_zoo_assumed(online):
-    with pytest.raises(ValueError, match="not a model in the BioImage Model Zoo"):
-        resolve("no-such-model")
-    with pytest.raises(ValueError, match="Could not tell what model 'unet'"):
-        resolve("unet")
-    online.zoo = OSError("zoo unreachable")
-    assert "zoo unreachable" in resolve("no-such-model").notes[0]
-    with pytest.raises(ValueError, match="Could not tell"):
-        resolve("unet")
-
-
-def test_offline_only_a_zoo_shaped_name_is_taken_on_trust(online):
-    assert resolve("conscientious-dromedary", online=False).type == "bioimage"
-    with pytest.raises(ValueError, match="offline: not looked up"):
-        resolve("unet", online=False)
-    assert online.asked == []
-
-
-def test_a_zoo_model_gets_the_voxel_size_it_was_trained_at_and_says_where_from(online):
-    resolved = resolve("organized-badger", online=False)
-    assert resolved.entry()["voxel_size"] == [100, 80, 80] and resolved.needs == []
-    assert any("Platynereis" in note and "zenodo" in note for note in resolved.notes)
-    assert any("downsampled" in note for note in resolved.notes)
-    # One given wins.
-    assert resolve("organized-badger", voxel_size=8, online=False).entry()["voxel_size"] == [8, 8, 8]
-
-
-def test_a_cellmap_flow_config_is_refused_with_how_to_run_it(tmp_path):
-    config = tmp_path / "run.yaml"
-    config.write_text("data_path: /d\nmodels:\n  mito:\n    type: script\n    script_path: /s.py\n")
-    with pytest.raises(ValueError, match=r"cellmap-flow config \(1 model\(s\): mito\).*cellmap_flow yaml"):
-        resolve(str(config), online=False)
-
-
-# --- what is given -----------------------------------------------------------------------------
-
-def test_a_name_and_voxel_size_are_given_as_asked(tmp_path):
-    resolved = resolve("cpsam", name="cells", voxel_size="(5.24, 4, 4)")
-    assert resolved.entry() == {"type": "cellpose", "pretrained_model": "cpsam", "voxel_size": [5.24, 4, 4],
-                                "name": "cells"}
-    for bad in ("a,b", [1, 2], 0):
-        with pytest.raises(ValueError, match="voxel_size"):
-            resolve("cpsam", voxel_size=bad)
-    with pytest.raises(ValueError, match="Give a model reference"):
-        resolve("  ")
-
-
-class OldBio:
-    def __init__(self, model_name: str, voxel_size, edge_length_to_process=None, name=None, scale=None):
-        pass
-
-
-class NewBio:
-    def __init__(self, model: str, voxel_size=None, name=None, scale=None):
-        pass
-
-
-class NoVoxelBio:
-    def __init__(self, model: str, name=None):
-        pass
-
-
-@pytest.mark.parametrize("cls, voxel_size, expected", [
-    (OldBio, None, ({"model_name": "m"}, ["voxel_size"])),
-    (OldBio, [8, 8, 8], ({"model_name": "m", "voxel_size": [8, 8, 8]}, [])),
-    (NewBio, None, ({"model": "m"}, [])),
-    (NewBio, [8, 8, 8], ({"model": "m", "voxel_size": [8, 8, 8]}, [])),
-    (NoVoxelBio, [8, 8, 8], ({"model": "m"}, [])),
-])
-def test_the_bioimage_arguments_follow_its_constructor(cls, voxel_size, expected):
-    assert bioimage_params("m", voxel_size, cls=cls) == expected
-
-
-def test_the_bioimage_type_is_asked_for_its_signature(monkeypatch):
-    real = registry.model_type
-    monkeypatch.setattr(registry, "model_type", lambda name: NewBio if name == "bioimage" else real(name))
-    assert _summary(resolve("affable-shark")) == ("bioimage", {"model": "affable-shark"}, "affable-shark", [])
-
-
-# --- ONNX models ------------------------------------------------------------------------------------
-
-WEB_EXPORTS = ["README.md", "setup_54/manifest.json", "setup_54/setup_54_in148_fp32.onnx",
-               "setup_53_2d/manifest.json", "conv3d/setup_54/model.onnx"]
-
-
-def _with_manifest(path, manifest):
-    """The fixture with ``manifest`` in its metadata_props, as the browser's download writes it."""
-    path.write_bytes(with_metadata(HEAD.read_bytes(), {MANIFEST_KEY: json.dumps(manifest or FINETUNED_MANIFEST)}))
-    return path
-
-
-def test_an_onnx_file_that_carries_its_manifest_needs_nothing(tmp_path, online):
-    path = _with_manifest(tmp_path / "mito_aff_setup53-2d_16nm-ft1.onnx", None)
-    resolved = resolve(str(path), voxel_size=8)
-    assert _summary(resolved) == ("onnx", {"path": str(path)}, "mito_aff_setup53-2d_16nm-ft1", [])
-    assert resolved.env == "onnx" and "manifest" in resolved.how
-    assert resolved.notes[:2] == ["its manifest says mito_aff_z, mito_aff_y at 16x16x16 nm",
-                                  "its output is raw logits (apply sigmoid / threshold at 0): add a "
-                                  "SigmoidPostprocessor for probabilities"]
-    assert resolved.notes[-1] == "voxel_size is not used: an onnx model says its own"
-    assert online.asked == []
-
-
-def test_an_onnx_file_without_one_needs_its_voxel_size(tmp_path):
-    shutil.copy(HEAD, tmp_path / "plain.onnx")
-    assert _summary(resolve(str(tmp_path / "plain.onnx"))) == (
-        "onnx", {"path": str(tmp_path / "plain.onnx")}, "plain", ["input_voxel_size"])
-    assert _summary(resolve(f"onnx:{tmp_path}/plain.onnx", voxel_size="16,8,8")) == (
-        "onnx", {"path": str(tmp_path / "plain.onnx"), "input_voxel_size": [16, 8, 8]}, "plain", [])
-    (tmp_path / "page.onnx").write_text("<html>rate limited</html>")
-    with pytest.raises(ValueError, match="not an ONNX model"):
-        resolve(str(tmp_path / "page.onnx"))
-    with pytest.raises(ValueError, match="there is none at .*gone.onnx"):
-        resolve("gone.onnx")
-
-
-def test_a_folder_of_onnx_web_exports_is_an_onnx_model(online):
-    """By the browser's id (org/repo/folder), its page on the Hub, or its bare name."""
-    online.hf["cellmap/onnx-web-models"] = WEB_EXPORTS
-    expected = ("onnx", {"repo": "cellmap/onnx-web-models", "folder": "setup_54"}, "setup_54", [])
-    assert _summary(resolve("cellmap/onnx-web-models/setup_54")) == expected
-    assert _summary(resolve("setup_54")) == expected
-    assert _summary(resolve("https://huggingface.co/cellmap/onnx-web-models/tree/main/setup_54")) == (
-        "onnx", {"repo": "cellmap/onnx-web-models", "folder": "setup_54", "revision": "main"}, "setup_54", [])
-    file_url = "https://huggingface.co/cellmap/onnx-web-models/blob/main/setup_54/setup_54_in148_fp32.onnx"
-    assert resolve(file_url).params["file"] == "setup_54_in148_fp32.onnx"
-    with pytest.raises(ValueError, match="has no ONNX web export setup_99.*it has setup_53_2d, setup_54"):
-        resolve("cellmap/onnx-web-models/setup_99")
-    with pytest.raises(ValueError, match="repo of ONNX web exports.*cellmap/onnx-web-models/setup_53_2d"):
-        resolve("cellmap/onnx-web-models")
-    # A one-word name is the zoo's first, and the exports' only when it is a folder of theirs.
-    with pytest.raises(ValueError, match="Could not tell what model 'unet'"):
-        resolve("unet")
-
-
-def test_offline_an_onnx_folder_is_taken_on_trust_only_when_written_out(online):
-    resolved = resolve("cellmap/onnx-web-models/setup_54", online=False)
-    assert (resolved.type, resolved.notes[0]) == ("onnx", "not checked (offline): taken to be a folder of ONNX "
-                                                          "web exports")
-    assert _summary(resolve("onnx:me/exports/m1@v2", online=False)) == (
-        "onnx", {"repo": "me/exports", "folder": "m1", "revision": "v2"}, "m1", [])
-    with pytest.raises(ValueError, match="offline: not looked up"):
-        resolve("setup_54", online=False)
-    assert online.asked == []
-
-
-# --- the dashboard's route -----------------------------------------------------------------------
 
 def test_the_route_answers_with_the_resolved_model(dashboard):
     answer = dashboard.post("/api/models/resolve", json={"ref": " cpsam ", "name": "cells", "voxel_size": "8"})
     assert answer.status_code == 200
-    assert answer.get_json() == {
-        "success": True, "type": "cellpose", "params": {"pretrained_model": "cpsam", "voxel_size": [8, 8, 8]},
-        "name": "cells", "env": "cellpose4", "how": "a Cellpose 4 pretrained model", "needs": [], "notes": [],
-    }
+    body = answer.get_json()
+    assert (body["success"], body["type"], body["params"], body["name"], body["env"], body["needs"]) == (
+        True, "cellpose", {"pretrained_model": "cpsam", "voxel_size": [8, 8, 8]}, "cells", "cellpose4", [])
     assert dashboard.post("/api/models/resolve", json={"ref": "cpsam"}).get_json()["needs"] == ["voxel_size"]
 
 

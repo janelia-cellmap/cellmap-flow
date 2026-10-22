@@ -4,7 +4,7 @@
 import { closeDialog, openDialog, registerDialog } from "./dialogs.js";
 import { addPaletteItem } from "./palette.js";
 
-// {class name: {display_name, description, parameters: {name: {required,
+// {type name: {display_name, description, parameters: {name: {required,
 // description, input_type, default}}}}, fetched the first time the dialog opens.
 let availableModelConfigTypes = {};
 
@@ -25,23 +25,23 @@ async function openCreateModelConfigModal() {
 function populateModelConfigTypeSelect() {
   const select = document.getElementById("model-config-type-select");
   select.innerHTML = '<option value="">-- Select Model Type --</option>';
-  Object.entries(availableModelConfigTypes).forEach(([className, config]) => {
+  Object.entries(availableModelConfigTypes).forEach(([typeName, config]) => {
     const option = document.createElement("option");
-    option.value = className;
+    option.value = typeName;
     option.textContent = `${config.display_name} - ${config.description}`;
     select.appendChild(option);
   });
 }
 
-// The form for one class: its required parameters, then its optional ones.
-function updateModelConfigForm(className) {
+// The form for one type: its required parameters, then its optional ones.
+function updateModelConfigForm(typeName) {
   const container = document.getElementById("model-config-form-container");
   const formDiv = document.getElementById("model-config-form");
-  if (!className) {
+  if (!typeName) {
     container.style.display = "none";
     return;
   }
-  const config = availableModelConfigTypes[className];
+  const config = availableModelConfigTypes[typeName];
   formDiv.innerHTML = "";
 
   const required = Object.entries(config.parameters).filter(([_, info]) => info.required);
@@ -112,14 +112,14 @@ function createParameterField(paramName, paramInfo) {
 }
 
 async function submitCreateModelConfig() {
-  const className = document.getElementById("model-config-type-select").value;
-  if (!className) {
+  const typeName = document.getElementById("model-config-type-select").value;
+  if (!typeName) {
     alert("Please select a model type");
     return;
   }
   // Every parameter's text; a blank one is null.
   const params = {};
-  Object.keys(availableModelConfigTypes[className].parameters).forEach((paramName) => {
+  Object.keys(availableModelConfigTypes[typeName].parameters).forEach((paramName) => {
     const input = document.getElementById(`param-${paramName}`);
     if (input) {
       params[paramName] = input.value.trim() || null;
@@ -130,7 +130,7 @@ async function submitCreateModelConfig() {
     const response = await fetch("/api/create-model-config", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ class_name: className, params }),
+      body: JSON.stringify({ type: typeName, params }),
     });
     if (!response.ok) {
       const error = await response.json();

@@ -24,8 +24,10 @@ import type {
   ViewerController,
 } from "../../src/contracts";
 import { entryFor } from "../../src/models";
+import { outputClassOf } from "../../src/shared/model-info";
 import { memorySession } from "../../src/state";
 import { MemoryPaintStore } from "../../src/state/paint-store";
+import { portablePython } from "./pyodide";
 
 export function manifest(name: string, channels: string[], voxel: number): ModelManifest {
   return {
@@ -115,6 +117,8 @@ export class FakeInference implements Inference {
       has_channel: true,
       output_axes: ["c", "z", "y", "x"],
       available: true,
+      // As the real one reads it off the manifest (shared/model-info.ts).
+      output_class: outputClassOf(entry.manifest.output),
       engine: "browser",
     };
     const view = `${entry.name}${ARGS_KEY}${blob}${ARGS_KEY}`;
@@ -191,6 +195,13 @@ export class FakeInference implements Inference {
       for (let z = lo[0]; z < hi[0]; z++) for (let y = lo[1]; y < hi[1]; y++) for (let x = lo[2]; x < hi[2]; x++) data[i++] = this.outputAt(view, c, z, y, x);
     }
     return { data, shape };
+  }
+
+  /** The portable Python, in node's Pyodide (pyodide.ts); a test that calls it skips when there is none. */
+  async python<T>(fn: string, args: Record<string, unknown>, arrays: ArrayBuffer[] = []): Promise<T> {
+    const call = await portablePython();
+    if (!call) throw new Error("Pyodide is not available in this test run");
+    return call<T>(fn, args, arrays);
   }
 
   /** Every materialize call: the view, the store and the options. */

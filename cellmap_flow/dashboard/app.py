@@ -83,8 +83,30 @@ def _announce_service_url(url):
         logger.warning(f"Could not write the dashboard URL to {path}: {e}")
 
 
-def create_and_run_app(neuroglancer_url=None):
-    """Serve the dashboard on a free port, until the process is stopped.
+def bind_dashboard():
+    """Bind the dashboard to a free port, and record its address as the
+    session's ``dashboard_url``. Returns the server, for create_and_run_app.
+
+    Apart so the address is known before the dashboard serves: the CLIs'
+    startup (services.startup) builds the viewer's prediction layers first,
+    and each layer's URL carries the address (Session.layer_blob).
+    """
+    from werkzeug.serving import make_server
+
+    # threaded=True is not optional. make_server defaults to one request at a
+    # time, and the dashboard has long POSTs (a YAML crop load ran for three
+    # minutes) and open SSE log streams, each of which would then block every
+    # other request. app.run() used to default to threaded=True; this keeps it.
+    server = make_server("0.0.0.0", 0, app, threaded=True)
+    # By IP address, not hostname (see this_machine_ip): off campus a
+    # laptop's name still pointed at its campus address, and the link hung.
+    get_session().dashboard_url = f"http://{this_machine_ip()}:{server.socket.getsockname()[1]}"
+    return server
+
+
+def create_and_run_app(neuroglancer_url=None, server=None):
+    """Serve the dashboard on a free port (or on ``server``, bind_dashboard's),
+    until the process is stopped.
 
     It prints its URL, and writes it where SERVICE_URL_PATH says. Its
     terminal lines (the URL, the models it launches) are INFO: a
@@ -93,22 +115,15 @@ def create_and_run_app(neuroglancer_url=None):
     the plugins, whose normalizers, postprocessors and model types its
     pages offer, if nothing has yet.
     """
-    from werkzeug.serving import make_server
-
     from cellmap_flow.plugins import load_plugins
 
     if not logging.getLogger().handlers:
         configure_logging()
     load_plugins()
     get_session().neuroglancer_url = neuroglancer_url
-    # threaded=True is not optional. make_server defaults to one request at a
-    # time, and the dashboard has long POSTs (a YAML crop load ran for three
-    # minutes) and open SSE log streams, each of which would then block every
-    # other request. app.run() used to default to threaded=True; this keeps it.
-    server = make_server("0.0.0.0", 0, app, threaded=True)
-    # By IP address, not hostname (see this_machine_ip): off campus a
-    # laptop's name still pointed at its campus address, and the link hung.
-    url = f"http://{this_machine_ip()}:{server.socket.getsockname()[1]}"
+    if server is None:
+        server = bind_dashboard()
+    url = get_session().dashboard_url
     logger.info(f"Dashboard running at: {url}")
     print(f"\n * Dashboard URL: {url}\n", flush=True)
     _announce_service_url(url)

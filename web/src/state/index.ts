@@ -16,22 +16,19 @@
 // sessionStorage (a test, or a browser that blocks storage) the session
 // lives in memory for the page's life and says so in the console.
 import type { Chain, SessionState, SessionStore } from "../contracts";
+import { PYTHON } from "../generated/python-data";
 
 /** The session's key in the tab's sessionStorage. */
 export const SESSION_KEY = "cellmap-flow:session";
 
-/** The chain a fresh session starts with. Every model the browser runs
- * (cellmap/onnx-web-models) was trained on uint8 scaled to [-1, 1] and
- * outputs logits, so this is what makes their predictions right; the
- * dashboard's Input and Postprocess tabs show it ticked. */
+/** The chain a fresh session starts with, a fresh copy each call. Every
+ * model the browser runs (cellmap/onnx-web-models) was trained on uint8
+ * scaled to [-1, 1] and outputs logits, so this is what makes their
+ * predictions right; the dashboard's Input and Postprocess tabs show it
+ * ticked: it is web/build/export_data.py's DEFAULT_CHAIN, the one
+ * build/render.py ticks on the page. */
 export function defaultChain(): Chain {
-  return {
-    input_norm: [
-      { name: "MinMaxNormalizer", min_value: 0, max_value: 255 },
-      { name: "LambdaNormalizer", expression: "2*x-1" },
-    ],
-    postprocess: [{ name: "SigmoidPostprocessor" }],
-  };
+  return structuredClone(PYTHON.default_chain);
 }
 
 export function defaultState(): SessionState {

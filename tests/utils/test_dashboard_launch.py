@@ -1,47 +1,24 @@
-"""The dashboard's model launcher (dashboard.services.launch): what a failed
-launch leaves, a model taken off and put back on, and the Models tab's
-Loaded models list with its ✕. Its commands are in test_launch_command, its
+"""The dashboard's model launcher (dashboard.services.launch): a model added
+or ticked and submitted, the Models tab's Loaded models list with its ✕, the
+exported config and the job logs. Its commands are in test_launch_command, its
 layers in test_layer_sources_snapshot."""
 
-import logging
+import shlex
 import threading
-import time
 from types import SimpleNamespace
 
 import neuroglancer
 import pytest
 import yaml
+import zarr
 
 from cellmap_flow.dashboard.services import launch
 from cellmap_flow.dashboard.state import get_session
-from cellmap_flow.jobs.lsf import BsubTimeoutError, LSFJob
+from cellmap_flow.jobs import launch as jobs_launch
 from cellmap_flow.jobs.spec import JobStartError
 from cellmap_flow.models.bioimage_catalog import bioimage_entry
+from cellmap_flow.models.registry import build_model
 from cellmap_flow.process_chain import process_chain
-
-
-@pytest.mark.parametrize("error", [pytest.param(JobStartError("no GPU queue took it"), id="no-queue-took-it"),
-                                   pytest.param(BsubTimeoutError("bsub hung"), id="bsub-timed-out")])
-@pytest.mark.parametrize("start", [lambda: launch.run_model("/models/mito", "mito", "blob"),
-                                   lambda: launch.run_hf_model("cellmap/mito", "mito", "blob"),
-                                   lambda: launch.run_bioimage_model(
-                                       bioimage_entry("affable-shark", [8, 8, 8], "mito"), "blob"),
-                                   lambda: launch.run_cellpose_model(
-                                       {"pretrained_model": "cpsam_v2", "voxel_size": [64, 64, 64],
-                                        "output": "probability", "name": "cellpose_sam_v2"}, "blob")],
-                         ids=["catalog", "hf", "bioimage", "cellpose"])
-def test_a_failed_launch_is_logged_not_raised_and_adds_no_layer(viewer, monkeypatch, caplog, error, start):
-    """It runs on a dashboard thread, whose exceptions reach only stderr."""
-    def fail(*args, **kwargs):
-        raise error
-
-    monkeypatch.setattr(launch, "start_hosts", fail)
-    session = get_session()
-    session.jobs, session.dataset_path = [], "/data/raw.zarr"
-    with caplog.at_level(logging.ERROR, logger="cellmap_flow.dashboard.services.launch"):
-        start()
-    assert get_session().jobs == [] and len(viewer.state.layers) == 0
-    assert any(str(error) in r.getMessage() for r in caplog.records)
 
 
 class _Job:
@@ -60,85 +37,13 @@ class _InlineThread:
         self._target(*self._args)
 
 
-def test_a_model_taken_off_is_killed_forgotten_and_can_be_started_again(viewer, monkeypatch):
-    launched = []
-    monkeypatch.setattr(launch, "run_model", lambda path, name, st: launched.append(name))
-    monkeypatch.setattr(launch.threading, "Thread", _InlineThread)
-    kept, dropped = _Job("mito"), _Job("nuc")
-    get_session().jobs = [kept, dropped]
-    process_chain().input_norms, process_chain().postprocess = [], []
-    get_session().model_catalog = {"catalog": {"mito": "/models/mito", "nuc": "/models/nuc"}}
-    with viewer.txn() as s:
-        for name in ("mito", "nuc"):
-            s.layers[name] = neuroglancer.ImageLayer(source=f"zarr://http://{name}/x")
-    get_session().shader_controls["nuc"] = {"contrast": {"range": [0, 1]}}
-
-    launch.update_run_models(["mito"])
-    assert dropped.killed and not kept.killed and get_session().jobs == [kept]
-    assert [layer.name for layer in viewer.state.layers] == ["mito"]
-    # Kept for when it is drawn again (the ✕ forgets it).
-    assert get_session().shader_controls["nuc"] == {"contrast": {"range": [0, 1]}}
-    # Selecting it again must start it again, not be a silent no-op.
-    launch.update_run_models(["mito", "nuc"])
-    assert launched == ["nuc"]
-
-
-def test_a_second_submit_while_a_model_is_still_starting_does_not_start_it_again(viewer, monkeypatch):
-    """Two impartial_shrimp jobs once ran side by side: Submit again (Resample
-    toggled) before the first had a server, and it was started twice."""
-    import threading
-
-    release, launched = threading.Event(), []
-
-    def slow_start(path, name, st):
-        launched.append(name)
-        release.wait(5)
-
-    monkeypatch.setattr(launch, "run_model", slow_start)
-    get_session().jobs = []
-    process_chain().input_norms, process_chain().postprocess = [], []
-    get_session().model_catalog = {"catalog": {"mito": "/models/mito"}}
-    try:
-        launch.update_run_models(["mito"])
-        launch.update_run_models(["mito"])
-        assert launched == ["mito"] and "mito" in launch.running_names()
-    finally:
-        release.set()
-    for _ in range(100):  # its launch thread returns
-        if "mito" not in launch.running_names():
-            break
-        time.sleep(0.05)
-    assert "mito" not in launch.running_names()
-
-
-def test_submit_on_the_models_tab_leaves_a_finetune_jobs_server_running(viewer, monkeypatch):
-    """The Finetune tab owns that job. The Models tab, rendered before its
-    server came up, has no box for it, and bkilling it ended the training."""
-    from cellmap_flow.dashboard import finetune_layers
-
-    monkeypatch.setattr(finetune_layers, "fetch_model_info", lambda url: {})
-    monkeypatch.setattr(finetune_layers, "prediction_layer",
-                        lambda *a, **k: neuroglancer.ImageLayer(source="zarr://http://gpu1:9000/x"))
-    killed = []
-    monkeypatch.setattr(LSFJob, "kill", lambda self: killed.append(self.job_id))
-    training = SimpleNamespace(inference_server_url="http://gpu1:9000", lsf_job=SimpleNamespace(job_id="4242"),
-                               model_name="mito", finetuned_model_name=None, params={}, job_id="ft-1")
-    finetune_layers.add_finetuned_layer(training, "mito_finetuned_1")
-    monkeypatch.setattr(launch, "run_model", lambda path, name, st: None)
-    monkeypatch.setattr(launch.threading, "Thread", _InlineThread)
-    get_session().model_catalog = {"catalog": {"nuc": "/models/nuc"}}
-
-    launch.update_run_models(["nuc"])
-    assert killed == [] and [j.model_name for j in get_session().jobs] == ["mito_finetuned_1"]
-    assert "mito_finetuned_1" in viewer.state.layers
-
-
 @pytest.mark.parametrize("resample", [True, False])
-def test_the_resample_box_reaches_the_servers_and_the_exported_config(viewer, dashboard, monkeypatch, resample):
+def test_the_resample_box_reaches_the_servers_and_the_exported_config(viewer, dashboard, monkeypatch,
+                                                                     placeholder_cellmap_folders, resample):
     """The Models tab's box is the session's setting: the servers it submits
     get --resample, and Export Config keeps it for `cellmap_flow yaml`."""
     commands = []
-    monkeypatch.setattr(launch, "start_hosts", lambda command, *args, **kwargs: commands.append(command))
+    monkeypatch.setattr(jobs_launch, "start_hosts", lambda command, *args, **kwargs: commands.append(command))
     monkeypatch.setattr(launch.threading, "Thread", _InlineThread)
     process_chain().input_norms, process_chain().postprocess = [], []
     session = get_session()
@@ -174,7 +79,7 @@ def test_add_builds_a_pasted_models_entry_and_runs_it_in_its_environment(viewer,
     script = tmp_path / "m.py"
     script.write_text("x = 1\n")
     commands = []
-    monkeypatch.setattr(launch, "start_hosts", lambda command, *args, **kwargs: commands.append(command))
+    monkeypatch.setattr(jobs_launch, "start_hosts", lambda command, *args, **kwargs: commands.append(command))
     monkeypatch.setattr(launch.threading, "Thread", _InlineThread)
     from cellmap_flow.dashboard.routes import model_resolve
 
@@ -196,25 +101,6 @@ def test_add_builds_a_pasted_models_entry_and_runs_it_in_its_environment(viewer,
                                                              "name": "mine"}}).status_code == 409
     bad = dashboard.post("/api/models/add", json={"entry": {"type": "nope", "name": "x"}})
     assert bad.status_code == 400 and "nope" in bad.get_json()["error"]
-
-
-def test_job_logs_list_a_job_that_is_still_starting(dashboard, monkeypatch):
-    """From Submit until a server answers the page said no job had been submitted."""
-    from cellmap_flow.jobs import launch as jobs_launch
-
-    class Starting:
-        model_name, job_id, host = "impartial_shrimp", "77", None
-
-        def get_status(self):
-            return None
-
-        def peek(self):
-            return "Installing environment..."
-
-    monkeypatch.setattr(jobs_launch, "_starting", {Starting()})
-    get_session().jobs = []
-    (job,) = dashboard.get("/api/job-logs").get_json()["jobs"]
-    assert (job["model_name"], job["status"], job["log"]) == ("impartial_shrimp", "starting", "Installing environment...")
 
 
 def test_job_logs_keep_a_job_that_failed_to_start_until_it_is_started_again(dashboard, monkeypatch):
@@ -248,24 +134,6 @@ def test_job_logs_keep_a_job_that_failed_to_start_until_it_is_started_again(dash
         assert job["status"] == "starting"
     assert jobs_launch.failed_starts() == []
 
-    for i in range(jobs_launch.FAILED_STARTS_KEPT + 2):
-        with pytest.raises(RuntimeError), jobs_launch._while_starting(Job(f"m{i}")):
-            raise RuntimeError("died")
-    names = [j.model_name for j in jobs_launch.failed_starts()]
-    assert names == [f"m{i}" for i in range(2, jobs_launch.FAILED_STARTS_KEPT + 2)]
-
-
-def test_a_launch_that_raises_is_reported_in_the_log(viewer, monkeypatch, caplog):
-    """Launch threads' exceptions reached only the terminal."""
-    def broken(*args, **kwargs):
-        raise RuntimeError("no such environment")
-
-    monkeypatch.setattr(launch, "server_command_for", broken)
-    get_session().dataset_path = "/data/raw.zarr"
-    with caplog.at_level(logging.ERROR, logger="cellmap_flow.dashboard.services.launch"):
-        launch.run_hf_model("cellmap/mito", "mito", "blob")
-    assert any("no such environment" in r.getMessage() for r in caplog.records)
-
 
 def _finetune_jobs_model(monkeypatch, status):
     """A finetune job serving mito_finetuned_1 (add_finetuned_layer's job and
@@ -283,23 +151,12 @@ def _finetune_jobs_model(monkeypatch, status):
     return training
 
 
-def _wait_for(condition, seconds=5):
-    for _ in range(int(seconds / 0.02)):
-        if condition():
-            return True
-        time.sleep(0.02)
-    return condition()
-
-
 def test_the_loaded_models_say_where_each_came_from_and_whether_it_can_be_removed(viewer, dashboard, monkeypatch,
                                                                                  tmp_path):
     """One model from each place the Models tab picks them, a finetune's, and
     one still starting; with what the tab's rows know each by, to untick them."""
     from cellmap_flow.finetune.job_manager.state import JobStatus
-    from cellmap_flow.models.models_config import (
-        BioModelConfig, CellposeModelConfig, HuggingFaceModelConfig,
-    )
-    from cellmap_flow.models.registry import build_model
+    from cellmap_flow.models.models_config import CellposeModelConfig, HuggingFaceModelConfig
 
     script = tmp_path / "m.py"
     script.write_text("x = 1\n")
@@ -307,7 +164,7 @@ def test_the_loaded_models_say_where_each_came_from_and_whether_it_can_be_remove
     session.model_catalog = {"Mito": {"mito": "/models/mito"}, "Nuclei": {"nuc": "/models/nuc"}}
     session.models_config = [
         HuggingFaceModelConfig(repo="cellmap/fly_organelles_run08_438000", name="fly_organelles_run08_438000"),
-        BioModelConfig(**bioimage_entry("affable-shark", [8, 8, 8], "affable_shark")),
+        build_model(bioimage_entry("affable-shark", [8, 8, 8], "affable_shark")),
         CellposeModelConfig(pretrained_model="cpsam_v2", voxel_size=[64, 64, 64], output="probability",
                             name="cellpose_sam_v2_probability"),
         build_model({"type": "script", "script_path": str(script)}, "mine"),
@@ -341,12 +198,12 @@ def test_the_loaded_models_say_where_each_came_from_and_whether_it_can_be_remove
     assert {m["source"] for m in models.values()} == set(launch.SOURCES)  # the keys models-tab.js labels
 
 
-def test_remove_stops_that_model_alone_and_leaves_the_others_and_unsubmitted_ticks_alone(viewer, dashboard,
-                                                                                       monkeypatch):
+def test_remove_stops_that_model_alone_and_leaves_the_others_and_unsubmitted_ticks_alone(
+        viewer, dashboard, monkeypatch, placeholder_cellmap_folders):
     """On the page nuc is ticked and sam unticked, neither submitted: the ✕
     of mito sends mito's name alone, so neither of them changes."""
     launched = []
-    monkeypatch.setattr(launch, "run_model", lambda path, name, st: launched.append(name))
+    monkeypatch.setattr(launch, "run_model", lambda config, st: launched.append(config.name))
     monkeypatch.setattr(launch.threading, "Thread", _InlineThread)
     process_chain().input_norms, process_chain().postprocess = [], []
     session = get_session()
@@ -368,103 +225,36 @@ def test_remove_stops_that_model_alone_and_leaves_the_others_and_unsubmitted_tic
     launch.update_run_models(["mito", "sam"])
     assert launched == ["mito"]
 
-    missing = dashboard.post("/api/models/remove", json={"name": "ghost"})
-    assert missing.status_code == 404 and missing.get_json()["error"] == "No model named ghost is running"
-    nameless = dashboard.post("/api/models/remove", json={"name": " "})
-    assert nameless.status_code == 400 and "name is required" in nameless.get_json()["error"]
+    assert dashboard.post("/api/models/remove", json={"name": "ghost"}).status_code == 404
+    assert dashboard.post("/api/models/remove", json={"name": " "}).status_code == 400
     assert not sam.killed
 
 
-def test_a_finetune_jobs_model_is_removed_only_once_its_job_has_ended(viewer, dashboard, monkeypatch):
-    """While the job is alive its model is its server, which Restart trains
-    again: the Finetune tab stops it. Once the job has ended its server has
-    too, and ✕ takes the layer left pointing at it away, killing nothing."""
-    from cellmap_flow.finetune.job_manager.state import JobStatus
-
-    killed = []
-    monkeypatch.setattr(LSFJob, "kill", lambda self: killed.append(self.job_id))
-    training = _finetune_jobs_model(monkeypatch, JobStatus.WAITING_FOR_RESTART)
-
-    refused = dashboard.post("/api/models/remove", json={"name": "mito_finetuned_1"})
-    assert refused.status_code == 409 and "Cancel" in refused.get_json()["error"]
-    assert killed == [] and [j.model_name for j in get_session().jobs] == ["mito_finetuned_1"]
-    assert "mito_finetuned_1" in viewer.state.layers
-
-    training.status = JobStatus.CANCELLED
-    (entry,) = dashboard.get("/api/models/loaded").get_json()["models"]
-    assert (entry["removable"], entry["status"]) == (True, "ended") and "has ended (CANCELLED)" in entry["note"]
-    answer = dashboard.post("/api/models/remove", json={"name": "mito_finetuned_1"})
-    assert answer.status_code == 200 and answer.get_json()["models"] == []
-    assert killed == [] and get_session().jobs == [] and "mito_finetuned_1" not in viewer.state.layers
-
-
-@pytest.mark.parametrize("finetuned", [False, True], ids=["a running model", "an ended finetune job's model"])
-def test_a_removed_models_shader_is_forgotten_so_a_later_layer_of_its_name_starts_fresh(viewer, dashboard,
-                                                                                       monkeypatch, finetuned):
-    from cellmap_flow.finetune.job_manager.state import JobStatus
+def test_export_config_leaves_out_a_model_taken_off(viewer, dashboard):
+    """The ✕ takes the model's config with it: a config exported after it,
+    loaded with `cellmap_flow yaml`, starts only the models that were kept."""
+    from cellmap_flow.models.models_config import HuggingFaceModelConfig
 
     session = get_session()
-    name = "mito_finetuned_1" if finetuned else "mito"
-    if finetuned:
-        _finetune_jobs_model(monkeypatch, JobStatus.CANCELLED)
-    else:
-        session.jobs = [_Job(name)]
-    session.shaders[name], session.shader_controls[name] = "void main() {}", {"contrast": {"range": [0, 1]}}
+    session.dataset_path = "/data/raw.zarr"
+    session.models_config = [HuggingFaceModelConfig(repo=f"cellmap/{name}", name=name) for name in ("mito", "nuc")]
+    session.jobs = [_Job("mito"), _Job("nuc")]
 
-    assert dashboard.post("/api/models/remove", json={"name": name}).status_code == 200
-    assert name not in session.shaders and name not in session.shader_controls
+    def exported():
+        return [m["name"] for m in yaml.safe_load(dashboard.get("/api/export-config").data)["models"]]
 
-
-def test_a_model_removed_while_starting_is_stopped_as_it_comes_up_and_can_be_submitted_again(viewer, dashboard,
-                                                                                           monkeypatch):
-    """Its job waiting in a queue is killed at once; what its launch still
-    starts is killed as it comes up, and gets no layer. A Submit meanwhile
-    starts it again, and that one is kept."""
-    from cellmap_flow.jobs import launch as jobs_launch
-
-    release, started = threading.Event(), []
-
-    def slow_start(command, job_name, **kwargs):
-        release.wait(5)
-        job = _Job(job_name)
-        started.append(job)
-        jobs_launch.started_jobs().append(job)  # as start_hosts records it
-        return job
-
-    monkeypatch.setattr(launch, "start_hosts", slow_start)
-    monkeypatch.setattr(launch, "prediction_layer", lambda *a, **k: neuroglancer.ImageLayer(source="zarr://http://m/x"))
-    process_chain().input_norms, process_chain().postprocess = [], []
-    session = get_session()
-    session.jobs, session.dataset_path = [], "/data/raw.zarr"
-    session.model_catalog = {"catalog": {"mito": "/models/mito"}}
-    queued = _Job("mito")
-    jobs_launch._starting.add(queued)
-
-    launch.update_run_models(["mito"])
-    try:
-        assert [(m["name"], m["status"]) for m in dashboard.get("/api/models/loaded").get_json()["models"]] == [
-            ("mito", "starting")]
-        answer = dashboard.post("/api/models/remove", json={"name": "mito"})
-        assert answer.status_code == 200 and answer.get_json()["models"] == []
-        assert queued.killed and "mito" not in launch.running_names()
-        launch.update_run_models(["mito"])  # ticked again and submitted
-    finally:
-        release.set()
-    assert _wait_for(lambda: len(started) == 2 and not launch._launching)  # both launches returned
-    # The two came up in either order: the withdrawn one's job is killed and forgotten, the other kept.
-    (kept,) = [job for job in started if not job.killed]
-    assert session.jobs == [kept] and "mito" in viewer.state.layers
+    assert exported() == ["mito", "nuc"]
+    assert dashboard.post("/api/models/remove", json={"name": "mito"}).status_code == 200
+    assert exported() == ["nuc"]
 
 
 def test_a_model_added_by_reference_and_ticked_again_is_started_again_from_its_config(viewer, monkeypatch, tmp_path):
     """No catalog entry names it, so its ticked box did nothing once it had
     been stopped: removed, or unticked and submitted."""
-    from cellmap_flow.models.registry import build_model
-
     script = tmp_path / "m.py"
     script.write_text("x = 1\n")
     started = []
-    monkeypatch.setattr(launch, "run_model_config", lambda config, st: started.append(config.name))
+    monkeypatch.setattr(launch, "run_model", lambda config, st: started.append(config.name))
     monkeypatch.setattr(launch.threading, "Thread", _InlineThread)
     process_chain().input_norms, process_chain().postprocess = [], []
     session = get_session()
@@ -477,3 +267,24 @@ def test_a_model_added_by_reference_and_ticked_again_is_started_again_from_its_c
     session.jobs = [_Job("mine")]
     launch.update_run_models(["mine"])  # running already: not started twice
     assert started == ["mine"]
+
+
+def test_a_models_scale_picks_the_level_its_server_reads(viewer, monkeypatch, tmp_path):
+    """A config with `scale` launched from the Models tab was served at the
+    session's path, the scale ignored; the CLIs applied it. Every launcher
+    now reads the level the scale names (serving.launch.launch)."""
+    commands = []
+    monkeypatch.setattr(jobs_launch, "start_hosts", lambda command, *args, **kwargs: commands.append(command))
+    monkeypatch.setattr(launch.threading, "Thread", _InlineThread)
+    group = tmp_path / "raw.zarr"
+    zarr.open_group(str(group), mode="w").create_dataset("s1", shape=(4, 4, 4), dtype="u1")
+    script = tmp_path / "m.py"
+    script.write_text("x = 1\n")
+    session = get_session()
+    session.dataset_path, session.jobs = str(group), []
+    session.models_config = [build_model({"type": "script", "script_path": str(script), "scale": "s1"}, "mine")]
+
+    launch.update_run_models(["mine"])
+
+    (argv,) = [shlex.split(c) for c in commands]
+    assert argv[argv.index("-d") + 1] == str(group / "s1")

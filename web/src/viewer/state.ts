@@ -6,6 +6,7 @@
 // layer. No DOM here, so all of it is unit-tested.
 import { AXIS_NAMES, LAYOUT_DEPTH_SLOT, slotAxis } from "../ai-annotate/geometry";
 import type { LayerSpec } from "../contracts";
+import { PYTHON } from "../generated/python-data";
 
 /** A layer in the state: at least its name; `visible: false` when hidden
  * (Neuroglancer leaves the key out when it is shown). */
@@ -55,22 +56,10 @@ export function layersOf(state: NgState | null | undefined): NgLayer[] {
  * colours name segments of that data; the channel shown (local dimensions,
  * position, channel dimensions) counts that data's channels; the shader and
  * its controls are over its range (the app sets its own for a new chain);
- * annotations and a legacy top-level transform are the source's own. The
- * same list as cellmap_flow/viewer/layers.py's SOURCE_BOUND_LAYER_KEYS
- * (tests/web/test_layer_carry.py holds them equal). */
-export const SOURCE_BOUND_LAYER_KEYS: readonly string[] = [
-  "annotations",
-  "channelDimensions",
-  "equivalences",
-  "localDimensions",
-  "localPosition",
-  "segmentColors",
-  "segmentQuery",
-  "segments",
-  "shader",
-  "shaderControls",
-  "transform",
-];
+ * annotations and a legacy top-level transform are the source's own.
+ * cellmap_flow/viewer/layers.py's SOURCE_BOUND_LAYER_KEYS, exported
+ * (generated/python-data.ts), so both dashboards keep the same. */
+export const SOURCE_BOUND_LAYER_KEYS: readonly string[] = PYTHON.viewer.source_bound_layer_keys;
 const SOURCE_BOUND = new Set(SOURCE_BOUND_LAYER_KEYS);
 
 /** Every URL a layer's source names, in order: a string, a {url, ...}, or

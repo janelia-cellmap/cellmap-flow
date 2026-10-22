@@ -1,4 +1,4 @@
-"""The model types cellmap-flow knows, and how a model config is built from strings.
+"""The model types cellmap-flow knows, and how a model config is built from an entry.
 
 Every ModelConfig subclass is a model type: the built-in ones in
 ``models/configs`` (imported from models_config) and any that a plugin
@@ -11,25 +11,22 @@ Nothing is cached. Plugins are loaded when ``cellmap_flow`` is imported, and
 a plugin or a test can define a type at any time, so each call walks the
 subclasses as they are at that moment.
 
-Strings become constructor arguments in three ways, kept apart on purpose
-because each reproduces what its caller has always done:
-
-- ``coerce_cli_args``: click's strings. ``"8,8,8"`` for a tuple becomes
-  ``(8, 8, 8)``, ints.
-- ``coerce_form_params``: the dashboard form's strings. JSON, or
-  ``"8,8,8"`` becomes ``(8.0, 8.0, 8.0)``, floats; ``instantiate_model_config``
-  builds the form's model with them.
-- ``build_model``: YAML values, after ``YAML_ALIASES`` and the voxel-size
-  shorthands, then ``coerce_cli_args``; ``build_models`` for a YAML's whole
-  ``models``.
+A model entry (``models.entry``) becomes a config in one place,
+``build_model``: the entry's keys are matched to the constructor's arguments
+(``YAML_ALIASES`` first), its values coerced by the constructor's
+annotations (``entry.coerce``), its ``env`` checked, and the required
+arguments checked before the constructor, which may load files, runs. Every
+launcher and the server build models through it, so the same entry gives
+the same config from a YAML, ``cellmap_flow infer``, the dashboard's form,
+its pickers and ``serve``; ``build_models`` builds a YAML's whole ``models``.
 
 A bad YAML entry or type name is a ``config.yaml.ConfigError``.
 
 A model entry's ``env`` (the environment its server runs in, see
-``models.envs``) is not a constructor argument: ``build_model`` and
-``instantiate_model_config`` check it and set it on the built config, and
-the dashboard's form offers it beside each type's arguments. Left out, the
-type's ``default_env`` applies (``ModelConfig.effective_env``).
+``models.envs``) is not a constructor argument: ``build_model`` checks it
+and sets it on the built config, and the dashboard's form offers it beside
+each type's arguments. Left out, the type's ``default_env`` applies
+(``ModelConfig.effective_env``).
 
 Importing this module imports neither torch, flask, huggingface_hub nor
 ``cellmap_flow.globals``. The model config classes, which bring numpy and
@@ -39,12 +36,12 @@ bioimageio, dacapo or cellmap_models either.
 """
 
 import inspect
-import json
 import logging
 import os
-from typing import Any, Dict, List, Tuple, get_type_hints
+from typing import Any, Dict, List, Tuple
 
 from cellmap_flow.config.yaml import ConfigError
+from cellmap_flow.models.entry import coerce
 
 logger = logging.getLogger(__name__)
 
@@ -151,16 +148,19 @@ def model_types() -> Dict[str, type]:
 
 
 def _match_type(mtype: str, types: Dict[str, type]):
-    """The class for a YAML ``type:``: any case, with ``_`` or ``-`` or neither."""
+    """The class for a ``type``: its registered name in any case, with ``_``
+    or ``-`` or neither; or its class name ("ScriptModelConfig"), which the
+    dashboard's form posted before 0.3.0."""
     normalized = mtype.lower().replace("_", "-")
     for type_name, cls in types.items():
         if type_name == normalized or mtype.lower() == type_name.replace("-", ""):
             return cls
-    return None
+    return next((cls for cls in types.values() if cls.__name__ == mtype), None)
 
 
 def model_type(name: str) -> type:
-    """The class registered as ``name``, matched as a YAML ``type:`` is.
+    """The class registered as ``name``: a type name as a YAML ``type:``
+    gives it, or a class name.
 
     Raises:
         ConfigError: no type has that name; the message lists the valid ones.
@@ -174,21 +174,6 @@ def model_type(name: str) -> type:
     return cls
 
 
-def model_classes() -> Dict[str, type]:
-    """Every model type by class name (``"ScriptModelConfig"``), plugins included."""
-    classes: Dict[str, type] = {}
-    for cls in _subclasses(_model_config_base()):
-        taken = classes.get(cls.__name__)
-        if taken is None:
-            classes[cls.__name__] = cls
-        elif taken is not cls:
-            logger.warning(
-                f"Two model config classes are called {cls.__name__}; "
-                f"{cls.__module__}.{cls.__qualname__} is left out"
-            )
-    return classes
-
-
 def required_params(cls) -> List[str]:
     """The constructor arguments a user must give: no default, and not name or scale."""
     return [
@@ -200,46 +185,36 @@ def required_params(cls) -> List[str]:
     ]
 
 
-def build_model(entry: Dict[str, Any], name: str, base_dir: str = None):
-    """A model config from a YAML model entry; ``name`` is its key in the YAML.
+def build_model(entry: Dict[str, Any], name: str = None, base_dir: str = None):
+    """The model config a model entry describes (``models.entry``).
 
-    ``base_dir`` is the YAML file's folder, when there is one: a relative
-    path in one of the type's ``config_relative_paths`` is taken from there
-    rather than from the working directory.
+    ``name`` is the model's name when the entry gives none: its key under a
+    YAML's ``models``, or what a launcher calls it. ``base_dir`` is the YAML
+    file's folder, when there is one: a relative path in one of the type's
+    ``config_relative_paths`` is taken from there rather than from the
+    working directory.
 
     Raises:
         ConfigError: the entry does not describe a model that can be built.
     """
-    model_name = name
     if not isinstance(entry, dict):
-        raise ConfigError(f"Model '{model_name}' must be a mapping, got {entry!r}")
+        raise ConfigError(f"Model '{name or '?'}' must be a mapping, got {entry!r}")
     mtype = entry.get("type")
+    model_name = entry.get("name") or name or mtype
     if not mtype:
         raise ConfigError(f"Model '{model_name}' missing 'type' field")
 
     types = model_types()
-    config_class = _match_type(mtype, types)
+    config_class = _match_type(str(mtype), types)
     if config_class is None:
         raise ConfigError(
             f"Model '{model_name}' has unrecognized type '{mtype}'. "
             f"Valid types are: {', '.join(sorted(types))}"
         )
 
-    kwargs = {}
-    for yaml_key, yaml_value in entry.items():
-        if yaml_key in ("type", ENV_KEY):
-            continue
-        param_name = YAML_ALIASES.get(yaml_key, yaml_key)
-        # A voxel size may be written as one number or as a list.
-        if param_name in ("input_voxel_size", "output_voxel_size"):
-            if isinstance(yaml_value, int):
-                yaml_value = (yaml_value, yaml_value, yaml_value)
-            elif isinstance(yaml_value, list):
-                yaml_value = tuple(yaml_value)
-        kwargs[param_name] = yaml_value
-
-    if "name" not in kwargs:
-        kwargs["name"] = model_name
+    kwargs = {YAML_ALIASES.get(key, key): value for key, value in entry.items() if key not in ("type", ENV_KEY)}
+    if kwargs.get("name") is None and name is not None:
+        kwargs["name"] = name
     for param_name in getattr(config_class, "config_relative_paths", ()):
         value = kwargs.get(param_name)
         relative = isinstance(value, str) and value and "://" not in value and not os.path.isabs(
@@ -249,17 +224,20 @@ def build_model(entry: Dict[str, Any], name: str, base_dir: str = None):
     # Checked before the constructor, which may load files, runs.
     env = _checked_env(entry.get(ENV_KEY), model_name)
 
-    processed_kwargs = coerce_cli_args(config_class, kwargs)
+    try:
+        arguments = coerce(config_class, kwargs)
+    except ValueError as e:
+        raise ConfigError(f"Model '{model_name}' ({mtype}): {e}") from e
 
     required = required_params(config_class)
     for param_name in required:
-        if param_name in processed_kwargs:
+        if param_name in arguments:
             continue
-        if param_name == "output_voxel_size" and "input_voxel_size" in processed_kwargs:
-            processed_kwargs["output_voxel_size"] = processed_kwargs["input_voxel_size"]
+        if param_name == "output_voxel_size" and "input_voxel_size" in arguments:
+            arguments["output_voxel_size"] = arguments["input_voxel_size"]
             logger.warning(
                 f"Model '{model_name}' ({mtype}): 'output_voxel_size' not specified, "
-                f"using 'input_voxel_size' ({processed_kwargs['input_voxel_size']}) as default"
+                f"using 'input_voxel_size' ({arguments['input_voxel_size']}) as default"
             )
             continue
         # Given under an alias, but as null: left for the constructor to reject.
@@ -272,12 +250,12 @@ def build_model(entry: Dict[str, Any], name: str, base_dir: str = None):
             )
 
     try:
-        model = config_class(**processed_kwargs)
+        model = config_class(**arguments)
         logger.debug(f"Created model '{model_name}': {model}")
     except TypeError as e:
         raise ConfigError(
             f"Error creating model '{model_name}' ({mtype}): {e}. "
-            f"Provided parameters: {processed_kwargs}. "
+            f"Provided parameters: {arguments}. "
             f"Required parameters: {required}"
         ) from e
     except (ValueError, OSError) as e:
@@ -373,71 +351,6 @@ def _parse_type_annotation(annotation) -> Tuple[type, bool]:
     return str, False
 
 
-def _parse_comma_separated_values(value: str, target_type: type) -> Any:
-    """``"1,2,3"`` as ``[1, 2, 3]`` for int; a single value is a one-item list."""
-    if value is None:
-        return None
-    if "," in value:
-        values = [v.strip() for v in value.split(",")]
-        if target_type == int:
-            return [int(v) for v in values]
-        elif target_type == float:
-            return [float(v) for v in values]
-        return values
-    if target_type == int:
-        return [int(value)]
-    elif target_type == float:
-        return [float(value)]
-    return [value]
-
-
-def coerce_cli_args(cls, kwargs: Dict[str, Any]) -> Dict[str, Any]:
-    """``kwargs`` from the command line, as constructor arguments for ``cls``.
-
-    Only list and tuple arguments given as strings are converted (from
-    comma-separated values); None values and names ``cls`` does not take
-    are dropped, and everything else is passed through as it is.
-    """
-    sig = inspect.signature(cls.__init__)
-    processed_kwargs = {}
-
-    try:
-        type_hints = get_type_hints(cls.__init__)
-    except Exception:
-        type_hints = {}
-
-    for param_name, param_info in sig.parameters.items():
-        if param_name == "self":
-            continue
-
-        value = kwargs.get(param_name)
-        if value is None:
-            continue
-
-        annotation = type_hints.get(param_name, param_info.annotation)
-        origin = getattr(annotation, "__origin__", None)
-
-        if origin in (list, tuple) and isinstance(value, str):
-            args = getattr(annotation, "__args__", ())
-            element_type = args[0] if args else str
-            base_element_type, _ = _parse_type_annotation(element_type)
-            parsed_values = _parse_comma_separated_values(value, base_element_type)
-            processed_kwargs[param_name] = (
-                tuple(parsed_values) if origin == tuple else parsed_values
-            )
-        elif annotation == tuple and isinstance(value, str):
-            # A bare `tuple` annotation: ints if they parse, else strings.
-            try:
-                parsed_values = _parse_comma_separated_values(value, int)
-            except (ValueError, TypeError):
-                parsed_values = _parse_comma_separated_values(value, str)
-            processed_kwargs[param_name] = tuple(parsed_values)
-        else:
-            processed_kwargs[param_name] = value
-
-    return processed_kwargs
-
-
 def _click_option(param_name: str, param_info: inspect.Parameter, used_short_names=None):
     """The ``click.option`` arguments for one constructor argument, or None for self.
 
@@ -528,91 +441,6 @@ def print_available_models(cli_command_name: str = "cellmap_flow"):
 
 # --- the dashboard's model form ------------------------------------------------
 
-def coerce_form_params(cls, params: Dict[str, Any]) -> Dict[str, Any]:
-    """The model form's values, as constructor arguments for ``cls``.
-
-    Raises:
-        ValueError: a required argument is missing or empty.
-    """
-    parsed_params = {}
-    sig = inspect.signature(cls.__init__)
-
-    for param_name, param in sig.parameters.items():
-        if param_name in ("self", "cls") or param_name not in params:
-            continue
-
-        value = params[param_name]
-        if value is None or value == "":
-            # An empty field leaves an optional argument at its default.
-            if param.default != inspect.Parameter.empty:
-                continue
-            else:
-                raise ValueError(f"Required parameter '{param_name}' is missing")
-
-        if param.annotation != inspect.Parameter.empty:
-            annotation = param.annotation
-
-            if hasattr(annotation, "__origin__") and annotation.__origin__ in (list, tuple):
-                if isinstance(value, str):
-                    try:
-                        value = json.loads(value)
-                    except json.JSONDecodeError:
-                        value = [v.strip() for v in value.split(",")]
-                if annotation.__origin__ == tuple:
-                    value = tuple(value)
-
-            # A dict (a finetuned model's base_model) comes as JSON.
-            elif annotation == dict:
-                if isinstance(value, str):
-                    value = json.loads(value)
-
-            elif annotation in (int, float):
-                value = annotation(value)
-
-            # A bare tuple: JSON, or "16, 16, 16" as floats.
-            elif "tuple" in str(annotation).lower():
-                if isinstance(value, str):
-                    try:
-                        value = json.loads(value)
-                    except Exception:
-                        value = tuple(float(v.strip()) for v in value.split(","))
-                if not isinstance(value, tuple):
-                    value = tuple(value)
-
-        parsed_params[param_name] = value
-
-    return parsed_params
-
-
-def instantiate_model_config(class_name: str, params: Dict[str, Any]) -> Any:
-    """The model config the dashboard's model form describes.
-
-    ``class_name`` is a model type's class name (``"ScriptModelConfig"``),
-    plugins' included, and ``params`` the form's values
-    (``coerce_form_params``).
-
-    Raises:
-        ValueError: the class is unknown, or the values do not build one.
-    """
-    classes = model_classes()
-    if class_name not in classes:
-        raise ValueError(f"Unknown model config class: {class_name}")
-
-    cls = classes[class_name]
-    params = dict(params)
-    env = params.pop(ENV_KEY, None)
-    parsed_params = coerce_form_params(cls, params)
-    env = _checked_env(env, parsed_params.get("name") or class_name)
-
-    try:
-        model = cls(**parsed_params)
-    except Exception as e:
-        raise ValueError(f"Failed to instantiate {class_name}: {str(e)}")
-    if env:
-        model.env = env
-    return model
-
-
 def parameter_info(cls) -> Dict[str, Any]:
     """Each constructor argument of ``cls``: name, required, description, type and default."""
     sig = inspect.signature(cls.__init__)
@@ -662,16 +490,17 @@ def _input_type(param_name: str, param_info: Dict[str, Any]) -> str:
     return "text"
 
 
-def describe_types(classes=None) -> Dict[str, Dict[str, Any]]:
-    """What the dashboard's model form offers, by class name.
+def describe_types() -> Dict[str, Dict[str, Any]]:
+    """What the dashboard's model form offers, by type name (``model_types``).
 
-    ``classes`` (class name -> class) defaults to ``model_classes()``.
+    Each type's ``display_name``, ``description``, ``parameters``
+    (``parameter_info`` with the form control for each), its ``type``, the
+    name the form posts, and its ``class_name``.
     """
-    if classes is None:
-        classes = model_classes()
     registry = {}
 
-    for class_name, cls in classes.items():
+    for type_name, cls in model_types().items():
+        class_name = cls.__name__
         # ScriptModelConfig -> "Script Model", CellMapModelConfig -> "Cell Map Model".
         display_name = class_name.replace("Config", "").replace("ModelConfig", "")
         display_name = "".join(
@@ -681,8 +510,8 @@ def describe_types(classes=None) -> Dict[str, Dict[str, Any]]:
         params = parameter_info(cls)
         for param_name, param_info in params.items():
             param_info["input_type"] = _input_type(param_name, param_info)
-        # Every type's, though no constructor takes it; instantiate_model_config
-        # takes it off before building.
+        # Every type's, though no constructor takes it; build_model takes it
+        # off before building.
         params.setdefault(ENV_KEY, {
             "name": ENV_KEY,
             "required": False,
@@ -691,10 +520,11 @@ def describe_types(classes=None) -> Dict[str, Dict[str, Any]]:
             "input_type": "text",
         })
 
-        registry[class_name] = {
+        registry[type_name] = {
             "display_name": display_name,
             "description": f"Create a {display_name} model configuration",
             "parameters": params,
+            "type": type_name,
             "class_name": class_name,
         }
 

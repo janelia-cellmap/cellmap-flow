@@ -13,10 +13,10 @@
 // others (EuclideanDistance, Dilate, ChannelSelector) need a label volume or
 // a library, and a chain that names one is refused before serving, with the
 // error below naming it, rather than silently skipped as the prototype did.
+// The Python classes of those here say `browser = True`, which is what the
+// browser page offers (web/test/unit/python-data.test.ts holds the two equal).
 import type { Step, StepValue } from "../contracts";
 import { compileExpression } from "./expression";
-
-export const SUPPORTED_NORMALIZERS: readonly string[] = ["MinMaxNormalizer", "ZScoreNormalizer", "LambdaNormalizer"];
 
 type Normalizer = (data: Float32Array) => void;
 
@@ -36,41 +36,49 @@ export function asBool(value: StepValue | undefined, fallback: boolean): boolean
   return Boolean(value);
 }
 
+/** The normalizers the browser runs, by the Python class name the dashboard
+ * sends: each builds the step from its parameters, parsed as the Python
+ * constructor parses them (throwing on a bad one). */
+const NORMALIZERS: Record<string, (step: Step) => Normalizer> = {
+  MinMaxNormalizer: (step) => {
+    // clip to [min, max], scale to [0, 1], optionally flip
+    const min = asNumber(step.min_value, 0.0, "MinMaxNormalizer.min_value");
+    const max = asNumber(step.max_value, 255.0, "MinMaxNormalizer.max_value");
+    const invert = asBool(step.invert, false);
+    const range = max - min;
+    return (data) => {
+      for (let i = 0; i < data.length; i++) {
+        const v = (Math.min(Math.max(data[i], min), max) - min) / range;
+        data[i] = invert ? 1 - v : v;
+      }
+    };
+  },
+  ZScoreNormalizer: (step) => {
+    const mean = asNumber(step.mean, 0.0, "ZScoreNormalizer.mean");
+    const std = asNumber(step.std, 1.0, "ZScoreNormalizer.std");
+    return (data) => {
+      for (let i = 0; i < data.length; i++) data[i] = (data[i] - mean) / std;
+    };
+  },
+  LambdaNormalizer: (step) => {
+    // Scalar arithmetic on x, parsed against a whitelist (expression.ts);
+    // the Python class checks its expression in the constructor too.
+    const fn = compileExpression(step.expression);
+    return (data) => {
+      for (let i = 0; i < data.length; i++) data[i] = fn(data[i]);
+    };
+  },
+};
+
+export const SUPPORTED_NORMALIZERS: readonly string[] = Object.keys(NORMALIZERS);
+
 function makeNormalizer(step: Step): Normalizer {
-  switch (step.name) {
-    case "MinMaxNormalizer": {
-      // clip to [min, max], scale to [0, 1], optionally flip
-      const min = asNumber(step.min_value, 0.0, "MinMaxNormalizer.min_value");
-      const max = asNumber(step.max_value, 255.0, "MinMaxNormalizer.max_value");
-      const invert = asBool(step.invert, false);
-      const range = max - min;
-      return (data) => {
-        for (let i = 0; i < data.length; i++) {
-          const v = (Math.min(Math.max(data[i], min), max) - min) / range;
-          data[i] = invert ? 1 - v : v;
-        }
-      };
-    }
-    case "ZScoreNormalizer": {
-      const mean = asNumber(step.mean, 0.0, "ZScoreNormalizer.mean");
-      const std = asNumber(step.std, 1.0, "ZScoreNormalizer.std");
-      return (data) => {
-        for (let i = 0; i < data.length; i++) data[i] = (data[i] - mean) / std;
-      };
-    }
-    case "LambdaNormalizer": {
-      // Scalar arithmetic on x, parsed against a whitelist (expression.ts);
-      // the Python class checks its expression in the constructor too.
-      const fn = compileExpression(step.expression);
-      return (data) => {
-        for (let i = 0; i < data.length; i++) data[i] = fn(data[i]);
-      };
-    }
-    default:
-      throw new Error(
-        `normalizer ${JSON.stringify(step.name)} is not available in the browser (supported: ${SUPPORTED_NORMALIZERS.join(", ")})`,
-      );
+  if (!Object.hasOwn(NORMALIZERS, step.name)) {
+    throw new Error(
+      `normalizer ${JSON.stringify(step.name)} is not available in the browser (supported: ${SUPPORTED_NORMALIZERS.join(", ")})`,
+    );
   }
+  return NORMALIZERS[step.name](step);
 }
 
 /** Every step's constructor run, to reject a chain before anything is served. */

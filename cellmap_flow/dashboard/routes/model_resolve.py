@@ -68,10 +68,9 @@ def add_model():
     wrong with the entry; a 409, a model of that name already running.
     """
     from cellmap_flow.config.yaml import ConfigError
-    from cellmap_flow.dashboard.services.launch import _launch, run_model_config, running_names
+    from cellmap_flow.dashboard.services.launch import _launch, drop_config, run_model, running_names
     from cellmap_flow.dashboard.state import get_session
     from cellmap_flow.models.registry import build_model
-    from cellmap_flow.pipeline_spec import PipelineSpec
 
     body, error = parse(AddModel, request.get_json(silent=True))
     if error:
@@ -87,9 +86,8 @@ def add_model():
         model_config = build_model(entry, name)
     except (ConfigError, ValueError, TypeError) as e:
         return jsonify({"success": False, "error": str(e)}), 400
-    session.models_config = [mc for mc in session.models_config if getattr(mc, "name", None) != name]
+    drop_config(name)
     session.models_config.append(model_config)
-    st_data = PipelineSpec.from_steps(session.input_norms, session.postprocess).to_url_blob()
-    _launch(name, run_model_config, model_config, st_data, daemon=True)
+    _launch(name, run_model, model_config, session.layer_blob(), daemon=True)
     logger.info(f"Adding model {name} ({entry.get('type')})")
     return jsonify({"success": True, "name": name})

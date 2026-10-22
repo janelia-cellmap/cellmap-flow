@@ -369,3 +369,15 @@ def dashboard():
     from cellmap_flow.dashboard.app import app
 
     return app.test_client()
+
+
+@pytest.fixture
+def placeholder_cellmap_folders(monkeypatch):
+    """CellMapModelConfig reads its folder's metadata.json when constructed
+    (the dashboard builds one for each catalog model it starts), and tests
+    name placeholder folders: the model object is a stand-in that only knows
+    its folder."""
+    from types import SimpleNamespace
+
+    cellmap_model = pytest.importorskip("cellmap_models.model_export.cellmap_model")
+    monkeypatch.setattr(cellmap_model, "CellmapModel", lambda folder_path: SimpleNamespace(folder_path=folder_path))

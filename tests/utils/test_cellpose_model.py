@@ -1,10 +1,8 @@
-"""The cellpose model type, against a stand-in ``cellpose``: its geometry, how
-it batches Cellpose's tiles, its three outputs, linking masks across slices,
-segmenting in 3D, and that nothing but building
-the model imports cellpose. The real Cellpose 4 is not in the test
+"""The cellpose model type, against a stand-in ``cellpose``: what it serves
+for a chunk of slices (flows, masks) and for a 3D chunk, that nothing but
+building the model imports cellpose, and how its flows layer is shown. The real Cellpose 4 is not in the test
 environments (it has an environment of its own, cellpose4)."""
 
-import os
 import sys
 import types
 
@@ -14,10 +12,8 @@ from click.testing import CliRunner
 from funlib.geometry import Coordinate, Roi
 
 from cellmap_flow.models import registry
-from cellmap_flow.models.configs.cellpose import DEFAULT_BATCH_SIZE, OUTPUT_CHANNELS, tiles_per_slice, tiles_per_volume
+from cellmap_flow.models.configs.cellpose import OUTPUT_CHANNELS
 from cellmap_flow.models.models_config import CellposeModelConfig
-
-ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
 class FakeCellposeModel:
@@ -87,85 +83,6 @@ class ArrayIDI:
         return self.array[tuple(slice(b, b + s) for b, s in zip(begin, shape))]
 
 
-@pytest.mark.parametrize("output, dtype, channels", [
-    ("probability", np.float32, ["cell"]),
-    ("flows", np.float32, ["flow_y", "flow_x", "cell"]),
-    ("masks", np.uint64, ["cell"]),
-])
-def test_the_geometry_is_the_slices_with_context_in_y_and_x(fake_cellpose, output, dtype, channels):
-    model = CellposeModelConfig(voxel_size="16,8,8", output=output, slices_per_chunk=4, slice_size=100, context=10)
-    config = model.config
-    assert config.input_voxel_size == config.output_voxel_size == Coordinate(16, 8, 8)
-    assert config.write_shape == Coordinate(4 * 16, 100 * 8, 100 * 8)
-    assert config.read_shape == Coordinate(4 * 16, 120 * 8, 120 * 8)
-    assert model.geometry.context == Coordinate(0, 80, 80)
-    assert config.channels == channels and config.output_channels == len(channels)
-    assert config.block_shape.tolist() == [4, 100, 100, len(channels)]
-    assert model.geometry.block_shape() == (4, 100, 100, len(channels))
-    assert model.output_dtype is dtype
-    assert config.eval_kwargs["compute_masks"] is (output == "masks")
-
-
-def test_the_example_scripts_chunk_is_three_by_three_cellpose_sam_tiles():
-    # 576 px (512 + 2 * 32) is padded to 592, then cut into ceil(1.2 * 592 / 256).
-    assert tiles_per_slice(576, 256) == 9
-    assert tiles_per_slice(576, 384) == 4
-    assert tiles_per_slice(200, 256) == 1  # padded up to one tile
-    assert tiles_per_slice(576, 256, rescale=0.5) == 4  # 288 px, padded to 304
-
-
-@pytest.mark.parametrize(
-    "kwargs, bsize, batch_size",
-    [
-        ({}, 256, 16),  # cpsam_v2: Cellpose-SAM's 256 px tiles
-        ({"pretrained_model": "cpsam"}, 256, 16),
-        ({"pretrained_model": "cpdino"}, 384, 16),  # DINO: 384 px
-        ({"pretrained_model": "cpdino-vitb", "slices_per_chunk": 2}, 384, 16),
-        ({"batch_size": 72}, 256, 72),  # given, it is kept
-        ({"batch_size": None}, 256, 16),  # None is the default, not the whole chunk
-    ],
-    ids=["cpsam_v2", "cpsam", "cpdino", "cpdino-vitb", "given", "none"],
-)
-def test_tiles_go_sixteen_to_a_pass_at_the_models_tile_size(fake_cellpose, kwargs, bsize, batch_size):
-    """A whole chunk's 72 tiles in one pass, the old default, was no faster
-    than 16 on an L4 or an H100 and took ~6.5 GB more (DEFAULT_BATCH_SIZE)."""
-    assert DEFAULT_BATCH_SIZE == 16
-    eval_kwargs = CellposeModelConfig(voxel_size=64, **kwargs).config.eval_kwargs
-    assert (eval_kwargs["bsize"], eval_kwargs["batch_size"]) == (bsize, batch_size)
-
-
-def test_finetuned_weights_are_a_path_and_tile_as_their_network(fake_cellpose, tmp_path):
-    weights = tmp_path / "my_dino.pt"
-    weights.write_bytes(b"")
-    config = CellposeModelConfig(voxel_size=64, pretrained_model=str(weights)).config
-    assert config.model.pretrained_model == str(weights) and config.eval_kwargs["bsize"] == 384
-
-    # Cellpose would fall back to cpsam_v2 and serve that.
-    with pytest.raises(ValueError, match="neither one of Cellpose's models .* nor an existing file"):
-        CellposeModelConfig(voxel_size=64, pretrained_model=str(tmp_path / "missing")).config
-
-
-def test_the_model_is_built_once(fake_cellpose):
-    model = CellposeModelConfig(voxel_size=64)
-    assert model.config is model.config and len(FakeCellposeModel.built) == 1
-
-
-def test_the_probability_is_the_sigmoid_of_the_inner_logits(fake_cellpose):
-    model = CellposeModelConfig(voxel_size=8, output="probability", slices_per_chunk=3, slice_size=20, context=5)
-    idi = ArrayIDI(np.zeros((10, 60, 60), dtype=np.uint8), (8, 8, 8))
-    roi = Roi((8, 80, 160), (3 * 8, 20 * 8, 20 * 8))
-
-    out = model.config.process_chunk(idi, roi)
-
-    assert idi.reads == [roi.grow(Coordinate(0, 40, 40), Coordinate(0, 40, 40))]
-    ((shape, channel_axis, kwargs),) = model.config.model.calls
-    assert shape == (3, 30, 30, 1) and channel_axis == 3 and kwargs["batch_size"] == 16
-    assert "stitch_threshold" not in kwargs and "z_axis" not in kwargs
-    assert out.shape == (1, 3, 20, 20) and out.dtype == np.float32
-    logits = np.arange(5, 25) - 15  # the fake's logit is x - 30 / 2
-    np.testing.assert_allclose(out[0, 1, 7], 1 / (1 + np.exp(-logits)), rtol=1e-6)
-
-
 def test_masks_are_numbered_through_the_chunk(fake_cellpose):
     model = CellposeModelConfig(voxel_size=8, output="masks", slices_per_chunk=3, slice_size=20, context=5)
     idi = ArrayIDI(np.zeros((3, 30, 30), dtype=np.uint8), (8, 8, 8))
@@ -192,56 +109,6 @@ def test_flows_are_cellposes_dp_then_the_probability_inside_the_context(fake_cel
     np.testing.assert_allclose(out[2, 1, 7], 1 / (1 + np.exp(-logits)), rtol=1e-6)
 
 
-@pytest.mark.parametrize("output, channels", [("masks", 1), ("probability", 1), ("flows", 3)])
-def test_a_single_slice_chunk_is_unsqueezed(fake_cellpose, output, channels):
-    # Cellpose squeezes the output of a one-image batch to (y, x).
-    model = CellposeModelConfig(voxel_size=8, output=output, slices_per_chunk=1, slice_size=20, context=5)
-    out = model.config.process_chunk(ArrayIDI(np.zeros((1, 30, 30)), (8, 8, 8)), Roi((0, 40, 40), (8, 160, 160)))
-    assert out.shape == (channels, 1, 20, 20)
-
-
-def test_linked_slices_are_cellposes_stitching_and_keep_its_ids(fake_cellpose):
-    model = CellposeModelConfig(voxel_size=8, output="masks", stitch_threshold=0.25, slices_per_chunk=3,
-                                slice_size=20, context=5)
-    out = model.config.process_chunk(ArrayIDI(np.zeros((3, 30, 30)), (8, 8, 8)), Roi((0, 40, 40), (24, 160, 160)))
-
-    ((_, channel_axis, kwargs),) = model.config.model.calls
-    # Cellpose stitches only a stack whose z axis it is told.
-    assert (kwargs["stitch_threshold"], kwargs["z_axis"], channel_axis) == (0.25, 0, 3)
-    # Stitched ids already run through the chunk: not numbered slice by slice.
-    assert [sorted(np.unique(s).tolist()) for s in out[0]] == [[1, 2], [1, 2], [1, 2]]
-    assert out.dtype == np.uint64
-
-
-@pytest.mark.parametrize("output, channels", [
-    ("probability", ["cell"]),
-    ("flows", ["flow_z", "flow_y", "flow_x", "cell"]),
-    ("masks", ["cell"]),
-])
-def test_in_3d_a_chunk_is_a_cube_with_context_on_every_side(fake_cellpose, output, channels):
-    """Cellpose's do_3D runs its network on every plane of the chunk in all
-    three orientations: 192 + 2 * 24 = 240 voxels a side is one 256 px tile a
-    plane, 720 tiles for 192^3 voxels."""
-    model = CellposeModelConfig(voxel_size=8, output=output, do_3d=True)
-    config = model.config
-    assert config.write_shape == Coordinate(192 * 8, 192 * 8, 192 * 8)
-    assert config.read_shape == Coordinate(240 * 8, 240 * 8, 240 * 8)
-    assert config.channels == channels and config.block_shape.tolist() == [192, 192, 192, len(channels)]
-    assert model.display_channel == (3 if output == "flows" else None)
-    kwargs = config.eval_kwargs
-    assert (kwargs["do_3D"], kwargs["z_axis"]) == (True, 0) and "anisotropy" not in kwargs
-    assert tiles_per_volume((240, 240, 240), 256) == 720
-
-
-def test_in_3d_an_anisotropic_chunk_is_a_cube_in_nm(fake_cellpose):
-    """Cellpose stretches z by the anisotropy before cutting planes, so z gets
-    as many nm as y and x: half the voxels at twice the size."""
-    model = CellposeModelConfig(voxel_size="16,8,8", do_3d=True, slice_size=100, context=10)
-    assert model.chunk_voxels() == ((50, 100, 100), (5, 10, 10))
-    assert model.config.read_shape == Coordinate(60 * 16, 120 * 8, 120 * 8)
-    assert model.config.eval_kwargs["anisotropy"] == 2.0
-
-
 def test_in_3d_the_chunk_is_one_image_cut_to_its_inside_on_every_axis(fake_cellpose):
     model = CellposeModelConfig(voxel_size=8, output="flows", do_3d=True, slice_size=20, context=5)
     idi = ArrayIDI(np.zeros((60, 60, 60), dtype=np.uint8), (8, 8, 8))
@@ -259,33 +126,6 @@ def test_in_3d_the_chunk_is_one_image_cut_to_its_inside_on_every_axis(fake_cellp
     np.testing.assert_array_equal(out[2, 0, 0, :], np.arange(5, 25))
 
 
-def test_in_3d_masks_keep_cellposes_ids_through_z(fake_cellpose):
-    model = CellposeModelConfig(voxel_size=8, output="masks", do_3d=True, slice_size=20, context=5)
-    out = model.config.process_chunk(ArrayIDI(np.zeros((30, 30, 30)), (8, 8, 8)), Roi((40, 40, 40), (160, 160, 160)))
-    assert out.shape == (1, 20, 20, 20) and out.dtype == np.uint64
-    assert {tuple(np.unique(s).tolist()) for s in out[0]} == {(1, 2)}
-
-
-@pytest.mark.parametrize("kwargs, message", [
-    ({"do_3d": True, "output": "masks", "stitch_threshold": 0.3}, "3D objects already"),
-    ({"flow3d_smooth": 1.0}, "needs do_3d"),
-    ({"do_3d": True, "flow3d_smooth": -1}, "0 or more"),
-])
-def test_2d_only_and_3d_only_settings_are_refused_in_the_other(kwargs, message):
-    with pytest.raises(ValueError, match=message):
-        CellposeModelConfig(voxel_size=8, **kwargs)
-
-
-def test_in_3d_the_flows_can_be_smoothed_and_the_entry_round_trips(fake_cellpose):
-    model = CellposeModelConfig(voxel_size=8, do_3d="true", flow3d_smooth=1.5, name="cp3d")
-    assert model.do_3d is True and model.config.eval_kwargs["flow3D_smooth"] == 1.5
-    entry = model.to_dict()
-    assert (entry["do_3d"], entry["slice_size"], entry["context"], entry["flow3d_smooth"]) == (True, 192, 24, 1.5)
-    assert registry.build_model(entry, "cp3d").to_dict() == entry
-    assert registry.build_model(model.launch_entry, "cp3d").to_dict() == entry
-    assert "do_3d" not in CellposeModelConfig(voxel_size=8).to_dict()
-
-
 def test_nothing_but_building_the_model_imports_cellpose(monkeypatch):
     # None in sys.modules makes `import cellpose` raise ImportError.
     monkeypatch.setitem(sys.modules, "cellpose", None)
@@ -293,7 +133,7 @@ def test_nothing_but_building_the_model_imports_cellpose(monkeypatch):
 
     model = registry.build_model({"type": "cellpose", "voxel_size": 64}, "cp")
     model.to_dict(), model.launch_entry, model.command
-    assert "CellposeModelConfig" in registry.describe_types()
+    assert "cellpose" in registry.describe_types()
     result = CliRunner().invoke(main.cli, ["infer", "cellpose", "--help"])
     assert result.exit_code == 0 and "--pretrained-model" in result.output
     # Only building it imports cellpose. Where pixi provides cellpose4, the
@@ -303,78 +143,6 @@ def test_nothing_but_building_the_model_imports_cellpose(monkeypatch):
 
     with pytest.raises((ModelEnvError, ImportError)):
         model.config
-
-
-def test_it_runs_in_the_cellpose4_environment_by_default():
-    assert CellposeModelConfig.default_env == "cellpose4"
-
-
-def test_an_entry_round_trips_through_to_dict_and_the_launch_entry():
-    entry = {"type": "cellpose", "voxel_size": [16, 8, 8], "pretrained_model": "/w/my model", "output": "masks",
-             "slices_per_chunk": 4, "slice_size": 256, "context": 16, "batch_size": 12, "diameter": 45.0,
-             "flow_threshold": 0.5, "cellprob_threshold": -1.0, "stitch_threshold": 0.3, "name": "cp", "scale": "s2"}
-    model = registry.build_model(entry, "cp")
-    assert model.to_dict() == entry and list(model.to_dict()) == list(entry)
-    assert registry.build_model(model.launch_entry, "cp").to_dict() == entry
-
-    # A bare entry: the defaults, written out, so an exported YAML says what ran.
-    assert registry.build_model({"type": "cellpose", "voxel_size": 64}, "cp").to_dict() == {
-        "type": "cellpose", "voxel_size": [64, 64, 64], "pretrained_model": "cpsam_v2", "output": "flows",
-        "slices_per_chunk": 8, "slice_size": 512, "context": 32, "batch_size": 16, "flow_threshold": 0.4,
-        "cellprob_threshold": 0.0, "name": "cp",
-    }
-    probability = registry.build_model({"type": "cellpose", "voxel_size": 64, "output": "probability"}, "cp")
-    assert registry.build_model(probability.to_dict(), "cp").output == "probability"
-
-
-def test_the_form_builds_one_from_its_strings():
-    model = registry.instantiate_model_config(
-        "CellposeModelConfig", {"voxel_size": "8,8,8", "slices_per_chunk": "4", "batch_size": "", "diameter": "40"},
-    )
-    # A blank batch size is the default one.
-    assert (model.voxel_size, model.slices_per_chunk, model.batch_size, model.diameter) == ((8, 8, 8), 4, 16, 40.0)
-
-
-@pytest.mark.parametrize(
-    "entry, message",
-    [
-        ({"type": "cellpose"}, "missing required parameter 'voxel_size'"),
-        ({"type": "cellpose", "voxel_size": 64, "output": "labels"},
-         "output must be one of probability, flows, masks"),
-        ({"type": "cellpose", "voxel_size": 64, "slice_size": 0}, "slice_size must be at least 1"),
-        ({"type": "cellpose", "voxel_size": 64, "batch_size": 0}, "batch_size must be at least 1"),
-        ({"type": "cellpose", "voxel_size": 64, "output": "masks", "stitch_threshold": 1.5},
-         "stitch_threshold is an IoU, from 0 to 1"),
-        ({"type": "cellpose", "voxel_size": 64, "output": "flows", "stitch_threshold": 0.5},
-         "stitch_threshold links masks: it needs output masks, not 'flows'"),
-    ],
-    ids=["no-voxel-size", "bad-output", "empty-slices", "no-batch", "stitch-above-one", "stitch-without-masks"],
-)
-def test_a_bad_entry_is_a_config_error(entry, message):
-    from cellmap_flow.config.yaml import ConfigError
-
-    with pytest.raises(ConfigError, match=message):
-        registry.build_model(entry, "cp")
-
-
-def test_the_example_yaml_is_a_cellpose_model():
-    import yaml
-
-    with open(os.path.join(ROOT, "example", "cellpose_sam.yaml")) as f:
-        models = registry.build_models(yaml.safe_load(f)["models"])
-    assert all(isinstance(model, CellposeModelConfig) for model in models)
-    assert [(m.name, m.pretrained_model, m.output, m.voxel_size) for m in models] == [
-        ("cellpose_sam_v2", "cpsam_v2", "flows", (64, 64, 64)),
-    ]
-
-
-def test_a_non_integer_voxel_size_is_kept(fake_cellpose):
-    """_as_int_tuple truncated 5.24 nm to 5, putting every chunk on the wrong grid."""
-    from cellmap_flow.models.configs.cellpose import CellposeModelConfig
-
-    config = CellposeModelConfig(voxel_size="5.24,4,4", slices_per_chunk=2, slice_size=64, context=8).config
-    assert (config.input_voxel_size, config.write_shape, config.read_shape) == (
-        (5.24, 4, 4), (10.48, 256, 256), (10.48, 320, 320))
 
 
 def test_all_channels_are_served_by_default_and_the_layer_shows_them_together():

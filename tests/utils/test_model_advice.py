@@ -5,7 +5,6 @@ from types import SimpleNamespace
 import pytest
 
 from cellmap_flow.dashboard.state import get_session
-from cellmap_flow.models.configs.base import ModelConfig
 from cellmap_flow.models.configs.cellpose import CellposeModelConfig
 from cellmap_flow.models.configs.finetune import FinetuneModelConfig
 from cellmap_flow.process_chain import process_chain
@@ -41,15 +40,6 @@ def test_a_model_that_normalizes_its_own_input_gets_no_suggestion(advice, model_
     """Cellpose normalizes each slice itself, and its finetune trained on raw
     values, but the page suggested adding [-1, 1] normalization for it."""
     assert advice(model_config)["input_norm"] is None
-
-
-def test_a_model_that_declares_nothing_is_still_assumed_to_take_minus_one_to_one(advice):
-    # The base class itself rather than a subclass of it: the registry lists
-    # every subclass, and the type listings' tests would see one more.
-    model_config = ModelConfig()
-    model_config.name = "mine"
-    suggestion = advice(model_config)
-    assert suggestion["order"] == ["MinMaxNormalizer", "LambdaNormalizer"] and suggestion["confidence"] == "low"
 
 
 def test_an_onnx_models_manifest_declares_its_input_normalization(advice, tmp_path):

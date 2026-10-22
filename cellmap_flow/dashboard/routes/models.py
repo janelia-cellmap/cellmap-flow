@@ -29,30 +29,31 @@ def get_model_config_types():
 
 @models_bp.route("/api/create-model-config", methods=["POST"])
 def create_model_config():
-    """Create a ModelConfig instance from user-provided parameters"""
-    from cellmap_flow.models.registry import instantiate_model_config
+    """Build the model config the form describes (a CreateModelConfig: the
+    type and its parameters, as a model entry) and keep it among the
+    session's models, for the pipeline builder and blockwise. A type or
+    value the registry cannot build from is a 400."""
+    from cellmap_flow.config.yaml import ConfigError
+    from cellmap_flow.models.registry import build_model
 
     body, error = parse(CreateModelConfig, request.get_json(silent=True))
     if error:
         return error
-    class_name = body.class_name
+    type_name = body.type_name()
     try:
-        # The form's values are strings; the registry parses them.
-        model_config = instantiate_model_config(class_name, body.params)
-
-        # Configured, for the pipeline builder and blockwise.
-        get_session().models_config.append(model_config)
-
-        logger.info(f"Created {class_name}: {model_config.name}")
-        return jsonify({
-            'success': True,
-            'message': f'Created {class_name}',
-            'model_name': model_config.name,
-            'config_dict': model_config.to_dict()
-        })
-    except Exception as e:
-        logger.error(f"Error creating model config: {str(e)}")
-        return jsonify({'success': False, 'error': str(e)}), 400
+        # The form's values are strings; build_model parses them.
+        model_config = build_model({"type": type_name, **body.params})
+    except (ConfigError, ValueError, TypeError) as e:
+        logger.error(f"Error creating model config: {e}")
+        return jsonify({"success": False, "error": str(e)}), 400
+    get_session().models_config.append(model_config)
+    logger.info(f"Created {type_name}: {model_config.name}")
+    return jsonify({
+        "success": True,
+        "message": f"Created {type_name}",
+        "model_name": model_config.name,
+        "config_dict": model_config.to_dict(),
+    })
 
 
 @models_bp.route("/api/huggingface-models")

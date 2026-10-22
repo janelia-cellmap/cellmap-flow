@@ -1,14 +1,12 @@
-"""The dashboard's static files: shipped by the package, and loadable by the pages.
+"""The dashboard's static files: loadable by the pages.
 
-The pages' scripts are ES modules served as they are, with no bundler. A
-file the package data leaves out, an import that points nowhere or a name a
-module does not export only shows up in a browser, as a page whose scripts
-silently never run.
+The pages' scripts are ES modules served as they are, with no bundler. An
+import that points nowhere or a name a module does not export only shows up
+in a browser, as a page whose scripts silently never run. (That the wheel
+ships every file is CI's package job.)
 """
 
-import glob
 import re
-import tomllib
 from pathlib import Path
 
 import cellmap_flow.dashboard
@@ -16,7 +14,6 @@ from cellmap_flow.dashboard.app import app
 
 DASHBOARD = Path(cellmap_flow.dashboard.__file__).resolve().parent
 STATIC = DASHBOARD / "static"
-REPO = DASHBOARD.parents[1]
 IMPORT = re.compile(r"""^\s*(?:import|export)\s+(?:([\w$*{}\s,]+?)\s+from\s+)?["']([^"']+)["']""", re.M)
 EXPORTED = re.compile(r"^\s*export\s+(?:async\s+)?(?:function\*?|class|const|let|var)\s+([\w$]+)", re.M)
 EXPORT_LIST = re.compile(r"^\s*export\s*\{([^}]*)\}", re.M)  # export { a, b as c } (the vendored js-yaml)
@@ -29,27 +26,9 @@ def _exports(source):
     return names
 
 
-def _globbed(patterns, root):
-    return {Path(p).resolve() for pat in patterns for p in glob.glob(str(root / pat), recursive=True)}
-
-
-def test_the_package_ships_every_dashboard_file_and_every_module_import_resolves():
-    config = tomllib.loads((REPO / "pyproject.toml").read_text())
-    shipped = _globbed(config["tool"]["setuptools"]["package-data"]["cellmap_flow.dashboard"], DASHBOARD)
-    in_sdist = set()
-    for words in (line.split() for line in (REPO / "MANIFEST.in").read_text().splitlines()):
-        if words[:1] == ["include"]:
-            in_sdist |= _globbed(words[1:], REPO)
-        elif words[:1] == ["recursive-include"]:
-            in_sdist |= _globbed([f"{words[1]}/**/{pat}" for pat in words[2:]], REPO)
-    problems = [
-        f"{path.relative_to(DASHBOARD)}: missing from the package data or MANIFEST.in"
-        for folder in ("templates", "static")
-        for path in (DASHBOARD / folder).rglob("*")
-        if path.is_file() and not (path in shipped and path in in_sdist)
-    ]
-
-    # Every module the two pages load, and everything they import.
+def test_every_module_the_pages_load_and_every_import_resolves():
+    """Every module the two pages load, and everything they import."""
+    problems = []
     client = app.test_client()
     todo = [
         (STATIC / src).resolve()

@@ -162,6 +162,8 @@ export const POSTPROCESSORS: Record<string, PostprocessorDef> = {
   SimpleBlockwiseMerger: blockwiseMerger,
 };
 
+/** The Python classes of these say `browser = True`, which is what the
+ * browser page offers (web/test/unit/python-data.test.ts holds the two equal). */
 export const SUPPORTED_POSTPROCESSORS: readonly string[] = Object.keys(POSTPROCESSORS);
 
 function definition(step: Step): PostprocessorDef {

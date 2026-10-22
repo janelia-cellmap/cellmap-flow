@@ -163,6 +163,65 @@ PUT, DELETE of whole objects), which the Neuroglancer fork's writable zarr
 source paints into as it paints into MinIO in server mode; the Engine
 registers the same `sw.js` by name, so both get one registration.
 
+## One implementation per behaviour
+
+A feature works in both modes only when its logic is written once, where
+both modes run it: a shared Python core, chunkmirage (engine work), the
+dashboard's JavaScript and templates (UI), or the generated contracts
+(`cellmap_flow/schema.py`, below). Only the I/O adapters are written per
+mode. A feature whose logic cannot live in one of those places is
+mode-specific: the other mode answers `unavailable` with a reason
+(`router.ts`), and the template hides its controls (`server-only`,
+`[data-mode]`). A new experiment lands in one mode first and reaches the
+other once its logic is portable; it is not ported by hand.
+
+| both modes (logic written once) | browser only | server only |
+|---|---|---|
+| view; input and postprocess chains; paint volumes; Label it; rank, threshold, norm choice and re-check; targets; good regions; AI annotate (prompt, mask, fill); export config | ORT Web inference; head and TF.js finetune; local folders; Run on a region to disk; share links | LSF model servers; LoRA and whole-network torch training; blockwise; Review tab; crops import; bioimageio, dacapo and Cellpose models; pipeline builder |
+
+Both modes have "a finetune", but not one algorithm: what they share is the
+targets, the sampling plan, the loss definitions and the job card's JSON.
+Several both-mode rows are still ports kept in step by the parity fixtures
+(`test/parity`); the rule says where their one implementation goes next.
+
+The shared Python core is `cellmap_flow/portable/`: modules importable with
+the standard library, numpy, scipy, pydantic and Pillow alone
+(`tests/portable/test_boundary.py` holds them to that), which the server
+runs in its process and this page runs in chunkmirage's Pyodide worker.
+`build/portable.ts` bundles them as text (`import.meta.glob`, as chunkmirage
+bundles its own ops) and `infer/engine.ts` hands them to `Engine.start` as
+`modules` when a dataset opens, with `python: "always"` and one worker, so
+Pyodide and numpy (about 17 MB once per browser, cached after) load in the
+background while the data opens; the log says when they are in.
+`Inference.python("cellmap_flow.portable.calls:<fn>", args, arrays)` is
+chunkmirage's `Engine.call` by module path: `fn(args, arrays)` in Python,
+with the JSON arguments and the arrays' bytes, answering JSON, one array or
+JSON with arrays (`portable/calls.py` decodes and encodes; the maths is in
+the modules beside it). The workers take turns, so a call carries its own
+state: the rank's tallies travel in its JSON. The first such Python is the
+rank score and the paint carry (Finetuning, below); the TypeScript ports
+they replace are gone with their unit tests, and
+`test/unit/finetune-rank.test.ts` runs the routes on the same Python in
+node's Pyodide (`test/unit/pyodide.ts`: the `pyodide` package at the version
+the workers load, numpy's wheel from jsDelivr the first time, so without
+the network those tests skip).
+
+The contract is generated, not copied. `cellmap_flow/schema.py` exports a
+JSON Schema of every pydantic request model (`dashboard/requests.py`), the
+table of every route with where it is answered (both, stub, server, browser;
+the method and path from the Flask app's `url_map`, the availability declared
+beside it) and the constants both modes share (the rank score's, Undo's
+depth, the AI annotation's caps, the Finetune form's defaults). `npm run gen`
+writes `src/generated/cellmap-flow.schema.json`, `cellmap-flow.ts` (its types
+by json-schema-to-typescript, with the constants, `ROUTES` and the chain
+steps' parameters as values) and `docs/api.md`. `tests/web/test_schema.py`
+fails when they are stale, when a Flask route is added without a declaration,
+when the router here registers a route the table does not give the browser or
+misses one it does, and when the server form's defaults leave
+`FinetuneSubmit`'s; `test/unit/generated-routes.test.ts` holds the router to
+`ROUTES`. TypeScript imports a shared number (`FINETUNE_DEFAULTS`,
+`LABEL_MAX_CHARS`) from the generated file rather than writing it again.
+
 ## Finetuning (src/finetune/)
 
 The Finetune tab works as on the server with the browser in the server's and
@@ -198,12 +257,15 @@ Which model to start from (`backend/routes/rank.ts`) scores a model on the
 paint with the engine's own reads: the model served (or the served one
 reused), `readOutput` over at most `RANK_BLOCKS` of its blocks under the
 paint, each painted voxel's model voxel from Label it's `servedIndices`,
-and the targets from `targetTransformFor`; `finetune/rank.ts` is the
-counting alone, so it adds nothing to the engine. The server dashboard
-answers the same routes (`dashboard/routes/finetune/rank_routes.py`) with
-Python ports of the counting (`cellmap_flow/finetune/rank.py`) and of
-`finetune/carry.ts` (`carry_paint` in `finetune/session/volume.py`): a
-change to one is made to the other.
+and the targets from `targetTransformFor`; then each chunk's labels,
+targets and logits go to `cellmap_flow.portable.rank` (`Inference.python`,
+above), where the tallies, the score at the model's own cut-off and the
+stretched window are decided, in the same Python the server dashboard's
+routes run in their process (`dashboard/routes/finetune/rank_routes.py`),
+so there is no port to keep in step. *Use this model*'s carry of the paint
+onto the new grid is `cellmap_flow.portable.carry` the same way, the paint
+store's reads and writes around it here and the zarr's on the server
+(`carry_paint` in `finetune/session/volume.py`).
 `backend/routes/finetune.ts`, `good-regions.ts` and `finetune-jobs.ts` answer the tab's routes
 with the Python routes' JSON (a job is a run in the page; its log streams as
 server-sent events), so the tab's job card, loss plot and log stream are
@@ -408,6 +470,8 @@ web/
   chunkmirage.lock           the chunkmirage commit; scripts/fetch-chunkmirage.sh clones it
   neuroglancer.lock          the Neuroglancer fork's commit; scripts/fetch-neuroglancer.sh builds it
   build/render.py            renders cellmap_flow/dashboard/templates/index.html → web/index.html
+  build/export_data.py       the constants and catalogs shared with Python → src/generated/python-data.json
+  build/portable.ts          the Python both modes run (cellmap_flow/portable) as text, for the engine's Pyodide worker
   build/vite-plugins.ts      the service worker bundle; serves/copies the dashboard's static files and a Neuroglancer build
   chunkmirage/               (gitignored) the clone; we import web/chunkmirage/web/src/{engine,stages,onnx,relay,routes,asread,materialize}.ts
                              and its Vite plugin web/vite-ort.ts (onnxruntime-web's wasm files served/copied under ./ort/)
@@ -416,6 +480,10 @@ web/
   src/
     main.ts                  boot
     contracts.ts             the types the modules share
+    generated/               python-data.json (written by build/export_data.py, committed; never edited by hand) and
+                             python-data.ts, which gives it to the modules: the op registry and which ops the browser runs,
+                             the default chain, the organelle catalog and prompt sentences, the shaders and colours, the
+                             ranking's and the finetune log's constants, the unit table
     rebase.ts                root-relative /api/ URLs → the page's directory
     browser.css              hides .server-only under data-mode="browser"
     sw.ts                    the service worker: chunkmirage's relay for /api/* and /virtual/*, its store cache, our local/ files and paint/ store
@@ -452,10 +520,12 @@ web/
     viewer/                  createViewer(): ViewerController — iframe (index.ts), layers.ts (port of
                              viewer/layers.py), display.ts (shaders, ranges), state.ts, share.ts (the viewer's state: the tab's copy, a link's hash)
   test/
-    unit/                    vitest, one file per module concern
+    unit/                    vitest: the backend's routes over the fakes in backend-fakes.ts, and what
+                             parity does not cover (the ops that parity checks have no unit file);
+                             pyodide.ts runs cellmap_flow.portable in node for the routes that call it
     parity/                  the TypeScript ports against test/fixtures/*.json, which
-                             test/fixtures/make_fixtures.py writes from the Python classes
-    e2e/                     Playwright smoke test (E2E=1 npm run e2e)
+                             test/fixtures/make_*.py write from the Python classes
+    e2e/                     Playwright: smoke, downloads, recent datasets, finetune, AI-annotate (E2E=1 npm run e2e)
 ```
 
 ## Running it
@@ -466,6 +536,7 @@ npm install
 npm run fetch:chunkmirage                 # once, and after bumping chunkmirage.lock
 bash scripts/fetch-neuroglancer.sh        # once (a minute or two): the fork that paints, into web/ng/
 PYTHON=../.pixi/envs/default/bin/python npm run render   # after a template change
+PYTHON=../.pixi/envs/default/bin/python npm run gen      # after changing a request model, a route or a shared constant
 npm run dev                               # http://localhost:5173/  (WebGPU needs localhost or https)
 ```
 

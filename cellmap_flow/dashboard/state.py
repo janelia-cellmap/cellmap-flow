@@ -25,8 +25,9 @@ The rest it stores itself, in ``__slots__``, so a misspelt attribute raises
 rather than being stored beside the real one:
 
 - The data and the viewer: ``dataset_path``, ``resample``, ``viewer``,
-  ``raw``, ``neuroglancer_url``, ``shaders``, ``shader_controls``,
-  ``extra_layers``.
+  ``raw``, ``neuroglancer_url``, ``dashboard_url``, ``shaders``,
+  ``shader_controls``, ``extra_layers``; and ``layer_blob()``, the chain as
+  every prediction layer's URL carries it.
 - The models: ``models_config``, ``model_catalog``.
 - The pipeline builder's last apply: ``builder_state``,
   ``builder_model_configs``.
@@ -66,7 +67,8 @@ class Session:
     # _builder_state and _finetune_job_manager hold what the builder_state
     # and finetune_job_manager properties serve: a slot and a property of one
     # name cannot coexist.
-    __slots__ = ("dataset_path", "resample", "viewer", "raw", "neuroglancer_url", "shaders", "shader_controls", "extra_layers",
+    __slots__ = ("dataset_path", "resample", "viewer", "raw", "neuroglancer_url", "dashboard_url", "shaders",
+                 "shader_controls", "extra_layers",
                  "models_config", "model_catalog", "_builder_state", "builder_model_configs", "tmp_dir",
                  "blockwise_tasks_dir", "minio_state", "annotation_volumes", "output_sessions", "review",
                  "_finetune_job_manager", "restart_key", "label_undo", "ai_annotate", "log_buffer", "log_clients",
@@ -90,6 +92,10 @@ class Session:
         self.raw = None
         # The viewer's own address, which the index page embeds.
         self.neuroglancer_url = None
+        # The dashboard's own address, by IP (dashboard.app.bind_dashboard
+        # sets it); None until the dashboard is bound. The inference servers
+        # post a merging postprocessor's merged ids to it (layer_blob).
+        self.dashboard_url = None
         # {layer name: shader}: the user's, put back when a layer is rebuilt.
         self.shaders = {}
         # {layer name: shaderControls}, likewise.
@@ -188,6 +194,25 @@ class Session:
         """Drop ``name``'s LAYER_BOOKKEEPING, so a later layer of that name starts fresh."""
         for attr in LAYER_BOOKKEEPING:
             getattr(self, attr).pop(name, None)
+
+    def layer_blob(self, dashboard_url=None):
+        """The args blob of a prediction layer's URL (viewer.layers.prediction_url):
+        the chain (``pipeline_spec``), the dashboard's address and the chain's
+        digest, as the browser app's layers carry them (web/src/backend/serving.ts).
+
+        Every layer is built through this, whatever started its model (the
+        CLI, Submit, Add, a finetune, Submit's redraw), so an inference server
+        running a merging postprocessor knows where to post its merged ids
+        (serving.chunkmirage_ops), and a redraw of the chain a layer already
+        shows is told by its URL (routes.pipeline._shows). The address is
+        the dashboard's own (``dashboard_url``, by IP, which a server on the
+        cluster can reach), or else ``dashboard_url`` as given, the address
+        a request reached the dashboard by; left out when neither is known.
+        """
+        spec = self.pipeline_spec
+        url = self.dashboard_url or dashboard_url
+        extras = {"dashboard_url": url} if url else {}
+        return spec.to_url_blob(**extras, digest=spec.digest())
 
     # The models
     @property

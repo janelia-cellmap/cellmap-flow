@@ -1,7 +1,10 @@
 // Which model to start from: the Finetune tab ranks the models the browser
 // can run by how well each one's prediction already matches the session
-// volume's paint (finetune/rank.ts says how a model is scored), so the one
-// to finetune is the one with the least to learn.
+// volume's paint (cellmap_flow/portable/rank.py says how a model is scored:
+// the Python both modes run, called here in the engine's Pyodide worker
+// through Inference.python), so the one to finetune is the one with the
+// least to learn. This file reads the paint and the model's output and
+// hands them to that Python; nothing of the score is decided here.
 //
 // GET /api/finetune/rank/candidates lists them: the catalog's models,
 // finetuned ones among them, with the session's volume and the model it is
@@ -13,29 +16,30 @@
 // leaves the Models tab and the GPU as they were (its download stays in the
 // catalog's byte cache, and Show serves it at once). Where the raw under the
 // paint is narrow, a model is scored a second time through its normalizer
-// stretched to the raw's window, served for that alone (finetune/rank.ts
+// stretched to the raw's window, served for that alone (portable/rank.py
 // says when that is kept). POST /api/finetune/rank/use {name, window?}
 // makes the one picked the model to finetune, the window its score chose
 // (if any) first made the session's input normalization:
 // served with its layer (as the Models tab's Add serves it), a volume made
 // for it with the session volume's paint carried onto its grid
-// (finetune/carry.ts) and its good regions, and that volume the session's,
+// (cellmap_flow/portable/carry.py, the same way) and its good regions, and that volume the session's,
 // its paint layer in the old one's place; the old volume stays in the paint
 // store.
 import { TYPED } from "../../../chunkmirage/web/src/asread";
 import { inputBox } from "../../../chunkmirage/web/src/stages";
+import { volumeCornerNm } from "../../ai-annotate/fill";
 import { percentile } from "../../ai-annotate/mask";
 import type { AppContext, Chain, DatasetInfo, ModelEntry, PaintVolume, ServedModel, Step } from "../../contracts";
 import { FINETUNED_REPO } from "../../contracts";
-import { carryPaint, paintedBox } from "../../finetune/carry";
 import { loadGoodRegions, saveGoodRegions } from "../../finetune/good-regions";
 import { readsOneSlice } from "../../finetune/modes";
 import type { PaintedChunk } from "../../finetune/types";
-import { emptyTallies, paintEdges, RANK_BLOCKS, rankScore, type RankScore, spread, tallyChunk, WINDOW_MARGIN, windowed } from "../../finetune/rank";
 import { targetTransformFor } from "../../finetune/targets";
-import { createVolume, hasAffinityChannels, paintedChunkIndices, planVolume, readPaintedChunk, readVolume } from "../../finetune/volume";
+import { CHUNK_DIR, chunkKey, createVolume, hasAffinityChannels, paintedChunkIndices, planVolume, readPaintedChunk, readVolume } from "../../finetune/volume";
+import { RANK_BLOCKS, WINDOW_MARGIN } from "../../generated/cellmap-flow";
 import { chooseRawLevel, geometryOf, outputShape, ratio } from "../../infer/geometry";
 import { servedIndices, servedLevel } from "../../label-it/prediction";
+import { probability } from "../../label-it/segment";
 import { entryFor } from "../../models/manifest";
 import { PAINT_TAB, paintLayer, paintLayerName, paintLayerUrl } from "../../viewer/layers";
 import type { Router } from "../router";
@@ -64,7 +68,7 @@ export function rankRoutes(router: Router): void {
   });
 
   // POST /api/finetune/rank/score {name}: the model's score on the paint
-  // (finetune/rank.ts RankScore, in snake case), how long it took, and a
+  // (rank_score's, portable/rank.py), how long it took, and a
   // note when some painted chunks lie where the model's level does not
   // reach. Refused without a dataset, a volume or paint (400), and for a
   // model the catalog does not have (404).
@@ -92,9 +96,9 @@ export function rankRoutes(router: Router): void {
     try {
       const base = await scorePaint(ctx, dataset, volume, indices, held.served);
       let score = base.score, window: [number, number] | null = null;
-      // The raw stretched to its own range, when it is narrow (finetune/rank.ts).
+      // The raw stretched to its own range, when it is narrow (portable/rank.py).
       const range = base.score && (await rawWindow(ctx, dataset, held.served.entry, base.read));
-      const stretched = range && windowed(held.chain.input_norm, range[0], range[1]);
+      const stretched = range && (await windowed(ctx, held.chain.input_norm, range));
       if (base.score && range && stretched) {
         const alt = await servedForRanking(ctx, entry, stretched);
         try {
@@ -116,11 +120,9 @@ export function rankRoutes(router: Router): void {
       const seconds = (performance.now() - started) / 1000;
       const pct = (v: number | null) => (v === null ? "–" : `${Math.round(v * 100)}%`);
       const stretchedBy = window ? `, the raw stretched from ${window.map((v) => v.toFixed(1)).join("–")} (${pct(base.score!.matches)} as normalized)` : "";
-      ctx.log(`Ranked ${name} on ${score.scored} painted voxels of ${volume.id}: matches ${pct(score.matches)} at cut-off ${score.cutoff} (objects found ${pct(score.objectsFound)}, background right ${pct(score.backgroundRight)}; ${pct(score.matchesAtZero)} at 0)${stretchedBy}, loss ${score.loss.toFixed(3)}, ${seconds.toFixed(1)} s`);
+      ctx.log(`Ranked ${name} on ${score.scored_voxels} painted voxels of ${volume.id}: matches ${pct(score.matches)} at cut-off ${score.cutoff} (objects found ${pct(score.objects_found)}, background right ${pct(score.background_right)}; ${pct(score.matches_at_zero)} at 0)${stretchedBy}, loss ${score.loss.toFixed(3)}, ${seconds.toFixed(1)} s`);
       return json(200, {
-        success: true, name,
-        matches: score.matches, objects_found: score.objectsFound, background_right: score.backgroundRight, cutoff: score.cutoff, matches_at_zero: score.matchesAtZero, loss: score.loss,
-        scored_voxels: score.scored, object_voxels: score.objects, background_voxels: score.background, channel: score.channel, seconds,
+        success: true, name, ...score, seconds,
         window, ...(window ? { matches_without_window: base.score!.matches } : {}),
         ...(notes.length ? { note: notes.join("; ") } : {}),
       });
@@ -151,7 +153,7 @@ export function rankRoutes(router: Router): void {
       // The raw's window the score chose (window: [lo, hi]), made the session's
       // normalizer: the raw is the dataset's, so every model reads it so.
       const w = Array.isArray(body.window) && body.window.length === 2 ? body.window.map(Number) : null;
-      const norm = w && windowed(ctx.session.state.chain.input_norm, w[0], w[1]);
+      const norm = w && (await windowed(ctx, ctx.session.state.chain.input_norm, [w[0], w[1]]));
       if (norm) await setChain(ctx, { ...ctx.session.state.chain, input_norm: norm });
       if (!ctx.infer.served().some((s) => s.entry.id === entry.id)) {
         const entries = [...ctx.session.state.models.filter((m) => m.id !== entry.id), entry];
@@ -162,7 +164,7 @@ export function rankRoutes(router: Router): void {
       if (!served) throw new Error(`${name} did not start`);
       const to = planVolume(dataset, served.entry, ctx.session.state.chain);
       await createVolume(ctx.paint, to);
-      const carried = await carryPaint(ctx.paint, from, to);
+      const carried = await carryPaint(ctx, from, to);
       // Good regions are boxes in nm, the same on any grid: they go with the paint.
       const regions = await loadGoodRegions(ctx.paint, from.id);
       if (regions.length) await saveGoodRegions(ctx.paint, to.id, regions);
@@ -215,20 +217,45 @@ async function scorePaint(ctx: AppContext, dataset: DatasetInfo, volume: PaintVo
   for (const key of spread(keys, RANK_BLOCKS)) {
     const lo = blocks.get(key)!.map((b, a) => b * block[a]), hi = lo.map((l, a) => Math.min(l + block[a], level.shape[a]));
     const out = await ctx.infer.readOutput(served.view, lo, hi);
-    read.set(key, { lo, hi, shape: out.shape, data: out.data });
+    read.set(key, { lo, hi, shape: out.shape, data: logitsOf(out, served.info.output_class) });
   }
-  const tallies = emptyTallies(entry.manifest.channels.length);
+  // Each placed chunk added to the model's tallies by the Python (rank.tally,
+  // with paint_edges for the voxels a binary model's score skips): its
+  // labels, its targets and the model's logits on its voxels, NaN where
+  // none was read. The tallies travel with each call: the workers take turns.
+  const channels = entry.manifest.channels, C = channels.length;
+  let tallies: Tallies | null = null;
   for (const { chunk, origin, at } of placed) {
-    const logits = new Map<number, (c: number) => number>();
+    const n = chunk.labels.length, logits = new Float32Array(C * n).fill(NaN);
     forEachPainted(chunk, origin, at, (i, s) => {
       const r = read.get(s.map((v, a) => Math.floor(v / block[a])).join(","));
       if (!r) return;
       const [, bz, by, bx] = r.shape, [sz, sy, sx] = s.map((v, a) => v - r.lo[a]);
-      logits.set(i, (c) => r.data[((c * bz + sz) * by + sy) * bx + sx]);
+      for (let c = 0; c < C; c++) logits[c * n + i] = r.data[((c * bz + sz) * by + sy) * bx + sx];
     });
-    tallyChunk(tallies, chunk, transform(chunk), (c, i) => logits.get(i)?.(c) ?? null, affinity ? null : paintEdges(chunk));
+    const { target, mask } = transform(chunk);
+    tallies = await ctx.infer.python<Tallies>(`${PORTABLE}:rank_tally`,
+      { tallies, shape: chunk.shape, channels: C, labels_dtype: chunk.labels instanceof Uint16Array ? "uint16" : "uint8", affinity },
+      [bytesOf(chunk.labels), bytesOf(target), bytesOf(mask), bytesOf(logits)]);
   }
-  return { score: rankScore(tallies, entry.manifest.channels, affinity), blocks: keys.length, read: [...read.values()].map(({ lo, hi }) => ({ lo, hi })), outside };
+  const score = tallies ? await ctx.infer.python<RankScore | null>(`${PORTABLE}:rank_score`, { tallies, channels, affinity }) : null;
+  return { score, blocks: keys.length, read: [...read.values()].map(({ lo, hi }) => ({ lo, hi })), outside };
+}
+
+/** A model's output block as logits, whatever its activation, as the
+ * server's ranking reads it (rank_routes._score): the output as a
+ * probability by the served model's output class (label-it's probability,
+ * so a sigmoid model's 0.9 and a logit model's 2.2 are one and the same),
+ * clipped to [1e-6, 1 - 1e-6], then its logit. A logit model's output comes
+ * back as it was, within float32; a probability's is no longer read as if
+ * 0.1 said object. */
+function logitsOf(out: { data: Float32Array; shape: number[] }, outputClass: string | null | undefined): Float32Array {
+  const p = probability(out, outputClass, null).data;
+  for (let i = 0; i < p.length; i++) {
+    const q = Math.min(Math.max(p[i], 1e-6), 1 - 1e-6);
+    p[i] = Math.log(q / (1 - q));
+  }
+  return p;
 }
 
 /** The window of the raw under the output blocks `blocks` of `entry`'s
@@ -268,6 +295,82 @@ function forEachPainted(chunk: PaintedChunk, origin: number[], at: NonNullable<R
 
 function compareIndex(p: number[], q: number[]): number {
   return p[0] - q[0] || p[1] - q[1] || p[2] - q[2];
+}
+
+/** The portable Python's entry points (cellmap_flow/portable/calls.py), by module path. */
+const PORTABLE = "cellmap_flow.portable.calls";
+
+/** A model's tallies of the paint so far, as the Python answers them and takes them back; nothing here reads them. */
+type Tallies = Record<string, unknown>[];
+
+/** A model's score on the paint, as rank_score answers it (portable/rank.py): the
+ * balanced accuracy at the model's own cut-off, its parts, the score at 0, the loss,
+ * the voxels counted and a binary model's channel (null for an affinity model's). */
+interface RankScore {
+  matches: number;
+  objects_found: number | null;
+  background_right: number | null;
+  cutoff: number;
+  matches_at_zero: number;
+  loss: number;
+  scored_voxels: number;
+  object_voxels: number;
+  background_voxels: number;
+  channel: string | null;
+}
+
+/** A typed array's own bytes, copied: a call's arrays are handed to the worker. */
+function bytesOf(a: ArrayBufferView): ArrayBuffer {
+  return a.buffer.slice(a.byteOffset, a.byteOffset + a.byteLength) as ArrayBuffer;
+}
+
+/** `norm` with its MinMaxNormalizer set to the raw's window, or null (rank.windowed:
+ * no such normalizer, no window, or one not narrower than NARROW_WINDOW of its range). */
+function windowed(ctx: AppContext, norm: readonly Step[], [lo, hi]: readonly [number, number]): Promise<Step[] | null> {
+  return ctx.infer.python<Step[] | null>(`${PORTABLE}:windowed`, { norm, lo, hi });
+}
+
+/** `count` of `items`, spread evenly over them in their order; all of them when there
+ * are no more (rank.spread, for which blocks to read: a pick, so no call for it). */
+function spread<T>(items: readonly T[], count: number): T[] {
+  if (items.length <= count) return [...items];
+  return Array.from({ length: count }, (_, j) => items[Math.floor(((j + 0.5) * items.length) / count)]);
+}
+
+/** The box of `chunk`'s painted voxels, in its own voxels; null when none is painted. */
+function paintedBox(chunk: PaintedChunk): { lo: number[]; hi: number[] } | null {
+  const [, h, w] = chunk.shape, lo = [Infinity, Infinity, Infinity], hi = [-1, -1, -1];
+  chunk.labels.forEach((label, i) => {
+    if (!label) return;
+    const at = [Math.floor(i / (h * w)), Math.floor(i / w) % h, i % w];
+    for (let a = 0; a < 3; a++) { lo[a] = Math.min(lo[a], at[a]); hi[a] = Math.max(hi[a], at[a] + 1); }
+  });
+  return hi[0] < 0 ? null : { lo, hi };
+}
+
+/** What carryPaint did: the new volume's voxels painted, the old volume's painted
+ * voxels they came from, the new voxels left unpainted because their old voxels
+ * disagreed, and the new volume's chunks written. */
+interface Carried { painted: number; source: number; conflicts: number; chunks: number }
+
+/** The paint of `from` copied into `to`, an empty volume over the same dataset on
+ * another model's grid (createVolume'd): cellmap_flow.portable.carry, in the engine's
+ * Python, with the paint store's reads and writes around it here. The old volume's
+ * painted chunks go whole, both grids placed by their volume's dataset_offset_nm
+ * (voxel 0's centre, fill.ts volumeCornerNm), and the new chunks that got paint come
+ * back whole, to be written as they are. */
+async function carryPaint(ctx: AppContext, from: PaintVolume, to: PaintVolume): Promise<Carried> {
+  const grid = (v: PaintVolume) => ({ corner_nm: volumeCornerNm(v.dataset_offset_nm, v.output_voxel_size), voxel_nm: v.output_voxel_size, shape: v.dataset_shape_voxels, chunks: v.chunk_size });
+  const indices: number[][] = [], labels: ArrayBuffer[] = [];
+  for (const index of await paintedChunkIndices(ctx.paint, from.id)) {
+    const chunk = await readPaintedChunk(ctx.paint, from, index);
+    if (chunk) { indices.push(index); labels.push(bytesOf(chunk.labels)); }
+  }
+  const { value, arrays } = await ctx.infer.python<{ value: Carried & { indices: number[][] }; arrays: ArrayBuffer[] }>(
+    `${PORTABLE}:carry_paint`, { old: grid(from), new: grid(to), old_dtype: from.dtype, new_dtype: to.dtype, indices }, labels);
+  await Promise.all(value.indices.map((index, k) => ctx.paint.put(to.id, CHUNK_DIR + chunkKey(index), new Uint8Array(arrays[k]))));
+  const { painted, source, conflicts, chunks } = value;
+  return { painted, source, conflicts, chunks };
 }
 
 async function sessionVolume(ctx: AppContext): Promise<PaintVolume | null> {

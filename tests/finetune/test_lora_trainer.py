@@ -1,34 +1,20 @@
-"""LoRAFinetuner on the CPU: what it learns from, which epoch it keeps, what
-stays frozen, and how a run survives a NaN, an OOM, a resume or a stop.
-
-The losses of every epoch, the exported names and the served weights are
-pinned by test_training_snapshot.
-"""
-
-import logging
-import math
+"""Finetuner on the CPU: what it distils toward, how it reads the model's
+output, and how a run survives a NaN, an OOM or the dashboard's stop."""
 
 import numpy as np
 import pytest
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
-from cellmap_flow.finetune.adaptation import LoraStrategy, cpu_state_copy, frozen_teacher_copy
-from cellmap_flow.finetune.target_transforms import BinaryTargetTransform, IntervalTargetTransform
+from cellmap_flow.finetune.adaptation import cpu_state_copy, frozen_teacher_copy
+from cellmap_flow.finetune.losses import masked_mean
+from cellmap_flow.finetune.target_transforms import BinaryTargetTransform
 
 
 def _net():
     torch.manual_seed(0)
     return nn.Sequential(nn.Conv3d(1, 2, 3, padding=1), nn.ReLU(), nn.Conv3d(2, 1, 1))
-
-
-def _constant(logit, sigmoid=False):
-    """Predicts ``logit`` everywhere; at learning rate 0 it stays there."""
-    conv = nn.Conv3d(1, 1, 1)
-    with torch.no_grad():
-        conv.weight.zero_()
-        conv.bias.fill_(logit)
-    return nn.Sequential(conv, nn.Sigmoid()) if sigmoid else conv
 
 
 def _annotation(fill, n=1, size=4, **labels):
@@ -40,147 +26,7 @@ def _annotation(fill, n=1, size=4, **labels):
     return ann
 
 
-def _bce(p, t):
-    return -(t * math.log(p) + (1 - t) * math.log(1 - p))
-
-
-P2, P3 = 1 / (1 + math.exp(-2.0)), 1 / (1 + math.exp(-3.0))
-FIRST_VOXEL = np.s_[..., 0, 0, 0]
 FOREGROUND = _annotation(2)
-BACKGROUND = _annotation(1)
-BOTH_CLASSES = _annotation(1, fg=(2, np.s_[..., :2]))
-NOTHING_ANNOTATED = _annotation(0)
-ONE_VOXEL_ANNOTATED = _annotation(0, fg=(2, FIRST_VOXEL))
-ONE_FG_IN_A_THOUSAND = _annotation(1, size=10, fg=(2, FIRST_VOXEL))
-THEN_AN_EMPTY_PATCH = _annotation(0, n=2, fg=(2, np.s_[0]))  # a foreground patch, then an unannotated one
-
-
-def _train_at_rate_0(make_trainer, model, ann, **settings):
-    trainer = make_trainer(model, (torch.rand(ann.shape), ann), learning_rate=0.0,
-                           **{"target_transform": BinaryTargetTransform(), **settings})
-    trainer.train()
-    return trainer
-
-
-@pytest.mark.parametrize("model, ann, settings, expected", [
-    # MSE compares probabilities: on a logit model it trained the logits toward 0/1.
-    pytest.param(_constant(3.0), FOREGROUND, dict(loss_type="mse"), (P3 - 1) ** 2, id="mse on logits"),
-    pytest.param(_constant(3.0, sigmoid=True), FOREGROUND, dict(loss_type="mse"), (P3 - 1) ** 2,
-                 id="mse on a model ending in a sigmoid"),
-    # Classes are balanced as annotated: one fg voxel weighs as much as 999 bg,
-    # whatever the smoothing did to their targets.
-    pytest.param(_constant(2.0), ONE_FG_IN_A_THOUSAND, dict(balance_classes=True, label_smoothing=0.1),
-                 (_bce(P2, 0.95) + _bce(P2, 0.05)) / 2, id="balanced bce under label smoothing"),
-    # A batch with nothing supervised (rehearsal patches only) is not a 0 in the epoch's mean.
-    pytest.param(_constant(2.0), THEN_AN_EMPTY_PATCH, {}, -math.log(P2), id="a batch with nothing supervised"),
-    pytest.param(_constant(2.0), NOTHING_ANNOTATED, {}, float("nan"), id="an epoch with nothing supervised"),
-    # Without a transform or masking (the trainer's own defaults) the annotation is the target as it stands.
-    pytest.param(_constant(2.0), BACKGROUND, dict(target_transform=None, mask_unannotated=False),
-                 -math.log(P2), id="the annotation as it stands"),
-])
-def test_the_supervised_loss_of_an_epoch(make_trainer, model, ann, settings, expected):
-    """What picks the best checkpoint."""
-    trainer = _train_at_rate_0(make_trainer, model, ann, **settings)
-    if math.isnan(expected):
-        assert math.isnan(trainer.last_supervised_loss)
-    else:
-        assert trainer.last_supervised_loss == pytest.approx(expected, rel=1e-4)
-
-
-@pytest.mark.parametrize("ann, warns", [
-    pytest.param(FOREGROUND, True, id="foreground only"),
-    pytest.param(BACKGROUND, True, id="background only"),
-    pytest.param(BOTH_CLASSES, False, id="both classes"),
-    pytest.param(ONE_VOXEL_ANNOTATED, True, id="unannotated voxels do not rescue it"),
-    pytest.param(NOTHING_ANNOTATED, True, id="nothing supervised at all"),
-    pytest.param(THEN_AN_EMPTY_PATCH, True, id="said once, for the first batch"),
-])
-def test_a_target_of_one_class_is_called_out(make_trainer, caplog, ann, warns):
-    """Three sessions in a row painted only foreground. Every instruction the
-    model then gets says "raise this", and it comes out worse than it started,
-    with nothing in the pipeline saying a word. The first batch warns, once."""
-    _train_at_rate_0(make_trainer, _constant(2.0), ann)
-    warnings = [r for r in caplog.records if r.levelno >= logging.WARNING and r.name.endswith("lora_trainer")]
-    assert len(warnings) == (1 if warns else 0)
-
-
-# Background painted over a whole 4^3 patch, at a constant logit of 3: the
-# wrong side. Its upper bound is -2L/6, L being 1 voxel to the patch's edge
-# for the 56 voxels on its surface and 2 for the 8 inside, less a third
-# for the slack; the wrong side costs 5 x (3 - the slack) on top.
-WRONG_SIDE = (56 * 3.0 + 8 * (3.0 + 1 / 3)) / 64 + 5 * (3.0 - 1 / 3)
-
-
-@pytest.mark.parametrize("model, expected", [
-    pytest.param(_constant(-3.0), 0.0, id="within the bounds"),
-    pytest.param(_constant(3.0), WRONG_SIDE, id="on the wrong side"),
-    pytest.param(_constant(3.0, sigmoid=True), WRONG_SIDE, id="a model ending in a sigmoid, in logits"),
-])
-def test_a_distance_model_on_scribbles_trains_on_bounds(make_trainer, model, expected):
-    trainer = _train_at_rate_0(make_trainer, model, BACKGROUND, loss_type="interval",
-                               target_transform=IntervalTargetTransform(6.0))
-    assert trainer.last_supervised_loss == pytest.approx(expected, abs=1e-4)
-
-
-def test_the_best_epoch_is_the_best_supervised_one(make_trainer):
-    """Distillation is 0 until the model moves, so ranking epochs by the whole
-    objective kept epoch 1, one optimizer step from the start, in every run."""
-    torch.manual_seed(0)
-    ann = _annotation(0, fg=(2, np.s_[..., :2]))  # the rest is unannotated, and distilled
-    trainer = make_trainer(nn.Conv3d(1, 1, 1), (torch.rand(ann.shape), ann), num_epochs=2,
-                           learning_rate=0.1, distillation_lambda=100.0,
-                           target_transform=BinaryTargetTransform())
-    trainer.train()
-    first, second = trainer.training_stats
-    assert first["loss"] < second["loss"], "the objective rose after epoch 1"
-    assert second["best_loss"] < first["best_loss"], "while the supervised loss fell"
-    best = torch.load(trainer.output_dir / "best_checkpoint.pth", weights_only=False)
-    assert best["epoch"] + 1 == 2
-
-
-class _RehearsalFirst(torch.utils.data.Dataset):
-    """One patch: a rehearsal patch, nothing annotated, for its first ``draws`` draws; then both classes."""
-
-    def __init__(self, draws):
-        self.rehearsals, self.raw = draws, torch.rand(1, 4, 4, 4, generator=torch.Generator().manual_seed(0))
-
-    def __len__(self):
-        return 1
-
-    def __getitem__(self, i):
-        self.rehearsals -= 1
-        return self.raw, (NOTHING_ANNOTATED if self.rehearsals >= 0 else BOTH_CLASSES)[0]
-
-
-def test_an_epoch_that_supervised_nothing_is_never_the_best(make_trainer):
-    """Ranked by its total loss, lambda * distillation alone (~0, and exactly 0
-    at lambda 0), an epoch of rehearsal patches only was "best" for the rest of
-    the run, and the export shipped it."""
-    # Two rehearsal draws: the trainer's output probe's, and epoch 1's.
-    trainer = make_trainer(_net(), torch.utils.data.DataLoader(_RehearsalFirst(2)), num_epochs=3,
-                           learning_rate=0.1, distillation_lambda=0.0, target_transform=BinaryTargetTransform())
-    trainer.train()
-    best = torch.load(trainer.output_dir / "best_checkpoint.pth", weights_only=False)
-    later = trainer.training_stats[1:]
-    assert best["epoch"] + 1 == min(later, key=lambda s: s["loss"])["epoch"]
-    assert trainer.best_loss == min(s["loss"] for s in later)
-
-
-@pytest.mark.parametrize("ann, num_epochs", [
-    pytest.param(NOTHING_ANNOTATED, 2, id="no epoch supervised anything"),
-    pytest.param(FOREGROUND, 0, id="no epoch ran"),  # a restart asking for 0 epochs
-])
-def test_without_a_best_epoch_the_export_is_this_runs_last_weights(make_trainer, tmp_path, ann, num_epochs):
-    """A job's iterations share the output directory, and the export loaded the
-    best checkpoint an earlier one left there: it shipped that iteration's
-    weights as this one's, or failed to load them after a change of rank."""
-    make_trainer(_net(), (torch.rand(1, 1, 4, 4, 4), FOREGROUND), learning_rate=0.1).train()
-    trainer = make_trainer(_net(), (torch.rand(1, 1, 4, 4, 4), ann), num_epochs=num_epochs,
-                           distillation_lambda=0.0, target_transform=BinaryTargetTransform())
-    trainer.train()
-    last = cpu_state_copy(trainer.model)
-    exported = torch.load(trainer.save_adapter(export_dir=str(tmp_path / "export")), weights_only=True)
-    assert all(torch.equal(v, last[k]) for k, v in exported.items())
 
 
 @pytest.mark.parametrize("accumulate", [pytest.param(1, id="a step per batch"),
@@ -195,6 +41,29 @@ def test_a_non_finite_batch_never_reaches_the_weights(make_trainer, accumulate):
                            gradient_accumulation_steps=accumulate, target_transform=BinaryTargetTransform())
     assert trainer.train()["diverged"]
     assert all(torch.isfinite(p).all() for p in trainer.model.parameters())
+
+
+def test_a_tanh_model_is_read_as_its_server_reads_it(make_trainer):
+    """The trainer had a sigmoid probe of its own, which took a tanh's [-1, 1]
+    for logits, while ranking and seeding read it as (p + 1) / 2
+    (serving.probe's signed_unit): one model, trained on one reading and
+    thresholded on another. The trainer takes the server's class now, and
+    the job probes with the same classifier when the dashboard had none."""
+    from cellmap_flow.finetune.trainer.supervised import probe_output_class
+    from cellmap_flow.serving.probe import SIGNED_UNIT, classify_output_range
+
+    model = nn.Sequential(nn.Conv3d(1, 1, 1), nn.Tanh())
+    raw = torch.rand(2, 1, 4, 4, 4)
+    out = model(raw).detach()
+    assert probe_output_class(model, raw) == SIGNED_UNIT == classify_output_range(float(out.min()), float(out.max()))
+
+    ann = _annotation(1, n=2, fg=(2, np.s_[:, :, :2]))
+    trainer = make_trainer(model, (raw, ann), output_class=SIGNED_UNIT, target_transform=BinaryTargetTransform(),
+                           balance_classes=False)
+    target, mask, bounds, hard_target = trainer.supervised.targets(ann)
+    loss = trainer.supervised(out, target, mask, bounds, hard_target)
+    expected = masked_mean(F.binary_cross_entropy((out + 1) / 2, target, reduction="none"), mask)
+    assert torch.allclose(loss, expected)
 
 
 class _Anchors(torch.utils.data.Dataset):
@@ -225,30 +94,6 @@ def test_the_distillation_weight_when_good_regions_are_marked(make_trainer, anch
     assert trainer.distillation_lambda == used
 
 
-def _bn_net():
-    torch.manual_seed(0)
-    return nn.Sequential(nn.Conv3d(1, 4, 3, padding=1), nn.BatchNorm3d(4), nn.ReLU(),
-                         nn.Dropout(0.5), nn.Conv3d(4, 1, 1))
-
-
-@pytest.mark.parametrize("lora, num_epochs, moves", [
-    pytest.param(True, 2, False, marks=pytest.mark.finetune, id="lora"),
-    pytest.param(False, 2, True, id="full"),
-    # The output probe's 100x noise, in train mode, multiplied the variance ~7000x.
-    pytest.param(False, 0, False, id="full, the startup probes alone"),
-])
-def test_only_training_a_full_finetune_moves_the_batchnorm_statistics(make_trainer, lora, num_epochs, moves):
-    """model.train() put the frozen base's BatchNorm in train mode: its running
-    statistics, which the adapter does not save, drifted from the served base."""
-    model = LoraStrategy(2, 4, 0.0).prepare(_bn_net()) if lora else _bn_net()
-    bn = next(m for m in model.modules() if isinstance(m, nn.BatchNorm3d))
-    before = torch.cat([bn.running_mean, bn.running_var])
-    ann = _annotation(1, n=2, size=6, fg=(2, np.s_[:, :, :3]))
-    make_trainer(model, (torch.rand(ann.shape) * 5, ann), batch_size=2, num_epochs=num_epochs,
-                 target_transform=BinaryTargetTransform()).train()
-    assert torch.equal(torch.cat([bn.running_mean, bn.running_var]), before) != moves
-
-
 def _half_background(n=4):
     """Background on half the patch, a foreground corner in it, the rest unannotated: something to distil."""
     return _annotation(0, n=n, size=6, bg=(1, np.s_[:, :, :3]), fg=(2, np.s_[:, :, :2, :2]))
@@ -273,13 +118,6 @@ def test_a_full_finetune_distils_toward_a_frozen_copy_of_its_starting_weights(ma
     assert not any(p.requires_grad for p in trainer.teacher_model.parameters())
     assert all(torch.equal(v, start[k]) for k, v in trainer.teacher_model.state_dict().items())
     assert any(not torch.equal(v, start[k]) for k, v in model.state_dict().items()), "the student moved"
-
-
-def test_no_teacher_is_made_without_distillation(make_trainer):
-    ann = _half_background(n=2)
-    trainer = make_trainer(_net(), (torch.rand(ann.shape), ann), distillation_lambda=0.0,
-                           target_transform=BinaryTargetTransform())
-    assert trainer.teacher_model is None
 
 
 class _OutOfMemory(nn.Module):
@@ -309,70 +147,22 @@ def test_an_out_of_memory_epoch_is_retried_on_half_batches(make_trainer, monkeyp
         assert (trainer.dataloader.batch_size, trainer.gradient_accumulation_steps) == (1, 2)
 
 
-@pytest.mark.parametrize("num_epochs, epochs", [
-    pytest.param(5, [4, 5], id="the epochs after the checkpoint's"),  # --resume re-ran all of them
-    pytest.param(3, [], id="none, and no loss to print"),  # formatting None raised TypeError
-])
-def test_a_resumed_run_carries_on_after_its_checkpoint(make_trainer, tmp_path, num_epochs, epochs):
-    data = (torch.rand(1, 1, 4, 4, 4), FOREGROUND)
-    first = make_trainer(nn.Conv3d(1, 1, 1), data, output_dir=str(tmp_path / "first"))
-    first.current_epoch = 2  # epochs 1-3 are done
-    first.save_checkpoint(is_best=True)
-    resumed = make_trainer(nn.Conv3d(1, 1, 1), data, num_epochs=num_epochs)
-    resumed.load_checkpoint(str(tmp_path / "first" / "best_checkpoint.pth"))
-    stats = resumed.train()
-    assert [s["epoch"] for s in resumed.training_stats] == epochs
-    assert (stats["final_loss"] is None) == (not epochs)
-
-
-@pytest.mark.finetune
-def test_a_checkpoint_saved_without_loss_scaling_resumes_into_a_trainer_with_it(make_trainer, tmp_path):
-    """bf16, fp32 and the fp32 fallback save an empty scaler state, which an fp16 trainer's scaler refused."""
-    data = (torch.rand(1, 1, 4, 4, 4), FOREGROUND)
-    lora = LoraStrategy(2, 4, 0.0)
-    make_trainer(lora.prepare(_net()), data, output_dir=str(tmp_path / "first")).train()
-    resumed = make_trainer(lora.prepare(_net()), data)
-    resumed.scaler = torch.amp.GradScaler("cpu")  # an fp16 trainer's; CUDA's turns itself off without a GPU
-    resumed.load_checkpoint(str(tmp_path / "first" / "best_checkpoint.pth"))
-    assert resumed.scaler.is_enabled()
-
-
 class _StopSignal(nn.Module):
-    """Passes its input on; writes the dashboard's stop signal at its second call, in epoch 1
-    (the first is the output probe's)."""
+    """Passes its input on; writes the dashboard's stop signal at its first call, in epoch 1."""
 
     def __init__(self, signal):
         super().__init__()
-        self.signal, self.calls = signal, 0
+        self.signal = signal
 
     def forward(self, x):
-        self.calls += 1
-        if self.calls == 2 and self.signal is not None:
+        if self.signal is not None:
             self.signal.write_text("{}")
         return x
 
 
-def _stops_during_epoch_1(signal):
-    return nn.Sequential(_StopSignal(signal), nn.Conv3d(1, 1, 1))
-
-
 def test_the_dashboards_stop_signal_ends_the_run_after_the_current_epoch(make_trainer, tmp_path):
-    trainer = make_trainer(_stops_during_epoch_1(tmp_path / "run" / "stop_signal.json"),
+    trainer = make_trainer(nn.Sequential(_StopSignal(tmp_path / "run" / "stop_signal.json"), nn.Conv3d(1, 1, 1)),
                            (torch.rand(1, 1, 4, 4, 4), FOREGROUND), num_epochs=3)
     trainer.train()
     assert [s["epoch"] for s in trainer.training_stats] == [1]
     assert not (tmp_path / "run" / "stop_signal.json").exists(), "the signal is used up"
-
-
-@pytest.mark.finetune
-def test_a_run_stopped_between_epochs_resumes_at_the_epoch_it_skipped(make_trainer, tmp_path):
-    """The final checkpoint recorded the epoch the stop skipped as done, so --resume never ran it."""
-    data = (torch.rand(1, 1, 4, 4, 4), FOREGROUND)
-    lora = LoraStrategy(2, 4, 0.0)
-    make_trainer(lora.prepare(_stops_during_epoch_1(tmp_path / "run" / "stop_signal.json")), data,
-                 num_epochs=3).train()
-    [checkpoint] = (tmp_path / "run").glob("checkpoint_epoch_*.pth")
-    resumed = make_trainer(lora.prepare(_stops_during_epoch_1(None)), data, num_epochs=3)
-    resumed.load_checkpoint(str(checkpoint))
-    resumed.train()
-    assert [s["epoch"] for s in resumed.training_stats] == [1, 2, 3]

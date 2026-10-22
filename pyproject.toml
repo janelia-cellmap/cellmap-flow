@@ -18,6 +18,8 @@ dependencies = [
     "fastmorph",
     "flask",
     "tensorstore",
+    # The shared reader: placement, levels, padded and resampled reads.
+    "worldarray>=0.1,<1",
     "funlib.geometry",
     "scikit-image",
     "numcodecs==0.15.0",
@@ -45,7 +47,7 @@ dependencies = [
     # queued chunks in the order they were asked for). Not on PyPI yet: a
     # release of cellmap-flow needs one, as PyPI refuses a dependency given
     # by URL.
-    "chunkmirage @ git+https://github.com/JaneliaSciComp/chunkmirage@7331a3fcd0b32a281b74c79766f6d52450a8f2a8",
+    "chunkmirage @ git+https://github.com/JaneliaSciComp/chunkmirage@7307e36b499f099bb0d5fd80f88cb013c0230387",
     ]
 
 # extras
@@ -54,7 +56,7 @@ dependencies = [
 dacapo = ["dacapo-ml"]
 cellpose = ["cellpose==3.1.1.1"]
 bioimageio = ["bioimageio.core[onnx,pytorch]==0.11.0", "timm>=1.0"]
-test = ["pytest", "pytest-cov"]
+test = ["pytest", "pytest-cov", "pytest-xdist"]
 dev = [
     "black",
     "mypy",

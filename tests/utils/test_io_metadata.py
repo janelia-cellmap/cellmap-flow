@@ -190,10 +190,11 @@ LAYOUTS = {
         lambda f: f.raw_zarr(DATA, voxel_size=(8, 4, 4), offset=(80, 40, 40)),
         ("zarr2", ZYX, (8.0, 4.0, 4.0), (80.0, 40.0, 40.0), (4, 4, 4), (4, 4, 4)),
     ),
-    # A v2 offset off the voxel grid is rounded onto it (funlib's rule).
+    # A v2 offset off the voxel grid is kept as written: stored numbers are never
+    # rounded onto a grid (worldarray's spec, Conventions 4).
     "funlib-offset-off-grid": (
         lambda f: f.raw_zarr(DATA, offset=(4, 4, 4)),
-        ("zarr2", ZYX, (8.0,) * 3, (8.0,) * 3, (4, 4, 4), (4, 4, 4)),
+        ("zarr2", ZYX, (8.0,) * 3, (4.0,) * 3, (4, 4, 4), (4, 4, 4)),
     ),
     "funlib-no-attrs": (
         lambda f: f.write_array("zarr2", DATA),
@@ -213,9 +214,10 @@ LAYOUTS = {
         lambda f: f.write_array("zarr2", np.zeros((3, 4, 4, 4), np.uint8), {"resolution": [8, 4, 4], "offset": [0] * 3}),
         ("zarr2", ("c^",) + ZYX, (1.0, 8.0, 4.0, 4.0), (0.0,) * 4, (3, 4, 4, 4), (1, 2, 2, 2)),
     ),
+    # A COSEM transform's translate is voxel 0's centre (worldarray's spec, Conventions 1).
     "v3-transform-attrs": (
         lambda f: f.write_array("zarr3", DATA, {"transform": {"scale": [8] * 3, "translate": [100, 200, 300]}}, V3),
-        ("zarr3", ZYX, (8.0,) * 3, (100.0, 200.0, 300.0), (4, 4, 4), (2, 2, 2)),
+        ("zarr3", ZYX, (8.0,) * 3, (96.0, 196.0, 296.0), (4, 4, 4), (2, 2, 2)),
     ),
     # A v3 array's own offset is taken as written.
     "v3-funlib-attrs": (
@@ -236,11 +238,11 @@ LAYOUTS = {
         lambda f: f.write_array("n5", np.zeros((10, 20, 30), np.uint8), {"resolution": [3, 2, 1], "offset": [0] * 3}),
         ("n5", ZYX, (1.0, 2.0, 3.0), (0.0,) * 3, (10, 20, 30), (5, 10, 15)),
     ),
-    # COSEM's N5: a C-order transform.
+    # COSEM's N5: a C-order transform, whose translate is voxel 0's centre.
     "n5-transform": (
         lambda f: f.write_array("n5", np.zeros((10, 20, 30), np.uint8), {"transform": {
             "ordering": "C", "scale": [8, 4, 2], "translate": [80, 40, 20], "units": ["nm"] * 3}}),
-        ("n5", ZYX, (8.0, 4.0, 2.0), (80.0, 40.0, 20.0), (10, 20, 30), (5, 10, 15)),
+        ("n5", ZYX, (8.0, 4.0, 2.0), (76.0, 38.0, 19.0), (10, 20, 30), (5, 10, 15)),
     ),
     # One unit for every axis, not a string to reverse with them ("um" read as "mu").
     "n5-units-string": (
@@ -253,23 +255,27 @@ LAYOUTS = {
         lambda f: f.write_array("n5", np.zeros((10, 20, 30), np.uint8), {"resolution": [3, 2, 1]}),
         ("n5", ZYX, (1.0, 2.0, 3.0), (0.0,) * 3, (10, 20, 30), (5, 10, 15)),
     ),
-    # ... and the group's multiscales give only the offset the array lacks.
+    # ... but a level its group's multiscales list takes that entry's transform, which
+    # outranks the array's own resolution (worldarray's spec, Conventions 4); its
+    # translate (C order) is the centre.
     "n5-offset-from-multiscales": (
         _n5_level_in_multiscales,
-        ("n5", ZYX, (1.0, 2.0, 3.0), (10.0, 20.0, 30.0), (10, 20, 30), (5, 10, 15)),
+        ("n5", ZYX, (8.0, 8.0, 8.0), (26.0, 16.0, 6.0), (10, 20, 30), (5, 10, 15)),
     ),
-    # BigDataViewer's and Paintera's N5.
+    # BigDataViewer's and Paintera's N5; the offset (x, y, z) is not rounded onto the grid.
     "n5-pixel-resolution": (
         lambda f: f.write_array("n5", np.zeros((10, 20, 30), np.uint8), {
             "pixelResolution": {"dimensions": [2, 4, 8], "unit": "nm"},
             "downsamplingFactors": [2, 2, 1], "offset": [30, 20, 10]}),
-        ("n5", ZYX, (8.0, 8.0, 4.0), (8.0, 24.0, 32.0), (10, 20, 30), (5, 10, 15)),
+        ("n5", ZYX, (8.0, 8.0, 4.0), (10.0, 20.0, 30.0), (10, 20, 30), (5, 10, 15)),
     ),
-    # ... which usually have no offset.
+    # ... which usually have no offset: a downsampled level then follows BigDataViewer,
+    # each voxel centred on the full-resolution voxels it covers, (f - 1) / 2 of them on
+    # (worldarray's spec, Conventions 1).
     "n5-pixel-resolution-without-offset": (
         lambda f: f.write_array("n5", np.zeros((10, 20, 30), np.uint8), {
             "pixelResolution": {"dimensions": [2, 4, 8], "unit": "nm"}, "downsamplingFactors": [2, 2, 1]}),
-        ("n5", ZYX, (8.0, 8.0, 4.0), (0.0,) * 3, (10, 20, 30), (5, 10, 15)),
+        ("n5", ZYX, (8.0, 8.0, 4.0), (-4.0, -2.0, -1.0), (10, 20, 30), (5, 10, 15)),
     ),
     # x, y, z voxels (3, 2, 1) at (4, 8, 16) nm: the corner is (16, 16, 12) nm.
     "precomputed": (
@@ -600,8 +606,9 @@ PUBLIC = [
                  ((10.48, 8.0, 8.0), (-2.62, -2.0, -2.0)),
                  {"driver": "zarr", "kvstore": {**_cosem("zarr/recon-1/em/fibsem-uint8/s1")}}, (1592, 400, 3000),
                  id="https-ome-zarr"),
-    # funlib's rule rounds the N5 offset, a voxel centre (2.62, 2, 2), onto the grid.
-    pytest.param(f"s3://{_COSEM}.n5/em/fibsem-uint16/s1", None, ((10.48, 8.0, 8.0), (0.0,) * 3),
+    # The level's COSEM transform translates to voxel 0's centre, (2.62, 2, 2): the corner
+    # is where the zarr's is, not rounded onto the grid.
+    pytest.param(f"s3://{_COSEM}.n5/em/fibsem-uint16/s1", None, ((10.48, 8.0, 8.0), (-2.62, -2.0, -2.0)),
                  {"driver": "n5", "kvstore": {**_cosem("n5/em/fibsem-uint16/s1")}}, (1592, 400, 3000), id="s3-n5"),
     pytest.param(f"gs://{_ERA5}", None, ((1.0,) * 3, (0.0,) * 3),
                  {"driver": "zarr", "kvstore": f"gs://{_ERA5}/"}, (1000, 0, 0), id="gs-zarr"),

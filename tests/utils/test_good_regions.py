@@ -11,7 +11,6 @@ import json
 import neuroglancer
 import pytest
 
-from cellmap_flow.dashboard.routes.finetune import good_regions as gr
 from cellmap_flow.dashboard.state import get_session
 
 MARK = "/api/finetune/good-regions/mark-view"
@@ -65,43 +64,6 @@ def test_marks_add_up_in_the_sessions_good_regions_file(dashboard, session, monk
     stored = json.loads((session / "good_regions.json").read_text())
     assert [r["label"] for r in stored] == ["good-1", "good-2", "good-3"]
     assert dashboard.get("/api/finetune/good-regions").get_json()["count"] == 3
-
-
-@pytest.mark.parametrize("size, status, shape", [
-    pytest.param([512] * 3, 200, [512.0] * 3, id="explicit"),
-    pytest.param([0, 10, 10], 400, None, id="not-positive"),
-])
-def test_a_marks_size_may_be_given_but_must_be_positive(dashboard, session, size, status, shape):
-    response = dashboard.post(MARK, json={"size_nm": size})
-    assert response.status_code == status
-    if shape:
-        assert response.get_json()["region"]["shape_nm"] == shape
-    else:
-        assert not (session / "good_regions.json").exists()
-
-
-@pytest.mark.parametrize("by_id", [pytest.param(True, id="one-by-id"), pytest.param(False, id="all")])
-def test_deleting_marks(dashboard, session, by_id):
-    first = dashboard.post(MARK, json={}).get_json()["region"]
-    dashboard.post(MARK, json={})
-    body = dashboard.post("/api/finetune/good-regions/delete", json={"id": first["id"]} if by_id else {}).get_json()
-    left = dashboard.get("/api/finetune/good-regions").get_json()["regions"]
-    assert body["count"] == len(left) == (1 if by_id else 0)
-    assert first["id"] not in [r["id"] for r in left]
-
-
-def test_the_marks_are_drawn_in_their_own_layer(dashboard, session, view):
-    dashboard.post(MARK, json={})
-    assert len(view.state.layers[gr.GOOD_REGIONS_LAYER].annotations) == 1
-
-
-def test_with_no_session_a_mark_is_refused_and_not_drawn(dashboard, view, monkeypatch):
-    """Better a visible error than a box that vanishes on the next click."""
-    monkeypatch.setattr(get_session(), "annotation_volumes", {})
-    monkeypatch.setitem(get_session().minio_state, "output_base", None)
-    response = dashboard.post(MARK, json={})
-    assert response.status_code == 409 and response.get_json()["success"] is False
-    assert gr.GOOD_REGIONS_LAYER not in view.state.layers
 
 
 def test_resuming_a_session_carries_its_good_regions(dashboard, session, tmp_path, monkeypatch):

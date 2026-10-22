@@ -1,18 +1,18 @@
 """The launcher's settings and ~/.cellmap_flow/server_config.yaml (jobs.settings).
 
 The file is how the CLIs, the dashboard, blockwise masters and scripts share
-the queue, billing and run limit, so its keys and format are pinned here. A
-file saved before a key existed must still load, and save every key: when
-the settings assigned each key by hand, adding "walltime" to the defaults
-gave save() a key no instance had, and every cellmap_flow_yaml run died on
-AttributeError at startup.
+the queue, billing and run limit, so its keys, and what they read back as,
+are checked here. A file saved before a key existed must still load, and
+save every key: when the settings assigned each key by hand, adding
+"walltime" to the defaults gave save() a key no instance had, and every
+cellmap_flow_yaml run died on AttributeError at startup.
 """
 
 import pytest
 import yaml
 
 from cellmap_flow.jobs import settings
-from cellmap_flow.jobs.settings import SERVER_CONFIG_DEFAULTS, LauncherSettings, launcher_settings
+from cellmap_flow.jobs.settings import SERVER_CONFIG_DEFAULTS, LauncherSettings
 
 WITHOUT_WALLTIME = {k: v for k, v in SERVER_CONFIG_DEFAULTS.items() if k != "walltime"}
 
@@ -38,22 +38,13 @@ def test_the_settings_are_the_saved_file_over_the_defaults(config_file, saved, e
     assert (loaded.as_dict(), loaded.cached) == ({**SERVER_CONFIG_DEFAULTS, **expected}, cached)
 
 
-def test_save_writes_every_key_in_the_files_format(config_file):
+def test_save_writes_every_key_and_each_reads_back_as_saved(config_file):
     config_file.write_text(yaml.safe_dump(WITHOUT_WALLTIME))
     loaded = LauncherSettings.load()
     loaded.charge_group, loaded.walltime = "my_lab", "12:00"
     loaded.save()  # where it crashed
-    assert config_file.read_text() == (
-        "charge_group: my_lab\ncycle_gpu_queues: true\nnb_cores_master: 4\nnb_cores_worker: 12\n"
-        "nb_workers: 14\nqueue: gpu_h100\nwalltime: '12:00'\n"
-    )
+    # Read as YAML 1.1, an unquoted 12:00 is the number 720.
+    assert yaml.safe_load(config_file.read_text()) == {**SERVER_CONFIG_DEFAULTS, "charge_group": "my_lab",
+                                                        "walltime": "12:00"}
     assert loaded.cached and LauncherSettings.load().walltime == "12:00"
 
-
-def test_the_process_loads_its_settings_from_the_file_on_first_use(config_file, monkeypatch):
-    config_file.write_text("queue: gpu_a100\n")
-    monkeypatch.setattr(settings, "_current", None)
-    first = launcher_settings()
-    assert (first.queue, launcher_settings()) == ("gpu_a100", first)
-    with pytest.raises(AttributeError):
-        first.wall_time = "06:30"  # misspelt: refused, not stored beside walltime

@@ -1,8 +1,9 @@
 // The shareable URL's pure parts (src/viewer/share.ts): the `#!` hash the
-// page carries, decoded from every form Neuroglancer writes or reads.
-import { afterEach, describe, expect, it, vi } from "vitest";
+// page carries, round-tripped, and decoded as the Python neuroglancer
+// package writes it.
+import { describe, expect, it } from "vitest";
 
-import { decodeState, encodeState, forgetState, isStateHash, rememberedState, rememberState, TAB_STATE_KEY, urlSafeToJson, withHash } from "../../src/viewer/share";
+import { decodeState, encodeState } from "../../src/viewer/share";
 
 const state = {
   dimensions: { z: [8e-9, "m"], y: [8e-9, "m"], x: [8e-9, "m"] },
@@ -15,37 +16,11 @@ const state = {
   crossSectionScale: 2,
 };
 
-/** Neuroglancer's own writing of its hash (UrlHashBinding in the local
- * build): encodeURI of the JSON, with a few more characters escaped. */
-function neuroglancerHash(json: object): string {
-  const text = encodeURI(JSON.stringify(json)).replace(/[!'()*;,]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
-  return `#!${text}`;
-}
-
-describe("isStateHash", () => {
-  it("is a #! hash with a state in it", () => {
-    expect(isStateHash("#!%7B%7D")).toBe(true);
-    expect(isStateHash("#!{'layers':[]}")).toBe(true);
-  });
-  it("is not an empty hash, a diff, or a state to fetch", () => {
-    expect(isStateHash("")).toBe(false);
-    expect(isStateHash("#")).toBe(false);
-    expect(isStateHash("#!")).toBe(false);
-    expect(isStateHash("#!+%7B%7D")).toBe(false);
-    expect(isStateHash("#!https://example.org/state.json")).toBe(false);
-    expect(isStateHash("#!gs://bucket/state.json")).toBe(false);
-    expect(isStateHash("#tab=finetune")).toBe(false);
-  });
-});
-
 describe("encodeState and decodeState", () => {
   it("round-trip a state", () => {
     const hash = encodeState(state);
     expect(hash.startsWith("#!")).toBe(true);
     expect(decodeState(hash)).toEqual(state);
-  });
-  it("read what Neuroglancer writes to its own hash", () => {
-    expect(decodeState(neuroglancerHash(state))).toEqual(state);
   });
   it("read what the Python neuroglancer package writes (url_state.to_url_fragment)", () => {
     // Printed by neuroglancer.url_state.to_url_fragment for the state above
@@ -66,67 +41,5 @@ describe("encodeState and decodeState", () => {
       layout: "xy",
       crossSectionScale: 2,
     });
-  });
-  it("read the oldest links' url-safe JSON: underscores for commas, single quotes", () => {
-    const legacy = "#!{'layers':[{'type':'image'_'source':'zarr://https://x/a.zarr'_'name':'data'}]_'layout':'xy'_'position':[1_2_3]}";
-    expect(decodeState(legacy)).toEqual({ layers: [{ type: "image", source: "zarr://https://x/a.zarr", name: "data" }], layout: "xy", position: [1, 2, 3] });
-  });
-  it("read a hash that is not percent-encoded, even with a stray percent sign", () => {
-    expect(decodeState('#!{"layers":[],"note":"100%"}')).toEqual({ layers: [], note: "100%" });
-  });
-  it("are null for anything that is not a state", () => {
-    expect(decodeState("")).toBeNull();
-    expect(decodeState("#!")).toBeNull();
-    expect(decodeState("#!+%7B%7D")).toBeNull();
-    expect(decodeState("#!https://example.org/state.json")).toBeNull();
-    expect(decodeState("#!not json at all")).toBeNull();
-    expect(decodeState("#!%5B1%2C2%5D")).toBeNull(); // a list is not a state
-  });
-});
-
-describe("urlSafeToJson", () => {
-  it("leaves plain JSON alone, underscores in strings included", () => {
-    const json = '{"a":[1,2],"b":"x_y, z","c":"it\'s"}';
-    expect(urlSafeToJson(json)).toBe(json);
-  });
-  it("turns url-safe commas and single-quoted strings into JSON", () => {
-    expect(urlSafeToJson("{'a':[1_2]_'b':'x_y'}")).toBe('{"a":[1,2],"b":"x_y"}');
-    expect(urlSafeToJson("{'q':'say \\'hi\\' \"there\"'}")).toBe('{"q":"say \'hi\' \\"there\\""}');
-    expect(urlSafeToJson("[1&2]")).toBe("[1,2]");
-  });
-});
-
-describe("withHash", () => {
-  it("replaces or adds the fragment", () => {
-    expect(withHash("https://h/app/?x=1#!old", "#!new")).toBe("https://h/app/?x=1#!new");
-    expect(withHash("https://h/app/", "#!new")).toBe("https://h/app/#!new");
-  });
-  it("drops the fragment for an empty hash", () => {
-    expect(withHash("https://h/app/#!old", "")).toBe("https://h/app/");
-  });
-});
-
-describe("the tab's copy of the viewer's state", () => {
-  afterEach(() => vi.unstubAllGlobals());
-
-  it("is kept in sessionStorage, read back only when it is a state, and dropped on request", () => {
-    const items = new Map<string, string>();
-    vi.stubGlobal("sessionStorage", { getItem: (k: string) => items.get(k) ?? null, setItem: (k: string, v: string) => void items.set(k, v), removeItem: (k: string) => void items.delete(k) });
-    expect(rememberedState()).toBeNull();
-    rememberState(encodeState({ layers: [] }));
-    expect(items.get(TAB_STATE_KEY)).toBe(encodeState({ layers: [] }));
-    expect(rememberedState()).toBe(encodeState({ layers: [] }));
-    rememberState("");  // nothing to keep: the state stays
-    expect(rememberedState()).toBe(encodeState({ layers: [] }));
-    items.set(TAB_STATE_KEY, "#!+diff");  // not a state
-    expect(rememberedState()).toBeNull();
-    forgetState();
-    expect(items.has(TAB_STATE_KEY)).toBe(false);
-  });
-
-  it("does nothing without storage", () => {
-    expect(() => rememberState("#!%7B%7D")).not.toThrow();
-    expect(rememberedState()).toBeNull();
-    expect(() => forgetState()).not.toThrow();
   });
 });

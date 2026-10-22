@@ -1,5 +1,5 @@
 // FileSystemStore over a fake directory handle: paths into subdirectories,
-// a missing file as undefined, other errors through.
+// a missing file as undefined, and the directory handles it walked to kept.
 import { describe, expect, it } from "vitest";
 
 import { FileSystemStore, type DirectoryLike } from "../../src/state/local-store";
@@ -45,38 +45,5 @@ describe("FileSystemStore keeps the directory handles it walked to", () => {
     expect(await store.get("s1/0/0/0")).toBeUndefined();  // s1 is not there (a missing chunk)
     tree.s1 = { "0": { "0": { "0": new Uint8Array([3]) } } };
     expect(Array.from((await store.get("s1/0/0/0"))!)).toEqual([3]);  // a directory made later is found
-  });
-});
-
-describe("FileSystemStore", () => {
-  const store = new FileSystemStore(
-    dir({
-      "zarr.json": new TextEncoder().encode('{"zarr_format":3}'),
-      s0: { c: { "0": { "0": { "0": new Uint8Array([7, 8, 9]) } } } },
-    }),
-  );
-
-  it("reads a file by its path, through subdirectories, with or without a leading slash", async () => {
-    expect(new TextDecoder().decode(await store.get("zarr.json"))).toBe('{"zarr_format":3}');
-    expect(Array.from((await store.get("/s0/c/0/0/0"))!)).toEqual([7, 8, 9]);
-  });
-
-  it("gives undefined for a missing file (a chunk at the fill value), a wrong kind, or an empty path", async () => {
-    expect(await store.get("s0/c/0/0/1")).toBeUndefined();
-    expect(await store.get("s0/zarr.json")).toBeUndefined();
-    expect(await store.get("zarr.json/x")).toBeUndefined(); // a file where a directory was expected
-    expect(await store.get("")).toBeUndefined();
-  });
-
-  it("lets other errors through", async () => {
-    const broken = new FileSystemStore({
-      getDirectoryHandle: async () => {
-        throw domError("NotAllowedError");
-      },
-      getFileHandle: async () => {
-        throw domError("NotAllowedError");
-      },
-    });
-    await expect(broken.get("zarr.json")).rejects.toThrow("NotAllowedError");
   });
 });

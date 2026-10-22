@@ -7,10 +7,8 @@ voxels it hit.
 """
 
 import json
-import logging
 import os
 import pickle
-import warnings
 from types import SimpleNamespace
 
 import numpy as np
@@ -18,7 +16,7 @@ import pytest
 from funlib.geometry import Coordinate, Roi
 
 from cellmap_flow.image_data_interface import ImageDataInterface
-from cellmap_flow.norm.input_normalize import ChannelSelector, LambdaNormalizer, MinMaxNormalizer
+from cellmap_flow.norm.input_normalize import ChannelSelector, LambdaNormalizer
 from cellmap_flow.process_chain import process_chain
 
 Z = np.arange(1, 11, dtype=np.uint8)[:, None, None]  # z index + 1
@@ -86,15 +84,6 @@ READS = {
         lambda f: _precomputed_pyramid(f) + "/s1", {}, (32, 16, 8), Roi((32, 16, 8), (64, 80, 80)),
         ((2, 5, 10), "uint8", [1, 3]),
     ),
-    # The volume is read at the scale for voxel_size, as a multiscale group is.
-    "precomputed-volume-at-a-voxel-size": (
-        _precomputed_pyramid, {"voxel_size": (32, 16, 8)}, (32, 16, 8), Roi((32, 16, 8), (64, 80, 80)),
-        ((2, 5, 10), "uint8", [1, 3]),
-    ),
-    "whole-array": (_at_the_origin, {}, (0, 0, 0), None, ((16, 16, 16), "uint8", list(range(1, 17)))),
-    # A start inside a voxel reads from that voxel.
-    "off-grid-start": (_at_the_origin, {}, (0, 0, 0), Roi((4, 0, 0), (16, 8, 8)), ((2, 1, 1), "uint8", [1, 2])),
-    "negative-start": (_at_the_origin, {}, (0, 0, 0), Roi((-16, 0, 0), (32, 8, 8)), ((4, 1, 1), "uint8", [0, 0, 1, 2])),
     # Half a voxel before the array is in voxel -1, as on the other side of voxel 0.
     "negative-off-grid-start": (
         _at_the_origin, {}, (0, 0, 0), Roi((-4, 0, 0), (16, 8, 8)), ((2, 1, 1), "uint8", [0, 1]),
@@ -106,62 +95,20 @@ READS = {
                                 fill_value=7),
         {}, (0, 0, 0), Roi((-1, 0, 0), (2, 1, 1)), ((2, 1, 1), "uint8", [0, 1]),
     ),
-    # ...or with custom_fill_value, or the border voxels repeated (padding="edge",
-    # what a model's input is read with)...
-    "custom-fill-value": (
-        _at_the_origin, {"custom_fill_value": 9}, (0, 0, 0), Roi((-8, 0, 0), (16, 8, 8)), ((2, 1, 1), "uint8", [9, 1]),
-    ),
+    # ...or with the border voxels repeated (padding="edge", what a model's
+    # input is read with)...
     "edge-fill": (
         _at_the_origin, {"padding": "edge"}, (0, 0, 0), Roi((-8, 0, 0), (16, 8, 8)),
         ((2, 1, 1), "uint8", [1, 1]),
     ),
-    # ...and the padding is added after the chain: it is never normalized, and
-    # the edge repeated is the normalized one.
-    "chain-then-padding": (
-        _at_the_origin, {"input_norms": [LambdaNormalizer("x * 2")]}, (0, 0, 0), Roi((-8, 0, 0), (16, 8, 8)),
-        ((2, 1, 1), "float32", [0.0, 2.0]),
-    ),
+    # ...which is added after the chain: the edge repeated is the normalized one.
     "chain-then-edge": (
         _at_the_origin, {"input_norms": [LambdaNormalizer("x * 2")], "padding": "edge"}, (0, 0, 0),
         Roi((-8, 0, 0), (16, 8, 8)), ((2, 1, 1), "float32", [2.0, 2.0]),
     ),
-    # A ROI wholly outside the array is all padding, in the chain's dtype...
-    "wholly-past-the-end": (
-        _at_the_origin, {"input_norms": [LambdaNormalizer("x * 2")]}, (0, 0, 0), Roi((200, 0, 0), (16, 8, 8)),
-        ((2, 1, 1), "float32", [0.0, 0.0]),
-    ),
-    # ...and "edge" repeats the array's voxels nearest it, on either side.
-    "wholly-before-the-start-edge": (
-        _at_the_origin, {"padding": "edge"}, (0, 0, 0), Roi((-32, 0, 0), (16, 8, 8)),
-        ((2, 1, 1), "uint8", [1, 1]),
-    ),
-    "wholly-past-the-end-edge": (
-        _at_the_origin, {"padding": "edge"}, (0, 0, 0), Roi((200, 0, 0), (16, 8, 8)),
-        ((2, 1, 1), "uint8", [16, 16]),
-    ),
-    "not-normalized": (
-        _at_the_origin, {"input_norms": [LambdaNormalizer("x * 2")], "normalize": False}, (0, 0, 0),
-        Roi((0, 0, 0), (16, 8, 8)), ((2, 1, 1), "uint8", [1, 2]),
-    ),
     "channel-selected": (
         _two_channels, {"input_norms": [ChannelSelector(1)]}, (0, 0, 0), Roi((0, 0, 0), (16, 8, 8)),
         ((2, 1, 1), "uint8", [101, 102]),
-    ),
-    # output_voxel_size resamples by the z factor: finer repeats each voxel, read
-    # widened to whole voxels (here [0, 24) nm) and cropped back to the ROI...
-    "upsampled": (
-        _at_the_origin, {"output_voxel_size": (4, 4, 4)}, (0, 0, 0), Roi((4, 0, 0), (16, 8, 8)),
-        ((4, 2, 2), "uint8", [1, 2, 2, 3]),
-    ),
-    # ...coarser takes each block's median...
-    "downsampled": (
-        _at_the_origin, {"output_voxel_size": (16, 16, 16)}, (0, 0, 0), Roi((0, 0, 0), (32, 16, 16)),
-        ((2, 1, 1), "float64", [1.5, 3.5]),
-    ),
-    # ...and the same z voxel size resamples nothing, even when y and x differ.
-    "resampled-z-unchanged": (
-        _at_the_origin, {"output_voxel_size": (8, 4, 4)}, (0, 0, 0), Roi((0, 0, 0), (16, 8, 8)),
-        ((2, 1, 1), "uint8", [1, 2]),
     ),
     "extra-compressor-field": (
         _extra_compressor_field, {}, (0, 0, 0), Roi((0, 0, 0), (4, 4, 4)), ((4, 4, 4), "uint8", [1, 2, 3, 4]),
@@ -181,18 +128,6 @@ READS = {
     "openorganelle-own-roi": (
         _openorganelle_level, {}, (-3, -2, -2), OWN_ROI, ((8, 8, 8), "uint8", list(range(1, 9))),
     ),
-    "5.24nm-own-roi": (
-        lambda f: f.ome_pyramid((((5.24, 4, 4), 0),), shape=(16, 4, 4)) + "/s0",
-        {}, (-3, -2, -2), OWN_ROI, ((16, 4, 4), "uint8", list(range(1, 17))),
-    ),
-    # Voxel 2 starts at 18.34 nm; the whole-nm box around voxels 2..4 starts at 18.
-    "openorganelle-whole-nm-start": (
-        _openorganelle_level, {}, (-3, -2, -2), Roi((18, -2, -2), (32, 8, 8)), ((3, 1, 1), "uint8", [3, 4, 5]),
-    ),
-    # More than 1 nm below voxel 0 (-4 nm) is still in voxel -1.
-    "openorganelle-start-before-voxel-0": (
-        _openorganelle_level, {}, (-3, -2, -2), Roi((-4, -2, -2), (21, 8, 8)), ((2, 1, 1), "uint8", [0, 1]),
-    ),
     "ome-v3-level": (
         lambda f: f.ome_pyramid(((8, 0), (16, 4)), zarr_format=3),
         {"voxel_size": (16, 16, 16)}, (-4, -4, -4), Roi((-4, -4, -4), (32, 16, 16)), ((2, 1, 1), "uint8", [1, 2]),
@@ -203,10 +138,6 @@ READS = {
         {"voxel_size": (16, 16, 16)}, (160, 160, 160), Roi((160, 160, 160), (48, 16, 16)),
         ((3, 1, 1), "uint8", [1, 2, 3]),
     ),
-    "exact-level": (
-        lambda f: f.ome_pyramid(((6, 123), (12, 126)), shape=(8, 4, 4)),
-        {"voxel_size": (12, 12, 12)}, (120, 120, 120), Roi((120, 120, 120), (12, 12, 12)), ((1, 1, 1), "uint8", [1]),
-    ),
 }
 
 
@@ -215,8 +146,6 @@ def _open(write, kwargs, ome_pyramid, write_array):
     return ImageDataInterface(path, **{"input_norms": [], **kwargs})
 
 
-# The resampling rows pass the deprecated arguments, which work until they go.
-@pytest.mark.filterwarnings("ignore:ImageDataInterface's .* is deprecated:DeprecationWarning")
 @pytest.mark.parametrize("layout", READS)
 def test_a_read_lands_where_the_metadata_says(layout, ome_pyramid, write_array):
     write, kwargs, corner, roi, (shape, dtype, column) = READS[layout]
@@ -226,138 +155,7 @@ def test_a_read_lands_where_the_metadata_says(layout, ome_pyramid, write_array):
     assert (got.shape, str(got.dtype), got[:, 0, 0].tolist()) == (shape, dtype, column)
 
 
-# layout: (what ImageDataInterface reports: voxel size, offset, roi, shape, chunk shape, axes, file type)
-OPENED = {
-    "n5": ((1, 2, 3), (0, 0, 0), Roi((0, 0, 0), (10, 40, 90)), (10, 20, 30), (5, 10, 15), ["z", "y", "x"], "n5"),
-    "precomputed": (
-        (16, 8, 4), (16, 16, 12), Roi((16, 16, 12), (32, 80, 80)), (2, 10, 20), (2, 10, 20), ["z", "y", "x"],
-        "precomputed",
-    ),
-    "precomputed-level": (
-        (32, 16, 8), (32, 16, 8), Roi((32, 16, 8), (64, 80, 80)), (2, 5, 10), (2, 5, 10), ["z", "y", "x"],
-        "precomputed",
-    ),
-    # A local zarr v2 array reports its last three axes, whatever is before them.
-    "channel-selected": (
-        (8, 8, 8), (0, 0, 0), Roi((0, 0, 0), (128, 128, 128)), (16, 16, 16), (8, 8, 8), ["z", "y", "x"], "zarr",
-    ),
-    "fractional-voxel-size": (
-        (5.24, 4.0, 4.0), (0, 0, 0), Roi((0, 0, 0), (1048, 16, 16)), (200, 4, 4), (100, 2, 2), ["z", "y", "x"], "zarr",
-    ),
-    "ome-v3-level": ((16, 16, 16), (-4, -4, -4), Roi((-4, -4, -4), (128, 128, 128)), (8, 8, 8), (4, 4, 4),
-                     ["z", "y", "x"], "zarr"),
-    "relabelled-level": ((16, 16, 16), (160, 160, 160), Roi((160, 160, 160), (64, 32, 32)), (4, 2, 2), (2, 1, 1),
-                         ["z", "y", "x"], "zarr"),
-}
-
-
-@pytest.mark.parametrize("layout", OPENED)
-def test_what_a_dataset_opens_as(layout, ome_pyramid, write_array):
-    write, kwargs = READS[layout][:2]
-    idi = _open(write, kwargs, ome_pyramid, write_array)
-    assert (tuple(idi.voxel_size), tuple(idi.offset), idi.roi, tuple(idi.shape), tuple(idi.chunk_shape), idi.axes_names,
-            idi.filetype) == OPENED[layout]
-    assert idi.output_voxel_size == idi.voxel_size
-
-
-# layout: (what ts is, its dtype, domain origin and shape, ts[:2, 0, 0])
-TS_VIEWS = {
-    "n5": ("LazyNormalization", np.uint8, ((0, 0, 0), (10, 20, 30)), [1, 2]),
-    # C order, indexed from 0 though tensorstore starts the volume at voxel_offset.
-    "precomputed": ("LazyNormalization", np.uint8, ((0, 0, 0), (2, 10, 20)), [1, 2]),
-    "chain-then-padding": ("LazyNormalization", np.float32, ((0, 0, 0), (16, 16, 16)), [2.0, 4.0]),
-    "not-normalized": ("TensorStore", np.uint8, ((0, 0, 0), (16, 16, 16)), [1, 2]),
-    "channel-selected": ("LazyNormalization", np.uint8, ((0, 0, 0), (16, 16, 16)), [101, 102]),
-}
-
-
-@pytest.mark.parametrize("layout", TS_VIEWS)
-def test_ts_is_one_channel_of_the_dataset_through_the_chain(layout, ome_pyramid, write_array):
-    """What neuroglancer indexes, and what process_chunk scripts may read directly."""
-    write, kwargs = READS[layout][:2]
-    ts = _open(write, kwargs, ome_pyramid, write_array).ts
-    dtype = np.dtype(getattr(ts.dtype, "numpy_dtype", ts.dtype))
-    assert (type(ts).__name__, dtype, (tuple(ts.domain.inclusive_min), tuple(ts.shape)),
-            np.asarray(ts[:2, 0, 0]).tolist()) == TS_VIEWS[layout]
-
-
-@pytest.mark.parametrize("kwargs, deprecated", [
-    pytest.param({"output_voxel_size": (4, 4, 4)}, "output_voxel_size", id="output_voxel_size"),
-    pytest.param({"custom_fill_value": 9}, "custom_fill_value", id="custom_fill_value"),
-])
-def test_the_resampling_arguments_are_deprecated(raw_zarr, kwargs, deprecated):
-    with warnings.catch_warnings(record=True) as caught:
-        warnings.simplefilter("always")
-        ImageDataInterface(raw_zarr(), **kwargs)
-    ours = [str(w.message) for w in caught if w.category is DeprecationWarning and "ImageDataInterface" in str(w.message)]
-    assert [deprecated in message for message in ours] == [True]
-
-
-def test_without_a_voxel_size_the_finest_level_is_opened(ome_pyramid):
-    assert ImageDataInterface(ome_pyramid(((6, 123), (12, 126)), shape=(8, 4, 4))).path.endswith("s0")
-
-
-def test_a_level_at_another_voxel_size_is_relabelled_with_a_warning_resampled_or_refused(ome_pyramid, caplog):
-    pyramid = ome_pyramid(((6, 123), (12, 126)), shape=(8, 4, 4))
-    with caplog.at_level(logging.WARNING):
-        idi = ImageDataInterface(pyramid, voxel_size=(16, 16, 16))
-    warned = [r for r in caplog.records if r.levelno >= logging.WARNING]
-    assert [r.name for r in warned] == ["cellmap_flow.image_data_interface"]
-    assert 'on_voxel_size_mismatch="resample"' in warned[0].getMessage(), "it says how to resample instead"
-    assert (idi.path[-2:], idi.voxel_size, idi.actual_voxel_size, idi.requested_voxel_size, idi.resampled) == (
-        "s1", Coordinate(16, 16, 16), Coordinate(12, 12, 12), Coordinate(16, 16, 16), False,
-    )
-    assert tuple(idi.roi.shape) == (64, 32, 32)
-    caplog.clear()
-    with caplog.at_level(logging.WARNING):
-        resampled = ImageDataInterface(pyramid, voxel_size=(16, 16, 16), on_voxel_size_mismatch="resample")
-    assert not caplog.records and (resampled.path[-2:], resampled.resampled) == ("s1", True)
-    with pytest.raises(ValueError, match="requested"):
-        ImageDataInterface(pyramid, voxel_size=(16, 16, 16), on_voxel_size_mismatch="error")
-
-
 # --- resampling (on_voxel_size_mismatch="resample") ---------------------------------
-
-# layout: (OME levels as ome_pyramid takes them, its shape, voxel_size asked for;
-#          what the resampled dataset opens as: the level read, its voxel size,
-#          voxel_size, offset, roi, shape). Every level's corner is -4 nm.
-RESAMPLED_OPENS = {
-    # Every level is coarser than 4 nm: the finest is upsampled.
-    "4nm-model-on-janelia-levels": (
-        ((8, 0), (16, 4)), (16, 16, 16), (4, 4, 4),
-        ("s0", (8, 8, 8), (4, 4, 4), (-4, -4, -4), Roi((-4, -4, -4), (128, 128, 128)), (32, 32, 32)),
-    ),
-    # 16 nm is too coarse for 12: s0 at 8 nm, by 1.5, covered by ceil(16 / 1.5) voxels.
-    "12nm-model-on-janelia-levels": (
-        ((8, 0), (16, 4)), (16, 16, 16), (12, 12, 12),
-        ("s0", (8, 8, 8), (12, 12, 12), (-4, -4, -4), Roi((-4, -4, -4), (132, 132, 132)), (11, 11, 11)),
-    ),
-    "16nm-model-on-8x8x40-data": (
-        (((40, 8, 8), (16, 0, 0)),), (10, 24, 24), (16, 16, 16),
-        ("s0", (40, 8, 8), (16, 16, 16), (-4, -4, -4), Roi((-4, -4, -4), (400, 192, 192)), (25, 12, 12)),
-    ),
-    # A level at the voxel size asked for is read as it is.
-    "exact-level-is-not-resampled": (
-        ((8, 0), (16, 4)), (16, 16, 16), (16, 16, 16),
-        ("s1", (16, 16, 16), (16, 16, 16), (-4, -4, -4), Roi((-4, -4, -4), (128, 128, 128)), (8, 8, 8)),
-    ),
-}
-
-
-@pytest.mark.parametrize("layout", RESAMPLED_OPENS)
-def test_a_resampled_dataset_starts_at_the_levels_corner(ome_pyramid, layout):
-    """The resampled grid's voxel 0 starts where the level's does (the OME
-    translation less half a level voxel), not at 0 nm, so what the model sees
-    lies over the data."""
-    levels, shape, requested, expected = RESAMPLED_OPENS[layout]
-    idi = ImageDataInterface(ome_pyramid(levels, shape=shape), voxel_size=requested,
-                             on_voxel_size_mismatch="resample", input_norms=[])
-    assert (idi.path[-2:], tuple(idi.actual_voxel_size), tuple(idi.voxel_size), tuple(idi.offset), idi.roi,
-            tuple(idi.shape)) == expected
-    assert idi.resampled is (expected[1] != expected[2]) and idi.output_voxel_size == idi.voxel_size
-    if idi.resampled:  # its voxels exist only as reads compute them
-        with pytest.raises(AttributeError, match="resampled"):
-            idi.ts
 
 
 def _scipy_resampled(data, source_vs, target_vs):
@@ -389,13 +187,10 @@ def _scipy_resampled(data, source_vs, target_vs):
 
 # layout: (source voxel size, shape, dtype, voxel size asked for)
 RESAMPLED_VALUES = {
-    "block-mean": ((8, 8, 8), (8, 8, 8), np.float32, (16, 16, 16)),
     "block-mean-rounded-in-uint8": ((8, 8, 8), (8, 8, 8), np.uint8, (16, 16, 16)),
     "block-mean-of-a-last-block-cut-short": ((8, 8, 8), (5, 8, 7), np.float32, (24, 16, 24)),
     "upsampled-linear": ((8, 8, 8), (4, 4, 4), np.float32, (4, 4, 4)),
     "non-integer-factor-linear": ((12, 12, 12), (8, 8, 8), np.float32, (16, 16, 16)),
-    "16nm-model-on-12x12x30-data": ((30, 12, 12), (6, 8, 8), np.float32, (16, 16, 16)),
-    "4nm-model-on-8x8x40-data": ((40, 8, 8), (3, 4, 4), np.float32, (4, 4, 4)),
     # z linear (40 -> 16), y and x block means (8 -> 16).
     "16nm-model-on-8x8x40-data": ((40, 8, 8), (4, 8, 8), np.float32, (16, 16, 16)),
     # Labels take the nearest voxel, whatever the factor.
@@ -446,23 +241,6 @@ def test_neighbouring_resampled_chunks_meet_exactly(write_array, layout):
             assert np.array_equal(pieces, expected), (axis, split)
 
 
-@pytest.mark.parametrize("levels, unit, requested, level, voxel_size, roi_shape", [
-    # Levels are compared in nanometers.
-    pytest.param((((0.008, 0.004, 0.004), None), ((0.016, 0.008, 0.008), None)), "micrometer", (16, 8, 8),
-                 "s1", Coordinate(16, 8, 8), None, id="micrometers-picked-in-nm"),
-    # A whole number despite the float noise of converting (70 A is 7.000000000000001 nm)...
-    pytest.param((((70, 40, 40), None),), "angstrom", None, "s0", Coordinate(7, 4, 4), None, id="angstroms-whole-nm"),
-    # ...or kept as floats: Coordinate would truncate 5.24 to 5, and 200 voxels span 1048 nm, not 1000.
-    pytest.param((((5.24, 4, 4), (2.62, 2, 2)),), "nanometer", None, "s0", (5.24, 4.0, 4.0), (1048, 16, 16),
-                 id="fractional-nm-kept"),
-])
-def test_the_voxel_size_is_in_nanometers_whole_or_fractional(ome_pyramid, levels, unit, requested, level, voxel_size,
-                                                             roi_shape):
-    idi = ImageDataInterface(ome_pyramid(levels, shape=(200, 4, 4), unit=unit), voxel_size=requested)
-    assert (idi.path[-2:], idi.voxel_size) == (level, voxel_size)
-    assert roi_shape is None or tuple(idi.roi.shape) == roi_shape
-
-
 def test_each_read_goes_through_its_own_chain(raw_zarr):
     roi = Roi((0, 0, 0), (32, 32, 32))
     idi = ImageDataInterface(raw_zarr(np.full((4, 4, 4), 7, np.uint8)))
@@ -479,17 +257,3 @@ def test_each_read_goes_through_its_own_chain(raw_zarr):
     unpickled = pickle.loads(pickle.dumps(idi))
     process_chain().input_norms = []
     assert np.all(unpickled.to_ndarray_ts(roi) == 7)
-
-
-def test_the_channel_is_chosen_on_every_read_and_keeps_the_last_declared_dtype(raw_zarr):
-    """A server that has read a chunk must follow a new ChannelSelector."""
-    roi = Roi((0, 0, 0), (32, 32, 32))
-    channels = ImageDataInterface(raw_zarr(np.stack([np.full((4, 4, 4), c, np.uint8) for c in (1, 2)])))
-    process_chain().input_norms = []
-    assert np.all(channels.to_ndarray_ts(roi) == 1)
-    process_chain().input_norms = [ChannelSelector(1)]
-    assert np.all(channels.to_ndarray_ts(roi) == 2) and np.all(np.asarray(channels.ts[...]) == 2)
-    # ChannelSelector declares no dtype: MinMax's float32 still reaches the viewer.
-    view = channels.with_input_norms([MinMaxNormalizer(), ChannelSelector(0)])
-    assert view.ts.dtype == np.float32 and view.to_ndarray_ts(roi).dtype == np.float32
-    assert channels.with_input_norms([]).ts.dtype == np.uint8

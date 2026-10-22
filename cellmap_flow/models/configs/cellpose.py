@@ -59,7 +59,8 @@ import os
 
 import numpy as np
 
-from cellmap_flow.models.configs.base import Config, ModelConfig, _voxel_size
+from cellmap_flow.models import entry
+from cellmap_flow.models.configs.base import Config, ModelConfig
 from cellmap_flow.models.geometry import _numbers
 
 logger = logging.getLogger(__name__)
@@ -323,7 +324,7 @@ class CellposeModelConfig(ModelConfig):
 
     def __init__(
         self,
-        voxel_size,
+        voxel_size: tuple,
         pretrained_model: str = "cpsam_v2",
         output: str = "flows",
         do_3d: bool = False,
@@ -342,14 +343,10 @@ class CellposeModelConfig(ModelConfig):
         super().__init__()
         if output not in OUTPUTS:
             raise ValueError(f"output must be one of {', '.join(OUTPUTS)}, not {output!r}")
-        # The server CLI and the model form pass the voxel size as a string
-        # ("64" or "16,8,8"); a YAML gives a number or a list.
-        # Not _as_int_tuple: that truncated a 5.24 nm voxel to 5.
-        self.voxel_size = _voxel_size(voxel_size)
+        self.voxel_size = entry.voxel_size(voxel_size)
         self.pretrained_model = str(pretrained_model)
         self.output = output
-        # The model form sends a checkbox as a string.
-        self.do_3d = do_3d if isinstance(do_3d, bool) else str(do_3d).strip().lower() in ("1", "true", "yes", "on")
+        self.do_3d = bool(do_3d)
         self.slices_per_chunk = int(slices_per_chunk)
         if slice_size is None:
             slice_size = DEFAULT_SLICE_SIZE_3D if self.do_3d else DEFAULT_SLICE_SIZE

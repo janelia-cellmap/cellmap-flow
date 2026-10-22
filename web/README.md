@@ -44,7 +44,10 @@ npm run dev                    # then open http://localhost:5173/
 ```
 
 `npm run render` writes `web/index.html` (it is not committed; the build
-renders it). `npm run dev` serves the page, the dashboard's static files
+renders it), and `web/src/generated/python-data.json`, the constants and
+catalogs the app reads from the Python (`build/export_data.py`, also
+`npm run export:data`): that one is committed, so regenerate it with a change
+to one of them, and `tests/web/test_python_data_fresh.py` says when it is stale. `npm run dev` serves the page, the dashboard's static files
 under `./static/` and, in development, relays `./ng/` from
 neuroglancer-demo.appspot.com: upstream Neuroglancer, which cannot paint.
 `scripts/fetch-neuroglancer.sh` builds the fork that paints

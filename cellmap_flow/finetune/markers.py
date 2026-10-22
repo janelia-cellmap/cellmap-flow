@@ -1,6 +1,6 @@
 """The lines the trainer prints for the job manager to find in its log.
 
-The training job's loop (session_loop) and lora_trainer print these to
+The training job's loop (session_loop) and the trainer (trainer.loop) print these to
 stdout, which tee copies into training_log.txt; the job manager reads them
 back from there to follow the job, and the finetune tab reads the log it
 streams. The two sides can be different versions -- a training job

@@ -15,8 +15,11 @@ cellmap-flow serves PyTorch, TensorFlow, DaCapo and bioimage.io models to Neurog
 - Library code raises (`ConfigError` for a bad configuration); only CLI entry points call `sys.exit`.
 - New code does not add state to the `Flow` singleton `g` (`globals.py`) or hard-code site values such as `gpu_h100`, 8 nm or `sN` level names; take them as arguments or from the data's metadata.
 - Comments and docstrings explain why, in plain prose: the constraint, the bug a line prevents, the units. They do not narrate the code.
+- A feature works in both modes (the server dashboard and the browser app) only when its logic is written once; otherwise the other mode answers unavailable. See *One implementation per behaviour* in `web/ARCHITECTURE.md`. A new Flask route is declared in `cellmap_flow/schema.py`'s `AVAILABILITY`, and the browser registers a route only when it is declared for it there.
+- `web/src/generated/` and `docs/api.md` are generated from the pydantic request models and `cellmap_flow/schema.py` (`npm run gen` in web/), never edited by hand; TypeScript imports a shared constant from there rather than writing the number again.
 
 **Tests**
 - Tests assert on behaviour (return values, files written, HTTP responses), not on source text (`inspect.getsource`), signatures, private attributes or exact log wording.
+- One behavioural test per feature in each mode (server and browser), at its outermost layer. No frozen snapshots, error-sentence, help-text or prompt pins, and no TypeScript unit test that hand-copies Python values for an op `web/test/parity/` already covers.
 - A test that needs peft is marked `@pytest.mark.finetune` and skips without it; `gpu`, `lsf`, `minio` and `network` work the same way. Write files under `tmp_path`.
 - A bug fix comes with a test that fails without it.

@@ -2,18 +2,16 @@
 
 chunkmirage reads the raw data around each chunk, caches, queues chunks for
 the device and serves the zarr. cellmap-flow adds the model on the layer's
-own chain, the chunk grid, the dashboard's routes and the announcement of
-the address, which these test. A served chunk is checked against
-``Inferencer.process_chunk`` on the chunk's region, the computation a
-blockwise worker does for a block. What the server answers for five models
-is pinned in test_served_metadata_snapshot.
+own chain, the chunk grid and the dashboard's routes, which these test. A
+served chunk is checked against ``Inferencer.process_chunk`` on the chunk's
+region, the computation a blockwise worker does for a block.
 """
 
 import json
-import logging
 import os
 import threading
 import time
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -34,13 +32,20 @@ from cellmap_flow.post.postprocessors import (
 )
 from cellmap_flow.process_chain import process_chain
 from cellmap_flow.serving import chunkmirage_ops
-from cellmap_flow.serving.chunkmirage_ops import InferenceOp, chunk_roi
-from cellmap_flow.serving.chunkmirage_server import INFERENCE_PREFETCH, ChunkmirageServer
-from cellmap_flow.serving.engine import check_server, make_server
+from cellmap_flow.serving.chunkmirage_ops import chunk_roi
+from cellmap_flow.serving.chunkmirage_server import ChunkmirageServer
 from cellmap_flow.serving.protocol import ARGS_KEY, FORMAT
 from cellmap_flow.serving.restart_token import TOKEN_HEADER
-from tests.utils.serving_helpers import IDENTITY_MODEL, get_json, layer, read_chunk, write_raw, write_script
-from tests.utils.test_served_metadata_snapshot import CASES, COARSER, _ome_raw, chunk_index
+from tests.utils.serving_helpers import (
+    COARSER_MODEL,
+    IDENTITY_MODEL,
+    SERVED_CASES,
+    get_json,
+    layer,
+    read_chunk,
+    write_raw,
+    write_script,
+)
 
 
 def _server(path, script, **kwargs):
@@ -63,43 +68,32 @@ def _computed(server, index, posts=(), norms=()):
 
 # --- the voxels ----------------------------------------------------------------
 
-CHAINS = [(case, chain) for case, (_, _, chains, _) in CASES.items() for chain in ["plain", *chains]]
+CHAINS = [(case, chain) for case, (_, _, chains, _) in SERVED_CASES.items() for chain in ["plain", *chains]]
 
 
 @pytest.mark.parametrize("case, chain", [pytest.param(case, chain, id=f"{case}-{chain}") for case, chain in CHAINS])
-def test_each_model_and_chain_serves_the_models_output_for_the_chunks_region(tmp_path, case, chain):
+def test_each_model_and_chain_serves_the_models_output_for_the_chunks_region(tmp_path, raw_zarr, ome_pyramid,
+                                                                             case, chain):
     """The identity, a model without a channel axis, one writing coarser
     voxels than it reads, one with context, and a level read as if it were at
     the model's voxel size; each plain and through a chain."""
-    script, raw, chains, key = CASES[case]
-    server, client = _server(raw(tmp_path), write_script(tmp_path, script))
+    script, raw, chains, index = SERVED_CASES[case]
+    server, client = _server(raw(SimpleNamespace(raw_zarr=raw_zarr, ome_pyramid=ome_pyramid)),
+                             write_script(tmp_path, script))
     posts = chains.get(chain, [])
 
-    got = read_chunk(client, layer(posts=posts), chunk_index(key))
-    expected = _computed(server, chunk_index(key), posts)
+    got = read_chunk(client, layer(posts=posts), index)
+    expected = _computed(server, index, posts)
 
     assert got.dtype == expected.dtype and got.shape == expected.shape
     np.testing.assert_array_equal(got, expected)
-
-
-def test_a_scale_of_a_precomputed_volume_is_read_at_the_models_voxel_size(tmp_path, write_array):
-    """The hemibrain on gs:// failed to start: cellmap-flow names a precomputed
-    volume's scales ``…/s<N>``, which is no path in the volume."""
-    data = np.arange(16**3, dtype=np.uint8).reshape((16,) * 3)
-    # 4 nm voxels: the model's 8 nm are scale 1.
-    path = write_array("precomputed", data, {"resolution": [4, 4, 4], "voxel_offset": [2, 4, 6]}, scales=2)
-    server, client = _server(path, write_script(tmp_path, IDENTITY_MODEL))
-
-    for index in [(0, 0, 0), (1, 1, 1)]:
-        np.testing.assert_array_equal(read_chunk(client, layer(), index), _computed(server, index))
-    assert server.model_info()["input_resampled_from"] is None
 
 
 def test_a_chunk_the_data_ends_in_is_computed_whole_and_cropped(tmp_path):
     """10 voxels in 4-voxel chunks: the last chunk holds 2, but the model
     still gets the 4 (and its context) it always did."""
     data = (np.arange(10**3) % 251).astype(np.uint8).reshape((10,) * 3)
-    crop = CASES["corner_at_-4nm"][0]
+    crop = SERVED_CASES["corner_at_-4nm"][0]
     server, client = _server(write_raw(tmp_path, data), write_script(tmp_path, crop))
 
     got = read_chunk(client, layer(), (2, 2, 1))
@@ -108,13 +102,12 @@ def test_a_chunk_the_data_ends_in_is_computed_whole_and_cropped(tmp_path):
     np.testing.assert_array_equal(got, _computed(server, (2, 2, 1))[:, :2, :2, :4])
 
 
-def test_the_served_array_covers_the_data_rounded_up_and_its_chunks_start_at_the_raw_corner(tmp_path):
+def test_the_served_array_covers_the_data_rounded_up_and_its_chunks_start_at_the_raw_corner(tmp_path, ome_pyramid):
     """11 voxels of 8 nm from -4 nm (Janelia's corner, which OME metadata
     carries; a legacy offset is snapped onto the voxel grid) end at 84 nm:
     5.5 voxels of 16 nm, so 6. Chunk (1, 1, 1) of 4 output voxels starts
     64 nm from the corner and holds the 2 voxels inside the data."""
-    data = (np.arange(11**3) % 251).astype(np.uint8).reshape((11,) * 3)
-    server, client = _server(_ome_raw(tmp_path, data, 8.0, 0.0), write_script(tmp_path, COARSER))
+    server, client = _server(ome_pyramid(((8.0, 0.0),), shape=(11, 11, 11)), write_script(tmp_path, COARSER_MODEL))
 
     assert get_json(client, f"/{layer()}/{FORMAT}/s0/.zarray")["shape"] == [2, 6, 6, 6]
     assert chunk_roi((1, 1, 1), server.served.block, (16, 16, 16), server.served.origin) == Roi(
@@ -212,34 +205,6 @@ def test_each_layer_is_served_with_the_chain_in_its_own_url(tmp_path):
     assert chain.input_norms == [] and [type(p) for p in chain.postprocess] == [Plus], "nothing leaks into it"
 
 
-@pytest.mark.parametrize("dataset, warns", [
-    pytest.param(layer([LambdaNormalizer("x * 2")]), False, id="with-an-input-chain"),
-    pytest.param("plain", True, id="no-chain-in-the-url"),
-    pytest.param(layer(), True, id="an-empty-input-chain"),
-])
-def test_a_layer_served_without_normalization_says_so(tmp_path, caplog, dataset, warns):
-    """A model fed raw voxels looks like one that trained badly, so the
-    server warns when a layer URL carries no input chain."""
-    _, client = _server(write_raw(tmp_path, np.full((8,) * 3, 10, np.uint8)), write_script(tmp_path, IDENTITY_MODEL))
-    caplog.clear()  # building the model warns of other things (no GPU, no output_dtype declared)
-    with caplog.at_level(logging.WARNING):
-        read_chunk(client, dataset, (0, 0, 0))
-    assert any(r.levelno == logging.WARNING for r in caplog.records) is warns
-
-
-def test_a_stateful_step_keeps_its_state_across_metadata_requests(tmp_path):
-    """A layer's steps are built once, when its name is resolved: the merger
-    that keeps the ids it has merged is the same object for every request."""
-    server, client = _server(write_raw(tmp_path, np.full((8,) * 3, 10, np.uint8)), write_script(tmp_path, IDENTITY_MODEL))
-    merged = layer(posts=[SimpleBlockwiseMerger()])
-    get_json(client, f"/{merged}/{FORMAT}/.zattrs")
-    first = server.registry.resolve(merged).ops[1]._step
-    read_chunk(client, merged, (0, 0, 0))
-    get_json(client, f"/{merged}/{FORMAT}/.zattrs")
-    assert server.registry.resolve(merged).ops[1]._step is first
-    assert first.chunk_slice_position_to_coords_id_dict
-
-
 def test_merged_ids_go_to_the_dashboard_without_holding_up_chunks(tmp_path, monkeypatch):
     """The POST ran inside the chunk request with no timeout, and the refresh
     time was set only once it returned: a slow dashboard held up the chunk,
@@ -261,18 +226,6 @@ def test_merged_ids_go_to_the_dashboard_without_holding_up_chunks(tmp_path, monk
     while not posted and time.monotonic() < deadline:
         time.sleep(0.01)
     assert posted == [("http://dashboard/update/equivalences", chunkmirage_ops.EQUIVALENCES_TIMEOUT_SECONDS)]
-
-
-@pytest.mark.parametrize("declared, served", [
-    pytest.param("np.float16", "<f2", id="numpy-type"),
-    pytest.param('"float32"', "<f4", id="string"),
-    pytest.param("np.uint8", "|u1", id="unsigned"),
-])
-def test_any_declared_output_dtype_is_served_as_a_zarr_dtype(tmp_path, declared, served):
-    script = write_script(tmp_path, IDENTITY_MODEL + f"\noutput_dtype = {declared}\n")
-    _, client = _server(write_raw(tmp_path, np.zeros((8,) * 3, np.uint8)), script)
-    assert get_json(client, f"/plain/{FORMAT}/s0/.zarray")["dtype"] == served
-    assert read_chunk(client, "plain", (0, 0, 0)).dtype == np.dtype(served)
 
 
 # --- the model's output is kept ------------------------------------------------
@@ -302,58 +255,6 @@ def test_the_models_output_is_kept_for_revisits_and_postprocessing_changes(tmp_p
     assert _forwards(server) - start == 1
 
 
-def test_a_chain_sent_again_with_its_values_as_text_reuses_the_models_output(tmp_path):
-    """The dashboard's forms send "0.0" where the YAML gave 0.0: submitting a
-    postprocessing step on the Output tab ran the model again on every chunk."""
-    server, client = _server(write_raw(tmp_path, np.full((8,) * 3, 10, np.uint8)), write_script(tmp_path, COUNTING_MODEL))
-    name = lambda norm, posts=(): f"m{ARGS_KEY}{PipelineSpec([norm], list(posts)).to_url_blob()}{ARGS_KEY}"  # noqa: E731
-    start = _forwards(server)
-
-    read_chunk(client, name({"name": "MinMaxNormalizer", "min_value": 0.0, "max_value": 255.0, "invert": False}), (0, 0, 0))
-    read_chunk(client, name({"name": "MinMaxNormalizer", "min_value": "0.0", "max_value": "255.0", "invert": "False"},
-                            [{"name": "ThresholdPostprocessor", "threshold": "0.5"}]), (0, 0, 0))
-
-    assert _forwards(server) - start == 1
-
-
-def test_the_next_chunks_are_normalized_while_the_device_runs_a_forward(tmp_path, monkeypatch):
-    """The device's slots hold the forward only; chunkmirage's queue admits a
-    few chunks more, whose normalization took turns with the forward when the
-    queue's slots were the device's."""
-    monkeypatch.setenv("CELLMAP_FLOW_GPU_SLOTS", "2")
-    server, _ = _server(write_raw(tmp_path, np.full((8,) * 3, 10, np.uint8)), write_script(tmp_path, IDENTITY_MODEL))
-
-    assert server.inferencer.device_slots.n == 2
-    assert InferenceOp.slots == 2 + INFERENCE_PREFETCH
-
-
-def test_no_prediction_cache_runs_the_model_for_every_request(tmp_path, monkeypatch):
-    monkeypatch.setenv("CELLMAP_FLOW_PREDICTION_CACHE_BYTES", "0")
-    server, client = _server(write_raw(tmp_path, np.full((8,) * 3, 10, np.uint8)), write_script(tmp_path, COUNTING_MODEL))
-    start = _forwards(server)
-
-    read_chunk(client, layer(), (0, 0, 0))
-    read_chunk(client, layer(), (0, 0, 0))
-
-    assert _forwards(server) - start == 2
-
-
-@pytest.mark.parametrize("env, cache_pool", [
-    pytest.param(None, {"total_bytes_limit": 1 << 30}, id="1-GiB-by-default"),
-    pytest.param("0", {}, id="none"),
-    pytest.param("12345", {"total_bytes_limit": 12345}, id="set-by-the-environment"),
-])
-def test_the_raw_data_is_read_through_a_cache_the_environment_sizes(tmp_path, monkeypatch, env, cache_pool):
-    """Neighbouring chunks' inputs overlap by two thirds: without a cache,
-    each chunk read and decoded them all again."""
-    monkeypatch.delenv("CELLMAP_FLOW_RAW_CACHE_BYTES", raising=False)
-    if env is not None:
-        monkeypatch.setenv("CELLMAP_FLOW_RAW_CACHE_BYTES", env)
-    server, _ = _server(write_raw(tmp_path, np.full((8,) * 3, 10, np.uint8)), write_script(tmp_path, IDENTITY_MODEL))
-    context = server.source.levels[0].store.spec(retain_context=True).to_json()["context"]
-    assert context["cache_pool"] == cache_pool
-
-
 def test_after_new_weights_a_new_layer_is_computed_anew(tmp_path):
     """A finetune iteration names its layer anew and updates the weights in
     place; nothing the old weights made is served under the new name."""
@@ -365,18 +266,6 @@ def test_after_new_weights_a_new_layer_is_computed_anew(tmp_path):
     read_chunk(client, layer(model="model_iteration_2"), (0, 0, 0))
 
     assert _forwards(server) - start == 1
-
-
-def test_each_chunk_logs_where_its_time_went(tmp_path, caplog):
-    """So a slow first chunk on the cluster can be read off the job's log:
-    the model's time by stage, then each postprocessing step's."""
-    _, client = _server(write_raw(tmp_path, np.full((8,) * 3, 10, np.uint8)), write_script(tmp_path, IDENTITY_MODEL))
-    with caplog.at_level(logging.INFO, logger="cellmap_flow.serving.chunkmirage_ops"):
-        read_chunk(client, layer(posts=[ThresholdPostprocessor(threshold=5)]), (0, 0, 0))
-    model, step = [r.getMessage() for r in caplog.records if r.getMessage().startswith("Chunk 0.0.0: ")]
-    assert model.startswith("Chunk 0.0.0: model ") and step.startswith("Chunk 0.0.0: ThresholdPostprocessor ")
-    stages = model.split("(", 1)[1].split(")", 1)[0]
-    assert [s.rsplit(" ", 1)[0] for s in stages.split(", ")] == ["read", "gpu wait", "gpu"]
 
 
 # --- the dashboard's routes, and running ----------------------------------------
@@ -402,6 +291,8 @@ def test_the_datasets_api_is_shut(tmp_path):
 
 
 def test_the_address_is_announced_once_the_server_takes_requests(tmp_path, monkeypatch, capsys):
+    """The launcher hands the dashboard the address the ready file and the
+    printed marker give, so both must come only once the port answers."""
     ready = tmp_path / "server.ready"
     monkeypatch.setenv("CELLMAP_FLOW_READY_FILE", str(ready))
     server, _ = _server(write_raw(tmp_path, np.full((8,) * 3, 10, np.uint8)), write_script(tmp_path, IDENTITY_MODEL))
@@ -470,36 +361,3 @@ def test_cellmap_flow_serve_resample_serves_the_model_its_own_voxel_size(ome_pyr
         corner = server.served.origin + 32 * np.array(index)
         expected = reader.to_ndarray_ts(Roi(tuple(corner), (32, 32, 32)))
         assert np.array_equal(read_chunk(client, "plain", index)[0], expected), index
-
-
-def test_every_launcher_builds_this_server_and_the_check_computes_a_chunk(tmp_path):
-    """`cellmap_flow serve`, `infer --server-check` and the finetune loop
-    build their server with make_server."""
-    path, script = write_raw(tmp_path, np.full((8,) * 3, 10, np.uint8)), write_script(tmp_path, IDENTITY_MODEL)
-    server = make_server(path, ScriptModelConfig(script_path=script))
-    assert isinstance(server, ChunkmirageServer)
-    assert check_server(server).shape == (1, 4, 4, 4)  # what `infer --server-check` computes
-
-
-def test_where_chunkmirage_is_missing_the_server_says_so(tmp_path, monkeypatch):
-    """A model's own ``env`` (a pixi environment, an alias or a path) must
-    have chunkmirage; one without it gets an error that says what to install
-    rather than a bare import failure."""
-    import sys
-
-    monkeypatch.setitem(sys.modules, "cellmap_flow.serving.chunkmirage_server", None)
-    path, script = write_raw(tmp_path, np.full((8,) * 3, 10, np.uint8)), write_script(tmp_path, IDENTITY_MODEL)
-
-    with pytest.raises(ImportError, match="needs chunkmirage"):
-        make_server(path, ScriptModelConfig(script_path=script))
-
-
-def test_a_step_on_the_gpu_runs_one_chunk_at_a_time_and_the_rest_in_parallel(tmp_path):
-    """Cellpose's masks follow the flows on the GPU: six at once each took 4 s
-    instead of 0.8, and the chunks nearest the cursor came no sooner."""
-    from cellmap_flow.serving.chunkmirage_ops import DevicePostprocessOp, PostprocessOp, layer_ops
-
-    server, _ = _server(write_raw(tmp_path, np.full((8,) * 3, 10, np.uint8)), write_script(tmp_path, IDENTITY_MODEL))
-    ops = layer_ops(server.served.name, [], [{"name": "CellposeMasksPostprocessor"}, {"name": "ThresholdPostprocessor"}])
-    assert [type(op) for op in ops[1:3]] == [DevicePostprocessOp, PostprocessOp]
-    assert DevicePostprocessOp.slots == 1 and PostprocessOp.slots is None

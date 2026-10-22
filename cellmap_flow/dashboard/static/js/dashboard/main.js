@@ -9,7 +9,7 @@ import { readCount, saveServerConfig } from "../shared/server-config.js";
 import { initConnect } from "./connect.js";
 import { initFinetuneTab } from "./finetune/index.js";
 import { initModelAdvice, refreshModelAdvice } from "./model-advice.js";
-import { initModelsTab } from "./models-tab.js";
+import { initModelsTab } from "./models/index.js";
 import { initReviewTab } from "./review/index.js";
 
 // The header's "Toggle Dashboard" button: the dashboard column the other way

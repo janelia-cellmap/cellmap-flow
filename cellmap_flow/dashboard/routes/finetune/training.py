@@ -35,16 +35,18 @@ from cellmap_flow.dashboard.routes.finetune.blueprint import finetune_bp
 from cellmap_flow.dashboard.routes.finetune.common import (
     LOG_FILTER_PATTERNS,
     autodetect_output_type,
-    build_restart_params,
     current_chain,
     detect_sparse_annotations,
     find_model_config,
     get_lsf_job_id,
     resolve_finetune_session,
-    training_settings,
+    restart_params,
+    served_output_class,
+    settings_note,
 )
 from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.finetune.job_manager.state import can_restart
+from cellmap_flow.finetune.options import TrainingOptions
 from cellmap_flow.finetune.session.store import SESSION_DIR_RE
 from cellmap_flow.jobs.site import current_site
 from cellmap_flow.jobs.spec import exists_now
@@ -285,13 +287,16 @@ def submit_finetuning():
         # minutes; it is only the chunk diff now.
         _pull_annotations("Submit pre-sync")
         has_sparse = detect_sparse_annotations(actual_corrections_path)
-        settings = training_settings(
-            output_type=output_type,
-            loss_type=body.loss_type,
-            label_smoothing=body.label_smoothing,
-            distillation_lambda=body.distillation_lambda,
-            sparse=has_sparse,
+        asked = body.options(
+            output_type=output_type, offsets=offsets, output_class=served_output_class(body.model_name),
         )
+        if asked.mode == "head":
+            return jsonify({"success": False, "error": (
+                "The last layer (mode head) is trained in the browser; a training job trains "
+                "a LoRA adapter (lora) or every weight (full)."
+            )}), 400
+        settings = asked.for_session(sparse=has_sparse)
+        note = settings_note(asked, settings)
 
         session = get_session()
         # Before the job exists: submitting starts its monitor, which tells
@@ -300,28 +305,14 @@ def submit_finetuning():
         finetune_job = session.finetune_job_manager.submit_finetuning_job(
             model_config=model_config,
             corrections_path=actual_corrections_path,
-            lora_r=body.lora_r,
-            num_epochs=body.num_epochs,
-            batch_size=body.batch_size,
-            learning_rate=body.learning_rate,
+            options=settings,
             output_base=Path(session_path),
             checkpoint_path_override=Path(body.checkpoint_path) if body.checkpoint_path else None,
             auto_serve=body.auto_serve,
-            mask_unannotated=settings.mask_unannotated,
-            loss_type=settings.loss_type,
-            label_smoothing=settings.label_smoothing,
-            distillation_lambda=settings.distillation_lambda,
-            distillation_scope=body.distillation_scope,
-            margin=body.margin,
-            balance_classes=body.balance_classes,
-            augment=body.augment,
             queue=body.queue,
             # The request's, else the dashboard's own, else the site's.
             charge_group=body.charge_group or session.charge_group or current_site().default_charge_group,
             walltime=session.walltime,
-            output_type=settings.output_type,
-            select_channel=body.select_channel,
-            offsets=offsets,
         )
 
         response = {
@@ -334,8 +325,8 @@ def submit_finetuning():
             "output_type": settings.output_type,
             "message": "Finetuning job submitted successfully",
         }
-        if settings.note:
-            response["note"] = settings.note
+        if note:
+            response["note"] = note
         return jsonify(response)
     except ValueError as e:
         logger.error(f"Validation error: {e}")
@@ -591,31 +582,30 @@ def stop_training_early(job_id):
         return jsonify({"success": False, "error": str(e)}), 500
 
 
-def _restart_training_settings(job, updated_params, corrections_dir):
+def _restart_training_settings(job, changes, corrections_dir):
     """The target and loss settings a restart sends, adjusted as submit adjusts them.
 
     The form holds what the user picked, not what submit replaced it with
-    (training_settings), and the trainer only checks what it is sent. So a
-    restart from the unchanged form undid submit's choice: a distance model
-    was sent the form's margin loss, and its next iteration failed at setup,
-    every time, and mse went back to training on scribbles. The same rules
-    are applied here, to the form's settings over the job's own, with the
-    session's sparsity read again after the sync: strokes painted since
-    submit can make it sparse.
+    (TrainingOptions.for_session), and the trainer only checks what it is
+    sent. So a restart from the unchanged form undid submit's choice: a
+    distance model was sent the form's margin loss, and its next iteration
+    failed at setup, every time, and mse went back to training on scribbles.
+    The same rules are applied here, to the form's ``changes`` over the
+    job's own settings, with the session's sparsity read again after the
+    sync: strokes painted since submit can make it sparse.
 
     All five settings are sent, so the trainer's settings are the adjusted
     ones whichever of them the form left out. A job that does not know its
     session (one from before jobs recorded it) keeps its mask_unannotated.
     """
-    current = {**job.params, **updated_params}
-    settings = training_settings(
-        output_type=current.get("output_type"),
-        loss_type=current.get("loss_type"),
-        label_smoothing=current.get("label_smoothing"),
-        distillation_lambda=current.get("distillation_lambda"),
-        sparse=bool(corrections_dir) and detect_sparse_annotations(corrections_dir),
-    )
-    sent = {key: value for key, value in settings._asdict().items() if key != "note" and value is not None}
+    recorded = {key: value for key, value in job.params.items() if key in TrainingOptions.model_fields}
+    asked = TrainingOptions.model_validate({**recorded, **changes})
+    used = asked.for_session(sparse=bool(corrections_dir) and detect_sparse_annotations(corrections_dir))
+    sent = {
+        key: getattr(used, key)
+        for key in ("output_type", "loss_type", "label_smoothing", "distillation_lambda", "mask_unannotated")
+        if getattr(used, key) is not None
+    }
     if not corrections_dir:
         sent.pop("mask_unannotated")
     return sent
@@ -688,8 +678,8 @@ def _restart_finetuning_job(job_id):
         # the chunk diff now.
         pulled = _pull_annotations(f"Restart pre-sync for job {job_id}")
 
-        updated_params = build_restart_params(data)
-        updated_params.update(_restart_training_settings(job_record, updated_params, corrections_dir))
+        updated_params = restart_params(body)
+        updated_params.update(_restart_training_settings(job_record, body.changes(), corrections_dir))
         job = manager.restart_finetuning_job(job_id=job_id, updated_params=updated_params)
         total_elapsed = time.perf_counter() - restart_t0
         logger.info(f"Restart request processed for job {job_id}: total={total_elapsed:.2f}s")

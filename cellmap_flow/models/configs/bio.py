@@ -55,7 +55,9 @@ from typing import TYPE_CHECKING, Optional
 
 import numpy as np
 
-from cellmap_flow.models.configs.base import Config, ModelConfig, _as_given, _get_device, _per_axis, _sizes, _voxel_size
+from cellmap_flow.io.metadata import _NM_PER_UNIT
+from cellmap_flow.models import entry
+from cellmap_flow.models.configs.base import Config, ModelConfig, _get_device
 from cellmap_flow.models.geometry import _numbers
 
 if TYPE_CHECKING:
@@ -83,17 +85,15 @@ _CATALOG_WEIGHT_FORMATS = {"pytorch": "pytorch_state_dict", "torchscript": "torc
 # input_size is given: a 2D model's tile is one slice, so it can be larger.
 DEFAULT_INPUT_SIZE = {2: 256, 3: 128}
 DEFAULT_SLICES_PER_CHUNK = 8
-# nm per unit, for the space units of the 0.5 spec that a voxel is measured
-# in; any other (a foot, a parsec) is taken for no unit at all.
-NM_PER_UNIT = {
-    "picometer": 1e-3,
-    "angstrom": 0.1,
-    "nanometer": 1.0,
-    "micrometer": 1e3,
-    "millimeter": 1e6,
-    "centimeter": 1e7,
-    "meter": 1e9,
-}
+
+
+def nm_per_unit(unit):
+    """How many nm one ``unit`` of an RDF's space axis is, or None for no unit
+    or one that is no length (a parsec, a foot): ``io.metadata``'s table,
+    the one the raw data's units are read with."""
+    if not unit:
+        return None
+    return _NM_PER_UNIT.get(str(unit).strip().lower())
 
 
 def _space_axes(axes) -> list:
@@ -417,9 +417,9 @@ class BioModelConfig(ModelConfig):
     def __init__(
         self,
         model: str,
-        voxel_size=None,
-        input_size=None,
-        context=None,
+        voxel_size: tuple = None,
+        input_size: tuple = None,
+        context: tuple = None,
         slices_per_chunk: int = None,
         weight_format: str = None,
         name=None,
@@ -427,12 +427,9 @@ class BioModelConfig(ModelConfig):
     ):
         super().__init__()
         self.model = str(model)
-        # The server CLI and the model form pass sizes as strings ("8,8,8",
-        # "256"); a YAML gives a number or a list. The voxel size is not
-        # _as_int_tuple's, which truncates a 5.24 nm voxel to 5.
-        self.voxel_size = None if voxel_size is None else _voxel_size(voxel_size)
-        self.input_size = _sizes(input_size)
-        self.context = _sizes(context)
+        self.voxel_size = entry.voxel_size(voxel_size)
+        self.input_size = entry.sizes(input_size, what="input_size")
+        self.context = entry.sizes(context, what="context")
         self.slices_per_chunk = None if slices_per_chunk is None else int(slices_per_chunk)
         if self.slices_per_chunk is not None and self.slices_per_chunk < 1:
             raise ValueError(f"slices_per_chunk must be at least 1, got {self.slices_per_chunk}")
@@ -485,7 +482,7 @@ class BioModelConfig(ModelConfig):
             raise ValueError(f"{self.model}'s input has {ndim} space axes; cellmap-flow runs 2D and 3D models")
         batch = next((a for a in tensor.axes if a.type == "batch"), None)
 
-        tile = _input_shape(tensor, space, _per_axis(self.input_size or (DEFAULT_INPUT_SIZE[ndim],), ndim,
+        tile = _input_shape(tensor, space, entry.per_axis(self.input_size or (DEFAULT_INPUT_SIZE[ndim],), ndim,
                                                      "input_size"))
         crop = self._crop(description, space)
         out_shape, ratio, channels, channel_axes = self._outputs(description, tensor, space, tile, crop)
@@ -580,7 +577,7 @@ class BioModelConfig(ModelConfig):
     def _crop(self, description, space) -> dict:
         """Voxels cut off each side of each output, by its id, per space axis: context, else its halo."""
         if self.context is not None:
-            context = _per_axis(self.context, len(space), "context")
+            context = entry.per_axis(self.context, len(space), "context")
             return {str(out.id): context for out in description.outputs}
         crop = {}
         for out in description.outputs:
@@ -595,7 +592,7 @@ class BioModelConfig(ModelConfig):
             return self.voxel_size
         nm = []
         for axis in space:
-            per_unit = NM_PER_UNIT.get(axis.unit) if axis.unit else None
+            per_unit = nm_per_unit(axis.unit)
             if per_unit is None:
                 from cellmap_flow.models.bioimage_catalog import trained_at
 
@@ -827,9 +824,9 @@ class BioModelConfig(ModelConfig):
         if self.voxel_size is not None:
             result["voxel_size"] = list(self.voxel_size)
         if self.input_size is not None:
-            result["input_size"] = _as_given(self.input_size)
+            result["input_size"] = entry.as_given(self.input_size)
         if self.context is not None:
-            result["context"] = _as_given(self.context)
+            result["context"] = entry.as_given(self.context)
         if self.slices_per_chunk is not None:
             result["slices_per_chunk"] = self.slices_per_chunk
         if self.weight_format is not None:

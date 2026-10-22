@@ -88,7 +88,7 @@ def chain_items(available, configured):
 
 
 def cellpose_panel_data(models_config, running_job_names):
-    """What the Models tab's Cellpose panel is built from (models-tab.js):
+    """What the Models tab's Cellpose panel is built from (js/dashboard/models/cellpose.js):
     each model it lists, and the settings of those running, which start
     ticked.
 

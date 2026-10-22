@@ -1,4 +1,5 @@
-"""Small datasets, script models and requests for serving tests; conftest.py's fixtures use them."""
+"""Small datasets, script models and requests for serving tests; conftest.py's
+fixtures use them, and SERVED_CASES are the models test_chunkmirage_server serves."""
 
 import os
 import textwrap
@@ -8,6 +9,7 @@ import numpy as np
 import zarr
 
 from cellmap_flow.pipeline_spec import PipelineSpec
+from cellmap_flow.post.postprocessors import ChannelSelection, ThresholdPostprocessor
 from cellmap_flow.serving.protocol import ARGS_KEY, FORMAT
 
 
@@ -101,3 +103,69 @@ def get_json(client, url):
     response = client.get(url)
     assert response.status_code == 200, response.text
     return response.json()
+
+
+SQUEEZE_MODEL = IDENTITY_MODEL.replace("model = Identity()", "") + """
+chunk_output_axes = ("z", "y", "x")
+
+
+class Squeeze(torch.nn.Module):
+    def forward(self, x):
+        return x[:, 0]
+
+
+model = Squeeze()
+"""
+
+# 8 nm in, 16 nm out, two channels: each 2^3 block's mean, twice.
+COARSER_MODEL = """
+input_voxel_size = Coordinate(8, 8, 8)
+output_voxel_size = Coordinate(16, 16, 16)
+read_shape = Coordinate(8, 8, 8) * input_voxel_size
+write_shape = Coordinate(4, 4, 4) * output_voxel_size
+output_channels = 2
+channels = ["a", "b"]
+block_shape = np.array((4, 4, 4, 2))
+
+
+class Pool(torch.nn.Module):
+    def forward(self, x):
+        return torch.nn.functional.avg_pool3d(x, 2).repeat(1, 2, 1, 1, 1)
+
+
+model = Pool()
+"""
+
+# One voxel of context on each side, cropped off.
+CROP_MODEL = """
+input_voxel_size = Coordinate(8, 8, 8)
+output_voxel_size = Coordinate(8, 8, 8)
+read_shape = Coordinate(6, 6, 6) * input_voxel_size
+write_shape = Coordinate(4, 4, 4) * output_voxel_size
+output_channels = 1
+block_shape = np.array((4, 4, 4, 1))
+
+
+class Crop(torch.nn.Module):
+    def forward(self, x):
+        return x[:, :, 1:-1, 1:-1, 1:-1]
+
+
+model = Crop()
+"""
+
+
+# The models and data the served-chunk tests run: name -> (model script, raw
+# writer (of an object holding conftest's raw_zarr and ome_pyramid fixtures),
+# {chain name: postprocess}, the (z, y, x) chunk read).
+SERVED_CASES = {
+    "identity": (IDENTITY_MODEL, lambda f: f.raw_zarr(), {"threshold": [ThresholdPostprocessor(threshold=0.5)]},
+                 (1, 0, 1)),
+    "no_channel": (SQUEEZE_MODEL, lambda f: f.raw_zarr(), {"threshold": [ThresholdPostprocessor(threshold=0.5)]},
+                   (0, 1, 1)),
+    "8nm_to_16nm": (COARSER_MODEL, lambda f: f.raw_zarr(), {"one_channel": [ChannelSelection("1")]}, (1, 1, 0)),
+    # Janelia's levels have their corner at -4 nm: voxel 0's centre is at 0.
+    "corner_at_-4nm": (CROP_MODEL, lambda f: f.ome_pyramid(((8.0, 0.0),), shape=(8, 8, 8)), {}, (1, 1, 1)),
+    # 6 nm data read as if it were 8 nm, voxel for voxel.
+    "relabelled": (IDENTITY_MODEL, lambda f: f.ome_pyramid(((6.0, 3.0),), shape=(8, 8, 8)), {}, (1, 0, 0)),
+}

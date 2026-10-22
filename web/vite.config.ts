@@ -24,6 +24,8 @@ import { dashboardStatic, localNeuroglancer, serviceWorker } from "./build/vite-
 
 const here = import.meta.dirname;
 const DASHBOARD_STATIC = resolve(here, "../cellmap_flow/dashboard/static");
+// The Python both modes run, bundled as text for the Pyodide workers (build/portable.ts).
+const PORTABLE_PYTHON = resolve(here, "../cellmap_flow/portable");
 const NEUROGLANCER_BUILD = resolve(here, "ng");
 // The clone, or a local checkout linked in its place (CHUNKMIRAGE_LOCAL in
 // scripts/fetch-chunkmirage.sh): Vite allows files by their real path.
@@ -46,7 +48,7 @@ export default defineConfig({
     },
   },
   worker: { format: "es" },
-  // chunkmirage's Pyodide workers import its Python from web/chunkmirage/src as text
-  server: { proxy: ngProxy, fs: { allow: [here, CHUNKMIRAGE, DASHBOARD_STATIC] } },
+  // chunkmirage's Pyodide workers import its Python from web/chunkmirage/src as text, and ours from cellmap_flow/portable
+  server: { proxy: ngProxy, fs: { allow: [here, CHUNKMIRAGE, DASHBOARD_STATIC, PORTABLE_PYTHON] } },
   preview: { proxy: ngProxy },
 });

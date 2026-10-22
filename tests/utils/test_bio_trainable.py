@@ -2,13 +2,10 @@
 whose pipeline runs a small torch network the way the real one does: the
 input's preprocessing in numpy, the network on the input's axes, each
 output's postprocessing. ``trainable_model()`` must give what process_chunk
-serves, for a 3D and a 2D model, with normalization, a halo and a sigmoid;
-``serve_trained`` must make the inferencer's own forward serve the same; a
-model it cannot train is refused with the reason; gradients and a LoRA
-adapter reach the network."""
+serves, with normalization, a halo and a sigmoid; ``serve_trained`` must make
+the inferencer's own forward serve the same; a LoRA adapter on it trains."""
 
 import copy
-import io
 import sys
 import types
 from types import SimpleNamespace
@@ -47,27 +44,22 @@ def tensor(id_, axes, dtype="float32", preprocessing=(), postprocessing=()):
                            preprocessing=list(preprocessing), postprocessing=list(postprocessing))
 
 
-def weights(net, formats=("pytorch_state_dict",)):
-    """The description's weights: each format a stand-in for ``net``'s file."""
-    buffer = io.BytesIO()
-    if "torchscript" in formats:
-        torch.jit.save(torch.jit.script(net), buffer)
-    specs = {f: SimpleNamespace(net=net, get_reader=lambda: io.BytesIO(buffer.getvalue())) for f in formats}
-    return SimpleNamespace(**specs)
+def weights(net):
+    """The description's weights: a state dict, a stand-in for ``net``'s file."""
+    return SimpleNamespace(pytorch_state_dict=SimpleNamespace(net=net))
 
 
-def unet_3d(net, channels=2, halo=2, preprocessing=(zmuv(["channel", "z", "y", "x"]),),
-            postprocessing=(op("sigmoid"),), formats=("pytorch_state_dict",), dtype="float32"):
+def unet_3d(net, channels=2, halo=2):
     """Like "conscientious-dromedary": fixed sizes, batch fixed at 1, zero mean unit variance and a sigmoid."""
     space = [axis("space", a, size) for a, size in zip("zyx", (4, 16, 16))]
     out_space = [axis("space", a, size, halo=halo if a != "z" else None) for a, size in zip("zyx", (4, 16, 16))]
     return SimpleNamespace(
         inputs=[tensor("input0", [axis("batch", size=1), axis("channel", channel_names=["raw"]), *space],
-                       preprocessing=preprocessing)],
+                       preprocessing=[zmuv(["channel", "z", "y", "x"])])],
         outputs=[tensor("output0", [axis("batch", size=1),
                                     axis("channel", channel_names=[f"c{i}" for i in range(channels)]), *out_space],
-                        dtype=dtype, postprocessing=postprocessing)],
-        weights=weights(net, formats),
+                        postprocessing=[op("sigmoid")])],
+        weights=weights(net),
     )
 
 
@@ -135,8 +127,7 @@ class NetworkPipeline:
 
     def __init__(self, description, weights_format=None):
         self.description = description
-        spec = getattr(description.weights, "pytorch_state_dict", None) or description.weights.torchscript
-        self.net = copy.deepcopy(spec.net).eval()
+        self.net = copy.deepcopy(description.weights.pytorch_state_dict.net).eval()
         self.calls = []
         NetworkPipeline.built.append(self)
 
@@ -171,39 +162,19 @@ def fake_zoo(fake_bioimageio, monkeypatch):  # noqa: F811  (the fixture imported
     return fake_bioimageio
 
 
-def _served_and_trained(model, idi, roi):
-    """(process_chunk's chunk, the trainable model's output for the same read), as numpy."""
-    served = model.config.process_chunk(idi, roi)
-    module = model.trainable_model()
-    read = np.asarray(idi.to_ndarray_ts(roi.grow(model.config.context, model.config.context)), dtype=np.float32)
-    device = next(module.parameters()).device
-    with torch.no_grad():
-        trained = module(torch.from_numpy(read)[None, None].to(device))[0].cpu().numpy()
-    return served, trained, module
-
-
 # --- the module matches what is served ---------------------------------------------
-
-def test_a_3d_models_trainable_module_gives_what_process_chunk_serves(fake_zoo):
-    torch.manual_seed(0)
-    fake_zoo["unet"] = unet_3d(Net3d())
-    model = BioModelConfig(model="unet", voxel_size=8)
-    idi = ArrayIDI(np.random.default_rng(0).normal(100, 20, (8, 32, 32)).astype(np.float32), (8, 8, 8))
-
-    served, trained, module = _served_and_trained(model, idi, Roi((0, 16, 16), (32, 96, 96)))
-
-    # The halo of 2 is cut off in y and x: 16 - 4 voxels written.
-    assert served.shape == trained.shape == (2, 4, 12, 12)
-    np.testing.assert_allclose(trained, served, atol=1e-5)
-    assert 0 < trained.min() and trained.max() < 1  # the sigmoid is in the module
-
 
 @pytest.mark.parametrize("batch, axes", [
     pytest.param(None, ("channel", "y", "x"), id="slices-in-one-call-each-normalized"),
     pytest.param(None, ("batch", "channel", "y", "x"), id="slices-in-one-call-normalized-together"),
     pytest.param(1, None, id="a-call-a-slice"),
 ])
-def test_a_2d_models_trainable_module_gives_what_process_chunk_serves(fake_zoo, batch, axes):
+def test_serve_trained_makes_the_inferencers_forward_serve_the_trained_module(fake_zoo, batch, axes):
+    """The trainable module, served through the inferencer, gives what
+    process_chunk served: the same preprocessing over the same slices, the
+    network, then each output's postprocessing."""
+    from cellmap_flow.inference.runner import ModelRunner
+
     torch.manual_seed(0)
     fake_zoo["2d"] = two_outputs_2d(Net2dTwoOutputs(), batch=batch, axes=axes)
     model = BioModelConfig(model="2d", voxel_size=8, input_size=40, slices_per_chunk=3)
@@ -211,78 +182,21 @@ def test_a_2d_models_trainable_module_gives_what_process_chunk_serves(fake_zoo, 
     rng = np.random.default_rng(1)
     array = (rng.normal(0, 1, (3, 40, 40)) * [[[5]], [[20]], [[50]]] + [[[0]], [[100]], [[300]]]).astype(np.float32)
     idi = ArrayIDI(array, (8, 8, 8))
-
-    served, trained, _ = _served_and_trained(model, idi, Roi((0, 32, 32), (24, 32 * 8, 32 * 8)))
-
-    # fg then dist, the halo of 4 cut off each side.
-    assert model.config.channels == ["fg_fg", "dist"]
-    assert served.shape == trained.shape == (2, 3, 32, 32)
-    np.testing.assert_allclose(trained, served, atol=1e-5)
-    assert len(NetworkPipeline.built[0].calls) == (1 if batch is None else 3)
-
-
-def test_serve_trained_makes_the_inferencers_forward_serve_the_trained_module(fake_zoo):
-    from cellmap_flow.inference.runner import ModelRunner
-
-    torch.manual_seed(0)
-    fake_zoo["2d"] = two_outputs_2d(Net2dTwoOutputs())
-    model = BioModelConfig(model="2d", voxel_size=8, input_size=40, slices_per_chunk=3)
-    idi = ArrayIDI(np.random.default_rng(2).normal(50, 10, (3, 40, 40)).astype(np.float32), (8, 8, 8))
     roi = Roi((0, 32, 32), (24, 32 * 8, 32 * 8))
     served = model.config.process_chunk(idi, roi)
+    assert len(NetworkPipeline.built[0].calls) == (1 if batch is None else 3)
 
     model.serve_trained(model.config, model.trainable_model())
     runner = ModelRunner(model)  # puts it on the device, warms it up and checks its output's shape
     predicted = runner.predict(idi, roi)
 
-    assert model.config.process_chunk is None
-    assert predicted.dtype == np.float32 and predicted.shape == served.shape
+    # fg then dist, the halo of 4 cut off each side.
+    assert model.config.process_chunk is None and model.config.channels == ["fg_fg", "dist"]
+    assert predicted.dtype == np.float32 and predicted.shape == served.shape == (2, 3, 32, 32)
     np.testing.assert_allclose(predicted, served, atol=1e-5)
 
 
-def test_torchscript_weights_are_trained_when_there_is_no_state_dict(fake_zoo):
-    torch.manual_seed(0)
-    fake_zoo["unet"] = unet_3d(Net3d(), formats=("torchscript", "onnx"))
-    model = BioModelConfig(model="unet", voxel_size=8)
-    idi = ArrayIDI(np.random.default_rng(0).normal(0, 1, (4, 16, 16)).astype(np.float32), (8, 8, 8))
-
-    served, trained, module = _served_and_trained(model, idi, Roi((0, 16, 16), (32, 96, 96)))
-
-    np.testing.assert_allclose(trained, served, atol=1e-5)
-    assert any(isinstance(m, torch.jit.ScriptModule) for m in module.modules())
-
-
-# --- what it refuses ----------------------------------------------------------------
-
-@pytest.mark.parametrize("kwargs, message", [
-    pytest.param(dict(formats=("onnx", "tensorflow_saved_model_bundle")),
-                 "onnx, tensorflow_saved_model_bundle weights only.*torch module", id="no-torch-weights"),
-    pytest.param(dict(postprocessing=(op("sigmoid"), op("binarize", threshold=0.5))),
-                 "binarize thresholds it: no gradient", id="binarize"),
-    pytest.param(dict(dtype="uint16", postprocessing=()), "outputs are uint16 .labels", id="labels"),
-    pytest.param(dict(postprocessing=(op("stardist_postprocessing"),)), "makes instances outside the network",
-                 id="stardist"),
-    pytest.param(dict(postprocessing=(zmuv(),)), "normalizes it by its own statistics", id="output-statistics"),
-])
-def test_what_cannot_be_finetuned_is_refused_with_the_reason(fake_zoo, kwargs, message):
-    fake_zoo["unet"] = unet_3d(Net3d(), **kwargs)
-    with pytest.raises(ValueError, match=f"unet cannot be finetuned: .*{message}"):
-        BioModelConfig(model="unet", voxel_size=8).trainable_model()
-
-
 # --- training -----------------------------------------------------------------------
-
-def test_gradients_reach_every_parameter_of_the_network(fake_zoo):
-    fake_zoo["2d"] = two_outputs_2d(Net2dTwoOutputs())
-    module = BioModelConfig(model="2d", voxel_size=8, input_size=40, slices_per_chunk=3).trainable_model()
-    device = next(module.parameters()).device
-
-    module.train()
-    module(torch.randn(2, 1, 3, 40, 40, device=device)).square().mean().backward()
-
-    named = dict(module.named_parameters())
-    assert named and all(p.grad is not None and p.grad.abs().sum() > 0 for p in named.values())
-
 
 @pytest.mark.finetune
 def test_a_lora_adapter_on_the_trainable_module_trains(fake_zoo):

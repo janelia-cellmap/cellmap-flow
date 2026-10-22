@@ -9,17 +9,9 @@ trained at when those differ (``trained_at_geometry``).
 
 import numpy as np
 
+from cellmap_flow.models import entry
 from cellmap_flow.models.configs.base import Config, ModelConfig
 from cellmap_flow.models.geometry import _numbers, _voxels
-
-
-def _voxel_sizes(value):
-    """A voxel size given as a sequence or as the CLI's "10.48,8,8"; None stays None."""
-    if value is None:
-        return None
-    if isinstance(value, str):
-        value = value.split(",")
-    return _numbers(float(v) for v in value)
 
 
 def trained_at_geometry(base_cfg, input_voxel_size=None, output_voxel_size=None) -> dict:
@@ -95,7 +87,8 @@ class FinetuneModelConfig(ModelConfig):
             input_voxel_size, output_voxel_size: the voxel sizes the finetune
                 was trained at, when not the base model's (see
                 ``trained_at_geometry``); the trainer writes them into the
-                serving YAML. A sequence, or "10.48,8,8" from the CLI.
+                serving YAML. One number, a sequence, or "10.48,8,8" from
+                the CLI.
         """
         super().__init__()
         self.lora_adapter_path = lora_adapter_path
@@ -116,8 +109,8 @@ class FinetuneModelConfig(ModelConfig):
         self.base_model_dict = base_model
         self.name = name
         self.scale = scale
-        self.input_voxel_size = _voxel_sizes(input_voxel_size)
-        self.output_voxel_size = _voxel_sizes(output_voxel_size)
+        self.input_voxel_size = entry.voxel_size(input_voxel_size, "input_voxel_size")
+        self.output_voxel_size = entry.voxel_size(output_voxel_size, "output_voxel_size")
         self._base_model_config = None
         self._trained_module = None  # set when config is built
 

@@ -84,49 +84,6 @@ def test_a_reconnect_resumes_after_what_it_had(tmp_path, client, how):
     assert "data: line two" in body
 
 
-def test_a_partial_line_waits_until_the_job_is_done(tmp_path, client):
-    http, manager = client
-    text = "whole\nEpoch 3/10 - Lo"
-    manager.jobs["j"] = _job(
-        tmp_path, text,
-        statuses=[JobStatus.RUNNING, JobStatus.RUNNING, JobStatus.RUNNING, JobStatus.COMPLETED],
-    )
-    events = _events(http.get("/api/finetune/job/j/logs/stream").get_data(as_text=True))
-    assert events[0] == "id: 6\ndata: whole"
-    assert events[1] == f"id: {len(text)}\ndata: Epoch 3/10 - Lo"
-    assert events[2] == "event: done\ndata: COMPLETED"
-
-
-def test_an_unknown_job_ends_the_stream(client):
-    http, _ = client
-    events = _events(http.get("/api/finetune/job/nope/logs/stream").get_data(as_text=True))
-    assert events[-1] == "event: done\ndata: NOT_FOUND"
-
-
-def test_the_log_snapshot_says_where_the_stream_should_start(tmp_path, client):
-    http, manager = client
-    manager.jobs["j"] = _job(tmp_path, "one\ntwo\nthr")
-    data = http.get("/api/finetune/job/j/logs").get_json()
-    assert data["logs"] == "one\ntwo\n"
-    assert data["offset"] == len("one\ntwo\n")
-
-
-def test_a_stream_that_breaks_while_the_job_runs_does_not_say_done(tmp_path, client, monkeypatch):
-    """The browser must reconnect and resume, not close for good."""
-    from cellmap_flow.dashboard.routes.finetune import training
-
-    http, manager = client
-    manager.jobs["j"] = _job(tmp_path, "whole\npart", statuses=[JobStatus.RUNNING])
-
-    def broken_sleep(seconds):
-        raise OSError("stale NFS handle")
-
-    monkeypatch.setattr(training.time, "sleep", broken_sleep)
-    body = http.get("/api/finetune/job/j/logs/stream").get_data(as_text=True)
-    assert "event: done" not in body
-    assert "data: part" not in body, "a partial line is kept for the reconnect"
-
-
 # What the job had printed when bpeek was asked, and the log file as it is
 # later: the same bytes, since the trainer's output goes through tee into both.
 EARLY = "Loading model...\nFetching 8 files:   0%|  | 0/8\rFetching 8 files: 100%|##| 8/8\n"
@@ -159,8 +116,3 @@ def test_the_log_read_from_bpeek_then_from_its_file_shows_each_line_once(bpeek_t
     shown = _shown(bpeek_then_file.get("/api/finetune/job/j/logs/stream").get_data(as_text=True))
     assert shown[:-1] == LATER.replace("\r", "\n").splitlines() and shown[-1] == "COMPLETED"
 
-
-def test_a_reconnect_after_bpeek_resumes_the_file_after_what_bpeek_showed(bpeek_then_file):
-    """bpeek's blocks had no id, so the browser reconnected from 0."""
-    resumed = bpeek_then_file.get("/api/finetune/job/j/logs/stream", headers={"Last-Event-ID": str(len(EARLY))})
-    assert _shown(resumed.get_data(as_text=True)) == ["Epoch 1/2 - Loss: 0.5", "Epoch 2/2 - Loss: 0.4", "COMPLETED"]

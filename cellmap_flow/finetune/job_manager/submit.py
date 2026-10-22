@@ -32,6 +32,8 @@ from cellmap_flow.jobs.spec import JobSpec, shell_join, shell_quote
 from cellmap_flow.jobs.lsf import available as is_bsub_available
 from cellmap_flow.jobs.local import run as run_locally
 
+from cellmap_flow.finetune.options import TrainingOptions
+
 logger = logging.getLogger(__name__)
 
 
@@ -344,28 +346,21 @@ def build_command(
     channels: List[str],
     input_voxel_size: List[int],
     output_voxel_size: List[int],
-    lora_r: int,
-    num_epochs: int,
-    batch_size: int,
-    learning_rate: float,
-    loss_type: str,
-    label_smoothing: float,
-    distillation_lambda: Optional[float],
-    distillation_scope: str,
-    margin: float,
+    options: TrainingOptions,
     auto_serve: bool,
     serve_data_path: Optional[str],
-    mask_unannotated: bool,
-    balance_classes: bool,
-    augment: bool,
-    output_type: str,
-    select_channel: Optional[int],
-    offsets: Optional[str],
     models_dir: Optional[Path] = None,
     queue: Optional[str] = None,
     charge_group: Optional[str] = None,
 ) -> str:
-    """Build the shell command used to launch finetuning, for ``bash -c``."""
+    """Build the shell command used to launch finetuning, for ``bash -c``.
+
+    The training settings go as ``cli.training_flags(options)``, every one
+    said, so the command stands on its own whatever the defaults become.
+    """
+    # Here, not at the top: cli imports this module for the model types.
+    from cellmap_flow.finetune.cli import training_flags
+
     # -P: without it `python -m` puts the job's working directory first on
     # sys.path, so a job started from inside another cellmap-flow checkout
     # ran that checkout's trainer instead of the installed one (and failed on
@@ -394,40 +389,11 @@ def build_command(
         "--channels", *map(str, channels),
         "--input-voxel-size", *map(str, input_voxel_size),
         "--output-voxel-size", *map(str, output_voxel_size),
-        "--lora-r", str(lora_r),
-        "--lora-alpha", str(lora_r * 2),
-        "--num-epochs", str(num_epochs),
-        "--batch-size", str(batch_size),
-        "--learning-rate", str(learning_rate),
-        "--loss-type", str(loss_type),
+        *training_flags(options),
     ]
 
-    if label_smoothing > 0:
-        command_parts += ["--label-smoothing", str(label_smoothing)]
-    # Passed whenever it was chosen, 0 included: leaving the flag out means
-    # "unset", which the trainer turns into 1.0 when good regions exist,
-    # so omitting it for 0 made "0 (Disabled)" impossible to express.
-    if distillation_lambda is not None:
-        command_parts += ["--distillation-lambda", str(distillation_lambda)]
-    if distillation_scope == "all" and (distillation_lambda is None or distillation_lambda > 0):
-        command_parts.append("--distillation-all-voxels")
-    if loss_type == "margin":
-        command_parts += ["--margin", str(margin)]
     if auto_serve and serve_data_path:
         command_parts += ["--auto-serve", "--serve-data-path", str(serve_data_path)]
-    if mask_unannotated:
-        command_parts.append("--mask-unannotated")
-    if balance_classes:
-        command_parts.append("--balance-classes")
-    # Opt-out flag: only passed when augmentation is disabled.
-    if not augment:
-        command_parts.append("--no-augment")
-    if output_type != "binary":
-        command_parts += ["--output-type", str(output_type)]
-    if select_channel is not None:
-        command_parts += ["--select-channel", str(select_channel)]
-    if offsets is not None:
-        command_parts += ["--offsets", str(offsets)]
     if models_dir is not None:
         command_parts += ["--models-dir", str(models_dir)]
     # Only written into the serving YAMLs, so a model served from one runs

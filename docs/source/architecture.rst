@@ -90,12 +90,18 @@ Models
    * - ``models/models_config.py``
      - The classes' public import path, which the docs and plugins use, and
        ``Config``.
+   * - ``models/entry.py``
+     - A model entry, ``{type, name, env, **arguments}``, the one shape every
+       description of a model takes, and ``coerce``: how its values become a
+       constructor's arguments, by the constructor's annotations, so the
+       same entry gives the same config from a YAML, the command line or the
+       form. The helpers the constructors normalize their arguments with
+       (``voxel_size``, ``sizes``, ``names``).
    * - ``models/registry.py``
-     - The model types (every ``ModelConfig`` subclass, a plugin's included)
-       and how a config is built from a YAML entry, command-line strings or
-       the dashboard's form: ``model_types``, ``build_model(s)``,
-       ``coerce_cli_args``, ``coerce_form_params``, ``click_options``,
-       ``instantiate_model_config``, ``describe_types``.
+     - The model types (every ``ModelConfig`` subclass, a plugin's included,
+       by type name and by class name) and ``build_model(s)``, the one place
+       a config is built from an entry; ``click_options`` and
+       ``describe_types`` for the CLI and the form.
    * - ``models/geometry.py``
      - ``ModelGeometry``: a model's shapes and voxel sizes, read once from its
        config, with the context and block shape derived.
@@ -134,8 +140,9 @@ Serving and jobs
      - ``make_server``, which every place that starts a server builds it
        with, and ``check_server`` (``infer --server-check``).
    * - ``serving/launch.py``
-     - The one place a server's command line is built (``server_argv``,
-       ``server_argv_for``, ``server_command``).
+     - ``launch``, the one launcher every CLI and dashboard path starts a
+       server through, and the one place its command line is built
+       (``server_argv``, ``server_command``).
    * - ``serving/protocol.py``
      - What a layer URL carries to a server: ``ARGS_KEY``,
        ``encode_to_str``, ``decode_to_json``, ``split_dataset_url``; and
@@ -386,9 +393,11 @@ A chunk served to Neuroglancer
    ``zarr://<server>/<model>__CFLOW_ARGS__<blob>__CFLOW_ARGS__/zarr``
    (``viewer.layers.prediction_source``): the layer's name, then the format
    the server serves it in (``serving.protocol.FORMAT``). The blob is the
-   layer's chain, ``PipelineSpec.to_url_blob(...)``: minified JSON in
-   URL-safe base64 (``serving.protocol.encode_to_str``). Every request
-   Neuroglancer makes for the layer carries it.
+   layer's chain with the dashboard's address and the chain's digest,
+   ``Session.layer_blob()`` (``PipelineSpec.to_url_blob``): minified JSON
+   in URL-safe base64 (``serving.protocol.encode_to_str``). Every request
+   Neuroglancer makes for the layer carries it, and every path that draws a
+   layer builds it the same way.
 #. The server is ``serving.chunkmirage_server.ChunkmirageServer``, built on
    `chunkmirage <https://github.com/JaneliaSciComp/chunkmirage>`_, which
    reads, caches, schedules and serves; cellmap-flow keeps the model, its
@@ -453,9 +462,9 @@ Submit, or ``PUT /api/pipeline``, and the layers
    together, and keeps the canvas if one was sent. With no viewer yet (no
    dataset opened) it stops there.
 #. The layers' source is named by the chain's digest,
-   ``spec.to_url_blob(dashboard_url=..., digest=spec.digest())``. The same
-   chain sent again gives the same URL, so Neuroglancer keeps the chunks it
-   has, and each server reuses the chain it built.
+   ``Session.layer_blob()``. The same chain sent again gives the same URL,
+   so Neuroglancer keeps the chunks it has, and each server reuses the
+   chain it built; a layer a launch drew over this chain is left alone.
 #. It keeps the shaders the user set in the viewer, dropping a layer's
    contrast range when its chain changed. Then, in one ``viewer.txn()``, it
    rebuilds the raw layer (``viewer.layers.raw_layer``) and a prediction
@@ -471,16 +480,18 @@ Launching a model server
 
 #. A model config comes from ``cellmap_flow infer <type>`` (``cli/infer.py``:
    a command per type in ``models.registry.model_types()``, its options from
-   ``registry.click_options``, its strings through ``coerce_cli_args``), or
-   from a YAML (``cli/yaml_cli.py``: ``config.yaml.load_config``,
-   ``registry.build_models``). The Models tab's catalog and Hugging Face
-   picks (``POST /api/models``, ``dashboard/services/launch.py``) need no
-   config for the command, only a type and its arguments.
-#. ``serving.launch`` builds the command line: the words of
-   ``jobs.launch.SERVER_COMMAND`` (``cellmap_flow serve`` by default), then
-   ``--model`` and the model's entry as JSON (``ModelConfig.launch_entry``,
-   ``to_dict()`` without None, in ``server_argv``; or the type and
-   arguments, in ``server_argv_for``), then ``-d <data path>``.
+   ``registry.click_options``, its options made a model entry), from a
+   YAML (``cli/yaml_cli.py``: ``config.yaml.load_config``,
+   ``registry.build_models``), or from the Models tab (``POST /api/models``,
+   ``dashboard/services/launch.py``: each catalog, Hugging Face, zoo and
+   Cellpose pick is an entry, built the same way). ``registry.build_model``
+   is the one constructor path.
+#. ``serving.launch.launch`` is the one launcher: it applies the model's
+   ``scale`` to the data path (``config.yaml.resolve_data_path``), falls
+   back to the saved queue and charge group, builds the command line (the
+   words of ``jobs.launch.SERVER_COMMAND``, ``cellmap_flow serve`` by
+   default, then ``--model`` and the model's entry as JSON,
+   ``ModelConfig.launch_entry``, then ``-d <data path>``) and starts the job.
 #. ``jobs.launch.start_hosts`` submits it to LSF with one GPU
    (``submit_bsub_job``, then ``jobs.lsf.submit`` and ``bsub_argv``). When a
    queue does not start the job it tries the next of
@@ -790,21 +801,50 @@ A change to anything a user, a file or another version of cellmap-flow sees
 (served data or metadata, files written, HTTP answers, the CLI, training
 results) is its own commit, whose subject starts ``Behaviour change:``. It
 carries a test that fails on its parent, and it is listed under
-"Behaviour-change commits" in ``CHANGELOG.md``. A refactor leaves every guard
-below unchanged, so that a behaviour change can be reviewed, reverted or
-dropped on its own.
+"Behaviour-change commits" in ``CHANGELOG.md``. A refactor leaves every test
+below passing unchanged, so that a behaviour change can be reviewed, reverted
+or dropped on its own.
 
 Tests
 ~~~~~
 
-- **One test module per public module**, next to its subject in
-  ``tests/utils/`` (most of the package, whatever its package),
-  ``tests/cli/``, ``tests/finetune/`` or ``tests/blockwise/``, and tested
-  through its public interface: nothing on private helpers, and no test that
+- **One behavioural test per feature, in each mode.** Each user-facing
+  feature has a test that goes through a public entry point (a dashboard
+  route, the CLI, a served chunk, a training run; in the browser app, a
+  backend route over the fakes in ``web/test/unit/backend-fakes.ts``) and
+  that a refactor keeping the behaviour leaves passing. A behaviour is tested
+  once, at its outermost layer, not again at each layer beneath it (the
+  route, then the job manager, then the command line, then the CLI).
+- **Tests live next to their subject**, in ``tests/utils/`` (most of the
+  package, whatever its package), ``tests/cli/``, ``tests/finetune/``,
+  ``tests/blockwise/``, ``tests/ai_annotate/`` or ``tests/web/``, and test
+  through the public interface: nothing on private helpers, and no test that
   would fail only because of an internal rename.
 - **Tables with readable row ids**: near-duplicates are one parametrized
   test, each ``pytest.param(..., id="...")`` named for its case, and a test's
   name says the behaviour it protects.
+- **No wording or shape pins.** A test checks what a user or another program
+  acts on: a status code and the kind of error, the values served, the files
+  written, a YAML read back with ``yaml.safe_load``. It does not freeze an
+  error's sentence, help text or a prompt, a command line or a task YAML byte
+  for byte, a list of element ids, a hash of trained weights or a table of
+  per-epoch losses. Where another party reads a contract, the test is that
+  party's check: ``test_deployability`` runs what Fileglancer's
+  ``runnables.yaml`` runs, and ``test_import_hygiene`` and
+  ``test_import_targets`` (every ``from cellmap_flow... import`` in the
+  package and the tests resolves) guard the imports.
+- **Parity where both modes must agree.** The browser app's ports are checked
+  in ``web/test/parity/`` against JSON that ``web/test/fixtures/make_*.py``
+  writes from the Python, for what a user sees the same in either mode: the
+  ``__CFLOW_ARGS__`` blob and its digest (a shared link names the same
+  layer), the input norms and the postprocessors, the ids from Morton codes,
+  connected components, mutex watershed and the merger, the finetune targets,
+  Label it, and AI-annotate's planes and paint. ``tests/web/test_fixtures_fresh.py``
+  fails while a fixture is stale. An op that parity covers gets no
+  TypeScript unit test of hand-copied Python values.
+- **Characterization tests stay on their branch.** A refactor that wants the
+  current behaviour pinned first writes the snapshot on its branch, runs it on
+  the code before and after the change, and drops it before the merge.
 - **Shared fixtures** are in the conftest files. ``tests/conftest.py``
   points ``HOME`` at a temporary directory before anything imports
   cellmap_flow, gives every test fresh owners of the process's state
@@ -812,48 +852,33 @@ Tests
   ``raw_zarr``, ``ome_pyramid``, ``write_array``, ``model_script``,
   ``fake_lsf``, ``viewer`` and ``dashboard``. ``tests/finetune/conftest.py``
   and ``tests/blockwise/conftest.py`` have their areas' fixtures.
-- **Characterization snapshots are the guards.** Each pins, as literals in
-  the test, something another party reads:
-
-  - ``test_cli_surface``: the CLIs' commands and flags, each type's
-    ``to_dict()`` and ``command``, and the model form;
-  - ``test_url_map``: every dashboard URL and its methods;
-  - ``test_served_metadata_snapshot``: what a server answers;
-  - ``test_layer_sources_snapshot``: the layers every path puts in the
-    viewer;
-  - ``test_bsub_argv_snapshot``: every bsub and local command line;
-  - ``test_blockwise_routes``: the task YAMLs generate writes;
-  - ``test_training_snapshot``, ``test_dataset_draws_snapshot``,
-    ``test_volume_snapshot``: training's numbers, markers and layout, the
-    patches drawn, and the annotation volume format;
-  - the rehydration snapshot in ``test_finetune_job_manager``;
-  - ``test_deployability``, ``test_import_hygiene`` and
-    ``test_import_targets`` (every ``from cellmap_flow... import`` in the
-    package and the tests resolves).
-
-  A refactor starts with the characterization test, which must pass on the
-  code before it.
 - **Patch where the name is used.** A test that monkeypatches a name patches
   it on the module that calls it, and asserts its fake was called, so a move
   can't turn it into a test of nothing, or of real bsub or ``mc``.
 - **Markers**: ``finetune`` (needs peft, skipped without it), ``gpu``,
   ``lsf``, ``minio``, ``network`` (opt in with
   ``CELLMAP_FLOW_NETWORK_TESTS=1``) and ``slow``. CI runs
-  ``pytest -m "not gpu and not lsf and not minio and not network"`` with and
-  without the ``finetune`` extra.
+  ``pytest -n auto -m "not gpu and not lsf and not minio and not network"``
+  with and without the ``finetune`` extra; ``-n auto`` spreads the tests over
+  the machine's cores with pytest-xdist (in the ``test`` extra), so a test
+  may not rely on another having run before it in the same process.
 - **Import hygiene**: what jobs, servers, finetune runs and the dashboard's
   request threads import must not drag in the dashboard or a model. No
   module imports ``globals`` (``test_import_targets``). A new module imports
   Flask, neuroglancer, huggingface_hub and peft only where it needs them,
   never at module level, and torch likewise outside ``finetune/`` and
   ``inference/``. ``test_import_hygiene`` checks it in a fresh interpreter
-  per group: ``jobs/`` and the job manager, ``io/``, ``serving/`` (with
+  per group: ``jobs/`` and the job manager (through ``jobs.launch`` and
+  ``job_manager.manager``, which import the rest), ``serving/`` (with
   ``models.geometry``, ``geometry_cache``, ``inference.runner``, the
   ``Inferencer`` and ``ImageDataInterface``), the registry (with
-  ``config.yaml`` and ``serving.launch``), ``pipeline_spec`` and
-  ``process_chain``, the state's owners, ``finetune/session/``, ``review``
-  and ``viewer/``; that importing the server or ``blockwise/`` leaves
-  logging alone; and that ``import cellmap_flow`` writes nothing under
+  ``config.yaml`` and ``serving.launch``), ``models.resolve``, the state's
+  owners (with ``process_chain``), ``finetune/session/`` and a finetune
+  run's modules (``adaptation``, ``losses``, ``data`` and the training
+  loop); that importing the server, ``blockwise/`` or the finetune CLI
+  leaves logging alone, and ``jobs.launch`` imported off the main thread
+  leaves the signal handlers alone; that plugins run when a command starts,
+  not on import; and that ``import cellmap_flow`` writes nothing under
   ``HOME``.
 
 The dashboard's JavaScript
@@ -864,9 +889,10 @@ The repository has no JavaScript test runner. CI checks that every file in
 plain ``node --check`` passes a module with a syntax error), and pytest
 checks what it can without a browser: what the two pages hand their scripts
 (``test_dashboard_pages``), that every element id the builder's and the
-tabs' scripts look up is on the page (``test_builder_page``,
-``test_dashboard_tab_scripts``), and that every static file ships and every
-import resolves (``test_static_assets``).
+tabs' scripts look up is on the page and that no markup runs an inline
+script (``test_dashboard_tab_scripts``), and that every module the pages
+load and every import resolves (``test_static_assets``). That the wheel
+ships every file is CI's ``package`` job.
 
 What a page does was checked during the cleanup with a headless-Chrome
 harness. It renders each page from the tree with Flask's test client and

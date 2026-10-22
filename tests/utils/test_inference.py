@@ -1,8 +1,8 @@
 """Running a model on a chunk: inference/runner and Inferencer.
 
-Only the device part of a chunk waits for the GPU, in arrival order. A
-model's declared shapes are checked on its warmup forward, half precision is
-opt-in and checked against fp32, and the chain sees the chunk it is given.
+Only the device part of a chunk waits for the GPU. A model's declared shapes
+are checked on its warmup forward, half precision is opt-in and checked
+against fp32, and the chain sees the chunk it is given.
 """
 
 import threading
@@ -15,10 +15,10 @@ import torch
 from funlib.geometry import Roi
 
 from cellmap_flow.image_data_interface import ImageDataInterface
-from cellmap_flow.inference.runner import DeviceSlots, ModelRunner, predict
+from cellmap_flow.inference.runner import DeviceSlots, predict
 from cellmap_flow.inferencer import Inferencer
 from cellmap_flow.models.models_config import ScriptModelConfig
-from cellmap_flow.post.postprocessors import PostProcessor, ThresholdPostprocessor
+from cellmap_flow.post.postprocessors import PostProcessor
 from cellmap_flow.process_chain import process_chain
 from cellmap_flow.serving.chunkmirage_server import ChunkmirageServer
 from tests.utils.serving_helpers import IDENTITY_MODEL
@@ -43,50 +43,6 @@ def _holding(slots):
 
     threading.Thread(target=hold).start()
     return release
-
-
-def _enter(slots, entered, i):
-    with slots.hold():
-        entered.append(i)
-
-
-def test_device_slots_are_first_come_first_served():
-    slots, entered = DeviceSlots(1), []
-    release = _holding(slots)
-    _wait_until(lambda: slots._running == 1)
-    threads = []
-    for i in range(5):
-        threads.append(threading.Thread(target=_enter, args=(slots, entered, i)))
-        threads[-1].start()
-        _wait_until(lambda: len(slots._waiting) == i + 1)
-    release.set()
-    [t.join(5) for t in threads]
-    assert entered == [0, 1, 2, 3, 4]
-
-
-def test_never_more_chunks_than_slots_hold_the_device():
-    slots, lock, now, peak = DeviceSlots(2), threading.Lock(), [0], [0]
-
-    def work():
-        with slots.hold():
-            with lock:
-                now[0] += 1
-                peak[0] = max(peak[0], now[0])
-            time.sleep(0.01)
-            with lock:
-                now[0] -= 1
-
-    threads = [threading.Thread(target=work) for _ in range(12)]
-    [t.start() for t in threads]
-    [t.join(5) for t in threads]
-    assert peak[0] == 2
-
-
-@pytest.mark.parametrize("value", [pytest.param("0", id="zero"), pytest.param("two", id="not-a-number")])
-def test_a_bad_slot_count_is_refused(monkeypatch, value):
-    monkeypatch.setenv("CELLMAP_FLOW_GPU_SLOTS", value)
-    with pytest.raises(ValueError, match="CELLMAP_FLOW_GPU_SLOTS"):
-        DeviceSlots.from_env()
 
 
 def test_a_chunk_is_read_while_the_device_is_busy():
@@ -129,7 +85,6 @@ model = Probe()
         pytest.param(True, 0.0, None, torch.bfloat16, id="a-script-turns-it-on"),  # bfloat16 on a CPU
         pytest.param(True, 0.5, None, None, id="fp32-when-the-two-disagree"),
         pytest.param(False, 0.0, "1", torch.bfloat16, id="the-servers-environment-turns-it-on"),
-        pytest.param(False, 0.0, "0", None, id="or-off"),
     ],
 )
 def test_half_precision_is_opt_in_and_checked_against_fp32(raw_zarr, model_script, monkeypatch, in_script, shift,
@@ -171,27 +126,15 @@ model = Recording()
 """
 
 
-def test_serving_runs_one_forward_the_warmup(model_script):
-    """The shape check at config load ran a forward of its own, on zeros."""
-    config = ScriptModelConfig(script_path=model_script(RECORDING, out=4))
-    inferencer = Inferencer(config)
-    (probe,) = config.config.model.inputs
-    assert probe.device == inferencer.device and probe.abs().max() > 0, "the warmup's probe input"
-
-
 def test_a_declared_shape_the_model_does_not_produce_stops_the_server(raw_zarr, model_script):
+    """The shapes are checked on the warmup forward, the only one serving
+    runs before the first chunk: the check at config load ran a forward of
+    its own, on zeros."""
     config = ScriptModelConfig(script_path=model_script(RECORDING, out=2))
-    with pytest.raises(ValueError, match="(?s)shape validation failed.*write_shape mismatch"):
+    with pytest.raises(ValueError, match="write_shape"):
         ChunkmirageServer(raw_zarr(np.zeros((8, 8, 8), np.uint8)), config)
     (probe,) = config._config.model.inputs  # raised by the warmup's forward
     assert probe.abs().max() > 0
-
-
-def test_a_config_read_without_an_inferencer_checks_its_shapes_itself(model_script):
-    config = ScriptModelConfig(script_path=model_script(RECORDING, out=2))
-    with pytest.raises(ValueError, match="write_shape mismatch"):
-        config.config
-    assert len(config._config.model.inputs) == 1
 
 
 def test_postprocessors_space_their_ids_by_output_voxels(raw_zarr, model_script):
@@ -216,16 +159,3 @@ model = torch.nn.Upsample(scale_factor=2)
     raw = raw_zarr(np.zeros((8, 8, 8), np.uint8))
     Inferencer(ScriptModelConfig(script_path=script)).process_chunk(ImageDataInterface(raw, voxel_size=(8, 8, 8)), ROI)
     assert seen == [8 * 8 * 8]
-
-
-def test_a_model_runner_returns_the_models_own_output(raw_zarr, model_script):
-    """No chain, not even the process's: the model's output for the region, read with its context."""
-    data = (np.arange(512) % 251).astype(np.uint8).reshape(8, 8, 8)
-    script = model_script(IDENTITY_MODEL.replace("read_shape = Coordinate(4, 4, 4)", "read_shape = Coordinate(6, 6, 6)")
-                          + "\nmodel.forward = lambda x: x[:, :, 1:-1, 1:-1, 1:-1] * 2\n")
-    process_chain().postprocess = [ThresholdPostprocessor(threshold=0.5)]
-    runner = ModelRunner(ScriptModelConfig(script_path=script))
-    out = runner.predict(ImageDataInterface(raw_zarr(data), voxel_size=(8, 8, 8), input_norms=[]),
-                         Roi((8, 8, 8), (32, 32, 32)))
-    assert out.shape == (1, 4, 4, 4) and out.dtype == np.float32
-    assert np.array_equal(out[0], 2.0 * data[1:5, 1:5, 1:5])

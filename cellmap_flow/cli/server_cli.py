@@ -113,34 +113,23 @@ def create_dynamic_server_command(cli_name: str, config_class: Type[ModelConfig]
     """
     Dynamically create a Click command for a ModelConfig subclass server.
     """
-    # Create the command function
     def command_func(**kwargs):
-        # Separate model config kwargs from server kwargs
-        model_kwargs = {}
         data_path = kwargs.pop("data_path")
         port = kwargs.pop("port", 0)
         certfile = kwargs.pop("certfile", None)
         keyfile = kwargs.pop("keyfile", None)
 
-        # Process kwargs for the model config
-        for key, value in kwargs.items():
-            if value is not None:
-                model_kwargs[key] = value
-
-        # Process constructor args (handle list/tuple conversions)
-        processed_kwargs = registry.coerce_cli_args(config_class, model_kwargs)
-
-        # Create model config instance
+        # The options as a model entry, built as every launcher's is.
+        entry = {"type": cli_name, **{key: value for key, value in kwargs.items() if value is not None}}
         try:
-            model_config = config_class(**processed_kwargs)
-        except TypeError as e:
-            logger.error(f"Error creating {config_class.__name__}: {e}")
-            logger.error(f"Provided arguments: {processed_kwargs}")
+            model_config = registry.build_model(entry)
+        except ConfigError as e:
+            logger.error(str(e))
             sys.exit(1)
         except Exception:
             logger.exception(
                 f"Failed to create {config_class.__name__} with arguments "
-                f"{processed_kwargs} (likely a missing/mismatched dependency "
+                f"{entry} (likely a missing/mismatched dependency "
                 "for this model's framework)"
             )
             sys.exit(1)

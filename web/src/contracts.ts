@@ -70,6 +70,28 @@ export interface Unavailable {
   error: string;
 }
 
+/** The bodies the Python routes parse with pydantic (dashboard/requests.py),
+ * as generated into src/generated/cellmap-flow.ts by `npm run gen`, for the
+ * handlers here that answer the same routes; the route table (Route, ROUTES)
+ * and the constants both modes share come from the same file. */
+export type {
+  AddModel,
+  AIAnnotateDecision,
+  AIAnnotateResend,
+  AIAnnotateRun,
+  AIAnnotateSettings,
+  CreateVolume,
+  FinetuneRestart,
+  FinetuneSubmit,
+  PipelineUpdate,
+  RemoveModel,
+  ResolveModel,
+  Route,
+  ServerConfigUpdate,
+  SetData,
+  SubmitModels,
+} from "./generated/cellmap-flow";
+
 // ---------------------------------------------------------------------------
 // Session state (what dashboard/state.py keeps between requests)
 // ---------------------------------------------------------------------------
@@ -472,6 +494,14 @@ export interface Inference {
    * model's, and the axes the box's corner is off the model's chunk edges
    * along (z 0, y 1, x 2), the ones putting it on an edge shrinks that. */
   materializePlan?(view: string, box: { lo: number[]; hi: number[] }): Promise<RegionPlan>;
+  /** A function of cellmap_flow.portable, the Python both modes run, by
+   * module path (`"cellmap_flow.portable.calls:rank_tally"`), run in the
+   * engine's Pyodide worker as chunkmirage's `Engine.call` runs it:
+   * `fn(args, arrays)` with the JSON arguments and the arrays' bytes (which
+   * the call takes over), answering JSON, one array (an ArrayBuffer) or
+   * `{value, arrays}`. Python loads when the dataset opens, numpy with it,
+   * so the first call rarely waits for it. */
+  python<T>(fn: string, args: Record<string, unknown>, arrays?: ArrayBuffer[]): Promise<T>;
 }
 
 /** Where materialize writes a zarr's files, by their path within it

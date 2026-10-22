@@ -73,7 +73,8 @@ from typing import Dict, Optional
 
 import numpy as np
 
-from cellmap_flow.models.configs.base import Config, ModelConfig, _as_given, _names, _per_axis, _sizes, _voxel_size
+from cellmap_flow.models import entry
+from cellmap_flow.models.configs.base import Config, ModelConfig
 from cellmap_flow.models.geometry import _numbers
 from cellmap_flow.models.resolve import ONNX_REPO
 
@@ -429,8 +430,8 @@ class OnnxModelConfig(ModelConfig):
         variant: str = None,
         input_voxel_size: tuple = None,
         output_voxel_size: tuple = None,
-        input_size=None,
-        output_size=None,
+        input_size: tuple = None,
+        output_size: tuple = None,
         channels: list[str] = None,
         output: str = None,
         slices_per_chunk: int = None,
@@ -451,14 +452,11 @@ class OnnxModelConfig(ModelConfig):
         self.revision = revision
         self.file = file
         self.variant = variant
-        # Strings from the server CLI and the model form ("16,16,16"); a
-        # number or a list from a YAML. Not _as_int_tuple's, which truncates
-        # a 5.24 nm voxel to 5.
-        self.input_voxel_size = None if input_voxel_size is None else _voxel_size(input_voxel_size)
-        self.output_voxel_size = None if output_voxel_size is None else _voxel_size(output_voxel_size)
-        self.input_size = _sizes(input_size, min=1, lengths=(1, 3))
-        self.output_size = _sizes(output_size, min=1, lengths=(1, 3))
-        self.channels = _names(channels)
+        self.input_voxel_size = entry.voxel_size(input_voxel_size, "input_voxel_size")
+        self.output_voxel_size = entry.voxel_size(output_voxel_size, "output_voxel_size")
+        self.input_size = entry.sizes(input_size, min=1, lengths=(1, 3), what="input_size")
+        self.output_size = entry.sizes(output_size, min=1, lengths=(1, 3), what="output_size")
+        self.channels = entry.names(channels)
         self.output = output
         self.slices_per_chunk = None if slices_per_chunk is None else int(slices_per_chunk)
         if self.slices_per_chunk is not None and self.slices_per_chunk < 1:
@@ -586,9 +584,9 @@ class OnnxModelConfig(ModelConfig):
         # In the folder's case input_size chose the variant; a file's
         # manifest's variant is overruled by the entry's sizes.
         given_in = self.input_size if self.folder is None else None
-        in_size = first(_per_axis(given_in, 3, "input_size"), variant.get("input_size"), in_dims[2:],
+        in_size = first(entry.per_axis(given_in, 3, "input_size"), variant.get("input_size"), in_dims[2:],
                         what_is_it="input_size")
-        out_size = first(_per_axis(self.output_size, 3, "output_size"), variant.get("output_size"), out_dims[-3:],
+        out_size = first(entry.per_axis(self.output_size, 3, "output_size"), variant.get("output_size"), out_dims[-3:],
                          what_is_it="output_size")
         for kind, size, dims in (("input", in_size, in_dims[2:]), ("output", out_size, out_dims[-3:])):
             if any(d is not None and d != s for d, s in zip(dims, size)):
@@ -654,7 +652,7 @@ class OnnxModelConfig(ModelConfig):
             if value is None:
                 continue
             if key in ("input_size", "output_size"):
-                value = _as_given(value)
+                value = entry.as_given(value)
             elif isinstance(value, (tuple, list)):
                 value = list(value)  # a copy, and no tuple: yaml.safe_load refuses !!python/tuple
             result[key] = value

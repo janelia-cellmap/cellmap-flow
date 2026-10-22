@@ -63,7 +63,7 @@ function isScored(answer) {
   return Boolean(answer.success) && Number.isFinite(answer.matches);
 }
 
-// What a score is at besides the model as it is (web/src/finetune/rank.ts):
+// What a score is at besides the model as it is (cellmap_flow/portable/rank.py):
 // the raw stretched from its window, when that scored clearly better, and the
 // cut-off that fits the paint best, when it is not the model's own 0; with
 // the score without the change.

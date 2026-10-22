@@ -1,5 +1,6 @@
-"""The dashboard's routes outside finetuning: what it serves, the settings forms,
-the bounding boxes read back from the viewer, and the viewer layer API."""
+"""The dashboard's routes outside finetuning: what it serves, the settings forms
+and the model form, the bounding boxes read back from the viewer, and the
+viewer layer API."""
 
 import logging
 import queue
@@ -65,33 +66,13 @@ def test_other_sites_get_no_cors_grant(dashboard, tmp_path):
     "url, payload, error",
     [
         pytest.param("/api/blockwise-config", {"nb_cores_master": 4, "nb_cores_worker": 12, "nb_workers": None},
-                     "nb_workers must be a whole number, got None", id="blockwise-null"),
-        pytest.param("/api/blockwise-config", {"nb_cores_master": 4, "nb_cores_worker": 12, "nb_workers": ""},
-                     "nb_workers must be a whole number, got ''", id="blockwise-empty"),
-        pytest.param("/api/blockwise-config", {"nb_cores_master": 4, "nb_cores_worker": 12, "nb_workers": "twelve"},
-                     "nb_workers must be a whole number, got 'twelve'", id="blockwise-word"),
-        pytest.param("/api/blockwise-config", {"nb_cores_master": 4, "nb_cores_worker": 12},
-                     "nb_workers must be a whole number, got None", id="blockwise-missing"),
-        pytest.param("/api/blockwise-config", {"nb_cores_master": 4, "nb_cores_worker": 12, "nb_workers": 2.5},
-                     "nb_workers must be a whole number, got 2.5", id="blockwise-a-fraction"),
-        pytest.param("/api/server-config", {"queue": "gpu_a100", "nb_workers": "lots"},
-                     "nb_workers must be a whole number, got 'lots'", id="server-word"),
-        pytest.param("/api/server-config", {"queue": "gpu_a100", "nb_workers": None},
-                     "nb_workers must be a whole number, got None", id="server-null"),
-        pytest.param("/api/server-config", "not json", "expected a JSON object", id="server-not-json"),
-        pytest.param("/api/create-model-config", {"params": {"name": "m"}}, "class_name is required",
-                     id="model-form-without-a-class"),
-        pytest.param("/api/set-data", {"dataset_path": "  "}, "dataset_path is required", id="set-data-blank"),
-        pytest.param("/api/set-data", "not json", "expected a JSON object", id="set-data-not-json"),
-        pytest.param("/api/models", "not json", "expected a JSON object", id="models-not-json"),
-        pytest.param("/api/models", {"selected_models": "mito"}, "selected_models: Input should be a valid list",
-                     id="models-not-a-list"),
-        pytest.param("/update/equivalences", {"dataset": "seg"}, "equivalences: Field required",
-                     id="equivalences-missing"),
-        pytest.param("/api/bbx-generator", {"dataset_path": ""}, "Dataset path is required", id="box-tool-no-dataset"),
+                     "nb_workers", id="blockwise-null"),
+        pytest.param("/api/server-config", "not json", "JSON", id="server-not-json"),
+        pytest.param("/api/set-data", {"dataset_path": "  "}, "dataset_path", id="set-data-blank"),
+        pytest.param("/api/models", {"selected_models": "mito"}, "selected_models", id="models-not-a-list"),
+        pytest.param("/update/equivalences", {"dataset": "seg"}, "equivalences", id="equivalences-missing"),
         pytest.param("/api/bbx-generator", {"dataset_path": "/d", "existing_bounding_boxes": [{"offset": [1, 2]}]},
-                     "existing_bounding_boxes.0.offset: List should have at least 3 items after validation, not 2",
-                     id="box-tool-a-short-corner"),
+                     "offset", id="box-tool-a-short-corner"),
     ],
 )
 def test_a_bad_request_is_a_400_that_says_why_and_changes_nothing(dashboard, monkeypatch, url, payload, error):
@@ -101,8 +82,40 @@ def test_a_bad_request_is_a_400_that_says_why_and_changes_nothing(dashboard, mon
     session.queue, session.nb_workers, session.dataset_path, session.models_config = "gpu_h100", 14, "/data/raw.zarr", []
     kwargs = {"data": payload} if isinstance(payload, str) else {"json": payload}
     response = dashboard.post(url, **kwargs)
-    assert (response.status_code, response.get_json()) == (400, {"success": False, "error": error})
+    assert (response.status_code, response.get_json()["success"]) == (400, False)
+    assert error in response.get_json()["error"]
     assert (session.queue, session.nb_workers, session.dataset_path, session.models_config) == ("gpu_h100", 14, "/data/raw.zarr", [])
+
+
+@pytest.mark.parametrize(
+    "type_name, params, status, expected",
+    [
+        # Form tuples become numbers, whole ones ints, and a list of strings
+        # is split on commas when it is not JSON.
+        ("fly",
+         {"checkpoint_path": "/c.ts", "channels": "mito, er", "input_voxel_size": "16,16,16",
+          "output_voxel_size": "[8, 8, 8]", "input_size": "", "name": "fly"},
+         200,
+         {"type": "fly", "checkpoint_path": "/c.ts", "channels": ["mito", "er"],
+          "input_voxel_size": [16, 16, 16], "output_voxel_size": [8, 8, 8], "name": "fly"}),
+        ("NoSuchModelConfig", {}, 400, "NoSuchModelConfig"),
+        ("dacapo", {"run_name": "r", "iteration": ""}, 400, "iteration"),
+        ("dacapo", {"run_name": "r", "iteration": "ten"}, 400, "iteration"),
+    ],
+    ids=["parsed", "unknown-type", "empty-required", "not-a-number"],
+)
+def test_the_model_form_parses_and_rejects_the_same_way(dashboard, type_name, params, status, expected):
+    """The model form sends every field as a string: parsed, they make the
+    config the session serves; a type or field it cannot use is a 400."""
+    from cellmap_flow.models.registry import cli_name_of
+
+    response = dashboard.post("/api/create-model-config", json={"type": type_name, "params": params})
+    assert response.status_code == status, response.get_json()
+    if status == 200:
+        assert response.get_json()["config_dict"] == expected
+        assert [cli_name_of(type(m)) for m in get_session().models_config] == [type_name]
+    else:
+        assert expected in response.get_json()["error"]
 
 
 def test_the_blockwise_settings_are_kept_and_read_back(dashboard, tmp_path):

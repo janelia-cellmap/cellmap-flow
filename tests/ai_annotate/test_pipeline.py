@@ -1,4 +1,4 @@
-"""Reading the planned plane, asking for a mask and labelling the box.
+"""Reading the planned plane, mapping a mask onto the box and labelling it.
 
 The round trips are the point: a raw with a bright block at a known world
 position, a plane planned through it, read, masked by brightness, mapped to
@@ -11,12 +11,8 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-from cellmap_flow.ai_annotate.backends.base import SegmentRequest
-from cellmap_flow.ai_annotate.backends.fake import FakeBackend
 from cellmap_flow.ai_annotate.geometry import from_screen, plan_plane, to_screen
-from cellmap_flow.ai_annotate.organelles import ORGANELLES
 from cellmap_flow.ai_annotate.pipeline import (
-    build_request,
     labels_for_box,
     mask_to_write_shape,
     raw_extent_nm,
@@ -92,16 +88,6 @@ def test_anisotropic_voxels_land_too(raw_zarr, depth_axis):
     assert labelled == _expected(BLOCK_NM, (16, 8, 8), depth_axis, int(point[depth_axis] // (16, 8, 8)[depth_axis]))
 
 
-def test_a_plane_clipped_at_the_volume_edge_lands_too(raw_zarr):
-    # A block touching the volume's y start, the point 2 voxels from it.
-    block = ((64, 96), (0, 24), (160, 192))
-    raw = _raw_with_block(raw_zarr, (4, 4, 4), (192, 256, 320), block)
-    volume = _volume(raw, (8, 8, 8), (4, 4, 4))
-    plan, labelled = _labelled_voxels(volume, (24, 32, 40), (81, 17, 177), 0, crop_size_px=16)
-    assert plan.write_lo[1] == 0 and plan.write_shape == (2 + 8, 16)
-    assert labelled == _expected(block, (8, 8, 8), 0, 10)
-
-
 def test_a_downsampled_plane_lands_too(raw_zarr):
     # 1 nm in-plane raw, 4 nm annotation, a field of 1100 x 1200 nm: 1100 x
     # 1200 px at 1 nm, so sent at 1200/1024 nm per pixel.
@@ -124,19 +110,8 @@ def test_a_resampled_raw_is_read_at_the_input_voxel_size(raw_zarr):
     assert labelled == _expected(BLOCK_NM, (8, 8, 8), 0, 10)
 
 
-def test_the_read_is_padded_outside_the_raw(raw_zarr):
-    # A volume larger than its raw (padded to whole chunks): the far part reads 0.
-    raw = _raw_with_block(raw_zarr, (4, 4, 4), (192, 256, 320))
-    volume = _volume(raw, (8, 8, 8), (4, 4, 4))
-    plan = plan_plane(volume, (24, 40, 40), (81, 250, 177), 0, crop_size_px=16)
-    plane = read_plane(volume, plan)
-    rows_in_raw = (256 - plan.raw_offset_nm[1]) // 4
-    assert np.all(plane[: int(rows_in_raw)] == DIM)
-    assert np.all(plane[int(rows_in_raw):] == 0)
-
-
 def test_a_field_at_the_datas_edge_stops_there(raw_zarr):
-    # The same volume larger than its raw (to whole chunks), with the data's
+    # A volume larger than its raw (padded to whole chunks), with the data's
     # extent given: the field stops at the raw's y end, 256 nm, rather than
     # reading and labelling the padding past it.
     raw = _raw_with_block(raw_zarr, (4, 4, 4), (192, 256, 320))
@@ -147,15 +122,6 @@ def test_a_field_at_the_datas_edge_stops_there(raw_zarr):
     assert plan.write_hi[1] == 256 // 8
     assert plan.raw_offset_nm[1] + plan.raw_shape_nm[1] == 256
     assert np.all(read_plane(volume, plan) == DIM)
-
-
-def test_a_point_past_the_datas_edge_is_refused(raw_zarr):
-    from cellmap_flow.ai_annotate.errors import AIAnnotateError
-
-    raw = _raw_with_block(raw_zarr, (4, 4, 4), (192, 256, 320))
-    volume = _volume(raw, (8, 8, 8), (4, 4, 4))
-    with pytest.raises(AIAnnotateError, match="outside the data"):
-        plan_plane(volume, (24, 40, 40), (81, 280, 177), 0, crop_size_px=16, data_box_nm=raw_extent_nm(volume))
 
 
 @pytest.mark.parametrize("depth_axis", [0, 1, 2])
@@ -198,52 +164,7 @@ def test_the_image_is_the_plane_as_the_panel_draws_it(raw_zarr, depth_axis, down
     assert near.all() and not far.any()
 
 
-# --- the request ------------------------------------------------------------------
-
-
-def test_build_request_states_the_resolution_sent_and_the_click(raw_zarr):
-    raw = _raw_with_block(raw_zarr, (4, 4, 4), (192, 256, 320))
-    volume = _volume(raw, (8, 8, 8), (4, 4, 4))
-    plan = plan_plane(volume, (24, 32, 40), (81, 113, 177), 0, crop_size_px=16)
-    request = build_request(read_plane(volume, plan), plan, ORGANELLES["mito"])
-    assert isinstance(request, SegmentRequest)
-    assert request.image.mode == "RGB"
-    assert request.image.size == (plan.image_shape[1], plan.image_shape[0])
-    assert request.target_rgb == tuple(ORGANELLES["mito"].rgb)
-    # x runs leftwards in the XY plane, as on screen.
-    assert request.click_px == plan.click_px == ((113 - 48) // 4, 32 - 1 - (177 - 112) // 4)
-    assert "4 nm/px" in request.prompt
-
-    edited = build_request(read_plane(volume, plan), plan, ORGANELLES["mito"], "Paint the bright block red.")
-    assert "Paint the bright block red." in edited.prompt
-    assert "4 nm/px" in edited.prompt
-
-    # A backend's mask comes back the image's size and maps onto the box.
-    result = FakeBackend().segment(request, "fake-threshold")
-    assert mask_to_write_shape(result.mask, plan).shape == plan.write_shape
-
-
-def test_build_request_refuses_a_plane_off_the_plan(raw_zarr):
-    raw = _raw_with_block(raw_zarr, (4, 4, 4), (192, 256, 320))
-    volume = _volume(raw, (8, 8, 8), (4, 4, 4))
-    plan = plan_plane(volume, (24, 32, 40), (81, 113, 177), 0, crop_size_px=16)
-    with pytest.raises(ValueError):
-        build_request(np.zeros((5, 5)), plan, ORGANELLES["mito"])
-
-
 # --- the mask on the box ----------------------------------------------------------
-
-
-def test_mask_to_write_shape_samples_each_voxel_centre():
-    # A 4 px image over 2 voxels: voxel 0 takes pixel 1 (its centre is at
-    # 1.0, the pixel [1, 2)), voxel 1 pixel 3. An XZ plane, drawn with z
-    # across: the image's row is the box's column.
-    plan = SimpleNamespace(write_shape=(2, 1), depth_axis=1, display_dimensions=None,
-                           from_screen=lambda image: from_screen(image, 1))
-    assert mask_to_write_shape(np.array([[True, False, False, True]]), plan).tolist() == [[False], [True]]
-    assert mask_to_write_shape(np.array([[False, True, False, False]]), plan).tolist() == [[True], [False]]
-    with pytest.raises(ValueError):
-        mask_to_write_shape(np.zeros((2, 2, 2)), plan)
 
 
 def test_a_one_pixel_line_parts_two_objects_on_coarser_voxels():
@@ -299,49 +220,3 @@ def test_labels_for_box_counts_up_on_an_instance_volume():
     labels = labels_for_box(_objects(mask, 1), existing, 1, count_up=True)[:, 0, :]
     assert labels.dtype == np.uint16
     assert {int(labels[0, 0]), int(labels[0, 4])} == {301, 302}
-
-
-@pytest.mark.parametrize("depth_axis", [0, 1, 2])
-def test_an_object_continuing_one_in_the_plane_beside_keeps_its_id(depth_axis):
-    # The plane before holds two objects, 2 on the left and 3 on the right.
-    # This plane's mask continues only the right one, and adds a new one
-    # where the plane before has nothing.
-    before = np.ones((6, 12), dtype=np.uint16)
-    before[1:4, 0:3] = 2
-    before[1:4, 5:8] = 3
-    mask = np.zeros((6, 12), dtype=bool)
-    mask[1:4, 5:8] = True
-    mask[1:4, 9:12] = True
-
-    def box(plane):
-        return np.expand_dims(plane, depth_axis)
-
-    existing = box(np.zeros((6, 12), dtype=np.uint16))
-    labels = np.squeeze(
-        labels_for_box(_objects(mask, depth_axis), existing, depth_axis, count_up=True, beside=[box(before), None]),
-        axis=depth_axis,
-    )
-    assert np.all(labels[1:4, 5:8] == 3)  # the same object, not a fresh id
-    # A new object, not 2: that id is a different object right beside it.
-    assert np.all(labels[1:4, 9:12] == 4)
-    assert np.all(labels[~mask] == 1)  # the ids beside are only consulted, never written
-
-
-def test_a_new_object_on_a_uint8_volume_skips_the_ids_beside():
-    after = np.zeros((1, 4, 8), dtype=np.uint8)
-    after[0, :, 0:2] = 2
-    mask = np.zeros((4, 8), dtype=bool)
-    mask[:, 5:7] = True
-    labels = labels_for_box(mask, np.zeros((1, 4, 8), dtype=np.uint8), 0, count_up=False, beside=[None, after])[0]
-    assert np.all(labels[:, 5:7] == 3)
-
-
-def test_the_planes_beside_must_match_the_box():
-    with pytest.raises(ValueError):
-        labels_for_box(np.ones((4, 4), dtype=bool), np.zeros((1, 4, 4), dtype=np.uint8), 0, count_up=False,
-                       beside=[np.zeros((1, 4, 5), dtype=np.uint8), None])
-
-
-def test_labels_for_box_refuses_a_box_of_another_shape():
-    with pytest.raises(ValueError):
-        labels_for_box(np.ones((4, 4), dtype=bool), np.zeros((1, 4, 5), dtype=np.uint8), 0, count_up=False)

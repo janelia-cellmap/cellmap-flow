@@ -21,6 +21,10 @@ Usage (from web/)::
     python build/render.py --out -         # writes the page to stdout
     python build/render.py --check         # exits 1 if web/index.html is stale
 
+``npm run render`` runs build/export_data.py after it, so the data the app
+shares with Python (web/src/generated/python-data.json) is brought up to
+date with the page.
+
 Renders the cellmap_flow beside this script (the repository root, two
 directories up, put first on sys.path, so a worktree renders its own templates
 and not an installed copy's); its dependencies must be importable (the pixi
@@ -43,19 +47,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 HERE = Path(__file__).resolve().parent
 WEB = HERE.parent
 
+# The exporter beside this script. A script run finds it on sys.path already;
+# the tests that import this file by path find it through this.
+sys.path.insert(1, str(HERE))
+import export_data  # noqa: E402
+
 # The chains a fresh browser session starts with, ticked on the Input and
-# Postprocess tabs with these values. The six models in Hugging Face's
-# cellmap/onnx-web-models were trained on uint8 raw scaled to [-1, 1] and
-# output logits, so this is what every one of them wants: anything else gives
-# wrong predictions without a hint of why. (The Flask dashboard starts with
-# empty chains because its models vary.)
-DEFAULT_CHAIN = {
-    "input_norm": [
-        {"name": "MinMaxNormalizer", "min_value": 0, "max_value": 255},
-        {"name": "LambdaNormalizer", "expression": "2*x-1"},
-    ],
-    "postprocess": [{"name": "SigmoidPostprocessor"}],
-}
+# Postprocess tabs with these values (the app's session starts with the same).
+DEFAULT_CHAIN = export_data.DEFAULT_CHAIN
 
 # The page's module script and where the dashboard's static files are served,
 # relative to the page, as vite.config.ts and build/vite-plugins.ts arrange it.
@@ -114,6 +113,12 @@ def browser_context(app_entry=APP_ENTRY, static_prefix=STATIC_PREFIX, chain=DEFA
     # route hands it the session's: build the default chain's the same way, so
     # a parameter is shown exactly as the dashboard would show it.
     input_norms, postprocess = PipelineSpec(chain["input_norm"], chain["postprocess"]).build()
+
+    def in_browser(ops):
+        # Only the ops the browser runs (their ``browser`` flag): one it
+        # cannot run would be refused when ticked.
+        return [op for op in ops if op["browser"]]
+
     return dict(
         mode="browser",
         app_entry=app_entry,
@@ -121,9 +126,10 @@ def browser_context(app_entry=APP_ENTRY, static_prefix=STATIC_PREFIX, chain=DEFA
         # No viewer yet: the page shows the connect panel, and the in-page
         # backend puts the viewer in when a dataset is opened.
         neuroglancer_url="",
-        # The default chain ticked, with its values; every other op after it, unticked.
-        input_norm_items=chain_items(get_input_normalizers(), input_norms),
-        postprocess_items=chain_items(get_postprocessors_list(), postprocess),
+        # The default chain ticked, with its values; every other op the
+        # browser runs after it, unticked.
+        input_norm_items=chain_items(in_browser(get_input_normalizers()), input_norms),
+        postprocess_items=chain_items(in_browser(get_postprocessors_list()), postprocess),
         # The Local Catalog lists paths on the cluster's file systems, which a
         # browser cannot read; the browser's models come from Hugging Face.
         model_catalog={},

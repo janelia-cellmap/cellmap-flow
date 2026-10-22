@@ -62,7 +62,8 @@ import re
 import numpy as np
 import yaml
 
-from cellmap_flow.models.configs.base import Config, ModelConfig, _as_int_tuple, _get_device, _names, _voxel_size
+from cellmap_flow.models import entry
+from cellmap_flow.models.configs.base import Config, ModelConfig, _get_device
 from cellmap_flow.models.geometry import _numbers
 
 logger = logging.getLogger(__name__)
@@ -324,8 +325,8 @@ class FlyModelConfig(ModelConfig):
         input_voxel_size: tuple = None,
         output_voxel_size: tuple = None,
         name: str = None,
-        input_size=None,
-        output_size=None,
+        input_size: tuple = None,
+        output_size: tuple = None,
         scale=None,
         sigmoid: bool = True,
     ):
@@ -349,8 +350,7 @@ class FlyModelConfig(ModelConfig):
             used.append(f"{key} {value} from {source}")
             return value
 
-        # The server CLI passes the channels as "mito,er".
-        channels = given_or_found("channels", _names(channels))
+        channels = given_or_found("channels", entry.names(channels))
         # The voxel sizes and the sizes are each a pair: one given stands for
         # its partner rather than letting the files supply it, since the files
         # describe the network at the other one.
@@ -373,13 +373,12 @@ class FlyModelConfig(ModelConfig):
         if input_voxel_size is None and output_voxel_size is None:
             raise ValueError(self._not_found("input_voxel_size"))
         self.channels = list(channels)
-        # fly_organelles trains at one voxel size, in and out. Not
-        # _as_int_tuple: that truncated a 5.24 nm voxel to 5.
-        self.input_voxel_size = _voxel_size(input_voxel_size if input_voxel_size is not None else output_voxel_size)
-        self.output_voxel_size = _voxel_size(output_voxel_size if output_voxel_size is not None else input_voxel_size)
-        # The server CLI passes these as "178,178,178" strings.
-        self.input_size = _as_int_tuple(input_size)
-        self.output_size = _as_int_tuple(output_size)
+        # fly_organelles trains at one voxel size, in and out.
+        self.input_voxel_size = entry.voxel_size(input_voxel_size if input_voxel_size is not None else output_voxel_size, "input_voxel_size")
+        self.output_voxel_size = entry.voxel_size(output_voxel_size if output_voxel_size is not None else input_voxel_size, "output_voxel_size")
+        # One number is every axis's.
+        self.input_size = entry.per_axis(entry.sizes(input_size, what="input_size"), 3, "input_size")
+        self.output_size = entry.per_axis(entry.sizes(output_size, what="output_size"), 3, "output_size")
 
     def _not_found(self, argument):
         return (
