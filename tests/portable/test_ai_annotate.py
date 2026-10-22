@@ -1,7 +1,6 @@
 """AI-assisted annotation's maths (cellmap_flow.portable.ai_annotate), which
-both modes run: the plane planned around a point, the images resampled as
-Pillow resamples them, the mask in a model's reply, and the labels Accept
-writes.
+both modes run: the plane planned around a point, the mask in a model's
+reply, and the labels Accept writes.
 
 The volumes here have their voxel 0's corner at the world origin: an 8 nm
 volume's ``dataset_offset_nm`` is 4 (voxel 0's centre), so annotation voxel
@@ -13,7 +12,6 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
-from PIL import Image
 
 from cellmap_flow.ai_annotate.organelles import ORGANELLES
 from cellmap_flow.portable.ai_annotate import (
@@ -23,12 +21,9 @@ from cellmap_flow.portable.ai_annotate import (
     from_screen,
     labels_for_box,
     mask_to_write_shape,
-    nearest,
     overlay,
     plan_plane,
     raw_box,
-    resize,
-    resize_rgb,
     to_screen,
 )
 
@@ -140,35 +135,6 @@ def test_the_raw_box_reads_the_plane_on_the_raws_grid():
         assert raw_box(plan, (4, 4, 4), corner) == (first, (1, 128, 128)), corner
     # A coarser raw: 8 nm voxels, 64 of them; along z the one holding 401 nm.
     assert raw_box(plan, (8, 8, 8), (0, 0, 0)) == ((50, 68, 118), (1, 64, 64))
-
-
-# --- resampling, as Pillow does it ------------------------------------------------
-
-
-@pytest.mark.parametrize("shape, to", [((64, 64), (32, 32)), ((70, 33), (64, 32)), ((16, 64), (64, 64)),
-                                       ((40, 60), (90, 50)), ((1100, 1200), (939, 1024))])
-def test_the_images_are_resampled_as_pillow_resamples_them(shape, to):
-    # The port follows Pillow 12.3's Resample.c and Geometry.c, to the bit on
-    # that version, for the plane (an "F" image: box when shrinking, bilinear
-    # otherwise), the model's reply (RGB, bilinear) and the mask's objects (an
-    # "I" image, nearest). Pillow's own arithmetic moves between versions
-    # (13.0 rounds the 8-bit bilinear differently at a non-integer ratio, one
-    # level on half the pixels of the 70×33 → 64×32 case, and one float32 ulp
-    # in the box filter), so against the installed Pillow the port is held to
-    # what the maths downstream can tell: a float32 ulp on the plane, one
-    # level on the reply (the colour threshold has a margin of many), and
-    # the same pixel for the objects.
-    rng = np.random.default_rng(sum(shape) + sum(to))
-    rows, cols = to
-    plane = (rng.random(shape) * 4000 - 100).astype(np.float32)
-    shrinking = shape[0] >= rows and shape[1] >= cols
-    pillow = np.asarray(Image.fromarray(plane).resize((cols, rows), Image.BOX if shrinking else Image.BILINEAR), dtype=np.float32)
-    assert np.allclose(resize(plane, to), pillow, rtol=2e-7, atol=0)
-    rgb = rng.integers(0, 256, shape + (3,), dtype=np.uint8)
-    reply = np.asarray(Image.fromarray(rgb).resize((cols, rows), Image.BILINEAR)).astype(np.int16)
-    assert np.abs(resize_rgb(rgb, to).astype(np.int16) - reply).max() <= 1
-    objects = rng.integers(0, 9, shape).astype(np.int32)
-    assert np.array_equal(nearest(objects, to), np.asarray(Image.fromarray(objects).resize((cols, rows), Image.NEAREST)))
 
 
 # --- the mask in the model's reply --------------------------------------------------

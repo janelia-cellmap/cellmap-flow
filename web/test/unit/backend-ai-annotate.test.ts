@@ -33,7 +33,7 @@ import { paintLayerName } from "../../src/viewer/layers";
 import { entry, type FakeContext, fakeContext, NAME_54, NAME_56, request } from "./backend-fakes";
 import { portablePython } from "./pyodide";
 
-// Pyodide, numpy and scipy load once for the file, a few seconds.
+// Pyodide, numpy, Pillow and scipy load once for the file, a few seconds.
 vi.setConfig({ testTimeout: 120_000 });
 const python = await portablePython();
 

@@ -31,14 +31,13 @@ runs backwards, depend on the viewer's display dimensions (``screen_axes``):
 cellmap-flow's viewers show x, y, z, so the XY plane is drawn as in z, y, x
 order, the XZ plane too, and the YZ plane transposed and mirrored.
 
-The images are resampled as Pillow resamples them (``resize``,
-``resize_rgb``, ``nearest``: libImaging's Resample.c and Geometry.c,
-followed operation by operation in numpy), not by Pillow itself: the
-browser's Pyodide worker loads numpy when a dataset opens and scipy the
-first time a call imports it, and has no way to load Pillow on first use.
+The images are resampled by Pillow (``resize``, ``nearest``, and the
+model's reply in ``model_mask``), in both modes: the server's installed
+Pillow, and in the browser the one Pyodide ships, which chunkmirage's worker
+loads the first time a call imports it (scipy, for the mask's objects,
+likewise).
 """
 
-import math
 from dataclasses import asdict, dataclass
 
 import numpy as np
@@ -366,103 +365,15 @@ def raw_box(plan: PlanePlan, voxel_size, corner) -> tuple:
 
 
 # ---------------------------------------------------------------------------
-# Resampling, as Pillow resamples
+# Resampling, by Pillow
 # ---------------------------------------------------------------------------
 #
-# Pillow resizes in two passes, across (each row) and then down (each
-# column of the result), each a weighted sum of the input samples under an
-# output sample's footprint (Resample.c: precompute_coeffs, then
-# ImagingResampleHorizontal/Vertical, the 32-bit float variant for a float
-# image and the 8-bit one, in fixed point, for an RGB image). A pass whose
-# size does not change is skipped. NEAREST takes the input sample under each
-# output sample's centre, the centres accumulated in double as Geometry.c's
-# ImagingScaleAffine accumulates them. Each is followed here operation by
-# operation, the sums in Pillow's order, so the results are Pillow's.
-
-# The fixed-point precision of Pillow's 8-bit passes: 8 bits of value and
-# two of headroom left in a 32-bit int.
-_PRECISION_BITS = 32 - 8 - 2
-
-
-def _box_filter(x):
-    return ((x > -0.5) & (x <= 0.5)).astype(np.float64)
-
-
-def _bilinear_filter(x):
-    x = np.abs(x)
-    return np.where(x < 1.0, 1.0 - x, 0.0)
-
-
-# Each filter and its support, in input samples at scale 1 (Image.BOX, Image.BILINEAR).
-_FILTERS = {"box": (_box_filter, 0.5), "bilinear": (_bilinear_filter, 1.0)}
-
-
-def _coefficients(in_size, out_size, kind):
-    """Pillow's precompute_coeffs for one axis of ``in_size`` samples resampled
-    to ``out_size``: per output sample, the first input sample it reads, how
-    many it reads, and their weights (out_size, ksize), normalized to sum to
-    1, 0 past how many. The filter's support grows by the shrink factor when
-    shrinking, so every input sample is weighed."""
-    weigh, support = _FILTERS[kind]
-    scale = in_size / out_size
-    filterscale = max(scale, 1.0)
-    support = support * filterscale
-    ksize = int(math.ceil(support)) * 2 + 1
-    centre = (np.arange(out_size) + 0.5) * scale
-    # C's (int) truncates toward zero: "round the value", as Pillow says.
-    first = np.maximum(np.trunc(centre - support + 0.5).astype(np.int64), 0)
-    count = np.minimum(np.trunc(centre + support + 0.5).astype(np.int64), in_size) - first
-    taps = np.arange(ksize)
-    weights = weigh(((first[:, None] + taps) - centre[:, None] + 0.5) * (1.0 / filterscale))
-    weights[taps >= count[:, None]] = 0.0
-    total = np.zeros(out_size)
-    for k in range(ksize):  # summed tap by tap, as Pillow sums them
-        total = total + weights[:, k]
-    weights = np.divide(weights, total[:, None], out=weights, where=total[:, None] != 0)
-    return first, count, weights
-
-
-def _along(values, axis, ndim):
-    """``values`` (one per output sample) shaped to broadcast along ``axis`` of an ``ndim``-D array."""
-    return values.reshape([-1 if a == axis else 1 for a in range(ndim)])
-
-
-def _float_pass(data, axis, first, count, weights):
-    """One float32 pass along ``axis``: each output sample the sum, in double
-    and tap by tap, of its input samples times their weights, stored as
-    float32 (Pillow's "F" image). A tap past an output sample's count adds
-    nothing, as Pillow never reads it (so a NaN there cannot leak in)."""
-    last = data.shape[axis] - 1
-    total = np.zeros(data.shape[:axis] + (first.size,) + data.shape[axis + 1:])
-    for k in range(weights.shape[1]):
-        taken = np.take(data, np.minimum(first + k, last), axis=axis).astype(np.float64)
-        counted = _along(k < count, axis, data.ndim)
-        total = total + np.where(counted, taken * _along(weights[:, k], axis, data.ndim), 0.0)
-    return total.astype(np.float32)
-
-
-def _uint8_pass(data, axis, first, count, weights):
-    """One 8-bit pass along ``axis``: the weights in fixed point (rounded
-    half away from zero to ``_PRECISION_BITS`` bits, 0 past an output
-    sample's count), each output sample the 32-bit integer sum from half a
-    unit, shifted back and clipped to 0..255. Integer sums do not depend on
-    their order, so these are Pillow's exactly."""
-    scale = 1 << _PRECISION_BITS
-    fixed = np.trunc(np.where(weights < 0, -0.5 + weights * scale, 0.5 + weights * scale)).astype(np.int32)
-    last = data.shape[axis] - 1
-    total = np.full(data.shape[:axis] + (first.size,) + data.shape[axis + 1:], 1 << (_PRECISION_BITS - 1), dtype=np.int32)
-    for k in range(fixed.shape[1]):
-        total += np.take(data, np.minimum(first + k, last), axis=axis).astype(np.int32) * _along(fixed[:, k], axis, data.ndim)
-    return np.clip(total >> _PRECISION_BITS, 0, 255).astype(np.uint8)
-
-
-def _resample(data, shape, kind, one_pass):
-    rows, cols = shape
-    if data.shape[1] != cols:
-        data = one_pass(data, 1, *_coefficients(data.shape[1], cols, kind))
-    if data.shape[0] != rows:
-        data = one_pass(data, 0, *_coefficients(data.shape[0], rows, kind))
-    return data
+# Pillow is imported inside the functions that resample, not at the top: in
+# the browser, chunkmirage's Pyodide worker loads a package the first time a
+# call fails to import it (found by its module in Pyodide's lockfile), so
+# Pillow is downloaded with the first image resized, not when a dataset
+# opens, and never on a page that does not annotate with AI. Each answer is
+# a writable array of its own, not a view of the image's bytes.
 
 
 def resize(plane, shape) -> np.ndarray:
@@ -471,7 +382,7 @@ def resize(plane, shape) -> np.ndarray:
     Shrinking (neither side grows) averages each pixel's footprint (Pillow's
     box filter), so fine membranes fade rather than alias; otherwise (the
     coarse axis of an anisotropic plane) it interpolates linearly (Pillow's
-    bilinear), as an "F" image's ``resize`` does.
+    bilinear), on Pillow's 32-bit float ("F") image.
     """
     rows, cols = (int(s) for s in shape)
     plane = np.asarray(plane)
@@ -479,46 +390,27 @@ def resize(plane, shape) -> np.ndarray:
         return plane
     if rows < 1 or cols < 1:
         raise ValueError(f"cannot resize a plane to {rows}x{cols}")
+    from PIL import Image
+
     shrinking = plane.shape[0] >= rows and plane.shape[1] >= cols
-    data = np.ascontiguousarray(plane, dtype=np.float32)
-    return _resample(data, (rows, cols), "box" if shrinking else "bilinear", _float_pass)
-
-
-def resize_rgb(rgb, shape) -> np.ndarray:
-    """An RGB image (rows, cols, 3) of uint8 at ``shape`` (rows, cols), by
-    Pillow's bilinear filter on an RGB image (its 8-bit passes), which
-    averages when shrinking; itself when it already is that size."""
-    rows, cols = (int(s) for s in shape)
-    rgb = np.asarray(rgb, dtype=np.uint8)
-    if rgb.shape[:2] == (rows, cols):
-        return rgb
-    return _resample(rgb, (rows, cols), "bilinear", _uint8_pass)
-
-
-def _nearest_indices(in_size, out_size):
-    """The input sample each of ``out_size`` output samples takes: the one
-    under its centre, the centre accumulated in double as Pillow's
-    ImagingScaleAffine accumulates it; -1 or ``in_size`` and past where none is."""
-    step = in_size / out_size
-    centres = np.add.accumulate(np.concatenate([[step * 0.5], np.full(out_size - 1, step)]))
-    return np.where(centres < 0, -1, np.trunc(centres)).astype(np.int64)
+    kind = Image.Resampling.BOX if shrinking else Image.Resampling.BILINEAR
+    image = Image.fromarray(np.ascontiguousarray(plane, dtype=np.float32))
+    return np.array(image.resize((cols, rows), kind), dtype=np.float32)
 
 
 def nearest(array, shape) -> np.ndarray:
-    """``array`` (rows, cols, ...) at ``shape`` (rows, cols) by nearest
-    neighbour, pixel centre to pixel centre (Pillow's NEAREST), 0 where an
-    output pixel's centre lands past the input (only ever by rounding at the
-    far edge); a copy when it already is that size."""
+    """A 2D ``array`` (uint8 or int32, as Pillow holds an image of each) at
+    ``shape`` (rows, cols) by nearest neighbour, pixel centre to pixel centre
+    (Pillow's NEAREST), in its own dtype; a copy when it already is that
+    size."""
     rows, cols = (int(s) for s in shape)
     array = np.asarray(array)
-    if array.shape[:2] == (rows, cols):
+    if array.shape == (rows, cols):
         return array.copy()
-    down, across = _nearest_indices(array.shape[0], rows), _nearest_indices(array.shape[1], cols)
-    keep_down = (down >= 0) & (down < array.shape[0])
-    keep_across = (across >= 0) & (across < array.shape[1])
-    out = np.zeros((rows, cols) + array.shape[2:], dtype=array.dtype)
-    out[np.ix_(keep_down, keep_across)] = array[np.ix_(down[keep_down], across[keep_across])]
-    return out
+    from PIL import Image
+
+    image = Image.fromarray(np.ascontiguousarray(array))
+    return np.array(image.resize((cols, rows), Image.Resampling.NEAREST), dtype=array.dtype)
 
 
 # ---------------------------------------------------------------------------
@@ -597,13 +489,19 @@ def model_mask(rgb, sent_shape, image_shape, target_rgb):
     uint8), ``sent_shape`` the (rows, cols) of the image it was sent (the
     plane padded to a square), ``image_shape`` the plane's. A reply at
     another size (or shape: stretching it then is what the review shows) is
-    resized back to the sent size (``resize_rgb``), then the padding is cut
-    off the right and bottom, so what is left lines up with the plane; the
-    mask is the pixels painted ``target_rgb`` in that (``extract_mask``).
+    resized back to the sent size by Pillow's bilinear filter on an RGB
+    image (which averages when shrinking), then the padding is cut off the
+    right and bottom, so what is left lines up with the plane; the mask is
+    the pixels painted ``target_rgb`` in that (``extract_mask``).
     ``aligned`` is (rows, cols, 3) uint8, the plane's shape, for the review.
     """
     rgb = np.asarray(rgb, dtype=np.uint8)[:, :, :3]
-    rgb = resize_rgb(rgb, sent_shape)
+    sent_rows, sent_cols = (int(s) for s in sent_shape)
+    if rgb.shape[:2] != (sent_rows, sent_cols):
+        from PIL import Image
+
+        reply = Image.fromarray(np.ascontiguousarray(rgb))
+        rgb = np.array(reply.resize((sent_cols, sent_rows), Image.Resampling.BILINEAR))
     rows, cols = (int(s) for s in image_shape)
     if rows > rgb.shape[0] or cols > rgb.shape[1]:
         raise ValueError(f"The plane is {rows}x{cols}, larger than the {rgb.shape[0]}x{rgb.shape[1]} image sent")

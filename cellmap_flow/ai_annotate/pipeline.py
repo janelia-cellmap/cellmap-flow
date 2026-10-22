@@ -9,8 +9,8 @@ into the labels ``fill.paint_box`` writes: one id per object, background
 elsewhere, as a seed from a model's prediction is labelled.
 
 The maths is ``cellmap_flow.portable.ai_annotate``'s, which the browser runs
-too (its resampling is Pillow's, followed in numpy); what is the server's
-alone is reading the raw through ``ImageDataInterface``.
+too (its resampling is Pillow's, in both modes); what is the server's alone
+is reading the raw through ``ImageDataInterface``.
 """
 
 import numpy as np
