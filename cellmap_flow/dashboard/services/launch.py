@@ -2,7 +2,8 @@
 
 - ``update_run_models()``: stop and forget the models no longer picked,
   start the ones newly picked, each in its own thread. A finetune job's
-  server is the Finetune tab's to stop, never this one's.
+  server is the Finetune tab's to stop, never this one's. A chain with no
+  input normalizers takes the ones the first model started declares.
 - ``run_model()``: start one model's inference server
   (``serving.launch.launch``, which records the job) and add its layer, the
   one Submit would give it. Every model the tab picks goes through it, as a
@@ -416,7 +417,12 @@ def update_run_models(names: List[str], hf_repos: List[str] = None, bioimage_mod
     ({"model", "voxel_size", "output", "do_3d", "stitch_threshold"} each),
     and stop every other model. A ValueError, before anything changes, when
     an entry cannot be built: a zoo model needs a voxel size, a Cellpose
-    model's settings are missing or wrong, a catalog folder is not there."""
+    model's settings are missing or wrong, a catalog folder is not there.
+
+    When the chain has no input normalizers, the first model started that
+    declares some (an onnx model's manifest) sets them, as part of its start
+    (routes.pipeline.set_declared_input_norm); any other chain is left as it
+    is, and only the page's Apply changes it."""
     session = get_session()
     picked = _picked(names, hf_repos or [], bioimage_models or [], cellpose_models or [])
 
@@ -432,12 +438,18 @@ def update_run_models(names: List[str], hf_repos: List[str] = None, bioimage_mod
     # box on a Models tab rendered before it, so every Submit bkilled it.
     to_be_killed = [j for j in session.jobs if j.model_name not in kept and not _owned_by_finetune(j)]
     names_running = running_names() - {j.model_name for j in to_be_killed}
+    starting = [(name, config) for name, config in picked if name not in names_running]
 
-    st_data = session.layer_blob()
     _stop_jobs(to_be_killed)
-    for name, config in picked:
-        if name in names_running:
-            continue
+    # A chain with no input normalizers takes the first starting model's
+    # declared ones, before the blob its layers are drawn with is taken, so
+    # they are drawn through them (routes.pipeline.set_declared_input_norm).
+    # After the stop, so the layers of the models stopped are not redrawn.
+    from cellmap_flow.dashboard.routes.pipeline import set_declared_input_norm
+
+    set_declared_input_norm([config for _, config in starting])
+    st_data = session.layer_blob()
+    for name, config in starting:
         _keep_config(config)
         # launch_entry, not to_dict(): a Hugging Face model's to_dict() fetches its metadata.
         logger.info(f"To be submitted: {name} ({config.launch_entry})")

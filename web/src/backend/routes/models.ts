@@ -13,7 +13,7 @@ import type { AppContext, FinetunedRecord, ModelEntry, ServedModel, Step } from 
 import { isFinetuned } from "../../models";
 import type { Router } from "../router";
 import { badRequest, json, message, objectBody, unavailable } from "../router";
-import { serveModels, stepNames, unserveModel } from "../serving";
+import { inputNormDeclaredBy, serveModels, setDeclaredInputNorm, stepNames, unserveModel } from "../serving";
 import { serverParams } from "./config";
 
 /** The catalog as /api/huggingface-models lists it: {model id: metadata},
@@ -130,6 +130,9 @@ export function modelRoutes(router: Router): void {
     const resolved = await resolveAll(ctx, [...selected, ...hf]);
     if ("error" in resolved) return badRequest(resolved.error);
     if (resolved.entries.length && !ctx.infer.dataset()) return badRequest(NO_DATASET);
+    // A chain with no input normalizers takes the ones the first model
+    // started declares, before it is served (serving.ts setDeclaredInputNorm).
+    await setDeclaredInputNorm(ctx, resolved.entries.filter((e) => !ctx.session.state.models.some((m) => m.id === e.id)));
     await serveModels(ctx, resolved.entries, ctx.session.state.chain);
     await ctx.session.update({ models: resolved.entries });
     return json(200, {
@@ -144,7 +147,14 @@ export function modelRoutes(router: Router): void {
 
   // The Loaded models list (routes/models.py's /api/models/loaded), and its
   // ✕: stop serving that one model, whatever else is ticked on the tab.
-  router.get("/api/models/loaded", async (_req, _params, ctx) => json(200, { success: true, models: await loadedModels(ctx) }));
+  // Beside it, the chain the models run through and the model whose
+  // declared input normalization its input part is: the page reads them
+  // after every model change, since a model's start can set that
+  // normalization (serving.ts setDeclaredInputNorm).
+  router.get("/api/models/loaded", async (_req, _params, ctx) => {
+    const { chain, models } = ctx.session.state;
+    return json(200, { success: true, models: await loadedModels(ctx), pipeline: chain, input_norm_from: inputNormDeclaredBy(chain, models) });
+  });
 
   router.post("/api/models/remove", async (req, _params, ctx) => {
     const body = objectBody(req);
@@ -203,6 +213,8 @@ export function modelRoutes(router: Router): void {
     if (!model) return badRequest(`${ref} is not a model the browser can run`);
     if (!ctx.infer.dataset()) return badRequest(NO_DATASET);
     const entries = [...ctx.session.state.models.filter((m) => m.id !== model.id), model];
+    // As Submit: a chain with no input normalizers takes the ones it declares.
+    if (!ctx.session.state.models.some((m) => m.id === model.id)) await setDeclaredInputNorm(ctx, [model]);
     await serveModels(ctx, entries, ctx.session.state.chain);
     await ctx.session.update({ models: entries });
     return json(200, { success: true, name: model.name });

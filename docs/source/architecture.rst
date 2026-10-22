@@ -444,15 +444,17 @@ A chunk served to Neuroglancer
    ``<dashboard_url>/update/equivalences``, at most every 5 s, from a thread
    of its own.
 
-Submit, or ``PUT /api/pipeline``, and the layers
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Apply, or ``PUT /api/pipeline``, and the layers
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-#. The dashboard page's Submit reads the ticked ops of the Input and
-   Postprocess tabs (``static/js/shared/op-chain.js``) and sends
-   ``PUT /api/pipeline`` with ``{input_norm, postprocess}``
-   (``static/js/dashboard/main.js``). The pipeline builder sends the same,
-   and its canvas as ``builder``, 2 s after its last edit
-   (``static/js/pipeline-builder/state.js``).
+#. The dashboard page's Apply, at the top of the Input and Postprocess tabs
+   (``templates/_apply_bar.html``), reads the ticked ops of both tabs
+   (``static/js/shared/op-chain.js``) and sends ``PUT /api/pipeline`` with
+   ``{input_norm, postprocess}`` (``static/js/dashboard/main.js``). Until
+   then the bar counts the edits not applied (``op-chain.js``
+   ``chainChanges``, against the chain last applied or shown). The pipeline
+   builder sends the same, and its canvas as ``builder``, 2 s after its last
+   edit (``static/js/pipeline-builder/state.js``).
 #. ``dashboard/routes/pipeline.put_pipeline`` parses the body as a
    ``PipelineUpdate`` through ``dashboard.requests.parse`` (an unknown op is a
    400), then builds the steps (a value an op's class refuses is a 400).
@@ -474,6 +476,16 @@ Submit, or ``PUT /api/pipeline``, and the layers
    ``effective_output_voxel_size`` places the layer.
 #. The answer is ``{"success": true, "pipeline", "digest", "layers"}``; see
    :doc:`viewer_api`. The layers' next chunk requests carry the new blob.
+
+The one other change of the chain a model makes: a model started from the
+Models tab when the chain has no input normalizers sets the ones it declares
+(``ModelConfig.declared_input_norm``, an onnx model's manifest), before its
+layer is drawn (``routes/pipeline.set_declared_input_norm``, through
+``_set_chain_and_redraw``; the browser's ``serving.ts``
+``setDeclaredInputNorm``, through ``setChain``). After every model change
+the page reads the chain back from ``GET /api/models/loaded``'s
+``pipeline``, and a list whose chain the backend changed shows it, saying
+so.
 
 Launching a model server
 ~~~~~~~~~~~~~~~~~~~~~~~~

@@ -1,0 +1,27 @@
+{# The top of the Input and Postprocess tabs (_input_tab.html, _output_tab.html
+   include it once each): the tab's title, how many edits of the two lists
+   the backend does not run yet, and Apply, which sends both chains
+   (PUT /api/pipeline). It stays at the top of the dashboard column while the
+   list scrolls under it. js/dashboard/main.js (initApply) drives every bar on
+   the page; the count is shared/op-chain.js's pendingChanges. Nothing is
+   sent until Apply is pressed (or Enter in a parameter field).
+
+   apply_bar_chain: the chain the tab edits, "input" or "postprocess".
+   apply_bar_title: the tab's title. #}
+<div
+  class="apply-bar py-2 mb-2"
+  data-chain="{{ apply_bar_chain }}"
+  style="position: sticky; top: 0; z-index: 10; background: var(--bg-base); border-bottom: 1px solid var(--border);"
+>
+  <div class="d-flex align-items-center gap-2">
+    <h6 class="mb-0 me-auto">{{ apply_bar_title }}</h6>
+    <button type="button" class="btn btn-sm btn-outline-secondary apply-button">Apply</button>
+  </div>
+  <small class="apply-pending d-block mt-1" aria-live="polite" hidden></small>
+  {# Said when the backend changed this chain itself: a model's start set the
+     input normalization it declares, say. Cleared by the next Apply, or its ✕. #}
+  <div class="apply-notice alert alert-info d-flex align-items-start gap-2 py-1 px-2 mt-2 mb-0 small" hidden>
+    <span class="apply-notice-text flex-grow-1"></span>
+    <button type="button" class="btn-close btn-close-white apply-notice-close" aria-label="Dismiss"></button>
+  </div>
+</div>
