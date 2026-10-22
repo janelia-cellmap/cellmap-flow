@@ -49,6 +49,14 @@ def windowed(args, arrays):
     return rank.windowed(args["norm"], float(args["lo"]), float(args["hi"]))
 
 
+def rank_row(args, arrays):
+    """``rank.score_row``: the ranking's row from ``base`` (the score read
+    through ``norm``), ``stretched`` (the score read through ``norm``
+    stretched to ``raw``, or null) and ``raw`` (the raw's window, or null);
+    null when ``base`` is null."""
+    return rank.score_row(args.get("base"), args.get("stretched"), args["norm"], args.get("raw"))
+
+
 def carry_paint(args, arrays):
     """The old volume's paint carried onto the new grid (``carry.carry``).
     ``args``: ``old`` and ``new`` (each a ``Grid``'s fields), ``old_dtype``,

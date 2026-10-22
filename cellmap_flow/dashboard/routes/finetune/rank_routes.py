@@ -13,12 +13,16 @@ candidate's, says how to build it) and stopped after, so a ranking leaves
 the Models tab and the cluster as they were. Where the raw under the paint
 is narrow, the same server is asked again through the dashboard's
 normalizer stretched to the raw's window: a server runs the chain each
-request names. POST /api/finetune/rank/use {name, entry?, window?} makes
-the one picked the model to finetune: running (as the Models tab's Add runs
-it), the window its score chose (if any) made the dashboard's
-normalization, a volume made for it with the session volume's paint
-carried onto its grid (session/volume.py carry_paint) and its paint layer
-in the old one's place; the old volume stays.
+request names. The answer is the ranking's row (portable/rank.py
+score_row: the score kept, its threshold and the raw's range it read).
+POST /api/finetune/rank/use {name, entry?, window?} makes the one picked
+the model to finetune: running (as the Models tab's Add runs it), the
+window its score chose (if any) made the dashboard's normalization, a
+volume made for it with the session volume's paint carried onto its grid
+(session/volume.py carry_paint) and its paint layer in the old one's
+place; the old volume stays. POST /api/finetune/rank/window {window} makes
+the window the dashboard's normalization alone, with no model started and
+no volume made: Fit to paint's, for the model already seeding the paint.
 """
 
 import logging
@@ -124,15 +128,13 @@ def rank_score():
         offsets = None if output_type != "affinities" else _offsets(offsets)
         boxes = [box for box in map(lambda index: _painted_box(volume, index), rank.spread(chunks, rank.RANK_BLOCKS)) if box]
         base, outside = _score(host, name, volume, boxes, info, offsets)
-        score, window = base, None
-        # The raw stretched to its own range, when it is narrow (portable/rank.py).
+        # The raw stretched to its own range, when it is narrow, and the
+        # row from the two scores (portable/rank.py).
         norm = [dict(s) for s in session.pipeline_spec.input_norm]
         raw = base and _raw_window(volume, boxes)
         stretched = raw and rank.windowed(norm, *raw)
-        if base and stretched:
-            alt, _ = _score(host, name, volume, boxes, info, offsets, stretched)
-            if alt and alt["matches"] >= base["matches"] + rank.WINDOW_MARGIN:
-                score, window = alt, list(raw)
+        alt = _score(host, name, volume, boxes, info, offsets, stretched)[0] if base and stretched else None
+        score = rank.score_row(base, alt, norm, raw)
         if not score:
             return _refused(f"The paint gives {name} nothing to score: "
                             + ("an affinity is between two painted neighbours, so paint strokes, not single voxels." if offsets
@@ -143,13 +145,13 @@ def rank_score():
             *(["started for its score and stopped after"] if job is not None else []),
         ]
         seconds = time.time() - started
+        window = score["window"]
         logger.info(f"Ranked {name} on {score['scored_voxels']} painted voxels of {volume_id}: matches {score['matches']:.0%} "
                     f"at cut-off {score['cutoff']} ({score['matches_at_zero']:.0%} at 0)"
                     + (f", the raw stretched from {window[0]:.1f}-{window[1]:.1f} ({base['matches']:.0%} as normalized)" if window else "")
                     + f", {seconds:.1f} s")
         return jsonify({
-            "success": True, "name": name, **score, "seconds": seconds, "window": window,
-            **({"matches_without_window": base["matches"]} if window else {}),
+            "success": True, "name": name, **score, "seconds": seconds,
             **({"note": "; ".join(notes)} if notes else {}),
         })
     except Exception as e:
@@ -167,7 +169,6 @@ def rank_use():
     from cellmap_flow.dashboard.routes.finetune.annotation_core import make_volume
     from cellmap_flow.dashboard.routes.finetune.overlay import add_annotation_layer
     from cellmap_flow.dashboard.finetune_utils import ensure_minio_serving
-    from cellmap_flow.dashboard.routes.pipeline import _set_chain_and_redraw
     from cellmap_flow.dashboard.services.launch import running_names
     from cellmap_flow.finetune.session.volume import carry_paint
     from cellmap_flow.models.geometry_cache import resolve_model_geometry
@@ -183,13 +184,7 @@ def rank_use():
     if from_volume.get("model_name") == name:
         return _refused(f"{from_id} is {name}'s volume already: finetune it as it is.")
     try:
-        # The raw's window the score chose, made the dashboard's
-        # normalization: the raw is the dataset's, so every model reads it so.
-        w = data.get("window")
-        norm = [dict(s) for s in session.pipeline_spec.input_norm]
-        stretched = rank.windowed(norm, float(w[0]), float(w[1])) if isinstance(w, list) and len(w) == 2 else None
-        if stretched:
-            _set_chain_and_redraw(PipelineSpec(stretched, session.pipeline_spec.postprocess), request.host_url)
+        window, _ = _install_window(data.get("window"))
         config = _model_config(name, data.get("entry"))
         if name not in running_names():
             _start_for_good(name, config)
@@ -209,11 +204,56 @@ def rank_use():
         return jsonify({
             "success": True, "name": name, "volume_id": to_id, "from_volume": from_id, "layer_name": layer,
             "painted_voxels": carried["painted"], "source_voxels": carried["source"], "conflicts": carried["conflicts"],
-            "chunks": carried["chunks"], "window": [float(w[0]), float(w[1])] if stretched else None,
+            "chunks": carried["chunks"], "window": window,
         })
     except Exception as e:
         logger.error(f"Could not make {name} the model to finetune: {e}", exc_info=True)
         return _refused(f"Could not make {name} the model to finetune: {e}")
+
+
+@finetune_bp.route("/api/finetune/rank/window", methods=["POST"])
+def rank_window():
+    """Fit to paint's: the raw's window a score chose ({window: [lo, hi]},
+    the score answer's) made the dashboard's normalization, as Use this
+    model makes it, without starting a model or making a volume. Answers
+    the window and the normalizer steps now set; refused (400) when the
+    normalization has no MinMaxNormalizer to stretch or the window is not
+    narrower than its range (portable/rank.py windowed), which leaves it as
+    it was."""
+    data = request.get_json(silent=True) or {}
+    try:
+        window, steps = _install_window(data.get("window"))
+    except Exception as e:
+        logger.error(f"Could not stretch the input normalization: {e}", exc_info=True)
+        return _refused(f"Could not stretch the input normalization: {e}")
+    if steps is None:
+        return _refused("The input normalization was left as it is: it has no MinMaxNormalizer, "
+                        "or the window is not narrower than its range. Score the model again.")
+    logger.info(f"Stretched the input normalization to the raw's window {window[0]:.1f}-{window[1]:.1f}, to fit the paint")
+    return jsonify({"success": True, "window": window, "input_norm": steps})
+
+
+def _install_window(w):
+    """The dashboard's input normalization with its MinMaxNormalizer
+    stretched to the raw's window ``w`` ([lo, hi], the score's) made the
+    session's chain, and the viewer redrawn through it
+    (routes/pipeline.py's setter, as PUT /api/pipeline sets it): the raw is
+    the dataset's, so every model reads it so. Returns ``(window, steps)``:
+    ``w`` as numbers and the normalizer steps set, or ``(None, None)`` when
+    ``w`` is not a pair or the normalization has nothing to stretch to it
+    (rank.windowed), which changes nothing."""
+    from cellmap_flow.dashboard.routes.pipeline import _set_chain_and_redraw
+
+    if not (isinstance(w, list) and len(w) == 2):
+        return None, None
+    session = get_session()
+    window = [float(w[0]), float(w[1])]
+    norm = [dict(s) for s in session.pipeline_spec.input_norm]
+    stretched = rank.windowed(norm, *window)
+    if not stretched:
+        return None, None
+    _set_chain_and_redraw(PipelineSpec(stretched, session.pipeline_spec.postprocess), request.host_url)
+    return window, stretched
 
 
 def _model_config(name, entry):
