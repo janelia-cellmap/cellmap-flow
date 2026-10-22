@@ -1,6 +1,6 @@
 """What cellmap-flow reads from each layout it supports, through io/.
 
-Every reader (ImageDataInterface, the viewer, blockwise, the finetune crop
+Every reader (open_raw and RawInput, the viewer, blockwise, the finetune crop
 loader) takes voxel sizes, offsets and levels from here, so one row per
 layout: OME-Zarr v2 and v3 at every placement of their transforms, funlib
 and N5 attributes, precomputed, http. Offsets are voxel 0's corner, in nm;
@@ -428,7 +428,7 @@ def test_choosing_a_precomputed_scale_opens_none_of_them(write_array, monkeypatc
 def test_a_precomputed_path_with_no_scale_to_choose_is_not_opened(volume, caplog):
     """A named scale is read as it is, and a volume without a voxel size at scale 0,
     with nothing opened (these volumes don't exist): a gs:// URL once had fsspec
-    ask for gcsfs, in a warning on every ImageDataInterface opened on it."""
+    ask for gcsfs, in a warning on every dataset opened on it."""
     with caplog.at_level(logging.WARNING):
         assert select_dataset(volume) == (volume, None)
         assert select_dataset(volume + "/s1", (16, 16, 16)) == (volume + "/s1", None)
@@ -437,17 +437,19 @@ def test_a_precomputed_path_with_no_scale_to_choose_is_not_opened(volume, caplog
 
 @pytest.mark.parametrize("scheme", ["http", "s3", "gs"])
 def test_a_pyramid_at_a_url_opens_as_it_does_on_disk(pyramid, at_url, scheme):
-    """Its levels, the level chosen for a voxel size, and what ImageDataInterface
-    reads there."""
-    from cellmap_flow.image_data_interface import ImageDataInterface
+    """Its levels, the level chosen for a voxel size, and the level open_raw
+    opens there and what a RawInput reads from it."""
+    from cellmap_flow.io.raw import RawInput, open_raw, spatial_axes, spatial_shape
 
     def opened(path):
-        idi = ImageDataInterface(path, voxel_size=(16, 16, 16), input_norms=[])
+        raw = RawInput(open_raw(path, (16, 16, 16)), input_norms=[])
+        array = raw.array
         return (
             [(level, meta.voxel_size, meta.translation, meta.shape) for level, meta in list_levels(path)],
             select_dataset(path, (16, 16, 16))[1], closest_raw_scale(path + "/s0", (20,) * 3),
-            (idi.voxel_size, idi.offset, idi.roi, idi.shape, idi.chunk_shape, idi.axes_names),
-            idi.to_ndarray_ts(idi.roi).tolist(),
+            (array.voxel_size, array.corner, array.box, spatial_shape(array), array.meta.chunk_shape,
+             spatial_axes(array)),
+            raw.to_ndarray_ts(array.box).tolist(),
         )
 
     assert opened(at_url(scheme, pyramid)) == opened(pyramid)
@@ -573,11 +575,15 @@ ARRAY_URLS = _url_rows(["http", "s3", "gs"], ["zarr2", "zarr3", "n5", "precomput
 
 @pytest.mark.parametrize("scheme, fmt, bucket", ARRAY_URLS)
 def test_an_array_at_a_url_reads_as_it_does_on_disk(write_array, at_url, scheme, fmt, bucket):
-    from cellmap_flow.io.source import open_array
+    from cellmap_flow.io.metadata import open_level
+
+    def read(path):
+        """The whole array, every axis, as stored."""
+        array = open_level(path, units=None)
+        return array.read_index((0,) * array.meta.ndim, array.meta.shape)
 
     path = write_array(fmt, np.arange(4 * 6 * 8, dtype=np.uint16).reshape(4, 6, 8), name=V3 if fmt == "zarr3" else None)
-    on_disk = open_array(path).read()
-    assert np.array_equal(open_array(at_url(scheme, path, bucket)).read(), on_disk)
+    assert np.array_equal(read(at_url(scheme, path, bucket)), read(path))
 
 
 _COSEM = "janelia-cosem-datasets/jrc_hela-2/jrc_hela-2"
@@ -621,29 +627,34 @@ def test_public_data_reads_as_tensorstore_reads_it(path, voxel_size, placed, lev
     """With broken AWS and Google credentials configured, which must not stop a
     public read."""
     import tensorstore
+    import worldarray as wa
 
-    from cellmap_flow.image_data_interface import ImageDataInterface
-    from cellmap_flow.io.geometry import Box
+    from cellmap_flow.io.raw import RawInput, open_raw, spatial_shape
 
     direct = tensorstore.open(level).result()
-    if level["driver"] != "zarr":  # x, y, z(, channel), as io.source opens them
+    if level["driver"] != "zarr":  # x, y, z(, channel) in tensorstore; worldarray reads them reversed
         direct = direct[tensorstore.d[:].transpose[::-1]][tensorstore.d[:].translate_to[0]]
     (tmp_path / "adc.json").write_text(json.dumps(
         {"type": "authorized_user", "client_id": "x", "client_secret": "y", "refresh_token": "z"}))
     for name, value in {"AWS_ACCESS_KEY_ID": "AKIAFAKEFAKEFAKEFAKE", "AWS_SECRET_ACCESS_KEY": "fake",
                         "GOOGLE_APPLICATION_CREDENTIALS": str(tmp_path / "adc.json")}.items():
         monkeypatch.setenv(name, value)
-    idi = ImageDataInterface(path, voxel_size=voxel_size, input_norms=[])
-    assert (tuple(idi._grid.voxel_size), tuple(idi._grid.translation)) == placed
-    assert tuple(idi.shape) == tuple(direct.shape[-3:])
+    array = open_raw(path, voxel_size)
+    assert (array.voxel_size, array.corner) == placed
+    assert spatial_shape(array) == tuple(direct.shape[-3:])
     size = (1,) * (direct.rank - 3) + tuple(min(64, s) for s in direct.shape[-3:])
     begin = (0,) * (direct.rank - 3) + voxel
-    want = direct[tuple(slice(b, b + n) for b, n in zip(begin, size))].read().result()
-    assert np.array_equal(idi.source.read(Box(begin, size)), want)
-    # Read in the world too: the whole-nm Roi around those voxels (z from
-    # 16681 nm, not voxel 1592's 16681.54, on OpenOrganelle) reads them.
-    world = idi._grid.box_to_world(Box(voxel, size[-3:]))
-    assert np.array_equal(idi.to_ndarray_ts(world), want[(0,) * (direct.rank - 3)])
+    end = tuple(b + n for b, n in zip(begin, size))
+    want = direct[tuple(slice(b, e) for b, e in zip(begin, end))].read().result()
+    # Every axis worldarray has: it drops the single channel of a precomputed
+    # volume, which tensorstore keeps.
+    dropped = direct.rank - array.meta.ndim
+    assert np.array_equal(array.read_index(begin[dropped:], end[dropped:]), want[(0,) * dropped])
+    # Read in the world too: worldarray's exact box of those voxels (z from
+    # voxel 1592's corner, 16681.54 nm, on OpenOrganelle) reads them.
+    world = wa.Box.from_index(voxel, tuple(v + n for v, n in zip(voxel, size[-3:])), array.voxel_size,
+                              array.translation)
+    assert np.array_equal(RawInput(array, input_norms=[]).to_ndarray_ts(world), want[(0,) * (direct.rank - 3)])
 
 
 def test_v3_is_read_from_local_disk_only_and_urls_join_with_slashes(tmp_path):

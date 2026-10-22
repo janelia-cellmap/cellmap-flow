@@ -13,7 +13,6 @@ from urllib.parse import urlparse
 
 import neuroglancer
 
-from cellmap_flow.image_data_interface import legacy_meta
 from cellmap_flow.io import metadata
 from cellmap_flow.utils.address import this_machine_ip
 from cellmap_flow.viewer import VIEWER_AXES
@@ -59,9 +58,9 @@ def raw_dimensions(dataset_path):
         except Exception:
             levels = [metadata.read_array_meta(dataset_path)]
         finest = min(levels, key=lambda meta: tuple(meta.spatial().voxel_size))
-        # The names and sizes ImageDataInterface gives the raw layer's volume.
-        voxel_size, _, _, _, names, _ = legacy_meta(finest)
-        return viewer_space(names, voxel_size)
+        # The names and sizes the raw layer's volume gets.
+        spatial = finest.spatial()
+        return viewer_space([a for a in spatial.axes if a], spatial.voxel_size)
     except Exception as e:
         logger.warning(f"Could not read the viewer's dimensions from {dataset_path}: {e}")
         return None

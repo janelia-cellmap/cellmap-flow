@@ -26,15 +26,14 @@ from dataclasses import dataclass, field
 from typing import Any, ClassVar, Optional
 
 import numpy as np
+import worldarray as wa
 from chunkmirage.core import ArrayInfo
 from chunkmirage.ops import Op
 from funlib.geometry import Roi
 from pydantic import PrivateAttr
 
-from cellmap_flow.image_data_interface import apply_norms
 from cellmap_flow.inference import timing
-from cellmap_flow.inferencer import apply_postprocess
-from cellmap_flow.io.geometry import Grid
+from cellmap_flow.io.raw import apply_norms
 from cellmap_flow.pipeline_spec import _output_info, chain_output_dtype
 
 logger = logging.getLogger(__name__)
@@ -49,9 +48,12 @@ class ServedModel:
     """A model a process serves, and the grid its chunks lie on.
 
     ``runner``: the warmed-up Inferencer (with no device slots: the
-    InferenceOp's ``slots`` bound the device). ``grid``: the raw data's voxels
-    as the model reads them, in nm (``ImageDataInterface._grid``: for a level
-    read as if it were at the model's voxel size, its corner rescaled too).
+    InferenceOp's ``slots`` bound the device). ``translation``: the centre of
+    input voxel 0 in nm (worldarray's ``translation``) of the grid the model's
+    reads are mapped onto, whose voxel size is ``input_voxel_size``: the level
+    ``open_raw`` (``cellmap_flow.io.raw``) opened for the model, at that voxel
+    size, resampled to it, or read as if it were at it (its corner rescaled
+    too).
     ``level_shape``: that level's voxels (its resampled ones when resampled).
     ``origin``: output voxel 0's lower corner in nm, where the chunk grid
     starts. ``block``: output voxels per chunk, spatial. ``halo``: input voxels
@@ -61,7 +63,7 @@ class ServedModel:
 
     name: str
     runner: Any
-    grid: Grid
+    translation: tuple
     level_shape: tuple
     origin: np.ndarray
     block: tuple
@@ -100,30 +102,33 @@ def served_model(name: str) -> ServedModel:
 class BlockInput:
     """What a model reads its input from: the block chunkmirage read for a chunk.
 
-    It stands in for the ImageDataInterface a ModelRunner reads with. Every
-    config's own ``process_chunk`` or ``predict``, like the default forward,
-    only calls ``to_ndarray_ts(roi)`` with the chunk grown by its context.
+    It stands in for the ``RawInput`` (``cellmap_flow.io.raw``) a ModelRunner
+    reads with. Every config's own ``process_chunk`` or ``predict``, like the
+    default forward, only calls ``to_ndarray_ts(roi)`` with the chunk grown by
+    its context. The level's ``level_shape`` voxels are ``voxel_size`` apart
+    (nm) with voxel 0's centre at ``translation``, the grid ``RawInput`` reads
+    on; the block starts at voxel ``block_start`` of it.
     """
 
-    def __init__(self, block, block_start, grid: Grid, level_shape, input_norms):
+    def __init__(self, block, block_start, voxel_size, translation, level_shape, input_norms):
         self.block = block
         self.block_start = np.asarray(block_start, dtype=int)
-        self.grid = grid
+        self.voxel_size = tuple(float(v) for v in voxel_size)
+        self.translation = tuple(float(v) for v in translation)
         self.level_shape = np.asarray(level_shape, dtype=int)
         self.input_norms = list(input_norms)
 
     def to_ndarray_ts(self, roi):
         """``roi`` (nm) through the input chain, the data's outermost voxels
-        repeated past it, after the chain, as ``ImageDataInterface.to_ndarray_ts``
-        reads it with ``padding="edge"``. A flat fill there is a wall the model
+        repeated past it, after the chain, as ``RawInput.to_ndarray_ts``
+        reads it with ``padding="edge"``: the voxels whose centres lie in
+        ``roi`` (worldarray's rule). A flat fill there is a wall the model
         never saw in training: on jrc_jurkat-1 setup_56 found 28% of the
         nuclei the volume's edge cuts with zeros past it, 60% with the edge
         repeated. ``roi`` wholly outside the data reads zeros."""
-        want = self.grid.world_to_box(roi)
-        begin = np.asarray(want.begin, dtype=int)
-        shape = np.asarray(want.shape, dtype=int)
+        begin, end = (np.asarray(v, dtype=int) for v in wa.Box.coerce(roi).to_index(self.voxel_size, self.translation))
         lo = np.clip(begin, 0, self.level_shape)
-        hi = np.maximum(np.clip(begin + shape, 0, self.level_shape), lo)
+        hi = np.maximum(np.clip(end, 0, self.level_shape), lo)
         start, stop = lo - self.block_start, hi - self.block_start
         if np.any(start < 0) or np.any(stop > np.asarray(self.block.shape)):
             raise ValueError(
@@ -131,11 +136,11 @@ class BlockInput:
                 f"({tuple(self.block_start)} + {self.block.shape})"
             )
         data = apply_norms(self.block[tuple(slice(a, b) for a, b in zip(start, stop))], self.input_norms)
-        if np.array_equal(lo, begin) and np.array_equal(hi, begin + shape):
+        if np.array_equal(lo, begin) and np.array_equal(hi, end):
             return data
         if data.size == 0:
-            return np.zeros(tuple(shape), dtype=data.dtype)
-        return np.pad(data, list(zip(lo - begin, begin + shape - hi)), mode="edge")
+            return np.zeros(tuple(end - begin), dtype=data.dtype)
+        return np.pad(data, list(zip(lo - begin, end - hi)), mode="edge")
 
 
 def _whole(values, what):
@@ -225,7 +230,8 @@ class InferenceOp(Op):
         # The whole chunk, as the model always computed it; one the data ends
         # in is cropped after.
         roi = chunk_roi(index, served.block, served.output_voxel_size, served.origin)
-        reader = BlockInput(block, start, served.grid, served.level_shape, self._norms)
+        reader = BlockInput(block, start, served.input_voxel_size, served.translation, served.level_shape,
+                            self._norms)
         timing.start()
         began = time.perf_counter()
         result = np.asarray(served.runner.predict(reader, roi))

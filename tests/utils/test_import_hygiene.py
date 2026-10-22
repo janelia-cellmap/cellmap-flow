@@ -38,7 +38,7 @@ check(["cellmap_flow.jobs.launch", "cellmap_flow.finetune.job_manager.manager"],
     # torch only once a runner is built.
     "serving": """
 check(["cellmap_flow.models.geometry", "cellmap_flow.models.geometry_cache", "cellmap_flow.inference.runner",
-       "cellmap_flow.inferencer", "cellmap_flow.image_data_interface"]
+       "cellmap_flow.inferencer", "cellmap_flow.io.raw"]
       + [f"cellmap_flow.serving.{m}" for m in ("chunkmirage_ops", "protocol", "client", "probe", "restart_token")],
       LIGHT + ["torch"])
 """,

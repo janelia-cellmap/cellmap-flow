@@ -14,7 +14,8 @@ This module owns:
     - The label remap function (:func:`remap_labels`).
     - Small zarr-attrs helpers used by the loader to derive a crop's voxel
       size, offset, and the array sub-path inside an OME-NGFF group (the
-      array itself is read with ``io.source.open_array``).
+      array itself is read with worldarray, opened by
+      ``io.metadata.open_level``).
 """
 
 from __future__ import annotations

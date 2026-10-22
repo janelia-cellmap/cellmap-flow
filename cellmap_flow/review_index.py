@@ -3,7 +3,7 @@ from an instance segmentation.
 
     python -m cellmap_flow.review_index LABELS OUT.sqlite [--queue NAME ...]
 
-LABELS is anything ImageDataInterface reads (zarr v2/v3, N5, precomputed;
+LABELS is anything worldarray reads (zarr v2/v3, N5, precomputed;
 a multiscale group is read at its finest level), with 0 as background. The
 index has the schema cellmap_flow.review reads: one ``instances`` row per
 label with its voxel count, bounding box (voxels, half-open) and centroid
@@ -90,8 +90,7 @@ def build_index(
     Refuses to overwrite ``db_path``: its ledger holds the verdicts.
     Returns ``{"n_instances", "voxel_size_nm", "offset_nm"}``.
     """
-    from cellmap_flow.image_data_interface import ImageDataInterface
-    from cellmap_flow.io.metadata import read_array_meta
+    from cellmap_flow.io.metadata import open_level, read_array_meta
 
     unknown = [q for q in queues if q not in QUEUES]
     if unknown:
@@ -101,12 +100,12 @@ def build_index(
     if os.path.exists(db_path):
         raise FileExistsError(f"{db_path} exists; its ledger may hold verdicts")
 
-    idi = ImageDataInterface(labels_path, normalize=False, input_norms=[])
-    meta = read_array_meta(idi.path).spatial()
-    store = idi.ts
+    array = open_level(labels_path)
+    meta = read_array_meta(array.level_path).spatial()
+    store = array.ts
     if store.rank != 3 or meta.axes not in (("z", "y", "x"), ("",) * 3):
         raise ValueError(
-            f"expected a 3-D z, y, x segmentation; {idi.path} has axes {meta.axes}"
+            f"expected a 3-D z, y, x segmentation; {array.level_path} has axes {meta.axes}"
         )
     lo = np.asarray(store.domain.inclusive_min)
     hi = np.asarray(store.domain.exclusive_max)
@@ -172,7 +171,7 @@ def build_index(
                 "INSERT INTO ledger (instance_id) VALUES (?)", ((int(i),) for i in ids)
             )
             conn.executemany("INSERT INTO meta VALUES (?, ?)", [
-                ("source_zarr", idi.path),
+                ("source_zarr", array.level_path),
                 ("built_at", time.strftime("%Y-%m-%dT%H:%M:%S")),
                 ("voxel_size_nm", json.dumps(voxel_size.tolist())),
                 # The lower corner of voxel 0, in nm.

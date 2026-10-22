@@ -362,22 +362,21 @@ def _raw_window(volume, boxes):
     voxels, at most RAW_SAMPLE), read as stored at the volume's input voxel
     size, or None when nothing could be read."""
     from cellmap_flow.ai_annotate.pipeline import _raw
-    from cellmap_flow.io.geometry import Box
 
     try:
-        idi = _raw(volume, tuple(volume["input_voxel_size"]))
+        raw = _raw(volume, tuple(volume["input_voxel_size"]))
     except Exception as e:
         logger.debug(f"No raw window: {e}")
         return None
     voxel = np.asarray(volume["output_voxel_size"], dtype=float)
     corner = volume_corner_nm(volume.get("dataset_offset_nm"), voxel)
-    raw_voxel = np.asarray(idi.voxel_size, dtype=float)[-3:]
-    raw_corner = np.asarray(idi.offset, dtype=float)[-3:]
+    raw_voxel = np.asarray(raw.array.voxel_size, dtype=float)[-3:]
+    raw_corner = np.asarray(raw.array.corner, dtype=float)[-3:]
     parts = []
     for lo, hi, _ in boxes:
         begin = np.floor((corner + lo * voxel - raw_corner) / raw_voxel + 1e-6).astype(int)
         end = np.ceil((corner + hi * voxel - raw_corner) / raw_voxel - 1e-6).astype(int)
-        parts.append(np.asarray(idi.read_box(Box(tuple(int(v) for v in begin), tuple(int(v) for v in np.maximum(end - begin, 1))))).ravel())
+        parts.append(np.asarray(raw.read_index(begin, np.maximum(end, begin + 1))).ravel())
     values = np.concatenate(parts) if parts else np.zeros(0)
     if not values.size:
         return None

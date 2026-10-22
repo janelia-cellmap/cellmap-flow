@@ -18,7 +18,7 @@ from zarr.hierarchy import open_group
 from functools import partial
 from pydantic import ValidationError
 from cellmap_flow.blockwise.bounding_box import BoundingBox, TaskBoundingBox
-from cellmap_flow.image_data_interface import ImageDataInterface
+from cellmap_flow.io.raw import RawInput, open_raw, spatial_shape
 from cellmap_flow.inferencer import Inferencer
 from cellmap_flow.pipeline_spec import PipelineSpec
 from cellmap_flow.config.yaml import ConfigError, load_config, resolve_data_path
@@ -245,8 +245,8 @@ class CellMapFlowBlockwiseProcessor:
             raise ConfigError("No models found in the configuration.")
 
         # The same data_path + scale rule as cellmap_flow infer and yaml.
-        # All models read through one ImageDataInterface, so the first
-        # model's scale is the one that applies.
+        # All models read through one raw input, so the first model's scale
+        # is the one that applies.
         scale = getattr(models[0], "scale", None)
         other_scales = [
             getattr(m, "scale", None) for m in models[1:] if getattr(m, "scale", None) != scale
@@ -340,28 +340,19 @@ class CellMapFlowBlockwiseProcessor:
         # resample (true unless the task says false) reads the data resampled
         # to the model's input voxel size when it has no level at it; the
         # grid below is then the resampled one, starting at the level's own
-        # corner.
-        # padding="edge": the data's edge repeated past it, as the inference
-        # server pads the model's input (BlockInput).
-        self.idi_raw = ImageDataInterface(
-            self.input_path,
-            voxel_size=self.input_voxel_size,
-            on_voxel_size_mismatch="resample" if self.config.get("resample", True) else "relabel",
-            padding="edge",
-        )
+        # corner. Past the data a read repeats its edge (open_raw's padding),
+        # as the inference server pads the model's input (BlockInput). Every
+        # model reads through this one input, with the task's chain.
+        raw = open_raw(self.input_path, self.input_voxel_size, resample=self.config.get("resample", True))
+        self.raw_input = RawInput(raw)
 
         # The output grid starts at the corner of the raw level the model
         # reads (whole nanometers), so every output voxel sits exactly on the
         # input voxels it is computed from; anchored at 0 it was half a raw
         # voxel off Janelia data, whose corner is -4 nm. The whole-volume
         # output is the raw extent, shrunk to whole output voxels.
-        self.grid_origin = Coordinate(
-            int(v) for v in np.round(np.array(self.idi_raw.offset, dtype=float))
-        )
-        raw_roi = daisy.Roi(
-            self.grid_origin,
-            Coordinate(self.idi_raw.shape) * self.input_voxel_size,
-        )
+        self.grid_origin = Coordinate(int(v) for v in np.round(np.array(raw.corner, dtype=float)))
+        raw_roi = daisy.Roi(self.grid_origin, Coordinate(spatial_shape(raw)) * self.input_voxel_size)
         self.full_output_roi = self._snap_to_output_grid(raw_roi)
 
         self.bounding_boxes = self.config.get("bounding_boxes", None)
@@ -583,7 +574,7 @@ class CellMapFlowBlockwiseProcessor:
         if len(self.inferencers) == 1:
             # Single model - original behavior
             chunk_data = self.inferencers[0].process_chunk(
-                self.idi_raw,
+                self.raw_input,
                 block.write_roi,
                 input_norms=self.input_norms,
                 postprocess=self.postprocess,
@@ -594,7 +585,7 @@ class CellMapFlowBlockwiseProcessor:
             model_outputs = []
             for inferencer in self.inferencers:
                 output = inferencer.process_chunk(
-                    self.idi_raw,
+                    self.raw_input,
                     block.write_roi,
                     input_norms=self.input_norms,
                     postprocess=self.postprocess,

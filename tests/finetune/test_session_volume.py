@@ -80,7 +80,7 @@ def test_a_volume_made_to_resample_is_trained_on_the_raw_resampled(tmp_path, ome
     manifest), so the trainer reads the raw at the model's voxel size as a
     --resample server does, whatever the dashboard is set to later."""
     from cellmap_flow.finetune.data.reader import PatchReader
-    from cellmap_flow.image_data_interface import ImageDataInterface
+    from cellmap_flow.io.raw import RawInput, open_raw
     from funlib.geometry import Roi
 
     raw = ome_pyramid((((16, 4, 4), 0),))  # 16^3 voxels from (-8, -2, -2) nm; no 8 nm level
@@ -100,6 +100,6 @@ def test_a_volume_made_to_resample_is_trained_on_the_raw_resampled(tmp_path, ome
     reader = PatchReader(path, raw, (4, 4, 4), (4, 4, 4), (8, 8, 8), (8, 8, 8),
                          corner_nm=corner, shape_voxels=np.array(shape), resample=manifest["resample"])
     # Centred 6, 2, 2 output voxels in: the input box starts 32, 0, 0 nm from the corner.
-    expected = ImageDataInterface(raw, voxel_size=(8, 8, 8), on_voxel_size_mismatch="resample",
-                                  normalize=False).to_ndarray_ts(Roi((24, -2, -2), (32, 32, 32)))
+    expected = RawInput(open_raw(raw, (8, 8, 8), resample=True), normalize=False).to_ndarray_ts(
+        Roi((24, -2, -2), (32, 32, 32)))
     assert np.array_equal(reader.raw(np.array([6, 2, 2])), expected)

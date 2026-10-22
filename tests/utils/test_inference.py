@@ -14,9 +14,9 @@ import pytest
 import torch
 from funlib.geometry import Roi
 
-from cellmap_flow.image_data_interface import ImageDataInterface
 from cellmap_flow.inference.runner import DeviceSlots, predict
 from cellmap_flow.inferencer import Inferencer
+from cellmap_flow.io.raw import RawInput, open_raw
 from cellmap_flow.models.models_config import ScriptModelConfig
 from cellmap_flow.post.postprocessors import PostProcessor
 from cellmap_flow.process_chain import process_chain
@@ -98,7 +98,7 @@ def test_half_precision_is_opt_in_and_checked_against_fp32(raw_zarr, model_scrip
     inferencer = ChunkmirageServer(raw, config).inferencer
     assert inferencer.autocast_dtype == expected
     config.config.model.under_autocast.clear()
-    assert inferencer.process_chunk(ImageDataInterface(raw, voxel_size=(8, 8, 8)), ROI).dtype == np.float32
+    assert inferencer.process_chunk(RawInput(open_raw(raw, (8, 8, 8))), ROI).dtype == np.float32
     assert config.config.model.under_autocast == [expected is not None]
 
 
@@ -157,5 +157,5 @@ model = torch.nn.Upsample(scale_factor=2)
 
     process_chain().postprocess = [Record()]
     raw = raw_zarr(np.zeros((8, 8, 8), np.uint8))
-    Inferencer(ScriptModelConfig(script_path=script)).process_chunk(ImageDataInterface(raw, voxel_size=(8, 8, 8)), ROI)
+    Inferencer(ScriptModelConfig(script_path=script)).process_chunk(RawInput(open_raw(raw, (8, 8, 8))), ROI)
     assert seen == [8 * 8 * 8]

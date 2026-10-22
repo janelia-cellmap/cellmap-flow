@@ -4,7 +4,7 @@ import os
 import numpy as np
 import json
 from funlib.geometry import Coordinate
-from cellmap_flow.image_data_interface import ImageDataInterface
+from cellmap_flow.io.raw import RawInput
 from funlib.geometry import Roi
 
 
@@ -75,7 +75,7 @@ def process_lsd(
     return output_data.astype(np.uint8)
 
 
-def process_chunk(idi: ImageDataInterface, input_roi: Roi):
+def process_chunk(idi: RawInput, input_roi: Roi):
     input_roi = input_roi.grow(context, context)
     chunk = idi.to_ndarray_ts(input_roi)
     input_tensorname, output_tensorname = get_tensor_names(

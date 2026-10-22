@@ -1,9 +1,10 @@
-"""ImageDataInterface: which level it opens, where it puts it, and what a read returns.
+"""open_raw and RawInput: which level opens, where worldarray puts it, and what a read returns.
 
 A read that lands a voxel off, or through the wrong chain, gives a model the
 wrong input with nothing to show for it. The datasets hold each voxel's z
 index + 1 (see conftest's ``ome_pyramid``), so a read's z column says which
-voxels it hit.
+voxels it hit. A world box is read by worldarray's rule: a voxel is read when
+its centre lies in the half-open box.
 """
 
 import json
@@ -13,9 +14,10 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
-from funlib.geometry import Coordinate, Roi
+import worldarray as wa
+from funlib.geometry import Roi
 
-from cellmap_flow.image_data_interface import ImageDataInterface
+from cellmap_flow.io.raw import RawInput, open_raw, spatial_shape
 from cellmap_flow.norm.input_normalize import ChannelSelector, LambdaNormalizer
 from cellmap_flow.process_chain import process_chain
 
@@ -62,11 +64,14 @@ def _openorganelle_level(f):
     return f.ome_pyramid((((5.24, 4, 4), 0), ((10.48, 8, 8), (2.62, 2, 2)))) + "/s1"
 
 
-# Read the dataset's own roi.
-OWN_ROI = "idi.roi"
+# Read the array's own box (``raw.array.box``).
+OWN_BOX = "raw.array.box"
 
-# layout: (how it is written, ImageDataInterface arguments, where it starts, read ROI,
-#          (shape read, its dtype, its z column))
+# What RawInput takes; a row's other arguments are open_raw's.
+INPUT_ARGUMENTS = ("input_norms", "normalize")
+
+# layout: (how it is written, open_raw and RawInput arguments, where it starts
+#          (the corner), read box, (shape read, its dtype, its z column))
 READS = {
     # N5 attributes are x, y, z; the data is z, y, x like its metadata says.
     "n5": (
@@ -84,19 +89,19 @@ READS = {
         lambda f: _precomputed_pyramid(f) + "/s1", {}, (32, 16, 8), Roi((32, 16, 8), (64, 80, 80)),
         ((2, 5, 10), "uint8", [1, 3]),
     ),
-    # Half a voxel before the array is in voxel -1, as on the other side of voxel 0.
+    # A box that begins at voxel -1's centre reads voxel -1: the box is half-open.
     "negative-off-grid-start": (
         _at_the_origin, {}, (0, 0, 0), Roi((-4, 0, 0), (16, 8, 8)), ((2, 1, 1), "uint8", [0, 1]),
     ),
     "past-the-end": (_at_the_origin, {}, (0, 0, 0), Roi((112, 0, 0), (32, 8, 8)), ((4, 1, 1), "uint8", [15, 16, 0, 0])),
-    # Outside the array a read is padded with 0, not the array's fill value...
+    # Outside the array a read is padded with 0 (padding=0), not the array's fill value...
     "border": (
         lambda f: f.write_array("zarr2", np.ones((4, 4, 4), np.uint8), {"resolution": [1] * 3, "offset": [0] * 3},
                                 fill_value=7),
         {}, (0, 0, 0), Roi((-1, 0, 0), (2, 1, 1)), ((2, 1, 1), "uint8", [0, 1]),
     ),
-    # ...or with the border voxels repeated (padding="edge", what a model's
-    # input is read with)...
+    # ...or with the border voxels repeated (padding="edge", open_raw's default
+    # and what a model's input is read with)...
     "edge-fill": (
         _at_the_origin, {"padding": "edge"}, (0, 0, 0), Roi((-8, 0, 0), (16, 8, 8)),
         ((2, 1, 1), "uint8", [1, 1]),
@@ -113,20 +118,23 @@ READS = {
     "extra-compressor-field": (
         _extra_compressor_field, {}, (0, 0, 0), Roi((0, 0, 0), (4, 4, 4)), ((4, 4, 4), "uint8", [1, 2, 3, 4]),
     ),
-    # z = 524 nm is voxel 100 at 5.24 nm (it was voxel 104 at 5 nm).
+    # z = 524 nm is voxel 100 at 5.24 nm (it was voxel 104 at 5 nm). 47 nm is
+    # just short of 9 voxels (47.16 nm) and holds the centres of voxels
+    # 100..108, as 9 whole voxels would; 52 nm (9.92 voxels) holds voxel 109's too.
     "fractional-voxel-size": (
         lambda f: f.ome_pyramid((((5.24, 4, 4), (2.62, 2, 2)),), shape=(200, 4, 4)) + "/s0",
-        {}, (0, 0, 0), Roi((524, 0, 0), (52, 4, 4)), ((9, 1, 1), "uint8", list(range(101, 110))),
+        {}, (0, 0, 0), Roi((524, 0, 0), (47, 4, 4)), ((9, 1, 1), "uint8", list(range(101, 110))),
     ),
     # Every Janelia level's corner is -4 nm: world [-4, 28) is exactly s2's voxel 0.
     "janelia-level": (
         lambda f: f.ome_pyramid(((8, 0), (16, 4), (32, 12)), shape=(32, 32, 32)) + "/s2",
         {}, (-4, -4, -4), Roi((60, -4, -4), (64, 32, 32)), ((2, 1, 1), "uint8", [3, 4]),
     ),
-    # A Roi holds whole nm, so roi starts voxel 0 at -3 nm, not -2.62: reading
-    # it gives the array's own voxels, not a voxel of padding and voxels 0..6.
-    "openorganelle-own-roi": (
-        _openorganelle_level, {}, (-3, -2, -2), OWN_ROI, ((8, 8, 8), "uint8", list(range(1, 9))),
+    # The corner is not a whole nanometer in z, and the array's box keeps it:
+    # reading the box gives the array's own voxels, not a voxel of padding
+    # and voxels 0..6.
+    "openorganelle-own-box": (
+        _openorganelle_level, {}, (-2.62, -2, -2), OWN_BOX, ((8, 8, 8), "uint8", list(range(1, 9))),
     ),
     "ome-v3-level": (
         lambda f: f.ome_pyramid(((8, 0), (16, 4)), zarr_format=3),
@@ -142,20 +150,25 @@ READS = {
 
 
 def _open(write, kwargs, ome_pyramid, write_array):
+    """The row's dataset, written and opened. Its reads go through no chain and
+    are padded with 0 unless the row says otherwise, so padding (open_raw's
+    default repeats the edge) cannot pass for data."""
     path = write(SimpleNamespace(ome_pyramid=ome_pyramid, write_array=write_array))
-    return ImageDataInterface(path, **{"input_norms": [], **kwargs})
+    input_kwargs = {"input_norms": [], **{k: v for k, v in kwargs.items() if k in INPUT_ARGUMENTS}}
+    open_kwargs = {"padding": 0, **{k: v for k, v in kwargs.items() if k not in INPUT_ARGUMENTS}}
+    return RawInput(open_raw(path, **open_kwargs), **input_kwargs)
 
 
 @pytest.mark.parametrize("layout", READS)
 def test_a_read_lands_where_the_metadata_says(layout, ome_pyramid, write_array):
-    write, kwargs, corner, roi, (shape, dtype, column) = READS[layout]
-    idi = _open(write, kwargs, ome_pyramid, write_array)
-    assert tuple(idi.roi.offset) == corner
-    got = idi.to_ndarray_ts(idi.roi if roi == OWN_ROI else roi)
+    write, kwargs, corner, box, (shape, dtype, column) = READS[layout]
+    raw = _open(write, kwargs, ome_pyramid, write_array)
+    assert raw.array.corner == pytest.approx(corner)
+    got = raw.to_ndarray_ts(raw.array.box if box == OWN_BOX else box)
     assert (got.shape, str(got.dtype), got[:, 0, 0].tolist()) == (shape, dtype, column)
 
 
-# --- resampling (on_voxel_size_mismatch="resample") ---------------------------------
+# --- resampling (open_raw's resample=True) ------------------------------------------
 
 
 def _scipy_resampled(data, source_vs, target_vs):
@@ -202,22 +215,28 @@ def _random_volume(write_array, layout):
     source_vs, shape, dtype, requested = RESAMPLED_VALUES[layout]
     data = (np.random.default_rng(0).random(shape) * 250).astype(dtype)
     path = write_array("zarr2", data, {"resolution": list(source_vs), "offset": [0, 0, 0]})
-    idi = ImageDataInterface(path, voxel_size=requested, on_voxel_size_mismatch="resample", input_norms=[])
-    return idi, data
+    raw = RawInput(open_raw(path, voxel_size=requested, resample=True, padding=0), input_norms=[])
+    return raw, data
 
 
 @pytest.mark.parametrize("layout", RESAMPLED_VALUES)
 def test_a_resampled_read_is_the_direct_computation(write_array, layout):
-    idi, data = _random_volume(write_array, layout)
+    """Every target voxel, read by index: ``raw.array.box`` is the data's own
+    extent, which can end before the last target voxel's centre (5 x voxels
+    of 8 nm are 40 nm, two 24 nm voxels centred at 12 and 36 nm, the second
+    reaching past the data; at 7 they are 56 nm and the third, at 60 nm, is
+    outside it)."""
+    raw, data = _random_volume(write_array, layout)
     source_vs, _, dtype, requested = RESAMPLED_VALUES[layout]
-    got, expected = idi.to_ndarray_ts(idi.roi), _scipy_resampled(data, source_vs, requested)
-    assert got.dtype == dtype and got.shape == expected.shape == tuple(idi.shape)
+    shape = spatial_shape(raw.array)
+    got, expected = raw.read_index((0, 0, 0), shape), _scipy_resampled(data, source_vs, requested)
+    assert got.dtype == dtype and got.shape == expected.shape == shape
     if np.dtype(dtype).kind == "f":
         np.testing.assert_allclose(got, expected, rtol=1e-6)
     else:
         np.testing.assert_array_equal(got, expected)
     # Through the chain after resampling, as a stored level would be.
-    doubled = idi.with_input_norms([LambdaNormalizer("x * 2")]).to_ndarray_ts(idi.roi)
+    doubled = raw.with_input_norms([LambdaNormalizer("x * 2")]).read_index((0, 0, 0), shape)
     np.testing.assert_allclose(doubled, expected.astype(np.float32) * 2, rtol=1e-6)
 
 
@@ -226,34 +245,34 @@ def test_neighbouring_resampled_chunks_meet_exactly(write_array, layout):
     """The server reads every chunk on its own: two that meet must give, at
     their shared border, the voxels one read across both gives, including
     where they run past the data into padding."""
-    idi, _ = _random_volume(write_array, layout)
-    voxel = np.array(idi.voxel_size)
-    whole = Roi(idi.roi.offset - Coordinate(voxel * 2), idi.roi.shape + Coordinate(voxel * 4))
-    expected = idi.to_ndarray_ts(whole)
+    raw, _ = _random_volume(write_array, layout)
+    voxel = np.array(raw.array.voxel_size)
+    # Every target voxel and two more on each side, cut below on target voxel corners.
+    shape = spatial_shape(raw.array)
+    whole = wa.Box.from_index((-2,) * 3, tuple(n + 2 for n in shape), voxel, raw.array.translation)
+    expected = raw.to_ndarray_ts(whole)
     for axis in range(3):
         for split in range(1, expected.shape[axis]):
-            cut = np.array(whole.shape)
-            cut[axis] = split * voxel[axis]
-            first = Roi(whole.offset, Coordinate(cut))
-            rest = Roi(whole.offset + Coordinate(np.eye(3, dtype=int)[axis] * cut[axis]),
-                       whole.shape - Coordinate(np.eye(3, dtype=int)[axis] * cut[axis]))
-            pieces = np.concatenate([idi.to_ndarray_ts(first), idi.to_ndarray_ts(rest)], axis=axis)
+            at = whole.begin[axis] + split * voxel[axis]
+            first = wa.Box(whole.begin, tuple(at if i == axis else e for i, e in enumerate(whole.end)))
+            rest = wa.Box(tuple(at if i == axis else b for i, b in enumerate(whole.begin)), whole.end)
+            pieces = np.concatenate([raw.to_ndarray_ts(first), raw.to_ndarray_ts(rest)], axis=axis)
             assert np.array_equal(pieces, expected), (axis, split)
 
 
 def test_each_read_goes_through_its_own_chain(raw_zarr):
     roi = Roi((0, 0, 0), (32, 32, 32))
-    idi = ImageDataInterface(raw_zarr(np.full((4, 4, 4), 7, np.uint8)))
+    raw = RawInput(open_raw(raw_zarr(np.full((4, 4, 4), 7, np.uint8))))
     process_chain().input_norms = [LambdaNormalizer("x * 2")]
-    # With no chain of its own it follows the process's, on region and whole-array reads.
-    assert np.all(idi.to_ndarray_ts(roi) == 14) and np.all(idi.to_ndarray_ts() == 14)
-    # An explicit chain wins, and leaves the original alone; both share one store.
-    tripled = idi.with_input_norms([LambdaNormalizer("x * 3")])
-    assert np.all(tripled.to_ndarray_ts(roi) == 21) and np.all(idi.to_ndarray_ts(roi) == 14)
-    assert tripled.source.ts is idi.source.ts
-    assert np.all(ImageDataInterface(idi.path, normalize=False).to_ndarray_ts(roi) == 7)
+    # With no chain of its own it follows the process's, on a region and on the array's own box.
+    assert np.all(raw.to_ndarray_ts(roi) == 14) and np.all(raw.to_ndarray_ts(raw.array.box) == 14)
+    # An explicit chain wins, and leaves the original alone; both share one open array.
+    tripled = raw.with_input_norms([LambdaNormalizer("x * 3")])
+    assert np.all(tripled.to_ndarray_ts(roi) == 21) and np.all(raw.to_ndarray_ts(roi) == 14)
+    assert tripled.array is raw.array
+    assert np.all(RawInput(raw.array, normalize=False).to_ndarray_ts(roi) == 7)
     # Pickled, it still has no chain of its own: it reads the chain of the
     # process that unpickles it, which in a spawned loader worker is empty.
-    unpickled = pickle.loads(pickle.dumps(idi))
+    unpickled = pickle.loads(pickle.dumps(raw))
     process_chain().input_norms = []
     assert np.all(unpickled.to_ndarray_ts(roi) == 7)

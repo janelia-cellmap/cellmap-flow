@@ -35,18 +35,14 @@ import numpy as np
 from chunkmirage.cache import LRUCache
 from chunkmirage.pipeline import Pipeline, select_axes
 from chunkmirage.server import DatasetRegistry, create_app
-from chunkmirage.sources.base import MultiscaleSource
-from chunkmirage.sources.tensorstore_source import TensorStoreSource
 from funlib.geometry.coordinate import Coordinate
 from starlette.concurrency import run_in_threadpool
 from starlette.responses import JSONResponse
 from starlette.routing import Route
 
-from cellmap_flow.image_data_interface import ImageDataInterface, selected_channel
 from cellmap_flow.inference.runner import DeviceSlots
 from cellmap_flow.inferencer import Inferencer
-from cellmap_flow.io import paths
-from cellmap_flow.io.ome import CHANNEL_AXIS_NAMES
+from cellmap_flow.io.raw import open_raw, selected_channel, spatial_axes, spatial_shape, stored_placement
 from cellmap_flow.jobs.spec import IP_PATTERN
 from cellmap_flow.pipeline_spec import PipelineSpec
 from cellmap_flow.process_chain import process_chain
@@ -104,9 +100,9 @@ class ChunkmirageServer:
     """One model's predictions over ``dataset_name``, served by chunkmirage.
 
     ``resample`` reads a level resampled to the model's input voxel size when
-    the data has none at it (``on_voxel_size_mismatch="resample"``, see
-    ImageDataInterface), instead of reading the nearest level as if it were
-    at that size; ``cellmap_flow serve --resample``. ``restart_callback``
+    the data has none at it (``open_raw(..., resample=True)``, see
+    ``cellmap_flow.io.raw``), instead of reading the nearest level as if it
+    were at that size; ``cellmap_flow serve --resample``. ``restart_callback``
     enables POST /__control__/restart, which then only accepts requests
     carrying ``restart_token`` in the X-Restart-Token header.
 
@@ -140,17 +136,11 @@ class ChunkmirageServer:
         DevicePostprocessOp.slots = device_slots.n
         self.geometry = model_config.geometry
 
-        # The level the model reads, chosen and placed as ImageDataInterface
-        # does for every reader (blockwise reads the same level, padded the
-        # same way: its edge repeated, as BlockInput pads).
-        self.idi_raw = ImageDataInterface(
-            dataset_name,
-            voxel_size=Coordinate(self.geometry.input_voxel_size),
-            on_voxel_size_mismatch="resample" if resample else "relabel",
-            padding="edge",
-        )
-        idi = self.idi_raw
-        self.axes = [a for a in idi.axes_names if a not in CHANNEL_AXIS_NAMES]
+        # The level the model reads, chosen and placed as open_raw does for
+        # every reader (blockwise reads the same level, padded the same way:
+        # its edge repeated, as BlockInput pads).
+        self.raw = raw = open_raw(dataset_name, Coordinate(self.geometry.input_voxel_size), resample=resample)
+        self.axes = list(spatial_axes(raw))
         self.has_channel = self.geometry.has_channel_axis
         input_voxel_size = np.asarray(Coordinate(self.geometry.input_voxel_size), dtype=float)
         output_voxel_size = Coordinate(self.geometry.output_voxel_size)
@@ -160,13 +150,13 @@ class ChunkmirageServer:
         self.served = ServedModel(
             name=f"{getattr(model_config, 'name', None) or type(model_config).__name__}@{id(self):x}",
             runner=self.inferencer,
-            grid=idi._grid,
-            level_shape=tuple(int(v) for v in idi.shape),
+            translation=tuple(float(v) for v in raw.translation),
+            level_shape=spatial_shape(raw),
             # Output voxel 0 starts at the corner of the level the model reads,
             # so every output voxel sits exactly on the input voxels it is
             # computed from; anchored at 0 it would be half a raw voxel off
             # Janelia data, whose corner is -4 nm. Whole nm: Roi is integral.
-            origin=np.round(np.array(idi.offset, dtype=float)).astype(int),
+            origin=np.round(np.array(raw.corner, dtype=float)).astype(int),
             block=block,
             input_voxel_size=tuple(input_voxel_size),
             output_voxel_size=output_voxel_size,
@@ -200,48 +190,33 @@ class ChunkmirageServer:
     # --- what is served ------------------------------------------------------
 
     def _open_source(self):
-        """The level the model reads, as a chunkmirage source placed where
-        cellmap-flow places it: the voxel size and corner it read, in nm."""
+        """The level the model reads, as a chunkmirage source placed where its
+        data really lies: the level's own voxel size and voxel 0's centre, in
+        nm, which for a relabelled level are not those ``raw`` reads at.
+        chunkmirage then reads it at the model's voxel size as ``raw`` does
+        (``pipeline_for``'s ``input_level``)."""
         from chunkmirage.sources import open_source
 
-        idi = self.idi_raw
-        # A plain local path made absolute, as io.store hands one to
-        # tensorstore, which refuses ".." in a path: `serve -d ../data.zarr/raw`
-        # failed to start here while the reader above had opened it. A URL,
-        # or a ``precomputed://`` location, is left as it is.
-        path = idi.path if "://" in idi.path else os.path.abspath(idi.path)
-        grid = idi._grid
-        actual = np.asarray(idi.actual_voxel_size, dtype=float)
-        if idi.resampled:
-            corner = np.asarray(grid.translation, dtype=float)
-        else:
-            # Relabelled, the grid's corner is the real one rescaled.
-            corner = np.asarray(grid.translation, dtype=float) / np.asarray(grid.voxel_size, dtype=float) * actual
-        centre = corner + actual / 2
-
-        def placed(lead):
-            return dict(
-                voxel_size=[1.0] * lead + [float(v) for v in actual],
-                translation=[0.0] * lead + [float(v) for v in centre],
-                units=[""] * lead + ["nanometer"] * len(self.axes),
-                axes=["c"] * lead + list(self.axes),
-            )
-
-        if paths.is_precomputed(path):
-            # cellmap-flow names a precomputed volume's scales ``…/s<N>``,
-            # which is no path in the volume: chunkmirage opens the volume at
-            # that scale's index. The volume always has a channel axis, one
-            # channel or more, which pipeline_for selects from.
-            volume, scale_index = paths.precomputed_volume(path)
-            level = TensorStoreSource.from_path(
-                volume, cache_bytes=self.registry.source_cache_bytes, scale_index=scale_index, **placed(1)
-            )
-            return MultiscaleSource([level], name=path)
+        raw = self.raw
+        voxel_size, translation = stored_placement(raw)
+        # Any channel axis comes first, in OME's order as in worldarray's for
+        # a precomputed volume (whose only channel, if it has one, both drop:
+        # chunkmirage opens the level through worldarray too); pipeline_for
+        # selects from it.
+        lead = len(raw.axes) - len(self.axes)
+        # worldarray's path of the level, which chunkmirage opens as it is: a
+        # precomputed volume's scale as ``<volume>/<scale key>``, a local path
+        # absolute and without "..", which tensorstore refuses (`serve -d
+        # ../data.zarr/raw` once failed to start here while the reader had
+        # opened it).
         return open_source(
-            path,
+            raw.level_path,
             cache_bytes=self.registry.source_cache_bytes,
             cache=self.registry.cache,
-            **placed(len(idi.axes_names) - len(self.axes)),
+            voxel_size=[1.0] * lead + list(voxel_size),
+            translation=[0.0] * lead + list(translation),
+            units=[""] * lead + ["nanometer"] * len(self.axes),
+            axes=["c"] * lead + list(self.axes),
         )
 
     def _chain(self, name):
@@ -325,17 +300,15 @@ class ChunkmirageServer:
         model. A resampled input really is at input_voxel_size; a relabelled
         one is at the level's, which moves the output (see to_model_info).
         """
-        idi = self.idi_raw
-        info = self.geometry.to_model_info(
-            self.axes, idi.voxel_size if idi.resampled else idi.actual_voxel_size
-        )
+        raw = self.raw
+        stored, _ = stored_placement(raw)
+        info = self.geometry.to_model_info(self.axes, raw.voxel_size if raw.resampled else stored)
         info["output_axes"] = (["c"] if self.has_channel else []) + list(self.axes)
-        info["input_resampled_from"] = list(idi.actual_voxel_size) if idi.resampled else None
-        relabelled = not idi.resampled and not np.allclose(
-            np.asarray(idi.actual_voxel_size, dtype=float),
-            np.asarray(self.geometry.input_voxel_size, dtype=float),
+        info["input_resampled_from"] = list(stored) if raw.resampled else None
+        relabelled = not raw.resampled and not np.allclose(
+            np.asarray(stored, dtype=float), np.asarray(self.geometry.input_voxel_size, dtype=float)
         )
-        info["input_relabelled_from"] = list(idi.actual_voxel_size) if relabelled else None
+        info["input_relabelled_from"] = list(stored) if relabelled else None
         info["display_channel"] = getattr(self.inferencer.model_config, "display_channel", None)
         info["engine"] = ENGINE
         output_class = getattr(self.inferencer, "output_class", None)

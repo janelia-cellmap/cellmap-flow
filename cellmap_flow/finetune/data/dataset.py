@@ -53,7 +53,7 @@ def stored_voxel_size(raw_dataset_path: str, voxel_size, resample: bool) -> Opti
     ``voxel_size``, as stored, before any resampling to it; None when its
     metadata cannot be read here.
 
-    The level is the one PatchReader's ImageDataInterface opens. Resampled
+    The level is the one PatchReader's ``open_raw`` opens. Resampled
     to cubes, voxels stored three times as deep are still blurred across z,
     so a side slice through them is not an x–y slice.
     """

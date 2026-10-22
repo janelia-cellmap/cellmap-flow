@@ -117,25 +117,23 @@ def raw_level(raw_dataset_path: str, input_voxel_size, resample: bool = False) -
     own voxel size; with ``resample``, the raw resampled to
     ``input_voxel_size``, as the trainer and a --resample server read it.
     """
-    from cellmap_flow.image_data_interface import ImageDataInterface
+    from cellmap_flow.io.raw import open_raw, spatial_shape
 
     if resample:
-        voxel_size, mismatch = input_voxel_size, "resample"
+        voxel_size = input_voxel_size
     else:
         # Opened at the level's own voxel size, so that it is read as it is
         # stored and its corner is its own, not one relabelled to the model's.
         voxel_size = closest_raw_scale(raw_dataset_path, tuple(input_voxel_size)) or input_voxel_size
-        mismatch = "relabel"
-    idi = ImageDataInterface(raw_dataset_path, voxel_size=voxel_size, on_voxel_size_mismatch=mismatch)
+    array = open_raw(raw_dataset_path, voxel_size, resample=resample)
     axes = len(input_voxel_size)
     # The data's own extent is its shape times its voxel size, which the plan
-    # takes. Not idi.roi's: that is the whole-nm box around the data, up to
-    # 2 nm larger, which would add a voxel to every level whose extent is not
-    # whole nm (10.48 nm...).
+    # takes: not a whole-nm box around the data, up to 2 nm larger, which
+    # would add a voxel to every level whose extent is not whole nm (10.48 nm...).
     return {
-        "voxel": [float(v) for v in idi.voxel_size][-axes:],
-        "corner": [float(o) for o in idi.offset][-axes:],
-        "shape": [int(n) for n in idi.shape][-axes:],
+        "voxel": [float(v) for v in array.voxel_size][-axes:],
+        "corner": [float(o) for o in array.corner][-axes:],
+        "shape": [int(n) for n in spatial_shape(array)][-axes:],
     }
 
 
@@ -166,7 +164,7 @@ def raw_voxel_sizes(raw_dataset_path: str) -> list:
 
     A multiscale group's levels (or a precomputed volume's scales), from
     its documents alone, no level opened; the path of one array is that one
-    level, as ImageDataInterface reads it.
+    level, as ``open_raw`` reads it.
     """
     from cellmap_flow.io import metadata
 
@@ -390,12 +388,14 @@ def write_crop_into_volume(volume_meta: dict, entry, *, progress_callback=None) 
     """
     from cellmap_flow.finetune.crop_loader import _read_voxel_size_and_offset, remap_labels
     from cellmap_flow.finetune.session import sync  # sync reads volumes: import here
-    from cellmap_flow.io.source import open_array
+    from cellmap_flow.io.metadata import open_level
 
     started = time.time()
     sub, src_voxel_size_nm, src_offset_nm = _read_voxel_size_and_offset(entry.path)
-    # The whole crop at once, decoding chunks on every core.
-    src_data = open_array(str(Path(entry.path, *sub)), concurrency_limit=None).read()
+    # The whole crop at once, decoding chunks on every core (worldarray's
+    # shared context).
+    crop = open_level(str(Path(entry.path, *sub)), units=None)
+    src_data = crop.read_index((0,) * crop.meta.ndim, crop.meta.shape)
     if src_data.ndim != 3:
         raise ValueError(f"Crop {entry.path}: expected 3D (z, y, x), got shape {src_data.shape}")
     remapped = remap_labels(

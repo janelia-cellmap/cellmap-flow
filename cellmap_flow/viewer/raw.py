@@ -5,12 +5,13 @@ served from this process: a multiscale pyramid (an OME-Zarr group's
 levels, a precomputed volume's scales) as one ``ScalePyramid`` (each level
 a ``LocalVolume``, served as a power-of-two downsampling of the finest; a
 level that is not one is left out), a single array
-as a ``LocalVolume``, both read through ImageDataInterface so that the
-input chain applies to what is drawn (never to a segmentation's ids), and
-placed by a source transform that puts voxel 0's lower corner where the
-metadata says. With ``wrap_raw=False`` neuroglancer reads the
-files itself. ``RAW_SHADER`` and ``prediction_shader`` are the layers'
-shaders, their contrast windows sampled from the data where it can be read.
+as a ``LocalVolume``, both opened with worldarray (``io.raw.open_raw``) and
+indexed through ``LazyNormalization`` so that the input chain applies to
+what is drawn (never to a segmentation's ids), and placed by a source
+transform that puts voxel 0's lower corner where the metadata says. With
+``wrap_raw=False`` neuroglancer reads the files itself. ``RAW_SHADER`` and
+``prediction_shader`` are the layers' shaders, their contrast windows
+sampled from the data where it can be read.
 
 ``ScalePyramid`` is adapted from funlib.show.neuroglancer's scale_pyramid.py
 (https://github.com/funkelab/funlib.show.neuroglancer).
@@ -24,11 +25,58 @@ from dataclasses import dataclass
 
 import neuroglancer
 import numpy as np
+import tensorstore as ts
 
-from cellmap_flow.image_data_interface import ImageDataInterface, apply_norms
 from cellmap_flow.io import metadata, paths
+from cellmap_flow.io.raw import apply_norms, channel_select, open_raw, spatial_axes, spatial_shape
+from cellmap_flow.process_chain import process_chain
 
 logger = logging.getLogger(__name__)
+
+
+class LazyNormalization:
+    """A worldarray array seen through the input chain, for neuroglancer to index.
+
+    The channel and the normalizers are looked up on every access rather than
+    fixed when the layer was made: a layer that has already served chunks must
+    still follow a ChannelSelector or a normalizer changed in the dashboard
+    afterwards. Follows the process's chain (``process_chain().input_norms``);
+    ``normalize=False`` selects the channel but applies no normalizer (a
+    segmentation's ids, or sampling the stored values).
+    """
+
+    def __init__(self, array, normalize=True):
+        self.array = array
+        self.normalize = normalize
+
+    def selected(self):
+        """The array's tensorstore (unnormalized) with its channel axis pinned
+        to the channel the chain selects; all of it when it has spatial axes only."""
+        select = channel_select(self.array, process_chain().input_norms)
+        if select is None:
+            return self.array.ts
+        ((axis, channel),) = select.items()
+        return self.array.ts[ts.d[self.array.axes.index(axis)][channel]]
+
+    @property
+    def dtype(self):
+        """The dtype indexing gives: the last step of the chain that declares
+        one decides, and steps without one (ChannelSelector) pass their
+        input's through; the stored dtype with ``normalize=False``."""
+        for norm in reversed(process_chain().input_norms if self.normalize else []):
+            if norm.dtype is not None:
+                return np.dtype(norm.dtype)
+        return self.array.dtype
+
+    def __getitem__(self, index):
+        data = self.selected()[index].read().result()
+        return apply_norms(data) if self.normalize else data
+
+    def __getattr__(self, attr):
+        if attr in ("array", "normalize"):
+            # Not set yet (e.g. while unpickling); don't recurse.
+            raise AttributeError(attr)
+        return getattr(self.selected(), attr)
 
 
 # Shader for the raw EM layer. ``range`` is the displayed contrast window;
@@ -126,30 +174,29 @@ def flow_shader(color, value_range, flow_y, flow_x, display_channel=None, dtype=
                               flow_x=int(flow_x))
 
 
-def _dtype_default_range(image):
+def _dtype_default_range(array, normalize=True):
     """Fallback display range when percentiles can't be computed.
 
-    The stored dtype's range put through the input chain ``image`` is shown
-    through: uint8 is [0, 255] as it is, [0, 1] after a MinMaxNormalizer, and
-    [-1, 1] with ``x*2-1`` after that. It used to be the range of the dtype the
-    chain declares, so any float chain got [-1, 1], and a pyramid got none of
-    this: [0, 255] over [0, 1] data, one flat colour. When the chain cannot be
-    run on the two ends, the declared dtype's range, [-1, 1] for a float.
+    The stored dtype's range put through the input chain ``array`` is shown
+    through (none with ``normalize=False``): uint8 is [0, 255] as it is,
+    [0, 1] after a MinMaxNormalizer, and [-1, 1] with ``x*2-1`` after that. It
+    used to be the range of the dtype the chain declares, so any float chain
+    got [-1, 1], and a pyramid got none of this: [0, 255] over [0, 1] data,
+    one flat colour. When the chain cannot be run on the two ends, the
+    declared dtype's range, [-1, 1] for a float.
     """
-    view = image._view()
-    stored = np.dtype(getattr(view.selected().dtype, "numpy_dtype", view.selected().dtype))
-    if stored.kind in "ui":
+    stored = array.dtype
+    if normalize and stored.kind in "ui":
         info = np.iinfo(stored)
-        ends = np.array([info.min, info.max], dtype=stored).reshape((1,) * (len(image.shape) - 1) + (2,))
+        ends = np.array([info.min, info.max], dtype=stored).reshape((1,) * (len(array.spatial) - 1) + (2,))
         try:
-            mapped = np.asarray(apply_norms(ends, view.norms_to_apply()), dtype=float).ravel()
+            mapped = np.asarray(apply_norms(ends), dtype=float).ravel()
             lo, hi = float(mapped.min()), float(mapped.max())
             if np.isfinite([lo, hi]).all() and hi > lo:
                 return lo, hi
         except Exception as e:
             logger.debug(f"Could not put the dtype's range through the input chain: {e}")
-    dtype = image.ts.dtype
-    dtype = np.dtype(getattr(dtype, "numpy_dtype", dtype))
+    dtype = LazyNormalization(array, normalize).dtype
     if dtype.kind in "ui":
         info = np.iinfo(dtype)
         return float(info.min), float(info.max)
@@ -177,26 +224,23 @@ def _auto_contrast_range(paths, normalize, lo_pct=1.0, hi_pct=99.0):
     readable = []
     for path in reversed(paths):
         try:
-            image = ImageDataInterface(path, normalize=normalize)
+            array = open_raw(path)
         except Exception as e:
             logger.debug(f"Auto-contrast could not open {path}: {e}")
             continue
-        n_voxels = int(np.prod(image.shape))
+        n_voxels = int(np.prod(spatial_shape(array)))
         if n_voxels > MAX_VOXELS:
             break  # finer levels are only bigger -- stop rather than read them
         if n_voxels >= MIN_VOXELS:
-            readable.append((path, image))
-    for path, image in reversed(readable):
+            readable.append((path, array))
+    for path, array in reversed(readable):
         try:
-            # Index the store directly, the way neuroglancer's LocalVolume
-            # does, so LazyNormalization.__getitem__ runs and the sample is in
-            # the same space as what gets displayed. to_ndarray_ts() would
-            # silently give unnormalized data here: its roi=None branch returns
-            # the underlying store's read() without applying the chain
-            # (only the roi branch does), so the percentiles would land in raw
-            # uint8 space while the layer shows [-1, 1] -- a 0-168 range over
-            # data that never exceeds 1, i.e. an all-black image.
-            arr = np.asarray(image.ts[...]).ravel()
+            # Read through LazyNormalization, as neuroglancer's LocalVolume
+            # indexes the layer, so the sample is in the same space as what
+            # gets displayed. Sampled unnormalized, the percentiles would land
+            # in raw uint8 space while the layer shows [-1, 1] -- a 0-168
+            # range over data that never exceeds 1, i.e. an all-black image.
+            arr = np.asarray(LazyNormalization(array, normalize)[...]).ravel()
             arr = _without_padding(arr[np.isfinite(arr)])
             if arr.size == 0:
                 continue
@@ -301,26 +345,26 @@ def _view_contrast_range(paths, normalize, view, lo_pct=1.0, hi_pct=99.0):
     _auto_contrast_range. ``paths`` is ordered fine -> coarse.
     """
     try:
-        images = [ImageDataInterface(path, normalize=normalize) for path in paths]
+        arrays = [open_raw(path) for path in paths]
         level = 0
-        for index, image in enumerate(images):
-            if min(float(v) for v in image.voxel_size) <= view.pixel_nm * 1.01:
+        for index, array in enumerate(arrays):
+            if min(array.voxel_size) <= view.pixel_nm * 1.01:
                 level = index
         # Zoomed in on a large panel that is a million voxels a plane, about
         # 3 s from /nrs: read coarser levels until a plane is at most
         # MAX_VIEW_REACH voxels each way. Their percentiles barely differ.
-        while (level + 1 < len(images)
-               and VIEW_HALF_WIDTH_PX * view.pixel_nm / min(float(v) for v in images[level].voxel_size)
-               > MAX_VIEW_REACH):
+        while (level + 1 < len(arrays)
+               and VIEW_HALF_WIDTH_PX * view.pixel_nm / min(arrays[level].voxel_size) > MAX_VIEW_REACH):
             level += 1
-        shown = images[level]
-        names = list(shown.axes_names)[-len(shown.voxel_size):]
+        array = arrays[level]
+        names = spatial_axes(array)
         if any(name not in view.center for name in names):
             return None
-        voxel_size = np.asarray([float(v) for v in shown.voxel_size])
-        offset = np.asarray([float(v) for v in shown.offset])
-        shape = np.asarray(shown.ts.shape[-len(names):])
-        centre = np.floor((np.asarray([view.center[name] for name in names]) - offset) / voxel_size).astype(int)
+        voxel_size = np.asarray(array.voxel_size, dtype=float)
+        corner = np.asarray(array.corner, dtype=float)
+        shape = np.asarray(spatial_shape(array))
+        shown = LazyNormalization(array, normalize)
+        centre = np.floor((np.asarray([view.center[name] for name in names]) - corner) / voxel_size).astype(int)
         reach = np.ceil(VIEW_HALF_WIDTH_PX * view.pixel_nm / voxel_size).astype(int)
         values = []
         for axis in range(len(names)):
@@ -331,7 +375,7 @@ def _view_contrast_range(paths, normalize, view, lo_pct=1.0, hi_pct=99.0):
                 else slice(max(centre[i] - reach[i], 0), min(centre[i] + reach[i] + 1, shape[i]))
                 for i in range(len(names))
             )
-            values.append(np.asarray(shown.ts[(Ellipsis, *index)]).ravel())
+            values.append(np.asarray(shown[(Ellipsis, *index)]).ravel())
         arr = np.concatenate(values) if values else np.empty(0)
         arr = _without_padding(arr[np.isfinite(arr)])
         if arr.size < 1024:
@@ -343,23 +387,22 @@ def _view_contrast_range(paths, normalize, view, lo_pct=1.0, hi_pct=99.0):
         return None
 
 
-def _shown_dtype(paths, normalize, image=None):
-    """The dtype of what the raw layer shows: ``image``'s, read through its
-    input chain, else that of ``paths[0]`` read as ``normalize`` says; None
-    when neither can be opened."""
+def _shown_dtype(paths, normalize, array=None):
+    """The dtype of what the raw layer shows: ``array``'s (an open level), else
+    that of ``paths[0]``, read as ``normalize`` says; None when neither can be
+    opened."""
     try:
-        if image is None:
-            image = ImageDataInterface(paths[0], normalize=normalize)
-        return image.ts.dtype
+        return LazyNormalization(open_raw(paths[0]) if array is None else array, normalize).dtype
     except Exception as e:
         logger.debug(f"Could not tell the raw layer's dtype: {e}")
         return None
 
 
-def _raw_shader(paths, normalize, image_for_fallback=None, view=None):
+def _raw_shader(paths, normalize, array=None, view=None):
     """Build the raw-layer shader, preferring a data-derived contrast range:
     that at ``view`` when given (_view_contrast_range), else the whole
-    volume's; else the range of ``image_for_fallback``'s dtype, else 0-255."""
+    volume's; else the range of the dtype of ``array`` (an open level, read as
+    ``normalize`` says), else 0-255."""
     rng = _view_contrast_range(paths, normalize, view) if paths and view is not None else None
     if rng is not None:
         logger.info("Raw contrast taken from the viewer's view")
@@ -372,14 +415,10 @@ def _raw_shader(paths, normalize, image_for_fallback=None, view=None):
         wlo, whi = lo - pad, hi + pad
         logger.info(f"Raw auto-contrast range [{lo:.6g}, {hi:.6g}]")
     else:
-        lo, hi = (
-            _dtype_default_range(image_for_fallback)
-            if image_for_fallback is not None
-            else (0.0, 255.0)
-        )
+        lo, hi = _dtype_default_range(array, normalize) if array is not None else (0.0, 255.0)
         wlo, whi = lo, hi
         logger.info(f"Raw auto-contrast unavailable; using [{lo:.6g}, {hi:.6g}]")
-    dtype = _shown_dtype(paths, normalize, image_for_fallback) if paths or image_for_fallback else None
+    dtype = _shown_dtype(paths, normalize, array) if paths or array is not None else None
     return RAW_SHADER.format(bounds=_invlerp_bounds(lo, hi, wlo, whi, dtype))
 
 
@@ -524,21 +563,19 @@ def get_raw_layer(
         try:
 
             def level(scale):
-                image = ImageDataInterface(
-                    paths.join(dataset_path, scale), normalize=normalize and not segmentation
-                )
-                return image, _local_volume(image)
+                array = open_raw(paths.join(dataset_path, scale))
+                return array, _local_volume(array, normalize and not segmentation)
 
             # Each level's metadata read and tensorstore open is a round trip
             # to wherever the data is, about 40 ms each on gs://, where a
             # volume can have a dozen levels: they are made side by side.
             with ThreadPoolExecutor(max_workers=len(scales)) as pool:
-                images, layers = (list(built) for built in zip(*pool.map(level, scales)))
+                arrays, layers = (list(built) for built in zip(*pool.map(level, scales)))
             # ScalePyramid serves every level as a downsampling of the finest
             # one, so the finest level's corner places them all. That holds
             # for pyramids whose levels share a corner (Janelia's all sit at
             # -4 nm); a level with a different corner cannot be expressed.
-            finest = min(images, key=lambda image: tuple(image.voxel_size))
+            finest = min(arrays, key=lambda array: tuple(array.voxel_size))
 
             # Previously this branch set no shader at all, which neuroglancer
             # reports back as the literal string "None" -- see the guard in
@@ -548,8 +585,7 @@ def get_raw_layer(
                     url=ScalePyramid(layers), transform=_corner_transform(finest)
                 ),
                 lambda: _raw_shader(
-                    [paths.join(dataset_path, sc) for sc in scales], normalize, image_for_fallback=finest,
-                    view=view,
+                    [paths.join(dataset_path, sc) for sc in scales], normalize, array=finest, view=view,
                 ),
                 segmentation,
                 disable_meshes,
@@ -559,47 +595,50 @@ def get_raw_layer(
 
     # One array, or a pyramid that could not be shown as one. An image here
     # reads through the input chain whatever normalize says, as it always has.
-    image = ImageDataInterface(original_dataset_path, normalize=not segmentation)
+    array = open_raw(original_dataset_path)
     return _layer(
         neuroglancer.LayerDataSource(
-            url=_local_volume(image), transform=_corner_transform(image)
+            url=_local_volume(array, not segmentation), transform=_corner_transform(array)
         ),
-        lambda: _raw_shader([original_dataset_path], normalize, image_for_fallback=image, view=view),
+        lambda: _raw_shader([original_dataset_path], normalize, array=array, view=view),
         segmentation,
         disable_meshes,
     )
 
 
-def _dimensions(image):
+def _dimensions(array):
+    """The layer's dimensions: ``array``'s spatial axes, at its voxel size in nm."""
     return neuroglancer.CoordinateSpace(
-        names=image.axes_names, units="nm", scales=image.voxel_size
+        names=list(spatial_axes(array)), units="nm", scales=list(array.voxel_size)
     )
 
 
-def _local_volume(image):
-    """``image`` as a LocalVolume indexed from 0; _corner_transform places it."""
+def _local_volume(array, normalize):
+    """``array`` as a LocalVolume indexed from 0, through the input chain
+    unless ``normalize`` is off (LazyNormalization); _corner_transform places it."""
     return neuroglancer.LocalVolume(
-        data=image.ts,
-        dimensions=_dimensions(image),
-        voxel_offset=[0] * len(image.axes_names),
+        data=LazyNormalization(array, normalize),
+        dimensions=_dimensions(array),
+        voxel_offset=[0] * len(array.spatial),
     )
 
 
-def _corner_transform(image):
-    """The transform putting ``image``'s voxel 0 lower corner at its offset.
+def _corner_transform(array):
+    """The transform putting ``array``'s voxel 0 lower corner where it is (its
+    ``corner``, nm).
 
     LocalVolume's own voxel_offset is a whole number of voxels, so it cannot
     hold an OME corner such as -4 nm at 8 nm -- and it was being handed the
     offset in nm, which drew any dataset not at the origin far from its data.
     The matrix's translation is in voxels of the output dimensions.
     """
-    rank = len(image.axes_names)
-    offset = np.asarray(image.offset, dtype=float)
-    voxel_size = np.asarray(image.voxel_size, dtype=float)
+    rank = len(array.spatial)
+    corner = np.asarray(array.corner, dtype=float)
+    voxel_size = np.asarray(array.voxel_size, dtype=float)
     matrix = np.hstack([np.eye(rank), np.zeros((rank, 1))])
-    matrix[rank - len(offset):, rank] = offset / voxel_size
+    matrix[:, rank] = corner / voxel_size
     return neuroglancer.CoordinateSpaceTransform(
-        output_dimensions=_dimensions(image), matrix=matrix
+        output_dimensions=_dimensions(array), matrix=matrix
     )
 
 

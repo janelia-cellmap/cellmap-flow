@@ -7,8 +7,8 @@ site's default queue) when the file leaves them out; the model entries under
 ``resolve_data_path`` is the one rule for a model's ``data_path`` and
 ``scale``, used by every launcher. Every model's input is resampled to its
 voxel size when the data has no level at it (``cellmap_flow yaml`` passes
-``--resample`` to each server; blockwise reads with
-``on_voxel_size_mismatch="resample"``) unless the YAML says
+``--resample`` to each server; blockwise opens the raw with
+``io.raw.open_raw(..., resample=True)``) unless the YAML says
 ``resample: false``.
 """
 

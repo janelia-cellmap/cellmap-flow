@@ -226,8 +226,8 @@ def _set_chain_and_redraw(spec, dashboard_url, *, built=None, builder=None) -> l
     # Save current shader state from viewer before refreshing layers
     _save_shaders_from_viewer()
 
-    # The raw layer is displayed *through* the input normalizers -- its
-    # tensorstore is wrapped by LazyNormalization -- so its value range moves
+    # The raw layer is displayed *through* the input normalizers -- every
+    # chunk viewer.raw serves goes through them -- so its value range moves
     # when they change: plain uint8 raw spans 0-255, but MinMax+Lambda("x*2-1")
     # puts the same data in [-1, 1]. Restoring a contrast range captured under
     # the old normalization would then map every voxel outside the new range,

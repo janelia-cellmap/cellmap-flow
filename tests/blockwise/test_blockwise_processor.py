@@ -19,7 +19,7 @@ from cellmap_flow.blockwise.blockwise_processor import (
     precheck,
     spawn_worker,
 )
-from cellmap_flow.image_data_interface import ImageDataInterface
+from cellmap_flow.io.raw import open_raw
 from cellmap_flow.models.models_config import ScriptModelConfig
 from cellmap_flow.post.postprocessors import MortonSegmentationRelabeling, ThresholdPostprocessor
 from cellmap_flow.jobs.site import current_site
@@ -96,7 +96,7 @@ def test_a_block_gets_the_same_label_ids_served_or_blockwise(ome_pyramid, poolin
                      resample=resample)
     CellMapFlowBlockwiseProcessor(path, create=True)
     worker = CellMapFlowBlockwiseProcessor(path, create=False)
-    assert worker.idi_raw.resampled is resample
+    assert worker.raw_input.array.resampled is resample
     server = ChunkmirageServer(raw, ScriptModelConfig(script_path=model), resample=resample)
     client = TestClient(server.app)
     for index in range(2):  # along z
@@ -154,7 +154,7 @@ def test_a_box_runs_output_is_the_box(ome_pyramid, pooling_model, task_yaml, mon
     assert {roi.shape for _, roi in blocks} == {Coordinate(32, 32, 32)}
     # Readers place it at the box: by the group's OME translation, or by s0's funlib offset.
     for read in (master.output_path / "a", master.output_path / "a" / "s0"):
-        assert tuple(ImageDataInterface(str(read)).offset) == (8, 16, 0), read
+        assert tuple(open_raw(str(read)).corner) == (8.0, 16.0, 0.0), read
 
 
 def test_a_box_is_cut_to_the_data(ome_pyramid, pooling_model, task_yaml):

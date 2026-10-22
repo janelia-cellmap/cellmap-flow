@@ -90,14 +90,12 @@ def _raw_dtype_and_range(dataset_path):
 
     dtype_name, value_range = None, None
     try:
-        from cellmap_flow.image_data_interface import ImageDataInterface
+        from cellmap_flow.io.metadata import open_level
         from cellmap_flow.viewer.raw import _auto_contrast_range
 
-        # normalize=False: we want the range of the data as stored, which is
-        # what the normalizers being proposed have to map from.
-        idi = ImageDataInterface(dataset_path, normalize=False)
-        dtype = idi.ts.dtype
-        dtype = np.dtype(getattr(dtype, "numpy_dtype", dtype))
+        # The range of the data as stored, which is what the normalizers
+        # being proposed have to map from.
+        dtype = open_level(dataset_path).dtype
         dtype_name = dtype.name
         if dtype.kind in "ui":
             info = np.iinfo(dtype)
