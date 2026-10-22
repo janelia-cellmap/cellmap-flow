@@ -246,11 +246,12 @@ of those or of an accepted AI annotation (one stack, 10 deep). A seed reads
 the model's own output, through its normalizers and none of its
 postprocessors (`Inference.readOutput`: the model stage served beside the
 layer, so the chunks already computed for the viewer are reused), placed on
-the volume's grid as the server places it (`src/label-it/prediction.ts`), and
-segments it by threshold and connected components or, for an affinity model,
-the mutex watershed (`src/label-it/segment.ts`, on the segmenters the
-postprocessors already use). These are checked against the Python on
-fixtures it writes (`test/fixtures/make_label_it_fixtures.py`). The server's
+the volume's grid and segmented by threshold and connected components by the
+server's own Python (`cellmap_flow/portable/label_it.py`, in the page's
+Pyodide worker), or, for an affinity model, by the mutex watershed
+(`src/label-it/segment.ts`, on the segmenter the postprocessors already use,
+checked against the Python on fixtures it writes,
+`test/fixtures/make_label_it_fixtures.py`). The server's
 distance watershed and a model's own instances are not offered: no model the
 browser runs outputs a distance or instance ids.
 

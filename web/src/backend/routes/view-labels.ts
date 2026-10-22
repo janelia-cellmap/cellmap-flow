@@ -6,10 +6,15 @@
 // gives them.
 //
 // - POST .../seed: the chosen model's prediction there, segmented into
-//   objects (label-it/segment.ts: threshold and connected components, or
-//   the mutex watershed for an affinity model), each written with an id of
-//   its own (2 and up), background 1. The user then cleans it up with the
-//   brush, which is far quicker than painting a whole object from nothing.
+//   objects (threshold and connected components, or the mutex watershed
+//   for an affinity model), each written with an id of its own (2 and up),
+//   background 1. The user then cleans it up with the brush, which is far
+//   quicker than painting a whole object from nothing. The seed's maths is
+//   the Python the server runs (cellmap_flow/portable/label_it.py, called
+//   through label_it_calls.py in the engine's Pyodide worker): the
+//   request's options, the channels it reads, where the prediction lies on
+//   the volume's grid, the probability and the components; only the mutex
+//   watershed itself runs here (label-it/segment.ts says why).
 // - POST .../background: every unannotated voxel 1, for a region the model
 //   fills with false positives.
 // - POST .../split: the box's foreground relabelled by connected component,
@@ -35,17 +40,21 @@
 // - The prediction is the page's own (Inference.readOutput: the model
 //   stage's output, the chain's normalizers and none of its postprocessors,
 //   as the server reads its model server's array with no postprocessing),
-//   placed on the volume's grid by label-it/prediction.ts. The "running
-//   servers" are the served models, finetuned ones among them, and the
-//   default is the volume model's latest finetune served, named
-//   `<model>-ft<n>` here (models/finetuned.ts) where the server's are
-//   `<model>_finetuned...`, else the model itself, else the only one served.
+//   read by label-it/prediction.ts. The "running servers" are the served
+//   models, finetuned ones among them, and the default is the volume
+//   model's latest finetune served, named `<model>-ft<n>` here
+//   (models/finetuned.ts) where the server's are `<model>_finetuned...`,
+//   else the model itself, else the only one served.
 // - The methods: components for every model, the mutex watershed for an
-//   affinity model; label-it/segment.ts says why distance_watershed and
-//   instances are not offered.
+//   affinity model (methodsFor says why distance_watershed and instances
+//   are not offered). An affinity model's offsets are the ones its channel
+//   names give, by the server's rule for a model whose script says none
+//   (label_it.affinity_offsets).
 // - No MinIO: nothing to check is serving, nothing to pull to disk after.
 // - A seed reads the dataset the engine has open, so a volume painted on
-//   another dataset is refused, as an AI annotation run is.
+//   another dataset is refused, as an AI annotation run is; and the Python
+//   runs in that dataset's engine, so with no dataset open a seed is
+//   refused before anything else.
 //
 // The refusals keep the Python's order, statuses and words (where a word
 // was the server's own, "server", the browser's), and the answers its keys:
@@ -53,12 +62,12 @@
 import { boxVoxels, paintBox, restoreBox, rewriteForeground } from "../../ai-annotate/fill";
 import { relabelObjects, seedLabels } from "../../ai-annotate/labels";
 import { AIAnnotateError, type Labels, type UndoEntry } from "../../ai-annotate/types";
-import type { AppContext, PaintVolume, ServedModel } from "../../contracts";
-import { readVolume } from "../../finetune/volume";
+import type { AppContext, ModelEntry, PaintVolume, ServedModel } from "../../contracts";
+import { hasAffinityChannels, readVolume } from "../../finetune/volume";
 import { PYTHON } from "../../generated/python-data";
-import { asConnectivity, asBoolLike, asInt } from "../../infer/label";
-import { readPrediction, servedLevel } from "../../label-it/prediction";
-import { methodsFor, outputTypeOf, SEED_METHODS, type SeedMethod, seedPlan, segmentPrediction } from "../../label-it/segment";
+import { asConnectivity, asBoolLike } from "../../infer/label";
+import { type Placement, placementArgs, readRegion, servedLevel } from "../../label-it/prediction";
+import { type Block, bufferOf, LABEL_IT, mutexObjects } from "../../label-it/segment";
 import { paintLayerName } from "../../viewer/layers";
 import type { Router } from "../router";
 import { json, message, objectBody } from "../router";
@@ -158,7 +167,7 @@ export function viewLabelsRoutes(router: Router): ViewLabelsState {
     const volumeId = ctx.session.state.paintVolume;
     const volume = await sessionVolume(ctx);
     const sources = ctx.infer.served();
-    const methods: Record<string, SeedMethod[]> = {};
+    const methods: Record<string, string[]> = {};
     for (const s of sources) methods[s.entry.name] = methodsFor(outputTypeOf(s.entry));
     return json(200, {
       success: true,
@@ -182,20 +191,14 @@ export function viewLabelsRoutes(router: Router): ViewLabelsState {
   router.post(`${BASE}/seed`, async (req, _params, ctx) => {
     const body = objectBody(req) ?? {};
     try {
-      const threshold = body.threshold;
-      if (threshold !== undefined && threshold !== null) {
-        const t = pyFloat(threshold);
-        if (!(t >= 0 && t <= 1)) throw new Refused(`threshold must be between 0 and 1, got ${pyStr(threshold)}`, 400);
-      }
-      const minSize = valueOr400(() => asInt(body.min_size as never, 0, "min_size"));
-      if (minSize < 0) throw new Refused(`min_size cannot be negative, got ${minSize}`, 400);
-      const method = body.method || "components";
-      if (typeof method !== "string" || !(SEED_METHODS as readonly string[]).includes(method)) {
-        throw new Refused(`method must be one of ${SEED_METHODS.join(", ")}, got ${typeof method === "string" ? `'${method}'` : pyStr(method)}`, 400);
-      }
-      const connectivity = valueOr400(() => asConnectivity((body.connectivity ?? 1) as never, 3));
-      const perSlice = asBoolLike(body.per_slice as never);
-      const selectChannel = body.select_channel === undefined || body.select_channel === null ? null : valueOr400(() => asInt(body.select_channel as never, 0, "select_channel"));
+      // The Python runs in the open dataset's engine, and a seed reads that
+      // dataset: without one there is nothing to seed from.
+      const dataset = ctx.infer.dataset();
+      if (!dataset) throw new Refused(NO_DATASET);
+      // The request's options as the server reads them, its defaults and its
+      // refusals (label_it.seed_options), before anything else, as there.
+      const { options } = refusedOr(await ctx.infer.python<{ options: SeedOptions } | Refusal>(`${LABEL_IT}:seed_options`, body));
+      const method = options.method;
 
       const { volume, lo, hi } = await targetBox(ctx, body);
       const confirmation = confirmationNeeded(body, lo, hi);
@@ -206,40 +209,40 @@ export function viewLabelsRoutes(router: Router): ViewLabelsState {
       if (!served) throw new Refused(`${base} is not served. Serve it from the Models tab, or pick a model.`);
       // The prediction is the open dataset's: a volume painted on another
       // one would get it at the wrong place.
-      const dataset = ctx.infer.dataset();
-      if (!dataset) throw new Refused("No dataset is open. Open the one the annotation volume was painted on.");
       if (dataset.url !== volume.dataset_path) {
         throw new Refused(`The annotation volume was painted on ${volume.dataset_path}, but the viewer shows ${dataset.url}: open that dataset again, or make a new volume on this one.`);
       }
       const name = served.entry.name;
-      const plan = valueOr400(() => seedPlan(served.entry, selectChannel));
-      const offered = methodsFor(plan.outputType);
-      if (!(offered as string[]).includes(method)) throw new Refused(`${name} cannot seed by ${method}; it offers ${offered.join(", ")}`, 400);
+      // What the seed reads of the model (label_it.seed_channels, the
+      // offsets by its channel names) and where the box lies on its level
+      // (label_it.placement), by the Python.
+      const plan = refusedOr(await ctx.infer.python<SeedPlan | Refusal>(`${LABEL_IT}:seed_plan`, {
+        channel_names: served.entry.manifest.channels,
+        select_channel: body.select_channel ?? null,
+        ...placementArgs(volume, lo, hi, servedLevel(dataset, served.entry)),
+      }));
+      const outputType = outputTypeOf(served.entry);
+      const offered = methodsFor(outputType);
+      if (!offered.includes(method)) throw new Refused(`${name} cannot seed by ${method}; it offers ${offered.join(", ")}`, 400);
+      const placement = plan.placement;
+      if (!placement) throw new Refused("The view is outside what the model predicts.", 400);
 
-      let read: Awaited<ReturnType<typeof readPrediction>>;
+      let region: Block;
       try {
-        read = await readPrediction(ctx.infer, served.view, servedLevel(dataset, served.entry), volume, lo, hi);
+        region = await readRegion(ctx.infer, served.view, placement);
       } catch (e) {
         ctx.log(`Could not read the prediction to seed from: ${message(e)}`);
         throw new Refused(`Could not read the model's prediction: ${message(e)}`, 502);
       }
-      if (!read) throw new Refused("The view is outside what the model predicts.", 400);
-      const objects = valueOr400(() =>
-        segmentPrediction(method, read!.prediction, served.info.output_class, plan.channels, plan.offsets, {
-          threshold: threshold === undefined || threshold === null ? 0.5 : pyFloat(threshold),
-          minSize,
-          connectivity,
-          perSlice,
-        }),
-      );
+      const objects = await seedObjects(ctx, options, region, placement, plan, served.info.output_class);
       // An instance target needs ids apart from its neighbours'; a selected
       // channel trains as a binary target. Ids counting up need room: an
       // instance target on a uint16 volume gets them, a uint8 volume reuses
       // free ids.
-      const instanceTarget = plan.outputType === "affinities" && selectChannel === null;
+      const instanceTarget = outputType === "affinities" && (body.select_channel === undefined || body.select_channel === null);
       const labelsFor = (existing: Labels) => seedLabels(objects, existing, instanceTarget && existing instanceof Uint16Array);
-      const answer = await fill(ctx, volume, read.lo, read.hi, labelsFor);
-      return json(200, { ...answer, model: name, threshold: threshold ?? null, method });
+      const answer = await fill(ctx, volume, placement.lo, placement.hi, labelsFor);
+      return json(200, { ...answer, model: name, threshold: body.threshold ?? null, method });
     } catch (e) {
       return answerError(ctx, e, "seeding the view from the prediction");
     }
@@ -317,6 +320,81 @@ export function viewLabelsRoutes(router: Router): ViewLabelsState {
   });
 
   return state;
+}
+
+// ---------------------------------------------------------------------------
+// The seed
+// ---------------------------------------------------------------------------
+
+const NO_DATASET = "No dataset is open. Open the one the annotation volume was painted on.";
+
+/** A refusal the Python answers in place of its value: the message the
+ * server answers 400 with (a ValueError there). */
+interface Refusal {
+  error: string;
+}
+
+/** `answer`, or its refusal thrown as the 400 the server answers. */
+function refusedOr<T extends object>(answer: T | Refusal): T {
+  if ("error" in answer) throw new Refused(answer.error, 400);
+  return answer;
+}
+
+/** A seed's options, as label_it.seed_options reads them from the body. */
+interface SeedOptions {
+  method: string;
+  threshold: number;
+  min_size: number;
+  connectivity: number;
+  per_slice: boolean;
+}
+
+/** What a seed reads (label_it_calls.seed_plan): `channels` [start, stop)
+ * (null: every one), an affinity model's `offsets`, and where the box lies
+ * on the model's level (null: it does not). */
+interface SeedPlan {
+  channels: [number, number] | null;
+  offsets: number[][] | null;
+  placement: Placement | null;
+}
+
+/** What a model is trained on, as the browser tells it (the server's
+ * autodetect_output_type, by its channel-name test): "affinities" for a
+ * model with a channel named `*_aff*`, else "binary". */
+type OutputType = "affinities" | "binary";
+
+function outputTypeOf(entry: ModelEntry): OutputType {
+  return hasAffinityChannels(entry) ? "affinities" : "binary";
+}
+
+/** The seed methods that fit a model's output, the best fit first
+ * (view_labels.methods_for): the mutex watershed for affinities, then
+ * components, which fits every output and so is always offered, last.
+ *
+ * The server's other two fit outputs no browser model has:
+ * "distance_watershed" (a distance map's watershed from its h-maxima) and
+ * "instances" (a model that serves integer ids, Cellpose's masks). The
+ * browser's models are those of Hugging Face's cellmap/onnx-web-models,
+ * affinity models (channels mito_aff_z/y/x) and binary ones (nuc, er), all
+ * raw logits, so neither is ever offered, and a request for one is refused
+ * as the server refuses a method the model does not offer (the page lists
+ * them greyed out, saying what they need). */
+function methodsFor(outputType: OutputType): string[] {
+  return outputType === "affinities" ? ["mutex_watershed", "components"] : ["components"];
+}
+
+/** The objects the seed's method makes of `region` (the served box
+ * `placement` reads), 0 background and 1..n, over the placement's box, z,
+ * y, x: for components, the Python's (label_it_calls.seed); for the mutex
+ * watershed, its input from the Python and the watershed here
+ * (label-it/segment.ts mutexObjects). `region` is handed to the worker. */
+async function seedObjects(ctx: AppContext, options: SeedOptions, region: Block, placement: Placement, plan: SeedPlan, outputClass: string | null | undefined): Promise<Uint32Array> {
+  const args = { ...options, output_class: outputClass ?? null, channels: plan.channels, offsets: plan.offsets, indices: placement.indices, shape: region.shape };
+  const out = refusedOr(await ctx.infer.python<{ value: { shape?: number[] }; arrays: ArrayBuffer[] } | Refusal>(`${LABEL_IT}:seed`, args, [bufferOf(region.data)]));
+  if (options.method === "mutex_watershed") {
+    return mutexObjects({ data: new Float32Array(out.arrays[0]), shape: out.value.shape! }, plan.offsets!, options.threshold, options.min_size);
+  }
+  return new Uint32Array(out.arrays[0]);
 }
 
 // ---------------------------------------------------------------------------
@@ -402,7 +480,7 @@ function predictionSource(sources: ServedModel[], base: string, chosen: string |
 // ---------------------------------------------------------------------------
 
 /** `fn`'s value, its error a 400 with the error's message: the Python's
- * ValueError from parsing a field or planning the seed. */
+ * ValueError from parsing a field. */
 function valueOr400<T>(fn: () => T): T {
   try {
     return fn();
@@ -410,16 +488,6 @@ function valueOr400<T>(fn: () => T): T {
     if (e instanceof Refused) throw e;
     throw new Refused(message(e), 400);
   }
-}
-
-/** Python's float() of a body value: a number as it is, a bool as 0 or 1, a
- * string when it is a float literal (whitespace around it allowed), and NaN
- * for anything float() refuses, which the caller refuses in turn. */
-function pyFloat(value: unknown): number {
-  if (typeof value === "number") return value;
-  if (typeof value === "boolean") return value ? 1 : 0;
-  if (typeof value === "string" && /^\s*[+-]?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?\s*$/.test(value)) return Number(value);
-  return NaN;
 }
 
 /** A value as Python's str() shows it in a refusal: a list as `[1, 2]`, None for null. */
