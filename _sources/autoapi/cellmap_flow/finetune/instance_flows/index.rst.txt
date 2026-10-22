@@ -1,0 +1,137 @@
+cellmap_flow.finetune.instance_flows
+====================================
+
+.. py:module:: cellmap_flow.finetune.instance_flows
+
+.. autoapi-nested-parse::
+
+   Flow targets from painted instances, and the masked loss a flow model trains on.
+
+   A flow model segments instances in 2D by predicting, at every pixel, the
+   direction towards the centre of the object it belongs to (a Y and an X
+   flow) and whether it belongs to one at all (a foreground logit); the
+   instances are recovered by following the flows. Cellpose does this, and so
+   can any network that predicts those three channels: nothing here is tied to
+   one.
+
+   The annotation is an instance patch in the painted scheme of
+   ``target_transforms`` (0 unannotated, 1 background, each id from 2 one
+   instance). ``FlowTargetTransform`` makes it a target of three channels,
+   ``[flow_scale * flowY, flow_scale * flowX, foreground]``, slice by slice,
+   with a mask per channel; ``FlowLoss`` compares a prediction
+   ``[flowY, flowX, foreground logit]`` with it.
+
+   Which voxels are supervised:
+
+   - the foreground channel: every painted voxel (unpainted ones may be
+     either, so they say nothing);
+   - the flow channels: the painted voxels, less every instance that touches
+     the patch's y or x edge. A flow points at the centre of the whole
+     object, and an object cut by the patch edge has its centre somewhere
+     the patch cannot see: the flow computed from the part inside would be
+     confidently wrong.
+
+   Instances are taken per slice, as 2D connected components: one 3D id can
+   cross a slice in two places (a U-shaped object), and to a 2D model those are
+   two objects, each with its own centre.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.instance_flows.FLOW_SCALE
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.instance_flows.FlowTargetTransform
+   cellmap_flow.finetune.instance_flows.FlowLoss
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.instance_flows.instance_components
+   cellmap_flow.finetune.instance_flows.cellpose_flows
+   cellmap_flow.finetune.instance_flows.flow_targets
+
+
+Module Contents
+---------------
+
+.. py:data:: FLOW_SCALE
+   :value: 5.0
+
+
+.. py:function:: instance_components(ids: numpy.ndarray) -> numpy.ndarray
+
+   The 2D instances of one painted slice: (Y, X) ids -> (Y, X) labels 1..n, 0 elsewhere.
+
+   Every id from 2 up is split into its 8-connected components, and each
+   component gets a label of its own, numbered consecutively from 1 (what
+   flow computations such as Cellpose's expect). Background (1) and
+   unpainted (0) voxels are 0.
+
+
+.. py:function:: cellpose_flows(labels: numpy.ndarray, device=None) -> numpy.ndarray
+
+   Cellpose's unit flows (2, Y, X), Y then X, for labels 1..n (0 none).
+
+   Cellpose's own computation (``dynamics.masks_to_flows_gpu``): heat
+   diffused from each object's median pixel, its gradient normalized to
+   unit length, zero off the objects. Imported here: Cellpose is only in
+   the environments of the models that use it.
+
+
+.. py:function:: flow_targets(annotation: numpy.ndarray, flow_fn: FlowFunction = cellpose_flows, flow_scale: float = FLOW_SCALE, device=None) -> Tuple[numpy.ndarray, numpy.ndarray]
+
+   The flow target and mask of one painted (Z, Y, X) patch, each (3, Z, Y, X) float32.
+
+   Channels ``[flow_scale * flowY, flow_scale * flowX, foreground]``, the
+   flows from ``flow_fn`` on each slice's ``instance_components``. See the
+   module docstring for which voxels each channel's mask supervises.
+
+
+.. py:class:: FlowTargetTransform(flow_fn: FlowFunction = cellpose_flows, flow_scale: float = FLOW_SCALE)
+
+
+
+   Painted instances (B, 1, Z, Y, X) as a flow model's target and mask, each (B, 3, Z, Y, X).
+
+   :param flow_fn: ``(labels (Y, X) 1..n, device) -> unit flows (2, Y, X)``;
+                   Cellpose's (``cellpose_flows``) by default. Another flow model
+                   may define its flows differently and pass its own.
+   :param flow_scale: what the network's flow output is to the unit flow (5
+                      for Cellpose).
+
+
+   .. py:attribute:: flow_fn
+
+
+   .. py:attribute:: flow_scale
+
+
+.. py:class:: FlowLoss(*args: Any, **kwargs: Any)
+
+
+
+   A flow model's loss: masked MSE of the flows, halved, plus masked BCE of the foreground.
+
+   ``pred`` is (B, 3, Z, Y, X): flowY, flowX and the foreground logit;
+   ``target`` and ``mask`` are FlowTargetTransform's. Each term is averaged
+   over the voxels its channels' mask supervises, so an unpainted voxel, or
+   one of an instance cut by the patch edge, contributes nothing. Unmasked
+   it is Cellpose's training loss (``train._loss_fn_seg``).
+
+
+   .. py:method:: forward(pred: torch.Tensor, target: torch.Tensor, mask: Optional[torch.Tensor] = None) -> torch.Tensor
+
+

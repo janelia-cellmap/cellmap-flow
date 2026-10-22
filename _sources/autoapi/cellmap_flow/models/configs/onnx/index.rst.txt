@@ -1,0 +1,321 @@
+cellmap_flow.models.configs.onnx
+================================
+
+.. py:module:: cellmap_flow.models.configs.onnx
+
+.. autoapi-nested-parse::
+
+   ``OnnxModelConfig``: an ONNX export as the browser mode runs it, served with ONNX Runtime.
+
+   The model is one of:
+
+   - ``path``: a local ``.onnx`` file. A model finetuned in the browser (the
+     file its *Download finetuned model* saves) carries its manifest in the
+     file's ``metadata_props``, under ``cellmap_flow.manifest`` (MANIFEST_KEY),
+     so the file alone says its voxel sizes, block sizes and channels. Any
+     other file says none of that: the entry gives ``input_voxel_size``, and the
+     block sizes and the channel count are read from the graph's input and
+     output shapes when they are fixed, else from ``input_size``,
+     ``output_size`` and ``channels``. A relative ``path`` in a YAML is taken
+     from the YAML file's folder (``config_relative_paths``), so an exported
+     YAML can name the downloaded file beside it.
+   - ``folder``: one model of a Hugging Face repo of web exports, ``repo``
+     (cellmap/onnx-web-models by default) at ``revision``: a folder with a
+     ``manifest.json`` and one ``.onnx`` per variant, a precision and a block
+     size. ``file`` names the variant's file (what the browser's Export Config
+     writes: the one it ran); without it, ``variant`` (fp32 by default) and
+     ``input_size`` (by default the largest block) choose one. Both files are
+     downloaded with huggingface_hub, as the huggingface type's are.
+
+   A manifest's fields are web/src/models/manifest.ts's, which ``parse_manifest``
+   reads the same way: the voxel sizes in nm, the channels, ``output`` (what the
+   output is: the exports' "raw logits"), ``input_norm`` (cellmap-flow steps),
+   ``io`` (the input and output tensors' names) and the variants. Anything the
+   entry gives (voxel sizes, sizes, channels, output) wins over the manifest.
+
+   Each forward is what the browser feeds (web/src/infer/stages.ts): one block
+   of float32 ``[1, 1, z, y, x]`` at the input size, normalized by the chain,
+   in and ``[1, C, z', y', x']`` out (``[1, z', y', x']`` is one channel); an
+   fp16 export whose graph takes float16 is given float16, and its output is
+   served as float32. A 2D student (input and output one slice thick, such as
+   setup_53_2d) is given one slice a call, ``slices_per_chunk`` slices a chunk,
+   as the bioimage type runs a 2D model. The session is wrapped in a torch
+   module (``_onnx_module``), so that the inference runner serves it as it
+   serves any network: the warmup forward checks the declared shapes against
+   the graph's, and its output probe sees an export's logits unbounded, so the
+   dashboard suggests a SigmoidPostprocessor (or the affinity chain for
+   affinities), as for any model whose output is logits. The price is one more
+   copy each way: the runner puts a block on the device, and the module hands
+   it to ONNX Runtime from the host (148³ float32 is 13 MB, milliseconds a
+   block next to the forward's tenths of a second).
+
+   The manifest's ``input_norm`` is what the browser feeds the model through;
+   here, as for every type, the session's chain (a YAML's json_data) does the
+   normalizing. ``declared_input_norm`` gives it to the dashboard's model
+   advice, which offers it with an Apply button, and the browser's Export
+   Config writes the chain the page ran with.
+
+   Not finetunable: the finetune trainer trains a torch module, with LoRA's
+   adapters or in full, and an ONNX graph is not one; its weights are tensors
+   in a protobuf, and no backward pass runs through ONNX Runtime's inference
+   sessions. The browser's own finetune trains an export's last layer, and
+   its result is served here.
+
+   ``onnxruntime`` is imported only when the model is built: the CLIs and the
+   dashboard's model form import every type. The server runs in pixi.toml's
+   ``onnx`` environment (onnxruntime-gpu on Linux, onnxruntime on the Mac)
+   unless the entry names another ``env``. The manifest is read without it
+   (``read_metadata``, ``read_manifest``), so ``cellmap_flow add`` and the
+   dashboard's *Add a model* can say what a file is.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.models.configs.onnx.logger
+   cellmap_flow.models.configs.onnx.MANIFEST_KEY
+   cellmap_flow.models.configs.onnx.VARIANTS
+   cellmap_flow.models.configs.onnx.DEFAULT_VARIANT
+   cellmap_flow.models.configs.onnx.DEFAULT_SLICES_PER_CHUNK
+   cellmap_flow.models.configs.onnx.MANIFEST_RETRY_SECONDS
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.models.configs.onnx.OnnxModelConfig
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.models.configs.onnx.read_metadata
+   cellmap_flow.models.configs.onnx.read_manifest
+   cellmap_flow.models.configs.onnx.parse_manifest
+   cellmap_flow.models.configs.onnx.choose_variant
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:data:: MANIFEST_KEY
+   :value: 'cellmap_flow.manifest'
+
+
+.. py:data:: VARIANTS
+   :value: ('fp32', 'fp16', 'int8w', 'int8w_fp16')
+
+
+.. py:data:: DEFAULT_VARIANT
+   :value: 'fp32'
+
+
+.. py:data:: DEFAULT_SLICES_PER_CHUNK
+   :value: 8
+
+
+.. py:data:: MANIFEST_RETRY_SECONDS
+   :value: 60
+
+
+.. py:function:: read_metadata(path) -> Dict[str, str]
+
+   The ``metadata_props`` of the ONNX model at ``path`` (ModelProto field 14), by key.
+
+   Read without onnx or onnxruntime, so the dashboard's environment can
+   read it: a model is a protobuf ModelProto, a run of fields, each a tag
+   (its number and wire type) and its value, a varint or a length-prefixed
+   run of bytes. Each field is stepped over but the metadata's entries; the
+   graph (field 7), nearly all of the file, is never read.
+
+   :raises ValueError: the file is not a protobuf message with a graph, so not
+       an ONNX model (a failed download's HTML page, say).
+
+
+.. py:function:: read_manifest(path) -> Optional[dict]
+
+   The cellmap-flow manifest the ONNX file at ``path`` carries (MANIFEST_KEY), parsed; None without one.
+
+   :raises ValueError: the file is not an ONNX model, or its manifest is not one.
+
+
+.. py:function:: parse_manifest(raw, where='manifest.json') -> dict
+
+   ``raw``, a manifest's JSON, checked and widened as the browser's ``parseManifest`` does.
+
+   The exports write a variant's block as one number (a cube) and ``io`` as
+   a sentence; here they are three numbers and ``{"input", "output"}``. A
+   variant of a precision not in VARIANTS is left out.
+
+   :raises ValueError: a field is missing or of the wrong kind; it says which.
+
+
+.. py:function:: choose_variant(manifest, file=None, variant=None, input_size=None) -> dict
+
+   The manifest's variant to serve: the one in ``file``, else of precision
+   ``variant`` (fp32 by default, else the first there is) with an input of
+   ``input_size`` voxels, by default the largest block.
+
+   :raises ValueError: no variant is the one asked for; the message lists them.
+
+
+.. py:class:: OnnxModelConfig(path: str = None, folder: str = None, repo: str = None, revision: str = None, file: str = None, variant: str = None, input_voxel_size: tuple = None, output_voxel_size: tuple = None, input_size: tuple = None, output_size: tuple = None, channels: list[str] = None, output: str = None, slices_per_chunk: int = None, name: str = None, scale=None)
+
+
+
+   An ONNX export, the browser mode's kind of model, served with ONNX Runtime.
+
+   :param path: a local .onnx file. Relative in a YAML: from the YAML's folder.
+   :param folder: a model's folder in ``repo`` (setup_54), instead of ``path``.
+   :param repo: the Hugging Face repo of ``folder``; cellmap/onnx-web-models.
+   :param revision: the repo's branch, tag or commit; its main branch.
+   :param file: the ``.onnx`` of ``folder`` to serve: one of its manifest's
+                variants (what the browser's Export Config writes).
+   :param variant: the precision to serve when ``file`` is not given: fp32
+                   (the default), fp16, int8w or int8w_fp16.
+   :param input_voxel_size: nm per input voxel (one number, or z, y, x). The
+                            manifest's; needed for a file without one.
+   :param output_voxel_size: nm per output voxel: by default the input's times
+                             the manifest's ratio of the two, else the input's.
+   :param input_size: voxels of the block the model reads (one number or z, y,
+                      x): the manifest's variant's, else the graph's input. For a
+                      ``folder``, it chooses the variant (the largest by default).
+   :param output_size: voxels it writes: the variant's, else the graph's output.
+   :param channels: the output channels' names; the manifest's, else
+                    channel_0, channel_1, ... for as many as the graph outputs.
+   :param output: what the output is, as the manifests say it ("raw logits").
+   :param slices_per_chunk: z slices a chunk of a 2D student (a model whose
+                            input and output are one slice thick), each one call; 8 by
+                            default. A 3D model ignores it.
+
+
+   .. py:attribute:: cli_name
+      :value: 'onnx'
+
+
+
+   .. py:attribute:: default_env
+      :value: 'onnx'
+
+
+
+   .. py:attribute:: finetunable
+      :value: False
+
+
+
+   .. py:attribute:: config_relative_paths
+      :value: ('path',)
+
+
+
+   .. py:attribute:: path
+      :value: None
+
+
+
+   .. py:attribute:: folder
+      :value: None
+
+
+
+   .. py:attribute:: repo
+      :value: None
+
+
+
+   .. py:attribute:: revision
+      :value: None
+
+
+
+   .. py:attribute:: file
+      :value: None
+
+
+
+   .. py:attribute:: variant
+      :value: None
+
+
+
+   .. py:attribute:: input_voxel_size
+      :value: None
+
+
+
+   .. py:attribute:: output_voxel_size
+      :value: None
+
+
+
+   .. py:attribute:: input_size
+      :value: None
+
+
+
+   .. py:attribute:: output_size
+      :value: None
+
+
+
+   .. py:attribute:: channels
+      :value: None
+
+
+
+   .. py:attribute:: output
+      :value: None
+
+
+
+   .. py:attribute:: slices_per_chunk
+      :value: None
+
+
+
+   .. py:attribute:: name
+      :value: None
+
+
+
+   .. py:attribute:: scale
+      :value: None
+
+
+
+   .. py:property:: hub_repo
+      :type: str
+
+
+
+   .. py:method:: declared_input_norm() -> Optional[list]
+
+      The input normalization the model's manifest declares, as
+      cellmap-flow steps (``[{"name": ..., **params}]``), or None.
+
+      For the dashboard's model advice (``suggest_input_norm``'s
+      ``declared``), which asks on every poll: a failed download is not
+      tried again for MANIFEST_RETRY_SECONDS.
+
+
+
+   .. py:method:: to_dict()
+
+      This config as a model entry, which ``registry.build_model`` rebuilds.
+
+      What the manifest or the graph decides unless told otherwise is
+      written only when it was given, so that an exported entry keeps
+      following the model.
+
+
+

@@ -1,0 +1,200 @@
+// The model picker at the top of the Annotation Crops panel: the served
+// models that can be finetuned (/api/finetune/models), and the one picked.
+import { esc } from "../../lib/dom.js";
+import { listen, MODELS_CHANGED_EVENT } from "../../lib/events.js";
+import { isBrowserMode } from "../../lib/page-data.js";
+import { poll } from "../../lib/poll.js";
+import { getAnswer } from "./requests.js";
+import { applyModelDefaults, setBrowserTraining } from "./training-form.js";
+
+// Models only appear in g.models_config once a pipeline has been submitted
+// on the main tab. The finetune tab is usually opened first, so a single
+// load on page load almost always finds nothing: the list is polled quietly
+// in the background instead, and polling stops as soon as models show up.
+const MODEL_POLL_INTERVAL_MS = 2000;
+const MODEL_POLL_MAX_ATTEMPTS = 150;  // ~5 minutes, enough for a queued job
+
+// pickModel's way into the picker, once initModelPicker has made it.
+let pickWhenListed = null;
+
+// Picks `name` in the picker as choosing it would (its info, the defaults of
+// its kind, the pick saved with the form), once the list has it: the list is
+// loaded again first, as the model may only now be served. For rank.js's
+// Use this model.
+export function pickModel(name) {
+  if (pickWhenListed) pickWhenListed(name);
+}
+
+function displayModelInfo(model) {
+  if (!model) return;
+
+  const voxelShape = model.write_shape.map((s, i) =>
+    Math.round(s / model.output_voxel_size[i])
+  );
+
+  document.getElementById("modelInfoContent").innerHTML = `
+      <small>
+        <strong>Name:</strong> ${esc(model.name)}<br>
+        <strong>Output Size (nm):</strong> [${esc(model.write_shape.join(', '))}]<br>
+        <strong>Voxel Size (nm):</strong> [${esc(model.output_voxel_size.join(', '))}]<br>
+        <strong>Crop Shape (voxels):</strong> [${esc(voxelShape.join(', '))}]<br>
+        <strong>Channels:</strong> ${esc(model.output_channels)}
+      </small>
+    `;
+  document.getElementById("modelInfo").style.display = "block";
+  if (isBrowserMode()) setBrowserTraining(model);
+  else applyFinetuneModes(model.finetune_modes);
+}
+
+// Offer only the LoRA ranks the model can take: a compiled (TorchScript)
+// network trains in full only, and some models not at all. null (the
+// dashboard could not ask) offers them all; the trainer refuses what the
+// model cannot do anyway.
+// The browser mode's modes ("head", the last layer, and "full", a 2D
+// model's whole network, as its manifest declares them) are the Training
+// field's instead (training-form.js setBrowserTraining): there is no rank to
+// pick there, and its group is server-only.
+function applyFinetuneModes(modes) {
+  const rank = document.getElementById("loraRank");
+  const note = document.getElementById("loraRankNote");
+  const lora = !modes || modes.includes("lora");
+  const full = !modes || modes.includes("full");
+  Array.from(rank.options).forEach((option) => {
+    option.disabled = option.value === "0" ? !full : !lora;
+  });
+  if (rank.selectedOptions[0] && rank.selectedOptions[0].disabled) {
+    const first = Array.from(rank.options).find((option) => !option.disabled);
+    if (first) rank.value = first.value;
+  }
+  rank.disabled = !lora && !full;
+  if (!lora && !full) {
+    note.textContent = "This model cannot be finetuned (its weights are in a format that cannot be trained).";
+  } else if (!lora) {
+    note.textContent = "Full finetune only: this model's network is compiled (TorchScript), so LoRA adapters cannot be attached.";
+  } else {
+    note.textContent = "Higher = more capacity. 0 = full finetune.";
+  }
+}
+
+// log: the Annotation Crops panel's log. savedModelName: the pick saved with
+// the form, preferred on the first load.
+// Returns { selected() }: the picked model's entry, or null if none.
+export function initModelPicker({ log, savedModelName }) {
+  const modelSelect = document.getElementById("modelSelect");
+  const modelSelectionDiv = document.getElementById("modelSelectionDiv");
+  let models = [];
+  let selectedModel = null;
+  let wanted = null;  // a model to pick once the list has it (pickModel)
+
+  let loggedNoModels = false;
+  let lastLoadedCount = null;
+
+  // One load of the list. The first load, and a Refresh, say what they
+  // found; the others are quiet unless the number of models changes.
+  // Resolves to false once models are listed, which stops the poll.
+  function loadModels({ tick, stale }) {
+    const quiet = tick > 1 || lastLoadedCount !== null;
+    return getAnswer("/api/finetune/models")
+      .then(data => {
+        if (stale()) return;
+        if (data.error) {
+          if (!quiet) log.add(`Error: ${data.error}`);
+          return;
+        }
+
+        models = data.models;
+
+        if (models.length === 0) {
+          if (!loggedNoModels) {
+            loggedNoModels = true;
+            log.add("No models available for finetuning yet");
+            log.add("  → Submit a model from the main tab; this list updates automatically");
+          }
+          modelSelect.innerHTML = "";
+          selectedModel = null;
+          lastLoadedCount = 0;
+          return;
+        }
+        // Rebuild the options from this response alone.
+        const previousName = modelSelect.value;
+        modelSelect.innerHTML = "";
+        models.forEach(model => {
+          const option = document.createElement("option");
+          option.value = model.name;
+          option.textContent = model.name;
+          modelSelect.appendChild(option);
+        });
+
+        // Keep the current pick when the list is reloaded (Refresh); on the
+        // first load prefer the saved state, then the server's choice.
+        const has = (name) => name && models.some(m => m.name === name);
+        if (has(previousName)) {
+          modelSelect.value = previousName;
+        } else if (has(savedModelName)) {
+          modelSelect.value = savedModelName;
+        } else if (has(data.selected_model)) {
+          modelSelect.value = data.selected_model;
+        }
+
+        // Only one model: nothing to choose, so hide the picker. Show it
+        // again when a later load finds more.
+        modelSelectionDiv.style.display = models.length === 1 ? "none" : "";
+        selectedModel = models.find(m => m.name === modelSelect.value) || models[0];
+        displayModelInfo(selectedModel);
+        // A new pick, as choosing it would: the defaults of its kind.
+        if (modelSelect.value !== previousName) applyModelDefaults(modelSelect.value);
+
+        loggedNoModels = false;
+        if (!quiet || models.length !== lastLoadedCount) {
+          log.add(`Loaded ${models.length} model(s)`);
+        }
+        lastLoadedCount = models.length;
+        if (has(wanted)) {
+          modelSelect.value = wanted;
+          wanted = null;
+          modelSelect.dispatchEvent(new Event("change"));
+        }
+        // A model to pick that is not listed yet keeps the poll going.
+        return wanted ? undefined : false;
+      })
+      .catch(err => {
+        if (!quiet) log.add(`Error loading models: ${err}`);
+        console.error(err);
+      });
+  }
+
+  // Bound once, here: loadModels runs on every refresh and poll.
+  modelSelect.addEventListener("change", function() {
+    selectedModel = models.find(m => m.name === this.value);
+    displayModelInfo(selectedModel);
+  });
+
+  // The first load, then the polls: MODEL_POLL_MAX_ATTEMPTS after it. They
+  // wait while the page is hidden, and one runs as soon as it is shown.
+  const modelPoll = poll(loadModels, {
+    intervalMs: MODEL_POLL_INTERVAL_MS,
+    maxTicks: 1 + MODEL_POLL_MAX_ATTEMPTS,
+    pauseWhenHidden: true,
+  });
+
+  document.getElementById("refreshModelsBtn").addEventListener("click", function() {
+    log.add("Refreshing model list...");
+    // The options are left in place so loadModels can keep the current
+    // pick; it rebuilds them from the response.
+    models = [];
+    selectedModel = null;
+    lastLoadedCount = null;
+    modelPoll.restart();
+  });
+
+  // Unlike Refresh, which is for models the page is not told of, this keeps
+  // the pick while asking: it comes without a click.
+  listen(MODELS_CHANGED_EVENT, () => modelPoll.restart());
+
+  pickWhenListed = (name) => {
+    wanted = name;
+    modelPoll.restart();
+  };
+
+  return { selected: () => selectedModel };
+}

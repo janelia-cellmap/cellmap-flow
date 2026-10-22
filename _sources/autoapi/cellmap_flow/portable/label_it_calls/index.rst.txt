@@ -1,0 +1,83 @@
+cellmap_flow.portable.label_it_calls
+====================================
+
+.. py:module:: cellmap_flow.portable.label_it_calls
+
+.. autoapi-nested-parse::
+
+   What the browser calls for Label it: the functions
+   ``web/src/backend/routes/view-labels.ts`` (and the rank's
+   ``web/src/backend/routes/rank.ts``, for the placement and the probability)
+   runs through ``Inference.python("cellmap_flow.portable.label_it_calls:<name>",
+   args, arrays)``, in the shape ``chunkmirage.calls`` says: ``fn(args, arrays)``,
+   ``args`` the JSON arguments, ``arrays`` the bytes sent beside them; a JSON
+   value, or a pair of JSON and arrays, back. Each decodes its arrays, calls
+   ``label_it`` and encodes the answer; the maths is not here.
+
+   A refusal the server answers 400 (a ValueError there) comes back as
+   ``{"error": message}``, for the route to answer as the server does; any
+   other exception rejects the call, the route's 500. A ``ModuleNotFoundError``
+   is never caught: it is how chunkmirage's worker learns to load scipy, before
+   it calls again.
+
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.portable.label_it_calls.seed_options
+   cellmap_flow.portable.label_it_calls.seed_plan
+   cellmap_flow.portable.label_it_calls.place
+   cellmap_flow.portable.label_it_calls.seed
+   cellmap_flow.portable.label_it_calls.probability
+
+
+Module Contents
+---------------
+
+.. py:function:: seed_options(args, arrays)
+
+   The seed's options (``label_it.seed_options``) from ``args``, the
+   request's body: ``{"options": ...}``, or the refusal.
+
+
+.. py:function:: seed_plan(args, arrays)
+
+   What a seed reads of the model, and where. ``args``: the model's
+   ``channel_names``, the request's ``select_channel`` (null when it gives
+   none), and the box as ``place`` takes it. Answers ``channels`` (``[start,
+   stop]``, or null for every one), ``offsets`` (an affinity model's, by
+   ``label_it.affinity_offsets``, else null) and ``placement`` (``place``'s
+   answer); or the refusal of the selected channel.
+
+
+.. py:function:: place(args, arrays)
+
+   Which served voxel lies under each voxel of the box (``_placed``):
+   ``args`` ``lo``, ``hi``, ``volume`` and ``level``.
+
+
+.. py:function:: seed(args, arrays)
+
+   A seed's objects, or the mutex watershed's input. ``arrays``: the
+   served region ``seed_plan``'s placement says to read (C, z, y, x
+   float32, its ``shape`` in ``args``). ``args`` also: the ``indices`` of
+   that placement, ``method`` and the options (``seed_options``'), the
+   model's ``output_class`` (null: read off the values), and the plan's
+   ``channels`` and ``offsets``.
+
+   *components*: ``{"count"}`` and the objects, (z, y, x) uint32 over the
+   box. *mutex_watershed*: ``{"shape"}`` and ``label_it.affinities``, float32,
+   which the browser's mutex watershed takes from there. A refusal (a
+   channel the model does not have) is ``{"error"}``.
+
+
+.. py:function:: probability(args, arrays)
+
+   ``label_it.probability`` of a block (``arrays``: C, z, y, x float32,
+   its ``shape`` in ``args``) by the model's ``output_class`` (null: read
+   off the values), every channel: the same shape, float32.
+
+

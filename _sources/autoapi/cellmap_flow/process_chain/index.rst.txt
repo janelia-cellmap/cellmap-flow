@@ -1,0 +1,111 @@
+cellmap_flow.process_chain
+==========================
+
+.. py:module:: cellmap_flow.process_chain
+
+.. autoapi-nested-parse::
+
+   This process's normalization + postprocessing chain: ``process_chain()``.
+
+   One chain per process. In the dashboard it is the chain the user last
+   submitted, which the finetune manifest and the exported YAML read as
+   ``spec``. In an inference server or a blockwise worker it is the fallback
+   for a layer or caller that brings no chain of its own: always empty for a
+   server started from the CLI, and set by the user scripts that call
+   ``process_chunk`` themselves (ImageDataInterface's docstring says they rely
+   on it).
+
+   - ``input_norms`` and ``postprocess`` are the live op instances, which can
+     hold state (SimpleBlockwiseMerger's equivalences), so they are replaced
+     only by ``set()`` and never rebuilt from the spec behind a caller's back.
+   - ``input_norm_config`` and ``postprocess_config`` are the steps as the
+     dashboard received them; ``spec`` reads them.
+   - ``set(spec, built=None)`` is the one way to change the chain.
+
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.process_chain.ProcessChain
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.process_chain.process_chain
+
+
+Module Contents
+---------------
+
+.. py:class:: ProcessChain
+
+   The chain; see the module docstring.
+
+
+   .. py:attribute:: input_norms
+      :value: []
+
+
+
+   .. py:attribute:: postprocess
+      :value: []
+
+
+
+   .. py:attribute:: input_norm_config
+
+
+   .. py:attribute:: postprocess_config
+
+
+   .. py:property:: spec
+      :type: cellmap_flow.pipeline_spec.PipelineSpec
+
+
+      The chain currently configured, as data. Derived on every read.
+
+      Per chain: the ``*_config`` steps when set, otherwise the live
+      instances' to_dict(). Never rebuilds the live instances, which can
+      hold state (SimpleBlockwiseMerger's equivalences).
+
+
+   .. py:method:: set(spec: cellmap_flow.pipeline_spec.PipelineSpec, built=None) -> None
+
+      Replace the configured chain: both live chains and both configs.
+
+      ``built`` is the ``(input_norms, postprocess)`` instances for
+      ``spec`` when the caller already has them; otherwise they are built
+      here. Everything is built before anything is assigned, so a chain
+      that fails to build leaves the previous one in place.
+
+
+
+   .. py:method:: output_dtype(model_output_dtype, postprocess=None)
+
+      The dtype a chain hands to the client.
+
+      ``postprocess=None`` means this chain's; the inference server passes
+      the chain of the layer being served. The last step that declares a
+      dtype decides, since the steps run in order: taking the first picked
+      e.g. SigmoidPostprocessor's float32 ahead of a trailing
+      AffinityPostprocessor's uint64, which both advertised the wrong dtype
+      in the zarr metadata (neuroglancer: "Data type not compatible with
+      segmentation layer") and cast uint64 label ids through float32,
+      corrupting any id above 2**24.
+
+
+
+.. py:function:: process_chain() -> ProcessChain
+
+   This process's chain.
+
+   Read it at call time, never into a module global: tests swap in a fresh
+   chain per test, and a copy taken at import would outlive them.
+
+

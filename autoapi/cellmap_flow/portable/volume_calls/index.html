@@ -1,0 +1,269 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>cellmap_flow.portable.volume_calls &mdash; CellMap Flow  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=4ae1632d" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css" />
+
+  
+    <link rel="shortcut icon" href="../../../../_static/favicon.ico"/>
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link rel="next" title="cellmap_flow.post" href="../../post/index.html" />
+    <link rel="prev" title="cellmap_flow.portable.volume" href="../volume/index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            CellMap Flow
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">CellMap-Flow API:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../../../../install.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../browser.html">In the browser</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../cli.html">Command line</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../scripts.html">Python Scripts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../yaml_config.html">YAML Configuration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../data_paths.html">Data paths</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../huggingface.html">HuggingFace Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../bioimage.html">BioImage Model Zoo</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../custom_script.html">Custom Model</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../post.html">PostProcessors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../plugins.html">Plugins</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../review.html">Reviewing instances</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../viewer_api.html">Viewer layer API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../architecture.html">Architecture</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../../../index.html">API Reference</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="../../index.html">cellmap_flow</a><ul class="current">
+<li class="toctree-l3 current"><a class="reference internal" href="../../index.html#submodules">Submodules</a><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="../../ai_annotate/index.html">cellmap_flow.ai_annotate</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../blockwise/index.html">cellmap_flow.blockwise</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../cli/index.html">cellmap_flow.cli</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../config/index.html">cellmap_flow.config</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../dashboard/index.html">cellmap_flow.dashboard</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../finetune/index.html">cellmap_flow.finetune</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../globals/index.html">cellmap_flow.globals</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../image_data_interface/index.html">cellmap_flow.image_data_interface</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../inference/index.html">cellmap_flow.inference</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../inferencer/index.html">cellmap_flow.inferencer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../io/index.html">cellmap_flow.io</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../jobs/index.html">cellmap_flow.jobs</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../logging_setup/index.html">cellmap_flow.logging_setup</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../models/index.html">cellmap_flow.models</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../norm/index.html">cellmap_flow.norm</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../pipeline_spec/index.html">cellmap_flow.pipeline_spec</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../plugins/index.html">cellmap_flow.plugins</a></li>
+<li class="toctree-l4 current"><a class="reference internal" href="../index.html">cellmap_flow.portable</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../post/index.html">cellmap_flow.post</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../process_chain/index.html">cellmap_flow.process_chain</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../review/index.html">cellmap_flow.review</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../review_index/index.html">cellmap_flow.review_index</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../schema/index.html">cellmap_flow.schema</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../serving/index.html">cellmap_flow.serving</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../utils/index.html">cellmap_flow.utils</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../viewer/index.html">cellmap_flow.viewer</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">CellMap Flow</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">API Reference</a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">cellmap_flow</a></li>
+          <li class="breadcrumb-item"><a href="../index.html">cellmap_flow.portable</a></li>
+      <li class="breadcrumb-item active">cellmap_flow.portable.volume_calls</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../../../../_sources/autoapi/cellmap_flow/portable/volume_calls/index.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-cellmap_flow.portable.volume_calls">
+<span id="cellmap-flow-portable-volume-calls"></span><h1>cellmap_flow.portable.volume_calls<a class="headerlink" href="#module-cellmap_flow.portable.volume_calls" title="Link to this heading"></a></h1>
+<p>What the browser calls to plan an annotation volume and its good regions:
+the functions <code class="docutils literal notranslate"><span class="pre">web/src/finetune/volume.ts</span></code>, <code class="docutils literal notranslate"><span class="pre">web/src/finetune/good-regions.ts</span></code>
+and <code class="docutils literal notranslate"><span class="pre">web/src/finetune/run.ts</span></code> run through chunkmirage’s
+<code class="docutils literal notranslate"><span class="pre">Engine.call(&quot;cellmap_flow.portable.volume_calls:&lt;name&gt;&quot;,</span> <span class="pre">args,</span> <span class="pre">arrays)</span></code>
+(<code class="docutils literal notranslate"><span class="pre">calls.py</span></code> says the shape). Each takes plain numbers in its JSON and
+answers JSON; the rules are <code class="docutils literal notranslate"><span class="pre">volume.py</span></code>’s and <code class="docutils literal notranslate"><span class="pre">regions.py</span></code>’s, which the
+server calls in its process. A refusal (a ValueError of those rules) is
+answered as <code class="docutils literal notranslate"><span class="pre">{&quot;error&quot;:</span> <span class="pre">&lt;its</span> <span class="pre">sentence&gt;}</span></code>, so the page shows the sentence the
+server’s route would, not a Python traceback.</p>
+<section id="functions">
+<h2>Functions<a class="headerlink" href="#functions" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.portable.volume_calls.plan_volume" title="cellmap_flow.portable.volume_calls.plan_volume"><code class="xref py py-obj docutils literal notranslate"><span class="pre">plan_volume</span></code></a>(args, arrays)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">volume.plan_volume</span></code> of <code class="docutils literal notranslate"><span class="pre">level</span></code> (<code class="docutils literal notranslate"><span class="pre">shape</span></code>, <code class="docutils literal notranslate"><span class="pre">voxel</span></code>, <code class="docutils literal notranslate"><span class="pre">corner</span></code>:</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.portable.volume_calls.plan_paint_volume" title="cellmap_flow.portable.volume_calls.plan_paint_volume"><code class="xref py py-obj docutils literal notranslate"><span class="pre">plan_paint_volume</span></code></a>(args, arrays)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">volume.plan_paint_volume</span></code> of <code class="docutils literal notranslate"><span class="pre">level</span></code> (<code class="docutils literal notranslate"><span class="pre">shape</span></code>, <code class="docutils literal notranslate"><span class="pre">voxel</span></code>,</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.portable.volume_calls.shown_level" title="cellmap_flow.portable.volume_calls.shown_level"><code class="xref py py-obj docutils literal notranslate"><span class="pre">shown_level</span></code></a>(args, arrays)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">{&quot;index&quot;:</span> <span class="pre">volume.shown_level(voxel_sizes,</span> <span class="pre">pixel_nm)}</span></code>: which of</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.portable.volume_calls.training_refusal" title="cellmap_flow.portable.volume_calls.training_refusal"><code class="xref py py-obj docutils literal notranslate"><span class="pre">training_refusal</span></code></a>(args, arrays)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">{&quot;error&quot;:</span> <span class="pre">&lt;the</span> <span class="pre">sentence&gt;}</span></code> when <code class="docutils literal notranslate"><span class="pre">volume</span></code> (its record) is not</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.portable.volume_calls.mark_region" title="cellmap_flow.portable.volume_calls.mark_region"><code class="xref py py-obj docutils literal notranslate"><span class="pre">mark_region</span></code></a>(args, arrays)</p></td>
+<td><p>The region a mark makes (<code class="docutils literal notranslate"><span class="pre">regions.new_region</span></code>): a box of the size</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.portable.volume_calls.region_boxes" title="cellmap_flow.portable.volume_calls.region_boxes"><code class="xref py py-obj docutils literal notranslate"><span class="pre">region_boxes</span></code></a>(args, arrays)</p></td>
+<td><p>The good_regions layer's boxes of <code class="docutils literal notranslate"><span class="pre">regions</span></code>: per entry its</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.portable.volume_calls.anchor_boxes" title="cellmap_flow.portable.volume_calls.anchor_boxes"><code class="xref py py-obj docutils literal notranslate"><span class="pre">anchor_boxes</span></code></a>(args, arrays)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">regions.anchor_boxes</span></code> of <code class="docutils literal notranslate"><span class="pre">regions</span></code> on the grid of <code class="docutils literal notranslate"><span class="pre">volume</span></code></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="module-contents">
+<h2>Module Contents<a class="headerlink" href="#module-contents" title="Link to this heading"></a></h2>
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.portable.volume_calls.plan_volume">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.volume_calls.</span></span><span class="sig-name descname"><span class="pre">plan_volume</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">arrays</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.portable.volume_calls.plan_volume" title="Link to this definition"></a></dt>
+<dd><p><code class="docutils literal notranslate"><span class="pre">volume.plan_volume</span></code> of <code class="docutils literal notranslate"><span class="pre">level</span></code> (<code class="docutils literal notranslate"><span class="pre">shape</span></code>, <code class="docutils literal notranslate"><span class="pre">voxel</span></code>, <code class="docutils literal notranslate"><span class="pre">corner</span></code>:
+the raw level the model reads) and <code class="docutils literal notranslate"><span class="pre">model</span></code> (its voxel sizes and its
+blocks, as <code class="docutils literal notranslate"><span class="pre">block_shapes</span></code> takes them), with <code class="docutils literal notranslate"><span class="pre">dtype</span></code>, the labels’
+(<code class="docutils literal notranslate"><span class="pre">volume.annotation_dtype</span></code> of <code class="docutils literal notranslate"><span class="pre">output_type</span></code>, what the model trains on).</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.portable.volume_calls.plan_paint_volume">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.volume_calls.</span></span><span class="sig-name descname"><span class="pre">plan_paint_volume</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">arrays</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.portable.volume_calls.plan_paint_volume" title="Link to this definition"></a></dt>
+<dd><p><code class="docutils literal notranslate"><span class="pre">volume.plan_paint_volume</span></code> of <code class="docutils literal notranslate"><span class="pre">level</span></code> (<code class="docutils literal notranslate"><span class="pre">shape</span></code>, <code class="docutils literal notranslate"><span class="pre">voxel</span></code>,
+<code class="docutils literal notranslate"><span class="pre">corner</span></code>: the raw level read at the voxel size) and <code class="docutils literal notranslate"><span class="pre">voxel_size</span></code>
+(nm, z, y, x), a volume painted before any model, with <code class="docutils literal notranslate"><span class="pre">dtype</span></code> uint8:
+its labels are background and objects, which a model’s volume they are
+carried to holds in its own dtype.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.portable.volume_calls.shown_level">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.volume_calls.</span></span><span class="sig-name descname"><span class="pre">shown_level</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">arrays</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.portable.volume_calls.shown_level" title="Link to this definition"></a></dt>
+<dd><p><code class="docutils literal notranslate"><span class="pre">{&quot;index&quot;:</span> <span class="pre">volume.shown_level(voxel_sizes,</span> <span class="pre">pixel_nm)}</span></code>: which of
+the raw’s levels (<code class="docutils literal notranslate"><span class="pre">voxel_sizes</span></code>, nm, finest first) the viewer shows at
+a screen pixel of <code class="docutils literal notranslate"><span class="pre">pixel_nm</span></code> (null: not known, the finest), the
+default voxel size of a volume painted before any model.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.portable.volume_calls.training_refusal">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.volume_calls.</span></span><span class="sig-name descname"><span class="pre">training_refusal</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">arrays</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.portable.volume_calls.training_refusal" title="Link to this definition"></a></dt>
+<dd><p><code class="docutils literal notranslate"><span class="pre">{&quot;error&quot;:</span> <span class="pre">&lt;the</span> <span class="pre">sentence&gt;}</span></code> when <code class="docutils literal notranslate"><span class="pre">volume</span></code> (its record) is not
+trained on (<code class="docutils literal notranslate"><span class="pre">volume.training_refusal</span></code>: a paint-first volume), else
+<code class="docutils literal notranslate"><span class="pre">{}</span></code>.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.portable.volume_calls.mark_region">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.volume_calls.</span></span><span class="sig-name descname"><span class="pre">mark_region</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">arrays</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.portable.volume_calls.mark_region" title="Link to this definition"></a></dt>
+<dd><p>The region a mark makes (<code class="docutils literal notranslate"><span class="pre">regions.new_region</span></code>): a box of the size
+<code class="docutils literal notranslate"><span class="pre">size_nm</span></code> asks for (<code class="docutils literal notranslate"><span class="pre">regions.region_size_nm</span></code>, the volume’s output
+block by default: <code class="docutils literal notranslate"><span class="pre">volume</span></code> has its <code class="docutils literal notranslate"><span class="pre">chunk_size</span></code> and
+<code class="docutils literal notranslate"><span class="pre">output_voxel_size</span></code>, or is null) centred on <code class="docutils literal notranslate"><span class="pre">centre_nm</span></code>, labelled
+<code class="docutils literal notranslate"><span class="pre">label</span></code> or after the <code class="docutils literal notranslate"><span class="pre">regions</span></code> already stored. Answers the region,
+and <code class="docutils literal notranslate"><span class="pre">boxes</span></code>, the layer’s boxes of the stored regions and it
+(<code class="docutils literal notranslate"><span class="pre">region_boxes</span></code>).</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.portable.volume_calls.region_boxes">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.volume_calls.</span></span><span class="sig-name descname"><span class="pre">region_boxes</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">arrays</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.portable.volume_calls.region_boxes" title="Link to this definition"></a></dt>
+<dd><p>The good_regions layer’s boxes of <code class="docutils literal notranslate"><span class="pre">regions</span></code>: per entry its
+<code class="docutils literal notranslate"><span class="pre">offset_nm</span></code>, <code class="docutils literal notranslate"><span class="pre">shape_nm</span></code> and <code class="docutils literal notranslate"><span class="pre">label</span></code>, or null for one that is not a
+region (<code class="docutils literal notranslate"><span class="pre">regions.region_box_nm</span></code>), so the layer’s ids stay the entries’
+indices.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.portable.volume_calls.anchor_boxes">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.volume_calls.</span></span><span class="sig-name descname"><span class="pre">anchor_boxes</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">arrays</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.portable.volume_calls.anchor_boxes" title="Link to this definition"></a></dt>
+<dd><p><code class="docutils literal notranslate"><span class="pre">regions.anchor_boxes</span></code> of <code class="docutils literal notranslate"><span class="pre">regions</span></code> on the grid of <code class="docutils literal notranslate"><span class="pre">volume</span></code>
+(its <code class="docutils literal notranslate"><span class="pre">dataset_offset_nm</span></code>, <code class="docutils literal notranslate"><span class="pre">output_voxel_size</span></code>, <code class="docutils literal notranslate"><span class="pre">dataset_shape_voxels</span></code>
+and <code class="docutils literal notranslate"><span class="pre">chunk_size</span></code>, the model’s output block): the boxes, and the
+entries skipped, each by its index in <code class="docutils literal notranslate"><span class="pre">regions</span></code>.</p>
+</dd></dl>
+
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../volume/index.html" class="btn btn-neutral float-left" title="cellmap_flow.portable.volume" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../../post/index.html" class="btn btn-neutral float-right" title="cellmap_flow.post" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, David Ackerman,  Marwan Zouinkhi, Jeff Rhoades, Larissa Heinrich, Aubrey Weigel.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

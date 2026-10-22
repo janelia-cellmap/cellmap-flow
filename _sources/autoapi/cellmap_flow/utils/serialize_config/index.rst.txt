@@ -1,0 +1,14 @@
+cellmap_flow.utils.serialize_config
+===================================
+
+.. py:module:: cellmap_flow.utils.serialize_config
+
+.. autoapi-nested-parse::
+
+   Deprecated: ``Config`` is ``cellmap_flow.models.models_config.Config``.
+
+   Kept only for ``Config``, which docs/source/plugins.rst told plugin authors
+   to import from here; it warns, and goes in the release after 0.3.0.
+
+
+

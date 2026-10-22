@@ -1,0 +1,399 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>cellmap_flow.ai_annotate.config &mdash; CellMap Flow  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=4ae1632d" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css" />
+
+  
+    <link rel="shortcut icon" href="../../../../_static/favicon.ico"/>
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link rel="next" title="cellmap_flow.ai_annotate.errors" href="../errors/index.html" />
+    <link rel="prev" title="cellmap_flow.ai_annotate.backends.vertex_gemini" href="../backends/vertex_gemini/index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            CellMap Flow
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">CellMap-Flow API:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../../../../install.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../browser.html">In the browser</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../cli.html">Command line</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../scripts.html">Python Scripts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../yaml_config.html">YAML Configuration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../data_paths.html">Data paths</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../huggingface.html">HuggingFace Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../bioimage.html">BioImage Model Zoo</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../custom_script.html">Custom Model</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../post.html">PostProcessors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../plugins.html">Plugins</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../review.html">Reviewing instances</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../viewer_api.html">Viewer layer API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../architecture.html">Architecture</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../../../index.html">API Reference</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="../../index.html">cellmap_flow</a><ul class="current">
+<li class="toctree-l3 current"><a class="reference internal" href="../../index.html#submodules">Submodules</a><ul class="current">
+<li class="toctree-l4 current"><a class="reference internal" href="../index.html">cellmap_flow.ai_annotate</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../blockwise/index.html">cellmap_flow.blockwise</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../cli/index.html">cellmap_flow.cli</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../config/index.html">cellmap_flow.config</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../dashboard/index.html">cellmap_flow.dashboard</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../finetune/index.html">cellmap_flow.finetune</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../globals/index.html">cellmap_flow.globals</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../image_data_interface/index.html">cellmap_flow.image_data_interface</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../inference/index.html">cellmap_flow.inference</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../inferencer/index.html">cellmap_flow.inferencer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../io/index.html">cellmap_flow.io</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../jobs/index.html">cellmap_flow.jobs</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../logging_setup/index.html">cellmap_flow.logging_setup</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../models/index.html">cellmap_flow.models</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../norm/index.html">cellmap_flow.norm</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../pipeline_spec/index.html">cellmap_flow.pipeline_spec</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../plugins/index.html">cellmap_flow.plugins</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../portable/index.html">cellmap_flow.portable</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../post/index.html">cellmap_flow.post</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../process_chain/index.html">cellmap_flow.process_chain</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../review/index.html">cellmap_flow.review</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../review_index/index.html">cellmap_flow.review_index</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../schema/index.html">cellmap_flow.schema</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../serving/index.html">cellmap_flow.serving</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../utils/index.html">cellmap_flow.utils</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../viewer/index.html">cellmap_flow.viewer</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">CellMap Flow</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">API Reference</a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">cellmap_flow</a></li>
+          <li class="breadcrumb-item"><a href="../index.html">cellmap_flow.ai_annotate</a></li>
+      <li class="breadcrumb-item active">cellmap_flow.ai_annotate.config</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../../../../_sources/autoapi/cellmap_flow/ai_annotate/config/index.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-cellmap_flow.ai_annotate.config">
+<span id="cellmap-flow-ai-annotate-config"></span><h1>cellmap_flow.ai_annotate.config<a class="headerlink" href="#module-cellmap_flow.ai_annotate.config" title="Link to this heading"></a></h1>
+<p>The server-side config that turns AI-assisted annotation on, and what it allows.</p>
+<p>The feature sends EM data to a hosted model, which costs money and moves data
+off site, so it is off unless the user who runs the dashboard writes a config
+file saying which providers and models may be used. The browser only ever
+picks a provider id and model id from this file’s lists; endpoints, projects
+and credentials come from here and from the environment, never from a request.</p>
+<p>The file holds no secrets. A key-based provider names an environment variable
+(<code class="docutils literal notranslate"><span class="pre">api_key_env</span></code>) or a key file (<code class="docutils literal notranslate"><span class="pre">api_key_file</span></code>); an inline <code class="docutils literal notranslate"><span class="pre">api_key</span></code> is
+a config error, so a key cannot end up in a file that gets copied, shared or
+committed. Error messages name the setting that is wrong, never its value,
+in case the value is a key pasted in the wrong place.</p>
+<p>The file is read on each request that needs it (it is small), so an edit
+takes effect without restarting the dashboard.</p>
+<section id="attributes">
+<h2>Attributes<a class="headerlink" href="#attributes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.ai_annotate.config.CONFIG_ENV" title="cellmap_flow.ai_annotate.config.CONFIG_ENV"><code class="xref py py-obj docutils literal notranslate"><span class="pre">CONFIG_ENV</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.ai_annotate.config.DOCS" title="cellmap_flow.ai_annotate.config.DOCS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DOCS</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.ai_annotate.config.DEFAULT_DAILY_CALL_LIMIT" title="cellmap_flow.ai_annotate.config.DEFAULT_DAILY_CALL_LIMIT"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DEFAULT_DAILY_CALL_LIMIT</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.ai_annotate.config.DEFAULT_CROP_SIZE_PX" title="cellmap_flow.ai_annotate.config.DEFAULT_CROP_SIZE_PX"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DEFAULT_CROP_SIZE_PX</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.ai_annotate.config.DEFAULT_VERTEX_LOCATION" title="cellmap_flow.ai_annotate.config.DEFAULT_VERTEX_LOCATION"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DEFAULT_VERTEX_LOCATION</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.ai_annotate.config.DEFAULT_TIMEOUT_S" title="cellmap_flow.ai_annotate.config.DEFAULT_TIMEOUT_S"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DEFAULT_TIMEOUT_S</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.ai_annotate.config.PROVIDER_OPTIONS" title="cellmap_flow.ai_annotate.config.PROVIDER_OPTIONS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PROVIDER_OPTIONS</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="classes">
+<h2>Classes<a class="headerlink" href="#classes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.ai_annotate.config.ProviderConfig" title="cellmap_flow.ai_annotate.config.ProviderConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ProviderConfig</span></code></a></p></td>
+<td><p>One provider the config allows: its id, type, models, and the rest of</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.ai_annotate.config.AIAnnotateConfig" title="cellmap_flow.ai_annotate.config.AIAnnotateConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">AIAnnotateConfig</span></code></a></p></td>
+<td><p>The parsed config file. Built only by <code class="docutils literal notranslate"><span class="pre">load_config</span></code>, which validates it.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="functions">
+<h2>Functions<a class="headerlink" href="#functions" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.ai_annotate.config.config_path" title="cellmap_flow.ai_annotate.config.config_path"><code class="xref py py-obj docutils literal notranslate"><span class="pre">config_path</span></code></a>()</p></td>
+<td><p>Where the config is read from: <code class="docutils literal notranslate"><span class="pre">$CELLMAP_FLOW_AI_ANNOTATE_CONFIG</span></code>, else</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.ai_annotate.config.load_config" title="cellmap_flow.ai_annotate.config.load_config"><code class="xref py py-obj docutils literal notranslate"><span class="pre">load_config</span></code></a>()</p></td>
+<td><p>The config, or None when the file does not exist or says <code class="docutils literal notranslate"><span class="pre">enabled:</span> <span class="pre">false</span></code>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.ai_annotate.config.disabled_reason" title="cellmap_flow.ai_annotate.config.disabled_reason"><code class="xref py py-obj docutils literal notranslate"><span class="pre">disabled_reason</span></code></a>()</p></td>
+<td><p>Why the feature is off, and how to turn it on, for the dashboard to show.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="module-contents">
+<h2>Module Contents<a class="headerlink" href="#module-contents" title="Link to this heading"></a></h2>
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.ai_annotate.config.CONFIG_ENV">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.ai_annotate.config.</span></span><span class="sig-name descname"><span class="pre">CONFIG_ENV</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'CELLMAP_FLOW_AI_ANNOTATE_CONFIG'</span></span><a class="headerlink" href="#cellmap_flow.ai_annotate.config.CONFIG_ENV" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.ai_annotate.config.DOCS">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.ai_annotate.config.</span></span><span class="sig-name descname"><span class="pre">DOCS</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'docs/ai_annotate.md'</span></span><a class="headerlink" href="#cellmap_flow.ai_annotate.config.DOCS" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.ai_annotate.config.DEFAULT_DAILY_CALL_LIMIT">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.ai_annotate.config.</span></span><span class="sig-name descname"><span class="pre">DEFAULT_DAILY_CALL_LIMIT</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">200</span></span><a class="headerlink" href="#cellmap_flow.ai_annotate.config.DEFAULT_DAILY_CALL_LIMIT" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.ai_annotate.config.DEFAULT_CROP_SIZE_PX">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.ai_annotate.config.</span></span><span class="sig-name descname"><span class="pre">DEFAULT_CROP_SIZE_PX</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">512</span></span><a class="headerlink" href="#cellmap_flow.ai_annotate.config.DEFAULT_CROP_SIZE_PX" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.ai_annotate.config.DEFAULT_VERTEX_LOCATION">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.ai_annotate.config.</span></span><span class="sig-name descname"><span class="pre">DEFAULT_VERTEX_LOCATION</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'global'</span></span><a class="headerlink" href="#cellmap_flow.ai_annotate.config.DEFAULT_VERTEX_LOCATION" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.ai_annotate.config.DEFAULT_TIMEOUT_S">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.ai_annotate.config.</span></span><span class="sig-name descname"><span class="pre">DEFAULT_TIMEOUT_S</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">120</span></span><a class="headerlink" href="#cellmap_flow.ai_annotate.config.DEFAULT_TIMEOUT_S" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.ai_annotate.config.PROVIDER_OPTIONS">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.ai_annotate.config.</span></span><span class="sig-name descname"><span class="pre">PROVIDER_OPTIONS</span></span><a class="headerlink" href="#cellmap_flow.ai_annotate.config.PROVIDER_OPTIONS" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.ai_annotate.config.config_path">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.ai_annotate.config.</span></span><span class="sig-name descname"><span class="pre">config_path</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.ai_annotate.config.config_path" title="Link to this definition"></a></dt>
+<dd><p>Where the config is read from: <code class="docutils literal notranslate"><span class="pre">$CELLMAP_FLOW_AI_ANNOTATE_CONFIG</span></code>, else
+<code class="docutils literal notranslate"><span class="pre">~/.cellmap_flow/ai_annotate.yaml</span></code>.</p>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="cellmap_flow.ai_annotate.config.ProviderConfig">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.ai_annotate.config.</span></span><span class="sig-name descname"><span class="pre">ProviderConfig</span></span><a class="headerlink" href="#cellmap_flow.ai_annotate.config.ProviderConfig" title="Link to this definition"></a></dt>
+<dd><p>One provider the config allows: its id, type, models, and the rest of
+its settings (<code class="docutils literal notranslate"><span class="pre">options</span></code>: project, location, timeout_s, …).</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.ai_annotate.config.ProviderConfig.id">
+<span class="sig-name descname"><span class="pre">id</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></span><a class="headerlink" href="#cellmap_flow.ai_annotate.config.ProviderConfig.id" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.ai_annotate.config.ProviderConfig.type">
+<span class="sig-name descname"><span class="pre">type</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></span><a class="headerlink" href="#cellmap_flow.ai_annotate.config.ProviderConfig.type" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.ai_annotate.config.ProviderConfig.models">
+<span class="sig-name descname"><span class="pre">models</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">tuple</span></span><a class="headerlink" href="#cellmap_flow.ai_annotate.config.ProviderConfig.models" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.ai_annotate.config.ProviderConfig.options">
+<span class="sig-name descname"><span class="pre">options</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">dict</span></span><a class="headerlink" href="#cellmap_flow.ai_annotate.config.ProviderConfig.options" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.ai_annotate.config.ProviderConfig.destination">
+<span class="sig-name descname"><span class="pre">destination</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.ai_annotate.config.ProviderConfig.destination" title="Link to this definition"></a></dt>
+<dd><p>Where a request to this provider sends the data, in words, for the
+user to acknowledge before the first call. Names the location but not
+the project: the user needs to know which company and region, not an
+account id.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="cellmap_flow.ai_annotate.config.AIAnnotateConfig">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.ai_annotate.config.</span></span><span class="sig-name descname"><span class="pre">AIAnnotateConfig</span></span><a class="headerlink" href="#cellmap_flow.ai_annotate.config.AIAnnotateConfig" title="Link to this definition"></a></dt>
+<dd><p>The parsed config file. Built only by <code class="docutils literal notranslate"><span class="pre">load_config</span></code>, which validates it.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.ai_annotate.config.AIAnnotateConfig.enabled">
+<span class="sig-name descname"><span class="pre">enabled</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">bool</span></span><a class="headerlink" href="#cellmap_flow.ai_annotate.config.AIAnnotateConfig.enabled" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.ai_annotate.config.AIAnnotateConfig.providers">
+<span class="sig-name descname"><span class="pre">providers</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">dict</span></span><a class="headerlink" href="#cellmap_flow.ai_annotate.config.AIAnnotateConfig.providers" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.ai_annotate.config.AIAnnotateConfig.default_provider">
+<span class="sig-name descname"><span class="pre">default_provider</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></span><a class="headerlink" href="#cellmap_flow.ai_annotate.config.AIAnnotateConfig.default_provider" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.ai_annotate.config.AIAnnotateConfig.daily_call_limit">
+<span class="sig-name descname"><span class="pre">daily_call_limit</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></span><a class="headerlink" href="#cellmap_flow.ai_annotate.config.AIAnnotateConfig.daily_call_limit" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.ai_annotate.config.AIAnnotateConfig.crop_size_px">
+<span class="sig-name descname"><span class="pre">crop_size_px</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></span><a class="headerlink" href="#cellmap_flow.ai_annotate.config.AIAnnotateConfig.crop_size_px" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.ai_annotate.config.AIAnnotateConfig.allowed_dataset_prefixes">
+<span class="sig-name descname"><span class="pre">allowed_dataset_prefixes</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">tuple</span></span><a class="headerlink" href="#cellmap_flow.ai_annotate.config.AIAnnotateConfig.allowed_dataset_prefixes" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.ai_annotate.config.AIAnnotateConfig.provider">
+<span class="sig-name descname"><span class="pre">provider</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">provider_id</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.ai_annotate.config.AIAnnotateConfig.provider" title="Link to this definition"></a></dt>
+<dd><p>The provider with this id. Raises a config error (400: the id came
+from the browser) when the config has no such provider.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.ai_annotate.config.AIAnnotateConfig.check_model">
+<span class="sig-name descname"><span class="pre">check_model</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">provider_id</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.ai_annotate.config.AIAnnotateConfig.check_model" title="Link to this definition"></a></dt>
+<dd><p>Raise unless <code class="docutils literal notranslate"><span class="pre">model</span></code> is one of the provider’s listed models.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.ai_annotate.config.AIAnnotateConfig.check_dataset">
+<span class="sig-name descname"><span class="pre">check_dataset</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dataset_path</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.ai_annotate.config.AIAnnotateConfig.check_dataset" title="Link to this definition"></a></dt>
+<dd><p>Refuse a dataset outside <code class="docutils literal notranslate"><span class="pre">allowed_dataset_prefixes</span></code>, when that list is set.</p>
+<p>Local paths are normalised first, so <code class="docutils literal notranslate"><span class="pre">/allowed/../elsewhere</span></code> does not
+pass as <code class="docutils literal notranslate"><span class="pre">/allowed</span></code>. A URL is not rewritten (normpath would mangle
+it), so one with a <code class="docutils literal notranslate"><span class="pre">.</span></code> or <code class="docutils literal notranslate"><span class="pre">..</span></code> segment, plain or percent-encoded,
+is refused outright: an HTTP client resolves those, and
+<code class="docutils literal notranslate"><span class="pre">https://host/allowed/../secret</span></code> would read <code class="docutils literal notranslate"><span class="pre">/secret</span></code>. A prefix
+matches as text: end it with <code class="docutils literal notranslate"><span class="pre">/</span></code> to mean one directory and not also
+its siblings that share the name’s start.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.ai_annotate.config.AIAnnotateConfig.public">
+<span class="sig-name descname"><span class="pre">public</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.ai_annotate.config.AIAnnotateConfig.public" title="Link to this definition"></a></dt>
+<dd><p>What the browser may see: provider ids, types, models and
+destinations, and the limits. No other option value (project,
+timeouts, key variable or file names) is included.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.ai_annotate.config.load_config">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.ai_annotate.config.</span></span><span class="sig-name descname"><span class="pre">load_config</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.ai_annotate.config.load_config" title="Link to this definition"></a></dt>
+<dd><p>The config, or None when the file does not exist or says <code class="docutils literal notranslate"><span class="pre">enabled:</span> <span class="pre">false</span></code>.</p>
+<p>Raises a config error for a file that exists but is malformed, naming the
+problem and never echoing a value from the file.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.ai_annotate.config.disabled_reason">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.ai_annotate.config.</span></span><span class="sig-name descname"><span class="pre">disabled_reason</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.ai_annotate.config.disabled_reason" title="Link to this definition"></a></dt>
+<dd><p>Why the feature is off, and how to turn it on, for the dashboard to show.</p>
+<p>Called when <code class="docutils literal notranslate"><span class="pre">load_config</span></code> returned None; a malformed file raises instead.</p>
+</dd></dl>
+
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../backends/vertex_gemini/index.html" class="btn btn-neutral float-left" title="cellmap_flow.ai_annotate.backends.vertex_gemini" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../errors/index.html" class="btn btn-neutral float-right" title="cellmap_flow.ai_annotate.errors" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, David Ackerman,  Marwan Zouinkhi, Jeff Rhoades, Larissa Heinrich, Aubrey Weigel.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

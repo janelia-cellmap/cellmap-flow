@@ -1,0 +1,582 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>In the browser &mdash; CellMap Flow  documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="_static/graphviz.css?v=4ae1632d" />
+      <link rel="stylesheet" type="text/css" href="_static/css/custom.css" />
+
+  
+    <link rel="shortcut icon" href="_static/favicon.ico"/>
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Command line" href="cli.html" />
+    <link rel="prev" title="Installation" href="install.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            CellMap Flow
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">CellMap-Flow API:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="install.html">Installation</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">In the browser</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#how-it-works">How it works</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#opening-a-volume">Opening a volume</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#running-the-models-over-a-region">Running the models over a region</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#finetuning-in-the-browser">Finetuning in the browser</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#which-model-to-start-from">Which model to start from</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#training-the-whole-network">Training the whole network</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#browsers-and-devices">Browsers and devices</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#running-it-locally">Running it locally</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="cli.html">Command line</a></li>
+<li class="toctree-l1"><a class="reference internal" href="scripts.html">Python Scripts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="yaml_config.html">YAML Configuration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="data_paths.html">Data paths</a></li>
+<li class="toctree-l1"><a class="reference internal" href="huggingface.html">HuggingFace Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="bioimage.html">BioImage Model Zoo</a></li>
+<li class="toctree-l1"><a class="reference internal" href="custom_script.html">Custom Model</a></li>
+<li class="toctree-l1"><a class="reference internal" href="post.html">PostProcessors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="plugins.html">Plugins</a></li>
+<li class="toctree-l1"><a class="reference internal" href="review.html">Reviewing instances</a></li>
+<li class="toctree-l1"><a class="reference internal" href="viewer_api.html">Viewer layer API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="architecture.html">Architecture</a></li>
+<li class="toctree-l1"><a class="reference internal" href="autoapi/index.html">API Reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">CellMap Flow</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">In the browser</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/browser.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="in-the-browser">
+<h1>In the browser<a class="headerlink" href="#in-the-browser" title="Link to this heading"></a></h1>
+<p><a class="reference external" href="https://janelia-cellmap.github.io/cellmap-flow/app/">janelia-cellmap.github.io/cellmap-flow/app</a>
+is cellmap-flow with nothing to install: the dashboard as a web page, with the
+models running in your browser. Open a volume, tick a model, and look at its
+predictions in Neuroglancer as you move around. It is the main place to try
+cellmap-flow, and the first place to test a change: every push to <code class="docutils literal notranslate"><span class="pre">main</span></code>
+deploys it (GitHub Pages, from <code class="docutils literal notranslate"><span class="pre">.github/workflows/pages.yml</span></code>).</p>
+<p><a class="reference external" href="https://janelia-cellmap.github.io/cellmap-flow/app/?dataset=https://janelia-cosem-datasets.s3.amazonaws.com/jrc_mus-liver/jrc_mus-liver.zarr/recon-1/em/fibsem-uint8&amp;model=setup_53">Open this example</a> to start from something running: an
+OpenOrganelle mouse-liver volume with the mitochondria model <code class="docutils literal notranslate"><span class="pre">setup_53</span></code> on
+it. A link’s query names the volume and the models, so any such pair can be
+shared:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>https://janelia-cellmap.github.io/cellmap-flow/app/?dataset=&lt;url&gt;&amp;model=&lt;name&gt;&amp;model=&lt;name&gt;
+</pre></div>
+</div>
+<p>A model is named as the Models tab lists it (<code class="docutils literal notranslate"><span class="pre">setup_53</span></code>) or by its
+repository path (<code class="docutils literal notranslate"><span class="pre">cellmap/onnx-web-models/setup_53</span></code>). <em>Share</em> in the header
+copies such a link to what you have open, with the view (position, zoom,
+each layer as shown) and the Input and Postprocess settings the models run
+with, for someone else to open. The address bar itself stays bare, so a new
+tab starts fresh.</p>
+<section id="how-it-works">
+<h2>How it works<a class="headerlink" href="#how-it-works" title="Link to this heading"></a></h2>
+<p>The page reads the raw volume straight from its URL, runs the model with
+<a class="reference external" href="https://onnxruntime.ai/">onnxruntime-web</a> on your machine’s GPU through
+WebGPU (or on its CPU through WebAssembly when there is none), and serves the
+predictions to Neuroglancer as a zarr array through a service worker, chunk by
+chunk, as the viewer asks for them. The models are ONNX exports of cellmap’s
+networks from <a class="reference external" href="https://huggingface.co/cellmap/onnx-web-models">cellmap/onnx-web-models</a>
+on Hugging Face, cached in the browser after the first download.</p>
+<p>It is the same dashboard as the server’s: the same Models, Input and
+Postprocess tabs, the same normalizers and postprocessing steps, a Finetune
+tab that paints and trains in the browser, and a Run tab of its own that
+saves the predictions over a region to a folder (both below). What is missing
+is what a browser cannot do: models that are not ONNX exports (PyTorch,
+TensorFlow, DaCapo, BioImage.io, Cellpose), a finetune of a 3D model’s whole
+network (the 2D models’ can train in the browser), crops imported from disk,
+the Pipeline Builder and blockwise runs on the cluster. Those are the server
+mode’s (<a class="reference internal" href="cli.html"><span class="doc">Command line</span></a>).</p>
+</section>
+<section id="opening-a-volume">
+<h2>Opening a volume<a class="headerlink" href="#opening-a-volume" title="Link to this heading"></a></h2>
+<p><strong>A URL.</strong> Paste the URL of an OME-Zarr group or array served with CORS
+(<code class="docutils literal notranslate"><span class="pre">Access-Control-Allow-Origin</span></code>). Public S3 and GCS buckets are, such as
+<a class="reference external" href="https://openorganelle.janelia.org">OpenOrganelle</a>’s; the connect panel’s
+placeholder is one of them.</p>
+<p><strong>A folder on your machine.</strong> In Chrome or Edge, <em>Browse local folder…</em> on the
+connect panel opens a directory picker, and the panel takes an OME-Zarr, zarr
+or N5 folder dropped on it from the file manager. Nothing is uploaded: the
+page reads the files itself. The browser asks once to allow reading the
+folder, and again after a reload. Firefox and Safari have no directory picker.</p>
+<p><strong>A volume on your institution’s network.</strong> A host with a private address
+(<code class="docutils literal notranslate"><span class="pre">10.x</span></code>, <code class="docutils literal notranslate"><span class="pre">192.168.x</span></code>, a <code class="docutils literal notranslate"><span class="pre">.local</span></code> name) opens as it does in
+Neuroglancer. To Chrome such a host is on your <em>local network</em>, which a
+public site such as this one may use only with your permission; if Chrome
+asks (“wants to look for and connect to devices on your local network”),
+allow it. Until it is allowed, connecting fails with <em>Failed to fetch</em>, and
+the connect panel says so; the setting is under <em>Local network access</em> in
+the site-information panel beside the address bar (or at
+<code class="docutils literal notranslate"><span class="pre">chrome://settings/content/localNetworkAccess</span></code>). Running the app locally
+on <code class="docutils literal notranslate"><span class="pre">http://localhost</span></code> (below) is not gated.</p>
+</section>
+<section id="running-the-models-over-a-region">
+<h2>Running the models over a region<a class="headerlink" href="#running-the-models-over-a-region" title="Link to this heading"></a></h2>
+<p>The viewer computes the chunks it shows, and keeps none of them. The <em>Run</em>
+tab runs the models served on the Models tab over a region, or the whole
+volume, on your GPU, and saves each one’s predictions as an OME-Zarr in a
+folder on your machine, to open in the app again or to copy to the cluster.</p>
+<ol class="arabic simple">
+<li><p>Tick the models (all are ticked at first). Each runs through the Input and
+Postprocess steps it is served with, so what is saved is what its layer
+shows.</p></li>
+<li><p><em>Draw a box</em> adds a <code class="docutils literal notranslate"><span class="pre">run_region</span></code> layer to the viewer. Hold <code class="docutils literal notranslate"><span class="pre">Ctrl</span></code>
+and click two opposite corners of the box in the viewer, scrolling
+between the two clicks to give it depth (a flat box is one chunk
+deep). The latest box drawn fills the <em>Offset</em> and <em>Size</em> fields (nm, z y
+x), and typing in them moves the box in the viewer to match, once you
+pause. <em>Whole volume</em> fills them with the volume’s
+extent instead. Under the fields, the tab says what each model would
+compute: the box in its voxels and in chunks (a chunk is one block the
+model computes at a time), with a warning for a run of more than 2,000
+chunks.</p></li>
+<li><p><em>Choose folder…</em> picks the folder to save into, or drop a folder on the
+<em>Output folder</em> block; the browser asks you to allow the page to edit
+files in it. Chrome refuses some folders themselves, such as Downloads
+and your home folder (“it contains system files”): make a new folder
+inside one (the picker has a <em>New Folder</em> button) and choose that. The
+folder is remembered, and after a reload the browser asks again when you
+click <em>Run</em>.</p></li>
+<li><p><em>Run</em> writes each model to <code class="docutils literal notranslate"><span class="pre">&lt;folder&gt;/&lt;model&gt;.zarr</span></code> with a progress bar
+(chunks, megabytes, time left) and <em>Cancel</em>, which keeps what was written.
+The run goes on while you move around the viewer or use the other tabs,
+and the viewer stays responsive: its chunks go first; reloading the page
+during a run asks first. If a
+<code class="docutils literal notranslate"><span class="pre">&lt;model&gt;.zarr</span></code> is in the folder already, the tab asks before replacing
+it (it is deleted first, so the old chunks do not mix with the new ones).</p></li>
+<li><p><em>Show the saved predictions in the viewer</em> adds each saved zarr as a
+<code class="docutils literal notranslate"><span class="pre">&lt;model&gt;</span> <span class="pre">(saved)</span></code> layer, read back from the folder, over the model’s live
+layer.</p></li>
+</ol>
+<p>Each zarr is zarr v2 with OME-Zarr 0.4 metadata, gzip-compressed (or not,
+with <em>Compression</em> set to <em>None</em>: Fiji’s zarr reader has no gzip), holding
+exactly the region: an array of the region’s voxels, not the whole volume’s,
+at the voxel size of the model’s layer and placed where the layer is by its
+translation (empty chunks are left out), so Neuroglancer, zarr-python and
+the server mode read it as they read any OME-Zarr. Its attributes, under
+<code class="docutils literal notranslate"><span class="pre">cellmap_flow</span></code>, say what made it: the model and its variant, the
+normalizers and postprocessing, the volume’s URL, the region in nm and the
+box in voxels, and when. Saving to a folder needs Chrome or Edge (the File
+System Access API); in Firefox and Safari a run of up to 256 MB of
+predictions is kept in memory and offered as a zip of the <code class="docutils literal notranslate"><span class="pre">.zarr</span></code> folders.</p>
+</section>
+<section id="finetuning-in-the-browser">
+<h2>Finetuning in the browser<a class="headerlink" href="#finetuning-in-the-browser" title="Link to this heading"></a></h2>
+<p>With a model running, the Finetune tab’s <em>New Volume</em> adds a paint layer to
+the viewer, selected, on its Draw tab: paint background (value 1) and the
+objects (2 and up) on a few slices with the brush (<code class="docutils literal notranslate"><span class="pre">A</span></code>) and flood fill
+(<code class="docutils literal notranslate"><span class="pre">F</span></code>), as on the server
+(<a class="reference external" href="https://github.com/janelia-cellmap/cellmap-flow/blob/main/docs/finetuning.md">docs/finetuning.md</a>).
+On the tab’s Training panel,
+<em>Start Finetuning</em> trains in the tab: the model’s last layer, its output
+convolution, is fitted on the voxels you painted, from the model’s own
+weights, in seconds on any machine; the job card and the loss plot follow it.
+With <em>Auto-serve</em> on, the finetuned model takes the layer over as soon as it
+is trained. Paint where it is still wrong and train again (<em>Restart</em> goes on
+from the trained layer, with the form’s values as they are then). Once the
+job waits for a restart, <code class="docutils literal notranslate"><span class="pre">Shift+R</span></code> over the viewer does the same without
+asking first, so painting and training again need not leave the viewer; it
+says in the tab’s logs what it did, or why there was nothing to restart. A
+restart’s model replaces the one before it, its layer included, and the one
+before is deleted from the browser: a job keeps its latest model only, as the
+server serves only a job’s latest iteration, and a new <em>Start Finetuning</em>
+makes a new one beside it.</p>
+<p>You can also paint before any model is running. <em>New Volume</em> then shows a
+<em>Voxel size (nm)</em> field that offers the dataset’s levels and takes any size
+you type (one number, or z, y, x); left blank, it uses the level the viewer
+shows when you click. The volume lies on the raw’s grid at that size, in
+64-voxel chunks, with no model recorded, as on the server. <em>Seed from
+Prediction</em> and <em>Fit to Paint</em> work on it with the model picked under
+<em>Prediction from</em> (or the only one served). <em>Start Finetuning</em> refuses it,
+because it is on no model’s grid. Rank the models on
+the paint under <em>Which model to start from</em> (below) and click <em>Use this
+model</em>: that copies the paint onto the chosen model’s grid, and you train on
+the new volume.</p>
+<p>The training panel’s controls are the server’s where they mean something for
+one layer: the epochs, the learning rate, the loss (BCE by default, MSE or
+margin; Dice scores whole patches and needs the server), label smoothing,
+class balance, and <em>Distillation Weight</em> and <em>Scope</em>, which keep the layer
+close to the model’s own output where you painted nothing: the loss adds the
+weight times the mean squared distance of the layer’s logits from the
+original’s, on the unpainted voxels of the painted chunks (or all of their
+voxels), up to 32,768 of them. 0.01, the default, is a light hold; 0.1 to 1
+holds firmly. <em>Voxels per Step</em> is the browser’s own batch: how many painted
+voxels each step of the training averages over. <em>Mark as Good</em>, under <em>Patch
+on screen</em>, marks the output block where the viewer looks as one the model
+already gets right; it shows as the <code class="docutils literal notranslate"><span class="pre">good_regions</span></code> box layer and is kept
+with the volume. Once there are good regions, distillation holds the model to
+its own output inside them, wherever you have not painted, instead of over
+the scope, as on the server; <em>clear</em> removes them.</p>
+<p>What this can and cannot fix. The rest of the network stays as exported, so
+the finetune learns what the model mislabels where its features already tell
+the two apart (a membrane it calls mitochondrion, a texture it misses), not
+new shapes; that is a finetune of the whole network, which the server mode
+runs on the cluster, and whose result the browser can serve as any other
+model. The models can train their whole network in the browser too (below).</p>
+<section id="which-model-to-start-from">
+<h3>Which model to start from<a class="headerlink" href="#which-model-to-start-from" title="Link to this heading"></a></h3>
+<p>A finetune has least to learn from the model that already gets most of your
+paint right, and that is not always the one the volume was made for. The
+Training panel’s <em>Which model to start from</em> ranks the models the browser can
+run, those finetuned in it among them, by how well each one’s prediction
+matches the volume’s paint: open the card (it starts closed, and stays as you
+leave it), tick the models, press <em>Rank models</em>, and each is scored in turn,
+a few seconds to half a minute each, and listed best first.</p>
+<ul class="simple">
+<li><p><strong>Match</strong>, which ranks them, is the share of the painted voxels the model
+gets right, objects and background counting equally, so that paint mostly
+of background does not reward a model that calls everything background:
+such a model matches 50%. Beside it are the share of painted objects it
+calls object and of painted background it calls background.</p></li>
+<li><p>Each model is scored at its own cut-off: the threshold on its output that
+fits the paint best. The row’s <em>Threshold</em> gives it as a probability, as
+<em>Seed from Prediction</em> takes it (0.5 is the model’s own boundary), with the
+match at 0.5 when that differs. A model that sees the objects but calls too
+much or too little at 0.5 is ranked as it would be used once its threshold
+is set.</p></li>
+<li><p>Raw that spans only a few grey levels (<code class="docutils literal notranslate"><span class="pre">jrc_jurkat-1</span></code>’s about 20 of
+0–255) looks almost flat to a model through its usual normalizer. Where
+the raw under the paint spans less than a quarter of the normalizer’s
+range, the model is scored again with the normalizer stretched to the
+raw’s 1st to 99th percentiles, and that is kept when it matches at least 3
+points better. The row’s <em>Input</em> gives the grey levels the model read as 0
+to 1: the normalizer’s own range, or the stretched one with the match
+unstretched beside it.</p></li>
+<li><p>A model is scored on what its own finetune would train on: a nucleus or
+mitochondria model on its channel (a model of several such channels on the
+one that matches best, which the row names), an affinity model on the pairs
+of painted neighbours, the same object or not. Its prediction is read on
+the paint’s grid, each painted voxel taking the model’s voxel its centre
+lies in, so a model at another voxel size is scored on the same paint.</p></li>
+<li><p>Rough strokes are forgiven: for a nucleus or mitochondria model, a painted
+voxel next to one painted the other class is not counted.</p></li>
+<li><p>A model finer than the paint (8 or 16 nm under 128 nm strokes) needs a
+block of its own for every few painted voxels, so it is scored under at
+most 32 of its blocks, spread over the paint, and its row says so.</p></li>
+<li><p>A model not loaded is loaded for its score alone, at its smallest block
+size, and released after: the Models tab, the viewer and the GPU are left
+as they were. <em>Show</em> loads one and adds its layer.</p></li>
+</ul>
+<p>With paint on one object, scores a few points apart are as good as tied, and
+the list says so; a little paint in two or three places ranks them more
+clearly. On <code class="docutils literal notranslate"><span class="pre">jrc_jurkat-1</span></code>, with a slice of one nucleus painted (4,430
+voxels), <code class="docutils literal notranslate"><span class="pre">setup_56</span></code> came first at 62% and <code class="docutils literal notranslate"><span class="pre">setup_55</span></code>, the volume’s own
+model, which sees none of the dataset’s nuclei, matched 50%. The box above
+the list filters it (<code class="docutils literal notranslate"><span class="pre">nuc</span></code>, <code class="docutils literal notranslate"><span class="pre">16</span> <span class="pre">nm</span></code>, <code class="docutils literal notranslate"><span class="pre">affinities</span></code>, <code class="docutils literal notranslate"><span class="pre">2d</span></code>), and only
+the ticked models it shows are ranked.</p>
+<p><em>Use this model</em> makes a ranked model the one to finetune without painting
+again: it is loaded with its layer and picked under <em>Select Model</em>, a volume
+is made for it, the paint and the good regions are copied into that volume
+on the model’s own grid, and its paint layer takes the old one’s place (the
+old volume stays, under <em>Resume Existing Volume</em>). What its score chose comes
+with it: a stretched raw becomes the session’s input normalization (the raw
+is the dataset’s, so every model reads it so), and its cut-off becomes <em>Seed
+from Prediction</em>’s threshold, marked <em>set by ranking</em> beside the field until
+you change it; a line under <em>Label it</em>’s buttons says what was set. On the
+same grid the paint
+is copied voxel for voxel; on a finer one each painted voxel becomes the
+voxels it covers; on a coarser one each voxel takes the label of the painted
+voxels inside it, and is left unpainted where they disagree (object against
+background in one voxel), which the status line counts. A stroke thinner
+than the coarser voxel still lands, a voxel wide.</p>
+<p><em>Fit to Paint</em>, beside <em>Seed from Prediction</em>, does the same for the model
+you already seed from (<em>Prediction from</em>), with no new volume and nothing
+served: it scores that model on your paint as a ranking would, sets <em>Seed
+from Prediction</em>’s threshold to the one that fits best, and stretches the
+input normalization when that scored clearly better. Paint a few strokes of
+object and background, fit, then seed: the seed is cut where your paint says.</p>
+</section>
+<section id="training-the-whole-network">
+<h3>Training the whole network<a class="headerlink" href="#training-the-whole-network" title="Link to this heading"></a></h3>
+<p>Each model’s manifest on Hugging Face says how it can be trained, and the
+Training panel offers just that. For the 2D students (<code class="docutils literal notranslate"><span class="pre">setup_53_2d</span></code> and
+<code class="docutils literal notranslate"><span class="pre">setup_54_2d</span></code>) and the 3D models (<code class="docutils literal notranslate"><span class="pre">setup_53</span></code>, <code class="docutils literal notranslate"><span class="pre">setup_54</span></code>, <code class="docutils literal notranslate"><span class="pre">setup_55</span></code>,
+<code class="docutils literal notranslate"><span class="pre">setup_56</span></code>, <code class="docutils literal notranslate"><span class="pre">setup_61</span></code> and <code class="docutils literal notranslate"><span class="pre">setup_67</span></code>) it offers both, so a <em>Training</em>
+choice appears at the top of the panel: <em>Last layer</em>, as above, or <em>Whole
+network</em>: every weight of the model trains on your paint, with
+<a class="reference external" href="https://www.tensorflow.org/js">TensorFlow.js</a> on this machine’s GPU
+(WebGPU), from a training graph Marwan Zouinkhi exported beside each model.
+The weights trained are written back into the model’s <code class="docutils literal notranslate"><span class="pre">.onnx</span></code>, which is
+then served, kept, downloaded and restarted from as a last-layer finetune
+is; switching between the two needs a new <em>Start Finetuning</em>. A model served
+from an int8 file offers neither (its weights are quantized and cannot be
+written): serve its fp32 or fp16 file to finetune it.</p>
+<p>A 2D model’s whole network trains on square tiles cut from the painted
+slices, in the plane you painted in (x–y, or z–y and z–x where the raw data’s
+voxels are cubes, as the server’s 2D training does), with Adam; a 3D model’s
+on cubes around the paint (below). Its controls are the
+epochs, its own learning rates (1e-4 by default, a hundredth of the last
+layer’s), the server’s <em>Batch Size</em>, in tiles per step (1 by default), <em>Tile
+Size</em>, <em>Augmentation</em>, and the last layer’s loss, distillation, smoothing and
+balance fields, which it reads as the last layer does. Distillation holds the
+model to the starting network’s output on the voxels its scope picks in each
+tile, worked out on the same tile it trains on. Good regions are not used.</p>
+<p><em>Augmentation</em>, off by default as on the server, gives each step’s tiles a
+random brightness (×0.8 to ×1.2) and noise (1% of the raw’s range) before
+normalization, then random flips and quarter turns of the image and the paint
+together, the server’s augmentation. The targets, and the starting network’s
+output for distillation, are made after the turn, from the turned paint and
+image, so an affinity still means its own direction. The whole network sees
+the same tiles every epoch, and augmentation varies them, so that it learns
+what it is shown rather than how one tile looks; the price is several times
+the steps, and with paint on only one or two objects it can stall (see the 3D
+models below). The last layer trains on features computed once, and takes no
+augmentation.</p>
+<p><em>Tile Size</em> is the tile’s side in pixels: 172, 300 (the default), 428 or 556.
+The model reads 88 pixels of context around what it predicts, so a tile’s
+output is 88 pixels smaller: half of a 300² tile is output, a quarter of a
+172² one, 71% of a 556² one. A smaller tile trains a step faster and in less
+memory, but more of each step is context. The hint under the field gives the
+time and memory of one step at the batch chosen, as measured in Chrome on an
+Apple laptop GPU (TF.js 4.22.0, batch 1) and scaled by area for the sides not
+measured:</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Model</p></th>
+<th class="head"><p>300², a step</p></th>
+<th class="head"><p>300², memory</p></th>
+<th class="head"><p>556², a step</p></th>
+<th class="head"><p>556², memory</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>setup_53_2d</p></td>
+<td><p>294 ms</p></td>
+<td><p>320 MB</p></td>
+<td><p>1178 ms</p></td>
+<td><p>1307 MB</p></td>
+</tr>
+<tr class="row-odd"><td><p>setup_54_2d</p></td>
+<td><p>462 ms</p></td>
+<td><p>908 MB</p></td>
+<td><p>1919 ms</p></td>
+<td><p>3702 MB</p></td>
+</tr>
+</tbody>
+</table>
+<p>300² is the default because it fits a laptop: four times faster than 556²
+and a quarter of its memory, which for setup_54_2d is more than many laptop
+GPUs give a tab. An epoch is one pass over the tiles, which cover each slice’s
+paint once. <em>Whole network</em> needs a GPU: where the browser finds none
+through WebGPU, the option is shown disabled with why (on the CPU a step
+would take minutes, and the page would answer nothing else meanwhile). The
+log says how long a step takes.</p>
+<p>A 3D model trains on cubes instead of tiles: a grid of cubes the size of the
+model’s output is laid over the painted voxels, and each cube that holds
+paint is read with the raw around it, whatever planes you painted in, so
+strokes on a few neighbouring slices teach the model along z too (an
+affinity model’s z channel learns from them). The field is then <em>Block
+Size</em>, the cube’s side, in the sides the model’s files come in: 124³, 140³
+and 172³ for the UNets (<code class="docutils literal notranslate"><span class="pre">setup_53</span></code>, <code class="docutils literal notranslate"><span class="pre">setup_55</span></code>), 116³, 132³ and 148³ for
+the ResUNets (<code class="docutils literal notranslate"><span class="pre">setup_54</span></code>, <code class="docutils literal notranslate"><span class="pre">setup_56</span></code>, <code class="docutils literal notranslate"><span class="pre">setup_61</span></code>, <code class="docutils literal notranslate"><span class="pre">setup_67</span></code>), the
+one it is served at by default. The run trains that side’s file, at the
+precision served, and the finetune is served from it, so it is served at
+the block it trained on: a ResUNet’s InstanceNorm normalizes each block by
+its own statistics, and a network trained on one size of block and served
+at another meets statistics it did not learn on. A <em>Restart</em> keeps the
+block; another one is a new job, as the trained network is in its file. A
+model finetuned here trains at its own block only. The model
+reads 88 voxels of context on each axis, so a 124³ block’s output is 36³,
+2.4% of it, and a block costs its volume: 172³ takes about three times the
+time and memory of 124³. A 3D model trains one block a step, so <em>Batch Size</em>
+is held at 1. <em>Augmentation</em> flips a block along z, y and x and turns it
+only in the x–y plane. The network is trained in less than a third of the
+memory TensorFlow.js’s own gradients would take (its activations recomputed
+rather than kept), and the hint gives the time and memory of one step as
+measured on an NVIDIA RTX 2080 Ti (11 GB), the time with distillation’s
+forward pass of the starting network:</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Model</p></th>
+<th class="head"><p>124³, a step</p></th>
+<th class="head"><p>124³, memory</p></th>
+<th class="head"><p>172³, a step</p></th>
+<th class="head"><p>172³, memory</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>setup_53, setup_55 (UNet)</p></td>
+<td><p>2.8 s</p></td>
+<td><p>2.2 GB</p></td>
+<td><p>8.2 s</p></td>
+<td><p>5.3 GB</p></td>
+</tr>
+<tr class="row-odd"><td><p>setup_54, setup_56, setup_61, setup_67 (ResUNet)</p></td>
+<td><p>4.0 s</p></td>
+<td><p>4.0 GB</p></td>
+<td><p>11.9 s</p></td>
+<td><p>9.9 GB</p></td>
+</tr>
+</tbody>
+</table>
+<p>A block that does not fit the GPU’s memory stops the run with a message
+naming a smaller <em>Block Size</em> to try; where even 124³ does not fit, train the
+last layer, which needs no more than inference.</p>
+<p>A run is a number of steps, epochs × blocks (its first line gives the
+blocks), and a 3D model’s whole network wants 60 to 150 of them: <em>Number of
+Epochs</em> goes up to 500 for paint that lies in one or two blocks. In a test on
+<code class="docutils literal notranslate"><span class="pre">jrc_jurkat-1</span></code> with <code class="docutils literal notranslate"><span class="pre">setup_55</span></code>, which sees none of its nuclei to start
+with, one painted slice of one nucleus (4 blocks) took it to 98% of that
+nucleus and 62% of the ten it was not shown in 300 steps, scored against
+OpenOrganelle’s nucleus segmentation; painting the whole slice rather than a
+ring of background around the nucleus cut the background it called nucleus
+from 18% to 6.5%. With <em>Augmentation</em> on, a ring around the same nucleus held
+the loss between 0.63 and 0.68, next to guessing, through 500 steps; turn it
+on once several objects are painted, with 3 to 5 times the epochs. The epoch
+lines’ loss reads
+against two marks: 0.69 for the default class-balanced BCE is guessing, and
+about 0.20 with label smoothing of 0.1 is the paint fitted exactly.</p>
+<p>The <em>Patch on screen</em> tools label the box centred where the viewer looks, as
+on the server (<a class="reference external" href="https://github.com/janelia-cellmap/cellmap-flow/blob/main/docs/finetuning.md">docs/finetuning.md</a>):
+<em>Seed from Prediction</em> copies a model’s
+prediction into the unpainted voxels, an id per object and background 1, for
+you to fix with the brush; <em>All Background</em> labels them background; <em>Split
+Objects</em> gives each connected object an id of its own (paint a background wall
+through a merge first); <em>Undo</em> takes back the last of these, or of an accepted
+AI annotation, up to 10. <em>Prediction from</em> lists the models served on the
+Models tab, the ones finetuned here among them (default: the volume model’s
+latest finetune), and the seed reads the prediction the page has already
+computed for the viewer. Its methods are <em>Threshold + components</em> for any
+model and <em>Mutex watershed</em> for an affinity model; the server’s <em>Distance
+watershed</em> and <em>Model’s instances</em> fit outputs no browser model has.</p>
+<p>AI-assisted annotation is in the tab too, under <em>Patch on screen</em>: hover over
+a structure and press <code class="docutils literal notranslate"><span class="pre">Shift+G</span></code> (or click <em>Annotate at View Centre</em>), and
+one plane of raw EM goes to a Gemini image model asked to paint it; the
+review opens over the page, <em>Accept</em> writes the mask into the paint volume as
+an object per piece, and the tools’ <em>Undo</em> takes it back. The page calls Google itself, with
+credentials you give it in the panel: a Gemini API key, or a Google Cloud
+project and an access token for Vertex AI (<code class="docutils literal notranslate"><span class="pre">gcloud</span> <span class="pre">auth</span> <span class="pre">print-access-token</span></code>,
+good for about an hour). They stay in this browser and go to Google alone,
+with each plane, and are kept in the page’s memory only, never in the
+browser’s storage, so a reload asks for them again. On the Gemini API’s free tier Google may use what is
+sent to improve its products, on its paid tier and on Vertex AI it does not;
+the server mode uses Vertex AI for that reason. A <em>fake</em> provider paints in
+the page, for trying the panel without a key. The server’s guide,
+<a class="reference external" href="https://github.com/janelia-cellmap/cellmap-flow/blob/main/docs/ai_annotate.md">docs/ai_annotate.md</a>,
+has the details under “In the browser”.</p>
+<p>The paint and the finetuned models stay in the browser (IndexedDB): <em>Resume
+Existing Volume</em> lists the volumes painted here, newest first, and the
+Models tab lists the finetuned models under the Hugging Face ones. The ✕
+beside a finetuned model under <em>Loaded models</em> (see <em>Usage</em> on the
+<a class="reference internal" href="index.html"><span class="doc">front page</span></a>) stops serving it and keeps it, to tick again.
+<em>Download paint</em> saves the volume as a zarr (zipped, the server’s layout, so a server
+session can train on it) and <em>Download finetuned model</em> the <code class="docutils literal notranslate"><span class="pre">.onnx</span></code>, with
+its manifest (voxel sizes, block, channels, input normalization) written into
+the file’s metadata, so that the server mode serves the file as it is.
+Nothing leaves your machine unless you download and share it.</p>
+<p>To run the same models on the cluster, <em>Export Config</em> (in the header) saves
+a YAML that <code class="docutils literal notranslate"><span class="pre">cellmap_flow</span> <span class="pre">yaml</span></code> runs, each model a <code class="docutils literal notranslate"><span class="pre">type:</span> <span class="pre">onnx</span></code> entry; a
+finetuned model’s <code class="docutils literal notranslate"><span class="pre">.onnx</span></code>, from <em>Download finetuned model</em>, goes beside it.
+See <a class="reference internal" href="yaml_config.html#onnx"><span class="std std-ref">ONNX exports and models finetuned in the browser</span></a> for what the YAML holds and what to add for the cluster.</p>
+</section>
+</section>
+<section id="browsers-and-devices">
+<h2>Browsers and devices<a class="headerlink" href="#browsers-and-devices" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p><strong>WebGPU.</strong> Chrome or Edge (any current version), or Safari 26 and later.
+Without WebGPU the page still works, on the CPU: tens of seconds per chunk
+instead of well under one.</p></li>
+<li><p><strong>Phones.</strong> The viewer fills the screen and the <em>Dashboard</em> button in the
+header opens the controls over it.</p></li>
+<li><p><strong>Memory.</strong> Model files are 11–43 MB each, kept in IndexedDB; the page
+picks a smaller variant (fp16, int8 weights) when the GPU’s limits call for
+it.</p></li>
+</ul>
+</section>
+<section id="running-it-locally">
+<h2>Running it locally<a class="headerlink" href="#running-it-locally" title="Link to this heading"></a></h2>
+<p>The browser mode lives in the repository’s <code class="docutils literal notranslate"><span class="pre">web/</span></code> directory; its
+<a class="reference external" href="https://github.com/janelia-cellmap/cellmap-flow/blob/main/web/README.md">README</a>
+says how to build and run it (<code class="docutils literal notranslate"><span class="pre">npm</span> <span class="pre">run</span> <span class="pre">dev</span></code>, then <code class="docutils literal notranslate"><span class="pre">http://localhost:5173/</span></code>:
+the address must be <code class="docutils literal notranslate"><span class="pre">localhost</span></code> or <code class="docutils literal notranslate"><span class="pre">https://</span></code> for WebGPU) and how its
+parts fit together. The in-browser engine is
+<a class="reference external" href="https://github.com/JaneliaSciComp/chunkmirage">chunkmirage</a>’s, and the
+browser mode itself is a port of Marwan Zouinkhi’s serverless prototype of
+cellmap-flow.</p>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="install.html" class="btn btn-neutral float-left" title="Installation" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="cli.html" class="btn btn-neutral float-right" title="Command line" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, David Ackerman,  Marwan Zouinkhi, Jeff Rhoades, Larissa Heinrich, Aubrey Weigel.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

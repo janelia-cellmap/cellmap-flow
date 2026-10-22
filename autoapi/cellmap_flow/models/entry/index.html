@@ -1,0 +1,358 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>cellmap_flow.models.entry &mdash; CellMap Flow  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=4ae1632d" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css" />
+
+  
+    <link rel="shortcut icon" href="../../../../_static/favicon.ico"/>
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link rel="next" title="cellmap_flow.models.envs" href="../envs/index.html" />
+    <link rel="prev" title="cellmap_flow.models.configs.script" href="../configs/script/index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            CellMap Flow
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">CellMap-Flow API:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../../../../install.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../browser.html">In the browser</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../cli.html">Command line</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../scripts.html">Python Scripts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../yaml_config.html">YAML Configuration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../data_paths.html">Data paths</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../huggingface.html">HuggingFace Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../bioimage.html">BioImage Model Zoo</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../custom_script.html">Custom Model</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../post.html">PostProcessors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../plugins.html">Plugins</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../review.html">Reviewing instances</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../viewer_api.html">Viewer layer API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../architecture.html">Architecture</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../../../index.html">API Reference</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="../../index.html">cellmap_flow</a><ul class="current">
+<li class="toctree-l3 current"><a class="reference internal" href="../../index.html#submodules">Submodules</a><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="../../ai_annotate/index.html">cellmap_flow.ai_annotate</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../blockwise/index.html">cellmap_flow.blockwise</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../cli/index.html">cellmap_flow.cli</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../config/index.html">cellmap_flow.config</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../dashboard/index.html">cellmap_flow.dashboard</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../finetune/index.html">cellmap_flow.finetune</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../globals/index.html">cellmap_flow.globals</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../image_data_interface/index.html">cellmap_flow.image_data_interface</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../inference/index.html">cellmap_flow.inference</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../inferencer/index.html">cellmap_flow.inferencer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../io/index.html">cellmap_flow.io</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../jobs/index.html">cellmap_flow.jobs</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../logging_setup/index.html">cellmap_flow.logging_setup</a></li>
+<li class="toctree-l4 current"><a class="reference internal" href="../index.html">cellmap_flow.models</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../norm/index.html">cellmap_flow.norm</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../pipeline_spec/index.html">cellmap_flow.pipeline_spec</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../plugins/index.html">cellmap_flow.plugins</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../portable/index.html">cellmap_flow.portable</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../post/index.html">cellmap_flow.post</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../process_chain/index.html">cellmap_flow.process_chain</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../review/index.html">cellmap_flow.review</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../review_index/index.html">cellmap_flow.review_index</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../schema/index.html">cellmap_flow.schema</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../serving/index.html">cellmap_flow.serving</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../utils/index.html">cellmap_flow.utils</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../viewer/index.html">cellmap_flow.viewer</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">CellMap Flow</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">API Reference</a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">cellmap_flow</a></li>
+          <li class="breadcrumb-item"><a href="../index.html">cellmap_flow.models</a></li>
+      <li class="breadcrumb-item active">cellmap_flow.models.entry</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../../../../_sources/autoapi/cellmap_flow/models/entry/index.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-cellmap_flow.models.entry">
+<span id="cellmap-flow-models-entry"></span><h1>cellmap_flow.models.entry<a class="headerlink" href="#module-cellmap_flow.models.entry" title="Link to this heading"></a></h1>
+<p>A model entry, and how its values become constructor arguments.</p>
+<p>A model entry is <code class="docutils literal notranslate"><span class="pre">{&quot;type&quot;:</span> <span class="pre">&lt;type</span> <span class="pre">name&gt;,</span> <span class="pre">&quot;name&quot;:</span> <span class="pre">...,</span> <span class="pre">&quot;env&quot;:</span> <span class="pre">...,</span>
+<span class="pre">**arguments}</span></code>: the one shape every description of a model takes. A YAML’s
+<code class="docutils literal notranslate"><span class="pre">models:</span></code> holds them; <code class="docutils literal notranslate"><span class="pre">cellmap_flow</span> <span class="pre">infer</span> <span class="pre">&lt;type&gt;</span></code> makes one of its
+options; the dashboard’s model form posts one; the Models tab’s catalog,
+Hugging Face, zoo and Cellpose pickers build one; <code class="docutils literal notranslate"><span class="pre">models.resolve</span></code> returns
+one for a pasted reference; <code class="docutils literal notranslate"><span class="pre">ModelConfig.to_dict()</span></code> writes one back; and
+<code class="docutils literal notranslate"><span class="pre">cellmap_flow</span> <span class="pre">serve</span> <span class="pre">--model</span></code> takes one. <code class="docutils literal notranslate"><span class="pre">registry.build_model</span></code> builds the
+config from it, and <code class="docutils literal notranslate"><span class="pre">coerce</span></code> here is how the entry’s values become the
+constructor’s arguments.</p>
+<p>The values arrive as whatever their source has: numbers and lists from a
+YAML or JSON, strings from the command line and the form. <code class="docutils literal notranslate"><span class="pre">coerce</span></code> reads
+each constructor argument’s annotation and makes the value fit it, so the
+same entry gives the same config wherever it came from:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">int</span></code>, <code class="docutils literal notranslate"><span class="pre">float</span></code>, <code class="docutils literal notranslate"><span class="pre">bool</span></code>, <code class="docutils literal notranslate"><span class="pre">str</span></code>: that type. A string is parsed (“8”
+is 8, “5.24” is 5.24, “true” is True); a whole float is an int.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">tuple</span></code> or <code class="docutils literal notranslate"><span class="pre">list</span></code>, with or without an element type (<code class="docutils literal notranslate"><span class="pre">tuple[int,</span> <span class="pre">...]</span></code>,
+<code class="docutils literal notranslate"><span class="pre">list[str]</span></code>): a sequence. A string is a JSON list or comma-separated
+values (“8,8,8”, “(16, 8, 8)”, “mito, er”), and one number is a one-item
+sequence. Each item takes the element type when the annotation gives one;
+without one, an item that reads as a number is a number and the rest stay
+strings.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">dict</span></code>: a JSON object from a string. A string that is not JSON is left as
+it is, for the constructor (a finetune’s base64 <code class="docutils literal notranslate"><span class="pre">base_model</span></code>, the form
+launchers used before 0.3.0).</p></li>
+<li><p>no annotation: the value as given.</p></li>
+</ul>
+<p>None, a blank string (an empty form field) and an empty list are left out,
+so the constructor’s default applies, and names the constructor does not take are
+dropped: an entry <code class="docutils literal notranslate"><span class="pre">to_dict()</span></code> wrote may carry more than the constructor
+takes (a finetuned model’s channels, for display).</p>
+<p>The helpers after <code class="docutils literal notranslate"><span class="pre">coerce</span></code> are what the constructors normalize their
+arguments with, whichever way they were called: through <code class="docutils literal notranslate"><span class="pre">build_model</span></code>, or
+from Python with a number, a tuple or a Coordinate. They parse text through
+the same <code class="docutils literal notranslate"><span class="pre">split</span></code>, so a string reaches the same value by either route.</p>
+<section id="functions">
+<h2>Functions<a class="headerlink" href="#functions" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.models.entry.number" title="cellmap_flow.models.entry.number"><code class="xref py py-obj docutils literal notranslate"><span class="pre">number</span></code></a>(value)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">value</span></code> as an int when it is whole, else as a float.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.models.entry.split" title="cellmap_flow.models.entry.split"><code class="xref py py-obj docutils literal notranslate"><span class="pre">split</span></code></a>(→ list)</p></td>
+<td><p>The items of a sequence written as text.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.models.entry.coerce_value" title="cellmap_flow.models.entry.coerce_value"><code class="xref py py-obj docutils literal notranslate"><span class="pre">coerce_value</span></code></a>(value, annotation)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">value</span></code> as a constructor argument annotated <code class="docutils literal notranslate"><span class="pre">annotation</span></code> (see the module docstring).</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.models.entry.blank" title="cellmap_flow.models.entry.blank"><code class="xref py py-obj docutils literal notranslate"><span class="pre">blank</span></code></a>(→ bool)</p></td>
+<td><p>Whether <code class="docutils literal notranslate"><span class="pre">value</span></code> says nothing: None, a blank string (an empty form</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.models.entry.coerce" title="cellmap_flow.models.entry.coerce"><code class="xref py py-obj docutils literal notranslate"><span class="pre">coerce</span></code></a>(→ dict)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">params</span></code>, a model entry's arguments, as <code class="docutils literal notranslate"><span class="pre">cls</span></code>'s constructor takes them.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.models.entry.numbers" title="cellmap_flow.models.entry.numbers"><code class="xref py py-obj docutils literal notranslate"><span class="pre">numbers</span></code></a>(→ list)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">value</span></code> as a list of numbers, ints kept ints and 5.24 kept 5.24: from</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.models.entry.voxel_size" title="cellmap_flow.models.entry.voxel_size"><code class="xref py py-obj docutils literal notranslate"><span class="pre">voxel_size</span></code></a>(value[, what])</p></td>
+<td><p>A voxel size, nm per voxel along z, y and x, as a tuple of three</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.models.entry.sizes" title="cellmap_flow.models.entry.sizes"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sizes</span></code></a>(value, *[, min, lengths, what])</p></td>
+<td><p>None, or <code class="docutils literal notranslate"><span class="pre">value</span></code> (one number, &quot;148&quot;, &quot;20,256,256&quot; or a sequence) as a tuple of whole numbers.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.models.entry.per_axis" title="cellmap_flow.models.entry.per_axis"><code class="xref py py-obj docutils literal notranslate"><span class="pre">per_axis</span></code></a>(counts, n, what)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">counts</span></code> (<code class="docutils literal notranslate"><span class="pre">sizes</span></code>'s) for each of <code class="docutils literal notranslate"><span class="pre">n</span></code> axes: one number is every axis's; None stays None.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.models.entry.as_given" title="cellmap_flow.models.entry.as_given"><code class="xref py py-obj docutils literal notranslate"><span class="pre">as_given</span></code></a>(counts)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">counts</span></code> (<code class="docutils literal notranslate"><span class="pre">sizes</span></code>'s) as a model entry writes them: one number as itself, more as a list.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.models.entry.names" title="cellmap_flow.models.entry.names"><code class="xref py py-obj docutils literal notranslate"><span class="pre">names</span></code></a>(value)</p></td>
+<td><p>None, or channel names as a list of strings, from a sequence or the</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="module-contents">
+<h2>Module Contents<a class="headerlink" href="#module-contents" title="Link to this heading"></a></h2>
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.models.entry.number">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.entry.</span></span><span class="sig-name descname"><span class="pre">number</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">value</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.models.entry.number" title="Link to this definition"></a></dt>
+<dd><p><code class="docutils literal notranslate"><span class="pre">value</span></code> as an int when it is whole, else as a float.</p>
+<p><code class="docutils literal notranslate"><span class="pre">int()</span></code> truncated a 5.24 nm voxel size to 5, which put crops and
+layers on the wrong grid.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.models.entry.split">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.entry.</span></span><span class="sig-name descname"><span class="pre">split</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">text</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">list</span></span></span><a class="headerlink" href="#cellmap_flow.models.entry.split" title="Link to this definition"></a></dt>
+<dd><p>The items of a sequence written as text.</p>
+<p>A JSON list is read as JSON, so its items keep their types. Otherwise
+the text, less brackets or parentheses around it, is split on commas
+(“8,8,8”, “(16, 8, 8)”, “mito, er”), or on commas and spaces when every
+piece is a number (“8 8 8”, as a voxel size is typed), into strings.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.models.entry.coerce_value">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.entry.</span></span><span class="sig-name descname"><span class="pre">coerce_value</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">value</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">annotation</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.models.entry.coerce_value" title="Link to this definition"></a></dt>
+<dd><p><code class="docutils literal notranslate"><span class="pre">value</span></code> as a constructor argument annotated <code class="docutils literal notranslate"><span class="pre">annotation</span></code> (see the module docstring).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>ValueError</strong> – <code class="docutils literal notranslate"><span class="pre">value</span></code> cannot be read as what the annotation asks for.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.models.entry.blank">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.entry.</span></span><span class="sig-name descname"><span class="pre">blank</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">value</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#cellmap_flow.models.entry.blank" title="Link to this definition"></a></dt>
+<dd><p>Whether <code class="docutils literal notranslate"><span class="pre">value</span></code> says nothing: None, a blank string (an empty form
+field) or an empty list or tuple.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.models.entry.coerce">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.entry.</span></span><span class="sig-name descname"><span class="pre">coerce</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">cls</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">params</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span></span></span><a class="headerlink" href="#cellmap_flow.models.entry.coerce" title="Link to this definition"></a></dt>
+<dd><p><code class="docutils literal notranslate"><span class="pre">params</span></code>, a model entry’s arguments, as <code class="docutils literal notranslate"><span class="pre">cls</span></code>’s constructor takes them.</p>
+<p>Each value is coerced by its argument’s annotation (<code class="docutils literal notranslate"><span class="pre">coerce_value</span></code>);
+None and blank strings are left out, and names the constructor does not
+take are dropped, unless it takes <code class="docutils literal notranslate"><span class="pre">**kwargs</span></code>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>ValueError</strong> – a value cannot be read as its annotation asks; the
+message starts with the argument’s name.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.models.entry.numbers">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.entry.</span></span><span class="sig-name descname"><span class="pre">numbers</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">value</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">what</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'values'</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">list</span></span></span><a class="headerlink" href="#cellmap_flow.models.entry.numbers" title="Link to this definition"></a></dt>
+<dd><p><code class="docutils literal notranslate"><span class="pre">value</span></code> as a list of numbers, ints kept ints and 5.24 kept 5.24: from
+one number, a sequence of them, or text (“8”, “16,8,8”, “(16, 8, 8)”).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>ValueError</strong> – something in it is not a number; the message names <code class="docutils literal notranslate"><span class="pre">what</span></code>.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.models.entry.voxel_size">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.entry.</span></span><span class="sig-name descname"><span class="pre">voxel_size</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">value</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">what</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'voxel_size'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.models.entry.voxel_size" title="Link to this definition"></a></dt>
+<dd><p>A voxel size, nm per voxel along z, y and x, as a tuple of three
+numbers: from one number (every axis’s), a sequence of three, or text;
+ints kept ints (<code class="docutils literal notranslate"><span class="pre">int()</span></code> made a 5.24 nm voxel 5). None stays None.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>ValueError</strong> – not numbers, not one or three of them, or not positive;
+the message names <code class="docutils literal notranslate"><span class="pre">what</span></code>.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.models.entry.sizes">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.entry.</span></span><span class="sig-name descname"><span class="pre">sizes</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">value</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">min</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lengths</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">what</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'sizes'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.models.entry.sizes" title="Link to this definition"></a></dt>
+<dd><p>None, or <code class="docutils literal notranslate"><span class="pre">value</span></code> (one number, “148”, “20,256,256” or a sequence) as a tuple of whole numbers.</p>
+<p>One number stays one (<code class="docutils literal notranslate"><span class="pre">per_axis</span></code> widens it), so that <code class="docutils literal notranslate"><span class="pre">as_given</span></code>
+writes it back as it was given. Each must be at least <code class="docutils literal notranslate"><span class="pre">min</span></code>, and when
+<code class="docutils literal notranslate"><span class="pre">lengths</span></code> is given, their count must be one of them.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>ValueError</strong> – not numbers, too few or too many, or too small; the
+message names <code class="docutils literal notranslate"><span class="pre">what</span></code>.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.models.entry.per_axis">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.entry.</span></span><span class="sig-name descname"><span class="pre">per_axis</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">counts</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">what</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.models.entry.per_axis" title="Link to this definition"></a></dt>
+<dd><p><code class="docutils literal notranslate"><span class="pre">counts</span></code> (<code class="docutils literal notranslate"><span class="pre">sizes</span></code>’s) for each of <code class="docutils literal notranslate"><span class="pre">n</span></code> axes: one number is every axis’s; None stays None.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>ValueError</strong> – neither one number nor <code class="docutils literal notranslate"><span class="pre">n</span></code>.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.models.entry.as_given">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.entry.</span></span><span class="sig-name descname"><span class="pre">as_given</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">counts</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.models.entry.as_given" title="Link to this definition"></a></dt>
+<dd><p><code class="docutils literal notranslate"><span class="pre">counts</span></code> (<code class="docutils literal notranslate"><span class="pre">sizes</span></code>’s) as a model entry writes them: one number as itself, more as a list.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.models.entry.names">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.entry.</span></span><span class="sig-name descname"><span class="pre">names</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">value</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.models.entry.names" title="Link to this definition"></a></dt>
+<dd><p>None, or channel names as a list of strings, from a sequence or the
+“mito, er” the command line and the model form send.</p>
+</dd></dl>
+
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../configs/script/index.html" class="btn btn-neutral float-left" title="cellmap_flow.models.configs.script" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../envs/index.html" class="btn btn-neutral float-right" title="cellmap_flow.models.envs" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, David Ackerman,  Marwan Zouinkhi, Jeff Rhoades, Larissa Heinrich, Aubrey Weigel.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

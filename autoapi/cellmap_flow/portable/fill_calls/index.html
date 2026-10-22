@@ -1,0 +1,268 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>cellmap_flow.portable.fill_calls &mdash; CellMap Flow  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=4ae1632d" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css" />
+
+  
+    <link rel="shortcut icon" href="../../../../_static/favicon.ico"/>
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link rel="next" title="cellmap_flow.portable.label_it" href="../label_it/index.html" />
+    <link rel="prev" title="cellmap_flow.portable.fill" href="../fill/index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            CellMap Flow
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">CellMap-Flow API:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../../../../install.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../browser.html">In the browser</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../cli.html">Command line</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../scripts.html">Python Scripts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../yaml_config.html">YAML Configuration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../data_paths.html">Data paths</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../huggingface.html">HuggingFace Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../bioimage.html">BioImage Model Zoo</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../custom_script.html">Custom Model</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../post.html">PostProcessors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../plugins.html">Plugins</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../review.html">Reviewing instances</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../viewer_api.html">Viewer layer API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../architecture.html">Architecture</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../../../index.html">API Reference</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="../../index.html">cellmap_flow</a><ul class="current">
+<li class="toctree-l3 current"><a class="reference internal" href="../../index.html#submodules">Submodules</a><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="../../ai_annotate/index.html">cellmap_flow.ai_annotate</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../blockwise/index.html">cellmap_flow.blockwise</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../cli/index.html">cellmap_flow.cli</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../config/index.html">cellmap_flow.config</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../dashboard/index.html">cellmap_flow.dashboard</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../finetune/index.html">cellmap_flow.finetune</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../globals/index.html">cellmap_flow.globals</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../image_data_interface/index.html">cellmap_flow.image_data_interface</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../inference/index.html">cellmap_flow.inference</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../inferencer/index.html">cellmap_flow.inferencer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../io/index.html">cellmap_flow.io</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../jobs/index.html">cellmap_flow.jobs</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../logging_setup/index.html">cellmap_flow.logging_setup</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../models/index.html">cellmap_flow.models</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../norm/index.html">cellmap_flow.norm</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../pipeline_spec/index.html">cellmap_flow.pipeline_spec</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../plugins/index.html">cellmap_flow.plugins</a></li>
+<li class="toctree-l4 current"><a class="reference internal" href="../index.html">cellmap_flow.portable</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../post/index.html">cellmap_flow.post</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../process_chain/index.html">cellmap_flow.process_chain</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../review/index.html">cellmap_flow.review</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../review_index/index.html">cellmap_flow.review_index</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../schema/index.html">cellmap_flow.schema</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../serving/index.html">cellmap_flow.serving</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../utils/index.html">cellmap_flow.utils</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../viewer/index.html">cellmap_flow.viewer</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">CellMap Flow</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">API Reference</a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">cellmap_flow</a></li>
+          <li class="breadcrumb-item"><a href="../index.html">cellmap_flow.portable</a></li>
+      <li class="breadcrumb-item active">cellmap_flow.portable.fill_calls</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../../../../_sources/autoapi/cellmap_flow/portable/fill_calls/index.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-cellmap_flow.portable.fill_calls">
+<span id="cellmap-flow-portable-fill-calls"></span><h1>cellmap_flow.portable.fill_calls<a class="headerlink" href="#module-cellmap_flow.portable.fill_calls" title="Link to this heading"></a></h1>
+<p>What the browser calls for Label it’s box tools: the functions
+<code class="docutils literal notranslate"><span class="pre">web/src/backend/routes/view-labels.ts</span></code>’s Seed from Prediction, All
+Background, Split Objects and Undo run through
+<code class="docutils literal notranslate"><span class="pre">Inference.python(&quot;cellmap_flow.portable.fill_calls:&lt;name&gt;&quot;,</span> <span class="pre">args,</span> <span class="pre">arrays)</span></code>,
+in the shape <code class="docutils literal notranslate"><span class="pre">chunkmirage.calls</span></code> says: <code class="docutils literal notranslate"><span class="pre">fn(args,</span> <span class="pre">arrays)</span></code>, <code class="docutils literal notranslate"><span class="pre">args</span></code> the
+JSON arguments, <code class="docutils literal notranslate"><span class="pre">arrays</span></code> the bytes sent beside them, in order; a JSON
+value, or a pair of JSON and arrays, back. Each decodes its arrays, calls
+<code class="docutils literal notranslate"><span class="pre">fill.py</span></code> and encodes the answer; the maths is not here, and the server’s
+routes (<code class="docutils literal notranslate"><span class="pre">dashboard/routes/finetune/view_labels.py</span></code>, through
+<code class="docutils literal notranslate"><span class="pre">finetune/session/fill.py</span></code>) call the same functions around MinIO.</p>
+<p>The route reads the box from the paint store and writes back what comes
+out, and keeps the undo stack, as the AI annotation’s accept does
+(<code class="docutils literal notranslate"><span class="pre">ai_annotate_calls.accept</span></code>): nothing here reads or keeps a volume. A box
+travels as the store holds it: <code class="docutils literal notranslate"><span class="pre">shape</span></code> (z, y, x) and <code class="docutils literal notranslate"><span class="pre">dtype</span></code> (the
+volume’s) in <code class="docutils literal notranslate"><span class="pre">args</span></code>, its bytes in C order, always <code class="docutils literal notranslate"><span class="pre">arrays[0]</span></code>. A write
+answers the box to write as its one array, or no array when nothing
+changes, so the route writes nothing and pushes no undo entry then.</p>
+<p>A refusal the server answers 400 (new ids that do not fit in the volume’s
+dtype, a ValueError there) comes back as <code class="docutils literal notranslate"><span class="pre">{&quot;error&quot;:</span> <span class="pre">message}</span></code>, as
+<code class="docutils literal notranslate"><span class="pre">label_it_calls</span></code> answers its own, for the route to answer as the server
+does. A <code class="docutils literal notranslate"><span class="pre">ModuleNotFoundError</span></code> (scipy, which Split Objects labels its
+components with) is never caught: it is how chunkmirage’s worker learns to
+load scipy, before it calls again.</p>
+<section id="functions">
+<h2>Functions<a class="headerlink" href="#functions" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.portable.fill_calls.box" title="cellmap_flow.portable.fill_calls.box"><code class="xref py py-obj docutils literal notranslate"><span class="pre">box</span></code></a>(args, arrays)</p></td>
+<td><p>The annotation voxels a box in world nm covers (<code class="docutils literal notranslate"><span class="pre">fill.box_voxels</span></code>).</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.portable.fill_calls.seed" title="cellmap_flow.portable.fill_calls.seed"><code class="xref py py-obj docutils literal notranslate"><span class="pre">seed</span></code></a>(args, arrays)</p></td>
+<td><p>A seed written into the box's unannotated voxels: <code class="docutils literal notranslate"><span class="pre">fill.seed_labels</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.portable.fill_calls.background" title="cellmap_flow.portable.fill_calls.background"><code class="xref py py-obj docutils literal notranslate"><span class="pre">background</span></code></a>(args, arrays)</p></td>
+<td><p>Every unannotated voxel of the box background (1), written as</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.portable.fill_calls.split" title="cellmap_flow.portable.fill_calls.split"><code class="xref py py-obj docutils literal notranslate"><span class="pre">split</span></code></a>(args, arrays)</p></td>
+<td><p>The box's foreground relabelled by connected component</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.portable.fill_calls.undo" title="cellmap_flow.portable.fill_calls.undo"><code class="xref py py-obj docutils literal notranslate"><span class="pre">undo</span></code></a>(args, arrays)</p></td>
+<td><p>The box put back to before an action where it still holds what the</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="module-contents">
+<h2>Module Contents<a class="headerlink" href="#module-contents" title="Link to this heading"></a></h2>
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.portable.fill_calls.box">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.fill_calls.</span></span><span class="sig-name descname"><span class="pre">box</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">arrays</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.portable.fill_calls.box" title="Link to this definition"></a></dt>
+<dd><p>The annotation voxels a box in world nm covers (<code class="docutils literal notranslate"><span class="pre">fill.box_voxels</span></code>).
+<code class="docutils literal notranslate"><span class="pre">args</span></code>: <code class="docutils literal notranslate"><span class="pre">volume</span></code> (its <code class="docutils literal notranslate"><span class="pre">output_voxel_size</span></code> and
+<code class="docutils literal notranslate"><span class="pre">dataset_offset_nm</span></code>), <code class="docutils literal notranslate"><span class="pre">offset_nm</span></code> and <code class="docutils literal notranslate"><span class="pre">shape_nm</span></code> (the box’s lower
+corner and size, z, y, x) and <code class="docutils literal notranslate"><span class="pre">volume_shape</span></code> (the volume’s voxels).
+Answers <code class="docutils literal notranslate"><span class="pre">{&quot;lo&quot;,</span> <span class="pre">&quot;hi&quot;}</span></code>, or null when no voxel of the volume is in the
+box.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.portable.fill_calls.seed">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.fill_calls.</span></span><span class="sig-name descname"><span class="pre">seed</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">arrays</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.portable.fill_calls.seed" title="Link to this definition"></a></dt>
+<dd><p>A seed written into the box’s unannotated voxels: <code class="docutils literal notranslate"><span class="pre">fill.seed_labels</span></code>
+of the objects, written as <code class="docutils literal notranslate"><span class="pre">fill.paint</span></code> writes without overwrite.
+<code class="docutils literal notranslate"><span class="pre">args</span></code>: the box’s <code class="docutils literal notranslate"><span class="pre">shape</span></code> and <code class="docutils literal notranslate"><span class="pre">dtype</span></code>, and <code class="docutils literal notranslate"><span class="pre">instance_target</span></code>
+(the model trains on instances, so new ids count up on a volume of more
+than 8-bit ids: <code class="docutils literal notranslate"><span class="pre">fill.counts_up</span></code>). <code class="docutils literal notranslate"><span class="pre">arrays</span></code>: the box, then the
+objects over it (uint32, 0 background, as <code class="docutils literal notranslate"><span class="pre">label_it_calls.seed</span></code>
+answers them). Answers the counts (<code class="docutils literal notranslate"><span class="pre">n_foreground</span></code>, <code class="docutils literal notranslate"><span class="pre">n_background</span></code>,
+<code class="docutils literal notranslate"><span class="pre">n_overwritten</span></code>) with the box to write; or the refusal, when the new
+ids do not fit.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.portable.fill_calls.background">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.fill_calls.</span></span><span class="sig-name descname"><span class="pre">background</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">arrays</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.portable.fill_calls.background" title="Link to this definition"></a></dt>
+<dd><p>Every unannotated voxel of the box background (1), written as
+<code class="docutils literal notranslate"><span class="pre">fill.paint</span></code> writes without overwrite: All Background. <code class="docutils literal notranslate"><span class="pre">args</span></code>: the
+box’s <code class="docutils literal notranslate"><span class="pre">shape</span></code> and <code class="docutils literal notranslate"><span class="pre">dtype</span></code>; <code class="docutils literal notranslate"><span class="pre">arrays</span></code>: the box. Answers as
+<code class="docutils literal notranslate"><span class="pre">seed</span></code>.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.portable.fill_calls.split">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.fill_calls.</span></span><span class="sig-name descname"><span class="pre">split</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">arrays</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.portable.fill_calls.split" title="Link to this definition"></a></dt>
+<dd><p>The box’s foreground relabelled by connected component
+(<code class="docutils literal notranslate"><span class="pre">fill.relabel_objects</span></code>) and written over its foreground voxels
+(<code class="docutils literal notranslate"><span class="pre">fill.rewrite</span></code>): Split Objects. <code class="docutils literal notranslate"><span class="pre">args</span></code>: the box’s <code class="docutils literal notranslate"><span class="pre">shape</span></code> and
+<code class="docutils literal notranslate"><span class="pre">dtype</span></code>, and <code class="docutils literal notranslate"><span class="pre">connectivity</span></code> and <code class="docutils literal notranslate"><span class="pre">per_slice</span></code>, as the route has read
+them. <code class="docutils literal notranslate"><span class="pre">arrays</span></code>: the box. Answers the counts (<code class="docutils literal notranslate"><span class="pre">objects</span></code>, <code class="docutils literal notranslate"><span class="pre">split</span></code>,
+<code class="docutils literal notranslate"><span class="pre">merged</span></code>) and <code class="docutils literal notranslate"><span class="pre">changed</span></code>, the voxels whose label changed, with the box
+to write; or the refusal, when the split-off pieces’ new ids do not
+fit.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.portable.fill_calls.undo">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.fill_calls.</span></span><span class="sig-name descname"><span class="pre">undo</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">args</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">arrays</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.portable.fill_calls.undo" title="Link to this definition"></a></dt>
+<dd><p>The box put back to before an action where it still holds what the
+action left (<code class="docutils literal notranslate"><span class="pre">fill.restore</span></code>): Undo. <code class="docutils literal notranslate"><span class="pre">args</span></code>: the box’s <code class="docutils literal notranslate"><span class="pre">shape</span></code> and
+<code class="docutils literal notranslate"><span class="pre">dtype</span></code>; <code class="docutils literal notranslate"><span class="pre">arrays</span></code>: the box as it is now, then the undo entry’s
+<code class="docutils literal notranslate"><span class="pre">before</span></code> and <code class="docutils literal notranslate"><span class="pre">after</span></code>, each shaped as the box. Answers <code class="docutils literal notranslate"><span class="pre">restored</span></code>,
+the voxels put back, with the box to write.</p>
+</dd></dl>
+
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../fill/index.html" class="btn btn-neutral float-left" title="cellmap_flow.portable.fill" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../label_it/index.html" class="btn btn-neutral float-right" title="cellmap_flow.portable.label_it" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, David Ackerman,  Marwan Zouinkhi, Jeff Rhoades, Larissa Heinrich, Aubrey Weigel.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

@@ -1,0 +1,125 @@
+cellmap_flow.jobs.settings
+==========================
+
+.. py:module:: cellmap_flow.jobs.settings
+
+.. autoapi-nested-parse::
+
+   The launcher's settings: which queue, who is billed, how long a job may run.
+
+   One ``LauncherSettings`` per process, from ``launcher_settings()``. It holds
+   one attribute per key of ``SERVER_CONFIG_DEFAULTS``, the one place a key is
+   added, and ``cached``: whether the values came from, or were saved to, the
+   file.
+
+   The settings cross processes through ~/.cellmap_flow/server_config.yaml,
+   whose keys and format are what this module reads and writes:
+
+   - ``launcher_settings()`` loads the file over the defaults the first time any
+     code in the process asks, so a script, a blockwise master and the dashboard
+     all get the saved values without asking for them.
+   - The CLIs apply their flags (``-q``, ``-P``) and a YAML's values to it and
+     ``save()`` it; the dashboard's /api/server-config does the same.
+   - ``start_hosts``, the finetune submit and blockwise read it for their
+     defaults. ``config.yaml.load_config`` reads the file itself, not this.
+
+   Nothing here is read at import: the file is opened on the first call, and
+   ``SERVER_CONFIG_PATH`` is looked up when the file is read or written, so a
+   test can point it elsewhere.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.jobs.settings.SERVER_CONFIG_PATH
+   cellmap_flow.jobs.settings.SERVER_CONFIG_DEFAULTS
+   cellmap_flow.jobs.settings.SERVER_CONFIG_KEYS
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.jobs.settings.LauncherSettings
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.jobs.settings.load_server_config_cache
+   cellmap_flow.jobs.settings.save_server_config_cache
+   cellmap_flow.jobs.settings.launcher_settings
+
+
+Module Contents
+---------------
+
+.. py:data:: SERVER_CONFIG_PATH
+
+.. py:data:: SERVER_CONFIG_DEFAULTS
+
+.. py:data:: SERVER_CONFIG_KEYS
+   :value: ['queue', 'charge_group', 'walltime', 'cycle_gpu_queues', 'nb_cores_master', 'nb_cores_worker',...
+
+
+.. py:function:: load_server_config_cache() -> Optional[Dict[str, Any]]
+
+   Load server config from cache file. Returns None if not found.
+
+
+.. py:function:: save_server_config_cache(config: Dict[str, Any]) -> None
+
+   Save server config to cache file.
+
+
+.. py:class:: LauncherSettings(values: Optional[Dict[str, Any]] = None, cached: bool = False)
+
+   The saved settings, one attribute per key, and ``cached``.
+
+   The slots come from the defaults, so a misspelt setting raises instead
+   of being stored beside the real one, and a key added to the defaults is
+   loaded and saved without being named anywhere else. (Assigning each key
+   by hand is how adding "walltime" once gave save() a key no instance had,
+   and every `cellmap_flow yaml` run died at startup.)
+
+
+   .. py:attribute:: cached
+      :value: False
+
+
+
+   .. py:method:: load() -> LauncherSettings
+      :classmethod:
+
+
+      The saved file over the defaults. A key the file lacks (it was
+      saved before the key existed) gets its default.
+
+
+
+   .. py:method:: as_dict() -> Dict[str, Any]
+
+      {key: value}, every key, as the file holds them.
+
+
+
+   .. py:method:: save() -> None
+
+      Write every key to the file, for this and later processes.
+
+
+
+.. py:function:: launcher_settings() -> LauncherSettings
+
+   This process's settings, loaded from the file on the first call.
+
+   Read it at call time, never into a module global: tests swap in fresh
+   settings per test, and a copy taken at import would outlive them.
+
+

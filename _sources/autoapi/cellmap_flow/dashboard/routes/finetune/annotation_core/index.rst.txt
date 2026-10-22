@@ -1,0 +1,118 @@
+cellmap_flow.dashboard.routes.finetune.annotation_core
+======================================================
+
+.. py:module:: cellmap_flow.dashboard.routes.finetune.annotation_core
+
+.. autoapi-nested-parse::
+
+   The models to annotate for, a new annotation volume, and the user's settings.
+
+   Routes: GET ``/api/finetune/models``, POST ``/api/finetune/create-volume``,
+   and GET and POST ``/api/finetune/user-prefs``.
+
+   A volume is made for a model, on the grid its prediction is served on, or
+   before any model (a "paint-first" volume, ``make_paint_volume``) on the
+   raw's grid at a voxel size of the user's, the raw level the viewer shows by
+   default: the models answer lists the raw's levels for New Volume to offer.
+   A paint-first volume is not trained on (``paint_first_refusal``, which
+   training's submit asks): Which model to start from's Use this model carries
+   its paint onto a model's grid (rank_routes).
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.routes.finetune.annotation_core.logger
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.routes.finetune.annotation_core.serve_new_volume
+   cellmap_flow.dashboard.routes.finetune.annotation_core.make_volume
+   cellmap_flow.dashboard.routes.finetune.annotation_core.make_paint_volume
+   cellmap_flow.dashboard.routes.finetune.annotation_core.session_raw_voxel_sizes
+   cellmap_flow.dashboard.routes.finetune.annotation_core.shown_voxel_size
+   cellmap_flow.dashboard.routes.finetune.annotation_core.paint_first_refusal
+   cellmap_flow.dashboard.routes.finetune.annotation_core.get_finetune_models
+   cellmap_flow.dashboard.routes.finetune.annotation_core.create_annotation_volume
+   cellmap_flow.dashboard.routes.finetune.annotation_core.get_user_prefs
+   cellmap_flow.dashboard.routes.finetune.annotation_core.set_user_prefs
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:function:: serve_new_volume(geometry, corrections_dir, dataset_path, model_name, annotation_dtype='uint8')
+
+   Write a new volume with ``geometry`` into ``corrections_dir`` and serve it.
+
+   The volume records the dashboard's current normalization and
+   postprocessing chains, so the trainer can reproduce the inference-side
+   normalization and the finetuned model's YAML the postprocessing. Returns
+   ``(volume_id, zarr_path, url)``, the URL as the browser reaches MinIO.
+   Registering the volume is the caller's.
+
+
+.. py:function:: make_volume(model_name, model_config, config, corrections_dir)
+
+   A new annotation volume for ``model_name`` (``config`` its geometry,
+   resolve_model_geometry's), over the session's dataset in
+   ``corrections_dir``: written, served, registered as the session's and
+   in its manifest. Returns ``(volume_id, zarr_path, minio_url, geometry)``.
+   Create Volume makes one; so does Which model to start from's Use this
+   model (rank_routes).
+
+
+.. py:function:: make_paint_volume(voxel_size, corrections_dir)
+
+   A new volume painted before any model (no ``model_name``), over the
+   session's dataset in ``corrections_dir``, on the raw's grid at
+   ``voxel_size`` (nm, z, y, x; None: the level the viewer shows,
+   ``shown_voxel_size``): written, served and registered as the session's,
+   as make_volume's, and returned as it returns one. It gets no training
+   manifest, as it is not trained on (``paint_first_refusal``).
+
+
+.. py:function:: session_raw_voxel_sizes()
+
+   The voxel sizes (nm, z, y, x) of the session's raw levels, finest
+   first (session/volume.py raw_voxel_sizes), kept per dataset: the models
+   answer carries them, every two seconds while the tab waits for a model.
+   Empty without a dataset, or when its levels cannot be read (logged).
+
+
+.. py:function:: shown_voxel_size()
+
+   The voxel size of the raw level the viewer shows now
+   (portable/volume.py shown_level at the viewer's zoom, viewer/raw.py
+   view_of), the finest without a viewer or a zoom: a paint-first volume's
+   when New Volume is given none. A ValueError when the raw's levels
+   cannot be read.
+
+
+.. py:function:: paint_first_refusal(corrections_dir)
+
+   Training's submit refused for a session whose volume
+   (session_store's session_volume of ``corrections_dir``) was painted
+   before any model: ``(response, 400)``, whose error is portable/volume.py
+   training_refusal's sentence (the browser's submit says the same) and
+   whose ``paint_first`` the tab can key on. None when the volume can be
+   trained on, or there is none (submit says so itself).
+
+
+.. py:function:: get_finetune_models()
+
+.. py:function:: create_annotation_volume()
+
+.. py:function:: get_user_prefs()
+
+.. py:function:: set_user_prefs()
+

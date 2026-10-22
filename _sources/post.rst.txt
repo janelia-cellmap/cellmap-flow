@@ -1,0 +1,142 @@
+PostProcessors
+====================
+
+Overview
+--------
+
+The `PostProcessor` module defines a framework for applying various postprocessing operations to `numpy.ndarray` data, primarily used in image segmentation, classification, and data normalization workflows.
+
+Base Class
+----------
+
+.. class:: PostProcessor
+
+    Abstract base class for all postprocessing methods.
+
+    .. method:: name()
+
+        Returns the class name.
+
+    .. method:: __call__(data, **kwargs)
+
+        Invokes the `process()` method.
+
+    .. method:: process(data, **kwargs)
+
+        Ensures `data` is a NumPy array and dispatches to `_process`.
+
+    .. method:: _process(data, **kwargs)
+
+        Abstract method to be implemented by subclasses.
+
+    .. method:: to_dict()
+
+        Serializes instance attributes to a dictionary.
+
+    .. attribute:: dtype
+
+        Returns the target NumPy dtype of the processed output.
+
+    .. attribute:: is_segmentation
+
+        Boolean indicating if output represents a segmentation map.
+
+PostProcessor Subclasses
+------------------------
+
+DefaultPostprocessor
+~~~~~~~~~~~~~~~~~~~~
+
+.. class:: DefaultPostprocessor(clip_min=-1.0, clip_max=1.0, bias=1.0, multiplier=127.5)
+
+Clips, biases, and scales the data. Converts to `uint8`.
+
+- `clip_min`: Minimum clipping value
+- `clip_max`: Maximum clipping value
+- `bias`: Value added after clipping
+- `multiplier`: Scaling factor
+
+ThresholdPostprocessor
+~~~~~~~~~~~~~~~~~~~~~~
+
+.. class:: ThresholdPostprocessor(threshold=0.5)
+
+Applies a threshold to binarize data. Produces `uint8` output.
+
+- `threshold`: Threshold for binarization
+
+LabelPostprocessor
+~~~~~~~~~~~~~~~~~~
+
+.. class:: LabelPostprocessor(channel=0, connectivity=1, min_size=0, per_slice=False)
+
+Labels the connected objects of a selected channel (``post.segment.connected_components``),
+an id per object, within the chunk. ``connectivity`` is which neighbours touch: 1 faces only
+(the default, as ``scipy.ndimage.label``), 2 faces and edges, 3 corners too. Objects of fewer
+than ``min_size`` voxels become background. ``per_slice`` labels each z slice on its own, for
+2D models. Ids are unique within a chunk; follow it with MortonSegmentationRelabeling for ids
+unique across chunks.
+
+CellposeMasksPostprocessor
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. class:: CellposeMasksPostprocessor(flow_threshold=0.4, cellprob_threshold=0.0, min_size=15, stitch_threshold=0.0, niter=200)
+
+Cellpose's masks, made from a Cellpose model's ``output: flows`` (channels flow_y, flow_x, cell) by
+following each pixel's flow, as Cellpose does, slice by slice; ``stitch_threshold`` above 0 joins
+objects across slices by IoU. Put it first in the chain, on a Cellpose server (it needs Cellpose).
+Unlike ``output: masks``, its thresholds can be changed from the dashboard without restarting the
+model; it sees each chunk without the context the server's own masks are followed over, so objects
+at chunk edges can differ. Ids are unique within the chunk: follow it with
+MortonSegmentationRelabeling.
+
+MortonSegmentationRelabeling
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. class:: MortonSegmentationRelabeling(channel=0)
+
+Relabels segmentation data using Morton-order encoding to ensure chunk-wise uniqueness.
+
+- `channel`: Channel to operate on
+- Uses `pymorton.interleave` for chunk-based ID uniqueness
+
+AffinityPostprocessor
+~~~~~~~~~~~~~~~~~~~~~
+
+.. class:: AffinityPostprocessor(bias=0.5, neighborhood=...)
+
+Uses multi-scale watershed (`mwatershed`) to generate segmentations from affinity graphs.
+
+- `bias`: the affinity above which neighbours join (0.5 by default, the midpoint of a sigmoid's probabilities)
+- `neighborhood`: List of offset vectors for affinity connectivity
+
+SimpleBlockwiseMerger
+~~~~~~~~~~~~~~~~~~~~~
+
+.. class:: SimpleBlockwiseMerger(channel=0, face_erosion_iterations=0)
+
+Merges chunk boundaries using edge voxel consistency and `neuroglancer.equivalence_map`.
+
+- `face_erosion_iterations`: Controls erosion on boundary faces before merge
+- Maintains a dictionary of voxel ID equivalences between chunks
+
+ChannelSelection
+~~~~~~~~~~~~~~~~
+
+.. class:: ChannelSelection(channels="0")
+
+Selects a subset of channels from the input array.
+
+- `channels`: Comma-separated list of channel indices (e.g., `"0,1,2"`)
+
+LambdaPostprocessor
+~~~~~~~~~~~~~~~~~~~
+
+.. class:: LambdaPostprocessor(expression)
+
+Applies a user-defined lambda expression to each data point.
+
+- `expression`: A numpy expression in `x` (e.g., `"x * 2"`, `"np.clip(x, 0, 1)"`). Arithmetic, comparisons,
+  indexing, `abs`, whitelisted `np.*` functions and dtypes, and a few array methods such as `astype` and `clip`
+  are allowed, with the keyword arguments `axis`, `keepdims`, `dtype`, `a_min` and `a_max`. Anything else,
+  including repeating a list (`[x] * n`), is rejected, because expressions arrive in layer URLs.

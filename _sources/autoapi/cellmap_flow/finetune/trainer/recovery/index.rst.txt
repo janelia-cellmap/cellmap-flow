@@ -1,0 +1,132 @@
+cellmap_flow.finetune.trainer.recovery
+======================================
+
+.. py:module:: cellmap_flow.finetune.trainer.recovery
+
+.. autoapi-nested-parse::
+
+   Keeping a run alive: mixed precision and the way back to fp32, out-of-memory
+   mitigation, and the check that no non-finite gradient reaches the weights.
+
+   ``Precision`` is the run's autocast dtype and GradScaler. The functions take
+   the trainer (``loop.Finetuner``), whose batch, accumulation and distillation
+   term they change.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.trainer.recovery.logger
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.trainer.recovery.Precision
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.finetune.trainer.recovery.probe_precision
+   cellmap_flow.finetune.trainer.recovery.halve_batch
+   cellmap_flow.finetune.trainer.recovery.survive_oom
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:class:: Precision(device, enabled: bool)
+
+   Mixed precision on CUDA: bf16 where the GPU has it, else fp16 with a
+   GradScaler; off on other devices, and off for good after a NaN
+   (``fall_back_to_fp32``).
+
+   bf16, because autocast's CUDA default, fp16, carries 5 exponent bits, so
+   a UNet this deep overflows in the forward pass: every run NaN'd out on
+   the startup probe and fell back to fp32, so "mixed precision" was never
+   once in effect and the tensor cores sat idle for the whole job. bf16
+   has fp32's 8 bits, which is exactly the failure mode it exists to fix,
+   and needs no loss scaling. Ampere and newer only (H100/H200 = cc 9.0
+   yes; the RTX 2080 Ti workstation = cc 7.5 no), so fp16 where it is
+   unavailable, and the probe demotes to fp32 if that NaNs too. The
+   GradScaler compensates for fp16's narrow range; bf16 does not need it,
+   and enabling it there costs a little and hides real overflows.
+
+
+   .. py:attribute:: device
+
+
+   .. py:attribute:: enabled
+
+
+   .. py:attribute:: amp_dtype
+      :value: Ellipsis
+
+
+
+   .. py:attribute:: scaler
+
+
+   .. py:method:: autocast(enabled=None)
+
+      The autocast context of a forward pass (``enabled`` False for a probe in fp32).
+
+
+
+   .. py:method:: describe() -> str
+
+      For the log and the TensorBoard card: "True (dtype=bfloat16, grad_scaler=False)" or "False (fp32)".
+
+
+
+   .. py:method:: fall_back_to_fp32()
+
+      Disable mixed precision training.
+
+
+
+   .. py:method:: gradients_finite(model) -> bool
+
+      Whether every accumulated gradient of ``model`` is finite.
+
+      With fp16 the GradScaler already skips a step whose gradients
+      overflowed, and it must see them scaled, so that case is left to it.
+
+
+
+.. py:function:: probe_precision(trainer)
+
+   One forward pass under mixed precision before training; fp32 if it NaNs.
+
+   Some model+data combinations produce NaN under fp16 autocast. On an OOM
+   the batch is halved as well. Runs with the model in eval mode (the
+   caller's doing), as the probe only looks at what the model computes.
+
+
+.. py:function:: halve_batch(trainer) -> bool
+
+   Halve the trainer's batch size and double its gradient accumulation, so the
+   effective batch size stays; False if the batch is already 1.
+
+
+.. py:function:: survive_oom(trainer, epoch) -> bool
+
+   Make room after an out-of-memory epoch: halve the batch, else drop
+   distillation; False when nothing is left to try.
+
+   Applied again and again until the epoch succeeds or there is nothing
+   left: users can restart with a much larger rank and batch and the second
+   attempt OOMs too. The optimizer's accumulated gradients are stale after
+   an OOM, so they are cleared.
+
+

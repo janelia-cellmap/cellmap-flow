@@ -1,0 +1,354 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>cellmap_flow.finetune.trainer.supervised &mdash; CellMap Flow  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../../_static/graphviz.css?v=4ae1632d" />
+      <link rel="stylesheet" type="text/css" href="../../../../../_static/css/custom.css" />
+
+  
+    <link rel="shortcut icon" href="../../../../../_static/favicon.ico"/>
+      <script src="../../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../../../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../search.html" />
+    <link rel="next" title="cellmap_flow.finetune.trainer.tensorboard" href="../tensorboard/index.html" />
+    <link rel="prev" title="cellmap_flow.finetune.trainer.recovery" href="../recovery/index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../../index.html" class="icon icon-home">
+            CellMap Flow
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">CellMap-Flow API:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../../../../../install.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../browser.html">In the browser</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../cli.html">Command line</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../scripts.html">Python Scripts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../yaml_config.html">YAML Configuration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../data_paths.html">Data paths</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../huggingface.html">HuggingFace Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../bioimage.html">BioImage Model Zoo</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../custom_script.html">Custom Model</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../post.html">PostProcessors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../plugins.html">Plugins</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../review.html">Reviewing instances</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../viewer_api.html">Viewer layer API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../architecture.html">Architecture</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../../../../index.html">API Reference</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="../../../index.html">cellmap_flow</a><ul class="current">
+<li class="toctree-l3 current"><a class="reference internal" href="../../../index.html#submodules">Submodules</a><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="../../../ai_annotate/index.html">cellmap_flow.ai_annotate</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../blockwise/index.html">cellmap_flow.blockwise</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../cli/index.html">cellmap_flow.cli</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../config/index.html">cellmap_flow.config</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../dashboard/index.html">cellmap_flow.dashboard</a></li>
+<li class="toctree-l4 current"><a class="reference internal" href="../../index.html">cellmap_flow.finetune</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../globals/index.html">cellmap_flow.globals</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../image_data_interface/index.html">cellmap_flow.image_data_interface</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../inference/index.html">cellmap_flow.inference</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../inferencer/index.html">cellmap_flow.inferencer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../io/index.html">cellmap_flow.io</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../jobs/index.html">cellmap_flow.jobs</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../logging_setup/index.html">cellmap_flow.logging_setup</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../models/index.html">cellmap_flow.models</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../norm/index.html">cellmap_flow.norm</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../pipeline_spec/index.html">cellmap_flow.pipeline_spec</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../plugins/index.html">cellmap_flow.plugins</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../portable/index.html">cellmap_flow.portable</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../post/index.html">cellmap_flow.post</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../process_chain/index.html">cellmap_flow.process_chain</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../review/index.html">cellmap_flow.review</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../review_index/index.html">cellmap_flow.review_index</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../schema/index.html">cellmap_flow.schema</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../serving/index.html">cellmap_flow.serving</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../utils/index.html">cellmap_flow.utils</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../viewer/index.html">cellmap_flow.viewer</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../../index.html">CellMap Flow</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../../index.html">API Reference</a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">cellmap_flow</a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">cellmap_flow.finetune</a></li>
+          <li class="breadcrumb-item"><a href="../index.html">cellmap_flow.finetune.trainer</a></li>
+      <li class="breadcrumb-item active">cellmap_flow.finetune.trainer.supervised</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../../../../../_sources/autoapi/cellmap_flow/finetune/trainer/supervised/index.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-cellmap_flow.finetune.trainer.supervised">
+<span id="cellmap-flow-finetune-trainer-supervised"></span><h1>cellmap_flow.finetune.trainer.supervised<a class="headerlink" href="#module-cellmap_flow.finetune.trainer.supervised" title="Link to this heading"></a></h1>
+<p>The supervised term of the training loss, and how the model’s output is read for it.</p>
+<p><code class="docutils literal notranslate"><span class="pre">SupervisedLoss</span></code> builds the criterion <code class="docutils literal notranslate"><span class="pre">loss_type</span></code> names and compares the
+model’s output with the target where it is annotated. <code class="docutils literal notranslate"><span class="pre">probe_output_class</span></code>
+reads what the output is – a sigmoid baked in, a tanh, or logits – when
+nothing declared it, in the classes the model’s server reports
+(<code class="docutils literal notranslate"><span class="pre">serving.probe</span></code>), so that training, ranking and seeding read one model
+the same way. The browser’s twin is web/src/finetune/full/loss.ts.</p>
+<section id="attributes">
+<h2>Attributes<a class="headerlink" href="#attributes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.trainer.supervised.logger" title="cellmap_flow.finetune.trainer.supervised.logger"><code class="xref py py-obj docutils literal notranslate"><span class="pre">logger</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="classes">
+<h2>Classes<a class="headerlink" href="#classes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.trainer.supervised.SupervisedLoss" title="cellmap_flow.finetune.trainer.supervised.SupervisedLoss"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SupervisedLoss</span></code></a></p></td>
+<td><p>The supervised term: the criterion <code class="docutils literal notranslate"><span class="pre">options.loss_type</span></code> names, compared with</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="functions">
+<h2>Functions<a class="headerlink" href="#functions" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.finetune.trainer.supervised.probe_output_class" title="cellmap_flow.finetune.trainer.supervised.probe_output_class"><code class="xref py py-obj docutils literal notranslate"><span class="pre">probe_output_class</span></code></a>(→ str)</p></td>
+<td><p>What <code class="docutils literal notranslate"><span class="pre">model</span></code>'s output is -- unit, signed_unit or unbounded (serving.probe)</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="module-contents">
+<h2>Module Contents<a class="headerlink" href="#module-contents" title="Link to this heading"></a></h2>
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.trainer.supervised.logger">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.trainer.supervised.</span></span><span class="sig-name descname"><span class="pre">logger</span></span><a class="headerlink" href="#cellmap_flow.finetune.trainer.supervised.logger" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.trainer.supervised.probe_output_class">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.trainer.supervised.</span></span><span class="sig-name descname"><span class="pre">probe_output_class</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">example</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">select_channel</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#cellmap_flow.finetune.trainer.supervised.probe_output_class" title="Link to this definition"></a></dt>
+<dd><p>What <code class="docutils literal notranslate"><span class="pre">model</span></code>’s output is – unit, signed_unit or unbounded (serving.probe)
+– read off its answer to an extreme input.</p>
+<p><code class="docutils literal notranslate"><span class="pre">example</span></code> is an input batch of the shape the model takes; the probe is
+noise of that shape at 100x, so that an output bounded by a sigmoid or a
+tanh shows its bounds and logits show their range. <code class="docutils literal notranslate"><span class="pre">select_channel</span></code>
+reads the channel training compares. The model is probed in eval mode
+and left as it was: in train mode a full finetune’s BatchNorm took the
+noise into its running statistics – about 7,000x on every channel,
+which takes ~85 batches to decay, longer than most interactive runs –
+and the export and the served model normalize by them. A probe that
+fails reads as logits, with a warning.</p>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.trainer.supervised.SupervisedLoss">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.finetune.trainer.supervised.</span></span><span class="sig-name descname"><span class="pre">SupervisedLoss</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">options</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">target_transform</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.finetune.trainer.supervised.SupervisedLoss" title="Link to this definition"></a></dt>
+<dd><p>The supervised term: the criterion <code class="docutils literal notranslate"><span class="pre">options.loss_type</span></code> names, compared with
+the target where it is annotated.</p>
+<p>What the criterion sees depends on what the model’s output is
+(<code class="docutils literal notranslate"><span class="pre">options.output_class</span></code>): probabilities when it is bounded – a sigmoid
+or a tanh baked in, where a second sigmoid would squash [0, 1] into
+[0.5, 0.73] and make a well-fitting prediction look like a constant –
+so BCE-with-logits becomes BCE and Dice and margin skip their sigmoid;
+logits otherwise (losses.as_probabilities). MSE always compares
+probabilities with the 0/1 target, as dice and margin do: on a logit
+model it used to compare the raw logits, training them toward 0 and 1,
+which the served sigmoid turns into 0.5 and 0.73, wrecking any
+threshold. The interval loss bounds the logit, where a distance field is
+a line; the flow loss reads flows and a logit as the model emits them,
+whatever the probe said (its flows can fall within [0, 1]).</p>
+<p>Label smoothing is redundant with the margin loss and means nothing to
+bounds, flows or a soft distance target, so it is 0 for those; class
+balancing does not apply to the flow loss.</p>
+<p><code class="docutils literal notranslate"><span class="pre">targets</span></code> makes a batch’s target, mask and bounds from its annotation;
+the call computes the term and keeps the step’s metrics (the interval
+terms; on BCE the target’s entropy floor and the mean <a href="#id1"><span class="problematic" id="id2">|p - t|</span></a>), which
+<code class="docutils literal notranslate"><span class="pre">tally</span></code> sums over the epoch’s supervised batches.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.trainer.supervised.SupervisedLoss.loss_type">
+<span class="sig-name descname"><span class="pre">loss_type</span></span><a class="headerlink" href="#cellmap_flow.finetune.trainer.supervised.SupervisedLoss.loss_type" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.trainer.supervised.SupervisedLoss.margin">
+<span class="sig-name descname"><span class="pre">margin</span></span><a class="headerlink" href="#cellmap_flow.finetune.trainer.supervised.SupervisedLoss.margin" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.trainer.supervised.SupervisedLoss.balance_classes">
+<span class="sig-name descname"><span class="pre">balance_classes</span></span><a class="headerlink" href="#cellmap_flow.finetune.trainer.supervised.SupervisedLoss.balance_classes" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.trainer.supervised.SupervisedLoss.label_smoothing">
+<span class="sig-name descname"><span class="pre">label_smoothing</span></span><a class="headerlink" href="#cellmap_flow.finetune.trainer.supervised.SupervisedLoss.label_smoothing" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.trainer.supervised.SupervisedLoss.mask_unannotated">
+<span class="sig-name descname"><span class="pre">mask_unannotated</span></span><a class="headerlink" href="#cellmap_flow.finetune.trainer.supervised.SupervisedLoss.mask_unannotated" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.trainer.supervised.SupervisedLoss.target_transform">
+<span class="sig-name descname"><span class="pre">target_transform</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.finetune.trainer.supervised.SupervisedLoss.target_transform" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.trainer.supervised.SupervisedLoss.use_bce">
+<span class="sig-name descname"><span class="pre">use_bce</span></span><a class="headerlink" href="#cellmap_flow.finetune.trainer.supervised.SupervisedLoss.use_bce" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.trainer.supervised.SupervisedLoss.use_mse">
+<span class="sig-name descname"><span class="pre">use_mse</span></span><a class="headerlink" href="#cellmap_flow.finetune.trainer.supervised.SupervisedLoss.use_mse" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.trainer.supervised.SupervisedLoss.use_interval">
+<span class="sig-name descname"><span class="pre">use_interval</span></span><a class="headerlink" href="#cellmap_flow.finetune.trainer.supervised.SupervisedLoss.use_interval" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.trainer.supervised.SupervisedLoss.use_flow">
+<span class="sig-name descname"><span class="pre">use_flow</span></span><a class="headerlink" href="#cellmap_flow.finetune.trainer.supervised.SupervisedLoss.use_flow" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.trainer.supervised.SupervisedLoss.output_class">
+<span class="sig-name descname"><span class="pre">output_class</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'unbounded'</span></span><a class="headerlink" href="#cellmap_flow.finetune.trainer.supervised.SupervisedLoss.output_class" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.trainer.supervised.SupervisedLoss.takes_probabilities">
+<span class="sig-name descname"><span class="pre">takes_probabilities</span></span><a class="headerlink" href="#cellmap_flow.finetune.trainer.supervised.SupervisedLoss.takes_probabilities" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.trainer.supervised.SupervisedLoss.step_interval_terms">
+<span class="sig-name descname"><span class="pre">step_interval_terms</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.finetune.trainer.supervised.SupervisedLoss.step_interval_terms" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.trainer.supervised.SupervisedLoss.step_bce_metrics">
+<span class="sig-name descname"><span class="pre">step_bce_metrics</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.finetune.trainer.supervised.SupervisedLoss.step_bce_metrics" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.trainer.supervised.SupervisedLoss.targets">
+<span class="sig-name descname"><span class="pre">targets</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">annotation</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.finetune.trainer.supervised.SupervisedLoss.targets" title="Link to this definition"></a></dt>
+<dd><p>A batch’s <code class="docutils literal notranslate"><span class="pre">(target,</span> <span class="pre">mask,</span> <span class="pre">bounds,</span> <span class="pre">hard_target)</span></code> from its annotation.</p>
+<p>The target transform’s target and mask; for the interval loss the
+target is the bounds, and the painted class stands in as the target
+for the class check, the class balance and the TensorBoard image.
+Without a transform, the legacy reading: 0 unannotated, 1 background,
+2 foreground, shifted down by one, and masked when mask_unannotated.
+<code class="docutils literal notranslate"><span class="pre">hard_target</span></code> is the target as annotated: class balancing splits
+voxels into fg and bg by it, before smoothing – split by the smoothed
+target, every bg voxel carried s/2 of fg weight (with 100 fg voxels
+against 100k bg at s = 0.1, 98% of the “fg” half of the loss was bg).
+Smoothing then moves 0 to s/2 and 1 to 1 - s/2.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.trainer.supervised.SupervisedLoss.reset_epoch">
+<span class="sig-name descname"><span class="pre">reset_epoch</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.finetune.trainer.supervised.SupervisedLoss.reset_epoch" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.trainer.supervised.SupervisedLoss.tally">
+<span class="sig-name descname"><span class="pre">tally</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.finetune.trainer.supervised.SupervisedLoss.tally" title="Link to this definition"></a></dt>
+<dd><p>Add the last step’s BCE metrics to the epoch’s; for a step that had supervised voxels.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.finetune.trainer.supervised.SupervisedLoss.epoch_bce_metrics">
+<span class="sig-name descname"><span class="pre">epoch_bce_metrics</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.finetune.trainer.supervised.SupervisedLoss.epoch_bce_metrics" title="Link to this definition"></a></dt>
+<dd><p>(mean BCE floor, mean <a href="#id3"><span class="problematic" id="id4">|p - t|</span></a>) over the epoch’s supervised steps, or None without BCE.</p>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../recovery/index.html" class="btn btn-neutral float-left" title="cellmap_flow.finetune.trainer.recovery" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../tensorboard/index.html" class="btn btn-neutral float-right" title="cellmap_flow.finetune.trainer.tensorboard" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, David Ackerman,  Marwan Zouinkhi, Jeff Rhoades, Larissa Heinrich, Aubrey Weigel.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

@@ -1,0 +1,51 @@
+cellmap_flow.finetune
+=====================
+
+.. py:module:: cellmap_flow.finetune
+
+.. autoapi-nested-parse::
+
+   Human-in-the-loop finetuning for CellMap-Flow models.
+
+   This package finetunes pre-trained models on user corrections: a LoRA
+   adapter, or every weight. Its settings are ``options.TrainingOptions``, its
+   trainer ``trainer.Finetuner``.
+
+   The names below are imported when first used (PEP 562): importing a light
+   submodule -- ``markers`` or ``job_manager.tailer``, which the dashboard
+   reads a training job's log with -- used to import torch, the trainer and the
+   dataset code first.
+
+
+
+Submodules
+----------
+
+.. toctree::
+   :maxdepth: 1
+
+   /autoapi/cellmap_flow/finetune/adaptation/index
+   /autoapi/cellmap_flow/finetune/build_corrections/index
+   /autoapi/cellmap_flow/finetune/cli/index
+   /autoapi/cellmap_flow/finetune/crop_loader/index
+   /autoapi/cellmap_flow/finetune/data/index
+   /autoapi/cellmap_flow/finetune/export_merged/index
+   /autoapi/cellmap_flow/finetune/finetune_cli/index
+   /autoapi/cellmap_flow/finetune/finetuned_model_templates/index
+   /autoapi/cellmap_flow/finetune/instance_flows/index
+   /autoapi/cellmap_flow/finetune/job_manager/index
+   /autoapi/cellmap_flow/finetune/json_files/index
+   /autoapi/cellmap_flow/finetune/lora_wrapper/index
+   /autoapi/cellmap_flow/finetune/losses/index
+   /autoapi/cellmap_flow/finetune/markers/index
+   /autoapi/cellmap_flow/finetune/model_loading/index
+   /autoapi/cellmap_flow/finetune/options/index
+   /autoapi/cellmap_flow/finetune/rank/index
+   /autoapi/cellmap_flow/finetune/run_outputs/index
+   /autoapi/cellmap_flow/finetune/session/index
+   /autoapi/cellmap_flow/finetune/session_loop/index
+   /autoapi/cellmap_flow/finetune/target_transforms/index
+   /autoapi/cellmap_flow/finetune/trainable/index
+   /autoapi/cellmap_flow/finetune/trainer/index
+
+

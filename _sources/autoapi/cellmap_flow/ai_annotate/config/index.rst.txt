@@ -1,0 +1,204 @@
+cellmap_flow.ai_annotate.config
+===============================
+
+.. py:module:: cellmap_flow.ai_annotate.config
+
+.. autoapi-nested-parse::
+
+   The server-side config that turns AI-assisted annotation on, and what it allows.
+
+   The feature sends EM data to a hosted model, which costs money and moves data
+   off site, so it is off unless the user who runs the dashboard writes a config
+   file saying which providers and models may be used. The browser only ever
+   picks a provider id and model id from this file's lists; endpoints, projects
+   and credentials come from here and from the environment, never from a request.
+
+   The file holds no secrets. A key-based provider names an environment variable
+   (``api_key_env``) or a key file (``api_key_file``); an inline ``api_key`` is
+   a config error, so a key cannot end up in a file that gets copied, shared or
+   committed. Error messages name the setting that is wrong, never its value,
+   in case the value is a key pasted in the wrong place.
+
+   The file is read on each request that needs it (it is small), so an edit
+   takes effect without restarting the dashboard.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.ai_annotate.config.CONFIG_ENV
+   cellmap_flow.ai_annotate.config.DOCS
+   cellmap_flow.ai_annotate.config.DEFAULT_DAILY_CALL_LIMIT
+   cellmap_flow.ai_annotate.config.DEFAULT_CROP_SIZE_PX
+   cellmap_flow.ai_annotate.config.DEFAULT_VERTEX_LOCATION
+   cellmap_flow.ai_annotate.config.DEFAULT_TIMEOUT_S
+   cellmap_flow.ai_annotate.config.PROVIDER_OPTIONS
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.ai_annotate.config.ProviderConfig
+   cellmap_flow.ai_annotate.config.AIAnnotateConfig
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.ai_annotate.config.config_path
+   cellmap_flow.ai_annotate.config.load_config
+   cellmap_flow.ai_annotate.config.disabled_reason
+
+
+Module Contents
+---------------
+
+.. py:data:: CONFIG_ENV
+   :value: 'CELLMAP_FLOW_AI_ANNOTATE_CONFIG'
+
+
+.. py:data:: DOCS
+   :value: 'docs/ai_annotate.md'
+
+
+.. py:data:: DEFAULT_DAILY_CALL_LIMIT
+   :value: 200
+
+
+.. py:data:: DEFAULT_CROP_SIZE_PX
+   :value: 512
+
+
+.. py:data:: DEFAULT_VERTEX_LOCATION
+   :value: 'global'
+
+
+.. py:data:: DEFAULT_TIMEOUT_S
+   :value: 120
+
+
+.. py:data:: PROVIDER_OPTIONS
+
+.. py:function:: config_path()
+
+   Where the config is read from: ``$CELLMAP_FLOW_AI_ANNOTATE_CONFIG``, else
+   ``~/.cellmap_flow/ai_annotate.yaml``.
+
+
+.. py:class:: ProviderConfig
+
+   One provider the config allows: its id, type, models, and the rest of
+   its settings (``options``: project, location, timeout_s, ...).
+
+
+   .. py:attribute:: id
+      :type:  str
+
+
+   .. py:attribute:: type
+      :type:  str
+
+
+   .. py:attribute:: models
+      :type:  tuple
+
+
+   .. py:attribute:: options
+      :type:  dict
+
+
+   .. py:method:: destination()
+
+      Where a request to this provider sends the data, in words, for the
+      user to acknowledge before the first call. Names the location but not
+      the project: the user needs to know which company and region, not an
+      account id.
+
+
+
+.. py:class:: AIAnnotateConfig
+
+   The parsed config file. Built only by ``load_config``, which validates it.
+
+
+   .. py:attribute:: enabled
+      :type:  bool
+
+
+   .. py:attribute:: providers
+      :type:  dict
+
+
+   .. py:attribute:: default_provider
+      :type:  str
+
+
+   .. py:attribute:: daily_call_limit
+      :type:  int
+
+
+   .. py:attribute:: crop_size_px
+      :type:  int
+
+
+   .. py:attribute:: allowed_dataset_prefixes
+      :type:  tuple
+
+
+   .. py:method:: provider(provider_id)
+
+      The provider with this id. Raises a config error (400: the id came
+      from the browser) when the config has no such provider.
+
+
+
+   .. py:method:: check_model(provider_id, model)
+
+      Raise unless ``model`` is one of the provider's listed models.
+
+
+
+   .. py:method:: check_dataset(dataset_path)
+
+      Refuse a dataset outside ``allowed_dataset_prefixes``, when that list is set.
+
+      Local paths are normalised first, so ``/allowed/../elsewhere`` does not
+      pass as ``/allowed``. A URL is not rewritten (normpath would mangle
+      it), so one with a ``.`` or ``..`` segment, plain or percent-encoded,
+      is refused outright: an HTTP client resolves those, and
+      ``https://host/allowed/../secret`` would read ``/secret``. A prefix
+      matches as text: end it with ``/`` to mean one directory and not also
+      its siblings that share the name's start.
+
+
+
+   .. py:method:: public()
+
+      What the browser may see: provider ids, types, models and
+      destinations, and the limits. No other option value (project,
+      timeouts, key variable or file names) is included.
+
+
+
+.. py:function:: load_config()
+
+   The config, or None when the file does not exist or says ``enabled: false``.
+
+   Raises a config error for a file that exists but is malformed, naming the
+   problem and never echoing a value from the file.
+
+
+.. py:function:: disabled_reason()
+
+   Why the feature is off, and how to turn it on, for the dashboard to show.
+
+   Called when ``load_config`` returned None; a malformed file raises instead.
+
+

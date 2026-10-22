@@ -1,0 +1,78 @@
+cellmap_flow.io.ome
+===================
+
+.. py:module:: cellmap_flow.io.ome
+
+.. autoapi-nested-parse::
+
+   OME-NGFF coordinate conventions.
+
+   OME-NGFF places ``translation`` at the *centre* of voxel 0 (Neuroglancer's
+   ome.ts subtracts half a voxel for the same reason), while everything in
+   cellmap-flow works with the lower corner of voxel 0. Readers convert with
+   ``ome_corner`` and writers with ``ome_translation``; nothing else should
+   add or subtract half a voxel. ``multiscales_attrs`` writes the attributes.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.io.ome.CHANNEL_AXIS_NAMES
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.io.ome.ome_corner
+   cellmap_flow.io.ome.ome_translation
+   cellmap_flow.io.ome.multiscales_attrs
+   cellmap_flow.io.ome.singlescale_attrs
+
+
+Module Contents
+---------------
+
+.. py:function:: ome_corner(translation: Sequence[float], scale: Sequence[float]) -> List[float]
+
+   The lower corner of voxel 0, from an OME-NGFF ``translation``.
+
+   Janelia pyramids store ``translation = scale/2 - 4`` per level, so every
+   level's corner is -4 nm; read as a corner, each level sat half its voxel
+   off (s1 8 nm, s2 16 nm) and the levels did not even agree with each
+   other. ``translation`` and ``scale`` must be in the same units.
+
+
+.. py:function:: ome_translation(corner: Sequence[float], scale: Sequence[float]) -> List[float]
+
+   The OME-NGFF ``translation`` (voxel-0 centre) for a lower ``corner``.
+
+
+.. py:data:: CHANNEL_AXIS_NAMES
+   :value: ('c', 'c^', 'channel')
+
+
+.. py:function:: multiscales_attrs(axes: Sequence[str], units: Sequence[str], levels: Sequence[Tuple[str, Sequence[float], Sequence[float]]], name: str = '', version: str = '0.4') -> Dict[str, Any]
+
+   OME-NGFF ``{"multiscales": [...]}`` attributes for a pyramid.
+
+   ``levels`` are ``(path, voxel_size, corner)``, one entry per axis in
+   ``axes`` order, with ``corner`` the lower corner of voxel 0. Spatial
+   axes get ``translation = corner + voxel_size / 2`` and the unit from
+   ``units``; the channel axes (named "c", "c^" or "channel") are written
+   as they are, with type "channel" and no unit. ``voxel_size`` is written as given.
+
+
+.. py:function:: singlescale_attrs(arr_name: str, voxel_size: Sequence[float], offset: Sequence[float], units: Sequence[str], axes: Sequence[str]) -> Dict[str, Any]
+
+   ``multiscales_attrs`` for one array ``arr_name`` whose voxel 0 has its
+   lower corner at ``offset``.
+
+   Writing the corner as the translation put every output half a voxel off
+   in Neuroglancer and in any OME reader.
+
+

@@ -1,0 +1,462 @@
+cellmap_flow.portable.ai_annotate
+=================================
+
+.. py:module:: cellmap_flow.portable.ai_annotate
+
+.. autoapi-nested-parse::
+
+   AI-assisted annotation's maths, which both modes run: which plane of the
+   data an annotation reads and which voxels it writes, the image the model is
+   sent, the mask in the image it sends back, and the labels that mask becomes.
+
+   The server runs it in its process (``ai_annotate/geometry.py``,
+   ``pipeline.py``, ``mask_extraction.py``, ``staging.py`` and the Vertex
+   backend call it, around their zarr reads and PNG files), the browser in
+   chunkmirage's Pyodide worker (``portable/ai_annotate_calls.py``, around the
+   engine's raw reads and the paint store). Nothing here reads data, calls a
+   model or sees a credential: what is sent and to whom stays with each mode's
+   provider.
+
+   The plane. A click (or the view centre) picks a point in world nm and the
+   plane the user is looking at picks the depth axis. ``plan_plane`` turns
+   those into a ``PlanePlan``: a square field of view around the point,
+   snapped to the annotation volume's voxels and clipped to the volume (the
+   write box, one annotation voxel thick along the depth axis), and the raw
+   read that covers the same physical area at the model's input voxel size (one
+   input voxel thick, at the point's depth). So whatever the model paints on
+   the image lands on the annotation voxels under it. Annotation voxels are
+   placed as ``finetune.session.volume`` places them: the volume's
+   ``dataset_offset_nm`` is voxel 0's *centre*, and a voxel is in a box when
+   its centre is (``fill.box_voxels``). The raw is read on its own grid, from
+   the voxel that holds the first pixel's centre (``raw_box``).
+
+   Axes are z, y, x throughout, as everywhere in cellmap-flow, except in the
+   image sent: that is laid out as the viewer's panel shows the plane
+   (``to_screen``), so the model, and the user reviewing its answer, see what
+   was on screen. Which axis runs down it and which across, and whether across
+   runs backwards, depend on the viewer's display dimensions (``screen_axes``):
+   cellmap-flow's viewers show x, y, z, so the XY plane is drawn as in z, y, x
+   order, the XZ plane too, and the YZ plane transposed and mirrored.
+
+   The images are resampled by Pillow (``resize``, ``nearest``, and the
+   model's reply in ``model_mask``), in both modes: the server's installed
+   Pillow, and in the browser the one Pyodide ships, which chunkmirage's worker
+   loads the first time a call imports it (scipy, for the mask's objects,
+   likewise).
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.portable.ai_annotate.AXIS_NAMES
+   cellmap_flow.portable.ai_annotate.MAX_IMAGE_SIDE
+   cellmap_flow.portable.ai_annotate.PLANE_NAMES
+   cellmap_flow.portable.ai_annotate.OVERLAY_ALPHA
+
+
+Exceptions
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.portable.ai_annotate.Refused
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.portable.ai_annotate.PlanePlan
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.portable.ai_annotate.snap_integral
+   cellmap_flow.portable.ai_annotate.display_names
+   cellmap_flow.portable.ai_annotate.screen_axes
+   cellmap_flow.portable.ai_annotate.screen_shape
+   cellmap_flow.portable.ai_annotate.to_screen
+   cellmap_flow.portable.ai_annotate.from_screen
+   cellmap_flow.portable.ai_annotate.plan_plane
+   cellmap_flow.portable.ai_annotate.raw_box
+   cellmap_flow.portable.ai_annotate.resize
+   cellmap_flow.portable.ai_annotate.nearest
+   cellmap_flow.portable.ai_annotate.plane_image
+   cellmap_flow.portable.ai_annotate.normalize_to_uint8
+   cellmap_flow.portable.ai_annotate.extract_mask
+   cellmap_flow.portable.ai_annotate.model_mask
+   cellmap_flow.portable.ai_annotate.overlay
+   cellmap_flow.portable.ai_annotate.mask_to_write_shape
+   cellmap_flow.portable.ai_annotate.labels_for_box
+   cellmap_flow.portable.ai_annotate.accept_labels
+
+
+Module Contents
+---------------
+
+.. py:data:: AXIS_NAMES
+   :value: ('z', 'y', 'x')
+
+
+.. py:data:: MAX_IMAGE_SIDE
+   :value: 1024
+
+
+.. py:data:: PLANE_NAMES
+   :value: ('XY', 'XZ', 'YZ')
+
+
+.. py:data:: OVERLAY_ALPHA
+   :value: 0.5
+
+
+.. py:exception:: Refused
+
+
+
+   A plane the point cannot have, outside the volume or the data: the
+   message says so, for the user (the server raises it as an
+   ``AIAnnotateError("refused")``, the browser's calls answer it).
+
+
+.. py:function:: snap_integral(values)
+
+   ``values`` as floats, with near-whole numbers made exactly whole
+   (``io.metadata.snap_integral``): voxel arithmetic in nm leaves
+   511.99999999 where 512 is meant, and a floor or a round after it must
+   not see the difference.
+
+
+.. py:function:: display_names(display_dimensions=None) -> tuple
+
+   ``display_dimensions`` when they are z, y and x in some order, else
+   z, y, x: the display dimensions of a viewer that sets none over
+   cellmap-flow's coordinate space, and of a plan saved before plans kept
+   them.
+
+
+.. py:function:: screen_axes(depth_axis, display_dimensions=None) -> tuple
+
+   ``(down, across, backwards)``: the data axes (0 z, 1 y, 2 x) the panel
+   looking along ``depth_axis`` draws down and across, and whether across
+   runs backwards, in a viewer whose display dimensions are
+   ``display_dimensions``, as ``display_names`` gives them (a plan's), or
+   None for z, y, x.
+
+
+.. py:function:: screen_shape(shape, depth_axis, display_dimensions=None) -> tuple
+
+   A plane's ``(rows, cols)`` in z, y, x order, as the panel draws it
+   (``screen_axes``).
+
+
+.. py:function:: to_screen(plane, depth_axis, display_dimensions=None) -> numpy.ndarray
+
+   ``plane`` (rows and columns its two axes in z, y, x order) as the panel
+   looking along ``depth_axis`` draws it, in a viewer showing
+   ``display_dimensions`` (``screen_axes``).
+
+
+.. py:function:: from_screen(image, depth_axis, display_dimensions=None) -> numpy.ndarray
+
+   ``to_screen`` undone: an image as the panel draws it, in z, y, x order.
+
+
+.. py:class:: PlanePlan
+
+   One plane to annotate: what is read, what is sent and what is written.
+
+   All three-element tuples are z, y, x. ``raw_offset_nm`` and
+   ``raw_shape_nm`` are the world box the raw is read over (lower corner
+   and size): in plane, the write box's extent; along the depth axis, one
+   input voxel centred on the point. ``image_shape`` is the (rows, cols)
+   of the image sent, laid out as on screen (``to_screen``),
+   ``resolution_nm`` its pixel size in nm (square
+   pixels, which a model needs to see shapes as they are). ``write_lo`` and
+   ``write_hi`` are the annotation voxels written, ``[lo, hi)``, clipped to
+   the volume and one voxel thick along the depth axis.
+   ``display_dimensions`` are the viewer's (``display_names``), which say
+   how its panel draws the plane (``screen_axes``); z, y, x in a plan saved
+   before plans kept them.
+
+
+   .. py:attribute:: depth_axis
+      :type:  int
+
+
+   .. py:attribute:: point_nm
+      :type:  tuple
+
+
+   .. py:attribute:: raw_offset_nm
+      :type:  tuple
+
+
+   .. py:attribute:: raw_shape_nm
+      :type:  tuple
+
+
+   .. py:attribute:: image_shape
+      :type:  tuple
+
+
+   .. py:attribute:: input_voxel_size
+      :type:  tuple
+
+
+   .. py:attribute:: write_lo
+      :type:  tuple
+
+
+   .. py:attribute:: write_hi
+      :type:  tuple
+
+
+   .. py:attribute:: resolution_nm
+      :type:  float
+
+
+   .. py:attribute:: display_dimensions
+      :type:  tuple
+      :value: ('z', 'y', 'x')
+
+
+
+   .. py:property:: plane_axes
+      :type: tuple
+
+
+      The two in-plane axes, in z, y, x order.
+
+
+   .. py:property:: plane_name
+      :type: str
+
+
+      the data axes the plane shows.
+
+      :type: "XY", "XZ" or "YZ"
+
+
+   .. py:property:: write_shape
+      :type: tuple
+
+
+      The write box's in-plane shape in annotation voxels, its ``plane_axes`` in z, y, x order.
+
+
+   .. py:property:: click_px
+      :type: tuple
+
+
+      ``(row, col)`` of the point in the image sent.
+
+
+   .. py:method:: to_screen(plane) -> numpy.ndarray
+
+      ``to_screen`` for this plan's plane.
+
+
+
+   .. py:method:: from_screen(image) -> numpy.ndarray
+
+      ``from_screen`` for this plan's plane.
+
+
+
+   .. py:method:: to_dict() -> dict
+
+      The plan as JSON-safe lists, for a staging's meta.json and the browser.
+
+
+
+   .. py:method:: from_dict(data: dict) -> PlanePlan
+      :classmethod:
+
+
+      The plan ``to_dict`` wrote.
+
+
+
+.. py:function:: plan_plane(volume: dict, volume_shape, point_nm, depth_axis: int, crop_size_px: int, data_box_nm=None, display_dimensions=None) -> PlanePlan
+
+   The plane through ``point_nm`` (world nm, z, y, x) across ``depth_axis``.
+
+   ``volume`` is the annotation volume's record (``output_voxel_size``,
+   ``input_voxel_size``, ``dataset_offset_nm``), ``volume_shape`` its
+   ``annotation/s0`` shape. The field of view is square in nm,
+   ``crop_size_px`` annotation voxels along the finer in-plane axis (both,
+   for isotropic voxels), centred on the point; its write box is the
+   annotation voxels whose centres lie in it, clipped to the volume, in the
+   annotation voxel that holds the point along the depth axis.
+
+   ``data_box_nm`` is the raw data's extent, ``(lo, hi)`` world nm z, y, x:
+   the field is clipped to it too. The volume is the data rounded up to
+   whole chunks of the model's output, which for Cellpose at 64 nm is up to
+   33 um past the data's edge, and there the plane is only the read's
+   zero padding: an image of it was labelled as background, and the cells
+   beside it smeared into it.
+
+   The raw is read over the clipped box's extent, so the image and the box
+   cover the same physical area. The image's pixels are the finer in-plane
+   input voxel size, square; when that makes a side longer than
+   ``MAX_IMAGE_SIDE`` the pixels are made larger to fit. The image is laid
+   out as the viewer's panel draws the plane, for the viewer's
+   ``display_dimensions`` (z, y, x when None).
+
+   Raises ``Refused`` when the point is outside the volume or the data: a
+   field clipped to an edge it does not reach is not what was aimed at.
+   ValueError for a depth axis, crop size or point that is not one.
+
+
+.. py:function:: raw_box(plan: PlanePlan, voxel_size, corner) -> tuple
+
+   ``(begin, count)``: the raw voxels to read for ``plan``, on a raw grid
+   of ``voxel_size`` whose voxel 0's lower corner is ``corner`` (nm, z, y, x).
+
+   Each axis starts at the voxel that holds the first sample's centre (half
+   a voxel in from the box's corner) and runs for as many voxels as fit in
+   the box, at least one: so a box on the grid reads exactly its voxels,
+   and the depth axis reads the voxel that holds the point.
+
+
+.. py:function:: resize(plane, shape) -> numpy.ndarray
+
+   ``plane`` resampled to ``shape`` (rows, cols), float32; itself when it already is that.
+
+   Shrinking (neither side grows) averages each pixel's footprint (Pillow's
+   box filter), so fine membranes fade rather than alias; otherwise (the
+   coarse axis of an anisotropic plane) it interpolates linearly (Pillow's
+   bilinear), on Pillow's 32-bit float ("F") image.
+
+
+.. py:function:: nearest(array, shape) -> numpy.ndarray
+
+   A 2D ``array`` (uint8 or int32, as Pillow holds an image of each) at
+   ``shape`` (rows, cols) by nearest neighbour, pixel centre to pixel centre
+   (Pillow's NEAREST), in its own dtype; a copy when it already is that
+   size.
+
+
+.. py:function:: plane_image(block, plan: PlanePlan) -> numpy.ndarray
+
+   The plane sent, from the raw ``block`` read over ``raw_box``'s voxels (z, y, x).
+
+   Its one slice along the depth axis, laid out as on screen
+   (``PlanePlan.to_screen``) and resampled to the plan's image
+   (``resize``). The raw's dtype is kept unless the plane had to be resized
+   to the image's grid, when it is float32.
+
+
+.. py:function:: normalize_to_uint8(data: numpy.ndarray) -> numpy.ndarray
+
+   A 2D array as uint8 grey levels (from ask-to-mask's ``_normalize_to_uint8``).
+
+   uint8 passes through unchanged. Anything else is clipped to its 1st-99th
+   percentile over the plane and stretched to 0-255, as raw EM is not always
+   8-bit and a few saturated pixels should not flatten the contrast.
+
+
+.. py:function:: extract_mask(rgb, target_rgb, threshold: float = 200.0) -> numpy.ndarray
+
+   The pixels of the model's reply (rows, cols, 3 or 4, uint8) painted
+   ``target_rgb``, as a bool (rows, cols) mask (ask-to-mask's
+   ``extract_mask``, its colour-difference mode).
+
+   Each pixel scores how strongly it shows the target colour: its weakest
+   channel among those the target has at full strength, minus its strongest
+   deviation elsewhere -- a channel the target has off (0) being on, or a
+   channel the target has at part strength being away from that strength.
+   For red (255, 0, 0) that is ``R - max(G, B)``: red that dominates. A
+   pixel counts when its score reaches ``threshold``.
+
+   The part-strength term is what lets orange (255, 128, 0) or purple
+   (128, 0, 255) be found at all: counting their half channel as "on" would
+   cap the score at 128, under the threshold, and counting it as "off"
+   would reject the colour itself.
+
+
+.. py:function:: model_mask(rgb, sent_shape, image_shape, target_rgb)
+
+   The mask in a model's reply, and the reply lined up with the plane:
+   ``(mask, aligned)``.
+
+   ``rgb`` is the image the model sent back, decoded (rows, cols, 3 or 4,
+   uint8), ``sent_shape`` the (rows, cols) of the image it was sent (the
+   plane padded to a square), ``image_shape`` the plane's. A reply at
+   another size (or shape: stretching it then is what the review shows) is
+   resized back to the sent size by Pillow's bilinear filter on an RGB
+   image (which averages when shrinking), then the padding is cut off the
+   right and bottom, so what is left lines up with the plane; the mask is
+   the pixels painted ``target_rgb`` in that (``extract_mask``).
+   ``aligned`` is (rows, cols, 3) uint8, the plane's shape, for the review.
+
+
+.. py:function:: overlay(rgb, mask, target_rgb, alpha: float = OVERLAY_ALPHA) -> numpy.ndarray
+
+   ``rgb`` (the image sent, rows, cols, 3 or 4) with the pixels ``mask``
+   marks tinted ``target_rgb``: the review's third picture, what accepting
+   writes, not the model's own image. ``mask`` is the write box's objects
+   laid out as the image is (``to_screen``) and scaled to it by nearest
+   neighbour; uint8 RGB back, rounded half to even.
+
+
+.. py:function:: mask_to_write_shape(mask: numpy.ndarray, plan: PlanePlan) -> numpy.ndarray
+
+   The objects of ``mask`` (the image's shape, as on screen) on the write
+   box's in-plane voxels, in z, y, x order (``PlanePlan.write_shape``):
+   int32, 0 for background and 1..n for the objects, numbered in the box's
+   raster order as ``scipy.ndimage.label`` numbers a mask.
+
+   Objects are the mask's 4-connected pieces (scipy's default, so pieces
+   touching only at a corner stay apart, as the model was asked to leave
+   them), found at the image's own resolution, where the model drew the
+   lines between them: on voxels coarser than the pixels a line can fall
+   between the pixels the voxels take, and the objects either side of it
+   still keep ids of their own. Then nearest neighbour, pixel centre to
+   voxel centre: each annotation voxel takes the object of the pixel at
+   its centre, so the mask keeps hard edges and lands where it was drawn
+   whatever the two sizes are. An object no voxel centre falls in is lost.
+
+
+.. py:function:: labels_for_box(objects: numpy.ndarray, existing: numpy.ndarray, depth_axis: int, count_up: bool, beside=None) -> numpy.ndarray
+
+   The labels for the write box: an id per object of ``objects``, 1 elsewhere.
+
+   ``objects`` is the in-plane objects (``mask_to_write_shape``), 0 for
+   background, ``existing`` the one-voxel-thick box as the volume holds
+   it. The objects are labelled by ``fill.seed_labels``: an object the user
+   has already painted part of keeps that id, the rest get fresh ones,
+   counting up for an instance target's ``count_up``.
+
+   ``beside`` is the planes on either side of the box along the depth axis,
+   as the volume holds them (each shaped like ``existing``, or None at the
+   volume's edge). Planes are annotated one at a time, so an object usually
+   continues one in the plane next to it: where this plane is unpainted,
+   the ids beside it count as painted here, and an object takes the id it
+   overlaps most, rather than a fresh one that an instance target would
+   read as a boundary between the two planes. Fresh ids skip those planes'
+   ids too, so a new object does not take the id of a different object
+   right next to it, which an instance target would read as one object.
+
+
+.. py:function:: accept_labels(objects, existing, depth_axis: int, instance_target: bool, overwrite: bool, beside=None) -> numpy.ndarray
+
+   What Accept writes into the write box: ``labels_for_box``'s labels, as
+   a seed's ids (counting up for an instance target on a volume of more
+   than 8-bit ids, ``fill.counts_up``; an object continuing one in a plane
+   ``beside`` keeps its id), for ``fill.paint`` to write.
+
+   With ``overwrite`` the model's objects replace what is under them, but
+   its background only fills unlabelled voxels: an object already painted
+   that the model missed is kept, not erased to background (those voxels
+   get 0, "leave as it is").
+
+

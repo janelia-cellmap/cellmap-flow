@@ -1,0 +1,81 @@
+cellmap_flow.dashboard.routes.finetune.rank_routes
+==================================================
+
+.. py:module:: cellmap_flow.dashboard.routes.finetune.rank_routes
+
+.. autoapi-nested-parse::
+
+   Which model to start from, in server mode: the browser's routes
+   (web/src/backend/routes/rank.ts), answered by the dashboard, so the Finetune
+   tab's ranking (static/js/dashboard/finetune/rank.js) works the same in both.
+
+   GET /api/finetune/rank/candidates lists the models to rank: the session's
+   (running or not), the catalog's and Hugging Face's, with the session's
+   volume and the model it is for; only the running ones start ticked, as a
+   model not running is started on the cluster for its score. POST
+   /api/finetune/rank/score {name, entry?} scores one on the session volume's
+   paint (portable/rank.py says how; the browser runs the same Python): a running model
+   through its server, any other started for the score alone (``entry``, the
+   candidate's, says how to build it) and stopped after, so a ranking leaves
+   the Models tab and the cluster as they were. Where the raw under the paint
+   is narrow, the same server is asked again through the dashboard's
+   normalizer stretched to the raw's window: a server runs the chain each
+   request names. The answer is the ranking's row (portable/rank.py
+   score_row: the score kept, its threshold and the raw's range it read).
+   POST /api/finetune/rank/use {name, entry?, window?} makes the one picked
+   the model to finetune: running (as the Models tab's Add runs it), the
+   window its score chose (if any) made the dashboard's normalization, a
+   volume made for it with the session volume's paint carried onto its grid
+   (session/volume.py carry_paint) and its paint layer in the old one's
+   place; the old volume stays. POST /api/finetune/rank/window {window} makes
+   the window the dashboard's normalization alone, with no model started and
+   no volume made: Fit to paint's, for the model already seeding the paint.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.routes.finetune.rank_routes.logger
+   cellmap_flow.dashboard.routes.finetune.rank_routes.RAW_SAMPLE
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.routes.finetune.rank_routes.rank_candidates
+   cellmap_flow.dashboard.routes.finetune.rank_routes.rank_score
+   cellmap_flow.dashboard.routes.finetune.rank_routes.rank_use
+   cellmap_flow.dashboard.routes.finetune.rank_routes.rank_window
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:data:: RAW_SAMPLE
+   :value: 1000000
+
+
+.. py:function:: rank_candidates()
+
+.. py:function:: rank_score()
+
+.. py:function:: rank_use()
+
+.. py:function:: rank_window()
+
+   Fit to paint's: the raw's window a score chose ({window: [lo, hi]},
+   the score answer's) made the dashboard's normalization, as Use this
+   model makes it, without starting a model or making a volume. Answers
+   the window and the normalizer steps now set; refused (400) when the
+   normalization has no MinMaxNormalizer to stretch or the window is not
+   narrower than its range (portable/rank.py windowed), which leaves it as
+   it was.
+
+

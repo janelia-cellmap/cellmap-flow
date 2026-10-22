@@ -1,0 +1,28 @@
+cellmap_flow.blockwise
+======================
+
+.. py:module:: cellmap_flow.blockwise
+
+.. autoapi-nested-parse::
+
+   Blockwise processing.
+
+   ``CellMapFlowBlockwiseProcessor`` is re-exported lazily: importing it pulls in
+   the whole inference stack, and ``cellmap_flow blockwise --help`` -- which goes
+   through this package to reach cli.py -- paid ~18s for it before printing
+   anything.
+
+
+
+Submodules
+----------
+
+.. toctree::
+   :maxdepth: 1
+
+   /autoapi/cellmap_flow/blockwise/blockwise_processor/index
+   /autoapi/cellmap_flow/blockwise/bounding_box/index
+   /autoapi/cellmap_flow/blockwise/cli/index
+   /autoapi/cellmap_flow/blockwise/multiple_cli/index
+
+

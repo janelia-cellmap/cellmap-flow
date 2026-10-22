@@ -1,0 +1,238 @@
+cellmap_flow.schema
+===================
+
+.. py:module:: cellmap_flow.schema
+
+.. autoapi-nested-parse::
+
+   The spec of what the dashboard's two backends share, and its generation for TypeScript.
+
+   The dashboard's JavaScript speaks to one of two backends, the Flask routes in
+   server mode and the TypeScript routes of ``web/src/backend`` in browser mode,
+   and the two must answer alike. What they agree on is written once, in the
+   pydantic request models and in this module, and TypeScript is generated from
+   it, so a change on the Python side reaches the browser's types by itself and
+   an implementation that drifts fails a test:
+
+   - ``python -m cellmap_flow.schema --out web/src/generated --docs docs/api.md``
+     (``npm run gen`` in web/) writes ``cellmap-flow.schema.json``, a JSON Schema
+     (draft 2020-12), ``cellmap-flow.ts``, its types by json-schema-to-typescript
+     with the constants and the route table as values, and the route table as
+     Markdown;
+   - ``--check`` says whether the committed files are current, with a diff when
+     not (tests/web/test_schema.py and CI's web job run it).
+
+   The schema holds:
+
+   - every request model of ``dashboard/requests.py``, and the route files' own
+     (``ResolveModel``, ``AddModel``, ``PipelineUpdate``), under ``$defs``; the
+     root object maps each route to its body's model ("POST /api/set-data");
+   - ``x-routes``: every route of the dashboard and where it is answered (a
+     ``Route``). The method and path come from the Flask app's ``url_map``, the
+     availability from ``AVAILABILITY`` below, and the two must agree: a route
+     added without a declaration is an error naming it (``routes()``);
+   - ``x-constants``: the numbers both modes share (``portable/rank.py``'s,
+     ``UNDO_DEPTH``, the AI annotation's caps) and the Finetune tab's defaults
+     for a blank field, read from ``finetune/options.py``'s ``TrainingOptions``;
+   - ``x-steps``: each normalizer's and postprocessor's parameters and defaults
+     (a ``StepSpec``), from their registries.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.schema.SCHEMA_DRAFT
+   cellmap_flow.schema.ROOT
+   cellmap_flow.schema.GENERATED_DIR
+   cellmap_flow.schema.DOCS_FILE
+   cellmap_flow.schema.SCHEMA_NAME
+   cellmap_flow.schema.TS_NAME
+   cellmap_flow.schema.JSON2TS
+   cellmap_flow.schema.REGENERATE
+   cellmap_flow.schema.Availability
+   cellmap_flow.schema.AVAILABILITY
+   cellmap_flow.schema.REQUEST_MODELS
+   cellmap_flow.schema.FINETUNE_FORM_FIELDS
+   cellmap_flow.schema.CONSTANT_DOCS
+   cellmap_flow.schema.BANNER
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.schema.Route
+   cellmap_flow.schema.StepSpec
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.schema.request_models
+   cellmap_flow.schema.flask_rules
+   cellmap_flow.schema.routes
+   cellmap_flow.schema.constants
+   cellmap_flow.schema.steps
+   cellmap_flow.schema.schema
+   cellmap_flow.schema.dumps
+   cellmap_flow.schema.typescript
+   cellmap_flow.schema.markdown
+   cellmap_flow.schema.outputs
+   cellmap_flow.schema.check
+   cellmap_flow.schema.main
+
+
+Module Contents
+---------------
+
+.. py:data:: SCHEMA_DRAFT
+   :value: 'https://json-schema.org/draft/2020-12/schema'
+
+
+.. py:data:: ROOT
+
+.. py:data:: GENERATED_DIR
+
+.. py:data:: DOCS_FILE
+
+.. py:data:: SCHEMA_NAME
+   :value: 'cellmap-flow.schema.json'
+
+
+.. py:data:: TS_NAME
+   :value: 'cellmap-flow.ts'
+
+
+.. py:data:: JSON2TS
+
+.. py:data:: REGENERATE
+   :value: 'python -m cellmap_flow.schema --out web/src/generated --docs docs/api.md (npm run gen in web/)'
+
+
+.. py:data:: Availability
+
+.. py:class:: Route(/, **data: Any)
+
+
+
+   One route of the dashboard and where it is answered: "both", by the
+   Flask route and the browser's; "stub", the browser answers the server's
+   JSON shape with fixed or empty data; "server", the browser answers
+   unavailable; "browser", only the page has it. ``request`` names the
+   pydantic model its body is parsed with, where there is one.
+
+
+   .. py:attribute:: method
+      :type:  Literal['GET', 'POST', 'PUT', 'DELETE']
+
+
+   .. py:attribute:: path
+      :type:  str
+
+
+   .. py:attribute:: availability
+      :type:  Availability
+
+
+   .. py:attribute:: request
+      :type:  Optional[str]
+      :value: None
+
+
+
+.. py:class:: StepSpec(/, **data: Any)
+
+
+
+   A normalizer or postprocessor as the dashboard's forms list it: its
+   class, its name, and its constructor's parameters with their defaults
+   ("" for one without a default).
+
+
+   .. py:attribute:: class_name
+      :type:  str
+
+
+   .. py:attribute:: name
+      :type:  str
+
+
+   .. py:attribute:: params
+      :type:  dict[str, Union[str, int, float, bool, None]]
+
+
+.. py:data:: AVAILABILITY
+   :type:  dict[str, Availability]
+
+.. py:data:: REQUEST_MODELS
+   :type:  dict[str, str]
+
+.. py:data:: FINETUNE_FORM_FIELDS
+   :value: ('lora_r', 'num_epochs', 'batch_size', 'learning_rate', 'loss_type', 'margin',...
+
+
+.. py:data:: CONSTANT_DOCS
+
+.. py:function:: request_models() -> dict[str, type[pydantic.BaseModel]]
+
+   Every request model by name: the public pydantic models
+   dashboard/requests.py defines, and the route files' own.
+
+
+.. py:function:: flask_rules() -> list[tuple[str, str]]
+
+   (method, path) for every rule of the dashboard but Flask's own /static.
+
+
+.. py:function:: routes(rules: Optional[list[tuple[str, str]]] = None) -> list[Route]
+
+   The route table: ``rules`` (by default the Flask app's) with their
+   availability, in AVAILABILITY's order. A rule that AVAILABILITY does not
+   declare, or a declaration (other than a browser-only route) the app no
+   longer has, is a LookupError naming it.
+
+
+.. py:function:: constants() -> dict
+
+.. py:function:: steps() -> dict[str, list[dict]]
+
+.. py:function:: schema() -> dict
+
+   The whole schema (see the module's docstring).
+
+
+.. py:function:: dumps(spec: Optional[dict] = None) -> str
+
+.. py:data:: BANNER
+   :value: "/* Generated from cellmap-flow's JSON Schema (python -m cellmap_flow.schema, npm run gen). Do...
+
+
+.. py:function:: typescript(spec: Optional[dict] = None, json2ts: pathlib.Path = JSON2TS) -> str
+
+   ``spec``'s types, by json-schema-to-typescript (web's devDependency), then
+   its constants, route table and steps as values.
+
+
+.. py:function:: markdown(spec: Optional[dict] = None) -> str
+
+   The route table as a Markdown page (docs/api.md).
+
+
+.. py:function:: outputs(out_dir: Optional[pathlib.Path], docs: Optional[pathlib.Path]) -> dict[pathlib.Path, str]
+
+   {path: content} of what --out and --docs write.
+
+
+.. py:function:: check(files: dict[pathlib.Path, str]) -> list[str]
+
+   A unified diff per file of ``files`` whose content on disk differs.
+
+
+.. py:function:: main(argv: Optional[list[str]] = None) -> int
+

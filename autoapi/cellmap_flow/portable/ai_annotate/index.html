@@ -1,0 +1,670 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>cellmap_flow.portable.ai_annotate &mdash; CellMap Flow  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=4ae1632d" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css" />
+
+  
+    <link rel="shortcut icon" href="../../../../_static/favicon.ico"/>
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link rel="next" title="cellmap_flow.portable.ai_annotate_calls" href="../ai_annotate_calls/index.html" />
+    <link rel="prev" title="cellmap_flow.portable" href="../index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            CellMap Flow
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">CellMap-Flow API:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../../../../install.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../browser.html">In the browser</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../cli.html">Command line</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../scripts.html">Python Scripts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../yaml_config.html">YAML Configuration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../data_paths.html">Data paths</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../huggingface.html">HuggingFace Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../bioimage.html">BioImage Model Zoo</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../custom_script.html">Custom Model</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../post.html">PostProcessors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../plugins.html">Plugins</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../review.html">Reviewing instances</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../viewer_api.html">Viewer layer API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../architecture.html">Architecture</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../../../index.html">API Reference</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="../../index.html">cellmap_flow</a><ul class="current">
+<li class="toctree-l3 current"><a class="reference internal" href="../../index.html#submodules">Submodules</a><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="../../ai_annotate/index.html">cellmap_flow.ai_annotate</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../blockwise/index.html">cellmap_flow.blockwise</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../cli/index.html">cellmap_flow.cli</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../config/index.html">cellmap_flow.config</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../dashboard/index.html">cellmap_flow.dashboard</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../finetune/index.html">cellmap_flow.finetune</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../globals/index.html">cellmap_flow.globals</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../image_data_interface/index.html">cellmap_flow.image_data_interface</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../inference/index.html">cellmap_flow.inference</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../inferencer/index.html">cellmap_flow.inferencer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../io/index.html">cellmap_flow.io</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../jobs/index.html">cellmap_flow.jobs</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../logging_setup/index.html">cellmap_flow.logging_setup</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../models/index.html">cellmap_flow.models</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../norm/index.html">cellmap_flow.norm</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../pipeline_spec/index.html">cellmap_flow.pipeline_spec</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../plugins/index.html">cellmap_flow.plugins</a></li>
+<li class="toctree-l4 current"><a class="reference internal" href="../index.html">cellmap_flow.portable</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../post/index.html">cellmap_flow.post</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../process_chain/index.html">cellmap_flow.process_chain</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../review/index.html">cellmap_flow.review</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../review_index/index.html">cellmap_flow.review_index</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../schema/index.html">cellmap_flow.schema</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../serving/index.html">cellmap_flow.serving</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../utils/index.html">cellmap_flow.utils</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../viewer/index.html">cellmap_flow.viewer</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">CellMap Flow</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">API Reference</a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">cellmap_flow</a></li>
+          <li class="breadcrumb-item"><a href="../index.html">cellmap_flow.portable</a></li>
+      <li class="breadcrumb-item active">cellmap_flow.portable.ai_annotate</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../../../../_sources/autoapi/cellmap_flow/portable/ai_annotate/index.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-cellmap_flow.portable.ai_annotate">
+<span id="cellmap-flow-portable-ai-annotate"></span><h1>cellmap_flow.portable.ai_annotate<a class="headerlink" href="#module-cellmap_flow.portable.ai_annotate" title="Link to this heading"></a></h1>
+<p>AI-assisted annotation’s maths, which both modes run: which plane of the
+data an annotation reads and which voxels it writes, the image the model is
+sent, the mask in the image it sends back, and the labels that mask becomes.</p>
+<p>The server runs it in its process (<code class="docutils literal notranslate"><span class="pre">ai_annotate/geometry.py</span></code>,
+<code class="docutils literal notranslate"><span class="pre">pipeline.py</span></code>, <code class="docutils literal notranslate"><span class="pre">mask_extraction.py</span></code>, <code class="docutils literal notranslate"><span class="pre">staging.py</span></code> and the Vertex
+backend call it, around their zarr reads and PNG files), the browser in
+chunkmirage’s Pyodide worker (<code class="docutils literal notranslate"><span class="pre">portable/ai_annotate_calls.py</span></code>, around the
+engine’s raw reads and the paint store). Nothing here reads data, calls a
+model or sees a credential: what is sent and to whom stays with each mode’s
+provider.</p>
+<p>The plane. A click (or the view centre) picks a point in world nm and the
+plane the user is looking at picks the depth axis. <code class="docutils literal notranslate"><span class="pre">plan_plane</span></code> turns
+those into a <code class="docutils literal notranslate"><span class="pre">PlanePlan</span></code>: a square field of view around the point,
+snapped to the annotation volume’s voxels and clipped to the volume (the
+write box, one annotation voxel thick along the depth axis), and the raw
+read that covers the same physical area at the model’s input voxel size (one
+input voxel thick, at the point’s depth). So whatever the model paints on
+the image lands on the annotation voxels under it. Annotation voxels are
+placed as <code class="docutils literal notranslate"><span class="pre">finetune.session.volume</span></code> places them: the volume’s
+<code class="docutils literal notranslate"><span class="pre">dataset_offset_nm</span></code> is voxel 0’s <em>centre</em>, and a voxel is in a box when
+its centre is (<code class="docutils literal notranslate"><span class="pre">fill.box_voxels</span></code>). The raw is read on its own grid, from
+the voxel that holds the first pixel’s centre (<code class="docutils literal notranslate"><span class="pre">raw_box</span></code>).</p>
+<p>Axes are z, y, x throughout, as everywhere in cellmap-flow, except in the
+image sent: that is laid out as the viewer’s panel shows the plane
+(<code class="docutils literal notranslate"><span class="pre">to_screen</span></code>), so the model, and the user reviewing its answer, see what
+was on screen. Which axis runs down it and which across, and whether across
+runs backwards, depend on the viewer’s display dimensions (<code class="docutils literal notranslate"><span class="pre">screen_axes</span></code>):
+cellmap-flow’s viewers show x, y, z, so the XY plane is drawn as in z, y, x
+order, the XZ plane too, and the YZ plane transposed and mirrored.</p>
+<p>The images are resampled by Pillow (<code class="docutils literal notranslate"><span class="pre">resize</span></code>, <code class="docutils literal notranslate"><span class="pre">nearest</span></code>, and the
+model’s reply in <code class="docutils literal notranslate"><span class="pre">model_mask</span></code>), in both modes: the server’s installed
+Pillow, and in the browser the one Pyodide ships, which chunkmirage’s worker
+loads the first time a call imports it (scipy, for the mask’s objects,
+likewise).</p>
+<section id="attributes">
+<h2>Attributes<a class="headerlink" href="#attributes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.portable.ai_annotate.AXIS_NAMES" title="cellmap_flow.portable.ai_annotate.AXIS_NAMES"><code class="xref py py-obj docutils literal notranslate"><span class="pre">AXIS_NAMES</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.portable.ai_annotate.MAX_IMAGE_SIDE" title="cellmap_flow.portable.ai_annotate.MAX_IMAGE_SIDE"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MAX_IMAGE_SIDE</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.portable.ai_annotate.PLANE_NAMES" title="cellmap_flow.portable.ai_annotate.PLANE_NAMES"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PLANE_NAMES</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.portable.ai_annotate.OVERLAY_ALPHA" title="cellmap_flow.portable.ai_annotate.OVERLAY_ALPHA"><code class="xref py py-obj docutils literal notranslate"><span class="pre">OVERLAY_ALPHA</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="exceptions">
+<h2>Exceptions<a class="headerlink" href="#exceptions" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.portable.ai_annotate.Refused" title="cellmap_flow.portable.ai_annotate.Refused"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Refused</span></code></a></p></td>
+<td><p>A plane the point cannot have, outside the volume or the data: the</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="classes">
+<h2>Classes<a class="headerlink" href="#classes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.portable.ai_annotate.PlanePlan" title="cellmap_flow.portable.ai_annotate.PlanePlan"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PlanePlan</span></code></a></p></td>
+<td><p>One plane to annotate: what is read, what is sent and what is written.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="functions">
+<h2>Functions<a class="headerlink" href="#functions" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.portable.ai_annotate.snap_integral" title="cellmap_flow.portable.ai_annotate.snap_integral"><code class="xref py py-obj docutils literal notranslate"><span class="pre">snap_integral</span></code></a>(values)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">values</span></code> as floats, with near-whole numbers made exactly whole</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.portable.ai_annotate.display_names" title="cellmap_flow.portable.ai_annotate.display_names"><code class="xref py py-obj docutils literal notranslate"><span class="pre">display_names</span></code></a>(→ tuple)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">display_dimensions</span></code> when they are z, y and x in some order, else</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.portable.ai_annotate.screen_axes" title="cellmap_flow.portable.ai_annotate.screen_axes"><code class="xref py py-obj docutils literal notranslate"><span class="pre">screen_axes</span></code></a>(→ tuple)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">(down,</span> <span class="pre">across,</span> <span class="pre">backwards)</span></code>: the data axes (0 z, 1 y, 2 x) the panel</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.portable.ai_annotate.screen_shape" title="cellmap_flow.portable.ai_annotate.screen_shape"><code class="xref py py-obj docutils literal notranslate"><span class="pre">screen_shape</span></code></a>(→ tuple)</p></td>
+<td><p>A plane's <code class="docutils literal notranslate"><span class="pre">(rows,</span> <span class="pre">cols)</span></code> in z, y, x order, as the panel draws it</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.portable.ai_annotate.to_screen" title="cellmap_flow.portable.ai_annotate.to_screen"><code class="xref py py-obj docutils literal notranslate"><span class="pre">to_screen</span></code></a>(→ numpy.ndarray)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">plane</span></code> (rows and columns its two axes in z, y, x order) as the panel</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.portable.ai_annotate.from_screen" title="cellmap_flow.portable.ai_annotate.from_screen"><code class="xref py py-obj docutils literal notranslate"><span class="pre">from_screen</span></code></a>(→ numpy.ndarray)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">to_screen</span></code> undone: an image as the panel draws it, in z, y, x order.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.portable.ai_annotate.plan_plane" title="cellmap_flow.portable.ai_annotate.plan_plane"><code class="xref py py-obj docutils literal notranslate"><span class="pre">plan_plane</span></code></a>(→ PlanePlan)</p></td>
+<td><p>The plane through <code class="docutils literal notranslate"><span class="pre">point_nm</span></code> (world nm, z, y, x) across <code class="docutils literal notranslate"><span class="pre">depth_axis</span></code>.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.portable.ai_annotate.raw_box" title="cellmap_flow.portable.ai_annotate.raw_box"><code class="xref py py-obj docutils literal notranslate"><span class="pre">raw_box</span></code></a>(→ tuple)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">(begin,</span> <span class="pre">count)</span></code>: the raw voxels to read for <code class="docutils literal notranslate"><span class="pre">plan</span></code>, on a raw grid</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.portable.ai_annotate.resize" title="cellmap_flow.portable.ai_annotate.resize"><code class="xref py py-obj docutils literal notranslate"><span class="pre">resize</span></code></a>(→ numpy.ndarray)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">plane</span></code> resampled to <code class="docutils literal notranslate"><span class="pre">shape</span></code> (rows, cols), float32; itself when it already is that.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.portable.ai_annotate.nearest" title="cellmap_flow.portable.ai_annotate.nearest"><code class="xref py py-obj docutils literal notranslate"><span class="pre">nearest</span></code></a>(→ numpy.ndarray)</p></td>
+<td><p>A 2D <code class="docutils literal notranslate"><span class="pre">array</span></code> (uint8 or int32, as Pillow holds an image of each) at</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.portable.ai_annotate.plane_image" title="cellmap_flow.portable.ai_annotate.plane_image"><code class="xref py py-obj docutils literal notranslate"><span class="pre">plane_image</span></code></a>(→ numpy.ndarray)</p></td>
+<td><p>The plane sent, from the raw <code class="docutils literal notranslate"><span class="pre">block</span></code> read over <code class="docutils literal notranslate"><span class="pre">raw_box</span></code>'s voxels (z, y, x).</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.portable.ai_annotate.normalize_to_uint8" title="cellmap_flow.portable.ai_annotate.normalize_to_uint8"><code class="xref py py-obj docutils literal notranslate"><span class="pre">normalize_to_uint8</span></code></a>(→ numpy.ndarray)</p></td>
+<td><p>A 2D array as uint8 grey levels (from ask-to-mask's <code class="docutils literal notranslate"><span class="pre">_normalize_to_uint8</span></code>).</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.portable.ai_annotate.extract_mask" title="cellmap_flow.portable.ai_annotate.extract_mask"><code class="xref py py-obj docutils literal notranslate"><span class="pre">extract_mask</span></code></a>(→ numpy.ndarray)</p></td>
+<td><p>The pixels of the model's reply (rows, cols, 3 or 4, uint8) painted</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.portable.ai_annotate.model_mask" title="cellmap_flow.portable.ai_annotate.model_mask"><code class="xref py py-obj docutils literal notranslate"><span class="pre">model_mask</span></code></a>(rgb, sent_shape, image_shape, target_rgb)</p></td>
+<td><p>The mask in a model's reply, and the reply lined up with the plane:</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.portable.ai_annotate.overlay" title="cellmap_flow.portable.ai_annotate.overlay"><code class="xref py py-obj docutils literal notranslate"><span class="pre">overlay</span></code></a>(→ numpy.ndarray)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">rgb</span></code> (the image sent, rows, cols, 3 or 4) with the pixels <code class="docutils literal notranslate"><span class="pre">mask</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.portable.ai_annotate.mask_to_write_shape" title="cellmap_flow.portable.ai_annotate.mask_to_write_shape"><code class="xref py py-obj docutils literal notranslate"><span class="pre">mask_to_write_shape</span></code></a>(→ numpy.ndarray)</p></td>
+<td><p>The objects of <code class="docutils literal notranslate"><span class="pre">mask</span></code> (the image's shape, as on screen) on the write</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.portable.ai_annotate.labels_for_box" title="cellmap_flow.portable.ai_annotate.labels_for_box"><code class="xref py py-obj docutils literal notranslate"><span class="pre">labels_for_box</span></code></a>(→ numpy.ndarray)</p></td>
+<td><p>The labels for the write box: an id per object of <code class="docutils literal notranslate"><span class="pre">objects</span></code>, 1 elsewhere.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.portable.ai_annotate.accept_labels" title="cellmap_flow.portable.ai_annotate.accept_labels"><code class="xref py py-obj docutils literal notranslate"><span class="pre">accept_labels</span></code></a>(→ numpy.ndarray)</p></td>
+<td><p>What Accept writes into the write box: <code class="docutils literal notranslate"><span class="pre">labels_for_box</span></code>'s labels, as</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="module-contents">
+<h2>Module Contents<a class="headerlink" href="#module-contents" title="Link to this heading"></a></h2>
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.portable.ai_annotate.AXIS_NAMES">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.ai_annotate.</span></span><span class="sig-name descname"><span class="pre">AXIS_NAMES</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">('z',</span> <span class="pre">'y',</span> <span class="pre">'x')</span></span><a class="headerlink" href="#cellmap_flow.portable.ai_annotate.AXIS_NAMES" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.portable.ai_annotate.MAX_IMAGE_SIDE">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.ai_annotate.</span></span><span class="sig-name descname"><span class="pre">MAX_IMAGE_SIDE</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">1024</span></span><a class="headerlink" href="#cellmap_flow.portable.ai_annotate.MAX_IMAGE_SIDE" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.portable.ai_annotate.PLANE_NAMES">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.ai_annotate.</span></span><span class="sig-name descname"><span class="pre">PLANE_NAMES</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">('XY',</span> <span class="pre">'XZ',</span> <span class="pre">'YZ')</span></span><a class="headerlink" href="#cellmap_flow.portable.ai_annotate.PLANE_NAMES" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.portable.ai_annotate.OVERLAY_ALPHA">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.ai_annotate.</span></span><span class="sig-name descname"><span class="pre">OVERLAY_ALPHA</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0.5</span></span><a class="headerlink" href="#cellmap_flow.portable.ai_annotate.OVERLAY_ALPHA" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py exception">
+<dt class="sig sig-object py" id="cellmap_flow.portable.ai_annotate.Refused">
+<span class="property"><span class="k"><span class="pre">exception</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.ai_annotate.</span></span><span class="sig-name descname"><span class="pre">Refused</span></span><a class="headerlink" href="#cellmap_flow.portable.ai_annotate.Refused" title="Link to this definition"></a></dt>
+<dd><p>A plane the point cannot have, outside the volume or the data: the
+message says so, for the user (the server raises it as an
+<code class="docutils literal notranslate"><span class="pre">AIAnnotateError(&quot;refused&quot;)</span></code>, the browser’s calls answer it).</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.portable.ai_annotate.snap_integral">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.ai_annotate.</span></span><span class="sig-name descname"><span class="pre">snap_integral</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">values</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.portable.ai_annotate.snap_integral" title="Link to this definition"></a></dt>
+<dd><p><code class="docutils literal notranslate"><span class="pre">values</span></code> as floats, with near-whole numbers made exactly whole
+(<code class="docutils literal notranslate"><span class="pre">io.metadata.snap_integral</span></code>): voxel arithmetic in nm leaves
+511.99999999 where 512 is meant, and a floor or a round after it must
+not see the difference.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.portable.ai_annotate.display_names">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.ai_annotate.</span></span><span class="sig-name descname"><span class="pre">display_names</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">display_dimensions</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">tuple</span></span></span><a class="headerlink" href="#cellmap_flow.portable.ai_annotate.display_names" title="Link to this definition"></a></dt>
+<dd><p><code class="docutils literal notranslate"><span class="pre">display_dimensions</span></code> when they are z, y and x in some order, else
+z, y, x: the display dimensions of a viewer that sets none over
+cellmap-flow’s coordinate space, and of a plan saved before plans kept
+them.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.portable.ai_annotate.screen_axes">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.ai_annotate.</span></span><span class="sig-name descname"><span class="pre">screen_axes</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">depth_axis</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">display_dimensions</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">tuple</span></span></span><a class="headerlink" href="#cellmap_flow.portable.ai_annotate.screen_axes" title="Link to this definition"></a></dt>
+<dd><p><code class="docutils literal notranslate"><span class="pre">(down,</span> <span class="pre">across,</span> <span class="pre">backwards)</span></code>: the data axes (0 z, 1 y, 2 x) the panel
+looking along <code class="docutils literal notranslate"><span class="pre">depth_axis</span></code> draws down and across, and whether across
+runs backwards, in a viewer whose display dimensions are
+<code class="docutils literal notranslate"><span class="pre">display_dimensions</span></code>, as <code class="docutils literal notranslate"><span class="pre">display_names</span></code> gives them (a plan’s), or
+None for z, y, x.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.portable.ai_annotate.screen_shape">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.ai_annotate.</span></span><span class="sig-name descname"><span class="pre">screen_shape</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">shape</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">depth_axis</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">display_dimensions</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">tuple</span></span></span><a class="headerlink" href="#cellmap_flow.portable.ai_annotate.screen_shape" title="Link to this definition"></a></dt>
+<dd><p>A plane’s <code class="docutils literal notranslate"><span class="pre">(rows,</span> <span class="pre">cols)</span></code> in z, y, x order, as the panel draws it
+(<code class="docutils literal notranslate"><span class="pre">screen_axes</span></code>).</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.portable.ai_annotate.to_screen">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.ai_annotate.</span></span><span class="sig-name descname"><span class="pre">to_screen</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">plane</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">depth_axis</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">display_dimensions</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">numpy.ndarray</span></span></span><a class="headerlink" href="#cellmap_flow.portable.ai_annotate.to_screen" title="Link to this definition"></a></dt>
+<dd><p><code class="docutils literal notranslate"><span class="pre">plane</span></code> (rows and columns its two axes in z, y, x order) as the panel
+looking along <code class="docutils literal notranslate"><span class="pre">depth_axis</span></code> draws it, in a viewer showing
+<code class="docutils literal notranslate"><span class="pre">display_dimensions</span></code> (<code class="docutils literal notranslate"><span class="pre">screen_axes</span></code>).</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.portable.ai_annotate.from_screen">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.ai_annotate.</span></span><span class="sig-name descname"><span class="pre">from_screen</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">image</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">depth_axis</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">display_dimensions</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">numpy.ndarray</span></span></span><a class="headerlink" href="#cellmap_flow.portable.ai_annotate.from_screen" title="Link to this definition"></a></dt>
+<dd><p><code class="docutils literal notranslate"><span class="pre">to_screen</span></code> undone: an image as the panel draws it, in z, y, x order.</p>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="cellmap_flow.portable.ai_annotate.PlanePlan">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.ai_annotate.</span></span><span class="sig-name descname"><span class="pre">PlanePlan</span></span><a class="headerlink" href="#cellmap_flow.portable.ai_annotate.PlanePlan" title="Link to this definition"></a></dt>
+<dd><p>One plane to annotate: what is read, what is sent and what is written.</p>
+<p>All three-element tuples are z, y, x. <code class="docutils literal notranslate"><span class="pre">raw_offset_nm</span></code> and
+<code class="docutils literal notranslate"><span class="pre">raw_shape_nm</span></code> are the world box the raw is read over (lower corner
+and size): in plane, the write box’s extent; along the depth axis, one
+input voxel centred on the point. <code class="docutils literal notranslate"><span class="pre">image_shape</span></code> is the (rows, cols)
+of the image sent, laid out as on screen (<code class="docutils literal notranslate"><span class="pre">to_screen</span></code>),
+<code class="docutils literal notranslate"><span class="pre">resolution_nm</span></code> its pixel size in nm (square
+pixels, which a model needs to see shapes as they are). <code class="docutils literal notranslate"><span class="pre">write_lo</span></code> and
+<code class="docutils literal notranslate"><span class="pre">write_hi</span></code> are the annotation voxels written, <code class="docutils literal notranslate"><span class="pre">[lo,</span> <span class="pre">hi)</span></code>, clipped to
+the volume and one voxel thick along the depth axis.
+<code class="docutils literal notranslate"><span class="pre">display_dimensions</span></code> are the viewer’s (<code class="docutils literal notranslate"><span class="pre">display_names</span></code>), which say
+how its panel draws the plane (<code class="docutils literal notranslate"><span class="pre">screen_axes</span></code>); z, y, x in a plan saved
+before plans kept them.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.portable.ai_annotate.PlanePlan.depth_axis">
+<span class="sig-name descname"><span class="pre">depth_axis</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">int</span></span><a class="headerlink" href="#cellmap_flow.portable.ai_annotate.PlanePlan.depth_axis" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.portable.ai_annotate.PlanePlan.point_nm">
+<span class="sig-name descname"><span class="pre">point_nm</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">tuple</span></span><a class="headerlink" href="#cellmap_flow.portable.ai_annotate.PlanePlan.point_nm" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.portable.ai_annotate.PlanePlan.raw_offset_nm">
+<span class="sig-name descname"><span class="pre">raw_offset_nm</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">tuple</span></span><a class="headerlink" href="#cellmap_flow.portable.ai_annotate.PlanePlan.raw_offset_nm" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.portable.ai_annotate.PlanePlan.raw_shape_nm">
+<span class="sig-name descname"><span class="pre">raw_shape_nm</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">tuple</span></span><a class="headerlink" href="#cellmap_flow.portable.ai_annotate.PlanePlan.raw_shape_nm" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.portable.ai_annotate.PlanePlan.image_shape">
+<span class="sig-name descname"><span class="pre">image_shape</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">tuple</span></span><a class="headerlink" href="#cellmap_flow.portable.ai_annotate.PlanePlan.image_shape" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.portable.ai_annotate.PlanePlan.input_voxel_size">
+<span class="sig-name descname"><span class="pre">input_voxel_size</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">tuple</span></span><a class="headerlink" href="#cellmap_flow.portable.ai_annotate.PlanePlan.input_voxel_size" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.portable.ai_annotate.PlanePlan.write_lo">
+<span class="sig-name descname"><span class="pre">write_lo</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">tuple</span></span><a class="headerlink" href="#cellmap_flow.portable.ai_annotate.PlanePlan.write_lo" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.portable.ai_annotate.PlanePlan.write_hi">
+<span class="sig-name descname"><span class="pre">write_hi</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">tuple</span></span><a class="headerlink" href="#cellmap_flow.portable.ai_annotate.PlanePlan.write_hi" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.portable.ai_annotate.PlanePlan.resolution_nm">
+<span class="sig-name descname"><span class="pre">resolution_nm</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">float</span></span><a class="headerlink" href="#cellmap_flow.portable.ai_annotate.PlanePlan.resolution_nm" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.portable.ai_annotate.PlanePlan.display_dimensions">
+<span class="sig-name descname"><span class="pre">display_dimensions</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">tuple</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">('z',</span> <span class="pre">'y',</span> <span class="pre">'x')</span></span><a class="headerlink" href="#cellmap_flow.portable.ai_annotate.PlanePlan.display_dimensions" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cellmap_flow.portable.ai_annotate.PlanePlan.plane_axes">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">plane_axes</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">tuple</span></span><a class="headerlink" href="#cellmap_flow.portable.ai_annotate.PlanePlan.plane_axes" title="Link to this definition"></a></dt>
+<dd><p>The two in-plane axes, in z, y, x order.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cellmap_flow.portable.ai_annotate.PlanePlan.plane_name">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">plane_name</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></span><a class="headerlink" href="#cellmap_flow.portable.ai_annotate.PlanePlan.plane_name" title="Link to this definition"></a></dt>
+<dd><p>the data axes the plane shows.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>“XY”, “XZ” or “YZ”</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cellmap_flow.portable.ai_annotate.PlanePlan.write_shape">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">write_shape</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">tuple</span></span><a class="headerlink" href="#cellmap_flow.portable.ai_annotate.PlanePlan.write_shape" title="Link to this definition"></a></dt>
+<dd><p>The write box’s in-plane shape in annotation voxels, its <code class="docutils literal notranslate"><span class="pre">plane_axes</span></code> in z, y, x order.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cellmap_flow.portable.ai_annotate.PlanePlan.click_px">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">click_px</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">tuple</span></span><a class="headerlink" href="#cellmap_flow.portable.ai_annotate.PlanePlan.click_px" title="Link to this definition"></a></dt>
+<dd><p><code class="docutils literal notranslate"><span class="pre">(row,</span> <span class="pre">col)</span></code> of the point in the image sent.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.portable.ai_annotate.PlanePlan.to_screen">
+<span class="sig-name descname"><span class="pre">to_screen</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">plane</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">numpy.ndarray</span></span></span><a class="headerlink" href="#cellmap_flow.portable.ai_annotate.PlanePlan.to_screen" title="Link to this definition"></a></dt>
+<dd><p><code class="docutils literal notranslate"><span class="pre">to_screen</span></code> for this plan’s plane.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.portable.ai_annotate.PlanePlan.from_screen">
+<span class="sig-name descname"><span class="pre">from_screen</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">image</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">numpy.ndarray</span></span></span><a class="headerlink" href="#cellmap_flow.portable.ai_annotate.PlanePlan.from_screen" title="Link to this definition"></a></dt>
+<dd><p><code class="docutils literal notranslate"><span class="pre">from_screen</span></code> for this plan’s plane.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.portable.ai_annotate.PlanePlan.to_dict">
+<span class="sig-name descname"><span class="pre">to_dict</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span></span></span><a class="headerlink" href="#cellmap_flow.portable.ai_annotate.PlanePlan.to_dict" title="Link to this definition"></a></dt>
+<dd><p>The plan as JSON-safe lists, for a staging’s meta.json and the browser.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.portable.ai_annotate.PlanePlan.from_dict">
+<span class="property"><span class="k"><span class="pre">classmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">from_dict</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#cellmap_flow.portable.ai_annotate.PlanePlan" title="cellmap_flow.portable.ai_annotate.PlanePlan"><span class="pre">PlanePlan</span></a></span></span><a class="headerlink" href="#cellmap_flow.portable.ai_annotate.PlanePlan.from_dict" title="Link to this definition"></a></dt>
+<dd><p>The plan <code class="docutils literal notranslate"><span class="pre">to_dict</span></code> wrote.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.portable.ai_annotate.plan_plane">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.ai_annotate.</span></span><span class="sig-name descname"><span class="pre">plan_plane</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">volume</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">volume_shape</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">point_nm</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">depth_axis</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">crop_size_px</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data_box_nm</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">display_dimensions</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#cellmap_flow.portable.ai_annotate.PlanePlan" title="cellmap_flow.portable.ai_annotate.PlanePlan"><span class="pre">PlanePlan</span></a></span></span><a class="headerlink" href="#cellmap_flow.portable.ai_annotate.plan_plane" title="Link to this definition"></a></dt>
+<dd><p>The plane through <code class="docutils literal notranslate"><span class="pre">point_nm</span></code> (world nm, z, y, x) across <code class="docutils literal notranslate"><span class="pre">depth_axis</span></code>.</p>
+<p><code class="docutils literal notranslate"><span class="pre">volume</span></code> is the annotation volume’s record (<code class="docutils literal notranslate"><span class="pre">output_voxel_size</span></code>,
+<code class="docutils literal notranslate"><span class="pre">input_voxel_size</span></code>, <code class="docutils literal notranslate"><span class="pre">dataset_offset_nm</span></code>), <code class="docutils literal notranslate"><span class="pre">volume_shape</span></code> its
+<code class="docutils literal notranslate"><span class="pre">annotation/s0</span></code> shape. The field of view is square in nm,
+<code class="docutils literal notranslate"><span class="pre">crop_size_px</span></code> annotation voxels along the finer in-plane axis (both,
+for isotropic voxels), centred on the point; its write box is the
+annotation voxels whose centres lie in it, clipped to the volume, in the
+annotation voxel that holds the point along the depth axis.</p>
+<p><code class="docutils literal notranslate"><span class="pre">data_box_nm</span></code> is the raw data’s extent, <code class="docutils literal notranslate"><span class="pre">(lo,</span> <span class="pre">hi)</span></code> world nm z, y, x:
+the field is clipped to it too. The volume is the data rounded up to
+whole chunks of the model’s output, which for Cellpose at 64 nm is up to
+33 um past the data’s edge, and there the plane is only the read’s
+zero padding: an image of it was labelled as background, and the cells
+beside it smeared into it.</p>
+<p>The raw is read over the clipped box’s extent, so the image and the box
+cover the same physical area. The image’s pixels are the finer in-plane
+input voxel size, square; when that makes a side longer than
+<code class="docutils literal notranslate"><span class="pre">MAX_IMAGE_SIDE</span></code> the pixels are made larger to fit. The image is laid
+out as the viewer’s panel draws the plane, for the viewer’s
+<code class="docutils literal notranslate"><span class="pre">display_dimensions</span></code> (z, y, x when None).</p>
+<p>Raises <code class="docutils literal notranslate"><span class="pre">Refused</span></code> when the point is outside the volume or the data: a
+field clipped to an edge it does not reach is not what was aimed at.
+ValueError for a depth axis, crop size or point that is not one.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.portable.ai_annotate.raw_box">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.ai_annotate.</span></span><span class="sig-name descname"><span class="pre">raw_box</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">plan</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#cellmap_flow.portable.ai_annotate.PlanePlan" title="cellmap_flow.portable.ai_annotate.PlanePlan"><span class="pre">PlanePlan</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">voxel_size</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">corner</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">tuple</span></span></span><a class="headerlink" href="#cellmap_flow.portable.ai_annotate.raw_box" title="Link to this definition"></a></dt>
+<dd><p><code class="docutils literal notranslate"><span class="pre">(begin,</span> <span class="pre">count)</span></code>: the raw voxels to read for <code class="docutils literal notranslate"><span class="pre">plan</span></code>, on a raw grid
+of <code class="docutils literal notranslate"><span class="pre">voxel_size</span></code> whose voxel 0’s lower corner is <code class="docutils literal notranslate"><span class="pre">corner</span></code> (nm, z, y, x).</p>
+<p>Each axis starts at the voxel that holds the first sample’s centre (half
+a voxel in from the box’s corner) and runs for as many voxels as fit in
+the box, at least one: so a box on the grid reads exactly its voxels,
+and the depth axis reads the voxel that holds the point.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.portable.ai_annotate.resize">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.ai_annotate.</span></span><span class="sig-name descname"><span class="pre">resize</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">plane</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">shape</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">numpy.ndarray</span></span></span><a class="headerlink" href="#cellmap_flow.portable.ai_annotate.resize" title="Link to this definition"></a></dt>
+<dd><p><code class="docutils literal notranslate"><span class="pre">plane</span></code> resampled to <code class="docutils literal notranslate"><span class="pre">shape</span></code> (rows, cols), float32; itself when it already is that.</p>
+<p>Shrinking (neither side grows) averages each pixel’s footprint (Pillow’s
+box filter), so fine membranes fade rather than alias; otherwise (the
+coarse axis of an anisotropic plane) it interpolates linearly (Pillow’s
+bilinear), on Pillow’s 32-bit float (“F”) image.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.portable.ai_annotate.nearest">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.ai_annotate.</span></span><span class="sig-name descname"><span class="pre">nearest</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">array</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">shape</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">numpy.ndarray</span></span></span><a class="headerlink" href="#cellmap_flow.portable.ai_annotate.nearest" title="Link to this definition"></a></dt>
+<dd><p>A 2D <code class="docutils literal notranslate"><span class="pre">array</span></code> (uint8 or int32, as Pillow holds an image of each) at
+<code class="docutils literal notranslate"><span class="pre">shape</span></code> (rows, cols) by nearest neighbour, pixel centre to pixel centre
+(Pillow’s NEAREST), in its own dtype; a copy when it already is that
+size.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.portable.ai_annotate.plane_image">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.ai_annotate.</span></span><span class="sig-name descname"><span class="pre">plane_image</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">block</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">plan</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#cellmap_flow.portable.ai_annotate.PlanePlan" title="cellmap_flow.portable.ai_annotate.PlanePlan"><span class="pre">PlanePlan</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">numpy.ndarray</span></span></span><a class="headerlink" href="#cellmap_flow.portable.ai_annotate.plane_image" title="Link to this definition"></a></dt>
+<dd><p>The plane sent, from the raw <code class="docutils literal notranslate"><span class="pre">block</span></code> read over <code class="docutils literal notranslate"><span class="pre">raw_box</span></code>’s voxels (z, y, x).</p>
+<p>Its one slice along the depth axis, laid out as on screen
+(<code class="docutils literal notranslate"><span class="pre">PlanePlan.to_screen</span></code>) and resampled to the plan’s image
+(<code class="docutils literal notranslate"><span class="pre">resize</span></code>). The raw’s dtype is kept unless the plane had to be resized
+to the image’s grid, when it is float32.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.portable.ai_annotate.normalize_to_uint8">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.ai_annotate.</span></span><span class="sig-name descname"><span class="pre">normalize_to_uint8</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">numpy.ndarray</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">numpy.ndarray</span></span></span><a class="headerlink" href="#cellmap_flow.portable.ai_annotate.normalize_to_uint8" title="Link to this definition"></a></dt>
+<dd><p>A 2D array as uint8 grey levels (from ask-to-mask’s <code class="docutils literal notranslate"><span class="pre">_normalize_to_uint8</span></code>).</p>
+<p>uint8 passes through unchanged. Anything else is clipped to its 1st-99th
+percentile over the plane and stretched to 0-255, as raw EM is not always
+8-bit and a few saturated pixels should not flatten the contrast.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.portable.ai_annotate.extract_mask">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.ai_annotate.</span></span><span class="sig-name descname"><span class="pre">extract_mask</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">rgb</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">target_rgb</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">threshold</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">200.0</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">numpy.ndarray</span></span></span><a class="headerlink" href="#cellmap_flow.portable.ai_annotate.extract_mask" title="Link to this definition"></a></dt>
+<dd><p>The pixels of the model’s reply (rows, cols, 3 or 4, uint8) painted
+<code class="docutils literal notranslate"><span class="pre">target_rgb</span></code>, as a bool (rows, cols) mask (ask-to-mask’s
+<code class="docutils literal notranslate"><span class="pre">extract_mask</span></code>, its colour-difference mode).</p>
+<p>Each pixel scores how strongly it shows the target colour: its weakest
+channel among those the target has at full strength, minus its strongest
+deviation elsewhere – a channel the target has off (0) being on, or a
+channel the target has at part strength being away from that strength.
+For red (255, 0, 0) that is <code class="docutils literal notranslate"><span class="pre">R</span> <span class="pre">-</span> <span class="pre">max(G,</span> <span class="pre">B)</span></code>: red that dominates. A
+pixel counts when its score reaches <code class="docutils literal notranslate"><span class="pre">threshold</span></code>.</p>
+<p>The part-strength term is what lets orange (255, 128, 0) or purple
+(128, 0, 255) be found at all: counting their half channel as “on” would
+cap the score at 128, under the threshold, and counting it as “off”
+would reject the colour itself.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.portable.ai_annotate.model_mask">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.ai_annotate.</span></span><span class="sig-name descname"><span class="pre">model_mask</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">rgb</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sent_shape</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">image_shape</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">target_rgb</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.portable.ai_annotate.model_mask" title="Link to this definition"></a></dt>
+<dd><p>The mask in a model’s reply, and the reply lined up with the plane:
+<code class="docutils literal notranslate"><span class="pre">(mask,</span> <span class="pre">aligned)</span></code>.</p>
+<p><code class="docutils literal notranslate"><span class="pre">rgb</span></code> is the image the model sent back, decoded (rows, cols, 3 or 4,
+uint8), <code class="docutils literal notranslate"><span class="pre">sent_shape</span></code> the (rows, cols) of the image it was sent (the
+plane padded to a square), <code class="docutils literal notranslate"><span class="pre">image_shape</span></code> the plane’s. A reply at
+another size (or shape: stretching it then is what the review shows) is
+resized back to the sent size by Pillow’s bilinear filter on an RGB
+image (which averages when shrinking), then the padding is cut off the
+right and bottom, so what is left lines up with the plane; the mask is
+the pixels painted <code class="docutils literal notranslate"><span class="pre">target_rgb</span></code> in that (<code class="docutils literal notranslate"><span class="pre">extract_mask</span></code>).
+<code class="docutils literal notranslate"><span class="pre">aligned</span></code> is (rows, cols, 3) uint8, the plane’s shape, for the review.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.portable.ai_annotate.overlay">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.ai_annotate.</span></span><span class="sig-name descname"><span class="pre">overlay</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">rgb</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mask</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">target_rgb</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">alpha</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">OVERLAY_ALPHA</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">numpy.ndarray</span></span></span><a class="headerlink" href="#cellmap_flow.portable.ai_annotate.overlay" title="Link to this definition"></a></dt>
+<dd><p><code class="docutils literal notranslate"><span class="pre">rgb</span></code> (the image sent, rows, cols, 3 or 4) with the pixels <code class="docutils literal notranslate"><span class="pre">mask</span></code>
+marks tinted <code class="docutils literal notranslate"><span class="pre">target_rgb</span></code>: the review’s third picture, what accepting
+writes, not the model’s own image. <code class="docutils literal notranslate"><span class="pre">mask</span></code> is the write box’s objects
+laid out as the image is (<code class="docutils literal notranslate"><span class="pre">to_screen</span></code>) and scaled to it by nearest
+neighbour; uint8 RGB back, rounded half to even.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.portable.ai_annotate.mask_to_write_shape">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.ai_annotate.</span></span><span class="sig-name descname"><span class="pre">mask_to_write_shape</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mask</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">numpy.ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">plan</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#cellmap_flow.portable.ai_annotate.PlanePlan" title="cellmap_flow.portable.ai_annotate.PlanePlan"><span class="pre">PlanePlan</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">numpy.ndarray</span></span></span><a class="headerlink" href="#cellmap_flow.portable.ai_annotate.mask_to_write_shape" title="Link to this definition"></a></dt>
+<dd><p>The objects of <code class="docutils literal notranslate"><span class="pre">mask</span></code> (the image’s shape, as on screen) on the write
+box’s in-plane voxels, in z, y, x order (<code class="docutils literal notranslate"><span class="pre">PlanePlan.write_shape</span></code>):
+int32, 0 for background and 1..n for the objects, numbered in the box’s
+raster order as <code class="docutils literal notranslate"><span class="pre">scipy.ndimage.label</span></code> numbers a mask.</p>
+<p>Objects are the mask’s 4-connected pieces (scipy’s default, so pieces
+touching only at a corner stay apart, as the model was asked to leave
+them), found at the image’s own resolution, where the model drew the
+lines between them: on voxels coarser than the pixels a line can fall
+between the pixels the voxels take, and the objects either side of it
+still keep ids of their own. Then nearest neighbour, pixel centre to
+voxel centre: each annotation voxel takes the object of the pixel at
+its centre, so the mask keeps hard edges and lands where it was drawn
+whatever the two sizes are. An object no voxel centre falls in is lost.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.portable.ai_annotate.labels_for_box">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.ai_annotate.</span></span><span class="sig-name descname"><span class="pre">labels_for_box</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">objects</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">numpy.ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">existing</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">numpy.ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">depth_axis</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">count_up</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">beside</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">numpy.ndarray</span></span></span><a class="headerlink" href="#cellmap_flow.portable.ai_annotate.labels_for_box" title="Link to this definition"></a></dt>
+<dd><p>The labels for the write box: an id per object of <code class="docutils literal notranslate"><span class="pre">objects</span></code>, 1 elsewhere.</p>
+<p><code class="docutils literal notranslate"><span class="pre">objects</span></code> is the in-plane objects (<code class="docutils literal notranslate"><span class="pre">mask_to_write_shape</span></code>), 0 for
+background, <code class="docutils literal notranslate"><span class="pre">existing</span></code> the one-voxel-thick box as the volume holds
+it. The objects are labelled by <code class="docutils literal notranslate"><span class="pre">fill.seed_labels</span></code>: an object the user
+has already painted part of keeps that id, the rest get fresh ones,
+counting up for an instance target’s <code class="docutils literal notranslate"><span class="pre">count_up</span></code>.</p>
+<p><code class="docutils literal notranslate"><span class="pre">beside</span></code> is the planes on either side of the box along the depth axis,
+as the volume holds them (each shaped like <code class="docutils literal notranslate"><span class="pre">existing</span></code>, or None at the
+volume’s edge). Planes are annotated one at a time, so an object usually
+continues one in the plane next to it: where this plane is unpainted,
+the ids beside it count as painted here, and an object takes the id it
+overlaps most, rather than a fresh one that an instance target would
+read as a boundary between the two planes. Fresh ids skip those planes’
+ids too, so a new object does not take the id of a different object
+right next to it, which an instance target would read as one object.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.portable.ai_annotate.accept_labels">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.ai_annotate.</span></span><span class="sig-name descname"><span class="pre">accept_labels</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">objects</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">existing</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">depth_axis</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">instance_target</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">overwrite</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">beside</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">numpy.ndarray</span></span></span><a class="headerlink" href="#cellmap_flow.portable.ai_annotate.accept_labels" title="Link to this definition"></a></dt>
+<dd><p>What Accept writes into the write box: <code class="docutils literal notranslate"><span class="pre">labels_for_box</span></code>’s labels, as
+a seed’s ids (counting up for an instance target on a volume of more
+than 8-bit ids, <code class="docutils literal notranslate"><span class="pre">fill.counts_up</span></code>; an object continuing one in a plane
+<code class="docutils literal notranslate"><span class="pre">beside</span></code> keeps its id), for <code class="docutils literal notranslate"><span class="pre">fill.paint</span></code> to write.</p>
+<p>With <code class="docutils literal notranslate"><span class="pre">overwrite</span></code> the model’s objects replace what is under them, but
+its background only fills unlabelled voxels: an object already painted
+that the model missed is kept, not erased to background (those voxels
+get 0, “leave as it is”).</p>
+</dd></dl>
+
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../index.html" class="btn btn-neutral float-left" title="cellmap_flow.portable" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../ai_annotate_calls/index.html" class="btn btn-neutral float-right" title="cellmap_flow.portable.ai_annotate_calls" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, David Ackerman,  Marwan Zouinkhi, Jeff Rhoades, Larissa Heinrich, Aubrey Weigel.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

@@ -1,0 +1,262 @@
+cellmap_flow.io.metadata
+========================
+
+.. py:module:: cellmap_flow.io.metadata
+
+.. autoapi-nested-parse::
+
+   Array metadata for every format cellmap-flow reads, as one ``ArrayMeta``.
+
+   worldarray parses the metadata: zarr v2 and v3, N5 and neuroglancer
+   precomputed, on disk or at an http(s), s3 or gs URL (``worldarray.placement``,
+   its spec's Conventions 1 and 4). This module turns worldarray's record (the
+   store's own units, ``translation`` the *centre* of voxel 0) into
+   cellmap-flow's: every axis kept, in the array's own (C) order; spatial sizes
+   and translations in nanometer floats; ``translation`` the lower *corner* of
+   voxel 0; non-spatial axes with unit None, voxel size 1 and translation 0.
+   ``.spatial()`` drops the channel/time axes.
+
+   What stays here because worldarray has no such thing:
+
+   - ``ArrayMeta`` itself (corner-based, ``spatial()`` a method);
+   - the record's shape for precomputed (a leading ``channel`` axis, even of one
+     channel) and for unnamed axes (``c^`` before ``z, y, x``);
+   - precomputed levels named ``s<N>`` (worldarray names them by key; it opens
+     ``…/s<N>`` as scale N);
+   - ``list_levels`` refusing a group without multiscales;
+   - ``nm_per_unit``, over worldarray's unit table (``worldarray.units.TABLE``);
+   - the crop loader's attribute helpers (``read_zarr_json``, ``attrs_from_meta``,
+     ``legacy_attrs``, ``dataset_transforms``).
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.io.metadata.logger
+   cellmap_flow.io.metadata.NANOMETER
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.io.metadata.ArrayMeta
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.io.metadata.nm_per_unit
+   cellmap_flow.io.metadata.to_nm
+   cellmap_flow.io.metadata.snap_integral
+   cellmap_flow.io.metadata.is_integral
+   cellmap_flow.io.metadata.from_world_array
+   cellmap_flow.io.metadata.open_level
+   cellmap_flow.io.metadata.read_array_meta
+   cellmap_flow.io.metadata.level_names
+   cellmap_flow.io.metadata.pyramid
+   cellmap_flow.io.metadata.list_levels
+   cellmap_flow.io.metadata.node_type
+   cellmap_flow.io.metadata.match_dataset
+   cellmap_flow.io.metadata.dataset_transforms
+   cellmap_flow.io.metadata.legacy_attrs
+   cellmap_flow.io.metadata.read_zarr_json
+   cellmap_flow.io.metadata.attrs_from_meta
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:data:: NANOMETER
+   :value: 'nanometer'
+
+
+.. py:function:: nm_per_unit(unit) -> float
+
+   How many nanometers one ``unit`` is; 1 for a missing, "pixel" or unknown
+   unit, with a warning for an unknown one.
+
+
+.. py:function:: to_nm(values, units) -> Tuple[float, ...]
+
+   ``values`` (one per axis) in nanometers; ``units`` None means nm.
+
+
+.. py:function:: snap_integral(values)
+
+   ``values`` as floats, with near-whole numbers made exactly whole.
+
+
+.. py:function:: is_integral(values) -> bool
+
+.. py:class:: ArrayMeta
+
+   What one array is, independent of its format.
+
+   Every per-axis tuple has one entry per array dimension, in the array's
+   (C) order. ``units[i]`` is "nanometer" on a spatial axis -- its
+   ``voxel_size`` and ``translation`` have been converted to nm -- and None
+   on a channel or time axis, where ``voxel_size`` is 1.0 and
+   ``translation`` 0.0. ``translation`` is the lower corner of voxel 0
+   (worldarray's ``corner``; its ``translation`` is the centre).
+   An axis nobody named has the name "".
+
+   ``format`` is "zarr2", "zarr3", "n5" or "precomputed".
+
+
+   .. py:attribute:: path
+      :type:  str
+
+
+   .. py:attribute:: format
+      :type:  str
+
+
+   .. py:attribute:: shape
+      :type:  Tuple[int, ...]
+
+
+   .. py:attribute:: dtype
+      :type:  Optional[numpy.dtype]
+
+
+   .. py:attribute:: chunk_shape
+      :type:  Tuple[int, ...]
+
+
+   .. py:attribute:: axes
+      :type:  Tuple[str, ...]
+
+
+   .. py:attribute:: units
+      :type:  Tuple[Optional[str], ...]
+
+
+   .. py:attribute:: voxel_size
+      :type:  Tuple[float, ...]
+
+
+   .. py:attribute:: translation
+      :type:  Tuple[float, ...]
+
+
+   .. py:attribute:: fill_value
+      :type:  object
+      :value: None
+
+
+
+   .. py:property:: spatial_indices
+      :type: Tuple[int, ...]
+
+
+
+   .. py:property:: channel_axis
+      :type: Optional[int]
+
+
+      The first non-spatial axis that is not time, or None.
+
+
+   .. py:method:: spatial() -> ArrayMeta
+
+      This array's metadata with only its spatial axes.
+
+
+
+.. py:function:: from_world_array(native: worldarray.ArrayMeta, path: str) -> ArrayMeta
+
+   cellmap-flow's record of worldarray's ``native`` metadata (an array's
+   ``.meta``) of the array at ``path``.
+
+   worldarray's spatial axes are those named z, y or x, else the last three;
+   the others keep unit None. Unnamed axes get cellmap-flow's names (z, y, x
+   from the end, ``c^`` before them); a precomputed volume's channel axis,
+   which worldarray drops when there is one channel, is put back.
+
+
+.. py:function:: open_level(path: str, voxel_size=None, **kwargs) -> worldarray.WorldArray
+
+   The worldarray array ``path`` names, as cellmap-flow reads a path: an
+   array as it is, ``…/s<N>`` of a precomputed volume as scale N, and a group
+   or precomputed volume at its level for ``voxel_size`` (worldarray chooses
+   it from the group's document), its first without one.
+
+
+.. py:function:: read_array_meta(path: str) -> ArrayMeta
+
+   Metadata of the array at ``path`` (see the module docstring). A path at
+   a group reads its first level: the first its multiscales list, else s0.
+
+
+.. py:function:: level_names(group_path: str, pyramid: worldarray.Pyramid) -> List[str]
+
+   cellmap-flow's names of ``pyramid``'s levels: a precomputed volume's
+   scales are ``s<N>``, a group's levels their dataset paths.
+
+
+.. py:function:: pyramid(group_path: str, units=None) -> Tuple[str, worldarray.Pyramid]
+
+   ``(group path, worldarray Pyramid)`` of the multiscale group or
+   precomputed volume at ``group_path``, in ``units`` (native when None);
+   raises as ``list_levels`` does.
+
+
+.. py:function:: list_levels(group_path: str) -> List[Tuple[str, ArrayMeta]]
+
+   ``[(dataset path, ArrayMeta)]`` for each level of the OME multiscale
+   group at ``group_path``, in the order its ``datasets`` list them, or of
+   the precomputed volume there (``s<N>`` for scale N), from the documents
+   alone (``worldarray.Pyramid.metas``): no level is opened.
+
+   Raises when there is no such group (KeyError for a v2 group without
+   multiscales, ValueError for a v3 one, or for one scale of a precomputed
+   volume).
+
+
+.. py:function:: node_type(path: str) -> Tuple[str, str]
+
+   ``(path, "group" or "array")``: what worldarray finds at ``path``.
+   FileNotFoundError when there is nothing there.
+
+
+.. py:function:: match_dataset(multiscale: dict, dataset_path: str) -> Optional[dict]
+
+   The ``datasets`` entry of one multiscales item whose path is
+   ``dataset_path`` (leading and trailing "/" ignored), or None.
+
+
+.. py:function:: dataset_transforms(entry: dict)
+
+   ``(scale, translation)`` of an OME ``datasets`` entry as written, each
+   None when the entry has none.
+
+
+.. py:function:: legacy_attrs(attrs: dict, ndim: int) -> Tuple[List[float], List[float]]
+
+   ``(voxel_size, offset)`` from an array's own ``transform`` or
+   ``resolution``/``offset`` attributes, as written; 1 and 0 without them.
+
+   For imported crops: no parent lookup, no units, no rounding.
+
+
+.. py:function:: read_zarr_json(path: str) -> dict
+
+   The ``zarr.json`` of the v3 node at ``path``; FileNotFoundError when
+   there is none.
+
+
+.. py:function:: attrs_from_meta(meta: dict) -> dict
+
+   Merge OME-NGFF 0.5's nested ``attributes.ome`` with the top-level
+   ``attributes`` dict (some writers emit OME metadata unnested).
+
+

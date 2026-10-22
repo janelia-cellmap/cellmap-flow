@@ -1,0 +1,32 @@
+cellmap_flow.utils.device
+=========================
+
+.. py:module:: cellmap_flow.utils.device
+
+.. autoapi-nested-parse::
+
+   The device torch work runs on, wherever cellmap-flow picks one.
+
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.utils.device.best_device
+
+
+Module Contents
+---------------
+
+.. py:function:: best_device()
+
+   CUDA when there is one, else Apple's GPU (MPS), else the CPU.
+
+   Every choice here was CUDA or the CPU, so a Mac served and trained its
+   models on the CPU, though PyTorch runs on its GPU and Cellpose and
+   bioimageio.core already used it on their own: a Cellpose finetune took
+   about 33 s a batch of eight tiles there, two days for 20 epochs.
+
+

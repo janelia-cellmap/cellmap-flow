@@ -1,0 +1,516 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>cellmap_flow.models.configs.onnx &mdash; CellMap Flow  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../../_static/graphviz.css?v=4ae1632d" />
+      <link rel="stylesheet" type="text/css" href="../../../../../_static/css/custom.css" />
+
+  
+    <link rel="shortcut icon" href="../../../../../_static/favicon.ico"/>
+      <script src="../../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../../../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../search.html" />
+    <link rel="next" title="cellmap_flow.models.configs.script" href="../script/index.html" />
+    <link rel="prev" title="cellmap_flow.models.configs.huggingface" href="../huggingface/index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../../index.html" class="icon icon-home">
+            CellMap Flow
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">CellMap-Flow API:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../../../../../install.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../browser.html">In the browser</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../cli.html">Command line</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../scripts.html">Python Scripts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../yaml_config.html">YAML Configuration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../data_paths.html">Data paths</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../huggingface.html">HuggingFace Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../bioimage.html">BioImage Model Zoo</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../custom_script.html">Custom Model</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../post.html">PostProcessors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../plugins.html">Plugins</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../review.html">Reviewing instances</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../viewer_api.html">Viewer layer API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../architecture.html">Architecture</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../../../../index.html">API Reference</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="../../../index.html">cellmap_flow</a><ul class="current">
+<li class="toctree-l3 current"><a class="reference internal" href="../../../index.html#submodules">Submodules</a><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="../../../ai_annotate/index.html">cellmap_flow.ai_annotate</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../blockwise/index.html">cellmap_flow.blockwise</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../cli/index.html">cellmap_flow.cli</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../config/index.html">cellmap_flow.config</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../dashboard/index.html">cellmap_flow.dashboard</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../finetune/index.html">cellmap_flow.finetune</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../globals/index.html">cellmap_flow.globals</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../image_data_interface/index.html">cellmap_flow.image_data_interface</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../inference/index.html">cellmap_flow.inference</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../inferencer/index.html">cellmap_flow.inferencer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../io/index.html">cellmap_flow.io</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../jobs/index.html">cellmap_flow.jobs</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../logging_setup/index.html">cellmap_flow.logging_setup</a></li>
+<li class="toctree-l4 current"><a class="reference internal" href="../../index.html">cellmap_flow.models</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../norm/index.html">cellmap_flow.norm</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../pipeline_spec/index.html">cellmap_flow.pipeline_spec</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../plugins/index.html">cellmap_flow.plugins</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../portable/index.html">cellmap_flow.portable</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../post/index.html">cellmap_flow.post</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../process_chain/index.html">cellmap_flow.process_chain</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../review/index.html">cellmap_flow.review</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../review_index/index.html">cellmap_flow.review_index</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../schema/index.html">cellmap_flow.schema</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../serving/index.html">cellmap_flow.serving</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../utils/index.html">cellmap_flow.utils</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../viewer/index.html">cellmap_flow.viewer</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../../index.html">CellMap Flow</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../../index.html">API Reference</a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">cellmap_flow</a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">cellmap_flow.models</a></li>
+          <li class="breadcrumb-item"><a href="../index.html">cellmap_flow.models.configs</a></li>
+      <li class="breadcrumb-item active">cellmap_flow.models.configs.onnx</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../../../../../_sources/autoapi/cellmap_flow/models/configs/onnx/index.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-cellmap_flow.models.configs.onnx">
+<span id="cellmap-flow-models-configs-onnx"></span><h1>cellmap_flow.models.configs.onnx<a class="headerlink" href="#module-cellmap_flow.models.configs.onnx" title="Link to this heading"></a></h1>
+<p><code class="docutils literal notranslate"><span class="pre">OnnxModelConfig</span></code>: an ONNX export as the browser mode runs it, served with ONNX Runtime.</p>
+<p>The model is one of:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">path</span></code>: a local <code class="docutils literal notranslate"><span class="pre">.onnx</span></code> file. A model finetuned in the browser (the
+file its <em>Download finetuned model</em> saves) carries its manifest in the
+file’s <code class="docutils literal notranslate"><span class="pre">metadata_props</span></code>, under <code class="docutils literal notranslate"><span class="pre">cellmap_flow.manifest</span></code> (MANIFEST_KEY),
+so the file alone says its voxel sizes, block sizes and channels. Any
+other file says none of that: the entry gives <code class="docutils literal notranslate"><span class="pre">input_voxel_size</span></code>, and the
+block sizes and the channel count are read from the graph’s input and
+output shapes when they are fixed, else from <code class="docutils literal notranslate"><span class="pre">input_size</span></code>,
+<code class="docutils literal notranslate"><span class="pre">output_size</span></code> and <code class="docutils literal notranslate"><span class="pre">channels</span></code>. A relative <code class="docutils literal notranslate"><span class="pre">path</span></code> in a YAML is taken
+from the YAML file’s folder (<code class="docutils literal notranslate"><span class="pre">config_relative_paths</span></code>), so an exported
+YAML can name the downloaded file beside it.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">folder</span></code>: one model of a Hugging Face repo of web exports, <code class="docutils literal notranslate"><span class="pre">repo</span></code>
+(cellmap/onnx-web-models by default) at <code class="docutils literal notranslate"><span class="pre">revision</span></code>: a folder with a
+<code class="docutils literal notranslate"><span class="pre">manifest.json</span></code> and one <code class="docutils literal notranslate"><span class="pre">.onnx</span></code> per variant, a precision and a block
+size. <code class="docutils literal notranslate"><span class="pre">file</span></code> names the variant’s file (what the browser’s Export Config
+writes: the one it ran); without it, <code class="docutils literal notranslate"><span class="pre">variant</span></code> (fp32 by default) and
+<code class="docutils literal notranslate"><span class="pre">input_size</span></code> (by default the largest block) choose one. Both files are
+downloaded with huggingface_hub, as the huggingface type’s are.</p></li>
+</ul>
+<p>A manifest’s fields are web/src/models/manifest.ts’s, which <code class="docutils literal notranslate"><span class="pre">parse_manifest</span></code>
+reads the same way: the voxel sizes in nm, the channels, <code class="docutils literal notranslate"><span class="pre">output</span></code> (what the
+output is: the exports’ “raw logits”), <code class="docutils literal notranslate"><span class="pre">input_norm</span></code> (cellmap-flow steps),
+<code class="docutils literal notranslate"><span class="pre">io</span></code> (the input and output tensors’ names) and the variants. Anything the
+entry gives (voxel sizes, sizes, channels, output) wins over the manifest.</p>
+<p>Each forward is what the browser feeds (web/src/infer/stages.ts): one block
+of float32 <code class="docutils literal notranslate"><span class="pre">[1,</span> <span class="pre">1,</span> <span class="pre">z,</span> <span class="pre">y,</span> <span class="pre">x]</span></code> at the input size, normalized by the chain,
+in and <code class="docutils literal notranslate"><span class="pre">[1,</span> <span class="pre">C,</span> <span class="pre">z',</span> <span class="pre">y',</span> <span class="pre">x']</span></code> out (<code class="docutils literal notranslate"><span class="pre">[1,</span> <span class="pre">z',</span> <span class="pre">y',</span> <span class="pre">x']</span></code> is one channel); an
+fp16 export whose graph takes float16 is given float16, and its output is
+served as float32. A 2D student (input and output one slice thick, such as
+setup_53_2d) is given one slice a call, <code class="docutils literal notranslate"><span class="pre">slices_per_chunk</span></code> slices a chunk,
+as the bioimage type runs a 2D model. The session is wrapped in a torch
+module (<code class="docutils literal notranslate"><span class="pre">_onnx_module</span></code>), so that the inference runner serves it as it
+serves any network: the warmup forward checks the declared shapes against
+the graph’s, and its output probe sees an export’s logits unbounded, so the
+dashboard suggests a SigmoidPostprocessor (or the affinity chain for
+affinities), as for any model whose output is logits. The price is one more
+copy each way: the runner puts a block on the device, and the module hands
+it to ONNX Runtime from the host (148³ float32 is 13 MB, milliseconds a
+block next to the forward’s tenths of a second).</p>
+<p>The manifest’s <code class="docutils literal notranslate"><span class="pre">input_norm</span></code> is what the browser feeds the model through;
+here, as for every type, the session’s chain (a YAML’s json_data) does the
+normalizing. <code class="docutils literal notranslate"><span class="pre">declared_input_norm</span></code> gives it to the dashboard’s model
+advice, which offers it with an Apply button, and the browser’s Export
+Config writes the chain the page ran with.</p>
+<p>Not finetunable: the finetune trainer trains a torch module, with LoRA’s
+adapters or in full, and an ONNX graph is not one; its weights are tensors
+in a protobuf, and no backward pass runs through ONNX Runtime’s inference
+sessions. The browser’s own finetune trains an export’s last layer, and
+its result is served here.</p>
+<p><code class="docutils literal notranslate"><span class="pre">onnxruntime</span></code> is imported only when the model is built: the CLIs and the
+dashboard’s model form import every type. The server runs in pixi.toml’s
+<code class="docutils literal notranslate"><span class="pre">onnx</span></code> environment (onnxruntime-gpu on Linux, onnxruntime on the Mac)
+unless the entry names another <code class="docutils literal notranslate"><span class="pre">env</span></code>. The manifest is read without it
+(<code class="docutils literal notranslate"><span class="pre">read_metadata</span></code>, <code class="docutils literal notranslate"><span class="pre">read_manifest</span></code>), so <code class="docutils literal notranslate"><span class="pre">cellmap_flow</span> <span class="pre">add</span></code> and the
+dashboard’s <em>Add a model</em> can say what a file is.</p>
+<section id="attributes">
+<h2>Attributes<a class="headerlink" href="#attributes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.models.configs.onnx.logger" title="cellmap_flow.models.configs.onnx.logger"><code class="xref py py-obj docutils literal notranslate"><span class="pre">logger</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.models.configs.onnx.MANIFEST_KEY" title="cellmap_flow.models.configs.onnx.MANIFEST_KEY"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MANIFEST_KEY</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.models.configs.onnx.VARIANTS" title="cellmap_flow.models.configs.onnx.VARIANTS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">VARIANTS</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.models.configs.onnx.DEFAULT_VARIANT" title="cellmap_flow.models.configs.onnx.DEFAULT_VARIANT"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DEFAULT_VARIANT</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.models.configs.onnx.DEFAULT_SLICES_PER_CHUNK" title="cellmap_flow.models.configs.onnx.DEFAULT_SLICES_PER_CHUNK"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DEFAULT_SLICES_PER_CHUNK</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.models.configs.onnx.MANIFEST_RETRY_SECONDS" title="cellmap_flow.models.configs.onnx.MANIFEST_RETRY_SECONDS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MANIFEST_RETRY_SECONDS</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="classes">
+<h2>Classes<a class="headerlink" href="#classes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.models.configs.onnx.OnnxModelConfig" title="cellmap_flow.models.configs.onnx.OnnxModelConfig"><code class="xref py py-obj docutils literal notranslate"><span class="pre">OnnxModelConfig</span></code></a></p></td>
+<td><p>An ONNX export, the browser mode's kind of model, served with ONNX Runtime.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="functions">
+<h2>Functions<a class="headerlink" href="#functions" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.models.configs.onnx.read_metadata" title="cellmap_flow.models.configs.onnx.read_metadata"><code class="xref py py-obj docutils literal notranslate"><span class="pre">read_metadata</span></code></a>(→ Dict[str, str])</p></td>
+<td><p>The <code class="docutils literal notranslate"><span class="pre">metadata_props</span></code> of the ONNX model at <code class="docutils literal notranslate"><span class="pre">path</span></code> (ModelProto field 14), by key.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.models.configs.onnx.read_manifest" title="cellmap_flow.models.configs.onnx.read_manifest"><code class="xref py py-obj docutils literal notranslate"><span class="pre">read_manifest</span></code></a>(→ Optional[dict])</p></td>
+<td><p>The cellmap-flow manifest the ONNX file at <code class="docutils literal notranslate"><span class="pre">path</span></code> carries (MANIFEST_KEY), parsed; None without one.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.models.configs.onnx.parse_manifest" title="cellmap_flow.models.configs.onnx.parse_manifest"><code class="xref py py-obj docutils literal notranslate"><span class="pre">parse_manifest</span></code></a>(→ dict)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">raw</span></code>, a manifest's JSON, checked and widened as the browser's <code class="docutils literal notranslate"><span class="pre">parseManifest</span></code> does.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.models.configs.onnx.choose_variant" title="cellmap_flow.models.configs.onnx.choose_variant"><code class="xref py py-obj docutils literal notranslate"><span class="pre">choose_variant</span></code></a>(→ dict)</p></td>
+<td><p>The manifest's variant to serve: the one in <code class="docutils literal notranslate"><span class="pre">file</span></code>, else of precision</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="module-contents">
+<h2>Module Contents<a class="headerlink" href="#module-contents" title="Link to this heading"></a></h2>
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.onnx.logger">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.configs.onnx.</span></span><span class="sig-name descname"><span class="pre">logger</span></span><a class="headerlink" href="#cellmap_flow.models.configs.onnx.logger" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.onnx.MANIFEST_KEY">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.configs.onnx.</span></span><span class="sig-name descname"><span class="pre">MANIFEST_KEY</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'cellmap_flow.manifest'</span></span><a class="headerlink" href="#cellmap_flow.models.configs.onnx.MANIFEST_KEY" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.onnx.VARIANTS">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.configs.onnx.</span></span><span class="sig-name descname"><span class="pre">VARIANTS</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">('fp32',</span> <span class="pre">'fp16',</span> <span class="pre">'int8w',</span> <span class="pre">'int8w_fp16')</span></span><a class="headerlink" href="#cellmap_flow.models.configs.onnx.VARIANTS" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.onnx.DEFAULT_VARIANT">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.configs.onnx.</span></span><span class="sig-name descname"><span class="pre">DEFAULT_VARIANT</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'fp32'</span></span><a class="headerlink" href="#cellmap_flow.models.configs.onnx.DEFAULT_VARIANT" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.onnx.DEFAULT_SLICES_PER_CHUNK">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.configs.onnx.</span></span><span class="sig-name descname"><span class="pre">DEFAULT_SLICES_PER_CHUNK</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">8</span></span><a class="headerlink" href="#cellmap_flow.models.configs.onnx.DEFAULT_SLICES_PER_CHUNK" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.onnx.MANIFEST_RETRY_SECONDS">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.configs.onnx.</span></span><span class="sig-name descname"><span class="pre">MANIFEST_RETRY_SECONDS</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">60</span></span><a class="headerlink" href="#cellmap_flow.models.configs.onnx.MANIFEST_RETRY_SECONDS" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.onnx.read_metadata">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.configs.onnx.</span></span><span class="sig-name descname"><span class="pre">read_metadata</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#cellmap_flow.models.configs.onnx.read_metadata" title="Link to this definition"></a></dt>
+<dd><p>The <code class="docutils literal notranslate"><span class="pre">metadata_props</span></code> of the ONNX model at <code class="docutils literal notranslate"><span class="pre">path</span></code> (ModelProto field 14), by key.</p>
+<p>Read without onnx or onnxruntime, so the dashboard’s environment can
+read it: a model is a protobuf ModelProto, a run of fields, each a tag
+(its number and wire type) and its value, a varint or a length-prefixed
+run of bytes. Each field is stepped over but the metadata’s entries; the
+graph (field 7), nearly all of the file, is never read.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>ValueError</strong> – the file is not a protobuf message with a graph, so not
+an ONNX model (a failed download’s HTML page, say).</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.onnx.read_manifest">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.configs.onnx.</span></span><span class="sig-name descname"><span class="pre">read_manifest</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#cellmap_flow.models.configs.onnx.read_manifest" title="Link to this definition"></a></dt>
+<dd><p>The cellmap-flow manifest the ONNX file at <code class="docutils literal notranslate"><span class="pre">path</span></code> carries (MANIFEST_KEY), parsed; None without one.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>ValueError</strong> – the file is not an ONNX model, or its manifest is not one.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.onnx.parse_manifest">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.configs.onnx.</span></span><span class="sig-name descname"><span class="pre">parse_manifest</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">raw</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">where</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'manifest.json'</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span></span></span><a class="headerlink" href="#cellmap_flow.models.configs.onnx.parse_manifest" title="Link to this definition"></a></dt>
+<dd><p><code class="docutils literal notranslate"><span class="pre">raw</span></code>, a manifest’s JSON, checked and widened as the browser’s <code class="docutils literal notranslate"><span class="pre">parseManifest</span></code> does.</p>
+<p>The exports write a variant’s block as one number (a cube) and <code class="docutils literal notranslate"><span class="pre">io</span></code> as
+a sentence; here they are three numbers and <code class="docutils literal notranslate"><span class="pre">{&quot;input&quot;,</span> <span class="pre">&quot;output&quot;}</span></code>. A
+variant of a precision not in VARIANTS is left out.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>ValueError</strong> – a field is missing or of the wrong kind; it says which.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.onnx.choose_variant">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.configs.onnx.</span></span><span class="sig-name descname"><span class="pre">choose_variant</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">manifest</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">file</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">variant</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">input_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span></span></span><a class="headerlink" href="#cellmap_flow.models.configs.onnx.choose_variant" title="Link to this definition"></a></dt>
+<dd><p>The manifest’s variant to serve: the one in <code class="docutils literal notranslate"><span class="pre">file</span></code>, else of precision
+<code class="docutils literal notranslate"><span class="pre">variant</span></code> (fp32 by default, else the first there is) with an input of
+<code class="docutils literal notranslate"><span class="pre">input_size</span></code> voxels, by default the largest block.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>ValueError</strong> – no variant is the one asked for; the message lists them.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.onnx.OnnxModelConfig">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">cellmap_flow.models.configs.onnx.</span></span><span class="sig-name descname"><span class="pre">OnnxModelConfig</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">folder</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">repo</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">revision</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">file</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">variant</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">input_voxel_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">tuple</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_voxel_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">tuple</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">input_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">tuple</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">tuple</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">channels</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">slices_per_chunk</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scale</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.models.configs.onnx.OnnxModelConfig" title="Link to this definition"></a></dt>
+<dd><p>An ONNX export, the browser mode’s kind of model, served with ONNX Runtime.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>path</strong> – a local .onnx file. Relative in a YAML: from the YAML’s folder.</p></li>
+<li><p><strong>folder</strong> – a model’s folder in <code class="docutils literal notranslate"><span class="pre">repo</span></code> (setup_54), instead of <code class="docutils literal notranslate"><span class="pre">path</span></code>.</p></li>
+<li><p><strong>repo</strong> – the Hugging Face repo of <code class="docutils literal notranslate"><span class="pre">folder</span></code>; cellmap/onnx-web-models.</p></li>
+<li><p><strong>revision</strong> – the repo’s branch, tag or commit; its main branch.</p></li>
+<li><p><strong>file</strong> – the <code class="docutils literal notranslate"><span class="pre">.onnx</span></code> of <code class="docutils literal notranslate"><span class="pre">folder</span></code> to serve: one of its manifest’s
+variants (what the browser’s Export Config writes).</p></li>
+<li><p><strong>variant</strong> – the precision to serve when <code class="docutils literal notranslate"><span class="pre">file</span></code> is not given: fp32
+(the default), fp16, int8w or int8w_fp16.</p></li>
+<li><p><strong>input_voxel_size</strong> – nm per input voxel (one number, or z, y, x). The
+manifest’s; needed for a file without one.</p></li>
+<li><p><strong>output_voxel_size</strong> – nm per output voxel: by default the input’s times
+the manifest’s ratio of the two, else the input’s.</p></li>
+<li><p><strong>input_size</strong> – voxels of the block the model reads (one number or z, y,
+x): the manifest’s variant’s, else the graph’s input. For a
+<code class="docutils literal notranslate"><span class="pre">folder</span></code>, it chooses the variant (the largest by default).</p></li>
+<li><p><strong>output_size</strong> – voxels it writes: the variant’s, else the graph’s output.</p></li>
+<li><p><strong>channels</strong> – the output channels’ names; the manifest’s, else
+channel_0, channel_1, … for as many as the graph outputs.</p></li>
+<li><p><strong>output</strong> – what the output is, as the manifests say it (“raw logits”).</p></li>
+<li><p><strong>slices_per_chunk</strong> – z slices a chunk of a 2D student (a model whose
+input and output are one slice thick), each one call; 8 by
+default. A 3D model ignores it.</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.onnx.OnnxModelConfig.cli_name">
+<span class="sig-name descname"><span class="pre">cli_name</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'onnx'</span></span><a class="headerlink" href="#cellmap_flow.models.configs.onnx.OnnxModelConfig.cli_name" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.onnx.OnnxModelConfig.default_env">
+<span class="sig-name descname"><span class="pre">default_env</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'onnx'</span></span><a class="headerlink" href="#cellmap_flow.models.configs.onnx.OnnxModelConfig.default_env" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.onnx.OnnxModelConfig.finetunable">
+<span class="sig-name descname"><span class="pre">finetunable</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">False</span></span><a class="headerlink" href="#cellmap_flow.models.configs.onnx.OnnxModelConfig.finetunable" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.onnx.OnnxModelConfig.config_relative_paths">
+<span class="sig-name descname"><span class="pre">config_relative_paths</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">('path',)</span></span><a class="headerlink" href="#cellmap_flow.models.configs.onnx.OnnxModelConfig.config_relative_paths" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.onnx.OnnxModelConfig.path">
+<span class="sig-name descname"><span class="pre">path</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.models.configs.onnx.OnnxModelConfig.path" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.onnx.OnnxModelConfig.folder">
+<span class="sig-name descname"><span class="pre">folder</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.models.configs.onnx.OnnxModelConfig.folder" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.onnx.OnnxModelConfig.repo">
+<span class="sig-name descname"><span class="pre">repo</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.models.configs.onnx.OnnxModelConfig.repo" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.onnx.OnnxModelConfig.revision">
+<span class="sig-name descname"><span class="pre">revision</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.models.configs.onnx.OnnxModelConfig.revision" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.onnx.OnnxModelConfig.file">
+<span class="sig-name descname"><span class="pre">file</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.models.configs.onnx.OnnxModelConfig.file" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.onnx.OnnxModelConfig.variant">
+<span class="sig-name descname"><span class="pre">variant</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.models.configs.onnx.OnnxModelConfig.variant" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.onnx.OnnxModelConfig.input_voxel_size">
+<span class="sig-name descname"><span class="pre">input_voxel_size</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.models.configs.onnx.OnnxModelConfig.input_voxel_size" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.onnx.OnnxModelConfig.output_voxel_size">
+<span class="sig-name descname"><span class="pre">output_voxel_size</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.models.configs.onnx.OnnxModelConfig.output_voxel_size" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.onnx.OnnxModelConfig.input_size">
+<span class="sig-name descname"><span class="pre">input_size</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.models.configs.onnx.OnnxModelConfig.input_size" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.onnx.OnnxModelConfig.output_size">
+<span class="sig-name descname"><span class="pre">output_size</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.models.configs.onnx.OnnxModelConfig.output_size" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.onnx.OnnxModelConfig.channels">
+<span class="sig-name descname"><span class="pre">channels</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.models.configs.onnx.OnnxModelConfig.channels" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.onnx.OnnxModelConfig.output">
+<span class="sig-name descname"><span class="pre">output</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.models.configs.onnx.OnnxModelConfig.output" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.onnx.OnnxModelConfig.slices_per_chunk">
+<span class="sig-name descname"><span class="pre">slices_per_chunk</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.models.configs.onnx.OnnxModelConfig.slices_per_chunk" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.onnx.OnnxModelConfig.name">
+<span class="sig-name descname"><span class="pre">name</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.models.configs.onnx.OnnxModelConfig.name" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.onnx.OnnxModelConfig.scale">
+<span class="sig-name descname"><span class="pre">scale</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></span><a class="headerlink" href="#cellmap_flow.models.configs.onnx.OnnxModelConfig.scale" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.onnx.OnnxModelConfig.hub_repo">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">hub_repo</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">str</span></span><a class="headerlink" href="#cellmap_flow.models.configs.onnx.OnnxModelConfig.hub_repo" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.onnx.OnnxModelConfig.declared_input_norm">
+<span class="sig-name descname"><span class="pre">declared_input_norm</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">list</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#cellmap_flow.models.configs.onnx.OnnxModelConfig.declared_input_norm" title="Link to this definition"></a></dt>
+<dd><p>The input normalization the model’s manifest declares, as
+cellmap-flow steps (<code class="docutils literal notranslate"><span class="pre">[{&quot;name&quot;:</span> <span class="pre">...,</span> <span class="pre">**params}]</span></code>), or None.</p>
+<p>For the dashboard’s model advice (<code class="docutils literal notranslate"><span class="pre">suggest_input_norm</span></code>’s
+<code class="docutils literal notranslate"><span class="pre">declared</span></code>), which asks on every poll: a failed download is not
+tried again for MANIFEST_RETRY_SECONDS.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="cellmap_flow.models.configs.onnx.OnnxModelConfig.to_dict">
+<span class="sig-name descname"><span class="pre">to_dict</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.models.configs.onnx.OnnxModelConfig.to_dict" title="Link to this definition"></a></dt>
+<dd><p>This config as a model entry, which <code class="docutils literal notranslate"><span class="pre">registry.build_model</span></code> rebuilds.</p>
+<p>What the manifest or the graph decides unless told otherwise is
+written only when it was given, so that an exported entry keeps
+following the model.</p>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../huggingface/index.html" class="btn btn-neutral float-left" title="cellmap_flow.models.configs.huggingface" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../script/index.html" class="btn btn-neutral float-right" title="cellmap_flow.models.configs.script" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, David Ackerman,  Marwan Zouinkhi, Jeff Rhoades, Larissa Heinrich, Aubrey Weigel.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

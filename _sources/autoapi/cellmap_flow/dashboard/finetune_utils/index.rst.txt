@@ -1,0 +1,47 @@
+cellmap_flow.dashboard.finetune_utils
+=====================================
+
+.. py:module:: cellmap_flow.dashboard.finetune_utils
+
+.. autoapi-nested-parse::
+
+   The dashboard's side of cellmap_flow.finetune.session.
+
+   The session code takes its state as arguments. The dashboard's is its
+   session's MinIO state and volume records (dashboard.state), which the MinIO
+   and sync entry points below read when they are called and pass on; serving a
+   volume checks first that MinIO is installed.
+
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.dashboard.finetune_utils.ensure_minio_serving
+   cellmap_flow.dashboard.finetune_utils.sync_all_annotations_from_minio
+   cellmap_flow.dashboard.finetune_utils.sync_annotation_volume_from_minio
+
+
+Module Contents
+---------------
+
+.. py:function:: ensure_minio_serving(zarr_path, crop_id, output_base_dir=None, mc_target_name=None)
+
+   Serve the volume at ``zarr_path`` through the dashboard's MinIO, starting
+   it if needed; returns its URL. ``crop_id`` is the volume id, its bucket key
+   without ".zarr". See ``session.minio.MinioServer.ensure_serving``.
+
+
+.. py:function:: sync_all_annotations_from_minio(force: bool = True)
+
+   ``session.sync.sync_all`` for the dashboard's MinIO: how many volumes
+   changed, or -1 if MinIO is not running.
+
+
+.. py:function:: sync_annotation_volume_from_minio(volume_id, force=False, zarr_path=None)
+
+   ``session.sync.sync_volume`` for the dashboard's MinIO.
+
+

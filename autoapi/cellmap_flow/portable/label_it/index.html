@@ -1,0 +1,441 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>cellmap_flow.portable.label_it &mdash; CellMap Flow  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=4ae1632d" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css" />
+
+  
+    <link rel="shortcut icon" href="../../../../_static/favicon.ico"/>
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link rel="next" title="cellmap_flow.portable.label_it_calls" href="../label_it_calls/index.html" />
+    <link rel="prev" title="cellmap_flow.portable.fill_calls" href="../fill_calls/index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            CellMap Flow
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">CellMap-Flow API:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../../../../install.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../browser.html">In the browser</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../cli.html">Command line</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../scripts.html">Python Scripts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../yaml_config.html">YAML Configuration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../data_paths.html">Data paths</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../huggingface.html">HuggingFace Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../bioimage.html">BioImage Model Zoo</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../custom_script.html">Custom Model</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../post.html">PostProcessors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../plugins.html">Plugins</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../review.html">Reviewing instances</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../viewer_api.html">Viewer layer API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../architecture.html">Architecture</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../../../index.html">API Reference</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="../../index.html">cellmap_flow</a><ul class="current">
+<li class="toctree-l3 current"><a class="reference internal" href="../../index.html#submodules">Submodules</a><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="../../ai_annotate/index.html">cellmap_flow.ai_annotate</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../blockwise/index.html">cellmap_flow.blockwise</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../cli/index.html">cellmap_flow.cli</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../config/index.html">cellmap_flow.config</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../dashboard/index.html">cellmap_flow.dashboard</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../finetune/index.html">cellmap_flow.finetune</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../globals/index.html">cellmap_flow.globals</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../image_data_interface/index.html">cellmap_flow.image_data_interface</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../inference/index.html">cellmap_flow.inference</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../inferencer/index.html">cellmap_flow.inferencer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../io/index.html">cellmap_flow.io</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../jobs/index.html">cellmap_flow.jobs</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../logging_setup/index.html">cellmap_flow.logging_setup</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../models/index.html">cellmap_flow.models</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../norm/index.html">cellmap_flow.norm</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../pipeline_spec/index.html">cellmap_flow.pipeline_spec</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../plugins/index.html">cellmap_flow.plugins</a></li>
+<li class="toctree-l4 current"><a class="reference internal" href="../index.html">cellmap_flow.portable</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../post/index.html">cellmap_flow.post</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../process_chain/index.html">cellmap_flow.process_chain</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../review/index.html">cellmap_flow.review</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../review_index/index.html">cellmap_flow.review_index</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../schema/index.html">cellmap_flow.schema</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../serving/index.html">cellmap_flow.serving</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../utils/index.html">cellmap_flow.utils</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../viewer/index.html">cellmap_flow.viewer</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">CellMap Flow</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">API Reference</a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">cellmap_flow</a></li>
+          <li class="breadcrumb-item"><a href="../index.html">cellmap_flow.portable</a></li>
+      <li class="breadcrumb-item active">cellmap_flow.portable.label_it</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../../../../_sources/autoapi/cellmap_flow/portable/label_it/index.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-cellmap_flow.portable.label_it">
+<span id="cellmap-flow-portable-label-it"></span><h1>cellmap_flow.portable.label_it<a class="headerlink" href="#module-cellmap_flow.portable.label_it" title="Link to this heading"></a></h1>
+<p>Label it’s segmentation of a prediction, written once for both modes.</p>
+<p>What the Finetune tab’s <em>Seed from Prediction</em> makes of a model’s output over
+the box on screen: the request’s options (<code class="docutils literal notranslate"><span class="pre">seed_options</span></code>), the channels a
+seed reads (<code class="docutils literal notranslate"><span class="pre">seed_channels</span></code>; <code class="docutils literal notranslate"><span class="pre">affinity_offsets</span></code> for a model known by its
+channel names alone), which served voxel lies under each annotation voxel
+(<code class="docutils literal notranslate"><span class="pre">placement</span></code>, <code class="docutils literal notranslate"><span class="pre">gather</span></code>), the output as a probability (<code class="docutils literal notranslate"><span class="pre">probability</span></code>)
+and the objects of the <em>components</em> method (<code class="docutils literal notranslate"><span class="pre">components</span></code>: threshold,
+connected components, smallest size, per slice). The server calls these
+from <code class="docutils literal notranslate"><span class="pre">dashboard/routes/finetune/view_labels.py</span></code> around its read of the
+model server’s array; the browser from <code class="docutils literal notranslate"><span class="pre">web/src/backend/routes/view-labels.ts</span></code>
+around the engine’s <code class="docutils literal notranslate"><span class="pre">readOutput</span></code>, through <code class="docutils literal notranslate"><span class="pre">label_it_calls.py</span></code>.</p>
+<p>The mutex watershed is the one method not here: <code class="docutils literal notranslate"><span class="pre">mwatershed</span></code> is Rust, with
+no Pyodide wheel, so each mode runs its own on what <code class="docutils literal notranslate"><span class="pre">affinities</span></code> gives
+(<code class="docutils literal notranslate"><span class="pre">post.segment.mutex_watershed</span></code> on the server, <code class="docutils literal notranslate"><span class="pre">web/src/infer/affinity.ts</span></code>
+in the browser, parity-tested against it). The distance watershed and a
+model’s own instances are the server’s alone (scikit-image, Cellpose); no
+model the browser runs outputs either.</p>
+<p>scipy is imported inside the functions that need it, never at the top: the
+browser’s Python starts with numpy alone, and chunkmirage’s worker loads a
+package the first time a call fails to import it, then calls again, so the
+first seed pays for scipy and opening a dataset does not.</p>
+<section id="attributes">
+<h2>Attributes<a class="headerlink" href="#attributes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.portable.label_it.SEED_METHODS" title="cellmap_flow.portable.label_it.SEED_METHODS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SEED_METHODS</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.portable.label_it.UNIT" title="cellmap_flow.portable.label_it.UNIT"><code class="xref py py-obj docutils literal notranslate"><span class="pre">UNIT</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.portable.label_it.SIGNED_UNIT" title="cellmap_flow.portable.label_it.SIGNED_UNIT"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SIGNED_UNIT</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.portable.label_it.UNBOUNDED" title="cellmap_flow.portable.label_it.UNBOUNDED"><code class="xref py py-obj docutils literal notranslate"><span class="pre">UNBOUNDED</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.portable.label_it.CONNECTIVITIES" title="cellmap_flow.portable.label_it.CONNECTIVITIES"><code class="xref py py-obj docutils literal notranslate"><span class="pre">CONNECTIVITIES</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="functions">
+<h2>Functions<a class="headerlink" href="#functions" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.portable.label_it.classify_output_range" title="cellmap_flow.portable.label_it.classify_output_range"><code class="xref py py-obj docutils literal notranslate"><span class="pre">classify_output_range</span></code></a>(→ str)</p></td>
+<td><p>Bucket an observed (min, max) output range into an activation class.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.portable.label_it.as_connectivity" title="cellmap_flow.portable.label_it.as_connectivity"><code class="xref py py-obj docutils literal notranslate"><span class="pre">as_connectivity</span></code></a>(→ int)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">value</span></code> as scipy's connectivity for an <code class="docutils literal notranslate"><span class="pre">ndim</span></code>-D array: 1 up to <code class="docutils literal notranslate"><span class="pre">ndim</span></code>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.portable.label_it.as_bool" title="cellmap_flow.portable.label_it.as_bool"><code class="xref py py-obj docutils literal notranslate"><span class="pre">as_bool</span></code></a>(→ bool)</p></td>
+<td><p>A form's &quot;true&quot;/&quot;false&quot; as a bool; anything else by Python's truth.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.portable.label_it.seed_options" title="cellmap_flow.portable.label_it.seed_options"><code class="xref py py-obj docutils literal notranslate"><span class="pre">seed_options</span></code></a>(→ dict)</p></td>
+<td><p>A seed request's options, from its JSON body, with the defaults the</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.portable.label_it.affinity_offsets" title="cellmap_flow.portable.label_it.affinity_offsets"><code class="xref py py-obj docutils literal notranslate"><span class="pre">affinity_offsets</span></code></a>(channel_names)</p></td>
+<td><p>The offsets of a model known by its channel names alone, or None</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.portable.label_it.seed_channels" title="cellmap_flow.portable.label_it.seed_channels"><code class="xref py py-obj docutils literal notranslate"><span class="pre">seed_channels</span></code></a>(output_type, offsets[, select_channel])</p></td>
+<td><p>The channels a seed reads, as a slice, or None for every one.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.portable.label_it.placement" title="cellmap_flow.portable.label_it.placement"><code class="xref py py-obj docutils literal notranslate"><span class="pre">placement</span></code></a>(lo, hi, voxel_size, dataset_offset_nm, ...)</p></td>
+<td><p>Which voxel of a served array each annotation voxel of <code class="docutils literal notranslate"><span class="pre">[lo,</span> <span class="pre">hi)</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.portable.label_it.read_box" title="cellmap_flow.portable.label_it.read_box"><code class="xref py py-obj docutils literal notranslate"><span class="pre">read_box</span></code></a>(indices)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">(lo,</span> <span class="pre">hi)</span></code>: the box of the served array the indices span, the one to read for <code class="docutils literal notranslate"><span class="pre">gather</span></code>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.portable.label_it.gather" title="cellmap_flow.portable.label_it.gather"><code class="xref py py-obj docutils literal notranslate"><span class="pre">gather</span></code></a>(region, indices)</p></td>
+<td><p>The prediction on the annotation grid: each annotation voxel the</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.portable.label_it.probability" title="cellmap_flow.portable.label_it.probability"><code class="xref py py-obj docutils literal notranslate"><span class="pre">probability</span></code></a>(prediction[, output_class, channels])</p></td>
+<td><p>The prediction as a probability, (channels, z, y, x), 0.5 at the model's decision boundary.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.portable.label_it.foreground_mask" title="cellmap_flow.portable.label_it.foreground_mask"><code class="xref py py-obj docutils literal notranslate"><span class="pre">foreground_mask</span></code></a>(prediction[, output_class, channels, ...])</p></td>
+<td><p>Where the model says foreground: its <code class="docutils literal notranslate"><span class="pre">probability</span></code>, averaged over <code class="docutils literal notranslate"><span class="pre">channels</span></code>, over <code class="docutils literal notranslate"><span class="pre">threshold</span></code>.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.portable.label_it.affinities" title="cellmap_flow.portable.label_it.affinities"><code class="xref py py-obj docutils literal notranslate"><span class="pre">affinities</span></code></a>(prediction, output_class, offsets)</p></td>
+<td><p>The mutex watershed's input: the probability of an affinity model's</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.portable.label_it.remove_small" title="cellmap_flow.portable.label_it.remove_small"><code class="xref py py-obj docutils literal notranslate"><span class="pre">remove_small</span></code></a>(labels[, min_size])</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">labels</span></code> with objects of fewer than <code class="docutils literal notranslate"><span class="pre">min_size</span></code> voxels made background.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.portable.label_it.connected_components" title="cellmap_flow.portable.label_it.connected_components"><code class="xref py py-obj docutils literal notranslate"><span class="pre">connected_components</span></code></a>(mask[, connectivity, min_size, ...])</p></td>
+<td><p>An id per connected object of <code class="docutils literal notranslate"><span class="pre">mask</span></code> (its nonzero voxels): uint64,</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.portable.label_it.components" title="cellmap_flow.portable.label_it.components"><code class="xref py py-obj docutils literal notranslate"><span class="pre">components</span></code></a>(prediction, output_class, channels[, ...])</p></td>
+<td><p>The objects of the <em>components</em> method: the <code class="docutils literal notranslate"><span class="pre">foreground_mask</span></code> of</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="module-contents">
+<h2>Module Contents<a class="headerlink" href="#module-contents" title="Link to this heading"></a></h2>
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.portable.label_it.SEED_METHODS">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.label_it.</span></span><span class="sig-name descname"><span class="pre">SEED_METHODS</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">('components',</span> <span class="pre">'mutex_watershed',</span> <span class="pre">'distance_watershed',</span> <span class="pre">'instances')</span></span><a class="headerlink" href="#cellmap_flow.portable.label_it.SEED_METHODS" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.portable.label_it.UNIT">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.label_it.</span></span><span class="sig-name descname"><span class="pre">UNIT</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'unit'</span></span><a class="headerlink" href="#cellmap_flow.portable.label_it.UNIT" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.portable.label_it.SIGNED_UNIT">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.label_it.</span></span><span class="sig-name descname"><span class="pre">SIGNED_UNIT</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'signed_unit'</span></span><a class="headerlink" href="#cellmap_flow.portable.label_it.SIGNED_UNIT" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.portable.label_it.UNBOUNDED">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.label_it.</span></span><span class="sig-name descname"><span class="pre">UNBOUNDED</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'unbounded'</span></span><a class="headerlink" href="#cellmap_flow.portable.label_it.UNBOUNDED" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.portable.label_it.CONNECTIVITIES">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.label_it.</span></span><span class="sig-name descname"><span class="pre">CONNECTIVITIES</span></span><a class="headerlink" href="#cellmap_flow.portable.label_it.CONNECTIVITIES" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.portable.label_it.classify_output_range">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.label_it.</span></span><span class="sig-name descname"><span class="pre">classify_output_range</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">lo</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">hi</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#cellmap_flow.portable.label_it.classify_output_range" title="Link to this definition"></a></dt>
+<dd><p>Bucket an observed (min, max) output range into an activation class.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.portable.label_it.as_connectivity">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.label_it.</span></span><span class="sig-name descname"><span class="pre">as_connectivity</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">value</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ndim</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">3</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">int</span></span></span><a class="headerlink" href="#cellmap_flow.portable.label_it.as_connectivity" title="Link to this definition"></a></dt>
+<dd><p><code class="docutils literal notranslate"><span class="pre">value</span></code> as scipy’s connectivity for an <code class="docutils literal notranslate"><span class="pre">ndim</span></code>-D array: 1 up to <code class="docutils literal notranslate"><span class="pre">ndim</span></code>.</p>
+<p>Forms send strings, so “2” is 2. A value past <code class="docutils literal notranslate"><span class="pre">ndim</span></code> (3 for one 2D
+slice) is <code class="docutils literal notranslate"><span class="pre">ndim</span></code>: every neighbour, which is what it asked for.
+Raises ValueError for anything that is not 1, 2 or 3, None among them.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.portable.label_it.as_bool">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.label_it.</span></span><span class="sig-name descname"><span class="pre">as_bool</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">value</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#cellmap_flow.portable.label_it.as_bool" title="Link to this definition"></a></dt>
+<dd><p>A form’s “true”/”false” as a bool; anything else by Python’s truth.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.portable.label_it.seed_options">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.label_it.</span></span><span class="sig-name descname"><span class="pre">seed_options</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span></span></span><a class="headerlink" href="#cellmap_flow.portable.label_it.seed_options" title="Link to this definition"></a></dt>
+<dd><p>A seed request’s options, from its JSON body, with the defaults the
+routes give an absent one: <code class="docutils literal notranslate"><span class="pre">method</span></code> (“components”), <code class="docutils literal notranslate"><span class="pre">threshold</span></code> (a
+probability, 0.5, the model’s own boundary), <code class="docutils literal notranslate"><span class="pre">min_size</span></code> (0),
+<code class="docutils literal notranslate"><span class="pre">connectivity</span></code> (1, faces) and <code class="docutils literal notranslate"><span class="pre">per_slice</span></code> (false).</p>
+<p>Raises ValueError, which both modes answer 400, for a threshold outside
+0 to 1, a negative or non-integer size, a method not in SEED_METHODS
+and a connectivity that is not 1, 2 or 3. A <code class="docutils literal notranslate"><span class="pre">connectivity</span></code> given as
+null is refused with the rest, not read as absent: the key is there.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.portable.label_it.affinity_offsets">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.label_it.</span></span><span class="sig-name descname"><span class="pre">affinity_offsets</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">channel_names</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.portable.label_it.affinity_offsets" title="Link to this definition"></a></dt>
+<dd><p>The offsets of a model known by its channel names alone, or None
+when they name no affinity channel.</p>
+<p>The server’s rule for a model whose script says none
+(<code class="docutils literal notranslate"><span class="pre">dashboard/routes/finetune/common.autodetect_output_type</span></code>): a model
+with a channel named <code class="docutils literal notranslate"><span class="pre">*_aff*</span></code> is an affinity model, and its first
+affinity channels, up to three, compare each voxel with the next one
+along z, y and x in turn, whatever their names say after <code class="docutils literal notranslate"><span class="pre">_aff</span></code>.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.portable.label_it.seed_channels">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.label_it.</span></span><span class="sig-name descname"><span class="pre">seed_channels</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">output_type</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">offsets</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">select_channel</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.portable.label_it.seed_channels" title="Link to this definition"></a></dt>
+<dd><p>The channels a seed reads, as a slice, or None for every one.</p>
+<p>As the trainer targets them: the selected channel; else an affinity
+model’s offset channels, the first <code class="docutils literal notranslate"><span class="pre">len(offsets)</span></code> (the rest, LSDs
+say, are masked out of its loss); else every channel, which a binary
+target is broadcast over. <code class="docutils literal notranslate"><span class="pre">offsets</span></code> is a list of the model’s offsets.
+A slice past the model’s channels reads those there are
+(<code class="docutils literal notranslate"><span class="pre">probability</span></code>).</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.portable.label_it.placement">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.label_it.</span></span><span class="sig-name descname"><span class="pre">placement</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">lo</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">hi</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">voxel_size</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dataset_offset_nm</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">translation</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">declared</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">shape</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">drawn</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.portable.label_it.placement" title="Link to this definition"></a></dt>
+<dd><p>Which voxel of a served array each annotation voxel of <code class="docutils literal notranslate"><span class="pre">[lo,</span> <span class="pre">hi)</span></code>
+reads: the one its centre lies in, so a seed from a model served at
+another voxel size (any served model can seed, not only the one the
+volume is for) lies under that model’s layer.</p>
+<p>The volume’s grid is its <code class="docutils literal notranslate"><span class="pre">voxel_size</span></code> from <code class="docutils literal notranslate"><span class="pre">dataset_offset_nm</span></code>, the
+centre of its voxel 0 (its OME translation, as
+<code class="docutils literal notranslate"><span class="pre">finetune/session/volume.volume_corner_nm</span></code> reads it; None is 0). The
+served array’s is its OME <code class="docutils literal notranslate"><span class="pre">translation</span></code> (voxel 0’s centre too) and
+<code class="docutils literal notranslate"><span class="pre">declared</span></code> voxel size, over <code class="docutils literal notranslate"><span class="pre">shape</span></code> voxels; <code class="docutils literal notranslate"><span class="pre">drawn</span></code> is the voxel
+size Neuroglancer draws it at when that is another
+(<code class="docutils literal notranslate"><span class="pre">viewer.layers.prediction_voxel_override</span></code>), which keeps the served
+offset in voxels, so the array’s corner moves with it.</p>
+<p>Returns <code class="docutils literal notranslate"><span class="pre">(indices,</span> <span class="pre">lo,</span> <span class="pre">hi)</span></code>: per axis, the served index of each
+annotation voxel the array covers, and the box shrunk to those voxels;
+None when it covers none along some axis.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.portable.label_it.read_box">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.label_it.</span></span><span class="sig-name descname"><span class="pre">read_box</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">indices</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.portable.label_it.read_box" title="Link to this definition"></a></dt>
+<dd><p><code class="docutils literal notranslate"><span class="pre">(lo,</span> <span class="pre">hi)</span></code>: the box of the served array the indices span, the one to read for <code class="docutils literal notranslate"><span class="pre">gather</span></code>.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.portable.label_it.gather">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.label_it.</span></span><span class="sig-name descname"><span class="pre">gather</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">region</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">indices</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.portable.label_it.gather" title="Link to this definition"></a></dt>
+<dd><p>The prediction on the annotation grid: each annotation voxel the
+served voxel <code class="docutils literal notranslate"><span class="pre">placement</span></code> gave it. <code class="docutils literal notranslate"><span class="pre">region</span></code> is (channels, z, y, x),
+the served box <code class="docutils literal notranslate"><span class="pre">read_box</span></code> gives; with the two grids equal, all of it
+in order.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.portable.label_it.probability">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.label_it.</span></span><span class="sig-name descname"><span class="pre">probability</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">prediction</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_class</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">channels</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.portable.label_it.probability" title="Link to this definition"></a></dt>
+<dd><p>The prediction as a probability, (channels, z, y, x), 0.5 at the model’s decision boundary.</p>
+<p>The boundary depends on the output’s activation: 0.5 on [0, 1] output
+(a sigmoid already applied; the cellmap distance models end in one, and
+0.5 is their object boundary), 0 on tanh’s [-1, 1], and 0 on unbounded
+output, logits or a signed distance alike. Each is turned into a
+probability, so <code class="docutils literal notranslate"><span class="pre">channels</span></code> (a slice: the affinity channels, say) can
+be averaged and one threshold means the same for every model. A slice
+running past the model’s channels reads those there are; one starting
+past them is refused. <code class="docutils literal notranslate"><span class="pre">output_class</span></code> is the server’s
+(serving.probe), or read off the values when it has none.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.portable.label_it.foreground_mask">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.label_it.</span></span><span class="sig-name descname"><span class="pre">foreground_mask</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">prediction</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_class</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">channels</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">threshold</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.5</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.portable.label_it.foreground_mask" title="Link to this definition"></a></dt>
+<dd><p>Where the model says foreground: its <code class="docutils literal notranslate"><span class="pre">probability</span></code>, averaged over <code class="docutils literal notranslate"><span class="pre">channels</span></code>, over <code class="docutils literal notranslate"><span class="pre">threshold</span></code>.</p>
+<p><code class="docutils literal notranslate"><span class="pre">threshold</span></code> is in probability whatever the activation: 0.5 is the
+model’s own boundary. Strictly over: a voxel at it is background.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.portable.label_it.affinities">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.label_it.</span></span><span class="sig-name descname"><span class="pre">affinities</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">prediction</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_class</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">offsets</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.portable.label_it.affinities" title="Link to this definition"></a></dt>
+<dd><p>The mutex watershed’s input: the probability of an affinity model’s
+offset channels, the first <code class="docutils literal notranslate"><span class="pre">len(offsets)</span></code> (as <code class="docutils literal notranslate"><span class="pre">seed_channels</span></code>
+takes them; fewer when the model has fewer).</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.portable.label_it.remove_small">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.label_it.</span></span><span class="sig-name descname"><span class="pre">remove_small</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">labels</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">min_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.portable.label_it.remove_small" title="Link to this definition"></a></dt>
+<dd><p><code class="docutils literal notranslate"><span class="pre">labels</span></code> with objects of fewer than <code class="docutils literal notranslate"><span class="pre">min_size</span></code> voxels made background.</p>
+<p>The rest are numbered 1..n again, in the order they had. <code class="docutils literal notranslate"><span class="pre">labels</span></code>
+must already be numbered without large gaps (any segmenter’s output):
+the sizes are counted per id.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.portable.label_it.connected_components">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.label_it.</span></span><span class="sig-name descname"><span class="pre">connected_components</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mask</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">connectivity</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">min_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">per_slice</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.portable.label_it.connected_components" title="Link to this definition"></a></dt>
+<dd><p>An id per connected object of <code class="docutils literal notranslate"><span class="pre">mask</span></code> (its nonzero voxels): uint64,
+0 for background and 1..n with no id skipped, numbered as
+<code class="docutils literal notranslate"><span class="pre">scipy.ndimage.label</span></code> numbers them.</p>
+<p><code class="docutils literal notranslate"><span class="pre">per_slice</span></code>: each z slice of a (z, y, x) mask is labelled on its own,
+in 2D, its ids following the slice before’s. For data whose objects are
+2D (what Cellpose sees), or annotations painted slice by slice: an
+object touching itself across slices is still one per slice.
+<code class="docutils literal notranslate"><span class="pre">min_size</span></code>: objects of fewer voxels are background (specks a
+threshold let through); per slice, each slice’s piece is counted alone.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.portable.label_it.components">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.label_it.</span></span><span class="sig-name descname"><span class="pre">components</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">prediction</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_class</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">channels</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">threshold</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.5</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">min_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">connectivity</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">per_slice</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.portable.label_it.components" title="Link to this definition"></a></dt>
+<dd><p>The objects of the <em>components</em> method: the <code class="docutils literal notranslate"><span class="pre">foreground_mask</span></code> of
+the prediction over <code class="docutils literal notranslate"><span class="pre">channels</span></code>, an id per connected object
+(<code class="docutils literal notranslate"><span class="pre">connected_components</span></code>).</p>
+</dd></dl>
+
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../fill_calls/index.html" class="btn btn-neutral float-left" title="cellmap_flow.portable.fill_calls" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../label_it_calls/index.html" class="btn btn-neutral float-right" title="cellmap_flow.portable.label_it_calls" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, David Ackerman,  Marwan Zouinkhi, Jeff Rhoades, Larissa Heinrich, Aubrey Weigel.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

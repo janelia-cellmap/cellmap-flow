@@ -1,0 +1,323 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>cellmap_flow.portable.targets &mdash; CellMap Flow  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=4ae1632d" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css" />
+
+  
+    <link rel="shortcut icon" href="../../../../_static/favicon.ico"/>
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link rel="next" title="cellmap_flow.portable.targets_calls" href="../targets_calls/index.html" />
+    <link rel="prev" title="cellmap_flow.portable.regions" href="../regions/index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            CellMap Flow
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">CellMap-Flow API:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../../../../install.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../browser.html">In the browser</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../cli.html">Command line</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../scripts.html">Python Scripts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../yaml_config.html">YAML Configuration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../data_paths.html">Data paths</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../huggingface.html">HuggingFace Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../bioimage.html">BioImage Model Zoo</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../custom_script.html">Custom Model</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../post.html">PostProcessors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../plugins.html">Plugins</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../review.html">Reviewing instances</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../viewer_api.html">Viewer layer API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../architecture.html">Architecture</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../../../index.html">API Reference</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="../../index.html">cellmap_flow</a><ul class="current">
+<li class="toctree-l3 current"><a class="reference internal" href="../../index.html#submodules">Submodules</a><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="../../ai_annotate/index.html">cellmap_flow.ai_annotate</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../blockwise/index.html">cellmap_flow.blockwise</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../cli/index.html">cellmap_flow.cli</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../config/index.html">cellmap_flow.config</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../dashboard/index.html">cellmap_flow.dashboard</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../finetune/index.html">cellmap_flow.finetune</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../globals/index.html">cellmap_flow.globals</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../image_data_interface/index.html">cellmap_flow.image_data_interface</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../inference/index.html">cellmap_flow.inference</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../inferencer/index.html">cellmap_flow.inferencer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../io/index.html">cellmap_flow.io</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../jobs/index.html">cellmap_flow.jobs</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../logging_setup/index.html">cellmap_flow.logging_setup</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../models/index.html">cellmap_flow.models</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../norm/index.html">cellmap_flow.norm</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../pipeline_spec/index.html">cellmap_flow.pipeline_spec</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../plugins/index.html">cellmap_flow.plugins</a></li>
+<li class="toctree-l4 current"><a class="reference internal" href="../index.html">cellmap_flow.portable</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../post/index.html">cellmap_flow.post</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../process_chain/index.html">cellmap_flow.process_chain</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../review/index.html">cellmap_flow.review</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../review_index/index.html">cellmap_flow.review_index</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../schema/index.html">cellmap_flow.schema</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../serving/index.html">cellmap_flow.serving</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../utils/index.html">cellmap_flow.utils</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../viewer/index.html">cellmap_flow.viewer</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">CellMap Flow</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">API Reference</a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">cellmap_flow</a></li>
+          <li class="breadcrumb-item"><a href="../index.html">cellmap_flow.portable</a></li>
+      <li class="breadcrumb-item active">cellmap_flow.portable.targets</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../../../../_sources/autoapi/cellmap_flow/portable/targets/index.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-cellmap_flow.portable.targets">
+<span id="cellmap-flow-portable-targets"></span><h1>cellmap_flow.portable.targets<a class="headerlink" href="#module-cellmap_flow.portable.targets" title="Link to this heading"></a></h1>
+<p>The paint as training targets: what a finetune trains a model toward.</p>
+<p>Labels mean what the paint layer paints: 0 unpainted (no loss), 1
+background, 2 and up objects (an instance volume numbers each one). Each
+function takes the labels of a patch, (Z, Y, X), or of a batch of them with
+any leading axes, (…, Z, Y, X), and answers float32 arrays with a channel
+axis in front of the three spatial ones, (…, C, Z, Y, X): one channel per
+output channel of the model, the target and the mask of the voxels its loss
+counts. The server’s <code class="docutils literal notranslate"><span class="pre">finetune/target_transforms.py</span></code> wraps these for the
+trainer’s (B, 1, Z, Y, X) tensors; the browser calls them on one painted
+chunk through <code class="docutils literal notranslate"><span class="pre">targets_calls.py</span></code>.</p>
+<p>What a model trains toward is the caller’s to say: the binary target for a
+model of objects, the affinities along <code class="docutils literal notranslate"><span class="pre">offsets</span></code> for an affinity model
+(the server reads them from the model’s script or its channel names, the
+browser from the names in its manifest), and for a distance model the soft
+signed distance (dense paint) or the bounds on it (scribbles), on the
+server only for now.</p>
+<section id="attributes">
+<h2>Attributes<a class="headerlink" href="#attributes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.portable.targets.SATURATION_SIGMAS" title="cellmap_flow.portable.targets.SATURATION_SIGMAS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SATURATION_SIGMAS</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="functions">
+<h2>Functions<a class="headerlink" href="#functions" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.portable.targets.binary" title="cellmap_flow.portable.targets.binary"><code class="xref py py-obj docutils literal notranslate"><span class="pre">binary</span></code></a>(labels[, channels])</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">(target,</span> <span class="pre">mask)</span></code>: 1 where the voxel is an object (label 2 or more),</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.portable.targets.affinity" title="cellmap_flow.portable.targets.affinity"><code class="xref py py-obj docutils literal notranslate"><span class="pre">affinity</span></code></a>(labels, offsets[, channels])</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">(target,</span> <span class="pre">mask)</span></code>: channel c the affinity along <code class="docutils literal notranslate"><span class="pre">offsets[c]</span></code>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.portable.targets.distance" title="cellmap_flow.portable.targets.distance"><code class="xref py py-obj docutils literal notranslate"><span class="pre">distance</span></code></a>(labels[, sigma_voxels, channels])</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">(target,</span> <span class="pre">mask)</span></code>: the soft signed distance of models trained the fly_organelles way.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.portable.targets.interval" title="cellmap_flow.portable.targets.interval"><code class="xref py py-obj docutils literal notranslate"><span class="pre">interval</span></code></a>(labels[, sigma_voxels, voxel_size_nm])</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">(bounds,</span> <span class="pre">mask)</span></code>: bounds on a distance model's output at each painted voxel, for scribbles.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.portable.targets.sigma_nm" title="cellmap_flow.portable.targets.sigma_nm"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sigma_nm</span></code></a>(→ float)</p></td>
+<td><p>The interval target's sigma in nm: <code class="docutils literal notranslate"><span class="pre">sigma_voxels</span></code> of the finest axis's voxels.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.portable.targets.distance_bounds" title="cellmap_flow.portable.targets.distance_bounds"><code class="xref py py-obj docutils literal notranslate"><span class="pre">distance_bounds</span></code></a>(ann[, voxel_size_nm])</p></td>
+<td><p>(L, U) in nm for each voxel of a (Z, Y, X) annotation; 0 off the paint, U inf with no other class.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="module-contents">
+<h2>Module Contents<a class="headerlink" href="#module-contents" title="Link to this heading"></a></h2>
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.portable.targets.SATURATION_SIGMAS">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.targets.</span></span><span class="sig-name descname"><span class="pre">SATURATION_SIGMAS</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">3.0</span></span><a class="headerlink" href="#cellmap_flow.portable.targets.SATURATION_SIGMAS" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.portable.targets.binary">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.targets.</span></span><span class="sig-name descname"><span class="pre">binary</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">labels</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">channels</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.portable.targets.binary" title="Link to this definition"></a></dt>
+<dd><p><code class="docutils literal notranslate"><span class="pre">(target,</span> <span class="pre">mask)</span></code>: 1 where the voxel is an object (label 2 or more),
+and where it is painted (label above 0), the same on every one of
+<code class="docutils literal notranslate"><span class="pre">channels</span></code> channels.</p>
+<p>One channel is the target of a model of one class. More treat a
+multi-channel model (affinities, distances) as simple binary
+segmentation, every channel trained toward the same objects.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.portable.targets.affinity">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.targets.</span></span><span class="sig-name descname"><span class="pre">affinity</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">labels</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">offsets</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">channels</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.portable.targets.affinity" title="Link to this definition"></a></dt>
+<dd><p><code class="docutils literal notranslate"><span class="pre">(target,</span> <span class="pre">mask)</span></code>: channel c the affinity along <code class="docutils literal notranslate"><span class="pre">offsets[c]</span></code>.</p>
+<p>A voxel’s affinity is 1 when it and its neighbour at the offset are the
+same object (equal labels above 1), and 0 when they are different
+objects or either is background. It is written at the voxel, and masked
+only where both of the pair are painted, so each channel has a mask of
+its own.</p>
+<p><code class="docutils literal notranslate"><span class="pre">offsets</span></code> are [dz, dy, dx], one for each of the first channels; an
+offset of None leaves its channel out of the loss, as are the channels
+past the offsets when <code class="docutils literal notranslate"><span class="pre">channels</span></code> (the model’s output channels, by
+default one per offset) has more: LSDs, say, which then get no
+gradient. An offset as long as the patch along its axis or longer pairs
+no voxel inside it, so its channel has an empty mask: a one-slice
+patch’s z channel, the head of a 2D student, keeps the model’s weights.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.portable.targets.distance">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.targets.</span></span><span class="sig-name descname"><span class="pre">distance</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">labels</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sigma_voxels</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">6.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">channels</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.portable.targets.distance" title="Link to this definition"></a></dt>
+<dd><p><code class="docutils literal notranslate"><span class="pre">(target,</span> <span class="pre">mask)</span></code>: the soft signed distance of models trained the fly_organelles way.</p>
+<p>The target is <code class="docutils literal notranslate"><span class="pre">(tanh((edt(fg)</span> <span class="pre">-</span> <span class="pre">edt(not</span> <span class="pre">fg))</span> <span class="pre">/</span> <span class="pre">sigma)</span> <span class="pre">+</span> <span class="pre">1)</span> <span class="pre">/</span> <span class="pre">2</span></code> with
+distances in voxels: 0.5 on the object boundary, rising to 1 inside and
+falling to 0 outside, saturating a few sigma away. That is exactly what
+<code class="docutils literal notranslate"><span class="pre">fly_organelles.utils.Distance</span></code> fed the cellmap distance models (the
+nuc/mito “<em>_distance_</em>” HuggingFace repos use sigma=6), so sigmoid(model
+output) is comparable to this target voxel for voxel. It goes with a
+BCE-with-logits loss, which accepts soft targets; margin and dice do not.
+The target is the same on every one of <code class="docutils literal notranslate"><span class="pre">channels</span></code> channels.</p>
+<p>Masking: an EDT computed inside a patch only sees boundaries inside the
+patch. For an annotated voxel the computed <a href="#id1"><span class="problematic" id="id2">|d|</span></a> is an upper bound on the
+truth – the real nearest boundary may sit just past the patch edge or
+inside an unannotated pocket. A voxel is supervised only when its
+computed <a href="#id3"><span class="problematic" id="id4">|d|</span></a> is no larger than its distance to the nearest unannotated
+voxel or patch edge (so no unseen boundary can be closer), or when that
+distance is already past 3*sigma, where tanh has saturated and the exact
+value no longer matters.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.portable.targets.interval">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.targets.</span></span><span class="sig-name descname"><span class="pre">interval</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">labels</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sigma_voxels</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">6.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">voxel_size_nm</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.portable.targets.interval" title="Link to this definition"></a></dt>
+<dd><p><code class="docutils literal notranslate"><span class="pre">(bounds,</span> <span class="pre">mask)</span></code>: bounds on a distance model’s output at each painted voxel, for scribbles.</p>
+<p>A distance target needs every voxel’s distance to the object boundary,
+and a stroke does not say where the boundary is. It does bound it
+(<code class="docutils literal notranslate"><span class="pre">distance_bounds</span></code>). The bounds are returned in the model’s logit
+space, where the distance target (tanh(d/sigma) + 1)/2 = sigmoid(2d/sigma)
+is the line z = 2d/sigma, with the sign of the painted class. Past
+SATURATION_SIGMAS a lower bound is capped there and an upper bound
+dropped (+-inf).</p>
+<p>Distances are Euclidean in nm (<code class="docutils literal notranslate"><span class="pre">voxel_size_nm</span></code>, so an anisotropic
+grid is measured as it is; 1 nm a voxel when None), and sigma, which is
+in output voxels as for the distance target, is taken in the finest
+axis’s voxels (<code class="docutils literal notranslate"><span class="pre">sigma_nm</span></code>).</p>
+<p>bounds has two channels, the lower and the upper bound on the logit (0
+off the paint), and mask one, the painted voxels, whatever the model’s
+channels: losses.IntervalLoss broadcasts them over its output.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.portable.targets.sigma_nm">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.targets.</span></span><span class="sig-name descname"><span class="pre">sigma_nm</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">sigma_voxels</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">voxel_size_nm</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">float</span></span></span><a class="headerlink" href="#cellmap_flow.portable.targets.sigma_nm" title="Link to this definition"></a></dt>
+<dd><p>The interval target’s sigma in nm: <code class="docutils literal notranslate"><span class="pre">sigma_voxels</span></code> of the finest axis’s voxels.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.portable.targets.distance_bounds">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.portable.targets.</span></span><span class="sig-name descname"><span class="pre">distance_bounds</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ann</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">voxel_size_nm</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.portable.targets.distance_bounds" title="Link to this definition"></a></dt>
+<dd><p>(L, U) in nm for each voxel of a (Z, Y, X) annotation; 0 off the paint, U inf with no other class.</p>
+<ul class="simple">
+<li><p>upper, U: the nearest voxel painted as the other class. The boundary
+lies between the two, so <a href="#id5"><span class="problematic" id="id6">|d|</span></a> &lt;= U.</p></li>
+<li><p>lower, L: the nearest voxel not painted as the voxel’s own class –
+the other class, unpainted (it may be either), or past the patch edge.
+Every voxel closer is known to be its own class, so <a href="#id7"><span class="problematic" id="id8">|d|</span></a> &gt;= L.</p></li>
+</ul>
+<p>Where the paint is dense, the nearest voxel not of its own class is of
+the other, and L == U: the exact distance <code class="docutils literal notranslate"><span class="pre">distance</span></code> would give, with
+the same convention (edt to the nearest voxel of the other class, so 1
+voxel on either side of a boundary). On a stroke the two bracket the
+truth. Both are computed in the patch the trainer gets, which keeps them
+valid: a closer other-class voxel outside the patch would only lower the
+true <a href="#id9"><span class="problematic" id="id10">|d|</span></a>, which U already exceeds or meets, and the patch edge counts as
+“not its own class”, which can only lower L. Reading context around the
+patch would tighten bounds near its edges, but the dataset hands the
+trainer the patch alone (augmented with it), so they are left as loose
+as the patch makes them.</p>
+</dd></dl>
+
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../regions/index.html" class="btn btn-neutral float-left" title="cellmap_flow.portable.regions" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../targets_calls/index.html" class="btn btn-neutral float-right" title="cellmap_flow.portable.targets_calls" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, David Ackerman,  Marwan Zouinkhi, Jeff Rhoades, Larissa Heinrich, Aubrey Weigel.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

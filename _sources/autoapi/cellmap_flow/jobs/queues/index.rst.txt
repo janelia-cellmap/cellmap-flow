@@ -1,0 +1,92 @@
+cellmap_flow.jobs.queues
+========================
+
+.. py:module:: cellmap_flow.jobs.queues
+
+.. autoapi-nested-parse::
+
+   Which GPU queues are actually usable, and the order to try them in.
+
+   gpu_queue_availability() feeds the dashboard's queue picker; candidates()
+   is the order start_hosts submits in when queue cycling is on.
+
+   Picking a queue blind is how a job ends up behind nine thousand pending ones:
+   at the time this was written ``gpu_h200`` had 9224 jobs pending while
+   ``gpu_h100`` had none, and nothing in the UI said so. LSF already knows --
+   ``bqueues`` for the backlog, ``bhosts`` for whether the nodes behind the queue
+   are up at all -- so ask it, cache the answer, and let the UI show it next to
+   each option.
+
+   Host state matters separately from queue state. A queue reports ``Open:Active``
+   while its nodes are individually closed: ``closed_Adm`` when an admin has taken
+   them out for maintenance, ``closed_Full`` when they are merely saturated. Those
+   mean different things to someone deciding where to submit -- the first will not
+   clear on its own -- so they are counted separately rather than lumped into one
+   "busy" number.
+
+   Nothing here raises. A dashboard running somewhere without LSF should show a
+   queue picker that still works, just without the annotations.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.jobs.queues.logger
+   cellmap_flow.jobs.queues.GPU_QUEUES
+   cellmap_flow.jobs.queues.CACHE_TTL_SECONDS
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.jobs.queues.gpu_queue_availability
+   cellmap_flow.jobs.queues.candidates
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:data:: GPU_QUEUES
+
+.. py:data:: CACHE_TTL_SECONDS
+   :value: 60
+
+
+.. py:function:: gpu_queue_availability(force=False)
+
+   Current GPU queue availability, cached for ``CACHE_TTL_SECONDS``.
+
+   The UI polls this about once a minute; the cache means several open
+   dashboards don't multiply into an LSF query storm, since the answer is the
+   same for all of them.
+
+
+.. py:function:: candidates(preferred, cycle=True)
+
+   The queue to try first, then the others worth falling back to.
+
+   With ``cycle=False`` the requested queue is the only candidate: the job
+   waits for it however long that takes, rather than being moved to whatever
+   is free. Some work is pinned to a queue on purpose -- a benchmark that
+   must run on one GPU model, or a charge group only valid on one queue --
+   and silently landing somewhere else is worse than waiting.
+
+   Ordered by what LSF says is actually free rather than by a fixed list, so
+   the first fallback is the one most likely to start now. Fallback queues
+   that are not accepting work are dropped: they take submissions and never
+   run them, which is indistinguishable from a very slow job.
+
+   The requested queue is kept whatever LSF says about it, but demoted to
+   last if LSF says it is not accepting work, so a closed request does not
+   cost a full pending timeout before anything else is tried.
+
+   When LSF cannot be queried at all, the fixed GPU list is used unfiltered.
+
+

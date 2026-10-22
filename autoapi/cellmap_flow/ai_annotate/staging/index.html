@@ -1,0 +1,325 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>cellmap_flow.ai_annotate.staging &mdash; CellMap Flow  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/graphviz.css?v=4ae1632d" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/custom.css" />
+
+  
+    <link rel="shortcut icon" href="../../../../_static/favicon.ico"/>
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" />
+    <link rel="next" title="cellmap_flow.ai_annotate.usage" href="../usage/index.html" />
+    <link rel="prev" title="cellmap_flow.ai_annotate.secrets" href="../secrets/index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            CellMap Flow
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">CellMap-Flow API:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../../../../install.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../browser.html">In the browser</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../cli.html">Command line</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../scripts.html">Python Scripts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../yaml_config.html">YAML Configuration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../data_paths.html">Data paths</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../huggingface.html">HuggingFace Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../bioimage.html">BioImage Model Zoo</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../custom_script.html">Custom Model</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../post.html">PostProcessors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../plugins.html">Plugins</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../review.html">Reviewing instances</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../viewer_api.html">Viewer layer API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../architecture.html">Architecture</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../../../index.html">API Reference</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="../../index.html">cellmap_flow</a><ul class="current">
+<li class="toctree-l3 current"><a class="reference internal" href="../../index.html#submodules">Submodules</a><ul class="current">
+<li class="toctree-l4 current"><a class="reference internal" href="../index.html">cellmap_flow.ai_annotate</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../blockwise/index.html">cellmap_flow.blockwise</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../cli/index.html">cellmap_flow.cli</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../config/index.html">cellmap_flow.config</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../dashboard/index.html">cellmap_flow.dashboard</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../finetune/index.html">cellmap_flow.finetune</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../globals/index.html">cellmap_flow.globals</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../image_data_interface/index.html">cellmap_flow.image_data_interface</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../inference/index.html">cellmap_flow.inference</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../inferencer/index.html">cellmap_flow.inferencer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../io/index.html">cellmap_flow.io</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../jobs/index.html">cellmap_flow.jobs</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../logging_setup/index.html">cellmap_flow.logging_setup</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../models/index.html">cellmap_flow.models</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../norm/index.html">cellmap_flow.norm</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../pipeline_spec/index.html">cellmap_flow.pipeline_spec</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../plugins/index.html">cellmap_flow.plugins</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../portable/index.html">cellmap_flow.portable</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../post/index.html">cellmap_flow.post</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../process_chain/index.html">cellmap_flow.process_chain</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../review/index.html">cellmap_flow.review</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../review_index/index.html">cellmap_flow.review_index</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../schema/index.html">cellmap_flow.schema</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../serving/index.html">cellmap_flow.serving</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../utils/index.html">cellmap_flow.utils</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../viewer/index.html">cellmap_flow.viewer</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">CellMap Flow</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">API Reference</a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">cellmap_flow</a></li>
+          <li class="breadcrumb-item"><a href="../index.html">cellmap_flow.ai_annotate</a></li>
+      <li class="breadcrumb-item active">cellmap_flow.ai_annotate.staging</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../../../../_sources/autoapi/cellmap_flow/ai_annotate/staging/index.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-cellmap_flow.ai_annotate.staging">
+<span id="cellmap-flow-ai-annotate-staging"></span><h1>cellmap_flow.ai_annotate.staging<a class="headerlink" href="#module-cellmap_flow.ai_annotate.staging" title="Link to this heading"></a></h1>
+<p>Where an AI annotation waits for review: a staging directory per annotation.</p>
+<p>A model’s result is not written into the annotation volume until the user
+accepts it. Until then it lives in <code class="docutils literal notranslate"><span class="pre">&lt;corrections_dir&gt;/.ai_annotate/&lt;id&gt;/</span></code>:
+the image sent (<code class="docutils literal notranslate"><span class="pre">input.png</span></code>), the image the model returned
+(<code class="docutils literal notranslate"><span class="pre">model.png</span></code>, when it returned one), the mask’s objects on the write box’s
+voxels (<code class="docutils literal notranslate"><span class="pre">mask_write.npy</span></code>) and <code class="docutils literal notranslate"><span class="pre">meta.json</span></code> (the plan, the prompt, the
+model, the label name). Accepting writes the objects and discards the
+directory, as rejecting does. Nothing secret is staged: the prompt and ids
+are the user’s own, and no provider credential ever reaches these functions.</p>
+<p>The id is the server’s (<code class="docutils literal notranslate"><span class="pre">new_annotate_id</span></code>) and is checked against
+<code class="docutils literal notranslate"><span class="pre">ANNOTATE_ID_RE</span></code> before it is joined into any path, so an id from a
+request can only ever name a directory under <code class="docutils literal notranslate"><span class="pre">.ai_annotate</span></code>.</p>
+<section id="attributes">
+<h2>Attributes<a class="headerlink" href="#attributes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.ai_annotate.staging.ANNOTATE_ID_RE" title="cellmap_flow.ai_annotate.staging.ANNOTATE_ID_RE"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ANNOTATE_ID_RE</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.ai_annotate.staging.STAGING_DIRNAME" title="cellmap_flow.ai_annotate.staging.STAGING_DIRNAME"><code class="xref py py-obj docutils literal notranslate"><span class="pre">STAGING_DIRNAME</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.ai_annotate.staging.INPUT_PNG" title="cellmap_flow.ai_annotate.staging.INPUT_PNG"><code class="xref py py-obj docutils literal notranslate"><span class="pre">INPUT_PNG</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.ai_annotate.staging.MODEL_PNG" title="cellmap_flow.ai_annotate.staging.MODEL_PNG"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MODEL_PNG</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.ai_annotate.staging.MASK_NPY" title="cellmap_flow.ai_annotate.staging.MASK_NPY"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MASK_NPY</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.ai_annotate.staging.META_JSON" title="cellmap_flow.ai_annotate.staging.META_JSON"><code class="xref py py-obj docutils literal notranslate"><span class="pre">META_JSON</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.ai_annotate.staging.OVERLAY_ALPHA" title="cellmap_flow.ai_annotate.staging.OVERLAY_ALPHA"><code class="xref py py-obj docutils literal notranslate"><span class="pre">OVERLAY_ALPHA</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="functions">
+<h2>Functions<a class="headerlink" href="#functions" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.ai_annotate.staging.new_annotate_id" title="cellmap_flow.ai_annotate.staging.new_annotate_id"><code class="xref py py-obj docutils literal notranslate"><span class="pre">new_annotate_id</span></code></a>(→ str)</p></td>
+<td><p>A fresh annotation id: 32 lowercase hex characters.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.ai_annotate.staging.staging_dir" title="cellmap_flow.ai_annotate.staging.staging_dir"><code class="xref py py-obj docutils literal notranslate"><span class="pre">staging_dir</span></code></a>(→ pathlib.Path)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">&lt;corrections_dir&gt;/.ai_annotate/&lt;annotate_id&gt;</span></code>; the id is validated first.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.ai_annotate.staging.stage" title="cellmap_flow.ai_annotate.staging.stage"><code class="xref py py-obj docutils literal notranslate"><span class="pre">stage</span></code></a>(→ dict)</p></td>
+<td><p>Stage a model's result for review; returns the meta written to meta.json.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.ai_annotate.staging.load" title="cellmap_flow.ai_annotate.staging.load"><code class="xref py py-obj docutils literal notranslate"><span class="pre">load</span></code></a>(corrections_dir, annotate_id)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">(meta,</span> <span class="pre">mask_write,</span> <span class="pre">input_image)</span></code> of a staging.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.ai_annotate.staging.overlay" title="cellmap_flow.ai_annotate.staging.overlay"><code class="xref py py-obj docutils literal notranslate"><span class="pre">overlay</span></code></a>(→ PIL.Image.Image)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">input_image</span></code> with the voxels the mask labels tinted <code class="docutils literal notranslate"><span class="pre">target_rgb</span></code>.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.ai_annotate.staging.preview" title="cellmap_flow.ai_annotate.staging.preview"><code class="xref py py-obj docutils literal notranslate"><span class="pre">preview</span></code></a>(→ dict)</p></td>
+<td><p>The review panel's images, base64 PNG: <code class="docutils literal notranslate"><span class="pre">input_png</span></code>, <code class="docutils literal notranslate"><span class="pre">model_png</span></code> (None</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.ai_annotate.staging.discard" title="cellmap_flow.ai_annotate.staging.discard"><code class="xref py py-obj docutils literal notranslate"><span class="pre">discard</span></code></a>(→ None)</p></td>
+<td><p>Delete a staging; nothing happens when there is none.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="module-contents">
+<h2>Module Contents<a class="headerlink" href="#module-contents" title="Link to this heading"></a></h2>
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.ai_annotate.staging.ANNOTATE_ID_RE">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.ai_annotate.staging.</span></span><span class="sig-name descname"><span class="pre">ANNOTATE_ID_RE</span></span><a class="headerlink" href="#cellmap_flow.ai_annotate.staging.ANNOTATE_ID_RE" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.ai_annotate.staging.STAGING_DIRNAME">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.ai_annotate.staging.</span></span><span class="sig-name descname"><span class="pre">STAGING_DIRNAME</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'.ai_annotate'</span></span><a class="headerlink" href="#cellmap_flow.ai_annotate.staging.STAGING_DIRNAME" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.ai_annotate.staging.INPUT_PNG">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.ai_annotate.staging.</span></span><span class="sig-name descname"><span class="pre">INPUT_PNG</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'input.png'</span></span><a class="headerlink" href="#cellmap_flow.ai_annotate.staging.INPUT_PNG" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.ai_annotate.staging.MODEL_PNG">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.ai_annotate.staging.</span></span><span class="sig-name descname"><span class="pre">MODEL_PNG</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'model.png'</span></span><a class="headerlink" href="#cellmap_flow.ai_annotate.staging.MODEL_PNG" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.ai_annotate.staging.MASK_NPY">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.ai_annotate.staging.</span></span><span class="sig-name descname"><span class="pre">MASK_NPY</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'mask_write.npy'</span></span><a class="headerlink" href="#cellmap_flow.ai_annotate.staging.MASK_NPY" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.ai_annotate.staging.META_JSON">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.ai_annotate.staging.</span></span><span class="sig-name descname"><span class="pre">META_JSON</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'meta.json'</span></span><a class="headerlink" href="#cellmap_flow.ai_annotate.staging.META_JSON" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.ai_annotate.staging.OVERLAY_ALPHA">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.ai_annotate.staging.</span></span><span class="sig-name descname"><span class="pre">OVERLAY_ALPHA</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0.5</span></span><a class="headerlink" href="#cellmap_flow.ai_annotate.staging.OVERLAY_ALPHA" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.ai_annotate.staging.new_annotate_id">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.ai_annotate.staging.</span></span><span class="sig-name descname"><span class="pre">new_annotate_id</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="headerlink" href="#cellmap_flow.ai_annotate.staging.new_annotate_id" title="Link to this definition"></a></dt>
+<dd><p>A fresh annotation id: 32 lowercase hex characters.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.ai_annotate.staging.staging_dir">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.ai_annotate.staging.</span></span><span class="sig-name descname"><span class="pre">staging_dir</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">corrections_dir</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">annotate_id</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">pathlib.Path</span></span></span><a class="headerlink" href="#cellmap_flow.ai_annotate.staging.staging_dir" title="Link to this definition"></a></dt>
+<dd><p><code class="docutils literal notranslate"><span class="pre">&lt;corrections_dir&gt;/.ai_annotate/&lt;annotate_id&gt;</span></code>; the id is validated first.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.ai_annotate.staging.stage">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.ai_annotate.staging.</span></span><span class="sig-name descname"><span class="pre">stage</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">corrections_dir</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">annotate_id</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">plan</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">request</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">result</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mask_write</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">provider_id</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">label_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">volume_id</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span></span></span><a class="headerlink" href="#cellmap_flow.ai_annotate.staging.stage" title="Link to this definition"></a></dt>
+<dd><p>Stage a model’s result for review; returns the meta written to meta.json.</p>
+<p><code class="docutils literal notranslate"><span class="pre">plan</span></code> is the <code class="docutils literal notranslate"><span class="pre">PlanePlan</span></code>, <code class="docutils literal notranslate"><span class="pre">request</span></code> and <code class="docutils literal notranslate"><span class="pre">result</span></code> the backend’s
+<code class="docutils literal notranslate"><span class="pre">SegmentRequest</span></code> and <code class="docutils literal notranslate"><span class="pre">SegmentResult</span></code>, <code class="docutils literal notranslate"><span class="pre">mask_write</span></code> the mask’s
+objects on the write box (<code class="docutils literal notranslate"><span class="pre">pipeline.mask_to_write_shape</span></code>). Staging the
+same id again (a resend) replaces what was there; meta.json is written
+last, so a staging with one is complete.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.ai_annotate.staging.load">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.ai_annotate.staging.</span></span><span class="sig-name descname"><span class="pre">load</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">corrections_dir</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">annotate_id</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.ai_annotate.staging.load" title="Link to this definition"></a></dt>
+<dd><p><code class="docutils literal notranslate"><span class="pre">(meta,</span> <span class="pre">mask_write,</span> <span class="pre">input_image)</span></code> of a staging.</p>
+<p>Raises AIAnnotateError (“refused”, 404) when there is none, as after an
+accept, a reject or a restart that cleared it.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.ai_annotate.staging.overlay">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.ai_annotate.staging.</span></span><span class="sig-name descname"><span class="pre">overlay</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input_image</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">PIL.Image.Image</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mask_write</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">numpy.ndarray</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">target_rgb</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">PIL.Image.Image</span></span></span><a class="headerlink" href="#cellmap_flow.ai_annotate.staging.overlay" title="Link to this definition"></a></dt>
+<dd><p><code class="docutils literal notranslate"><span class="pre">input_image</span></code> with the voxels the mask labels tinted <code class="docutils literal notranslate"><span class="pre">target_rgb</span></code>.</p>
+<p>The mask is the write box’s, laid out as the image is (<code class="docutils literal notranslate"><span class="pre">to_screen</span></code>)
+and scaled to it by nearest neighbour, so the overlay shows what
+accepting writes, not the model’s own image
+(<code class="docutils literal notranslate"><span class="pre">portable.ai_annotate.overlay</span></code>, which the browser’s review uses too).</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.ai_annotate.staging.preview">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.ai_annotate.staging.</span></span><span class="sig-name descname"><span class="pre">preview</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">corrections_dir</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">annotate_id</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span></span></span><a class="headerlink" href="#cellmap_flow.ai_annotate.staging.preview" title="Link to this definition"></a></dt>
+<dd><p>The review panel’s images, base64 PNG: <code class="docutils literal notranslate"><span class="pre">input_png</span></code>, <code class="docutils literal notranslate"><span class="pre">model_png</span></code> (None
+when the model returned no image) and <code class="docutils literal notranslate"><span class="pre">overlay_png</span></code>.</p>
+<p>Every image is re-encoded here, so nothing the model sent reaches the
+browser as it came.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.ai_annotate.staging.discard">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.ai_annotate.staging.</span></span><span class="sig-name descname"><span class="pre">discard</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">corrections_dir</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">annotate_id</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">None</span></span></span><a class="headerlink" href="#cellmap_flow.ai_annotate.staging.discard" title="Link to this definition"></a></dt>
+<dd><p>Delete a staging; nothing happens when there is none.</p>
+</dd></dl>
+
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../secrets/index.html" class="btn btn-neutral float-left" title="cellmap_flow.ai_annotate.secrets" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../usage/index.html" class="btn btn-neutral float-right" title="cellmap_flow.ai_annotate.usage" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, David Ackerman,  Marwan Zouinkhi, Jeff Rhoades, Larissa Heinrich, Aubrey Weigel.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

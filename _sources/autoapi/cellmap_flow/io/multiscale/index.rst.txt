@@ -1,0 +1,84 @@
+cellmap_flow.io.multiscale
+==========================
+
+.. py:module:: cellmap_flow.io.multiscale
+
+.. autoapi-nested-parse::
+
+   Choosing a level of a multiscale pyramid for a voxel size.
+
+   The rule is worldarray's ``select_level`` (its spec's Behaviour 3: "floor",
+   "exact", "nearest", "resample"), on the levels ``io.metadata.list_levels``
+   gives, in the order the group's ``datasets`` list them; a precomputed
+   volume's levels are its scales. Voxel sizes are compared as nanometer floats
+   on the spatial axes, so 10.48 nm is not 10 nm. ``select_dataset`` and
+   ``closest_raw_scale`` choose from the group's own document
+   (``worldarray.Pyramid.voxel_sizes``), opening no level. What stays here: no
+   voxel size picks the first level, and a path resolves to cellmap-flow's path
+   of its level.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.io.multiscale.logger
+   cellmap_flow.io.multiscale.Level
+   cellmap_flow.io.multiscale.Mode
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.io.multiscale.select_level
+   cellmap_flow.io.multiscale.select_dataset
+   cellmap_flow.io.multiscale.closest_raw_scale
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:data:: Level
+
+.. py:data:: Mode
+
+.. py:function:: select_level(levels: Sequence[Level], voxel_size=None, mode: Mode = 'floor') -> Level
+
+   The ``(path, ArrayMeta)`` of ``levels`` to read at ``voxel_size``: the
+   first (finest) with no ``voxel_size``, else worldarray's ``select_level``
+   by ``mode``. "floor" there is the coarsest level no coarser than
+   ``voxel_size`` on any axis, else the first: whatever the listing order,
+   where cellmap-flow's took the last level before the first too coarse one
+   (the same level for a pyramid listed finest first).
+
+
+.. py:function:: select_dataset(dataset_path: str, voxel_size=None, mode: Mode = 'floor') -> Tuple[str, Optional[str]]
+
+   ``(path of the array to read, level chosen)`` for a dataset path.
+
+   A multiscale group resolves to its level for ``voxel_size`` (see
+   ``select_level``); an array is read as it is, with level None. Raises
+   when a group has no multiscales it can read.
+
+   A precomputed volume is a group whose levels are its scales: it
+   resolves to ``…/s<N>`` for ``voxel_size`` the same way, and the path of
+   one scale is read as it is. Without a voxel size a volume is read at
+   scale 0, without opening it.
+
+
+.. py:function:: closest_raw_scale(dataset_path: str, target_voxel_size) -> Optional[tuple]
+
+   The voxel size (nm, z/y/x) of the level of ``dataset_path``'s pyramid
+   that ``select_level`` picks for ``target_voxel_size``, or None if it
+   can't be determined.
+
+   ``dataset_path`` may be the multiscale group or one of its levels (a
+   precomputed volume or one of its scales).
+
+

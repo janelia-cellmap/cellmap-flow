@@ -1,0 +1,869 @@
+/* ============================================
+   CellMap Flow — Dark Theme
+   Inspired by agentok's clean design system
+   ============================================ */
+
+/* An @import is ignored unless it comes before every other rule. The
+   palette comes first: everything below uses it. */
+@import url('tokens.css');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
+
+/* ---------- Global Reset ---------- */
+* {
+  box-sizing: border-box;
+}
+
+body {
+  background-color: var(--bg-base);
+  color: var(--text-primary);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 16px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ---------- Typography ---------- */
+h1, h2, h3, h4, h5, h6 {
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+  line-height: 1.3;
+}
+
+h3 { font-size: 20px; }
+h5 { font-size: 15px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-muted); }
+
+small, .text-muted {
+  color: var(--text-muted) !important;
+  font-size: 15px;
+}
+
+/* ---------- Scrollbar ---------- */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--border-hover);
+}
+
+/* ---------- Bootstrap Overrides: Nav Tabs ---------- */
+.nav-tabs {
+  border-bottom: 1px solid var(--border);
+  gap: 2px;
+}
+
+.nav-tabs .nav-link {
+  background: transparent;
+  color: var(--text-secondary);
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  padding: 12px 18px;
+  font-size: 15px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  transition: color var(--transition), border-color var(--transition);
+}
+
+.nav-tabs .nav-link:hover {
+  color: var(--text-secondary);
+  border-bottom-color: var(--border-hover);
+  background: transparent;
+}
+
+.nav-tabs .nav-link.active {
+  background: transparent;
+  color: #ffffff;
+  border-color: transparent;
+  border-bottom-color: var(--accent);
+  border-bottom-width: 3px;
+}
+
+/* ---------- Tab Panes ---------- */
+.tab-pane {
+  background: transparent;
+}
+
+.tab-content {
+  padding-top: 4px;
+}
+
+/* ---------- Accordion ---------- */
+.accordion {
+  --bs-accordion-bg: transparent;
+  --bs-accordion-border-color: var(--border);
+  --bs-accordion-border-width: 1px;
+  --bs-accordion-border-radius: var(--radius-md);
+}
+
+.accordion-item {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md) !important;
+  margin-bottom: 6px;
+  overflow: hidden;
+}
+
+.accordion-item:first-of-type,
+.accordion-item:last-of-type {
+  border-radius: var(--radius-md) !important;
+}
+
+.accordion-button {
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  font-size: 15px;
+  font-weight: 500;
+  padding: 12px 16px;
+  border: none;
+  box-shadow: none !important;
+  transition: background var(--transition), color var(--transition);
+}
+
+.accordion-button:hover {
+  background: var(--bg-muted);
+  color: var(--text-primary);
+}
+
+.accordion-button.collapsed {
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+}
+
+.accordion-button:not(.collapsed) {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+}
+
+.accordion-button::after {
+  filter: invert(0.5);
+  width: 14px;
+  height: 14px;
+  background-size: 14px;
+}
+
+.accordion-button:focus {
+  box-shadow: none;
+}
+
+.accordion-body {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  padding: 14px 16px;
+  font-size: 16px;
+}
+
+/* ---------- Forms ---------- */
+.form-control,
+.form-control:focus,
+.form-select,
+.form-select:focus {
+  background-color: var(--bg-input);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 15px;
+  padding: 8px 12px;
+  transition: border-color var(--transition);
+}
+
+.form-control:focus,
+.form-select:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-muted);
+  outline: none;
+}
+
+.form-control::placeholder {
+  color: var(--text-placeholder);
+}
+
+.form-control-sm {
+  font-size: 15px;
+  padding: 7px 12px;
+}
+
+.form-label {
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  margin-bottom: 4px;
+}
+
+.form-check-input {
+  background-color: var(--bg-input);
+  border: 1px solid var(--border-hover);
+  border-radius: 3px;
+  width: 18px;
+  height: 18px;
+  margin-top: 2px;
+  cursor: pointer;
+  transition: all var(--transition);
+}
+
+.form-check-input:checked {
+  background-color: var(--accent);
+  border-color: var(--accent);
+}
+
+.form-check-input:focus {
+  box-shadow: 0 0 0 2px var(--accent-muted);
+  border-color: var(--accent);
+}
+
+.form-check-label {
+  color: var(--text-primary);
+  font-size: 15px;
+  cursor: pointer;
+}
+
+/* ---------- Buttons ---------- */
+.btn {
+  font-size: 15px;
+  font-weight: 500;
+  padding: 8px 18px;
+  border-radius: var(--radius-sm);
+  transition: all var(--transition);
+  border: 1px solid transparent;
+}
+
+.btn-primary {
+  background-color: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.btn-primary:hover,
+.btn-primary:focus {
+  background-color: var(--accent-hover);
+  border-color: var(--accent-hover);
+  box-shadow: 0 0 0 2px var(--accent-muted);
+}
+
+.btn-outline-secondary {
+  background: transparent;
+  border-color: var(--border-hover);
+  color: var(--text-secondary);
+}
+
+.btn-outline-secondary:hover {
+  background: var(--bg-elevated);
+  border-color: var(--text-muted);
+  color: var(--text-primary);
+}
+
+.btn-sm {
+  font-size: 14px;
+  padding: 6px 14px;
+}
+
+/* ---------- Drag & Drop Items ---------- */
+.normalizer-item,
+.postprocessor-item {
+  background: var(--bg-surface);
+  border: 1px solid var(--border) !important;
+  border-radius: var(--radius-md) !important;
+  padding: 10px 12px !important;
+  margin-bottom: 6px !important;
+  transition: transform var(--transition), box-shadow var(--transition), border-color var(--transition);
+}
+
+.normalizer-item:hover,
+.postprocessor-item:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+  border-color: var(--border-hover) !important;
+}
+
+.normalizer-item[draggable="true"]:active,
+.postprocessor-item[draggable="true"]:active {
+  cursor: grabbing;
+}
+
+/* Checked/selected items get a brighter border */
+.normalizer-item.item-checked,
+.postprocessor-item.item-checked,
+.normalizer-item:has(.form-check-input:checked),
+.postprocessor-item:has(.form-check-input:checked) {
+  border-color: var(--accent) !important;
+}
+
+/* Override Bootstrap .form-check positioning when drag handle is present */
+.normalizer-item .form-check,
+.postprocessor-item .form-check {
+  padding-left: 0;
+}
+
+.normalizer-item .form-check .form-check-input,
+.postprocessor-item .form-check .form-check-input {
+  position: static;
+  margin-left: 0;
+  margin-top: 0;
+  float: none;
+}
+
+.drag-handle {
+  flex-shrink: 0;
+  cursor: grab;
+  user-select: none;
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 16px;
+  line-height: 1;
+  letter-spacing: -2px;
+  transition: color var(--transition);
+}
+
+.drag-handle:hover {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.drag-handle:active {
+  cursor: grabbing;
+}
+
+/* ---------- Alerts ---------- */
+.alert-info {
+  background: var(--bg-muted);
+  border: 1px solid var(--info);
+  color: var(--text-primary);
+  border-radius: var(--radius-md);
+  font-size: 14px;
+  padding: 10px 14px;
+}
+
+.alert-info strong {
+  font-weight: 600;
+}
+
+/* ---------- Textareas / Log areas ---------- */
+textarea.form-control[readonly] {
+  background: var(--bg-base);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+  font-size: 14px;
+  resize: none;
+  border-radius: var(--radius-sm);
+}
+
+#modelSubmissionLogModels {
+  background: var(--bg-base);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  resize: none;
+}
+
+/* ---------- Spinner ---------- */
+.spinner-border-sm {
+  width: 12px;
+  height: 12px;
+  border-width: 2px;
+  color: var(--accent);
+}
+
+/* ---------- Modal ---------- */
+.modal-content {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+}
+
+.modal-content.bg-dark {
+  background: var(--bg-surface) !important;
+}
+
+.modal-header {
+  border-bottom-color: var(--border);
+}
+
+.modal-footer {
+  border-top-color: var(--border);
+}
+
+.modal-header.border-secondary {
+  border-color: var(--border) !important;
+  padding: 16px 20px;
+}
+
+.modal-header .modal-title {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.modal-body {
+  padding: 16px 20px;
+}
+
+.modal-footer.border-secondary {
+  border-color: var(--border) !important;
+  padding: 12px 20px;
+}
+
+/* ---------- Card ---------- */
+.card {
+  background-color: var(--bg-surface);
+  border-color: var(--border);
+  color: var(--text-primary);
+}
+
+.card-header {
+  background-color: var(--bg-elevated);
+  border-bottom-color: var(--border);
+  color: var(--text-primary);
+}
+
+.card-body {
+  color: var(--text-primary);
+}
+
+/* ---------- Error ---------- */
+.error, .text-danger {
+  color: var(--danger) !important;
+  font-size: 15px;
+  margin-top: 4px;
+  white-space: pre-wrap;
+}
+
+/* ---------- Utility ---------- */
+.bg-dark {
+  background-color: var(--bg-base) !important;
+}
+
+.text-light {
+  color: var(--text-primary) !important;
+}
+
+.border {
+  border-color: var(--border) !important;
+}
+
+/* ---------- Section headings in tabs ---------- */
+.tab-pane h5 {
+  font-size: 14px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-top: 16px;
+  margin-bottom: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.tab-pane h5:first-child {
+  margin-top: 4px;
+}
+
+
+/* ---------- Finetune: the patch-on-screen tools ---------- */
+.patch-tools {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+}
+
+.patch-tools-title {
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+}
+
+.patch-tools-group + .patch-tools-group {
+  border-top: 1px solid var(--border-subtle);
+  margin-top: 10px;
+  padding-top: 10px;
+}
+
+.patch-tools-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+
+/* Even buttons that wrap to as many columns as fit the panel. */
+.patch-tools-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
+  gap: 6px;
+}
+
+.patch-tools-grid .btn {
+  width: 100%;
+  white-space: nowrap;
+}
+
+.patch-tools-settings {
+  margin-top: 8px;
+  font-size: 0.85rem;
+}
+
+.patch-tools-settings summary {
+  color: var(--text-muted);
+  cursor: pointer;
+  width: fit-content;
+}
+
+.patch-tools-settings summary:hover {
+  color: var(--text-primary);
+}
+
+.patch-tools-fields {
+  display: grid;
+  grid-template-columns: auto 7rem;
+  align-items: center;
+  gap: 6px 10px;
+  margin-top: 6px;
+}
+
+.patch-tools-fields label {
+  color: var(--text-muted);
+  margin: 0;
+}
+
+/* Each group of the patch tools is a heading that opens and closes. */
+.patch-tools-section > summary {
+  cursor: pointer;
+  width: fit-content;
+  color: var(--text-muted);
+}
+
+.patch-tools-section > summary:hover,
+.patch-tools-section > summary:hover .patch-tools-label {
+  color: var(--text-primary);
+}
+
+.patch-tools-section > summary .patch-tools-label {
+  display: inline;
+}
+
+.patch-tools-section[open] > summary {
+  margin-bottom: 6px;
+}
+
+/* AI-assisted annotation's heading also shows the job's state. */
+.ai-annotate-summary-status {
+  margin-left: 6px;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+/* Why it is off names a file path, which must wrap inside the panel. */
+#aiAnnotateDisabled {
+  overflow-wrap: anywhere;
+}
+
+/* The selects take the panel's width, not the seed settings' narrow column. */
+.ai-annotate-fields {
+  grid-template-columns: auto 1fr;
+}
+
+/* The AI panel's API key and access token: text fields shown as dots, so a
+   browser's password manager does not offer to save them as it does a
+   password field's (_finetune_tab.html says why). */
+.credential-secret {
+  -webkit-text-security: disc;
+}
+
+/* Input | model output | overlay, each scaled to a third of the panel. */
+.ai-annotate-previews {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.ai-annotate-previews figure {
+  margin: 0;
+  text-align: center;
+}
+
+.ai-annotate-previews img {
+  display: block;
+  width: 100%;
+  height: auto;
+  cursor: zoom-in;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  image-rendering: pixelated;
+}
+
+/* The review popup: nearly the page's width, so the planes are big enough to judge. */
+.ai-annotate-review-dialog {
+  max-width: min(96vw, 1800px);
+}
+
+/* A clicked image takes the popup's full width, above the other two. */
+.ai-annotate-previews figure.ai-annotate-zoomed {
+  grid-column: 1 / -1;
+  order: -1;
+}
+
+.ai-annotate-previews figure.ai-annotate-zoomed img {
+  max-height: 78vh;
+  object-fit: contain;
+  cursor: zoom-out;
+}
+
+/* While a resend runs, the old result stays, dimmed. */
+.ai-annotate-previews.ai-annotate-stale img {
+  opacity: 0.4;
+}
+
+.ai-annotate-previews figcaption {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+/* ---------- BioImage Model Zoo list (Models tab) ---------- */
+/* Up to 125 rows with the filters off: scroll inside the panel. */
+.zoo-model-list {
+  max-height: 26rem;
+  overflow-y: auto;
+}
+
+.zoo-model-item {
+  margin-bottom: 6px;
+}
+
+.zoo-tag {
+  display: inline-block;
+  margin-left: 4px;
+  padding: 0 5px;
+  font-size: 11px;
+  line-height: 1.5;
+  vertical-align: middle;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-hover);
+  border-radius: var(--radius-sm);
+}
+
+.zoo-link {
+  margin-left: 4px;
+  color: var(--text-muted);
+  text-decoration: none;
+}
+
+.zoo-link:hover {
+  color: var(--accent-hover);
+}
+
+/* One line; the full text is the row's tooltip. */
+.zoo-desc {
+  font-size: 13px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.zoo-voxel-row {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+/* Where the filled-in voxel size comes from; its source is the tooltip. */
+.zoo-trained {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.zoo-voxel {
+  width: 9rem;
+}
+
+.zoo-count {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+
+/* ---------- Cellpose list (Models tab) ---------- */
+/* Its rows reuse the zoo's look (zoo-tag, zoo-desc, zoo-voxel-row,
+   zoo-trained, zoo-voxel); what is its own is below. */
+.cellpose-model-item {
+  margin-bottom: 8px;
+}
+
+/* As wide as its longest choice, "Flows + probability", with room for
+   the arrow, which the 12px padding above leaves none. */
+.cellpose-output {
+  width: auto;
+  padding-right: 2rem;
+}
+
+/* The 3D box and its label, in line with the row's other fields: not
+   floated into the row's margin as a form-check's checkbox is. */
+.cellpose-3d-box {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cellpose-3d-box .form-check-input {
+  float: none;
+  margin: 0;
+}
+
+.cellpose-stitch {
+  width: 5.5rem;
+}
+
+/* "+ output" and the extra rows' remove button: quiet, like zoo-link. */
+.cellpose-row-btn {
+  margin-left: 6px;
+  padding: 0 4px;
+  font-size: 12px;
+  color: var(--text-muted);
+  background: none;
+  border: none;
+}
+
+.cellpose-row-btn:hover {
+  color: var(--accent-hover);
+}
+
+.cellpose-note {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 6px;
+}
+
+/* ---------- Models tab: Add a model ---------- */
+.add-model-result {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 8px 10px;
+}
+
+.add-model-fields {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 6px 10px;
+}
+
+.add-model-fields label {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  margin: 0;
+}
+
+/* ---------- Models tab: Loaded models ---------- */
+/* One row per model running or starting: its name and where it came from
+   on the first line, what it is (and any note) below, and its ✕ on the
+   right across both. The text column shrinks and wraps, so a row fits the
+   340px column and a phone's width without scrolling sideways. */
+.loaded-models-count {
+  margin-left: 6px;
+  font-size: 13px;
+  letter-spacing: normal;
+  text-transform: none;
+}
+
+.loaded-model-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 8px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 6px 6px 6px 10px;
+  margin-bottom: 6px;
+}
+
+.loaded-model-head {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+/* The whole name, wrapped (after its _, - and ., or anywhere in a word
+   too long): it is the layer's, and two models' can differ only at the end. */
+.loaded-model-name {
+  color: var(--text-primary);
+  font-size: 15px;
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+
+.loaded-model-head .zoo-tag {
+  flex-shrink: 0;
+  margin-left: 6px;
+}
+
+.loaded-model-status {
+  color: var(--warning);
+  border-color: currentColor;
+}
+
+.loaded-model-detail {
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.loaded-model-note {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.loaded-model-text {
+  min-width: 0;
+}
+
+/* The ✕: a 32px target, quiet until hovered. A disabled one keeps its
+   tooltip on the span around it (a disabled button gets no mouse events). */
+.loaded-model-remove-wrap {
+  display: inline-flex;
+}
+
+.loaded-model-remove {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  font-size: 16px;
+  line-height: 1;
+  color: var(--text-muted);
+  background: transparent;
+  border: 1px solid var(--border-hover);
+  border-radius: var(--radius-sm);
+  transition: all var(--transition);
+}
+
+.loaded-model-remove:hover:not(:disabled),
+.loaded-model-remove:focus-visible {
+  color: var(--danger);
+  border-color: var(--danger);
+  background: rgba(248, 113, 113, 0.08);
+  outline: none;
+}
+
+.loaded-model-remove:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.loaded-models-empty {
+  font-size: 13px;
+  color: var(--text-muted);
+}

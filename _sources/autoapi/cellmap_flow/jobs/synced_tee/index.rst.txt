@@ -1,0 +1,52 @@
+cellmap_flow.jobs.synced_tee
+============================
+
+.. py:module:: cellmap_flow.jobs.synced_tee
+
+.. autoapi-nested-parse::
+
+   ``tee`` for a log another host is reading: the file is synced as it grows.
+
+   A finetune job writes its log on its own node and the dashboard reads it
+   from another. ``tee`` writes each line into the node's NFS page cache, and
+   the client sends it on only when the page is old enough (about 30 s), so
+   the dashboard's log and loss plot got ten epochs at once, each stamped with
+   the right time. This copies stdin to stdout and to the file, and a thread
+   syncs the file (``os.fsync``) at most every SYNC_INTERVAL_S seconds while
+   there is something unsynced, so a line reaches the server within a second,
+   including the last one before a pause. Syncing on every line would make a
+   burst of output (a traceback) wait on the file server line by line.
+
+   Standard library only, and run as a script (``python -P <this file> LOG``),
+   so it works with any interpreter and needs nothing of cellmap-flow's.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.jobs.synced_tee.SYNC_INTERVAL_S
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.jobs.synced_tee.tee
+
+
+Module Contents
+---------------
+
+.. py:data:: SYNC_INTERVAL_S
+   :value: 1.0
+
+
+.. py:function:: tee(source, sink, path, interval=SYNC_INTERVAL_S)
+
+   Copy ``source``'s lines (binary) to ``sink`` and to ``path``, truncated first, syncing it.
+
+

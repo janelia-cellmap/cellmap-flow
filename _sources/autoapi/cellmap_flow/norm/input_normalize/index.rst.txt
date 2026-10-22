@@ -1,0 +1,213 @@
+cellmap_flow.norm.input_normalize
+=================================
+
+.. py:module:: cellmap_flow.norm.input_normalize
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.norm.input_normalize.logger
+
+
+Classes
+-------
+
+.. autoapisummary::
+
+   cellmap_flow.norm.input_normalize.SerializableInterface
+   cellmap_flow.norm.input_normalize.InputNormalizer
+   cellmap_flow.norm.input_normalize.ChannelSelector
+   cellmap_flow.norm.input_normalize.Dilate
+   cellmap_flow.norm.input_normalize.EuclideanDistance
+   cellmap_flow.norm.input_normalize.MinMaxNormalizer
+   cellmap_flow.norm.input_normalize.LambdaNormalizer
+   cellmap_flow.norm.input_normalize.ZScoreNormalizer
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.norm.input_normalize.op_listing
+   cellmap_flow.norm.input_normalize.get_input_normalizers
+   cellmap_flow.norm.input_normalize.deserialize_list
+   cellmap_flow.norm.input_normalize.get_normalizations
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:class:: SerializableInterface
+
+   .. py:attribute:: browser
+      :value: False
+
+
+
+   .. py:method:: name()
+      :classmethod:
+
+
+
+   .. py:method:: process(data, **kwargs) -> numpy.ndarray
+
+
+   .. py:method:: to_dict()
+
+      ``{"name": <class name>, **constructor arguments}``.
+
+      Exactly what ``type(self)(**params)`` needs to rebuild this step. The
+      public attributes are not that: constructors parse their arguments
+      (a neighborhood string becomes a list, "0,1" becomes [0, 1]) and add
+      state of their own, so feeding the attributes back in raised TypeError
+      or built a different step.
+
+      Each argument is reported with its real type: when the constructor
+      stored it under its own name as a plain number, bool or string, that
+      stored value is used (0.5, not the "0.5" a form sent); anything it
+      parsed into something else keeps the argument as given.
+
+
+
+   .. py:property:: dtype
+
+
+   .. py:method:: output_info(dtype, channels)
+
+      ``(dtype, channels, is_segmentation)`` of what this step returns.
+
+      ``dtype`` and ``channels`` describe what it is given. By default the
+      step's declared ``dtype`` replaces the incoming one (``None`` keeps
+      it), a ``num_channels`` attribute (only steps that change the count
+      have one) replaces the channel count, and ``is_segmentation`` is the
+      step's own, where ``None`` means it does not say. A step whose output
+      depends on its input in some other way overrides this.
+
+
+
+.. py:class:: InputNormalizer
+
+
+
+.. py:class:: ChannelSelector(channel=0)
+
+
+
+   .. py:attribute:: channel
+      :value: 0
+
+
+
+.. py:class:: Dilate(size=1)
+
+
+
+   .. py:attribute:: size
+      :value: 1
+
+
+
+.. py:class:: EuclideanDistance(anisotropy=50, black_border=True, parallel=5, type='edt', activation='tanh')
+
+
+
+   .. py:attribute:: type
+      :value: 'edt'
+
+
+
+   .. py:attribute:: anisotropy
+
+
+   .. py:attribute:: parallel
+      :value: 5
+
+
+
+   .. py:attribute:: activation
+
+
+   .. py:property:: dtype
+
+
+.. py:class:: MinMaxNormalizer(min_value=0.0, max_value=255.0, invert=False)
+
+
+
+   .. py:attribute:: browser
+      :value: True
+
+
+
+   .. py:attribute:: min_value
+
+
+   .. py:attribute:: max_value
+
+
+   .. py:property:: dtype
+
+
+.. py:class:: LambdaNormalizer(expression: str)
+
+
+
+   .. py:attribute:: browser
+      :value: True
+
+
+
+   .. py:attribute:: expression
+
+
+   .. py:property:: dtype
+
+
+.. py:class:: ZScoreNormalizer(mean=0.0, std=1.0)
+
+
+
+   .. py:attribute:: browser
+      :value: True
+
+
+
+   .. py:attribute:: mean
+
+
+   .. py:attribute:: std
+
+
+   .. py:property:: dtype
+
+
+.. py:function:: op_listing(classes) -> list[dict]
+
+   The registry entries of ``classes``, in that order: each op's name, its
+   constructor's parameters with their defaults ("" for one without), and
+   whether the browser mode runs it too (``browser``).
+
+
+.. py:function:: get_input_normalizers() -> list[dict]
+
+.. py:function:: deserialize_list(elms, T: type) -> list
+
+   Deserialize a list of processors from either dict or list format.
+
+   :param elms: Either a dict (old format) or list (new ordered format) of processor configs
+   :param T: The base type to deserialize (InputNormalizer or PostProcessor)
+
+   :returns: List of instantiated processor objects in the specified order
+
+
+.. py:function:: get_normalizations(elms) -> list[InputNormalizer]
+
+   Get normalizations from either dict or list format.
+
+

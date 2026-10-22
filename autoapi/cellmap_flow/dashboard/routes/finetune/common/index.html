@@ -1,0 +1,412 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../../../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>cellmap_flow.dashboard.routes.finetune.common &mdash; CellMap Flow  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../../../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../../../../../../_static/graphviz.css?v=4ae1632d" />
+      <link rel="stylesheet" type="text/css" href="../../../../../../_static/css/custom.css" />
+
+  
+    <link rel="shortcut icon" href="../../../../../../_static/favicon.ico"/>
+      <script src="../../../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../../../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../../../../../../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../../../../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../../search.html" />
+    <link rel="next" title="cellmap_flow.dashboard.routes.finetune.good_regions" href="../good_regions/index.html" />
+    <link rel="prev" title="cellmap_flow.dashboard.routes.finetune.blueprint" href="../blueprint/index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../../../index.html" class="icon icon-home">
+            CellMap Flow
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">CellMap-Flow API:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../../../../../../install.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../../browser.html">In the browser</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../../cli.html">Command line</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../../scripts.html">Python Scripts</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../../yaml_config.html">YAML Configuration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../../data_paths.html">Data paths</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../../huggingface.html">HuggingFace Models</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../../bioimage.html">BioImage Model Zoo</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../../custom_script.html">Custom Model</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../../post.html">PostProcessors</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../../plugins.html">Plugins</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../../review.html">Reviewing instances</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../../viewer_api.html">Viewer layer API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../../architecture.html">Architecture</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="../../../../../index.html">API Reference</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="../../../../index.html">cellmap_flow</a><ul class="current">
+<li class="toctree-l3 current"><a class="reference internal" href="../../../../index.html#submodules">Submodules</a><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="../../../../ai_annotate/index.html">cellmap_flow.ai_annotate</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../blockwise/index.html">cellmap_flow.blockwise</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../cli/index.html">cellmap_flow.cli</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../config/index.html">cellmap_flow.config</a></li>
+<li class="toctree-l4 current"><a class="reference internal" href="../../../index.html">cellmap_flow.dashboard</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../finetune/index.html">cellmap_flow.finetune</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../globals/index.html">cellmap_flow.globals</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../image_data_interface/index.html">cellmap_flow.image_data_interface</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../inference/index.html">cellmap_flow.inference</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../inferencer/index.html">cellmap_flow.inferencer</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../io/index.html">cellmap_flow.io</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../jobs/index.html">cellmap_flow.jobs</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../logging_setup/index.html">cellmap_flow.logging_setup</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../models/index.html">cellmap_flow.models</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../norm/index.html">cellmap_flow.norm</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../pipeline_spec/index.html">cellmap_flow.pipeline_spec</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../plugins/index.html">cellmap_flow.plugins</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../portable/index.html">cellmap_flow.portable</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../post/index.html">cellmap_flow.post</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../process_chain/index.html">cellmap_flow.process_chain</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../review/index.html">cellmap_flow.review</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../review_index/index.html">cellmap_flow.review_index</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../schema/index.html">cellmap_flow.schema</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../serving/index.html">cellmap_flow.serving</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../utils/index.html">cellmap_flow.utils</a></li>
+<li class="toctree-l4"><a class="reference internal" href="../../../../viewer/index.html">cellmap_flow.viewer</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../../../index.html">CellMap Flow</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../../../index.html">API Reference</a></li>
+          <li class="breadcrumb-item"><a href="../../../../index.html">cellmap_flow</a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">cellmap_flow.dashboard</a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">cellmap_flow.dashboard.routes</a></li>
+          <li class="breadcrumb-item"><a href="../index.html">cellmap_flow.dashboard.routes.finetune</a></li>
+      <li class="breadcrumb-item active">cellmap_flow.dashboard.routes.finetune.common</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../../../../../../_sources/autoapi/cellmap_flow/dashboard/routes/finetune/common/index.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-cellmap_flow.dashboard.routes.finetune.common">
+<span id="cellmap-flow-dashboard-routes-finetune-common"></span><h1>cellmap_flow.dashboard.routes.finetune.common<a class="headerlink" href="#module-cellmap_flow.dashboard.routes.finetune.common" title="Link to this heading"></a></h1>
+<section id="attributes">
+<h2>Attributes<a class="headerlink" href="#attributes" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.common.logger" title="cellmap_flow.dashboard.routes.finetune.common.logger"><code class="xref py py-obj docutils literal notranslate"><span class="pre">logger</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.common.USER_PREFS_FILE" title="cellmap_flow.dashboard.routes.finetune.common.USER_PREFS_FILE"><code class="xref py py-obj docutils literal notranslate"><span class="pre">USER_PREFS_FILE</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.common.LOG_FILTER_PATTERNS" title="cellmap_flow.dashboard.routes.finetune.common.LOG_FILTER_PATTERNS"><code class="xref py py-obj docutils literal notranslate"><span class="pre">LOG_FILTER_PATTERNS</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.common.SPARSE_MSE_NOTE" title="cellmap_flow.dashboard.routes.finetune.common.SPARSE_MSE_NOTE"><code class="xref py py-obj docutils literal notranslate"><span class="pre">SPARSE_MSE_NOTE</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="functions">
+<h2>Functions<a class="headerlink" href="#functions" title="Link to this heading"></a></h2>
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.common.find_model_config" title="cellmap_flow.dashboard.routes.finetune.common.find_model_config"><code class="xref py py-obj docutils literal notranslate"><span class="pre">find_model_config</span></code></a>(model_name)</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.common.current_chain" title="cellmap_flow.dashboard.routes.finetune.common.current_chain"><code class="xref py py-obj docutils literal notranslate"><span class="pre">current_chain</span></code></a>()</p></td>
+<td><p>The dashboard's chains as step lists, <code class="docutils literal notranslate"><span class="pre">(input_norm,</span> <span class="pre">postprocess)</span></code>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.common.viewer_position_and_scales" title="cellmap_flow.dashboard.routes.finetune.common.viewer_position_and_scales"><code class="xref py py-obj docutils literal notranslate"><span class="pre">viewer_position_and_scales</span></code></a>()</p></td>
+<td><p>The viewer's position, in its voxels, and each axis's scale in nm:</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.common.session_store" title="cellmap_flow.dashboard.routes.finetune.common.session_store"><code class="xref py py-obj docutils literal notranslate"><span class="pre">session_store</span></code></a>()</p></td>
+<td><p>The dashboard's sessions and volume registry (its session's dicts).</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.common.ensure_corrections_storage" title="cellmap_flow.dashboard.routes.finetune.common.ensure_corrections_storage"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ensure_corrections_storage</span></code></a>(output_path)</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.common.load_user_prefs" title="cellmap_flow.dashboard.routes.finetune.common.load_user_prefs"><code class="xref py py-obj docutils literal notranslate"><span class="pre">load_user_prefs</span></code></a>()</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.common.save_user_prefs" title="cellmap_flow.dashboard.routes.finetune.common.save_user_prefs"><code class="xref py py-obj docutils literal notranslate"><span class="pre">save_user_prefs</span></code></a>(prefs)</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.common.resolve_finetune_session" title="cellmap_flow.dashboard.routes.finetune.common.resolve_finetune_session"><code class="xref py py-obj docutils literal notranslate"><span class="pre">resolve_finetune_session</span></code></a>(corrections_path_str)</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.common.detect_sparse_annotations" title="cellmap_flow.dashboard.routes.finetune.common.detect_sparse_annotations"><code class="xref py py-obj docutils literal notranslate"><span class="pre">detect_sparse_annotations</span></code></a>(corrections_path)</p></td>
+<td><p>Whether the session trains on painted (sparse) annotations.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.common.declared_output_type" title="cellmap_flow.dashboard.routes.finetune.common.declared_output_type"><code class="xref py py-obj docutils literal notranslate"><span class="pre">declared_output_type</span></code></a>(model_config)</p></td>
+<td><p>The training target a model type declares (<code class="docutils literal notranslate"><span class="pre">finetune_output_type</span></code>), or None.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.common.annotation_dtype_for" title="cellmap_flow.dashboard.routes.finetune.common.annotation_dtype_for"><code class="xref py py-obj docutils literal notranslate"><span class="pre">annotation_dtype_for</span></code></a>(model_config)</p></td>
+<td><p>The labels' dtype of a new annotation volume for <code class="docutils literal notranslate"><span class="pre">model_config</span></code>:</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.common.autodetect_output_type" title="cellmap_flow.dashboard.routes.finetune.common.autodetect_output_type"><code class="xref py py-obj docutils literal notranslate"><span class="pre">autodetect_output_type</span></code></a>(model_config, output_type, offsets)</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.common.settings_note" title="cellmap_flow.dashboard.routes.finetune.common.settings_note"><code class="xref py py-obj docutils literal notranslate"><span class="pre">settings_note</span></code></a>(→ Optional[str])</p></td>
+<td><p>The sentence submit's answer carries when the loss was switched for sparse</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.common.served_output_class" title="cellmap_flow.dashboard.routes.finetune.common.served_output_class"><code class="xref py py-obj docutils literal notranslate"><span class="pre">served_output_class</span></code></a>(→ Optional[str])</p></td>
+<td><p>What the model's running server says its output is (model_info's</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.common.restart_params" title="cellmap_flow.dashboard.routes.finetune.common.restart_params"><code class="xref py py-obj docutils literal notranslate"><span class="pre">restart_params</span></code></a>(→ dict)</p></td>
+<td><p>The training settings a restart body (requests.FinetuneRestart) changes, as</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.common.get_lsf_job_id" title="cellmap_flow.dashboard.routes.finetune.common.get_lsf_job_id"><code class="xref py py-obj docutils literal notranslate"><span class="pre">get_lsf_job_id</span></code></a>(finetune_job)</p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.common.rewrite_minio_url_for_proxy" title="cellmap_flow.dashboard.routes.finetune.common.rewrite_minio_url_for_proxy"><code class="xref py py-obj docutils literal notranslate"><span class="pre">rewrite_minio_url_for_proxy</span></code></a>(minio_url[, request])</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">minio_url</span></code> as the browser can reach it through a reverse proxy.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#cellmap_flow.dashboard.routes.finetune.common.write_volume_manifest" title="cellmap_flow.dashboard.routes.finetune.common.write_volume_manifest"><code class="xref py py-obj docutils literal notranslate"><span class="pre">write_volume_manifest</span></code></a>(volume)</p></td>
+<td><p>Mark an annotation volume as trainable by writing its manifest.</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="module-contents">
+<h2>Module Contents<a class="headerlink" href="#module-contents" title="Link to this heading"></a></h2>
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.common.logger">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.common.</span></span><span class="sig-name descname"><span class="pre">logger</span></span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.common.logger" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.common.USER_PREFS_FILE">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.common.</span></span><span class="sig-name descname"><span class="pre">USER_PREFS_FILE</span></span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.common.USER_PREFS_FILE" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.common.LOG_FILTER_PATTERNS">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.common.</span></span><span class="sig-name descname"><span class="pre">LOG_FILTER_PATTERNS</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">['^\\s+base_model\\.\\S+\\.lora_',</span> <span class="pre">'^INFO:werkzeug:',</span> <span class="pre">'^Array</span> <span class="pre">metadata</span> <span class="pre">\\(scale=',</span> <span class="pre">'^Host...</span></span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.common.LOG_FILTER_PATTERNS" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.common.find_model_config">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.common.</span></span><span class="sig-name descname"><span class="pre">find_model_config</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model_name</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.common.find_model_config" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.common.current_chain">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.common.</span></span><span class="sig-name descname"><span class="pre">current_chain</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.common.current_chain" title="Link to this definition"></a></dt>
+<dd><p>The dashboard’s chains as step lists, <code class="docutils literal notranslate"><span class="pre">(input_norm,</span> <span class="pre">postprocess)</span></code>.</p>
+<p>A new volume and a training manifest record them, so that the trainer
+normalizes its input as inference does, and the finetuned model’s YAML
+postprocesses as the dashboard does.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.common.viewer_position_and_scales">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.common.</span></span><span class="sig-name descname"><span class="pre">viewer_position_and_scales</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.common.viewer_position_and_scales" title="Link to this definition"></a></dt>
+<dd><p>The viewer’s position, in its voxels, and each axis’s scale in nm:
+z, y, x when its dimensions name all three (they are x, y, z there),
+else in the viewer’s order.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.common.session_store">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.common.</span></span><span class="sig-name descname"><span class="pre">session_store</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.common.session_store" title="Link to this definition"></a></dt>
+<dd><p>The dashboard’s sessions and volume registry (its session’s dicts).</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.common.ensure_corrections_storage">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.common.</span></span><span class="sig-name descname"><span class="pre">ensure_corrections_storage</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">output_path</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.common.ensure_corrections_storage" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.common.load_user_prefs">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.common.</span></span><span class="sig-name descname"><span class="pre">load_user_prefs</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.common.load_user_prefs" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.common.save_user_prefs">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.common.</span></span><span class="sig-name descname"><span class="pre">save_user_prefs</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">prefs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.common.save_user_prefs" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.common.resolve_finetune_session">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.common.</span></span><span class="sig-name descname"><span class="pre">resolve_finetune_session</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">corrections_path_str</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.common.resolve_finetune_session" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.common.detect_sparse_annotations">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.common.</span></span><span class="sig-name descname"><span class="pre">detect_sparse_annotations</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">corrections_path</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.common.detect_sparse_annotations" title="Link to this definition"></a></dt>
+<dd><p>Whether the session trains on painted (sparse) annotations.</p>
+<p>Read from the volume the manifest points at: annotated voxels outside
+its imported crops are painted. This looked for per-chunk extracts
+marked source == “sparse_volume”, which are only written when there is
+no manifest – and every session has one now – so it was always False:
+the margin + distillation switch and the distance-model scribble guard in
+submit never fired, and mask_unannotated was never set. A session
+without a manifest cannot be trained, so it is not sparse either.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.common.declared_output_type">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.common.</span></span><span class="sig-name descname"><span class="pre">declared_output_type</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model_config</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.common.declared_output_type" title="Link to this definition"></a></dt>
+<dd><p>The training target a model type declares (<code class="docutils literal notranslate"><span class="pre">finetune_output_type</span></code>), or None.</p>
+<p>Cellpose predicts flows, so its type says “flows”. A finetuned model
+trains as its base does, so its <code class="docutils literal notranslate"><span class="pre">base_model_config</span></code> is asked in turn
+(building that config builds no network).</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.common.annotation_dtype_for">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.common.</span></span><span class="sig-name descname"><span class="pre">annotation_dtype_for</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model_config</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.common.annotation_dtype_for" title="Link to this definition"></a></dt>
+<dd><p>The labels’ dtype of a new annotation volume for <code class="docutils literal notranslate"><span class="pre">model_config</span></code>:
+<code class="docutils literal notranslate"><span class="pre">cellmap_flow.portable.volume.annotation_dtype</span></code> (the browser’s rule too)
+of what it trains on (<code class="docutils literal notranslate"><span class="pre">autodetect_output_type</span></code>), uint16 for the
+instance targets in INSTANCE_TARGETS, else uint8; uint8 when that cannot
+be told.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.common.autodetect_output_type">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.common.</span></span><span class="sig-name descname"><span class="pre">autodetect_output_type</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model_config</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_type</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">offsets</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.common.autodetect_output_type" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.common.SPARSE_MSE_NOTE">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.common.</span></span><span class="sig-name descname"><span class="pre">SPARSE_MSE_NOTE</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'Auto-switched</span> <span class="pre">to</span> <span class="pre">margin</span> <span class="pre">loss</span> <span class="pre">+</span> <span class="pre">distillation</span> <span class="pre">(lambda=0.5)</span> <span class="pre">for</span> <span class="pre">sparse</span> <span class="pre">annotations'</span></span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.common.SPARSE_MSE_NOTE" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.common.settings_note">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.common.</span></span><span class="sig-name descname"><span class="pre">settings_note</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">asked</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../../../../finetune/options/index.html#cellmap_flow.finetune.options.TrainingOptions" title="cellmap_flow.finetune.options.TrainingOptions"><span class="pre">cellmap_flow.finetune.options.TrainingOptions</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">used</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="../../../../finetune/options/index.html#cellmap_flow.finetune.options.TrainingOptions" title="cellmap_flow.finetune.options.TrainingOptions"><span class="pre">cellmap_flow.finetune.options.TrainingOptions</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.common.settings_note" title="Link to this definition"></a></dt>
+<dd><p>The sentence submit’s answer carries when the loss was switched for sparse
+annotations (TrainingOptions.for_session), else None: the form still shows
+what was entered, so say what was used.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.common.served_output_class">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.common.</span></span><span class="sig-name descname"><span class="pre">served_output_class</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model_name</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.common.served_output_class" title="Link to this definition"></a></dt>
+<dd><p>What the model’s running server says its output is (model_info’s
+<code class="docutils literal notranslate"><span class="pre">output_class</span></code>, serving.probe), the reading ranking and seeding share;
+None when no server for it is up, or it has not predicted yet, and the
+training job then probes the model itself.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.common.restart_params">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.common.</span></span><span class="sig-name descname"><span class="pre">restart_params</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">body</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span></span></span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.common.restart_params" title="Link to this definition"></a></dt>
+<dd><p>The training settings a restart body (requests.FinetuneRestart) changes, as
+the job’s trainer takes them (cli.RESTARTABLE_ARGS). A job started before
+this version knows three of them by other names, so those go beside the
+new: <code class="docutils literal notranslate"><span class="pre">no_augment</span></code> with <code class="docutils literal notranslate"><span class="pre">augment</span></code> (a restart could never switch
+augmentation on or off while the toggle was dropped), <code class="docutils literal notranslate"><span class="pre">no_mixed_precision</span></code>
+with <code class="docutils literal notranslate"><span class="pre">mixed_precision</span></code> and <code class="docutils literal notranslate"><span class="pre">distillation_all_voxels</span></code> with
+<code class="docutils literal notranslate"><span class="pre">distillation_scope</span></code>.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.common.get_lsf_job_id">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.common.</span></span><span class="sig-name descname"><span class="pre">get_lsf_job_id</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">finetune_job</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.common.get_lsf_job_id" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.common.rewrite_minio_url_for_proxy">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.common.</span></span><span class="sig-name descname"><span class="pre">rewrite_minio_url_for_proxy</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">minio_url</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">request</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.common.rewrite_minio_url_for_proxy" title="Link to this definition"></a></dt>
+<dd><p><code class="docutils literal notranslate"><span class="pre">minio_url</span></code> as the browser can reach it through a reverse proxy.</p>
+<p><code class="docutils literal notranslate"><span class="pre">session.minio.proxied_url</span></code>, for <code class="docutils literal notranslate"><span class="pre">request</span></code> or else the Flask request
+being handled. Unless CELLMAP_FLOW_MINIO_PROXY_URL is set and the
+request came through a proxy (X-Forwarded-Host), and outside a request
+(a background import, a script), the URL is returned unchanged.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="cellmap_flow.dashboard.routes.finetune.common.write_volume_manifest">
+<span class="sig-prename descclassname"><span class="pre">cellmap_flow.dashboard.routes.finetune.common.</span></span><span class="sig-name descname"><span class="pre">write_volume_manifest</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">volume</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#cellmap_flow.dashboard.routes.finetune.common.write_volume_manifest" title="Link to this definition"></a></dt>
+<dd><p>Mark an annotation volume as trainable by writing its manifest.</p>
+<p><code class="docutils literal notranslate"><span class="pre">create_dataloader</span></code> requires this manifest: it is what points the
+trainer at the volume zarr to stream patches from, and it carries the
+patch geometry, the dense/sparse ratio and the dashboard’s chains. The
+good regions beside it are honoured through the same dataset. Without
+one, training raises rather than fall back to anything.</p>
+<p>Returns the manifest path, or None when the volume record is too
+incomplete to describe (a resumed session whose .zattrs predates these
+fields, say). Nothing is guessed: such a session cannot be trained, and
+submit refuses it.</p>
+</dd></dl>
+
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../blueprint/index.html" class="btn btn-neutral float-left" title="cellmap_flow.dashboard.routes.finetune.blueprint" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../good_regions/index.html" class="btn btn-neutral float-right" title="cellmap_flow.dashboard.routes.finetune.good_regions" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, David Ackerman,  Marwan Zouinkhi, Jeff Rhoades, Larissa Heinrich, Aubrey Weigel.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

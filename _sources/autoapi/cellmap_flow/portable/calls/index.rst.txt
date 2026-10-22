@@ -1,0 +1,71 @@
+cellmap_flow.portable.calls
+===========================
+
+.. py:module:: cellmap_flow.portable.calls
+
+.. autoapi-nested-parse::
+
+   What the browser calls: the functions ``web/src/backend/routes/rank.ts``
+   runs through chunkmirage's ``Engine.call("cellmap_flow.portable.calls:<name>",
+   args, arrays)`` (``chunkmirage.calls`` says the shape: ``fn(args, arrays)``,
+   ``args`` the JSON arguments, ``arrays`` the bytes sent beside them, in order;
+   a JSON value, bytes, or a pair of JSON and arrays back). Each decodes its
+   arrays, calls the maths in ``rank.py`` or ``carry.py`` and encodes the
+   answer; the maths is not here. The workers take turns, so what a call needs
+   from the one before (the rank's tallies) travels in its JSON.
+
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.portable.calls.rank_tally
+   cellmap_flow.portable.calls.rank_score
+   cellmap_flow.portable.calls.windowed
+   cellmap_flow.portable.calls.rank_row
+   cellmap_flow.portable.calls.carry_paint
+
+
+Module Contents
+---------------
+
+.. py:function:: rank_tally(args, arrays)
+
+   One painted chunk added to a model's tallies (``rank.tally``). ``args``:
+   ``tallies`` (the ones so far, as this answered them; null for fresh ones),
+   ``shape`` (z, y, x), ``channels``, ``labels_dtype`` and ``affinity``;
+   ``arrays``: the chunk's labels (z, y, x), then its target, mask and the
+   model's logits (each C, z, y, x float32, the logits NaN where not read).
+   Answers the tallies.
+
+
+.. py:function:: rank_score(args, arrays)
+
+   The score of ``tallies`` (``rank.rank_score``) for ``channels``, an ``affinity`` model's or not; null when nothing was counted.
+
+
+.. py:function:: windowed(args, arrays)
+
+   ``rank.windowed``: ``norm`` with its MinMaxNormalizer set to the raw's window [``lo``, ``hi``], or null.
+
+
+.. py:function:: rank_row(args, arrays)
+
+   ``rank.score_row``: the ranking's row from ``base`` (the score read
+   through ``norm``), ``stretched`` (the score read through ``norm``
+   stretched to ``raw``, or null) and ``raw`` (the raw's window, or null);
+   null when ``base`` is null.
+
+
+.. py:function:: carry_paint(args, arrays)
+
+   The old volume's paint carried onto the new grid (``carry.carry``).
+   ``args``: ``old`` and ``new`` (each a ``Grid``'s fields), ``old_dtype``,
+   ``new_dtype`` and ``indices``, the old painted chunks'; ``arrays``: those
+   chunks' labels, whole, in that order. Answers the counts with ``indices``,
+   the new chunks' in the order of the arrays beside them, each a whole chunk
+   to write where it is not 0.
+
+

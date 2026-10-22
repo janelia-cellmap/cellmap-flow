@@ -1,0 +1,2441 @@
+<!DOCTYPE html>
+<html lang="en" data-mode="browser">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CellMap Flow Dashboard</title>
+  <!-- Bootstrap 5 (optional, for styling) -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <link rel="icon" href="./static/img/favicon.ico" type="image/x-icon" />
+  <link rel="stylesheet" href="./static/css/dark.css" />
+  <style>body{height:100vh;touch-action:manipulation;flex-direction:column;height:100dvh;margin:0;padding:0;display:flex}.app-header{background:var(--bg-surface);border-bottom:1px solid var(--border);flex-shrink:0;justify-content:space-between;align-items:center;gap:24px;padding:10px 20px;display:flex}.app-logo{flex-shrink:0;align-items:center;display:flex}.app-logo img{opacity:.9;width:auto;max-height:26px}.app-actions{align-items:center;gap:8px;display:flex}.action-btn{color:var(--text-secondary);border:1px solid var(--border);border-radius:var(--radius-sm);cursor:pointer;transition:all var(--transition);white-space:nowrap;background:0 0;padding:8px 16px;font-family:Inter,sans-serif;font-size:15px;font-weight:500;text-decoration:none}.action-btn:hover{background:var(--bg-elevated);border-color:var(--border-hover);color:var(--text-primary)}.action-btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}.action-btn.primary:hover{background:var(--accent-hover);border-color:var(--accent-hover);color:#fff}.content{flex:1;gap:0;display:flex;position:relative;overflow:hidden}#iframe-column{flex:1;height:100%;display:flex;overflow:hidden}#dashboard-column{border-left:1px solid var(--border);background:var(--bg-base);flex-shrink:0;width:340px;height:100%;overflow:hidden auto}body.dashboard-toggled #dashboard-column{display:none}@media (max-width:767.98px){.app-header{flex-wrap:wrap;gap:12px;padding:8px 12px}.app-logo img{max-height:22px}.action-btn{padding:6px 10px;font-size:13px}.wide-only{display:none}#dashboard-column{border-left:none;width:100%;display:none;position:absolute;inset:0}body.dashboard-toggled #dashboard-column{display:block}.no-data-panel{padding:24px 16px}.form-control,.form-select{font-size:16px}}.no-data-panel{background:var(--bg-base);flex-direction:column;justify-content:center;align-items:center;gap:12px;width:100%;height:100%;padding:40px;display:flex}.no-data-icon{background:var(--bg-elevated);border:1px solid var(--border);width:48px;height:48px;color:var(--text-muted);border-radius:12px;justify-content:center;align-items:center;font-size:20px;display:flex}.no-data-title{color:var(--text-primary);text-align:center;font-size:20px;font-weight:600}.no-data-desc{color:var(--text-secondary);text-align:center;max-width:400px;font-size:16px;line-height:1.5}.no-data-input-group{gap:8px;width:100%;max-width:440px;display:flex}.no-data-link{color:var(--accent);transition:color var(--transition);font-size:15px;text-decoration:none}.no-data-link:hover{color:var(--accent-hover)}</style>
+  
+  
+  <script>
+    try {
+      if (sessionStorage.getItem("cellmap-flow:dataset")) document.documentElement.dataset.viewer = "pending";
+    } catch (e) { /* no storage: the panel shows until the viewer is restored */ }
+  </script>
+  
+  <script type="module" crossorigin src="./assets/index-D5-SPolJ.js"></script>
+  <link rel="stylesheet" crossorigin href="./assets/index-B6c2Fo-c.css">
+</head>
+
+<body>
+  <!-- GitHub Style Header -->
+  <div class="app-header">
+    <div class="app-logo">
+      <img src="https://raw.githubusercontent.com/janelia-cellmap/cellmap-flow/refs/heads/main/img/CMFLOW_dark.png"
+        alt="CellMap Flow" />
+    </div>
+    <div class="app-actions">
+      
+      <button class="action-btn" type="button" id="toggleDashboardBtn">
+        <span class="wide-only">Toggle </span>Dashboard
+      </button>
+      
+      <a class="action-btn primary server-only" href="/pipeline-builder" role="button">
+        Pipeline Builder
+      </a>
+      <a class="action-btn" href="/api/export-config" download title="Download the current models/normalization/postprocessing/queue config as a reloadable YAML">
+        Export<span class="wide-only"> Config</span>
+      </a>
+      
+      
+      <button class="action-btn" type="button" id="shareLinkBtn" title="Copy a link that opens this volume with these models, at this view">Share</button>
+      
+    </div>
+  </div>
+
+  <div class="content bg-dark text-light">
+    <div class="col-9" id="iframe-column">
+      
+        <div id="noNeuroglancerPanel" class="no-data-panel">
+          <div class="no-data-icon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/>
+            </svg>
+          </div>
+          <div class="no-data-title">No Viewer Connected</div>
+          
+          <div class="no-data-desc">
+            
+            No volume open. Enter the URL of an OME-Zarr volume below to open it in the viewer.
+            
+          </div>
+          <div class="no-data-input-group">
+            
+            <input type="text" id="datasetPathInput" class="form-control" list="recentDatasets" autocomplete="off" placeholder="https://host/path/volume.zarr" style="flex:1;" />
+            <datalist id="recentDatasets"></datalist>
+            <button type="button" class="btn btn-primary" id="setDataBtn">Connect</button>
+          </div>
+          
+          
+          <div id="localFolderGroup">
+            <button type="button" class="btn btn-outline-secondary" id="browseLocalBtn">Browse local folder&hellip;</button>
+            <span id="localFolderHint">or drop an OME-Zarr, zarr or N5 folder on this panel</span>
+          </div>
+          
+          <div id="setDataStatus" style="font-size:11px;color:var(--text-muted);text-align:center;"></div>
+          <div class="server-only">
+            <a href="/pipeline-builder" class="no-data-link">Open Pipeline Builder &rarr;</a>
+          </div>
+        </div>
+      
+    </div>
+    <div class="col-3" id="dashboard-column">
+      <div id="modelAdviceBanner" class="mb-3"></div>
+      
+  <div style="padding: 12px 12px 0 12px;">
+    <!-- Nav Tabs -->
+    <ul class="nav nav-tabs" id="myTab" role="tablist">
+      <li class="nav-item" role="presentation">
+        <button
+          class="nav-link"
+          id="model-tab"
+          data-bs-toggle="tab"
+          data-bs-target="#models"
+          type="button"
+          role="tab"
+          aria-controls="models"
+          aria-selected="false"
+        >
+          Models
+        </button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button
+          class="nav-link active"
+          id="input-tab"
+          data-bs-toggle="tab"
+          data-bs-target="#input"
+          type="button"
+          role="tab"
+          aria-controls="input"
+          aria-selected="true"
+        >
+          Input
+        </button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button
+          class="nav-link"
+          id="output-tab"
+          data-bs-toggle="tab"
+          data-bs-target="#output"
+          type="button"
+          role="tab"
+          aria-controls="output"
+          aria-selected="false"
+        >
+          Postprocess
+        </button>
+      </li>
+
+      <!-- Finetune Tab. Shown in the browser mode (web/) too: there it trains
+           the model's last layer in the page (web/src/finetune), and what in
+           the tab needs a server is marked server-only in _finetune_tab.html. -->
+      <li class="nav-item" role="presentation">
+        <button
+          class="nav-link"
+          id="finetune-tab"
+          data-bs-toggle="tab"
+          data-bs-target="#finetune"
+          type="button"
+          role="tab"
+          aria-controls="finetune"
+          aria-selected="false"
+        >
+          Finetune
+        </button>
+      </li>
+
+      
+      
+      <li class="nav-item" role="presentation">
+        <button
+          class="nav-link"
+          id="run-tab"
+          data-bs-toggle="tab"
+          data-bs-target="#run"
+          type="button"
+          role="tab"
+          aria-controls="run"
+          aria-selected="false"
+        >
+          Run
+        </button>
+      </li>
+      
+
+      <!-- Review Tab. server-only: it queries a SQLite index on the server's
+           file system, which a browser cannot reach. -->
+      <li class="nav-item server-only" role="presentation">
+        <button
+          class="nav-link"
+          id="review-tab"
+          data-bs-toggle="tab"
+          data-bs-target="#review"
+          type="button"
+          role="tab"
+          aria-controls="review"
+          aria-selected="false"
+        >
+          Review
+        </button>
+      </li>
+    </ul>
+
+    <!-- Tab Contents -->
+    <div class="tab-content" id="myTabContent">
+      <div
+        class="tab-pane fade py-3"
+        id="models"
+        role="tabpanel"
+        aria-labelledby="model-tab"
+      >
+        <form id="modelSelectionForm">
+    <!-- Loaded models: every model running or starting, wherever it was
+         picked, with a ✕ that stops that one (js/dashboard/models/loaded.js; GET
+         /api/models/loaded and POST /api/models/remove, which the browser
+         mode answers too). Filled in by the script. -->
+    <section class="loaded-models mb-3" id="loadedModels" aria-labelledby="loadedModelsTitle">
+      <h5 id="loadedModelsTitle">Loaded models <span class="loaded-models-count" id="loadedModelsCount"></span></h5>
+      <ul class="loaded-model-list list-unstyled mb-0" id="loadedModelsList" aria-live="polite"></ul>
+      <p class="loaded-models-empty mb-0" id="loadedModelsEmpty">None yet: tick models below and press Submit Models.</p>
+    </section>
+
+    <!-- Add any model by reference (models/resolve.py) -->
+    <div class="add-model mb-3">
+      <label class="form-label fw-bold mb-1" for="addModelRef">Add a model</label>
+      <div class="d-flex gap-2">
+        <input type="text" class="form-control form-control-sm" id="addModelRef"
+               placeholder="Hugging Face repo, zoo model, Cellpose model, path..."
+               title="Anything that names a model: a Hugging Face repo (org/repo), a BioImage Model Zoo id, nickname or URL, a Cellpose model (cpsam_v2) or weights, an exported folder, a fly_organelles checkpoint, a script (.py), or dacapo:run@iteration. Prefixes (hf:, bioimageio:, cellpose:, fly:, script:) settle a doubt.">
+        <button type="button" class="btn btn-sm btn-outline-secondary" id="addModelResolveBtn">Resolve</button>
+      </div>
+      <div id="addModelResult" class="add-model-result mt-2" hidden>
+        <div id="addModelSummary" class="small"></div>
+        <div id="addModelNotes" class="small text-muted"></div>
+        <div id="addModelFields" class="add-model-fields mt-2"></div>
+        <button type="button" class="btn btn-sm btn-outline-secondary mt-2" id="addModelRunBtn"
+                title="Start its server now; it joins the models below, ticked, until unticked">Run</button>
+      </div>
+      <div id="addedModels" class="mt-2"></div>
+    </div>
+
+    <!-- Local Catalog Section. server-only: it lists paths on the cluster's
+         file systems; in the browser mode (web/) the models come from the
+         Hugging Face section below. -->
+    <h5 class="server-only">Local Catalog</h5>
+    <div class="accordion server-only" id="modelAccordion">
+      
+    </div>
+
+    <!-- Hugging Face Section -->
+    <h5>Hugging Face</h5>
+    <div class="accordion" id="hfModelAccordion">
+      <div class="accordion-item">
+        <h2 class="accordion-header" id="heading_hf">
+          <button
+            class="accordion-button collapsed"
+            type="button"
+            data-bs-toggle="collapse"
+            data-bs-target="#collapse_hf"
+            aria-expanded="false"
+            aria-controls="collapse_hf"
+          >
+            cellmap
+            <span id="hfLoadingSpinner" class="spinner-border spinner-border-sm ms-2 d-none" role="status"></span>
+          </button>
+        </h2>
+        <div
+          id="collapse_hf"
+          class="accordion-collapse collapse"
+          aria-labelledby="heading_hf"
+        >
+          <div class="accordion-body" id="hfModelsContainer">
+            <div class="d-flex gap-2 mb-2">
+              <input type="text" class="form-control" id="hfSearchBar" placeholder="Search models..." style="display: none;" />
+              <button type="button" class="btn btn-sm btn-outline-secondary" id="hfRefreshBtn" style="display: none; white-space: nowrap;" title="Refresh from Hugging Face">Refresh</button>
+            </div>
+            <p class="text-muted" id="hfPlaceholder">Click to load Hugging Face models...</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- BioImage Model Zoo Section: loaded when opened, like Hugging Face's.
+         Its rows are built by js/dashboard/models/zoo.js from the zoo's index. -->
+    <!-- server-only: the zoo's weights are not web (ONNX) exports. -->
+    <h5 class="server-only">BioImage Model Zoo</h5>
+    <div class="accordion server-only" id="zooModelAccordion">
+      <div class="accordion-item">
+        <h2 class="accordion-header" id="heading_zoo">
+          <button
+            class="accordion-button collapsed"
+            type="button"
+            data-bs-toggle="collapse"
+            data-bs-target="#collapse_zoo"
+            aria-expanded="false"
+            aria-controls="collapse_zoo"
+          >
+            bioimage.io
+            <span id="zooLoadingSpinner" class="spinner-border spinner-border-sm ms-2 d-none" role="status"></span>
+          </button>
+        </h2>
+        <div
+          id="collapse_zoo"
+          class="accordion-collapse collapse"
+          aria-labelledby="heading_zoo"
+        >
+          <div class="accordion-body" id="zooModelsContainer">
+            <div id="zooControls" style="display: none;">
+              <div class="d-flex gap-2 mb-2">
+                <input type="text" class="form-control" id="zooSearchBar" placeholder="Search models..." title="Name, description or tags" />
+                <button type="button" class="btn btn-sm btn-outline-secondary" id="zooRefreshBtn" style="white-space: nowrap;" title="Refresh from bioimage.io">Refresh</button>
+              </div>
+              <div class="d-flex align-items-center gap-3 mb-2 flex-wrap">
+                <div class="form-check mb-0" title="Only models whose tags, name or description say electron microscopy">
+                  <input class="form-check-input" type="checkbox" id="zooEmOnly" checked />
+                  <label class="form-check-label" for="zooEmOnly">EM only</label>
+                </div>
+                <div class="form-check mb-0" title="Models tagged 2D">
+                  <input class="form-check-input" type="checkbox" id="zoo2d" />
+                  <label class="form-check-label" for="zoo2d">2D</label>
+                </div>
+                <div class="form-check mb-0" title="Models tagged 3D">
+                  <input class="form-check-input" type="checkbox" id="zoo3d" />
+                  <label class="form-check-label" for="zoo3d">3D</label>
+                </div>
+                <span class="zoo-count ms-auto" id="zooCount" title="Shown / listed. Ticked models are always shown."></span>
+              </div>
+            </div>
+            <p class="text-muted" id="zooPlaceholder">Click to load BioImage Model Zoo models...</p>
+            <div class="zoo-model-list" id="zooModelList"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Cellpose Section: Cellpose 4's models, served in pixi's cellpose4
+         environment. Its rows are built by js/dashboard/models/cellpose.js from the data
+         below (routes/index_page.cellpose_panel_data): the models listed,
+         and the settings of those running, which start ticked. -->
+    <!-- server-only: Cellpose runs in its own pixi environment on the server. -->
+    <h5 class="server-only">Cellpose</h5>
+    <script type="application/json" id="cellpose-data">{"models": [], "running": []}</script>
+    <div class="accordion server-only" id="cellposeModelAccordion">
+      <div class="accordion-item">
+        <h2 class="accordion-header" id="heading_cellpose">
+          <button
+            class="accordion-button collapsed"
+            type="button"
+            data-bs-toggle="collapse"
+            data-bs-target="#collapse_cellpose"
+            aria-expanded="false"
+            aria-controls="collapse_cellpose"
+          >
+            Cellpose 4
+            <span id="cellposeRunningCount" class="zoo-count ms-2"></span>
+          </button>
+        </h2>
+        <div
+          id="collapse_cellpose"
+          class="accordion-collapse collapse"
+          aria-labelledby="heading_cellpose"
+        >
+          <div class="accordion-body" id="cellposeModelsContainer">
+            <div class="cellpose-model-list" id="cellposeModelList"></div>
+            <div class="cellpose-note">
+              Each z slice is segmented in 2D. The DINO models (cpdino, cpdino-vitb) are
+              not listed: they need the dinov3 package, which the cellpose4 environment
+              does not have. Cellpose-SAM's weights are for non-commercial use.
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Server Config Section. server-only: LSF settings. -->
+    <h5 class="server-only">Server Config</h5>
+    <div class="accordion server-only" id="serverConfigAccordion">
+      <div class="accordion-item">
+        <h2 class="accordion-header" id="heading_server_config">
+          <button
+            class="accordion-button collapsed"
+            type="button"
+            data-bs-toggle="collapse"
+            data-bs-target="#collapse_server_config"
+            aria-expanded="false"
+            aria-controls="collapse_server_config"
+          >
+            Server Configuration
+          </button>
+        </h2>
+        <div
+          id="collapse_server_config"
+          class="accordion-collapse collapse"
+          aria-labelledby="heading_server_config"
+        >
+          <div class="accordion-body" id="serverConfigContainer">
+            
+            <p class="text-muted small mb-2">No cluster here (no <code>bsub</code>): models and finetuning run on this machine, and these settings are not used.</p>
+            
+            <div class="mb-2">
+              <label class="form-label" for="cfg_queue">GPU Queue</label>
+              <select class="form-select form-select-sm" id="cfg_queue"></select>
+            </div>
+            <div class="mb-2">
+              <label class="form-label" for="cfg_charge_group">Charge Group</label>
+              <input type="text" class="form-control form-control-sm" id="cfg_charge_group" />
+            </div>
+            <div class="mb-2">
+              <label class="form-label" for="cfg_walltime">Time Limit</label>
+              <input type="text" class="form-control form-control-sm" id="cfg_walltime" placeholder="08:00" />
+              <div class="form-text">
+                LSF run limit, <code>HH:MM</code> or minutes. Jobs are killed at
+                this point. Leave blank for the queue default, which is 2 hours.
+              </div>
+            </div>
+            <div class="mb-2 form-check">
+              <input type="checkbox" class="form-check-input" id="cfg_cycle_gpu_queues" checked />
+              <label class="form-check-label" for="cfg_cycle_gpu_queues">Try other GPU queues</label>
+              <div class="form-text">
+                If the queue above is full or closed, submit to whichever GPU
+                queue has capacity instead of waiting. Uncheck to always use
+                the queue above, however long it takes to start.
+              </div>
+            </div>
+            <div class="mb-2">
+              <label class="form-label" for="cfg_nb_cores_worker">Cores per Worker</label>
+              <input type="number" class="form-control form-control-sm" id="cfg_nb_cores_worker" />
+            </div>
+            <div class="mb-2">
+              <label class="form-label" for="cfg_nb_workers">Number of Workers</label>
+              <input type="number" class="form-control form-control-sm" id="cfg_nb_workers" />
+            </div>
+            <button type="button" class="btn btn-sm btn-primary" id="updateServerConfigBtn">Update</button>
+            <span id="serverConfigStatus" class="ms-2" style="font-size: 0.85rem;"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- GPU type + submit -->
+    <div class="d-flex align-items-end gap-3 mt-3 flex-wrap">
+      
+      
+      <div class="text-muted small mb-1" style="max-width: 20rem">
+        Models run in this browser, on its GPU through WebGPU, or else on its CPU.
+      </div>
+      
+      <div class="form-check mb-1"
+           title="The scale matching each model's voxel size is always picked when the data has one. When it has none, ticked resamples the nearest scale to the model's voxel size; unticked reads it as if it were that size, so the model sees the wrong scale. Applies to models submitted from now on, their finetunes and blockwise runs.">
+        <input class="form-check-input" type="checkbox" id="resampleCheckbox" />
+        <label class="form-check-label" for="resampleCheckbox">Resample if no scale matches the model</label>
+      </div>
+      <button type="button" class="btn btn-primary" id="submitModelsBtn">
+        Submit Models
+      </button>
+    </div>
+    
+
+    <!-- Log area -->
+    <div class="mt-3">
+      <textarea
+        id="modelSubmissionLogModels"
+        class="form-control"
+        rows="3"
+        readonly
+      ></textarea>
+    </div>
+
+    <!-- Inference job output. Lives on a cluster node, so without this the
+         only way to read a server that died on startup is bpeek over ssh.
+         server-only: the browser has no job logs (its log is the console). -->
+    <div class="mt-3 server-only">
+      <div class="d-flex align-items-center gap-2">
+        <button type="button" class="btn btn-sm btn-outline-secondary" id="jobLogsBtn">
+          Show Job Logs
+        </button>
+        <div class="form-check mb-0">
+          <input class="form-check-input" type="checkbox" id="jobLogsFollow" />
+          <label class="form-check-label" for="jobLogsFollow">
+            <small>Follow</small>
+          </label>
+        </div>
+        <span id="jobLogsStatus" class="text-muted" style="font-size: 0.85rem"></span>
+      </div>
+      <textarea
+        id="jobLogsArea"
+        class="form-control mt-2"
+        rows="12"
+        readonly
+        style="display: none; font-family: monospace; font-size: 0.8rem"
+      ></textarea>
+    </div>
+  </form>
+      </div>
+      <div
+        class="tab-pane fade show active py-3"
+        id="input"
+        role="tabpanel"
+        aria-labelledby="input-tab"
+      >
+        
+  
+<div
+  class="apply-bar py-2 mb-2"
+  data-chain="input"
+  style="position: sticky; top: 0; z-index: 10; background: var(--bg-base); border-bottom: 1px solid var(--border);"
+>
+  <div class="d-flex align-items-center gap-2">
+    <h6 class="mb-0 me-auto">Input normalization</h6>
+    <button type="button" class="btn btn-sm btn-outline-secondary apply-button">Apply</button>
+  </div>
+  <small class="apply-pending d-block mt-1" aria-live="polite" hidden></small>
+  
+  <div class="apply-notice alert alert-info d-flex align-items-start gap-2 py-1 px-2 mt-2 mb-0 small" hidden>
+    <span class="apply-notice-text flex-grow-1"></span>
+    <button type="button" class="btn-close btn-close-white apply-notice-close" aria-label="Dismiss"></button>
+  </div>
+</div>
+
+<div class="alert alert-info" role="alert">
+  Drag to reorder: steps run in the order shown. An edit takes effect when
+  you press Apply, which sends this list and the Postprocess tab's together.
+</div>
+<form id="inputNormForm">
+  <div id="inputNormList">
+  
+  
+    
+    <div class="normalizer-item mb-3 p-2 border rounded" data-normalizer="MinMaxNormalizer">
+      <div class="form-check mb-2 d-flex align-items-center">
+        <span class="drag-handle me-2">⋮⋮</span>
+        <input
+          class="form-check-input inputNormCheckbox"
+          type="checkbox"
+          id="inputNorm0_enabled"
+          name="inputNorm0_enabled"
+          value="MinMaxNormalizer"
+          checked
+        />
+        <label
+          class="form-check-label ms-2"
+          for="inputNorm0_enabled"
+        >
+          MinMaxNormalizer
+        </label>
+      </div>
+
+    <div
+      class="ps-4 step-params"
+      style="display: block;"
+    >
+      
+        <div class="mb-3">
+          <label
+            for="inputNorm0_param_min_value"
+            class="form-label"
+          >
+            min_value
+          </label>
+          <input
+            type="text"
+            class="form-control"
+            id="inputNorm0_param_min_value"
+            name="inputNorm0_param_min_value"
+            data-param="min_value"
+            value="0.0"
+          />
+        </div>
+      
+        <div class="mb-3">
+          <label
+            for="inputNorm0_param_max_value"
+            class="form-label"
+          >
+            max_value
+          </label>
+          <input
+            type="text"
+            class="form-control"
+            id="inputNorm0_param_max_value"
+            name="inputNorm0_param_max_value"
+            data-param="max_value"
+            value="255.0"
+          />
+        </div>
+      
+        <div class="mb-3">
+          <label
+            for="inputNorm0_param_invert"
+            class="form-label"
+          >
+            invert
+          </label>
+          <input
+            type="text"
+            class="form-control"
+            id="inputNorm0_param_invert"
+            name="inputNorm0_param_invert"
+            data-param="invert"
+            value="False"
+          />
+        </div>
+      
+    </div>
+    </div>
+  
+    
+    <div class="normalizer-item mb-3 p-2 border rounded" data-normalizer="LambdaNormalizer">
+      <div class="form-check mb-2 d-flex align-items-center">
+        <span class="drag-handle me-2">⋮⋮</span>
+        <input
+          class="form-check-input inputNormCheckbox"
+          type="checkbox"
+          id="inputNorm1_enabled"
+          name="inputNorm1_enabled"
+          value="LambdaNormalizer"
+          checked
+        />
+        <label
+          class="form-check-label ms-2"
+          for="inputNorm1_enabled"
+        >
+          LambdaNormalizer
+        </label>
+      </div>
+
+    <div
+      class="ps-4 step-params"
+      style="display: block;"
+    >
+      
+        <div class="mb-3">
+          <label
+            for="inputNorm1_param_expression"
+            class="form-label"
+          >
+            expression
+          </label>
+          <input
+            type="text"
+            class="form-control"
+            id="inputNorm1_param_expression"
+            name="inputNorm1_param_expression"
+            data-param="expression"
+            value="2*x-1"
+          />
+        </div>
+      
+    </div>
+    </div>
+  
+    
+    <div class="normalizer-item mb-3 p-2 border rounded" data-normalizer="ZScoreNormalizer">
+      <div class="form-check mb-2 d-flex align-items-center">
+        <span class="drag-handle me-2">⋮⋮</span>
+        <input
+          class="form-check-input inputNormCheckbox"
+          type="checkbox"
+          id="inputNorm2_enabled"
+          name="inputNorm2_enabled"
+          value="ZScoreNormalizer"
+          
+        />
+        <label
+          class="form-check-label ms-2"
+          for="inputNorm2_enabled"
+        >
+          ZScoreNormalizer
+        </label>
+      </div>
+
+    <div
+      class="ps-4 step-params"
+      style="display: none;"
+    >
+      
+        <div class="mb-3">
+          <label
+            for="inputNorm2_param_mean"
+            class="form-label"
+          >
+            mean
+          </label>
+          <input
+            type="text"
+            class="form-control"
+            id="inputNorm2_param_mean"
+            name="inputNorm2_param_mean"
+            data-param="mean"
+            value="0.0"
+          />
+        </div>
+      
+        <div class="mb-3">
+          <label
+            for="inputNorm2_param_std"
+            class="form-label"
+          >
+            std
+          </label>
+          <input
+            type="text"
+            class="form-control"
+            id="inputNorm2_param_std"
+            name="inputNorm2_param_std"
+            data-param="std"
+            value="1.0"
+          />
+        </div>
+      
+    </div>
+    </div>
+  
+  </div>
+
+  <div class="mt-3">
+    <textarea
+      id="submissionLog_inputNorm"
+      class="form-control"
+      rows="3"
+      readonly
+    ></textarea>
+  </div>
+</form>
+
+      </div>
+      <div
+        class="tab-pane fade py-3"
+        id="output"
+        role="tabpanel"
+        aria-labelledby="output-tab"
+      >
+        
+  
+<div
+  class="apply-bar py-2 mb-2"
+  data-chain="postprocess"
+  style="position: sticky; top: 0; z-index: 10; background: var(--bg-base); border-bottom: 1px solid var(--border);"
+>
+  <div class="d-flex align-items-center gap-2">
+    <h6 class="mb-0 me-auto">Postprocessing</h6>
+    <button type="button" class="btn btn-sm btn-outline-secondary apply-button">Apply</button>
+  </div>
+  <small class="apply-pending d-block mt-1" aria-live="polite" hidden></small>
+  
+  <div class="apply-notice alert alert-info d-flex align-items-start gap-2 py-1 px-2 mt-2 mb-0 small" hidden>
+    <span class="apply-notice-text flex-grow-1"></span>
+    <button type="button" class="btn-close btn-close-white apply-notice-close" aria-label="Dismiss"></button>
+  </div>
+</div>
+
+<div class="alert alert-info" role="alert">
+  Drag to reorder: steps run in the order shown. An edit takes effect when
+  you press Apply, which sends this list and the Input tab's together.
+</div>
+<form id="postProcessForm">
+  <div id="postProcessList">
+  
+  
+    
+    <div class="postprocessor-item mb-3 p-2 border rounded" data-postprocessor="SigmoidPostprocessor">
+      <div class="form-check mb-2 d-flex align-items-center">
+        <span class="drag-handle me-2">⋮⋮</span>
+        <input
+          class="form-check-input postProcessCheckbox"
+          type="checkbox"
+          id="postProcess0_enabled"
+          name="postProcess0_enabled"
+          value="SigmoidPostprocessor"
+          checked
+        />
+        <label class="form-check-label ms-2" for="postProcess0_enabled">
+          SigmoidPostprocessor
+        </label>
+      </div>
+
+    <!-- Show or hide the param div based on whether it's checked by default -->
+    <div
+      class="ps-4 step-params"
+       style="display: block;" 
+    >
+      
+    </div>
+    </div>
+  
+    
+    <div class="postprocessor-item mb-3 p-2 border rounded" data-postprocessor="DefaultPostprocessor">
+      <div class="form-check mb-2 d-flex align-items-center">
+        <span class="drag-handle me-2">⋮⋮</span>
+        <input
+          class="form-check-input postProcessCheckbox"
+          type="checkbox"
+          id="postProcess1_enabled"
+          name="postProcess1_enabled"
+          value="DefaultPostprocessor"
+          
+        />
+        <label class="form-check-label ms-2" for="postProcess1_enabled">
+          DefaultPostprocessor
+        </label>
+      </div>
+
+    <!-- Show or hide the param div based on whether it's checked by default -->
+    <div
+      class="ps-4 step-params"
+       style="display: none;" 
+    >
+      
+        <div class="mb-3">
+          <label for="postProcess1_param_clip_min" class="form-label">
+            clip_min
+          </label>
+          <input
+            type="text"
+            class="form-control"
+            id="postProcess1_param_clip_min"
+            name="postProcess1_param_clip_min"
+            data-param="clip_min"
+            value="-1.0"
+          />
+        </div>
+      
+        <div class="mb-3">
+          <label for="postProcess1_param_clip_max" class="form-label">
+            clip_max
+          </label>
+          <input
+            type="text"
+            class="form-control"
+            id="postProcess1_param_clip_max"
+            name="postProcess1_param_clip_max"
+            data-param="clip_max"
+            value="1.0"
+          />
+        </div>
+      
+        <div class="mb-3">
+          <label for="postProcess1_param_bias" class="form-label">
+            bias
+          </label>
+          <input
+            type="text"
+            class="form-control"
+            id="postProcess1_param_bias"
+            name="postProcess1_param_bias"
+            data-param="bias"
+            value="1.0"
+          />
+        </div>
+      
+        <div class="mb-3">
+          <label for="postProcess1_param_multiplier" class="form-label">
+            multiplier
+          </label>
+          <input
+            type="text"
+            class="form-control"
+            id="postProcess1_param_multiplier"
+            name="postProcess1_param_multiplier"
+            data-param="multiplier"
+            value="127.5"
+          />
+        </div>
+      
+    </div>
+    </div>
+  
+    
+    <div class="postprocessor-item mb-3 p-2 border rounded" data-postprocessor="ThresholdPostprocessor">
+      <div class="form-check mb-2 d-flex align-items-center">
+        <span class="drag-handle me-2">⋮⋮</span>
+        <input
+          class="form-check-input postProcessCheckbox"
+          type="checkbox"
+          id="postProcess2_enabled"
+          name="postProcess2_enabled"
+          value="ThresholdPostprocessor"
+          
+        />
+        <label class="form-check-label ms-2" for="postProcess2_enabled">
+          ThresholdPostprocessor
+        </label>
+      </div>
+
+    <!-- Show or hide the param div based on whether it's checked by default -->
+    <div
+      class="ps-4 step-params"
+       style="display: none;" 
+    >
+      
+        <div class="mb-3">
+          <label for="postProcess2_param_threshold" class="form-label">
+            threshold
+          </label>
+          <input
+            type="text"
+            class="form-control"
+            id="postProcess2_param_threshold"
+            name="postProcess2_param_threshold"
+            data-param="threshold"
+            value="0.5"
+          />
+        </div>
+      
+    </div>
+    </div>
+  
+    
+    <div class="postprocessor-item mb-3 p-2 border rounded" data-postprocessor="ChannelSelection">
+      <div class="form-check mb-2 d-flex align-items-center">
+        <span class="drag-handle me-2">⋮⋮</span>
+        <input
+          class="form-check-input postProcessCheckbox"
+          type="checkbox"
+          id="postProcess3_enabled"
+          name="postProcess3_enabled"
+          value="ChannelSelection"
+          
+        />
+        <label class="form-check-label ms-2" for="postProcess3_enabled">
+          ChannelSelection
+        </label>
+      </div>
+
+    <!-- Show or hide the param div based on whether it's checked by default -->
+    <div
+      class="ps-4 step-params"
+       style="display: none;" 
+    >
+      
+        <div class="mb-3">
+          <label for="postProcess3_param_channels" class="form-label">
+            channels
+          </label>
+          <input
+            type="text"
+            class="form-control"
+            id="postProcess3_param_channels"
+            name="postProcess3_param_channels"
+            data-param="channels"
+            value="0"
+          />
+        </div>
+      
+    </div>
+    </div>
+  
+    
+    <div class="postprocessor-item mb-3 p-2 border rounded" data-postprocessor="LambdaPostprocessor">
+      <div class="form-check mb-2 d-flex align-items-center">
+        <span class="drag-handle me-2">⋮⋮</span>
+        <input
+          class="form-check-input postProcessCheckbox"
+          type="checkbox"
+          id="postProcess4_enabled"
+          name="postProcess4_enabled"
+          value="LambdaPostprocessor"
+          
+        />
+        <label class="form-check-label ms-2" for="postProcess4_enabled">
+          LambdaPostprocessor
+        </label>
+      </div>
+
+    <!-- Show or hide the param div based on whether it's checked by default -->
+    <div
+      class="ps-4 step-params"
+       style="display: none;" 
+    >
+      
+        <div class="mb-3">
+          <label for="postProcess4_param_expression" class="form-label">
+            expression
+          </label>
+          <input
+            type="text"
+            class="form-control"
+            id="postProcess4_param_expression"
+            name="postProcess4_param_expression"
+            data-param="expression"
+            value=""
+          />
+        </div>
+      
+    </div>
+    </div>
+  
+    
+    <div class="postprocessor-item mb-3 p-2 border rounded" data-postprocessor="LabelPostprocessor">
+      <div class="form-check mb-2 d-flex align-items-center">
+        <span class="drag-handle me-2">⋮⋮</span>
+        <input
+          class="form-check-input postProcessCheckbox"
+          type="checkbox"
+          id="postProcess5_enabled"
+          name="postProcess5_enabled"
+          value="LabelPostprocessor"
+          
+        />
+        <label class="form-check-label ms-2" for="postProcess5_enabled">
+          LabelPostprocessor
+        </label>
+      </div>
+
+    <!-- Show or hide the param div based on whether it's checked by default -->
+    <div
+      class="ps-4 step-params"
+       style="display: none;" 
+    >
+      
+        <div class="mb-3">
+          <label for="postProcess5_param_channel" class="form-label">
+            channel
+          </label>
+          <input
+            type="text"
+            class="form-control"
+            id="postProcess5_param_channel"
+            name="postProcess5_param_channel"
+            data-param="channel"
+            value="0"
+          />
+        </div>
+      
+        <div class="mb-3">
+          <label for="postProcess5_param_connectivity" class="form-label">
+            connectivity
+          </label>
+          <input
+            type="text"
+            class="form-control"
+            id="postProcess5_param_connectivity"
+            name="postProcess5_param_connectivity"
+            data-param="connectivity"
+            value="1"
+          />
+        </div>
+      
+        <div class="mb-3">
+          <label for="postProcess5_param_min_size" class="form-label">
+            min_size
+          </label>
+          <input
+            type="text"
+            class="form-control"
+            id="postProcess5_param_min_size"
+            name="postProcess5_param_min_size"
+            data-param="min_size"
+            value="0"
+          />
+        </div>
+      
+        <div class="mb-3">
+          <label for="postProcess5_param_per_slice" class="form-label">
+            per_slice
+          </label>
+          <input
+            type="text"
+            class="form-control"
+            id="postProcess5_param_per_slice"
+            name="postProcess5_param_per_slice"
+            data-param="per_slice"
+            value="False"
+          />
+        </div>
+      
+    </div>
+    </div>
+  
+    
+    <div class="postprocessor-item mb-3 p-2 border rounded" data-postprocessor="AffinityPostprocessor">
+      <div class="form-check mb-2 d-flex align-items-center">
+        <span class="drag-handle me-2">⋮⋮</span>
+        <input
+          class="form-check-input postProcessCheckbox"
+          type="checkbox"
+          id="postProcess6_enabled"
+          name="postProcess6_enabled"
+          value="AffinityPostprocessor"
+          
+        />
+        <label class="form-check-label ms-2" for="postProcess6_enabled">
+          AffinityPostprocessor
+        </label>
+      </div>
+
+    <!-- Show or hide the param div based on whether it's checked by default -->
+    <div
+      class="ps-4 step-params"
+       style="display: none;" 
+    >
+      
+        <div class="mb-3">
+          <label for="postProcess6_param_bias" class="form-label">
+            bias
+          </label>
+          <input
+            type="text"
+            class="form-control"
+            id="postProcess6_param_bias"
+            name="postProcess6_param_bias"
+            data-param="bias"
+            value="0.5"
+          />
+        </div>
+      
+        <div class="mb-3">
+          <label for="postProcess6_param_neighborhood" class="form-label">
+            neighborhood
+          </label>
+          <input
+            type="text"
+            class="form-control"
+            id="postProcess6_param_neighborhood"
+            name="postProcess6_param_neighborhood"
+            data-param="neighborhood"
+            value="[
+                [1, 0, 0],
+                [0, 1, 0],
+                [0, 0, 1],
+                [3, 0, 0],
+                [0, 3, 0],
+                [0, 0, 3],
+                [9, 0, 0],
+                [0, 9, 0],
+                [0, 0, 9],
+            ]"
+          />
+        </div>
+      
+    </div>
+    </div>
+  
+    
+    <div class="postprocessor-item mb-3 p-2 border rounded" data-postprocessor="MortonSegmentationRelabeling">
+      <div class="form-check mb-2 d-flex align-items-center">
+        <span class="drag-handle me-2">⋮⋮</span>
+        <input
+          class="form-check-input postProcessCheckbox"
+          type="checkbox"
+          id="postProcess7_enabled"
+          name="postProcess7_enabled"
+          value="MortonSegmentationRelabeling"
+          
+        />
+        <label class="form-check-label ms-2" for="postProcess7_enabled">
+          MortonSegmentationRelabeling
+        </label>
+      </div>
+
+    <!-- Show or hide the param div based on whether it's checked by default -->
+    <div
+      class="ps-4 step-params"
+       style="display: none;" 
+    >
+      
+        <div class="mb-3">
+          <label for="postProcess7_param_channel" class="form-label">
+            channel
+          </label>
+          <input
+            type="text"
+            class="form-control"
+            id="postProcess7_param_channel"
+            name="postProcess7_param_channel"
+            data-param="channel"
+            value="0"
+          />
+        </div>
+      
+    </div>
+    </div>
+  
+    
+    <div class="postprocessor-item mb-3 p-2 border rounded" data-postprocessor="SimpleBlockwiseMerger">
+      <div class="form-check mb-2 d-flex align-items-center">
+        <span class="drag-handle me-2">⋮⋮</span>
+        <input
+          class="form-check-input postProcessCheckbox"
+          type="checkbox"
+          id="postProcess8_enabled"
+          name="postProcess8_enabled"
+          value="SimpleBlockwiseMerger"
+          
+        />
+        <label class="form-check-label ms-2" for="postProcess8_enabled">
+          SimpleBlockwiseMerger
+        </label>
+      </div>
+
+    <!-- Show or hide the param div based on whether it's checked by default -->
+    <div
+      class="ps-4 step-params"
+       style="display: none;" 
+    >
+      
+        <div class="mb-3">
+          <label for="postProcess8_param_channel" class="form-label">
+            channel
+          </label>
+          <input
+            type="text"
+            class="form-control"
+            id="postProcess8_param_channel"
+            name="postProcess8_param_channel"
+            data-param="channel"
+            value="0"
+          />
+        </div>
+      
+        <div class="mb-3">
+          <label for="postProcess8_param_face_erosion_iterations" class="form-label">
+            face_erosion_iterations
+          </label>
+          <input
+            type="text"
+            class="form-control"
+            id="postProcess8_param_face_erosion_iterations"
+            name="postProcess8_param_face_erosion_iterations"
+            data-param="face_erosion_iterations"
+            value="0"
+          />
+        </div>
+      
+    </div>
+    </div>
+  
+  </div>
+
+  <div class="mt-3">
+    <textarea
+      id="submissionLog_postProcess"
+      class="form-control"
+      rows="3"
+      readonly
+    ></textarea>
+  </div>
+</form>
+
+      </div>
+
+      <!-- Finetune Tab Content (in both modes, like its tab above) -->
+      <div
+        class="tab-pane fade p-3"
+        id="finetune"
+        role="tabpanel"
+        aria-labelledby="finetune-tab"
+      >
+        
+<div class="alert alert-info" role="alert">
+  
+  <strong>Finetune:</strong> paint corrections, then train the model's last layer in this tab, or a 2D model's whole network.
+  
+  <small class="d-block server-only" title="Crops need the model's write_shape, output_voxel_size and so on. A model submitted from the GUI after startup may lack them; restart with a full model configuration.">Needs a model with full metadata.</small>
+</div>
+
+<!-- Tabs for Annotation Crops and Training -->
+<ul class="nav nav-tabs mb-3" id="finetuneTabs" role="tablist">
+  <li class="nav-item" role="presentation">
+    <button class="nav-link active" id="crops-tab" data-bs-toggle="tab" data-bs-target="#crops" type="button" role="tab">
+      Annotation Crops
+    </button>
+  </li>
+  <li class="nav-item" role="presentation">
+    <button class="nav-link" id="training-tab" data-bs-toggle="tab" data-bs-target="#training" type="button" role="tab">
+      Training
+    </button>
+  </li>
+</ul>
+
+<div class="tab-content" id="finetuneTabContent">
+  <!-- Annotation Crops Tab -->
+  <div class="tab-pane fade show active" id="crops" role="tabpanel">
+
+<form id="finetuneForm">
+  <!-- Model Selection (conditionally shown) -->
+  <div id="modelSelectionDiv" class="mb-3">
+    <label for="modelSelect" class="form-label">Select Model</label>
+    <div class="d-flex gap-2">
+      <select class="form-select" id="modelSelect">
+        <!-- Populated by JavaScript -->
+      </select>
+      <button type="button" class="btn btn-outline-secondary" id="refreshModelsBtn" title="Refresh model list">
+        &#x21bb;
+      </button>
+    </div>
+    <small class="form-text text-muted">Crops are sized to the model's output.</small>
+    
+    
+    <small class="form-text d-block mt-1" id="browserFinetuneNote">In the browser, finetuning trains the model's last layer (its output convolution) on the voxels you paint, on this machine; the rest of the network stays as it was. Paint some background and some objects on a few slices, then train.</small>
+    
+  </div>
+
+  <!-- Model Info Display -->
+  <div id="modelInfo" class="mb-3 p-2 border rounded" style="display: none;">
+    <h6>Model Configuration</h6>
+    <div id="modelInfoContent"></div>
+  </div>
+
+  <!-- Output Path for Zarr Files. server-only: a path on the server's file
+       system; the browser keeps the paint in its own store. -->
+  <div class="mb-3 server-only">
+    <label for="outputPath" class="form-label">Output Path for Zarr Files</label>
+    <input type="text" class="form-control" id="outputPath" placeholder="/path/to/output/directory">
+    <small class="form-text text-muted">Where crops are saved; MinIO must be able to read it.</small>
+  </div>
+
+  <!-- Primary actions: start or resume an annotation volume -->
+  <div class="mb-2">
+    <label class="form-label fw-bold mb-1">Start or resume an annotation volume</label>
+    <div class="d-flex align-items-center gap-2 flex-wrap">
+      <button type="button" class="btn btn-primary" id="createVolumeBtn">
+        New Volume
+      </button>
+      <button type="button" class="btn btn-info" id="loadExistingVolumeBtn" title="Copy and continue an existing annotation volume from a previous session">
+        Resume Existing Volume
+      </button>
+      
+      <button type="button" class="btn btn-secondary server-only" id="openLoadCropsBtn" title="Bulk-load externally annotated zarr crops from a YAML manifest (paste or load from file)">
+        Load Crops from YAML
+      </button>
+    </div>
+    
+    <div id="volumeVoxelRow" class="mt-2" hidden>
+      <div class="d-flex align-items-center gap-2">
+        <label class="mb-0 text-nowrap" for="volumeVoxelSize" style="font-size: 0.85rem;">Voxel size (nm)</label>
+        <input type="text" class="form-control form-control-sm" id="volumeVoxelSize" list="volumeVoxelSizes"
+               inputmode="decimal" placeholder="the level on screen" style="max-width: 12rem;"
+               title="The voxel size to paint at: one number for all three axes, or z, y, x. The raw's levels are offered; another size covers the raw in voxels of that size. Blank: the level the viewer shows now (the finest, without a viewer).">
+        <datalist id="volumeVoxelSizes"></datalist>
+      </div>
+      <small class="form-text text-muted d-block mt-1">No model is loaded, so the volume is painted on the raw's grid. To train, rank the models on your paint under <em>Which model to start from</em> and click <em>Use this model</em>: it copies the paint onto that model's grid.</small>
+    </div>
+    <small class="form-text text-muted d-block mt-1">Paint <code>1</code> = background, <code>2</code> and up = foreground, an id per object.</small>
+  </div>
+
+  <!-- Annotated-region boxes, on demand only -->
+  <div class="mb-2">
+    <button type="button" class="btn btn-outline-secondary btn-sm" id="showAnnotatedRegionsBtn"
+            title="Redraws the annotated_regions boxes. Not automatic on purpose: updating any layer makes neuroglancer rebuild all of them, which drops the draw tool you have selected and can lose a stroke you just painted. Click it when you want to see where you have been, not while painting.">
+      Redraw Annotated Regions
+    </button>
+    <span id="annotatedRegionCount" class="ms-2 text-muted" style="font-size: 0.85rem;"></span>
+    <small class="form-text text-muted d-block mt-1">Draws a box in the viewer around each region annotated so far. Only when you click, and not while painting: it drops the selected draw tool.</small>
+  </div>
+
+  <!-- The patch on screen: one-click labels, AI-assisted annotation, and good
+       regions (rehearsal anchors). All three run in both modes: the browser
+       mode answers their routes in the page (web/src/backend/routes/
+       view-labels.ts, its seeds from the models served in the page;
+       web/src/ai-annotate; good-regions.ts, the regions kept with the volume
+       and anchoring the head's distillation), and Label it's Undo takes back
+       an accepted AI annotation in both. What only the browser's AI panel has
+       (the credentials, a typed model id) is in browser-only blocks. Fit to
+       Paint (rank.js) scores the model Prediction from names on the paint,
+       as Which model to start from does, and sets its threshold and input
+       window; the line under the buttons says what it, or Use this model,
+       set, and the threshold's label marks a threshold the ranking set. -->
+  <div class="patch-tools mb-3">
+    <div class="patch-tools-title">Patch on screen</div>
+
+    <details class="patch-tools-group patch-tools-section" id="labelItSection" open>
+      <summary><span class="patch-tools-label">Label it</span></summary>
+      <div class="d-flex align-items-center gap-2 mb-2">
+        <label class="text-muted mb-0 text-nowrap" for="seedModel" style="font-size: 0.85rem;">Prediction from</label>
+        <select class="form-select form-select-sm" id="seedModel"
+                title="Whose prediction Seed from Prediction copies into the patch: any model served on the Models tab, a model finetuned in this browser among them. Default: the latest finetune of the model the volume is for, else that model."></select>
+      </div>
+      <div class="patch-tools-grid">
+        <button type="button" class="btn btn-outline-secondary btn-sm" id="seedViewBtn"
+                title="Fills the unpainted voxels of the patch from the chosen model's prediction, segmented by the settings' method (thresholded at the model's decision boundary unless they say otherwise): an id per object, background 1. Your strokes are kept. Then fix it with the brush. The viewer reloads to show it.">
+          Seed from Prediction
+        </button>
+        <button type="button" class="btn btn-outline-secondary btn-sm" id="fitToPaintBtn"
+                title="Scores the model chosen in Prediction from on your paint, as Which model to start from (Training tab) does, and sets what fits the paint best: Seed from Prediction's threshold, and, where the raw under the paint spans few grey levels and stretching it scores clearly better, the input normalization stretched to it. No volume is made and the paint stays as it is.">
+          Fit to Paint
+        </button>
+        <button type="button" class="btn btn-outline-secondary btn-sm" id="backgroundViewBtn"
+                title="Labels every unpainted voxel of the patch background (1), for a region of false positives. Your strokes are kept. The viewer reloads to show it.">
+          All Background
+        </button>
+        <button type="button" class="btn btn-outline-secondary btn-sm" id="undoViewLabelsBtn" disabled
+                title="Takes back the last Seed, All Background, Split or accepted AI annotation (up to 10): the patch goes back to what it held before. Voxels you have painted since are kept.">
+          Undo
+        </button>
+        <button type="button" class="btn btn-outline-secondary btn-sm" id="splitObjectsBtn"
+                title="Gives each connected object in the patch an id of its own, by the settings' connectivity. To split a merged object, paint a background wall through it in every slice it spans (in one slice, with Per z slice), then click: the two sides get their own ids. A stroke joining two objects merges them into one id. The viewer reloads to show it.">
+          Split Objects
+        </button>
+      </div>
+      <small class="d-block mt-1" id="fitToPaintStatus" role="status" hidden></small>
+      <details class="patch-tools-settings" id="seedSettings">
+        <summary>Seed, split and box settings</summary>
+        <div class="d-flex align-items-center gap-2 mt-2">
+          <label class="mb-0 text-nowrap" for="seedMethod">Method</label>
+          <select class="form-select form-select-sm" id="seedMethod"
+                  title="How Seed from Prediction makes objects of the prediction. The methods that fit the chosen model come first; the others are greyed out, saying what they need."></select>
+        </div>
+        <small class="text-muted d-block mt-1" id="seedMethodHint"></small>
+        <div class="patch-tools-fields">
+          <label for="seedBox">Box (voxels)</label>
+          <input type="text" class="form-control form-control-sm" id="seedBox" placeholder="one patch" inputmode="numeric"
+                 title="The box Seed from Prediction, All Background and Split Objects cover, centred where you look: z, y, x annotation voxels, or one number for all three. Any size: the model still reads its whole input around it. Smaller is less to check and fix (Cellpose's patch can hold hundreds of objects), and the unpainted voxels around it are left out of training. Blank: one model output patch, the size shown.">
+          <label for="seedThreshold">Threshold
+            <span class="badge bg-info ms-1" id="seedThresholdByRanking" hidden
+                  title="Fit to Paint or Use this model set this threshold: the one that fits your paint best. Changing it takes the mark away.">set by ranking</span></label>
+          <input type="number" class="form-control form-control-sm" id="seedThreshold" min="0" max="1" step="0.05"
+                 placeholder="model's"
+                 title="Probability above which the prediction counts as foreground, 0 to 1. Blank: the model's own decision boundary (0.5 for a probability, 0 for a signed distance). Higher keeps only confident voxels.">
+          <label for="seedMinSize">Min object (voxels)</label>
+          <input type="number" class="form-control form-control-sm" id="seedMinSize" min="0" step="1" value="0"
+                 title="Objects of fewer voxels than this become background: specks the threshold lets through.">
+          <label for="seedConnectivity">Connectivity</label>
+          <select class="form-select form-select-sm" id="seedConnectivity"
+                  title="Which neighbouring voxels touch, for Seed's objects and for Split Objects. Faces (6 neighbours, the default): a one-voxel background wall cuts an object. Edges (18) and all (26) join voxels that touch only along an edge or at a corner, so a diagonal wall no longer cuts.">
+            <option value="1">faces</option>
+            <option value="2">+ edges</option>
+            <option value="3">all</option>
+          </select>
+          <label for="seedPerSlice">Per z slice</label>
+          <input type="checkbox" class="form-check-input" id="seedPerSlice"
+                 title="Objects are found in each z slice on its own, in 2D: every slice of an object gets its own id. For objects annotated or segmented slice by slice (Cellpose). For Split Objects, a wall painted in one slice then splits that slice.">
+        </div>
+      </details>
+    </details>
+
+    <!-- AI-assisted annotation: a hosted model labels one plane, reviewed before
+         it is written (ai-annotate.js), and taken back by Label it's Undo. In
+         both modes: the browser mode answers its routes in the page
+         (web/src/ai-annotate); the credentials block and the typed model id
+         below are its alone. -->
+    <details class="patch-tools-group patch-tools-section ai-annotate" id="aiAnnotatePanel">
+        <summary>
+          <span class="patch-tools-label">AI-assisted annotation</span>
+          <span class="ai-annotate-summary-status" id="aiAnnotateSummaryStatus"></span>
+        </summary>
+
+        <div class="small text-muted mt-2" id="aiAnnotateDisabled" hidden>
+          <span id="aiAnnotateDisabledReason">Checking whether it is enabled...</span>
+          <a href="https://github.com/janelia-cellmap/cellmap-flow/blob/main/docs/ai_annotate.md"
+             target="_blank" rel="noopener noreferrer">How to turn it on</a>
+        </div>
+
+        <div id="aiAnnotateControls" hidden>
+          <div class="patch-tools-fields ai-annotate-fields">
+            <label for="aiAnnotateProvider">Provider</label>
+            <select class="form-select form-select-sm" id="aiAnnotateProvider"
+                    title="Where the plane is sent: Google's Gemini API with an API key, Vertex AI with a project and an access token, or the fake provider, which runs in this browser and sends nothing."></select>
+            <label for="aiAnnotateModel">Model</label>
+            <select class="form-select form-select-sm" id="aiAnnotateModel"
+                    title="The provider's image models. The Gemini API's are listed once a key is pasted; Other… takes a model id that is not listed."></select>
+            
+            
+            <input type="text" class="form-control form-control-sm" id="aiAnnotateModelName" maxlength="200" autocomplete="off" spellcheck="false"
+                   placeholder="Model id, e.g. gemini-3-pro-image" style="grid-column: 1 / -1;" hidden
+                   title="The id of a model the list does not have, as Google names it (without models/).">
+            
+            <label for="aiAnnotateLabel">Label</label>
+            <select class="form-select form-select-sm" id="aiAnnotateLabel"
+                    title="The structure the model is asked to paint. Its prompt is filled in below."></select>
+          </div>
+          <input type="text" class="form-control form-control-sm mt-1" id="aiAnnotateLabelName" maxlength="100"
+                 placeholder="Name of the structure, e.g. lipid droplet" hidden>
+
+          <div class="d-flex align-items-baseline justify-content-between mt-2">
+            <label class="text-muted mb-0" for="aiAnnotatePrompt" style="font-size: 0.85rem;">Prompt (optional to edit)</label>
+            <button type="button" class="btn btn-link btn-sm p-0" id="aiAnnotatePromptReset" hidden>Reset to default</button>
+          </div>
+          <textarea class="form-control form-control-sm" id="aiAnnotatePrompt" rows="3" maxlength="4000"
+                    title="Sent to the model with the plane. The default suits most datasets; EM looks different from one dataset to the next, so describing this one can help. Keep the colour it asks for: the mask is read from that colour."></textarea>
+
+          
+          
+          <div class="mt-2" id="aiAnnotateCredentials" hidden>
+            <div class="d-flex align-items-baseline justify-content-between">
+              <span class="text-muted" style="font-size: 0.85rem;">Credentials</span>
+              <span class="text-muted" style="font-size: 0.85rem;" id="aiAnnotateCredsState"></span>
+            </div>
+            <div class="patch-tools-fields ai-annotate-fields">
+              <label for="aiAnnotateApiKey" data-credential="api_key">API key</label>
+              <input type="text" class="form-control form-control-sm credential-secret" id="aiAnnotateApiKey" autocomplete="off" spellcheck="false" data-1p-ignore data-lpignore="true" data-bwignore data-credential="api_key"
+                     placeholder="From Google AI Studio"
+                     title="A Gemini API key (aistudio.google.com/apikey). Used as soon as it is pasted, sent to Google with each plane, kept in this page only: paste it again after a reload.">
+              <label for="aiAnnotateProject" data-credential="project">Project</label>
+              <input type="text" class="form-control form-control-sm" id="aiAnnotateProject" autocomplete="off" spellcheck="false" data-credential="project"
+                     placeholder="my-gcp-project"
+                     title="The Google Cloud project that is billed; the Vertex AI API must be enabled in it.">
+              <label for="aiAnnotateAccessToken" data-credential="access_token">Access token</label>
+              <input type="text" class="form-control form-control-sm credential-secret" id="aiAnnotateAccessToken" autocomplete="off" spellcheck="false" data-1p-ignore data-lpignore="true" data-bwignore data-credential="access_token"
+                     placeholder="gcloud auth print-access-token"
+                     title="The output of gcloud auth print-access-token, run where you are signed in to Google Cloud. It lasts about an hour; paste a new one when a call fails asking you to sign in.">
+            </div>
+            <div class="d-flex align-items-baseline gap-2 mt-1">
+              <small class="text-muted" id="aiAnnotateCredsHint"></small>
+              <button type="button" class="btn btn-link btn-sm p-0 ms-auto" id="aiAnnotateForgetCredsBtn"
+                      title="Removes the credentials from this page.">Clear</button>
+            </div>
+          </div>
+          
+
+          <div class="form-check mt-2">
+            <input class="form-check-input" type="checkbox" id="aiAnnotateAck">
+            <label class="form-check-label small" for="aiAnnotateAck">
+              Send planes of this dataset to: <span id="aiAnnotateDestination"></span>
+            </label>
+          </div>
+          <small class="text-muted d-block" id="aiAnnotateAckHint">Required once per provider and dataset.</small>
+
+          <div class="d-flex align-items-center gap-2 flex-wrap mt-2">
+            <button type="button" class="btn btn-outline-secondary btn-sm" id="aiAnnotateRunBtn"
+                    title="Sends the plane you are looking at (XY, XZ or YZ, from the viewer's layout), centred on the view, to the model. Nothing is written until you accept the result.">
+              Annotate at View Centre
+            </button>
+            <span class="text-muted" style="font-size: 0.85rem;" id="aiAnnotateKeyHint">or hover over the viewer and press Shift+G</span>
+          </div>
+          <small class="text-muted d-block mt-1" id="aiAnnotateUsage"></small>
+          <div class="small text-muted mt-1" id="aiAnnotateStatus" role="status" aria-live="polite"></div>
+          <div class="small text-danger mt-1" id="aiAnnotateError" role="alert" hidden></div>
+
+          <!-- A result waiting for review: the review itself is the popup below. -->
+          <!-- hidden is on the outer div: Bootstrap's d-flex would override it. -->
+          <div class="mt-2" id="aiAnnotateReview" hidden>
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+              <button type="button" class="btn btn-primary btn-sm" id="aiAnnotateOpenReviewBtn"
+                      title="Opens the result over the page to look at it closely and accept or reject it.">Review Result</button>
+              <small class="text-muted" id="aiAnnotateReviewSummary"></small>
+            </div>
+          </div>
+        </div>
+    </details>
+
+    <details class="patch-tools-group patch-tools-section" id="goodRegionsSection" open>
+      <summary><span class="patch-tools-label">Good regions</span></summary>
+      <div class="d-flex align-items-center gap-2 flex-wrap">
+        <button type="button" class="btn btn-outline-secondary btn-sm" id="markGoodRegionBtn"
+                title="Navigate until the screen shows output you are happy with, then click. Marks one model output patch, the size of an annotation crop. Training holds the model to what it already predicts there, while your scribbles correct it elsewhere; a scribble inside a good region wins. Shown as the good_regions layer.">
+          Mark as Good
+        </button>
+        <span id="goodRegionCount" class="text-muted" style="font-size: 0.85rem;"></span>
+        <button type="button" class="btn btn-link btn-sm p-0" id="clearGoodRegionsBtn"
+                title="Remove all good regions from this session">clear</button>
+      </div>
+    </details>
+  </div>
+
+  <!-- Save action. server-only: MinIO and the disk are the server's. -->
+  <div class="mb-2 server-only">
+    <button type="button" class="btn btn-success" id="saveAnnotationsBtn" title="Save all annotations from MinIO to local disk">
+      Save Annotations to Disk
+    </button>
+    <small class="form-text text-muted d-block mt-1">Copies the annotations from MinIO to disk.</small>
+  </div>
+
+  
+  
+  <div class="mb-2" id="browserVolumeActions">
+    <div class="d-flex align-items-center gap-2 flex-wrap">
+      <a class="btn btn-outline-secondary disabled" id="downloadVolumeBtn" role="button" aria-disabled="true" tabindex="-1" download
+         title="The annotation volume as a zip of its zarr: what the server's finetune reads, and zarr-python">
+        Download paint (zarr)
+      </a>
+      <button type="button" class="btn btn-outline-danger" id="deleteVolumeBtn" disabled
+              title="Removes the volume's paint from this browser and its layer from the viewer. Download it first to keep it.">
+        Delete volume
+      </button>
+    </div>
+    <small class="form-text text-muted d-block mt-1">The paint stays in this browser until you delete it; download it to keep it elsewhere or to train on the server.</small>
+  </div>
+  
+
+  <!-- AI-assisted annotation's review, over the page: the plane sent, the
+       model's answer and the mask over the plane, large enough to judge
+       (ai-annotate.js). Opens by itself when a result is ready. In both
+       modes, as its panel above. -->
+  <div class="modal fade" id="aiAnnotateReviewModal" tabindex="-1" aria-labelledby="aiAnnotateReviewTitle" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable ai-annotate-review-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="aiAnnotateReviewTitle">AI annotation: review</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"
+                  aria-label="Close; the result waits, and Review Result in the panel opens it again"></button>
+        </div>
+        <div class="modal-body ai-annotate-review">
+          <small class="text-muted d-block mb-2" id="aiAnnotateReviewInfo"></small>
+          <div class="ai-annotate-previews" id="aiAnnotatePreviews"
+               title="Click an image to see it at full width; click it again to go back.">
+            <figure>
+              <img id="aiAnnotateInputImg" alt="The EM plane sent to the model">
+              <figcaption>Input</figcaption>
+            </figure>
+            <figure>
+              <img id="aiAnnotateModelImg" alt="The model's output: the plane with the structure painted in">
+              <figcaption>Model output</figcaption>
+            </figure>
+            <figure>
+              <img id="aiAnnotateOverlayImg" alt="The mask that would be written, over the input">
+              <figcaption>Overlay</figcaption>
+            </figure>
+          </div>
+          <small class="text-muted d-block mt-1">Click an image to see it at full width; click it again to go back.</small>
+          <div class="small mt-2" id="aiAnnotateModalStatus" role="status" aria-live="polite"></div>
+          <div class="small text-danger mt-1" id="aiAnnotateModalError" role="alert" hidden></div>
+          <label class="text-muted mb-0 mt-2" for="aiAnnotateReviewPrompt" style="font-size: 0.85rem;">Prompt sent (edit it and Resend to ask again)</label>
+          <textarea class="form-control form-control-sm" id="aiAnnotateReviewPrompt" rows="3" maxlength="4000"
+                    title="Edit it and click Resend to ask the model again about the same plane."></textarea>
+          <div class="form-check mt-2">
+            <input class="form-check-input" type="checkbox" id="aiAnnotateOverwrite">
+            <label class="form-check-label small" for="aiAnnotateOverwrite">Overwrite existing labels</label>
+          </div>
+          <small class="text-muted d-block">Off: only unlabelled voxels are filled. On: the model's objects replace what is under them.</small>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary me-auto" data-bs-dismiss="modal"
+                  title="Close without deciding; Review Result in the panel opens it again.">Close</button>
+          <button type="button" class="btn btn-outline-secondary" id="aiAnnotateResendBtn"
+                  title="Asks the model again about the same plane, with the prompt above.">Resend</button>
+          <button type="button" class="btn btn-outline-danger" id="aiAnnotateRejectBtn"
+                  title="Discards the result; nothing is written.">Reject</button>
+          <button type="button" class="btn btn-success" id="aiAnnotateAcceptBtn"
+                  title="Writes the mask into the annotation volume: an id per object, background 1. Undo takes it back. The viewer reloads to show it.">Accept</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Load Crops from YAML Modal (server-only, with its button above) -->
+  <div class="modal fade server-only" id="loadCropsModal" tabindex="-1" aria-labelledby="loadCropsLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="loadCropsLabel">Load Annotated Crops from YAML</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <p class="text-muted small">
+            Bulk-load externally annotated zarr crops as <code>_chunk_*.zarr</code>
+            entries that train alongside painted chunks. Voxel size, ROI offset and
+            shape are auto-read from each zarr's OME-NGFF metadata; the raw read
+            snaps to the closest available scale of the current dataset.
+          </p>
+          <div class="mb-2">
+            <label for="loadCropsYamlPath" class="form-label">YAML file path (optional)</label>
+            <div class="input-group">
+              <input type="text" class="form-control" id="loadCropsYamlPath" placeholder="/path/to/manifest.yaml">
+              <button type="button" class="btn btn-outline-secondary" id="loadCropsYamlReadBtn" title="Read the file into the textarea below">
+                Load File
+              </button>
+            </div>
+            <small class="form-text text-muted">
+              Either pick a YAML file here, or paste the manifest below. If both are filled, the textarea wins.
+            </small>
+          </div>
+          <div class="mb-2">
+            <label for="loadCropsYaml" class="form-label">YAML manifest</label>
+            <textarea
+              class="form-control font-monospace"
+              id="loadCropsYaml"
+              rows="10"
+              placeholder="crops:&#10;  - /path/to/groundtruth.zarr/crop_42/mito&#10;  - path: /path/to/instances.zarr/labels&#10;    fg_ids: [3]&#10;    connected_components: true&#10;    mode: dense"
+            ></textarea>
+            <small class="form-text text-muted">
+              Bare strings default to <code>fg_ids=all_nonzero, mode=dense</code>.
+              Per-entry overrides: <code>fg_ids</code>, <code>bg_ids</code>,
+              <code>mode</code> (dense|sparse), <code>connected_components</code> (bool).
+              Top-level: <code>patches_per_epoch</code>, <code>jitter_voxels</code>.
+              Imported crops are written into the session's annotation volume
+              and trained on via FG-anchored random patches.
+            </small>
+          </div>
+          <div id="loadCropsStatus" class="text-muted small"></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="button" class="btn btn-primary" id="loadCropsSubmitBtn">Load Crops</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Load Existing Volume Modal -->
+  <div class="modal fade" id="loadExistingModal" tabindex="-1" aria-labelledby="loadExistingLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="loadExistingLabel">Load Existing Annotation Volume</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          
+          <p class="text-muted small server-only">
+            The selected session will be <strong>copied</strong> into a new session directory so your previous training data remains intact. Lineage is recorded in <code>loaded_from.json</code>.
+          </p>
+          
+          <p class="text-muted small" id="existingVolumesNote">
+            These are the volumes painted in this browser, newest first. Pick one to paint on and train again.
+          </p>
+          
+          <div class="mb-2 server-only">
+            <label for="existingBrowseRoot" class="form-label">Search in</label>
+            <div class="input-group">
+              <input type="text" class="form-control" id="existingBrowseRoot" placeholder="/path/to/output/directory">
+              <button type="button" class="btn btn-outline-secondary" id="existingBrowseRefreshBtn">Scan</button>
+            </div>
+            <small class="form-text text-muted">Directory containing timestamped sessions. Output Path is used as default.</small>
+          </div>
+          <div class="mb-2">
+            <label for="existingSessionsList" class="form-label">Existing Sessions</label>
+            <select class="form-select" id="existingSessionsList" size="10">
+              <option>Scan a directory above...</option>
+            </select>
+          </div>
+          <div id="existingSessionsEmpty" class="text-muted small" style="display:none;">
+            
+            No volumes painted in this browser yet: close this and click New Volume.
+            
+          </div>
+          <div id="loadExistingStatus" class="text-muted small mt-2"></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="button" class="btn btn-primary" id="loadExistingConfirmBtn" disabled>Load Selected</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MinIO Status (server-only: the browser has no MinIO) -->
+  <div class="mt-3 p-2 border rounded server-only" id="minioStatus" style="display: none;">
+    <h6>MinIO Status</h6>
+    <div id="minioStatusContent"></div>
+  </div>
+
+  <!-- Log Output -->
+  <div class="mt-3">
+    <label class="form-label">Log</label>
+    <textarea
+      id="finetuneLog"
+      class="form-control"
+      rows="8"
+      readonly
+      style="color: var(--text-muted); font-size: 15px; background-color: var(--bg-input); border: 1px solid var(--border);"
+    ></textarea>
+  </div>
+</form>
+</div><!-- End Crops Tab -->
+
+<!-- Training Tab -->
+
+<div class="tab-pane fade" id="training" role="tabpanel" data-training="head">
+
+
+<!-- Which Model to Start From Card -->
+<div class="card mb-3" id="rankCard" style="overflow: hidden;">
+  <details id="rankSection">
+    <summary class="card-header border-bottom-0" style="cursor: pointer;">
+      <h5 class="d-inline" style="border-bottom: 0;">Which model to start from</h5>
+    </summary>
+    <div class="card-body" style="border-top: 1px solid var(--border);">
+      <p class="text-muted small mb-2">Ranks models by how well each one already matches your paint, to pick the best one to finetune.</p>
+      <input type="search" class="form-control form-control-sm mb-1" id="rankFilter" autocomplete="off" spellcheck="false"
+             placeholder="Filter: nuc, 16 nm, mito_aff"
+             title="Shows only the models whose name, task, channels or voxel size have every word typed, whatever the case: nuc, 16 nm, mito_aff, 2d. Rank scores the ticked models shown; the hidden ones keep their ticks.">
+      <small class="d-block text-muted mb-1">Tick
+        <button type="button" class="btn btn-link btn-sm p-0 align-baseline" id="rankTickAll">all</button> /
+        <button type="button" class="btn btn-link btn-sm p-0 align-baseline" id="rankTickNone">none</button>
+        (shown)</small>
+      <div id="rankCandidates" class="mb-2" style="max-height: 14rem; overflow-y: auto;"></div>
+      <div class="d-flex align-items-center gap-2 flex-wrap mb-1">
+        <button type="button" class="btn btn-primary" id="rankBtn" disabled
+                title="Scores each ticked model shown in turn on the voxels you painted. A model not served yet is downloaded and run for its score, which can take up to a minute each; the Models tab and the viewer are left as they were.">
+          Rank models
+        </button>
+        <button type="button" class="btn btn-secondary" id="rankStopBtn" hidden
+                title="Stop once the model being scored now is done; its score and the ones before it stay.">
+          Stop
+        </button>
+      </div>
+      <small class="d-block text-muted" id="rankStatus" role="status"></small>
+      <div class="mt-2" id="rankResults" hidden>
+        <small class="d-block text-muted mb-1">Match: the share of your painted voxels the model gets right, objects and background counting equally, which ranks them; then the share of painted objects it calls object, and of painted background it calls background. Threshold: the probability above which the model's prediction fits your paint best (0.5 is the model's own boundary), as Seed from Prediction takes it. Input: the raw's grey levels the model reads as 0 to 1, its normalizer's own, or the raw under your paint stretched when that matches clearly better. Use this model sets both, as Fit to Paint does for the model seeding the paint.</small>
+        <ol class="list-unstyled mb-1" id="rankRows"></ol>
+        <div class="small text-warning" id="rankLittlePaint" hidden>Little paint: scores a few points apart are effectively tied; paint a little in two or three places for a clearer ranking.</div>
+      </div>
+    </div>
+  </details>
+</div>
+
+<!-- Training Configuration Card -->
+<div class="card mb-3">
+  <div class="card-header">
+    <h5>Training Configuration</h5>
+  </div>
+  <div class="card-body">
+    
+    
+    <div class="mb-3" id="finetuneModeGroup" hidden>
+      <label for="finetuneMode" class="form-label" title="What trains on the paint. Last layer: the model's output convolution, on the features the rest of the network already computes; seconds, on any machine. Whole network: every weight, with TensorFlow.js on this machine's GPU; minutes, and it can learn what the features miss. The model's manifest says which it offers.">Training</label>
+      <select id="finetuneMode" class="form-select">
+        <option value="head" selected>Last layer</option>
+        <option value="full">Whole network</option>
+      </select>
+      <small class="text-muted d-block" id="finetuneModeNote">The last layer trains in seconds; the whole network in minutes, on this machine's GPU.</small>
+    </div>
+    
+    <!-- Optional: Manual checkpoint path override -->
+    <div class="mb-3 server-only">
+      <label for="checkpointPath" class="form-label" title="The base model checkpoint to finetune from. Left empty, it is taken from the model's configuration or script.">
+        Checkpoint Path (Optional)
+        <span class="badge bg-secondary">Advanced</span>
+      </label>
+      <input type="text" id="checkpointPath" class="form-control" placeholder="Leave empty to auto-detect from model config">
+      <small class="text-muted">Empty: taken from the model config.</small>
+    </div>
+
+    <div class="row">
+      <div class="col-md-6 server-only">
+        <div class="mb-3">
+          <label for="loraRank" class="form-label" title="Higher rank = more trainable parameters. Alpha is held at twice the rank, so the step size stays the same when you change it. Rank 0 trains the whole model instead of an adapter: on the mito affinity UNet it was faster per step and lower in memory than rank 64, and exports full weights (~3 GB) rather than a ~100 MB adapter. Switching between 0 and a LoRA rank needs a new job, not a restart.">LoRA Rank</label>
+          <select id="loraRank" class="form-select">
+            <option value="4">4 (Fast, lower capacity)</option>
+            <option value="8">8 (Balanced)</option>
+            <option value="16">16 (High capacity)</option>
+            <option value="64" selected>64 (Very high capacity) - Recommended</option>
+            <option value="0">0 (Full finetune: every parameter, no adapter)</option>
+          </select>
+          <small class="text-muted" id="loraRankNote">Higher = more capacity. 0 = full finetune.</small>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <div class="mb-3">
+          <label for="numEpochs" class="form-label">Number of Epochs</label>
+          <input type="number" id="numEpochs" class="form-control" value="20" min="5" max="500" step="1">
+          <small class="text-muted">Usually 10–20. A 3D model's whole network trains one block a step: aim for 60 to 150 steps in all, epochs × blocks (the run's first line gives the blocks).</small>
+        </div>
+      </div>
+    </div>
+
+    <div class="row">
+      
+      
+      <div class="col-md-6 server-only full-also">
+        <div class="mb-3">
+          <label for="batchSize" class="form-label">Batch Size</label>
+          <select id="batchSize" class="form-select">
+            
+            <option value="1" selected>1 (Default)</option>
+            
+            <option value="2">2</option>
+            
+            <option value="4">4</option>
+            
+            <option value="8">8</option>
+            
+            <option value="16">16</option>
+            
+            <option value="32">32</option>
+            
+          </select>
+          
+          <small class="text-muted" id="batchSizeHint">Tiles per step: each step's time and memory grow with it.</small>
+          
+        </div>
+      </div>
+      
+      <div class="col-md-6 full-only">
+        <div class="mb-3">
+          
+          <label for="tileSize" id="tileSizeLabel" class="form-label" title="The side of the square slices the whole network trains on, in pixels of its input, cut in the plane you painted in. The model reads 88 pixels of context around what it predicts, so a tile's output is 88 pixels smaller. A smaller tile trains a step faster in less memory, but more of it is context. The sides offered are ones the network's pools and crops divide exactly.">Tile Size</label>
+          <select id="tileSize" class="form-select"></select>
+          <small class="text-muted d-block" id="tileSizeHint"></small>
+        </div>
+      </div>
+      <div class="col-md-6 head-only">
+        <div class="mb-3">
+          <label for="batchPixels" class="form-label" title="How many painted voxels each step of the head's training averages over, drawn from every painted chunk at once. Smaller batches take more steps per epoch: more movement, more noise. The epochs pass over all the paint whatever the batch.">Voxels per Step</label>
+          <select id="batchPixels" class="form-select">
+            <option value="1024">1,024</option>
+            <option value="4096" selected>4,096 (Default)</option>
+            <option value="16384">16,384</option>
+            <option value="65536">65,536</option>
+          </select>
+          <small class="text-muted">The head's batch: painted voxels per step.</small>
+        </div>
+      </div>
+      
+      <div class="col-md-6 head-only">
+        <div class="mb-3">
+          <label for="learningRate" class="form-label">Learning Rate</label>
+          <select id="learningRate" class="form-select">
+            
+            
+            <option value="0.01" selected>1e-2 (Standard for the last layer)</option>
+            <option value="0.003">3e-3 (Gentler)</option>
+            <option value="0.001">1e-3 (Gentle)</option>
+            
+          </select>
+          
+          <small class="text-muted">1e-2 suits the last layer; lower it if the loss jumps about.</small>
+          
+        </div>
+      </div>
+      
+      
+      <div class="col-md-6 full-only">
+        <div class="mb-3">
+          <label for="learningRateFull" class="form-label">Learning Rate</label>
+          <select id="learningRateFull" class="form-select">
+            <option value="0.0003">3e-4 (Faster)</option>
+            <option value="0.0001" selected>1e-4 (Standard)</option>
+            <option value="0.00003">3e-5 (Gentle)</option>
+            <option value="0.00001">1e-5 (Very gentle)</option>
+          </select>
+          <small class="text-muted">1e-4 suits the whole network; lower it if the loss jumps about or the model forgets what it knew.</small>
+        </div>
+      </div>
+      
+    </div>
+
+    <div class="row server-only">
+      <div class="col-md-6">
+        <div class="mb-3">
+          <label for="patchesPerEpoch" class="form-label" title="Blank keeps the manifest's value. 0 picks it from the number of painted chunks. A positive value caps the random patches per epoch.">
+            Patches per Epoch
+            <span class="badge bg-secondary">YAML override</span>
+          </label>
+          <input
+            type="number"
+            id="patchesPerEpoch"
+            class="form-control"
+            min="0"
+            step="1"
+            placeholder="YAML/default"
+          />
+          <small class="text-muted">Blank = manifest's, 0 = auto.</small>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <div class="mb-3">
+          <label for="rehearsalFraction" class="form-label" title="The share of training patches drawn from regions you marked good, where the model is held to what it already predicts.">
+            Good-Region Rehearsal
+            <span class="badge bg-secondary">Advanced</span>
+          </label>
+          <select id="rehearsalFraction" class="form-select">
+            <option value="" selected>Auto (25%)</option>
+            <option value="0">0% (ignore good regions)</option>
+            <option value="0.1">10%</option>
+            <option value="0.25">25%</option>
+            <option value="0.5">50%</option>
+            <option value="0.75">75%</option>
+          </select>
+          <small class="text-muted" id="rehearsalFractionHint">Share of patches from good regions.</small>
+        </div>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="col-md-6">
+        <div class="mb-3">
+          <label for="lossType" class="form-label">Loss Function</label>
+          <select id="lossType" class="form-select">
+            
+            
+            <option value="bce" selected>BCE (Default)</option>
+            <option value="mse">MSE</option>
+            <option value="margin">Margin (for scribbles)</option>
+            
+          </select>
+          
+          <small class="text-muted">BCE as before; MSE and margin as on the server.</small>
+          
+        </div>
+        <div class="mb-3" id="marginGroup">
+          <label for="marginValue" class="form-label" title="Smaller = stricter, more learning signal. Predictions outside [margin, 1 - margin] get no gradient.">
+            Margin
+            <span class="badge bg-secondary">margin loss only</span>
+          </label>
+          <input
+            type="number"
+            id="marginValue"
+            class="form-control"
+            value="0.3"
+            min="0"
+            max="0.5"
+            step="0.05"
+          />
+          <small class="text-muted">Smaller = stricter.</small>
+          <small class="text-info d-block server-only" id="distanceModelHint" hidden
+                 title="Each painted voxel is kept between the nearest voxel not painted as its own class and the nearest painted as the other: exact where the paint is dense. The slope is limited to a distance field's, and distillation of at least 0.5 holds the rest.">Distance model: scribbles train on distance bounds, whatever the loss above.</small>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <div class="mb-3">
+          
+          <label for="distillationLambda" class="form-label" title="Adds this weight times the mean squared distance of the model's logits from the starting model's, on the voxels the scope below picks (for the last layer, once good regions are marked, their unpainted voxels): what the paint does not ask to change stays as the model had it. 0.01 is a light hold; a head moves freely, so 0.1 to 1 holds it firmly. The whole network is held on the same tile it trains on, as the server holds it.">
+            Distillation Weight
+          </label>
+          
+          <select id="distillationLambda" class="form-select">
+            <option value="0">0 (Disabled)</option>
+            <option value="0.01" selected>0.01 (Default)</option>
+            <option value="0.05">0.05</option>
+            <option value="0.1">0.1</option>
+            <option value="0.2">0.2</option>
+            <option value="0.5">0.5</option>
+            <option value="1.0">1.0</option>
+            <option value="2.0">2.0</option>
+            <option value="5.0">5.0</option>
+            <option value="10.0">10.0</option>
+          </select>
+          
+          <small class="text-muted">Keeps the model near its own output where nothing is painted.</small>
+          
+        </div>
+      </div>
+    </div>
+    <div class="row">
+      <div class="col-md-6">
+        <div class="mb-3">
+          <label for="distillationScope" class="form-label">
+            Distillation Scope
+            <span class="badge bg-secondary">Advanced</span>
+          </label>
+          <select id="distillationScope" class="form-select">
+            <option value="unlabeled" selected>Unlabeled voxels only</option>
+            <option value="all">All voxels</option>
+          </select>
+          
+          <small class="text-muted">Of the painted chunks, up to 32,768 voxels. Good regions, once marked, decide instead.</small>
+          
+        </div>
+        <div class="mb-3">
+          <label for="labelSmoothing" class="form-label" title="Softens hard 0/1 targets to [s/2, 1 - s/2]. Set 0 for clean annotations where you want sharp 0/1 output.">
+            Label Smoothing
+          </label>
+          <input
+            type="number"
+            id="labelSmoothing"
+            class="form-control"
+            value="0.1"
+            min="0"
+            max="0.5"
+            step="0.01"
+          />
+          <small class="text-muted">0 for sharp 0/1 output.</small>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <div class="mb-3">
+          <div class="form-check mt-4">
+            <input class="form-check-input" type="checkbox" id="balanceClasses" checked>
+            <label class="form-check-label" for="balanceClasses" title="Weights foreground and background equally in the loss whatever the ratio of your scribbles, which stops foreground overprediction.">
+              Balance fg/bg classes
+            </label>
+          </div>
+          <small class="text-muted">Weights fg and bg equally.</small>
+        </div>
+        
+        <div class="mb-3 server-only full-also">
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="augment">
+            
+            <label class="form-check-label" for="augment" title="Each step's tiles get a random brightness (×0.8 to ×1.2) and noise (1% of the range), then random flips and quarter turns of the image and your paint together, with the targets made after, as on the server. It helps the model work on objects you did not paint, but slows learning several times over: with paint on only one or two objects it can stall at a loss near 0.69, which is guessing. Turn it on once you have painted several objects, with 3 to 5 times the epochs. Off by default, as on the server.">
+              Augmentation
+            </label>
+            
+          </div>
+          <small class="text-muted">
+            <span id="augmentAdvice" class="d-block"></span>
+          </small>
+        </div>
+      </div>
+    </div>
+
+    <div class="row server-only">
+      <div class="col-md-6">
+        <div class="mb-3">
+          <label for="gpuQueue" class="form-label">GPU Queue</label>
+          <select id="gpuQueue" class="form-select">
+            <option value="gpu_h100" selected>H100</option>
+            <option value="gpu_a100">A100</option>
+            <option value="gpu_h200">H200</option>
+          </select>
+          <small class="form-text text-muted d-block" id="finetuneGpuQueueHint"></small>
+        </div>
+      </div>
+    </div>
+
+    <!-- Auto-serve checkbox -->
+    <div class="form-check mb-3">
+      <input class="form-check-input" type="checkbox" id="autoServeCheck" checked>
+      <label class="form-check-label" for="autoServeCheck">
+        Auto-load model after training
+        <small class="text-muted">(serves it and adds the layer)</small>
+      </label>
+    </div>
+
+    <div class="d-grid gap-2">
+      <button type="button" class="btn btn-primary btn-lg" id="startFinetuningBtn">
+        🚀 Start Finetuning
+      </button>
+    </div>
+    
+    <small class="text-muted d-block mt-2">
+      Once a job waits for a restart, Shift+R over the viewer restarts it with these settings,
+      as Restart Training does, without asking first.
+    </small>
+  </div>
+</div>
+
+<!-- Training Status Card (hidden initially) -->
+<div class="card mb-3" id="trainingStatusCard" style="display: none;">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <h5>Training Status</h5>
+    <div>
+      <button type="button" class="btn btn-warning btn-sm me-2" id="restartJobBtn" style="display: none;"
+              title="Train this job again, on the paint as it is now, with the Training Configuration's current settings. Shift+R over the viewer does the same without asking first.">
+        🔄 Restart Training
+      </button>
+      <button type="button" class="btn btn-secondary btn-sm me-2" id="stopEarlyBtn" disabled title="Exit the training loop after the current epoch. Only available while training is actively running.">
+        ⏸ Stop Early
+      </button>
+      <button type="button" class="btn btn-danger btn-sm" id="cancelJobBtn">
+        ❌ Cancel
+      </button>
+    </div>
+  </div>
+  <div class="card-body">
+    <div class="mb-3">
+      <p class="mb-1"><strong>Job ID:</strong> <span id="jobId" class="font-monospace">-</span></p>
+      <p class="mb-1"><strong>Model:</strong> <span id="jobModelName">-</span></p>
+      <p class="mb-1"><strong>Output Type:</strong> <span id="jobOutputType" class="badge bg-info">-</span></p>
+      <p class="mb-1"><strong>Training with:</strong> <span id="jobTraining">-</span></p>
+      <p class="mb-1"><strong>Status:</strong> <span id="jobStatus" class="badge bg-secondary">-</span></p>
+      <p class="mb-1"><strong>Progress:</strong> <span id="jobProgress">-</span></p>
+    </div>
+
+    <!-- Progress bar -->
+    <div class="progress mb-3" style="height: 25px;">
+      <div id="trainingProgressBar" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%;">
+        0%
+      </div>
+    </div>
+
+    <!-- Inference Server Status (shown when ready) -->
+    <div id="inferenceServerStatus" style="display: none;">
+      <hr>
+      <h6>Inference Server</h6>
+      <div class="d-flex justify-content-between align-items-center mb-2">
+        <span class="text-muted">Status:</span>
+        <span id="inferenceServerReady" class="badge bg-success">Ready</span>
+      </div>
+      <div class="d-flex justify-content-between align-items-center">
+        <span class="text-muted">Layer:</span>
+        <span id="neuroglancerLayer" class="font-monospace small">-</span>
+      </div>
+    </div>
+
+    
+    
+    <a class="btn btn-outline-secondary btn-sm mt-3" id="downloadFinetunedBtn" role="button" download style="display: none;"
+       title="The finetuned model as an .onnx file: the base model's graph with the trained weights (its last layer, or its whole network) in it">
+      Download finetuned model
+    </a>
+    
+  </div>
+</div>
+
+<!-- Live Training Logs Card -->
+<div class="card mb-3">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <h5>Training Logs</h5>
+    <div class="form-check form-switch">
+      <input class="form-check-input" type="checkbox" id="autoScrollLogs" checked>
+      <label class="form-check-label" for="autoScrollLogs">Auto-scroll</label>
+    </div>
+  </div>
+  <div class="card-body">
+    <div class="mb-3">
+      <div class="d-flex justify-content-between align-items-center mb-1">
+        <small class="text-muted">Loss vs Epoch</small>
+        <small id="lossPlotSummary" class="text-muted">No loss data yet</small>
+      </div>
+      <canvas id="lossPlotCanvas" style="width: 100%; height: 180px; border: 1px solid var(--border); border-radius: var(--radius-sm);"></canvas>
+    </div>
+    <textarea id="trainingLogs" class="form-control font-monospace" rows="20" readonly
+              style="font-size: 15px; white-space: pre;">No training job running...
+    </textarea>
+  </div>
+</div>
+</div><!-- End Training Tab -->
+</div><!-- End Tab Content -->
+
+      </div>
+
+      
+      
+      <div
+        class="tab-pane fade p-3"
+        id="run"
+        role="tabpanel"
+        aria-labelledby="run-tab"
+      >
+        
+<div class="alert alert-info" role="alert">
+  <strong>Run on a region:</strong> run the models served on the Models tab over a box of the volume, or all of it, on this machine's GPU, and save their predictions as OME-Zarr in a folder on this machine, to open here again or copy to the cluster.
+</div>
+
+<div class="mb-3">
+  <div class="form-label fw-bold mb-1">Models</div>
+  <div id="runModels"></div>
+  <small class="form-text text-muted d-block">Each model is written to <code>&lt;folder&gt;/&lt;model&gt;.zarr</code>, through the Input and Postprocess steps it is served with.</small>
+</div>
+
+<div class="mb-3">
+  <div class="form-label fw-bold mb-1">Region</div>
+  <div class="d-flex align-items-center gap-2 flex-wrap mb-2">
+    <div class="btn-group btn-group-sm" role="group" aria-label="Where the region comes from">
+      <input type="radio" class="btn-check" name="runRegionMode" id="runRegionBox" value="box" autocomplete="off" checked>
+      <label class="btn btn-outline-secondary" for="runRegionBox"
+             title="The latest box drawn in the viewer's run_region layer, in the fields below as soon as it is drawn.">Box in the viewer</label>
+      <input type="radio" class="btn-check" name="runRegionMode" id="runRegionWhole" value="whole" autocomplete="off">
+      <label class="btn btn-outline-secondary" for="runRegionWhole"
+             title="The whole volume, in the fields below.">Whole volume</label>
+    </div>
+    <button type="button" class="btn btn-sm btn-outline-secondary" id="runDrawBoxBtn"
+            title="Adds the run_region layer to the viewer, if it is not there, for drawing a box in with Ctrl+click.">Draw a box</button>
+  </div>
+  <small class="form-text text-muted d-block mb-2">Draw a box: hold Ctrl and click two opposite corners in the viewer. Scroll between the two clicks to give the box depth; a flat box is one chunk deep. The latest box is used.</small>
+  <div class="run-region-fields">
+    <span></span><span class="run-region-axis">z</span><span class="run-region-axis">y</span><span class="run-region-axis">x</span>
+    <label class="mb-0" for="runOffsetZ">Offset (nm)</label>
+    <input type="number" class="form-control form-control-sm" id="runOffsetZ" step="any" aria-label="Offset z (nm)">
+    <input type="number" class="form-control form-control-sm" id="runOffsetY" step="any" aria-label="Offset y (nm)">
+    <input type="number" class="form-control form-control-sm" id="runOffsetX" step="any" aria-label="Offset x (nm)">
+    <label class="mb-0" for="runSizeZ">Size (nm)</label>
+    <input type="number" class="form-control form-control-sm" id="runSizeZ" step="any" min="0" aria-label="Size z (nm)">
+    <input type="number" class="form-control form-control-sm" id="runSizeY" step="any" min="0" aria-label="Size y (nm)">
+    <input type="number" class="form-control form-control-sm" id="runSizeX" step="any" min="0" aria-label="Size x (nm)">
+  </div>
+  <div class="small mt-2" id="runRegionSummary"></div>
+  <div class="small text-warning mt-1" id="runRegionWarning" role="alert" hidden></div>
+  
+  <div class="small text-warning mt-1" id="runPeakWarning" role="alert" hidden></div>
+</div>
+
+
+<div class="mb-3" id="runFolderDrop">
+  <div class="form-label fw-bold mb-1">Output folder</div>
+  <div class="d-flex align-items-center gap-2 flex-wrap">
+    <button type="button" class="btn btn-sm btn-outline-secondary" id="runChooseFolderBtn"
+            title="The folder on this machine the predictions are written to, one .zarr per model. The browser asks once to allow writing to it, and again after a reload, when you click Run.">Choose folder&hellip;</button>
+    <span class="small" id="runFolderName">No folder chosen</span>
+  </div>
+  <small class="form-text text-muted d-block" id="runFolderNote"></small>
+  
+  <div class="d-flex align-items-center gap-2 mt-2">
+    <label class="small mb-0" for="runCompression">Compression</label>
+    <select class="form-select form-select-sm w-auto" id="runCompression"
+            title="Gzip makes the zarr smaller and is read by zarr-python, Neuroglancer and napari. Pick None for a reader without gzip, such as Fiji.">
+      <option value="gzip" selected>gzip (smaller)</option>
+      <option value="none">None (Fiji reads it)</option>
+    </select>
+  </div>
+</div>
+
+<div class="d-flex align-items-center gap-2 mb-2">
+  <button type="button" class="btn btn-primary" id="runStartBtn"
+          title="Runs the ticked models over the region and writes their predictions. One run at a time; it keeps going while you browse or use the other tabs.">Run</button>
+  <button type="button" class="btn btn-outline-danger" id="runCancelBtn" disabled
+          title="Stops the run: the chunks being written finish, the rest are given up. What was written stays.">Cancel</button>
+</div>
+<div class="small mb-2" id="runStatus" role="status" aria-live="polite"></div>
+<div class="progress mb-1" id="runProgress" role="progressbar" aria-label="Run progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" hidden>
+  <div class="progress-bar" id="runProgressBar" style="width: 0%"></div>
+</div>
+<div class="small text-muted mb-2" id="runProgressText"></div>
+<div class="d-flex align-items-center gap-2 flex-wrap mb-2" id="runResults"></div>
+<textarea id="runLog" class="form-control" rows="5" readonly aria-label="Run log"></textarea>
+      </div>
+      
+
+      <!-- Review Tab Content (server-only, like its tab above) -->
+      <div
+        class="tab-pane fade p-3 server-only"
+        id="review"
+        role="tabpanel"
+        aria-labelledby="review-tab"
+      >
+        <div class="alert alert-info" role="alert">
+  <strong>Review:</strong> Query the instance-review SQLite and record
+  bless/edit verdicts. Server navigates neuroglancer to each instance.
+</div>
+
+<!-- Session setup -->
+<div class="card mb-3">
+  <div class="card-header">Session</div>
+  <div class="card-body">
+    <div class="mb-2">
+      <label class="form-label mb-1" for="reviewDbPath">review.sqlite path</label>
+      <input type="text" class="form-control form-control-sm" id="reviewDbPath"
+             placeholder="/.../review.sqlite">
+    </div>
+    <div class="mb-2">
+      <label class="form-label mb-1" for="reviewReviewer">reviewer</label>
+      <input type="text" class="form-control form-control-sm" id="reviewReviewer">
+    </div>
+    <div class="mb-2">
+      <label class="form-label mb-1" for="reviewSegLayer">segmentation layer (optional)</label>
+      <input type="text" class="form-control form-control-sm" id="reviewSegLayer"
+             placeholder="e.g. roi3_run11_instances_b050">
+    </div>
+    <button class="btn btn-sm btn-primary w-100" id="reviewOpenBtn">Open</button>
+    <div id="reviewSessionStatus" class="small text-muted mt-2"></div>
+  </div>
+</div>
+
+<!-- Queue + controls -->
+<div class="card mb-3">
+  <div class="card-header">Queue</div>
+  <div class="card-body">
+    <div class="mb-2">
+      <label class="form-label mb-1" for="reviewOrder">order</label>
+      <!-- Filled from the open index: one option per rank_<queue> column. -->
+      <select class="form-select form-select-sm" id="reviewOrder"></select>
+    </div>
+    <div class="mb-2">
+      <label class="form-label mb-1" for="reviewMinVox">min_vox</label>
+      <input type="number" class="form-control form-control-sm" id="reviewMinVox"
+             value="100" min="0">
+    </div>
+
+    <div class="d-grid gap-1 mt-3">
+      <div class="small text-muted mb-1">
+        Hover the cursor over a segment in NG and press <kbd>t</kbd> to pick
+        it. The current instance updates automatically — no Select click.
+      </div>
+      <div class="btn-group" role="group">
+        <button class="btn btn-sm btn-primary" id="reviewNextBtn">Next</button>
+      </div>
+      <div class="btn-group" role="group">
+        <button class="btn btn-sm btn-success" id="reviewBlessBtn" disabled
+                title="Correct detection; keep as-is">Bless</button>
+        <button class="btn btn-sm btn-warning" id="reviewEditBtn" disabled
+                title="Partially correct; record edit notes">Edit</button>
+        <button class="btn btn-sm btn-danger" id="reviewEraseBtn" disabled
+                title="False positive; paint with background for training">Erase</button>
+      </div>
+      <button class="btn btn-sm btn-outline-secondary" id="reviewUndoBtn" disabled
+              title="Clear the last verdict on currently-shown instance">
+        Undo
+      </button>
+      <div class="form-check form-check-inline ms-3">
+        <input class="form-check-input" type="checkbox" id="reviewAutoAdvanceChk" checked>
+        <label class="form-check-label small" for="reviewAutoAdvanceChk"
+               title="When checked, Bless/Edit/Erase advance to the next instance. When unchecked, stay at the current location.">
+          Auto-advance
+        </label>
+      </div>
+    </div>
+
+    <div class="d-flex align-items-center gap-2 mt-2">
+      <label class="form-label mb-0 small" for="reviewGotoId">Go to ID</label>
+      <input type="number" class="form-control form-control-sm" id="reviewGotoId"
+             style="max-width: 120px" placeholder="instance id" min="1">
+      <button class="btn btn-sm btn-outline-primary" id="reviewGotoBtn"
+              title="Server-pushes the centroid of the named instance into NG (bypasses cursor-state-read path)">Go</button>
+    </div>
+
+    <!-- Current instance -->
+    <div id="reviewCurrentBlock" class="border rounded p-2 small mt-3" style="display: none;">
+      <div class="mb-1"><strong>Current instance: </strong><span id="reviewCurrentId"></span></div>
+      <dl class="row mb-0 small">
+        <dt class="col-5">state</dt><dd class="col-7" id="reviewCurrentState"></dd>
+        <dt class="col-5">entry</dt><dd class="col-7" id="reviewCurrentEntryMethod"></dd>
+        <dt class="col-5">rank</dt><dd class="col-7" id="reviewCurrentRank"></dd>
+        <dt class="col-5">vox</dt><dd class="col-7" id="reviewCurrentVox"></dd>
+        <dt class="col-5">em_mean</dt><dd class="col-7" id="reviewCurrentEmMean"></dd>
+        <dt class="col-5">sphericity</dt><dd class="col-7" id="reviewCurrentSphericity"></dd>
+        <dt class="col-5">fm_score</dt><dd class="col-7" id="reviewCurrentFmScore"></dd>
+        <dt class="col-5">centroid (nm)</dt><dd class="col-7 font-monospace" id="reviewCurrentCentroid"></dd>
+        <dt class="col-5">bbox (vox)</dt><dd class="col-7 font-monospace" id="reviewCurrentBbox"></dd>
+      </dl>
+    </div>
+    <div id="reviewNoneBlock" class="text-muted mt-3" style="display: none;">
+      No more unreviewed instances matching the current filter.
+    </div>
+  </div>
+</div>
+
+<!-- Edit modal -->
+<div class="modal fade" id="reviewEditModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Record edit verdict</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <label class="form-label" for="reviewEditDetails">edit_details (JSON, optional)</label>
+        <textarea class="form-control font-monospace" id="reviewEditDetails" rows="6"
+                  placeholder='{"split_into": 2, "notes": "over-merged by fragment filter"}'></textarea>
+        <div class="small text-muted mt-1">
+          Free-form JSON stored in the ledger; any valid JSON object is accepted.
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-warning" id="reviewEditSaveBtn">Record edit</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Progress -->
+<div class="card">
+  <div class="card-header">Progress</div>
+  <div class="card-body">
+    <div id="reviewProgressSummary" class="small text-muted">
+      (open a review db to see progress)
+    </div>
+    <div class="progress mt-2" style="height: 18px;">
+      <div id="reviewProgressBarBlessed"
+           class="progress-bar bg-success" role="progressbar" style="width: 0%;">0</div>
+      <div id="reviewProgressBarEdited"
+           class="progress-bar bg-warning" role="progressbar" style="width: 0%;">0</div>
+      <div id="reviewProgressBarErased"
+           class="progress-bar bg-danger" role="progressbar" style="width: 0%;">0</div>
+    </div>
+    <div class="small mt-1">
+      <span class="text-muted">blessed / edited / erased / unreviewed:</span>
+      <span id="reviewProgressCounts" class="font-monospace"></span>
+    </div>
+  </div>
+</div>
+
+
+      </div>
+    </div>
+  </div>
+    </div>
+
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  
+  <script type="application/json" id="page-data">{"default_hf_repos": [], "default_bioimage_models": [], "resample": false, "mode": "browser"}</script>
+  
+  
+  
+
+  
+
+</body>
+
+</html>

@@ -1,0 +1,158 @@
+cellmap_flow.portable.rank
+==========================
+
+.. py:module:: cellmap_flow.portable.rank
+
+.. autoapi-nested-parse::
+
+   How well a model's prediction already matches the paint: the score the
+   Finetune tab ranks models by, to pick the one to start finetuning from.
+
+   The one implementation both modes run: the server dashboard
+   (dashboard/routes/finetune/rank_routes.py) in its process, the browser
+   (web/src/backend/routes/rank.ts) in chunkmirage's Pyodide workers through
+   portable/calls.py; numpy and the standard library only. In short:
+
+   - A model is scored on the targets its own finetune trains on, over the
+     painted voxels: an object or not on each channel of a binary model, the
+     painted pairs of an affinity model.
+   - The score is the balanced accuracy, the mean of the share of object
+     targets called object and of background targets called background. A
+     binary model's painted voxels next to one of the other class are not
+     counted (rough strokes are forgiven along their edges).
+   - It is read at the model's own cut-off: the logit, among CUTOFFS, with the
+     best Dice of its calls against the painted objects (the nearest to 0
+     among equals; 0 when only one class is painted). The score at 0 is given
+     beside it.
+   - A binary model answers with its best channel; an affinity model is scored
+     on its channels together.
+   - Where the raw under the paint is narrower than NARROW_WINDOW of the
+     model's MinMaxNormalizer's range, the model is scored again with the
+     normalizer stretched to the raw's 1st to 99th percentiles (``windowed``),
+     kept only when it scores WINDOW_MARGIN better.
+   - The row of the ranking (``score_row``) is the score kept, with what it
+     was read at in the units its controls take: the cut-off as Seed from
+     Prediction's threshold (a probability) and the raw's range read as 0 to
+     1 (the stretched window, or the normalizer's own range). Both modes
+     answer it as it is, so their tables agree.
+
+   The class-balanced BCE with label smoothing RANK_SMOOTHING, the finetune's
+   default loss, is given beside the score: about 0.69 is guessing, about 0.20
+   the paint fitted exactly.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.portable.rank.RANK_BLOCKS
+   cellmap_flow.portable.rank.RANK_SMOOTHING
+   cellmap_flow.portable.rank.CUTOFFS
+   cellmap_flow.portable.rank.NARROW_WINDOW
+   cellmap_flow.portable.rank.WINDOW_MARGIN
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.portable.rank.spread
+   cellmap_flow.portable.rank.empty_tallies
+   cellmap_flow.portable.rank.paint_edges
+   cellmap_flow.portable.rank.tally
+   cellmap_flow.portable.rank.rank_score
+   cellmap_flow.portable.rank.windowed
+   cellmap_flow.portable.rank.score_row
+
+
+Module Contents
+---------------
+
+.. py:data:: RANK_BLOCKS
+   :value: 32
+
+
+.. py:data:: RANK_SMOOTHING
+   :value: 0.1
+
+
+.. py:data:: CUTOFFS
+
+.. py:data:: NARROW_WINDOW
+   :value: 0.25
+
+
+.. py:data:: WINDOW_MARGIN
+   :value: 0.03
+
+
+.. py:function:: spread(items: Sequence, count: int) -> list
+
+   ``count`` of ``items``, spread evenly over them in their order; all of them when there are no more.
+
+
+.. py:function:: empty_tallies(channels: int) -> List[dict]
+
+   One channel's agreement with the paint per channel: the targets
+   counted, their logits binned against CUTOFFS (bin b: above b of them),
+   and the loss summed, apart for object and background targets.
+
+
+.. py:function:: paint_edges(labels: numpy.ndarray) -> numpy.ndarray
+
+   The painted voxels of ``labels`` (z, y, x; 0 unpainted, 1 background,
+   2 and up objects) that touch a painted voxel of the other class along z,
+   y or x: the strokes' edges, which a binary model's score leaves out.
+
+
+.. py:function:: tally(tallies: List[dict], target: numpy.ndarray, mask: numpy.ndarray, logits: numpy.ndarray, skip: Optional[numpy.ndarray] = None) -> None
+
+   Add one painted block to ``tallies``: ``target`` and ``mask`` (C, z, y, x)
+   as the finetune's target transform makes them, ``logits`` the model's on
+   the same voxels (NaN where it was not read), and ``skip`` (z, y, x) the
+   voxels not to count (paint_edges), or None.
+
+
+.. py:function:: rank_score(tallies: List[dict], channels: Sequence[str], affinity: bool) -> Optional[dict]
+
+   The score of ``tallies``: an affinity model's over its channels
+   together, a binary model's best channel's (by the score, then the lower
+   loss). None when nothing was counted.
+
+
+.. py:function:: windowed(norm: Sequence[dict], lo: float, hi: float) -> Optional[List[dict]]
+
+   ``norm`` (normalizer specs, ``{"name": ..., ...}``) with its
+   MinMaxNormalizer set to the raw's window [lo, hi], or None: no
+   MinMaxNormalizer, no window (lo = hi), or one not narrower than
+   NARROW_WINDOW of the normalizer's own range.
+
+
+.. py:function:: score_row(base: Optional[dict], stretched: Optional[dict], norm: Sequence[dict], raw: Optional[Sequence[float]]) -> Optional[dict]
+
+   A model's row of the ranking, as both modes answer it beside the
+   model's name, the time taken and the notes; None when ``base`` is None
+   (the paint gave the model nothing to score).
+
+   ``base`` is the model's score (``rank_score``) read through ``norm``,
+   the normalizer specs it was served with; ``stretched`` its score read
+   through ``windowed(norm, *raw)``, ``raw`` the raw's 1st and 99th
+   percentiles under the paint, or None when that was not tried (the raw
+   is not narrow) or counted nothing. The stretched score is kept when it
+   matches WINDOW_MARGIN better than ``base``. The row is the score kept,
+   with:
+
+   - ``window``: ``raw`` when the stretched score was kept, else None; and
+     then ``matches_without_window``, ``base``'s match;
+   - ``threshold``: the cut-off as a probability, as Seed from
+     Prediction's threshold takes it, to three decimals: 0.5 at the
+     model's own boundary (cut-off 0), else the probability the paint is
+     fitted best above;
+   - ``input_window``: the raw's range the model read as 0 to 1, as the
+     Input tab's MinMaxNormalizer takes it: ``window`` when kept, else
+     ``norm``'s own range; None when ``norm`` has no MinMaxNormalizer.
+
+

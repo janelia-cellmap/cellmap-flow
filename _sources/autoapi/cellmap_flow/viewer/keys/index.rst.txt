@@ -1,0 +1,59 @@
+cellmap_flow.viewer.keys
+========================
+
+.. py:module:: cellmap_flow.viewer.keys
+
+.. autoapi-nested-parse::
+
+   Keys bound in a neuroglancer viewer, and the status-bar messages they leave: each
+   feature's under a status key of its own, so that they do not overwrite one another.
+
+
+
+Attributes
+----------
+
+.. autoapisummary::
+
+   cellmap_flow.viewer.keys.logger
+
+
+Functions
+---------
+
+.. autoapisummary::
+
+   cellmap_flow.viewer.keys.bind_key
+   cellmap_flow.viewer.keys.say
+   cellmap_flow.viewer.keys.later
+   cellmap_flow.viewer.keys.say_for
+
+
+Module Contents
+---------------
+
+.. py:data:: logger
+
+.. py:function:: bind_key(viewer, action, key, handler)
+
+   Bind ``key`` ("shift+keyg") in ``viewer`` to ``action``, run by ``handler``, once per viewer.
+
+   Two requests racing both bind it, which is harmless: neuroglancer keeps a
+   set of handlers per action.
+
+
+.. py:function:: say(viewer, status_key, message)
+
+   Show ``message`` in the status bar under ``status_key`` (None clears it); never raises.
+
+
+.. py:function:: later(seconds, function, *args)
+
+   Run ``function(*args)`` in ``seconds``, on a daemon timer. Tests replace this.
+
+
+.. py:function:: say_for(viewer, status_key, message, seconds)
+
+   ``say`` ``message`` for ``seconds``.
+
+
