@@ -103,7 +103,11 @@
        web/src/ai-annotate; good-regions.ts, the regions kept with the volume
        and anchoring the head's distillation), and Label it's Undo takes back
        an accepted AI annotation in both. What only the browser's AI panel has
-       (the credentials, a typed model id) is in browser-only blocks. -->
+       (the credentials, a typed model id) is in browser-only blocks. Fit to
+       Paint (rank.js) scores the model Prediction from names on the paint,
+       as Which model to start from does, and sets its threshold and input
+       window; the line under the buttons says what it, or Use this model,
+       set, and the threshold's label marks a threshold the ranking set. -->
   <div class="patch-tools mb-3">
     <div class="patch-tools-title">Patch on screen</div>
 
@@ -119,6 +123,10 @@
                 title="Fills the unpainted voxels of the patch from the chosen model's prediction, segmented by the settings' method (thresholded at the model's decision boundary unless they say otherwise): an id per object, background 1. Your strokes are kept. Then fix it with the brush. The viewer reloads to show it.">
           Seed from Prediction
         </button>
+        <button type="button" class="btn btn-outline-secondary btn-sm" id="fitToPaintBtn"
+                title="Scores the model chosen in Prediction from on your paint, as Which model to start from (Training tab) does, and sets what fits the paint best: Seed from Prediction's threshold, and, where the raw under the paint spans few grey levels and stretching it scores clearly better, the input normalization stretched to it. No volume is made and the paint stays as it is.">
+          Fit to Paint
+        </button>
         <button type="button" class="btn btn-outline-secondary btn-sm" id="backgroundViewBtn"
                 title="Labels every unpainted voxel of the patch background (1), for a region of false positives. Your strokes are kept. The viewer reloads to show it.">
           All Background
@@ -132,6 +140,7 @@
           Split Objects
         </button>
       </div>
+      <small class="d-block mt-1" id="fitToPaintStatus" role="status" hidden></small>
       <details class="patch-tools-settings" id="seedSettings">
         <summary>Seed, split and box settings</summary>
         <div class="d-flex align-items-center gap-2 mt-2">
@@ -144,7 +153,9 @@
           <label for="seedBox">Box (voxels)</label>
           <input type="text" class="form-control form-control-sm" id="seedBox" placeholder="one patch" inputmode="numeric"
                  title="The box Seed from Prediction, All Background and Split Objects cover, centred where you look: z, y, x annotation voxels, or one number for all three. Any size: the model still reads its whole input around it. Smaller is less to check and fix (Cellpose's patch can hold hundreds of objects), and the unpainted voxels around it are left out of training. Blank: one model output patch, the size shown.">
-          <label for="seedThreshold">Threshold</label>
+          <label for="seedThreshold">Threshold
+            <span class="badge bg-info ms-1" id="seedThresholdByRanking" hidden
+                  title="Fit to Paint or Use this model set this threshold: the one that fits your paint best. Changing it takes the mark away.">set by ranking</span></label>
           <input type="number" class="form-control form-control-sm" id="seedThreshold" min="0" max="1" step="0.05"
                  placeholder="model's"
                  title="Probability above which the prediction counts as foreground, 0 to 1. Blank: the model's own decision boundary (0.5 for a probability, 0 for a signed distance). Higher keeps only confident voxels.">
@@ -528,14 +539,16 @@
    paint (web/src/backend/routes/rank.ts in the browser,
    dashboard/routes/finetune/rank_routes.py on a server). The results
    are a list, a model to a row with its scores on a line under its name, as
-   the dashboard's column is too narrow for a table of them. The card opens
-   and closes from its header (rank.js keeps it as the user left it): the
+   the dashboard's column is too narrow for a table of them; each row's
+   threshold and input window line up as two columns. The card starts
+   closed and opens and closes from its header (rank.js keeps it as the
+   user left it, and lists the models when it is open): the
    heading is inline, without the tab's underline under it, so the marker
    sits beside it; the header's border is the body's top, so a closed card
    has one line; and the card clips the header's square corners. #}
 <!-- Which Model to Start From Card -->
 <div class="card mb-3" id="rankCard" style="overflow: hidden;">
-  <details id="rankSection" open>
+  <details id="rankSection">
     <summary class="card-header border-bottom-0" style="cursor: pointer;">
       <h5 class="d-inline" style="border-bottom: 0;">Which model to start from</h5>
     </summary>
@@ -561,7 +574,7 @@
       </div>
       <small class="d-block text-muted" id="rankStatus" role="status"></small>
       <div class="mt-2" id="rankResults" hidden>
-        <small class="d-block text-muted mb-1">Match: the share of your painted voxels the model gets right, objects and background counting equally, which ranks them; then the share of painted objects it calls object, and of painted background it calls background.</small>
+        <small class="d-block text-muted mb-1">Match: the share of your painted voxels the model gets right, objects and background counting equally, which ranks them; then the share of painted objects it calls object, and of painted background it calls background. Threshold: the probability above which the model's prediction fits your paint best (0.5 is the model's own boundary), as Seed from Prediction takes it. Input: the raw's grey levels the model reads as 0 to 1, its normalizer's own, or the raw under your paint stretched when that matches clearly better. Use this model sets both, as Fit to Paint does for the model seeding the paint.</small>
         <ol class="list-unstyled mb-1" id="rankRows"></ol>
         <div class="small text-warning" id="rankLittlePaint" hidden>Little paint: scores a few points apart are effectively tied; paint a little in two or three places for a clearer ranking.</div>
       </div>

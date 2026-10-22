@@ -17,14 +17,18 @@
 // catalog's byte cache, and Show serves it at once). Where the raw under the
 // paint is narrow, a model is scored a second time through its normalizer
 // stretched to the raw's window, served for that alone (portable/rank.py
-// says when that is kept). POST /api/finetune/rank/use {name, window?}
+// says when that is kept). The answer is the ranking's row, as the Python
+// builds it (score_row: the score kept, its threshold and the raw's range
+// it read). POST /api/finetune/rank/use {name, window?}
 // makes the one picked the model to finetune, the window its score chose
 // (if any) first made the session's input normalization:
 // served with its layer (as the Models tab's Add serves it), a volume made
 // for it with the session volume's paint carried onto its grid
 // (cellmap_flow/portable/carry.py, the same way) and its good regions, and that volume the session's,
 // its paint layer in the old one's place; the old volume stays in the paint
-// store.
+// store. POST /api/finetune/rank/window {window} makes the window the
+// session's input normalization alone, with no model served and no volume
+// made: Fit to paint's, for the model already seeding the paint.
 import { TYPED } from "../../../chunkmirage/web/src/asread";
 import { inputBox } from "../../../chunkmirage/web/src/stages";
 import { volumeCornerNm } from "../../ai-annotate/fill";
@@ -36,7 +40,7 @@ import { readsOneSlice } from "../../finetune/modes";
 import type { PaintedChunk } from "../../finetune/types";
 import { targetTransformFor } from "../../finetune/target-call";
 import { CHUNK_DIR, chunkKey, createVolume, hasAffinityChannels, paintedChunkIndices, planVolume, readPaintedChunk, readVolume } from "../../finetune/volume";
-import { RANK_BLOCKS, WINDOW_MARGIN } from "../../generated/cellmap-flow";
+import { RANK_BLOCKS } from "../../generated/cellmap-flow";
 import { chooseRawLevel, geometryOf, outputShape, ratio } from "../../infer/geometry";
 import { place, type Placement, servedLevel } from "../../label-it/prediction";
 import { probability } from "../../label-it/segment";
@@ -67,8 +71,8 @@ export function rankRoutes(router: Router): void {
     });
   });
 
-  // POST /api/finetune/rank/score {name}: the model's score on the paint
-  // (rank_score's, portable/rank.py), how long it took, and a
+  // POST /api/finetune/rank/score {name}: the model's row of the ranking
+  // (score_row's, portable/rank.py), how long it took, and a
   // note when some painted chunks lie where the model's level does not
   // reach. Refused without a dataset, a volume or paint (400), and for a
   // model the catalog does not have (404).
@@ -95,19 +99,20 @@ export function rankRoutes(router: Router): void {
     }
     try {
       const base = await scorePaint(ctx, dataset, volume, indices, held.served);
-      let score = base.score, window: [number, number] | null = null;
-      // The raw stretched to its own range, when it is narrow (portable/rank.py).
+      // The raw stretched to its own range, when it is narrow, and the row
+      // from the two scores (portable/rank.py).
       const range = base.score && (await rawWindow(ctx, dataset, held.served.entry, base.read));
       const stretched = range && (await windowed(ctx, held.chain.input_norm, range));
+      let alt: RankScore | null = null;
       if (base.score && range && stretched) {
-        const alt = await servedForRanking(ctx, entry, stretched);
+        const again = await servedForRanking(ctx, entry, stretched);
         try {
-          const s = (await scorePaint(ctx, dataset, volume, indices, alt.served)).score;
-          if (s && s.matches >= base.score.matches + WINDOW_MARGIN) [score, window] = [s, range];
+          alt = (await scorePaint(ctx, dataset, volume, indices, again.served)).score;
         } finally {
-          await alt.release();
+          await again.release();
         }
       }
+      const score = base.score && (await rankRow(ctx, base.score, alt, held.chain.input_norm, range || null));
       if (!score) {
         return badRequest(hasAffinityChannels(entry)
           ? `The paint gives ${name} nothing to score: an affinity is between two painted neighbours, so paint strokes, not single voxels.`
@@ -119,11 +124,10 @@ export function rankRoutes(router: Router): void {
       ];
       const seconds = (performance.now() - started) / 1000;
       const pct = (v: number | null) => (v === null ? "–" : `${Math.round(v * 100)}%`);
-      const stretchedBy = window ? `, the raw stretched from ${window.map((v) => v.toFixed(1)).join("–")} (${pct(base.score!.matches)} as normalized)` : "";
+      const stretchedBy = score.window ? `, the raw stretched from ${score.window.map((v) => v.toFixed(1)).join("–")} (${pct(base.score!.matches)} as normalized)` : "";
       ctx.log(`Ranked ${name} on ${score.scored_voxels} painted voxels of ${volume.id}: matches ${pct(score.matches)} at cut-off ${score.cutoff} (objects found ${pct(score.objects_found)}, background right ${pct(score.background_right)}; ${pct(score.matches_at_zero)} at 0)${stretchedBy}, loss ${score.loss.toFixed(3)}, ${seconds.toFixed(1)} s`);
       return json(200, {
         success: true, name, ...score, seconds,
-        window, ...(window ? { matches_without_window: base.score!.matches } : {}),
         ...(notes.length ? { note: notes.join("; ") } : {}),
       });
     } catch (e) {
@@ -150,11 +154,7 @@ export function rankRoutes(router: Router): void {
     if (!entry) return json(404, { success: false, error: `${name} is not a model the browser can run` });
     if (from.model_id === entry.id) return badRequest(`${from.id} is ${name}'s volume already: finetune it as it is.`);
     try {
-      // The raw's window the score chose (window: [lo, hi]), made the session's
-      // normalizer: the raw is the dataset's, so every model reads it so.
-      const w = Array.isArray(body.window) && body.window.length === 2 ? body.window.map(Number) : null;
-      const norm = w && (await windowed(ctx, ctx.session.state.chain.input_norm, [w[0], w[1]]));
-      if (norm) await setChain(ctx, { ...ctx.session.state.chain, input_norm: norm });
+      const { window } = await installWindow(ctx, body.window);
       if (!ctx.infer.served().some((s) => s.entry.id === entry.id)) {
         const entries = [...ctx.session.state.models.filter((m) => m.id !== entry.id), entry];
         await serveModels(ctx, entries, ctx.session.state.chain);
@@ -175,13 +175,50 @@ export function rankRoutes(router: Router): void {
       ctx.viewer.selectLayer(layer, PAINT_TAB);
       ctx.log(`Carried ${from.id}'s paint to ${to.id} for ${name}: ${carried.painted} voxels at ${to.output_voxel_size.join("×")} nm from ${carried.source} at ${from.output_voxel_size.join("×")} nm, in ${carried.chunks} chunk${carried.chunks === 1 ? "" : "s"}${carried.conflicts ? `; ${carried.conflicts} left unpainted where object and background met in one voxel` : ""}`);
       return json(200, {
-        success: true, name, volume_id: to.id, from_volume: from.id, layer_name: layer, window: norm ? w : null,
+        success: true, name, volume_id: to.id, from_volume: from.id, layer_name: layer, window,
         painted_voxels: carried.painted, source_voxels: carried.source, conflicts: carried.conflicts, chunks: carried.chunks, good_regions: regions.length,
       });
     } catch (e) {
       return json(400, { success: false, error: `Could not make ${name} the model to finetune: ${message(e)}` });
     }
   });
+
+  // POST /api/finetune/rank/window {window}: Fit to paint's, the raw's
+  // window a score chose (the score answer's window: [lo, hi]) made the
+  // session's input normalization, as Use this model makes it, without
+  // serving a model or making a volume. Answers the window and the
+  // normalizer steps now set; refused (400) when the normalization has no
+  // MinMaxNormalizer to stretch or the window is not narrower than its
+  // range (portable/rank.py windowed), which leaves it as it was.
+  router.post("/api/finetune/rank/window", async (req, _params, ctx) => {
+    const body = objectBody(req);
+    if (!body) return badRequest("expected a JSON object");
+    try {
+      const { window, steps } = await installWindow(ctx, body.window);
+      if (!window || !steps) return badRequest("The input normalization was left as it is: it has no MinMaxNormalizer, or the window is not narrower than its range. Score the model again.");
+      ctx.log(`Stretched the input normalization to the raw's window ${window.map((v) => v.toFixed(1)).join("–")}, to fit the paint`);
+      return json(200, { success: true, window, input_norm: steps });
+    } catch (e) {
+      return json(400, { success: false, error: `Could not stretch the input normalization: ${message(e)}` });
+    }
+  });
+}
+
+/** The session's input normalization with its MinMaxNormalizer stretched to
+ * the raw's window `w` ([lo, hi], a score's) made the session's chain, its
+ * layers redrawn through it (serving.ts setChain, as PUT /api/pipeline sets
+ * it): the raw is the dataset's, so every model reads it so. Answers `w` as
+ * numbers and the normalizer steps set, or nulls when `w` is not a pair of
+ * numbers or the normalization has nothing to stretch to it (rank.windowed),
+ * which changes nothing. */
+async function installWindow(ctx: AppContext, w: unknown): Promise<{ window: [number, number] | null; steps: Step[] | null }> {
+  const pair = Array.isArray(w) && w.length === 2 ? w.map(Number) : null;
+  if (!pair || !pair.every(Number.isFinite)) return { window: null, steps: null };
+  const window: [number, number] = [pair[0], pair[1]];
+  const steps = await windowed(ctx, ctx.session.state.chain.input_norm, window);
+  if (!steps) return { window: null, steps: null };
+  await setChain(ctx, { ...ctx.session.state.chain, input_norm: steps });
+  return { window, steps };
 }
 
 /** `served`'s score on the paint of `volume`'s chunks `indices`, with how
@@ -318,6 +355,24 @@ interface RankScore {
   object_voxels: number;
   background_voxels: number;
   channel: string | null;
+}
+
+/** A model's row of the ranking, as score_row answers it (portable/rank.py): the
+ * score kept (the stretched one when it matched WINDOW_MARGIN better), the raw's
+ * window when that was kept and the match without it, the cut-off as Seed from
+ * Prediction's threshold (a probability), and the raw's range the model read as 0
+ * to 1 (null without a MinMaxNormalizer). */
+interface RankRow extends RankScore {
+  window: [number, number] | null;
+  matches_without_window?: number;
+  threshold: number;
+  input_window: [number, number] | null;
+}
+
+/** The ranking's row from `base`, the score read through `norm`, and `stretched`,
+ * the score read through `norm` stretched to `raw` (or null): rank.score_row. */
+function rankRow(ctx: AppContext, base: RankScore, stretched: RankScore | null, norm: readonly Step[], raw: readonly [number, number] | null): Promise<RankRow | null> {
+  return ctx.infer.python<RankRow | null>(`${PORTABLE}:rank_row`, { base, stretched, norm, raw });
 }
 
 /** A typed array's own bytes, copied: a call's arrays are handed to the worker. */

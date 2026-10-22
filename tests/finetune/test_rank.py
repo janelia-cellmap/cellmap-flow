@@ -4,10 +4,12 @@ web/test/unit/finetune-rank.test.ts tests it there: the score is balanced
 between object and background paint, read at the model's own cut-off and
 forgiving a binary model the strokes' edges; a model running is read
 through its server and any other started for its score alone; the raw is
-stretched when that scores clearly better; the paint is carried onto
-another model's grid.
+stretched when that scores clearly better; each row gives its threshold
+and input window; Fit to Paint sets them for the model seeding the paint
+without a new volume; the paint is carried onto another model's grid.
 """
 
+import math
 from types import SimpleNamespace
 
 import numpy as np
@@ -19,6 +21,7 @@ from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.finetune import rank
 from cellmap_flow.finetune.session.volume import carry_paint
 from cellmap_flow.pipeline_spec import PipelineSpec
+from cellmap_flow.portable.rank import score_row
 from cellmap_flow.serving.probe import UNBOUNDED
 
 
@@ -52,6 +55,20 @@ def test_only_a_narrow_raw_stretches_the_normalizer():
     assert rank.windowed(norm, 100, 140) == [dict(norm[0], min_value=100.0, max_value=140.0), norm[1]]
     assert rank.windowed(norm, 0, 200) is None
     assert rank.windowed(norm[1:], 100, 140) is None
+
+
+def test_the_row_keeps_a_clearly_better_stretch_and_gives_the_threshold_and_input_window():
+    norm = [{"name": "MinMaxNormalizer", "min_value": 0, "max_value": 255}]
+    base = {"matches": 0.6, "cutoff": 0.0}
+    # Two points better is not enough: the model's own range, at its own boundary.
+    close = score_row(base, {"matches": 0.62, "cutoff": 1.0}, norm, (100, 120))
+    assert (close["matches"], close["window"], close["threshold"], close["input_window"]) == (0.6, None, 0.5, [0.0, 255.0])
+    # Four are: the stretched raw's range, at the stretched score's cut-off as a probability.
+    clear = score_row(base, {"matches": 0.64, "cutoff": 1.0}, norm, (100, 120))
+    assert (clear["matches"], clear["matches_without_window"], clear["window"]) == (0.64, 0.6, [100.0, 120.0])
+    assert (clear["threshold"], clear["input_window"]) == (round(1 / (1 + math.exp(-1)), 3), [100.0, 120.0])
+    assert score_row(base, None, [], None)["input_window"] is None
+    assert score_row(None, None, norm, None) is None
 
 
 def _volume(path, voxel, shape, chunks):
@@ -157,7 +174,35 @@ def test_a_narrow_raw_is_stretched_when_that_scores_clearly_better(dashboard, pa
 
     assert body["success"], body
     assert (body["matches"], body["matches_without_window"], body["window"]) == (1, 0.5, [100.0, 120.0])
+    assert (body["threshold"], body["input_window"]) == (0.5, [100.0, 120.0])
     assert painted.reads[-1][1][0] == {"name": "MinMaxNormalizer", "min_value": 100.0, "max_value": 120.0}
+
+
+def test_fit_to_paint_sets_the_threshold_and_window_of_the_model_seeding_without_a_new_volume(dashboard, painted, monkeypatch):
+    session = get_session()
+    session.models_config = [SimpleNamespace(name="model")]
+    session.jobs = [SimpleNamespace(model_name="model", host="http://gpu:8000")]
+    session.set_pipeline(PipelineSpec([{"name": "MinMaxNormalizer", "min_value": 0, "max_value": 255}], ()))
+    monkeypatch.setattr(rank_routes, "_raw_window", lambda volume, boxes: (100.0, 120.0))
+    # The chain set, without a raw to redraw the viewer from.
+    monkeypatch.setattr("cellmap_flow.dashboard.routes.pipeline._set_chain_and_redraw", lambda spec, url: session.set_pipeline(spec))
+    # As normalized it sees nothing; with the raw stretched, the objects at -1
+    # over the rest at -4, so a cut-off under the model's own fits them.
+    painted.stretched = np.where(painted.logits > 0, -1.0, -4.0).astype("f4")
+    painted.logits = np.full_like(painted.logits, -4.0)
+    volumes = dict(session.annotation_volumes)
+
+    scored = dashboard.post("/api/finetune/rank/score", json={"name": "model"}).get_json()
+    fitted = dashboard.post("/api/finetune/rank/window", json={"window": scored["window"]}).get_json()
+
+    assert scored["success"] and fitted["success"], (scored, fitted)
+    assert scored["cutoff"] < 0 and scored["threshold"] == round(1 / (1 + math.exp(-scored["cutoff"])), 3)
+    assert fitted["window"] == scored["window"] == scored["input_window"] == [100.0, 120.0]
+    assert session.pipeline_spec.input_norm[0] == {"name": "MinMaxNormalizer", "min_value": 100.0, "max_value": 120.0}
+    assert session.annotation_volumes == volumes and rank_routes.session_store().session_volume()[0] == "vol-1"
+    # Stretched already: the window is no narrower than the range, and nothing changes.
+    assert not dashboard.post("/api/finetune/rank/window", json={"window": [100, 120]}).get_json()["success"]
+    assert session.pipeline_spec.input_norm[0]["min_value"] == 100.0
 
 
 def test_the_running_models_start_ticked_and_the_others_say_how_to_build_them(dashboard, painted, monkeypatch):
