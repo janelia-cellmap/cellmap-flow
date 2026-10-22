@@ -1,6 +1,6 @@
 name: CellMap Flow
 description: Real-time neural network inference on EM microscopy data.
-version: "0.2.3"
+version: "0.3.0"
 
 requirements:
   # pixi.lock is lockfile version 7, which pixi reads from 0.68.0 on.

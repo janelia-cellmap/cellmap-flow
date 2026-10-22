@@ -86,8 +86,11 @@ finetune = [
     "tensorboard",           # Training curves; lora_trainer silently skips logging without it
     # MinIO server and client are required for annotations but not available on PyPI.
     # Install via conda-forge: mamba install minio-server minio-client -c conda-forge
-    # Neuroglancer with voxel annotation support is required but not yet on PyPI.
-    # Install via: pip install git+https://github.com/briossant/neuroglancer@feature/voxel-annotation
+    # Painting needs the neuroglancer fork with the voxel-annotation tools
+    # (google/neuroglancer#858, not on PyPI; a URL here would make this
+    # package unpublishable). pixi installs it; with pip, install the commit
+    # pixi.toml pins: pip install
+    # git+https://github.com/briossant/neuroglancer@fae54db8c667176a602a34f0d9d1028956009836
 ]
 
 # AI-assisted annotation in the finetune tab (docs/ai_annotate.md): the
