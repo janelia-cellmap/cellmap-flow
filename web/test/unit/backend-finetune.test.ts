@@ -18,6 +18,12 @@ import { entryFor, parseManifest } from "../../src/models/manifest";
 import { DATASET, entry, type FakeContext, fakeContext, NAME_54, NAME_56, request } from "./backend-fakes";
 import { rawManifest } from "./models-helpers";
 import { readMetadata } from "./onnx-metadata";
+import { portablePython } from "./pyodide";
+
+// A volume's plan and a region's rules are the portable Python's, here in
+// node's Pyodide (pyodide.ts), loaded once for the file before the tests;
+// without it (no network for numpy's wheel) they skip.
+const python = await portablePython();
 
 function body(res: ApiResponse): any {
   if (!("json" in res)) throw new Error(`not a JSON answer: ${JSON.stringify(res)}`);
@@ -111,7 +117,7 @@ function fakeRun(baton?: Baton): { run: RunFinetune; calls: FinetuneRun[]; resul
 function harness(ctx: FakeContext, deps: Partial<FinetuneDeps> = {}) {
   const router = new Router();
   let volumes = 0, second = 0;
-  const plan: FinetuneDeps["plan"] = (dataset, e, chain, options = {}) => planVolume(dataset, e, chain, { ...options, id: `vol-${String(++volumes).padStart(8, "0")}-20261015-120000` });
+  const plan: FinetuneDeps["plan"] = (infer, dataset, e, chain, options = {}) => planVolume(infer, dataset, e, chain, { ...options, id: `vol-${String(++volumes).padStart(8, "0")}-20261015-120000` });
   const jobs = finetuneRoutes(router, { plan, now: () => new Date(2026, 9, 15, 12, 0, second++), ...deps });
   return { handle: (req: ApiRequest) => router.handle(req, ctx), jobs };
 }
@@ -191,7 +197,7 @@ const GRAPH_3D = parseTrainGraph({
   ],
 });
 
-describe("GET /api/finetune/models", () => {
+describe.skipIf(!python)("GET /api/finetune/models", () => {
   it("offers a 3D model's whole network in its files' block sides with what a step costs, one block a step, and trains the file of the block", async () => {
     // setup_53 served from its 124³ fp32 file, its manifest's full block as on the Hub since 2026-10-17.
     const file = "setup_53_mito_affinities_16nm_in124_fp32.onnx";
@@ -236,7 +242,7 @@ describe("GET /api/finetune/models", () => {
   });
 });
 
-describe("the existing volumes", () => {
+describe.skipIf(!python)("the existing volumes", () => {
   it("resumes a volume as the session's, in place, with its painted chunks counted and its record as metadata", async () => {
     const { ctx, h, id } = await ready();
     await ctx.session.update({ paintVolume: null });
@@ -266,7 +272,7 @@ describe("the existing volumes", () => {
   });
 });
 
-describe("POST /api/finetune/submit", () => {
+describe.skipIf(!python)("POST /api/finetune/submit", () => {
   it("refuses, with needs_volume, when the session has no annotation volume, and without it when nothing is painted", async () => {
     const ctx = fakeContext();
     await serve(ctx, entry("setup_54"));
@@ -281,7 +287,7 @@ describe("POST /api/finetune/submit", () => {
   });
 });
 
-describe("a job's life", () => {
+describe.skipIf(!python)("a job's life", () => {
   it("runs the model on the volume with the form's options, and reports as job-card.js reads it once served", async () => {
     const { ctx, h, id, calls } = await ready();
     const base = ctx.infer.served().find((s) => s.entry.name === NAME_54)!.entry;
@@ -359,7 +365,7 @@ describe("a job's life", () => {
   });
 });
 
-describe("GET /api/finetune/job/:id/logs/stream", () => {
+describe.skipIf(!python)("GET /api/finetune/job/:id/logs/stream", () => {
   it("sends the log so far with byte-offset ids, then each line as it is logged, and done when the job ends", async () => {
     const baton = new Baton();
     const { h, id } = await ready({ baton });
@@ -390,7 +396,7 @@ describe("GET /api/finetune/job/:id/logs/stream", () => {
   });
 });
 
-describe("cancel, stop early, restart", () => {
+describe.skipIf(!python)("cancel, stop early, restart", () => {
   it("cancels a running job at once; the run stops at its next step and nothing of it is kept", async () => {
     const baton = new Baton();
     const { ctx, h, results } = await ready({ baton });
@@ -465,7 +471,7 @@ describe("cancel, stop early, restart", () => {
   });
 });
 
-describe("Shift+R over the viewer", () => {
+describe.skipIf(!python)("Shift+R over the viewer", () => {
   it("is bound once the tab asks for the jobs, and tells the page, whose job-monitor.js restarts the job; the job itself is left to it", async () => {
     const page = new EventTarget();
     const heard: string[] = [];
@@ -487,7 +493,7 @@ describe("Shift+R over the viewer", () => {
   });
 });
 
-describe("downloads and deletion", () => {
+describe.skipIf(!python)("downloads and deletion", () => {
   it("downloads the volume as a zip of its zarr, every file under <id>.zarr/", async () => {
     const { h, id } = await ready();
     const res = await h.handle(request("GET", `/api/finetune/volume/${id}/download`));
@@ -537,7 +543,7 @@ describe("downloads and deletion", () => {
   });
 });
 
-describe("in the backend", () => {
+describe.skipIf(!python)("in the backend", () => {
   it("answers the finetune routes", async () => {
     const ctx = fakeContext();
     await serve(ctx, entry("setup_54"));

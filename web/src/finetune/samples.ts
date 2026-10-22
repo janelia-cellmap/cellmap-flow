@@ -27,6 +27,7 @@
 // session's own input_norm_config: the paint was drawn over the prediction
 // that chain produced.
 import { inputBox, padded, type StageAt } from "../../chunkmirage/web/src/stages";
+import type { Inference } from "../contracts";
 import { chooseRawLevel, geometryOf, halo as haloOf, inputShape, outputLevel, outputShape, ratio } from "../infer/geometry";
 import { modelInput } from "../infer/stages";
 import type { FinetuneRun, PaintedChunk, Sample } from "./types";
@@ -43,7 +44,7 @@ import { paintedChunkIndices, readPaintedChunk } from "./volume";
  * painted among them is a sample all the same, its labels all 0: a good
  * region's block anchors the model whether or not anything in it was
  * painted (run.ts). */
-export async function* collectSamples(run: Pick<FinetuneRun, "volume" | "entry" | "chain" | "dataset" | "paint"> & { infer: Pick<FinetuneRun["infer"], "readRaw"> }, indices?: number[][]): AsyncGenerator<Sample> {
+export async function* collectSamples(run: Pick<FinetuneRun, "volume" | "entry" | "chain" | "dataset" | "paint"> & { infer: Pick<Inference, "readRaw"> }, indices?: number[][]): AsyncGenerator<Sample> {
   const { volume, dataset, entry } = run;
   // The grid the model is served on, as engine.ts's serve() finds it: the
   // raw level the model reads, and the output level over it.

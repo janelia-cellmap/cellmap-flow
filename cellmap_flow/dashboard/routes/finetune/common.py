@@ -12,6 +12,9 @@ from cellmap_flow.finetune.options import OUTPUT_CLASSES, TrainingOptions
 from cellmap_flow.finetune.session.minio import MINIO_PROXY_URL_ENV, proxied_url
 from cellmap_flow.finetune.session.store import SessionStore
 from cellmap_flow.models.geometry import channel_names_of
+# INSTANCE_TARGETS: the targets trained on instances, whose annotation
+# volumes hold an id per object; imported from here by the routes.
+from cellmap_flow.portable.volume import INSTANCE_TARGETS, annotation_dtype  # noqa: F401
 from cellmap_flow.serving.client import fetch_model_info, running_job_host
 from cellmap_flow.portable.label_it import affinity_offsets
 
@@ -192,25 +195,18 @@ def declared_output_type(model_config):
     return None
 
 
-# The targets trained on instances, whose annotation volumes hold an id per
-# object rather than foreground and background alone.
-INSTANCE_TARGETS = ("affinities", "flows")
-
-
 def annotation_dtype_for(model_config):
-    """The labels' dtype of a new annotation volume for ``model_config``.
-
-    uint8 (ids up to 255) for a model trained on foreground and background;
-    uint16 (up to 65535) for one trained on instances (affinities, Cellpose's
-    flows), whose seeds number each object: 282 of a Cellpose model's masks
-    in one box did not fit a uint8 volume.
-    """
+    """The labels' dtype of a new annotation volume for ``model_config``:
+    ``cellmap_flow.portable.volume.annotation_dtype`` (the browser's rule too)
+    of what it trains on (``autodetect_output_type``), uint16 for the
+    instance targets in INSTANCE_TARGETS, else uint8; uint8 when that cannot
+    be told."""
     try:
         output_type, _ = autodetect_output_type(model_config, None, None)
     except Exception as e:
         logger.info(f"Could not tell what {getattr(model_config, 'name', 'the model')} trains on ({e}): uint8 labels")
         return "uint8"
-    return "uint16" if output_type in INSTANCE_TARGETS else "uint8"
+    return annotation_dtype(output_type)
 
 
 def autodetect_output_type(model_config, output_type, offsets):

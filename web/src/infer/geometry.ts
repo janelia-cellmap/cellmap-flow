@@ -153,7 +153,10 @@ export function chooseRawLevel(levels: Level[], voxel: number[]): number {
  * at the raw level's corner (chunkmirage_server.py: "output voxel 0 starts
  * at the corner of the level the model reads"), so the served origin is that
  * corner plus half an output voxel. With equal voxel sizes it is the raw
- * origin. */
+ * origin. An annotation volume lies on this grid: the portable Python
+ * plans it (cellmap_flow/portable/volume.py plan_volume) with the same
+ * arithmetic in the same order, so its voxel size and origin are these to
+ * the last bit and a chunk of paint is a block of this level. */
 export function outputLevel(raw: Level, g: BlockGeometry): Level {
   const voxel = raw.voxel.map((v, a) => v * ratio(g)[a]);
   return {
@@ -201,6 +204,11 @@ export function datasetInfoFrom(url: string, src: SourceInfo): DatasetInfo {
     })),
   };
 }
+
+/** Rounded to a millionth of a voxel before a floor or a ceiling: the float
+ * noise of nm → voxels (100.5 × 8 / 8 come back as 100.49999999999999) must
+ * not move a box by a voxel. */
+export const steady = (x: number) => Math.round(x * 1e6) / 1e6;
 
 function wholeVoxels(value: number, what: string): number {
   const n = Math.round(value);
