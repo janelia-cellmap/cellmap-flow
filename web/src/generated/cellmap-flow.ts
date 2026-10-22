@@ -351,11 +351,18 @@ export interface CreateModelConfig {
   };
 }
 /**
- * A new, empty annotation volume for ``model_name``, in a new session
- * under ``output_path`` (by default ~/.cellmap_flow/corrections).
+ * A new, empty annotation volume, in a new session under
+ * ``output_path`` (by default ~/.cellmap_flow/corrections): for
+ * ``model_name``, on the grid its prediction is served on; or, with no
+ * model named, a volume painted before any model (a "paint-first" one), on
+ * the raw's grid at ``voxel_size`` (nm, z, y, x, or one number for all
+ * three; none: the raw level the viewer shows), which Which model to start
+ * from's Use this model carries onto a model's grid. A voxel size with a
+ * model is refused: a model's volume lies on the model's grid.
  */
 export interface CreateVolume {
-  model_name?: string;
+  model_name?: string | null;
+  voxel_size?: unknown[] | null;
   output_path?: unknown;
 }
 /**

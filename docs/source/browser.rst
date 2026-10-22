@@ -142,6 +142,16 @@ before is deleted from the browser: a job keeps its latest model only, as the
 server serves only a job's latest iteration, and a new *Start Finetuning*
 makes a new one beside it.
 
+You can also paint before any model is running. *New Volume* then shows a
+*Voxel size (nm)* field that offers the dataset's levels and takes any size
+you type (one number, or z, y, x); left blank, it uses the level the viewer
+shows when you click. The volume lies on the raw's grid at that size, in
+64-voxel chunks, with no model recorded, as on the server. *Start
+Finetuning* refuses it, because it is on no model's grid. Rank the models on
+the paint under *Which model to start from* (below) and click *Use this
+model*: that copies the paint onto the chosen model's grid, and you train on
+the new volume.
+
 The training panel's controls are the server's where they mean something for
 one layer: the epochs, the learning rate, the loss (BCE by default, MSE or
 margin; Dice scores whole patches and needs the server), label smoothing,

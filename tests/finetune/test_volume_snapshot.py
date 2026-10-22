@@ -158,3 +158,83 @@ def test_a_session_resumes_only_over_the_dataset_it_was_painted_on(world):
                    source_session_path=str(Path(created["zarr_path"]).parents[1]))
     assert refused.status_code == 409 and "raw.zarr/em" in refused.get_json()["error"]
     assert not (world.tmp / "b").exists()
+
+
+def test_a_volume_painted_before_any_model_is_ranked_and_carried_but_not_trained(world, monkeypatch):
+    """No model loaded: New Volume offers the raw's levels and plans on the
+    raw's grid at the one asked for, a volume for no model and without a
+    training manifest. A training job on it is refused (paint_first); the
+    rank lists it, the running model ticked and none its model, scores the
+    model on its paint, and Use this model carries the paint onto the
+    model's 16 nm grid."""
+    from cellmap_flow.dashboard.routes.finetune import rank_routes, view_labels
+    from cellmap_flow.dashboard.state import get_session
+
+    session = get_session()
+    monkeypatch.setattr(session, "models_config", [])
+    post = lambda url, **body: world.client.post(url, json=body)  # noqa: E731
+    assert world.client.get("/api/finetune/models").get_json()["raw_voxel_sizes"] == [[8.0] * 3, [16.0] * 3]
+
+    created = post("/api/finetune/create-volume", voxel_size=[8, 8, 8], output_path=str(world.tmp / "a")).get_json()
+    assert created["success"], created
+    # s0's grid: 42 voxels from its corner (-4 nm), voxel 0 centred at 0, in one 42^3 chunk.
+    assert created["metadata"]["output_voxel_size"] == [8.0] * 3 and created["metadata"]["dataset_offset_nm"] == [0.0] * 3
+    assert created["metadata"]["dataset_shape_voxels"] == [42] * 3
+    volume_id, zarr_path = created["volume_id"], Path(created["zarr_path"])
+    assert session.annotation_volumes[volume_id]["model_name"] is None
+    assert zarr.open_group(str(zarr_path), mode="r").attrs["model_name"] is None
+    assert not (zarr_path.parent / "_virtual_sources.json").exists()
+    labels = zarr.open_array(str(zarr_path / "annotation" / "s0"), mode="r+")
+    labels[4:12, 4:12, 4:12] = 2
+    labels[20:28, 20:28, 20:28] = 1
+
+    # A model now running: training it on this volume is refused, the error saying where to go.
+    monkeypatch.setattr(session, "models_config", [SimpleNamespace(name="m")])
+    monkeypatch.setattr(session, "jobs", [SimpleNamespace(model_name="m", host="http://gpu:8000")])
+    refused = post("/api/finetune/submit", model_name="m", corrections_path=str(zarr_path.parent))
+    assert refused.status_code == 400 and refused.get_json()["paint_first"] is True
+
+    monkeypatch.setattr("cellmap_flow.models.hf_catalog.list_huggingface_models", lambda: {})
+    monkeypatch.setattr(rank_routes, "fetch_model_info", lambda host: {"channels": ["nuc"], "output_voxel_size": [16] * 3})
+    listed = world.client.get("/api/finetune/rank/candidates").get_json()
+    assert listed["volume"] == {"id": volume_id, "model_name": None, "painted_chunks": 1}
+    assert {c["name"] for c in listed["candidates"] if c["ticked"]} == {"m"}
+    assert not any(c["volume_model"] for c in listed["candidates"])
+
+    # The model's logits on the volume's grid: +4 over the object painted, -4 elsewhere.
+    def read_prediction(host, name, volume, lo, hi, info, postprocess=(), input_norm=None):
+        logits = np.full((1, 42, 42, 42), -4.0, "f4")
+        logits[:, 4:12, 4:12, 4:12] = 4.0
+        return logits[(slice(None),) + tuple(slice(a, b) for a, b in zip(lo, hi))], lo, hi
+
+    monkeypatch.setattr(view_labels, "read_prediction", read_prediction)
+    monkeypatch.setattr(rank_routes, "sync_annotation_volume_from_minio", lambda volume_id: None)
+    monkeypatch.setattr(rank_routes, "autodetect_output_type", lambda config, output_type, offsets: ("binary", None))
+    monkeypatch.setattr(rank_routes, "_raw_window", lambda volume, boxes: None)
+    scored = post("/api/finetune/rank/score", name="m").get_json()
+    assert scored["success"] and scored["matches"] == 1, scored
+
+    used = post("/api/finetune/rank/use", name="m").get_json()
+    assert used["success"], used
+    # 8^3 painted 8 nm voxels of each label, 4^3 of the model's 16 nm voxels each.
+    assert (used["from_volume"], used["source_voxels"], used["painted_voxels"]) == (volume_id, 2 * 8 ** 3, 2 * 4 ** 3)
+    carried = session.annotation_volumes[used["volume_id"]]
+    assert (carried["model_name"], carried["output_voxel_size"]) == ("m", [16.0] * 3)
+    assert (Path(carried["zarr_path"]).parent / "_virtual_sources.json").exists(), "the model's volume is trained on"
+
+
+@pytest.mark.parametrize("zoom, voxel", [(None, 8.0), (2.5, 16.0)], ids=["no zoom: the finest", "zoomed out: s1"])
+def test_new_volume_without_a_model_or_a_size_is_at_the_level_the_viewer_shows(world, monkeypatch, zoom, voxel):
+    from cellmap_flow.dashboard.state import get_session
+
+    session = get_session()
+    monkeypatch.setattr(session, "models_config", [])
+    if zoom is not None:
+        # 2.5 of the viewer's 8 nm voxels a screen pixel: 20 nm, where Neuroglancer draws s1.
+        with session.viewer.txn() as s:
+            s.dimensions = neuroglancer.CoordinateSpace(names=["z", "y", "x"], units="nm", scales=[8, 8, 8])
+            s.position = [21, 21, 21]
+            s.cross_section_scale = zoom
+    created = world.client.post("/api/finetune/create-volume", json={"output_path": str(world.tmp / "a")}).get_json()
+    assert created["success"], created
+    assert created["metadata"]["output_voxel_size"] == [voxel] * 3

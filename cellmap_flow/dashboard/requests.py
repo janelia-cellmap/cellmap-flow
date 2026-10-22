@@ -318,11 +318,27 @@ class FinetuneRestart(_FinetuneBody):
 
 
 class CreateVolume(BaseModel):
-    """A new, empty annotation volume for ``model_name``, in a new session
-    under ``output_path`` (by default ~/.cellmap_flow/corrections)."""
+    """A new, empty annotation volume, in a new session under
+    ``output_path`` (by default ~/.cellmap_flow/corrections): for
+    ``model_name``, on the grid its prediction is served on; or, with no
+    model named, a volume painted before any model (a "paint-first" one), on
+    the raw's grid at ``voxel_size`` (nm, z, y, x, or one number for all
+    three; none: the raw level the viewer shows), which Which model to start
+    from's Use this model carries onto a model's grid. A voxel size with a
+    model is refused: a model's volume lies on the model's grid."""
 
-    model_name: Annotated[str, _required("model_name")] = Field(None, validate_default=True)
+    model_name: Annotated[Optional[str], BeforeValidator(
+        lambda v: None if v is None or (isinstance(v, str) and not v.strip()) else v)] = None
+    voxel_size: Annotated[Optional[list], BeforeValidator(_voxel_size)] = None
     output_path: Any = None
+
+    @model_validator(mode="after")
+    def _a_voxel_size_only_without_a_model(self):
+        if self.model_name is not None and self.voxel_size is not None:
+            raise ValueError(
+                f"voxel_size is for a volume made without a model; {self.model_name}'s volume lies on its own grid"
+            )
+        return self
 
 
 class LoadCrops(BaseModel):

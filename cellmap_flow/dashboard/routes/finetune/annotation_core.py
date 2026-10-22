@@ -2,8 +2,17 @@
 
 Routes: GET ``/api/finetune/models``, POST ``/api/finetune/create-volume``,
 and GET and POST ``/api/finetune/user-prefs``.
+
+A volume is made for a model, on the grid its prediction is served on, or
+before any model (a "paint-first" volume, ``make_paint_volume``) on the
+raw's grid at a voxel size of the user's, the raw level the viewer shows by
+default: the models answer lists the raw's levels for New Volume to offer.
+A paint-first volume is not trained on (``paint_first_refusal``, which
+training's submit asks): Which model to start from's Use this model carries
+its paint onto a model's grid (rank_routes).
 """
 
+import functools
 import logging
 import os
 import time
@@ -26,8 +35,15 @@ from cellmap_flow.dashboard.routes.finetune.common import (
 )
 from cellmap_flow.dashboard.routes.finetune.overlay import refresh_annotated_regions_layer
 from cellmap_flow.dashboard.state import get_session
-from cellmap_flow.finetune.session.volume import create_volume_zarr, new_volume_id, plan_volume
+from cellmap_flow.finetune.session.volume import (
+    create_volume_zarr,
+    new_volume_id,
+    plan_paint_volume,
+    plan_volume,
+    raw_voxel_sizes,
+)
 from cellmap_flow.models.geometry_cache import build_here, resolve_model_geometry
+from cellmap_flow.portable import volume as portable_volume
 from cellmap_flow.serving.client import (
     fetch_model_info,
     model_geometry,
@@ -71,8 +87,29 @@ def make_volume(model_name, model_config, config, corrections_dir):
     model (rank_routes)."""
     session = get_session()
     geometry = plan_volume(session.dataset_path, config, resample=session.resample)
+    return _made(geometry, model_name, annotation_dtype_for(model_config), corrections_dir)
+
+
+def make_paint_volume(voxel_size, corrections_dir):
+    """A new volume painted before any model (no ``model_name``), over the
+    session's dataset in ``corrections_dir``, on the raw's grid at
+    ``voxel_size`` (nm, z, y, x; None: the level the viewer shows,
+    ``shown_voxel_size``): written, served and registered as the session's,
+    as make_volume's, and returned as it returns one. It gets no training
+    manifest, as it is not trained on (``paint_first_refusal``)."""
+    session = get_session()
+    size = list(voxel_size) if voxel_size is not None else shown_voxel_size()
+    geometry = plan_paint_volume(session.dataset_path, size, resample=session.resample)
+    return _made(geometry, None, portable_volume.annotation_dtype(None), corrections_dir)
+
+
+def _made(geometry, model_name, annotation_dtype, corrections_dir):
+    """make_volume's and make_paint_volume's volume of ``geometry``, for
+    ``model_name`` (None: for no model), written, served and registered as
+    the session's; a model's also in the session's training manifest."""
+    session = get_session()
     volume_id, zarr_path, minio_url = serve_new_volume(
-        geometry, corrections_dir, session.dataset_path, model_name, annotation_dtype_for(model_config)
+        geometry, corrections_dir, session.dataset_path, model_name, annotation_dtype
     )
     session_store().register_volume(
         volume_id,
@@ -83,10 +120,60 @@ def make_volume(model_name, model_config, config, corrections_dir):
             corrections_dir=corrections_dir,
         ),
     )
-    # The trainer finds the volume only through this manifest.
-    write_volume_manifest(session.annotation_volumes[volume_id])
+    if model_name is not None:
+        # The trainer finds the volume only through this manifest.
+        write_volume_manifest(session.annotation_volumes[volume_id])
     refresh_annotated_regions_layer()
     return volume_id, zarr_path, minio_url, geometry
+
+
+@functools.lru_cache(maxsize=8)
+def _cached_raw_voxel_sizes(dataset_path):
+    """raw_voxel_sizes of ``dataset_path``, read once (a failure is not kept, so it is asked again)."""
+    return tuple(tuple(size) for size in raw_voxel_sizes(dataset_path))
+
+
+def session_raw_voxel_sizes():
+    """The voxel sizes (nm, z, y, x) of the session's raw levels, finest
+    first (session/volume.py raw_voxel_sizes), kept per dataset: the models
+    answer carries them, every two seconds while the tab waits for a model.
+    Empty without a dataset, or when its levels cannot be read (logged)."""
+    path = get_session().dataset_path
+    if not path:
+        return []
+    try:
+        return [list(size) for size in _cached_raw_voxel_sizes(path)]
+    except Exception as e:
+        logger.warning(f"Could not list the levels of {path}: {e}")
+        return []
+
+
+def shown_voxel_size():
+    """The voxel size of the raw level the viewer shows now
+    (portable/volume.py shown_level at the viewer's zoom, viewer/raw.py
+    view_of), the finest without a viewer or a zoom: a paint-first volume's
+    when New Volume is given none. A ValueError when the raw's levels
+    cannot be read."""
+    from cellmap_flow.viewer.raw import view_of
+
+    sizes = session_raw_voxel_sizes()
+    viewer = get_session().viewer
+    view = view_of(viewer.state) if viewer is not None else None
+    return list(sizes[portable_volume.shown_level(sizes, view.pixel_nm if view else None)])
+
+
+def paint_first_refusal(corrections_dir):
+    """Training's submit refused for a session whose volume
+    (session_store's session_volume of ``corrections_dir``) was painted
+    before any model: ``(response, 400)``, whose error is portable/volume.py
+    training_refusal's sentence (the browser's submit says the same) and
+    whose ``paint_first`` the tab can key on. None when the volume can be
+    trained on, or there is none (submit says so itself)."""
+    _, volume = session_store().session_volume(str(corrections_dir))
+    refusal = volume and portable_volume.training_refusal(volume)
+    if not refusal:
+        return None
+    return jsonify({"success": False, "error": refusal, "paint_first": True}), 400
 
 
 def _get_selected_model_config(model_name):
@@ -216,7 +303,9 @@ def get_finetune_models():
                            "finetune_modes": _finetune_modes(configs_by_name.get(name))})
 
         selected = models[0]["name"] if len(models) == 1 else None
-        return jsonify({"models": models, "selected_model": selected})
+        # The raw's levels, which New Volume offers as the voxel size of a
+        # volume painted before any model.
+        return jsonify({"models": models, "selected_model": selected, "raw_voxel_sizes": session_raw_voxel_sizes()})
     except Exception as e:
         logger.error(f"Error getting finetune models: {e}")
         return jsonify({"error": str(e)}), 500
@@ -227,6 +316,8 @@ def create_annotation_volume():
     body, refused = parse(CreateVolume, request.get_json() or {})
     if refused:
         return refused
+    if body.model_name is None:
+        return _create_paint_volume(body)
     try:
         model_name = body.model_name
         output_path = body.output_path
@@ -247,26 +338,49 @@ def create_annotation_volume():
             return jsonify({"success": False, "error": "No dataset path configured"}), 400
         _, corrections_dir = ensure_corrections_storage(output_path)
         volume_id, zarr_path, minio_url, geometry = make_volume(model_name, model_config, config, corrections_dir)
-
-        return jsonify(
-            {
-                "success": True,
-                "volume_id": volume_id,
-                "zarr_path": zarr_path,
-                "minio_url": minio_url,
-                "neuroglancer_url": f"{minio_url}/annotation",
-                "metadata": {
-                    "dataset_shape_voxels": list(geometry.dataset_shape_voxels),
-                    "chunk_size": list(geometry.chunk_size),
-                    "output_voxel_size": list(geometry.output_voxel_size),
-                    "claimed_output_voxel_size": list(geometry.claimed_output_voxel_size),
-                    "dataset_offset_nm": list(geometry.dataset_offset_nm),
-                },
-            }
-        )
+        return jsonify(_created(volume_id, zarr_path, minio_url, geometry, model_name))
     except Exception as e:
         logger.error(f"Error creating annotation volume: {e}", exc_info=True)
         return jsonify({"success": False, "error": str(e)}), 500
+
+
+def _create_paint_volume(body):
+    """create-volume without a model: a paint-first volume at the body's
+    voxel size (make_paint_volume). A size the raw cannot be planned at is
+    a 400 with the plan's sentence."""
+    try:
+        if not get_session().dataset_path:
+            return jsonify({"success": False, "error": "No dataset path configured"}), 400
+        _, corrections_dir = ensure_corrections_storage(body.output_path)
+        volume_id, zarr_path, minio_url, geometry = make_paint_volume(body.voxel_size, corrections_dir)
+        logger.info(f"New annotation volume {volume_id} for no model yet, at {list(geometry.output_voxel_size)} nm")
+        return jsonify(_created(volume_id, zarr_path, minio_url, geometry, None))
+    except ValueError as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+    except Exception as e:
+        logger.error(f"Error creating annotation volume: {e}", exc_info=True)
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+def _created(volume_id, zarr_path, minio_url, geometry, model_name):
+    """create-volume's answer for a volume made: where it is, as the tab
+    reaches it, and its grid (crops.js logs it). A paint-first volume
+    claims no voxel size of a model's: its own is answered as the claimed."""
+    return {
+        "success": True,
+        "volume_id": volume_id,
+        "zarr_path": zarr_path,
+        "minio_url": minio_url,
+        "neuroglancer_url": f"{minio_url}/annotation",
+        "model_name": model_name,
+        "metadata": {
+            "dataset_shape_voxels": list(geometry.dataset_shape_voxels),
+            "chunk_size": list(geometry.chunk_size),
+            "output_voxel_size": list(geometry.output_voxel_size),
+            "claimed_output_voxel_size": list(geometry.claimed_output_voxel_size or geometry.output_voxel_size),
+            "dataset_offset_nm": list(geometry.dataset_offset_nm),
+        },
+    }
 
 
 @finetune_bp.route("/api/finetune/user-prefs", methods=["GET"])

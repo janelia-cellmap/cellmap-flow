@@ -401,7 +401,9 @@ export class AiAnnotateJob {
     // ids (portable/fill.py counts_up). The server asks what the model
     // trains on (affinities or Cellpose's flows); here the channel-name test
     // stands for it, as the server's annotation_dtype rule does (portable/volume.py): the browser runs no flow model.
-    const entry = (await ctx.catalog.resolve(volume.model_id)) ?? (await ctx.catalog.resolve(volume.model_name));
+    // A volume painted before any model names none: its labels are background and objects.
+    const resolve = (ref: string | null) => (ref ? ctx.catalog.resolve(ref) : Promise.resolve(null));
+    const entry = (await resolve(volume.model_id)) ?? (await resolve(volume.model_name));
     const instanceTarget = entry ? hasAffinityChannels(entry) : false;
     const lo = plan.write_lo.map((v) => Math.trunc(v));
     const hi = plan.write_hi.map((v) => Math.trunc(v));

@@ -5,6 +5,8 @@
 // - training-form.js: the form, kept across reloads, and the GPU queue picker;
 // - models.js: the model picker;
 // - crops.js: New Volume, Load Crops from YAML, annotated regions, Save;
+// - volume-grid.js: New Volume's voxel size when no model is loaded, for a
+//   volume painted on the raw's grid before any model;
 // - sessions.js: Resume Existing Volume;
 // - label-it.js: Seed from Prediction, All Background, Split Objects and
 //   Undo, over the patch on screen;
@@ -42,6 +44,7 @@ import { initModelPicker } from "./models.js";
 import { initRank } from "./rank.js";
 import { initSessions } from "./sessions.js";
 import { initTrainingForm } from "./training-form.js";
+import { initVolumeGrid } from "./volume-grid.js";
 
 export function initFinetuneTab() {
   const logArea = document.getElementById("finetuneLog");
@@ -58,7 +61,7 @@ export function initFinetuneTab() {
 
   const form = initTrainingForm();
   const picker = initModelPicker({ log, savedModelName: form.saved && form.saved.selectedModelName });
-  const crops = initCrops({ log, picker, form });
+  const crops = initCrops({ log, picker, form, grid: initVolumeGrid() });
   initSessions({ log, addToViewer: crops.addToViewer, volumeReady: crops.volumeReady });
   initLabelIt({ log });
   initGoodRegionMarks({ log });

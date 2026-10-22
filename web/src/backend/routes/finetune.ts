@@ -57,7 +57,7 @@ import { runFinetune } from "../../finetune/run";
 import { HEAD_LOSSES } from "../../finetune/head-trainer";
 import type { DistillationScope, FinetuneOptions, HeadLoss, RunFinetune } from "../../finetune/types";
 import { DEFAULT_OPTIONS, FULL_LEARNING_RATE } from "../../finetune/types";
-import { createVolume, hasAffinityChannels, paintedChunkIndices, planVolume, readVolume } from "../../finetune/volume";
+import { createVolume, hasAffinityChannels, paintedChunkIndices, planPaintVolume, planVolume, readVolume, trainingRefusal, viewPixelNm } from "../../finetune/volume";
 import { volumeZip, VOLUME_ZIP_SUFFIX } from "../../finetune/zip";
 import { PAINT_TAB, paintLayer, paintLayerName, paintLayerUrl } from "../../viewer/layers";
 import { FinetuneJob, FinetuneJobs } from "../finetune-jobs";
@@ -193,7 +193,10 @@ export function finetuneRoutes(router: Router, deps: Partial<FinetuneDeps> = {})
   // "head", "full"), as the server answers finetune_modes; a model whose
   // manifest declares none has the head the graph is found to end in. A
   // model that offers the whole network has its tile sides with them
-  // (full_training), which models.js and training-form.js show.
+  // (full_training), which models.js and training-form.js show. And the
+  // open dataset's levels' voxel sizes (raw_voxel_sizes, finest first, as
+  // the server answers them), which New Volume offers for a volume painted
+  // before any model (volume-grid.js).
   router.get("/api/finetune/models", async (_req, _params, ctx) => {
     const models = await Promise.all(ctx.infer.served().map(async (s) => {
       const modes = finetuneModes(s.entry);
@@ -206,40 +209,57 @@ export function finetuneRoutes(router: Router, deps: Partial<FinetuneDeps> = {})
         ...(modes.includes("full") ? { full_training: await fullTraining(s.entry) } : {}),
       };
     }));
-    return json(200, { models, selected_model: models.length === 1 ? models[0].name : null });
+    const rawVoxelSizes = (ctx.infer.dataset()?.levels ?? []).map((level) => level.voxel.slice());
+    return json(200, { models, selected_model: models.length === 1 ? models[0].name : null, raw_voxel_sizes: rawVoxelSizes });
   });
 
-  // POST /api/finetune/create-volume {model_name}: a new volume over the
-  // open dataset on the model's output grid (planVolume: the portable
-  // Python's plan, whose refusal is a 400), its zarr files in
-  // the paint store, and the session's volume from now on. The answer's
-  // URLs are the paint route's (volumeUrls); the tab then calls
-  // add-to-viewer with neuroglancer_url, as it does on the server.
+  // POST /api/finetune/create-volume {model_name} or {voxel_size}: a new
+  // volume over the open dataset, its zarr files in the paint store, and the
+  // session's volume from now on. For a model, on its output grid
+  // (planVolume); with no model named, one painted before any model, on the
+  // raw's grid at voxel_size (nm: three numbers, or one for all three; none,
+  // the level the viewer shows: planPaintVolume), refused with a model as
+  // the server refuses it. Both plans are the portable Python's, whose
+  // refusal is a 400. The answer's URLs are the paint route's (volumeUrls);
+  // the tab then calls add-to-viewer with neuroglancer_url, as it does on
+  // the server.
   router.post("/api/finetune/create-volume", async (req, _params, ctx) => {
     const body = objectBody(req);
     if (!body) return badRequest("expected a JSON object");
     const name = typeof body.model_name === "string" ? body.model_name.trim() : "";
-    if (!name) return badRequest("model_name is required");
-    const served = ctx.infer.served();
-    if (!served.length) return badRequest("No models loaded");
-    const model = served.find((s) => s.entry.name === name);
-    if (!model) return json(404, { success: false, error: `Model ${name} not found` });
+    const size = voxelSizeOf(body.voxel_size);
+    if (size === undefined) return badRequest(`voxel_size must be one positive number or three (z, y, x), not ${JSON.stringify(body.voxel_size)}`);
+    if (name && size) return badRequest(`voxel_size is for a volume made without a model; ${name}'s volume lies on its own grid`);
     const dataset = ctx.infer.dataset();
-    if (!dataset) return badRequest(NO_DATASET);
     let volume: PaintVolume;
-    try {
-      volume = await d.plan(ctx.infer, dataset, model.entry, ctx.session.state.chain, { now: d.now() });
-    } catch (e) {
-      return badRequest(message(e));
+    if (!name) {
+      if (!dataset) return badRequest(NO_DATASET);
+      try {
+        volume = await planPaintVolume(ctx.infer, dataset, size, ctx.session.state.chain, { now: d.now(), pixelNm: viewPixelNm(ctx.viewer.viewerUrl()) });
+      } catch (e) {
+        return badRequest(message(e));
+      }
+    } else {
+      const served = ctx.infer.served();
+      if (!served.length) return badRequest("No models loaded");
+      const model = served.find((s) => s.entry.name === name);
+      if (!model) return json(404, { success: false, error: `Model ${name} not found` });
+      if (!dataset) return badRequest(NO_DATASET);
+      try {
+        volume = await d.plan(ctx.infer, dataset, model.entry, ctx.session.state.chain, { now: d.now() });
+      } catch (e) {
+        return badRequest(message(e));
+      }
     }
     await createVolume(ctx.paint, volume);
     await ctx.session.update({ paintVolume: volume.id });
-    ctx.log(`New annotation volume ${volume.id} for ${name}: ${volume.dataset_shape_voxels.join("×")} voxels in ${volume.chunk_size.join("×")} chunks at ${volume.output_voxel_size.join("×")} nm`);
+    ctx.log(`New annotation volume ${volume.id} ${name ? `for ${name}` : "for no model yet"}: ${volume.dataset_shape_voxels.join("×")} voxels in ${volume.chunk_size.join("×")} chunks at ${volume.output_voxel_size.join("×")} nm`);
     return json(200, {
       success: true,
       volume_id: volume.id,
       zarr_path: `${PAINT_ROUTE}${volume.id}`,
       ...volumeUrls(volume.id),
+      model_name: volume.model_name,
       metadata: {
         dataset_shape_voxels: volume.dataset_shape_voxels,
         chunk_size: volume.chunk_size,
@@ -356,10 +376,11 @@ export function finetuneRoutes(router: Router, deps: Partial<FinetuneDeps> = {})
   // POST /api/finetune/submit: a job on the session's volume. Refused, in
   // the order the tab can act on, without a volume (needs_volume: the tab
   // offers New Volume), with nothing painted, for a model not served,
-  // without a dataset, with a loss that needs a server (the head's: the
-  // whole network has its own), and for a mode the model's manifest does
-  // not offer, a tile or block side its graph does not take, or a 3D model's
-// batch of more than one block.
+  // without a dataset, on a volume painted before any model (paint_first:
+  // trainingRefusal's sentence, the server's, says to Use this model), with
+  // a loss that needs a server (the head's: the whole network has its own),
+  // and for a mode the model's manifest does not offer, a tile or block side
+  // its graph does not take, or a 3D model's batch of more than one block.
   router.post("/api/finetune/submit", async (req, _params, ctx) => {
     const body = objectBody(req);
     if (!body) return badRequest("expected a JSON object");
@@ -377,6 +398,8 @@ export function finetuneRoutes(router: Router, deps: Partial<FinetuneDeps> = {})
     const model = ctx.infer.served().find((s) => s.entry.name === name);
     if (!model) return json(404, { success: false, error: `Model ${name} not found` });
     if (!ctx.infer.dataset()) return badRequest(NO_DATASET);
+    const paintFirst = await trainingRefusal(ctx.infer, volume);
+    if (paintFirst) return json(400, { success: false, error: paintFirst, paint_first: true });
     // The mode the form asks for; a body without one (an older tab) the
     // first the model offers.
     const mode = body.finetune_mode ?? finetuneModes(model.entry)[0] ?? "head";
@@ -506,6 +529,16 @@ export function finetuneRoutes(router: Router, deps: Partial<FinetuneDeps> = {})
   });
 
   return jobs;
+}
+
+/** create-volume's voxel_size: null when not given (or blank), three
+ * numbers from three or from one (every axis's), and undefined for anything
+ * else. Whether they are positive and the raw's axes is the plan's to say. */
+function voxelSizeOf(value: unknown): number[] | null | undefined {
+  if (value === undefined || value === null || value === "" || (Array.isArray(value) && !value.length)) return null;
+  const numbers = (Array.isArray(value) ? value : [value]).map((v) => (typeof v === "number" ? v : typeof v === "string" && v.trim() ? Number(v) : NaN));
+  if (numbers.some((v) => !Number.isFinite(v)) || (numbers.length !== 1 && numbers.length !== 3)) return undefined;
+  return numbers.length === 1 ? [numbers[0], numbers[0], numbers[0]] : numbers;
 }
 
 /** The volume's URLs as the Python answers them: `minio_url` names the

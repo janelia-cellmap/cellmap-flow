@@ -78,3 +78,48 @@ def test_the_browsers_calls_answer_a_refusal_as_its_sentence():
     assert volume_calls.plan_volume({"level": level, "model": _model(8, 8, 12, 4)}, [])["dtype"] == "uint8"
     refused = volume_calls.mark_region({"centre_nm": [0, 0, 0], "size_nm": -1, "regions": []}, [])
     assert refused == {"error": "size_nm must be positive"}
+
+
+# A Janelia-style 16 nm level: its corner at -4 nm, thinner in z than a chunk.
+LEVEL_16 = {"voxel": [16.0] * 3, "corner": [-4.0] * 3, "shape": [21, 100, 130]}
+
+
+@pytest.mark.parametrize("voxel_size, offset, chunk, shape, input_size", [
+    # The level's own size: its voxels, from its corner; 64^3 chunks, as
+    # thin as the volume in z, the extent padded to whole chunks.
+    pytest.param([16.0] * 3, [4.0] * 3, [21, 64, 64], [21, 128, 192], [21, 64, 64], id="a level's own"),
+    # A size typed between levels, over the level read for it: the level's
+    # extent in 24 nm voxels (14, 66.7 and 86.7 of them, rounded up), from
+    # the same corner, a chunk 1.5 times as many of the level's voxels.
+    pytest.param([24.0] * 3, [8.0] * 3, [14, 64, 64], [14, 128, 128], [21, 96, 96], id="typed"),
+])
+def test_a_paint_first_volume_lies_on_the_raws_grid_at_the_size_asked(voxel_size, offset, chunk, shape, input_size):
+    plan = volume.plan_paint_volume(LEVEL_16, voxel_size)
+    assert (plan["output_voxel_size"], plan["dataset_offset_nm"]) == (voxel_size, offset)
+    assert (plan["chunk_size"], plan["dataset_shape_voxels"], plan["input_size"]) == (chunk, shape, input_size)
+    assert plan["input_voxel_size"] == LEVEL_16["voxel"], "the raw under the paint is read at the level's own"
+    assert plan["claimed_output_voxel_size"] is None and plan["claimed_input_voxel_size"] is None, "no model claims one"
+    with pytest.raises(ValueError):
+        volume.plan_paint_volume(LEVEL_16, [16.0, 16.0])
+
+
+@pytest.mark.parametrize("pixel_nm, index", [
+    pytest.param(None, 0, id="no zoom known: the finest"),
+    pytest.param(4.0, 0, id="zoomed in past the finest"),
+    pytest.param(20.0, 1, id="between two levels: the coarser one no coarser than a pixel"),
+    pytest.param(32.2, 2, id="a pixel a hair finer than a level is that level"),
+    pytest.param(1000.0, 2, id="zoomed out past the coarsest"),
+])
+def test_a_paint_first_volumes_default_is_the_level_the_viewer_shows(pixel_nm, index):
+    assert volume.shown_level([[8.0] * 3, [16.0] * 3, [32.0] * 3], pixel_nm) == index
+    assert volume_calls.shown_level({"voxel_sizes": [[8.0] * 3, [16.0] * 3, [32.0] * 3], "pixel_nm": pixel_nm}, []) == {"index": index}
+
+
+def test_a_paint_first_volume_is_not_trained_on_and_says_where_its_paint_gets_a_grid():
+    planned = volume_calls.plan_paint_volume({"level": LEVEL_16, "voxel_size": [16.0] * 3}, [])
+    assert planned["dtype"] == "uint8"
+    assert set(volume_calls.plan_paint_volume({"level": LEVEL_16, "voxel_size": [0, 16, 16]}, [])) == {"error"}
+    assert volume.training_refusal({"model_name": None})
+    assert volume.training_refusal({"model_name": "mito"}) is None
+    assert set(volume_calls.training_refusal({"volume": {"model_name": None}}, [])) == {"error"}
+    assert volume_calls.training_refusal({"volume": {"model_name": "mito"}}, []) == {}
