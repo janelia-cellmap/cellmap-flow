@@ -44,12 +44,20 @@ class CellMapModelConfig(ModelConfig):
         config.channels_names = metadata.channels_names
         config.channels = metadata.channels_names  # alias for compatibility
 
-        config.read_shape = Coordinate(metadata.input_shape) * config.input_voxel_size
-        config.write_shape = Coordinate(metadata.output_shape) * config.output_voxel_size
-        config.inference_input_shape = Coordinate(metadata.inference_input_shape)* config.input_voxel_size
-        config.inference_output_shape = Coordinate(metadata.inference_output_shape)* config.output_voxel_size
-        
-        config.block_shape = [*metadata.output_shape, metadata.out_channels]
+        # The export's inference shapes when the metadata has them, the
+        # training shapes otherwise. cellmap_models traces the TorchScript at
+        # the inference shape (torch.jit.trace), and a traced UNet runs only
+        # at that shape: jrc_mus-livers_16nm_to_8nm_mito fails at its training
+        # 216³ ("padded input size (1 x 1 x 1)") and runs at its inference
+        # 288³, which is also what the Pipeline builder shows for it.
+        input_shape = getattr(metadata, "inference_input_shape", None) or metadata.input_shape
+        output_shape = getattr(metadata, "inference_output_shape", None) or metadata.output_shape
+        config.read_shape = Coordinate(input_shape) * config.input_voxel_size
+        config.write_shape = Coordinate(output_shape) * config.output_voxel_size
+        config.inference_input_shape = config.read_shape
+        config.inference_output_shape = config.write_shape
+
+        config.block_shape = [*output_shape, metadata.out_channels]
 
         config.model = self.cellmap_model.ts_model
         config.model.to(_get_device())
