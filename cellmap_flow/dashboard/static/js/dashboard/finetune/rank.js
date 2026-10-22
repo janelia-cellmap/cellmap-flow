@@ -9,18 +9,27 @@
 // a model not running (a cluster job started for it), and each is shown as it
 // comes. A server's candidate says how to build it (entry), sent back with
 // each request, and one not running (cluster) starts unticked. A filter narrows the models listed; Rank scores the ticked ones it
-// shows. Show serves a model and adds its layer, as the Models tab's Add
-// does; Use this model (POST /api/finetune/rank/use) makes one the model to
-// finetune: served, a new volume made for it with the paint carried onto its
-// grid, that volume the session's and its paint layer in the viewer. The
-// model picker (models.js pickModel) and the Annotation Crops panel's volume
-// buttons (crops.js sessionVolumeChanged) follow.
+// shows. Each row gives what its score was read at, as the controls it sets
+// take it (portable/rank.py score_row): the threshold, a probability, and
+// the raw's range read as 0 to 1. Show serves a model and adds its layer, as
+// the Models tab's Add does; Use this model (POST /api/finetune/rank/use)
+// makes one the model to finetune: served, a new volume made for it with the
+// paint carried onto its grid, that volume the session's and its paint layer
+// in the viewer. The model picker (models.js pickModel) and the Annotation
+// Crops panel's volume buttons (crops.js sessionVolumeChanged) follow.
+//
+// Fit to Paint, beside Seed from Prediction, does the same for the model
+// that seeds the paint (Label it's Prediction from) without a new volume:
+// it scores that model with the same route, and sets its threshold and,
+// when the stretch won, its window (POST /api/finetune/rank/window). Both
+// it and Use this model mark Seed from Prediction's threshold as set by
+// ranking, and say on the line under Label it's buttons what they set.
 import { h, setBusy } from "../../lib/dom.js";
-import { announce, listen, MODELS_CHANGED_EVENT } from "../../lib/events.js";
+import { announce, CHAIN_CHANGED_EVENT, listen, MODELS_CHANGED_EVENT } from "../../lib/events.js";
 import { readJSON, writeJSON } from "../../lib/stored.js";
 import { sessionVolumeChanged } from "./crops.js";
 import { pickModel } from "./models.js";
-import { getAnswer, postAnswer } from "./requests.js";
+import { getAnswer, offerNewVolume, postAnswer } from "./requests.js";
 
 // A score this close to the best one is marked about as good as it: two
 // points of matching are not worth choosing a model by.
@@ -63,21 +72,28 @@ function isScored(answer) {
   return Boolean(answer.success) && Number.isFinite(answer.matches);
 }
 
-// What a score is at besides the model as it is (cellmap_flow/portable/rank.py):
-// the raw stretched from its window, when that scored clearly better, and the
-// cut-off that fits the paint best, when it is not the model's own 0; with
-// the score without the change.
-function scoreNote(row) {
-  if (Array.isArray(row.window)) {
-    const cutoff = row.cutoff ? `, cut-off ${row.cutoff}` : "";
-    return ` with the raw stretched from ${row.window.map((v) => Math.round(v)).join("–")}${cutoff} (${percent(row.matches_without_window)} without)`;
-  }
-  return Number.isFinite(row.cutoff) && row.cutoff !== 0 ? ` at cut-off ${row.cutoff} (${percent(row.matches_at_zero)} at 0)` : "";
+// A scored row's two settings, as columns (each a fixed width, so they line
+// up from row to row): the threshold Seed from Prediction takes, 0.5 when
+// the model's own boundary fits the paint best, else with the match at 0.5;
+// and the raw's range the model reads as 0 to 1, its normalizer's own
+// unless the raw under the paint stretched scored clearly better, then with
+// the match unstretched (cellmap_flow/portable/rank.py score_row).
+function settingsCells(row) {
+  const own = row.cutoff === 0;
+  const stretched = Array.isArray(row.window);
+  return h("div", { class: "d-flex flex-wrap column-gap-3 small" },
+    h("span", { style: { minWidth: "11rem" }, title: "The probability above which the prediction fits your paint best, as Seed from Prediction's threshold takes it; 0.5 is the model's own boundary" },
+      "Threshold ", h("strong", {}, String(row.threshold)),
+      own ? h("span", { class: "text-muted" }, " (model's own)") : h("span", { class: "text-muted" }, ` (${percent(row.matches_at_zero)} at 0.5)`)),
+    h("span", { title: "The raw's grey levels the model reads as 0 to 1: its normalizer's own, or the raw under your paint stretched, when that matched clearly better" },
+      "Input ", h("strong", {}, Array.isArray(row.input_window) ? levels(row.input_window) : "as normalized"),
+      stretched ? h("span", { class: "text-muted" }, ` stretched (${percent(row.matches_without_window)} unstretched)`) : ""));
 }
 
-// A cut-off (a logit) as Seed from Prediction's threshold, a probability.
-function probability(cutoff) {
-  return Math.round(1000 / (1 + Math.exp(-cutoff))) / 1000;
+// A raw window [lo, hi] as grey levels: whole ones for a raw of hundreds of
+// levels, three significant digits for a raw of a few (a float raw's 0–1).
+function levels(window) {
+  return window.map((v) => String(Math.abs(v) >= 100 ? Math.round(v) : Number(v.toPrecision(3)))).join("–");
 }
 
 function percent(value) {
@@ -98,8 +114,11 @@ function describe(candidate) {
 }
 
 // Whether the card is open, kept in this browser as the patch tools'
-// sections are (index.js rememberOpenSections).
+// sections are (index.js rememberOpenSections); closed until opened.
 const OPEN_KEY = "finetuneRankOpen";
+// The threshold Use this model or Fit to Paint last set, and for which
+// model: {threshold, model}, kept in this browser for the field's mark.
+const MARK_KEY = "cellmap_flow.seed_threshold_by_ranking";
 
 export function initRank() {
   const section = document.getElementById("rankSection");
@@ -113,6 +132,15 @@ export function initRank() {
   const results = document.getElementById("rankResults");
   const rows = document.getElementById("rankRows");
   const littlePaint = document.getElementById("rankLittlePaint");
+  // Label it's: the model seeding the paint, the threshold and settings a
+  // score sets (label-it.js reads and keeps them), the threshold's mark,
+  // Fit to Paint and the line saying what was set.
+  const seedModel = document.getElementById("seedModel");
+  const seedThreshold = document.getElementById("seedThreshold");
+  const seedSettings = document.getElementById("seedSettings");
+  const thresholdMark = document.getElementById("seedThresholdByRanking");
+  const fitBtn = document.getElementById("fitToPaintBtn");
+  const fitStatus = document.getElementById("fitToPaintStatus");
 
   let candidates = [];
   // The models unticked, by hand or as listed (ticked false): one listed
@@ -133,10 +161,52 @@ export function initRank() {
   // and the one it made, with its volume, while that is the session's.
   let switching = null;
   let training = null;
+  // Whether Fit to Paint is scoring and setting, which Rank and Use wait for
+  // (and it for them): one score at a time. And whether the last listing
+  // found paint to rank on, for Rank once Fit to Paint is done.
+  let fitting = false;
+  let ready = false;
 
   function say(text, tone = "muted") {
     status.textContent = text;
     status.className = `d-block text-${tone}`;
+  }
+
+  // The line under Label it's buttons, for what a score set or why it could not.
+  function sayFit(text, tone = "muted") {
+    fitStatus.hidden = false;
+    fitStatus.textContent = text;
+    fitStatus.className = `d-block mt-1 text-${tone}`;
+  }
+
+  // What Use this model or Fit to Paint set from `row`, the model's score:
+  // the threshold, and the input normalization, stretched to `window` (the
+  // route that set it answered it) or left as it was.
+  function fittedText(name, row, window) {
+    const input = Array.isArray(window)
+      ? `the input normalization now stretches the raw from ${levels(window)} to 0–1, for every model`
+      : `the input normalization is left as it was${Array.isArray(row.input_window) ? `, the raw read from ${levels(row.input_window)}` : ""}`;
+    return `${name} fitted to your paint (${percent(row.matches)} match): Seed from Prediction's threshold is ${row.threshold}, and ${input}.`;
+  }
+
+  // The threshold a score fitted, made Seed from Prediction's (label-it.js
+  // keeps it with the seed settings on its change) and marked as set by
+  // ranking, with the settings opened to show it. The mark is kept in this
+  // browser with the value it marks, and shown while the field holds that
+  // value: typing another takes it away.
+  function installThreshold(name, threshold) {
+    if (!Number.isFinite(threshold)) return;
+    writeJSON(MARK_KEY, { threshold, model: name });
+    seedThreshold.value = threshold;
+    seedThreshold.dispatchEvent(new Event("change"));
+    seedSettings.open = true;
+  }
+
+  function showMark() {
+    const mark = readJSON(MARK_KEY, null);
+    const marks = Boolean(mark) && seedThreshold.value !== "" && Number(seedThreshold.value) === Number(mark.threshold);
+    thresholdMark.hidden = !marks;
+    if (marks) thresholdMark.title = `Set by ranking for ${mark.model}: the threshold that fits your paint best. Changing it takes the mark away.`;
   }
 
   // The candidates and the volume as the page has them now. Resolves to
@@ -174,14 +244,17 @@ export function initRank() {
       return { ready: false, message: `Nothing is painted in ${volume.id} yet: paint background (1) and objects (2 and up), then rank.`, tone: "muted" };
     }
     if (!candidates.length) return { ready: false, message: "No models to rank.", tone: "muted" };
-    return { ready: true, volume, message: `${plural(volume.painted_chunks, "painted chunk")} in ${volume.id}, painted for ${volume.model_name}.`, tone: "muted" };
+    const paintedFor = volume.model_name ? `painted for ${volume.model_name}` : "painted before a model was chosen";
+    return { ready: true, volume, message: `${plural(volume.painted_chunks, "painted chunk")} in ${volume.id}, ${paintedFor}.`, tone: "muted" };
   }
 
   // The status line and Rank from a listing; a ranking running, or one
-  // shown, keeps its own line.
+  // shown, keeps its own line. Rank waits while Use this model or Fit to
+  // Paint runs.
   function showReadiness(state) {
     if (running) return;
-    rankBtn.disabled = !state.ready;
+    ready = state.ready;
+    rankBtn.disabled = !state.ready || switching !== null || fitting;
     if (state.ready && answers.length && summary) say(summary.text, summary.tone);
     else say(state.message, state.tone);
   }
@@ -217,6 +290,8 @@ export function initRank() {
   }
 
   function showResults() {
+    // Fit to Paint waits while a ranking or Use this model runs.
+    fitBtn.disabled = running || switching !== null || fitting;
     const { rows: table, littlePaint: little } = rankResults(answers);
     results.hidden = !table.length;
     littlePaint.hidden = !little;
@@ -224,8 +299,8 @@ export function initRank() {
   }
 
   // A model's row: its name and badges beside Use this model (a scored model
-  // the volume is not for) and Show, its scores on a line under them, then
-  // what they were scored on.
+  // the volume is not for) and Show, its scores on a line under them, its
+  // threshold and input window under those, then what they were scored on.
   function resultRow(row) {
     const candidate = ranked.get(row.name);
     const scored = isScored(row);
@@ -251,9 +326,9 @@ export function initRank() {
           candidate && showButton(candidate))),
       scored
         ? h("div", {}, h("strong", {}, `${percent(row.matches)} match`),
-          scoreNote(row),
           ` · objects ${percent(row.objects_found)} · background ${percent(row.background_right)}`)
         : h("div", { class: "small text-danger" }, row.error || "No score in the answer"),
+      scored && settingsCells(row),
       details && h("small", { class: "d-block text-muted" }, details));
   }
 
@@ -287,7 +362,7 @@ export function initRank() {
   // The best row's is the card's suggestion, filled.
   function useButton(candidate, row) {
     const button = h("button", {
-      type: "button", class: `btn btn-sm ${row.best ? "btn-primary" : "btn-outline-secondary"}`, disabled: running || switching !== null,
+      type: "button", class: `btn btn-sm ${row.best ? "btn-primary" : "btn-outline-secondary"}`, disabled: running || switching !== null || fitting,
       title: "Finetune this model instead: your paint is copied to a new volume made for it, which becomes the session's, and the current volume is kept",
     }, "Use this model");
     if (switching === candidate.name) setBusy(button, true, "Copying paint...");
@@ -297,10 +372,11 @@ export function initRank() {
 
   // Makes `candidate` the model to finetune, as its score (`row`) found it
   // best: the raw's window, if one was chosen, as the session's normalizer,
-  // and its cut-off as Seed from Prediction's threshold. The ranking stays:
-  // the new volume holds the same paint, on the model's grid.
+  // and its threshold as Seed from Prediction's, marked as set by ranking.
+  // The ranking stays: the new volume holds the same paint, on the model's
+  // grid.
   async function useModel(candidate, row) {
-    if (running || switching !== null) return;
+    if (running || switching !== null || fitting) return;
     if (!confirm(`Make ${candidate.name} the model to finetune? Your paint is copied to a new volume for it; the current volume is kept.`)) return;
     switching = candidate.name;
     rankBtn.disabled = true;
@@ -324,15 +400,11 @@ export function initRank() {
     // As the listing will have them, until it comes.
     for (const c of [...candidates, ...ranked.values()]) c.volume_model = c.name === d.name;
     const dropped = d.conflicts ? ` (${Number(d.conflicts).toLocaleString()} left unpainted where object and background met)` : "";
-    const seedThreshold = document.getElementById("seedThreshold");
-    const threshold = seedThreshold && Number.isFinite(row.cutoff) && row.cutoff !== 0 ? probability(row.cutoff) : null;
-    if (threshold !== null) {
-      seedThreshold.value = threshold;
-      seedThreshold.dispatchEvent(new Event("change"));
-    }
+    installThreshold(d.name, row.threshold);
+    sayFit(fittedText(d.name, row, d.window), "success");
     const set = [
-      Array.isArray(d.window) && `the input normalization stretches the raw from ${d.window.map((v) => Math.round(v)).join("–")}`,
-      threshold !== null && `Seed from Prediction's threshold is ${threshold}`,
+      Array.isArray(d.window) && `the input normalization stretches the raw from ${levels(d.window)}`,
+      Number.isFinite(row.threshold) && `Seed from Prediction's threshold is ${row.threshold}`,
     ].filter(Boolean);
     summary = {
       text: `${d.name} is the model to finetune now: ${Number(d.painted_voxels || 0).toLocaleString()} painted voxels carried from ${d.from_volume} to ${d.volume_id}${dropped}.${set.length ? ` ${set.join("; ")}, as its score found best.` : ""}`,
@@ -363,7 +435,7 @@ export function initRank() {
   }
 
   async function rank() {
-    if (running || switching !== null) return;
+    if (running || switching !== null || fitting) return;
     running = true;
     setBusy(rankBtn, true, "Ranking...");
     // A volume made, or a model added, since the list was shown is in this one.
@@ -414,7 +486,59 @@ export function initRank() {
     say(summary.text, summary.tone);
   }
 
+  // Fit to Paint: the model seeding the paint scored on it, as a ranking
+  // scores one, and what fits it best set as Use this model sets it, with
+  // no new volume: the window first (POST /api/finetune/rank/window, when
+  // the stretched raw won), then the threshold, which was fitted under that
+  // window and so is set only once the window is.
+  async function fitToPaint() {
+    if (running || switching !== null || fitting) return;
+    const name = seedModel.value;
+    if (!name) {
+      sayFit("No model to fit: serve one on the Models tab, and pick it under Prediction from.", "warning");
+      return;
+    }
+    fitting = true;
+    setBusy(fitBtn, true, "Fitting...");
+    rankBtn.disabled = true;
+    showResults();
+    sayFit(`Scoring ${name} on your paint...`);
+    try {
+      const d = await score({ name });
+      if (!isScored(d)) {
+        sayFit(`Could not fit ${name} to your paint: ${d.error}`, "danger");
+        if (d.needs_volume) offerNewVolume(`Could not fit ${name} to your paint: ${d.error}`);
+        return;
+      }
+      let window = null;
+      if (Array.isArray(d.window)) {
+        const set = await postAnswer("/api/finetune/rank/window", { window: d.window });
+        if (!set.success) {
+          sayFit(`Could not set the input window that fits ${name} to your paint: ${set.error}`, "danger");
+          return;
+        }
+        window = set.window;
+        // The Input tab's list shows the stretched normalizer as it now runs
+        // (main.js reads the chain again), so a later Apply keeps it.
+        announce(CHAIN_CHANGED_EVENT);
+      }
+      installThreshold(name, d.threshold);
+      sayFit(fittedText(name, d, window), "success");
+    } catch (e) {
+      sayFit(`Could not fit ${name} to your paint: ${e.message || e}`, "danger");
+    } finally {
+      fitting = false;
+      setBusy(fitBtn, false);
+      rankBtn.disabled = !ready;
+      showResults();
+    }
+  }
+
   rankBtn.addEventListener("click", rank);
+  fitBtn.addEventListener("click", fitToPaint);
+  seedThreshold.addEventListener("input", showMark);
+  seedThreshold.addEventListener("change", showMark);
+  showMark();
   filter.addEventListener("input", showCandidates);
   // Tick or untick the models shown; the hidden ones keep their ticks.
   tickAll.addEventListener("click", () => {
@@ -431,19 +555,26 @@ export function initRank() {
     say(`${status.textContent} Stopping after this one.`);
   });
 
-  // Listed when the Training tab is opened, and on Rank. While Rank waits
-  // for paint, also as the pointer comes onto the card: the paint is made in
-  // the viewer beside it. Once listed, again whenever the models served may
-  // have changed, for the Show buttons.
-  document.getElementById("training-tab").addEventListener("shown.bs.tab", refresh);
+  // Listed while the card is open: when the Training tab is shown or the
+  // card opened there, and on Rank. While Rank waits for paint, also as the
+  // pointer comes onto the card: the paint is made in the viewer beside it.
+  // Once listed, again whenever the models served may have changed, for the
+  // Show buttons. A closed card lists nothing.
+  const trainingPane = document.getElementById("training");
+  document.getElementById("training-tab").addEventListener("shown.bs.tab", () => {
+    if (section.open) refresh();
+  });
   document.getElementById("rankCard").addEventListener("pointerenter", () => {
-    if (rankBtn.disabled && !running && switching === null) refresh();
+    if (section.open && rankBtn.disabled && !running && switching === null && !fitting) refresh();
   });
   listen(MODELS_CHANGED_EVENT, () => {
-    if (listed) refresh();
+    if (listed && section.open) refresh();
   });
 
   const open = readJSON(OPEN_KEY, null);
   if (typeof open === "boolean") section.open = open;
-  section.addEventListener("toggle", () => writeJSON(OPEN_KEY, section.open));
+  section.addEventListener("toggle", () => {
+    writeJSON(OPEN_KEY, section.open);
+    if (section.open && trainingPane.classList.contains("active")) refresh();
+  });
 }

@@ -23,12 +23,18 @@ portable/calls.py; numpy and the standard library only. In short:
   model's MinMaxNormalizer's range, the model is scored again with the
   normalizer stretched to the raw's 1st to 99th percentiles (``windowed``),
   kept only when it scores WINDOW_MARGIN better.
+- The row of the ranking (``score_row``) is the score kept, with what it
+  was read at in the units its controls take: the cut-off as Seed from
+  Prediction's threshold (a probability) and the raw's range read as 0 to
+  1 (the stretched window, or the normalizer's own range). Both modes
+  answer it as it is, so their tables agree.
 
 The class-balanced BCE with label smoothing RANK_SMOOTHING, the finetune's
 default loss, is given beside the score: about 0.69 is guessing, about 0.20
 the paint fitted exactly.
 """
 
+import math
 from typing import List, Optional, Sequence
 
 import numpy as np
@@ -148,16 +154,71 @@ def _score_of(t: dict, channel: Optional[str]) -> Optional[dict]:
     }
 
 
+def _min_max(norm: Sequence[dict]) -> Optional[tuple]:
+    """``(index, low, high)`` of the MinMaxNormalizer among ``norm``
+    (normalizer specs) and the raw's range it maps to 0 to 1 (its class's
+    defaults, 0 and 255, where a spec leaves them out); None without one."""
+    k = next((i for i, s in enumerate(norm) if s.get("name") == "MinMaxNormalizer"), None)
+    if k is None:
+        return None
+    return k, float(norm[k].get("min_value", 0)), float(norm[k].get("max_value", 255))
+
+
 def windowed(norm: Sequence[dict], lo: float, hi: float) -> Optional[List[dict]]:
     """``norm`` (normalizer specs, ``{"name": ..., ...}``) with its
     MinMaxNormalizer set to the raw's window [lo, hi], or None: no
     MinMaxNormalizer, no window (lo = hi), or one not narrower than
     NARROW_WINDOW of the normalizer's own range."""
-    k = next((i for i, s in enumerate(norm) if s.get("name") == "MinMaxNormalizer"), None)
-    if k is None or not hi > lo:
+    found = _min_max(norm)
+    if found is None or not hi > lo:
         return None
-    low, high = float(norm[k].get("min_value", 0)), float(norm[k].get("max_value", 255))
+    k, low, high = found
     if not hi - lo < NARROW_WINDOW * (high - low):
         return None
     return [dict(s, min_value=float(lo), max_value=float(hi)) if i == k else dict(s) for i, s in enumerate(norm)]
+
+
+def score_row(base: Optional[dict], stretched: Optional[dict], norm: Sequence[dict],
+              raw: Optional[Sequence[float]]) -> Optional[dict]:
+    """A model's row of the ranking, as both modes answer it beside the
+    model's name, the time taken and the notes; None when ``base`` is None
+    (the paint gave the model nothing to score).
+
+    ``base`` is the model's score (``rank_score``) read through ``norm``,
+    the normalizer specs it was served with; ``stretched`` its score read
+    through ``windowed(norm, *raw)``, ``raw`` the raw's 1st and 99th
+    percentiles under the paint, or None when that was not tried (the raw
+    is not narrow) or counted nothing. The stretched score is kept when it
+    matches WINDOW_MARGIN better than ``base``. The row is the score kept,
+    with:
+
+    - ``window``: ``raw`` when the stretched score was kept, else None; and
+      then ``matches_without_window``, ``base``'s match;
+    - ``threshold``: the cut-off as a probability, as Seed from
+      Prediction's threshold takes it, to three decimals: 0.5 at the
+      model's own boundary (cut-off 0), else the probability the paint is
+      fitted best above;
+    - ``input_window``: the raw's range the model read as 0 to 1, as the
+      Input tab's MinMaxNormalizer takes it: ``window`` when kept, else
+      ``norm``'s own range; None when ``norm`` has no MinMaxNormalizer.
+    """
+    if base is None:
+        return None
+    keep = stretched is not None and raw is not None and stretched["matches"] >= base["matches"] + WINDOW_MARGIN
+    score = stretched if keep else base
+    window = [float(raw[0]), float(raw[1])] if keep else None
+    declared = _min_max(norm)
+    if window is not None:
+        input_window = window
+    elif declared is not None:
+        input_window = [declared[1], declared[2]]
+    else:
+        input_window = None
+    return {
+        **score,
+        "window": window,
+        **({"matches_without_window": base["matches"]} if keep else {}),
+        "threshold": round(1 / (1 + math.exp(-score["cutoff"])), 3),
+        "input_window": input_window,
+    }
 

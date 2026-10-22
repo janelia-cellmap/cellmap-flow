@@ -15,6 +15,14 @@ volume lies on that grid, one chunk per model output block, so that a chunk
 of paint is a block of the prediction it is painted over, and it covers the
 level's whole extent, a partial output voxel at the far end rounded up, then
 padded to whole chunks.
+
+A volume painted before any model (``plan_paint_volume``, a "paint-first"
+volume) lies on the raw's own grid instead, at a voxel size the user picks
+(``shown_level`` gives the default: the level the viewer shows), in chunks
+PAINT_FIRST_CHUNK voxels a side. It is for no model (its ``model_name`` is
+None), so it is not trained on (``training_refusal``): Which model to start
+from ranks the models on its paint, and Use this model carries the paint onto
+the chosen model's grid (``carry.py``), into a volume that is trained on.
 """
 
 import math
@@ -30,6 +38,21 @@ INSTANCE_TARGETS = ("affinities", "flows")
 # voxel size is that number: the float noise of nm (10.48 nm voxels) is not a
 # fraction of a voxel.
 WHOLE_VOXEL_TOLERANCE = 1e-6
+
+# A paint-first volume's chunk side, in its voxels: the volume has no model
+# whose output block a chunk would be, and 64^3 uint8 voxels (256 KiB) is a
+# chunk Neuroglancer writes at every stroke without a pause. An axis the
+# volume is thinner along gets a chunk as thin as the volume.
+PAINT_FIRST_CHUNK = 64
+
+# Why a volume painted before any model is not trained on, said in both modes
+# (training_refusal); the Finetune tab's Which model to start from is where
+# the paint gets a model's grid.
+PAINT_FIRST_TRAINING = (
+    "This volume was painted before a model was chosen, so it is on no model's grid: "
+    "under Which model to start from, rank the models on your paint and click Use this model "
+    "on the one to finetune, which copies the paint onto its grid, then train."
+)
 
 
 def annotation_dtype(output_type) -> str:
@@ -105,6 +128,26 @@ def block_shapes(model) -> tuple:
             whole_voxels([w / v for w, v in zip(write, claimed_out)], "the model's output block"))
 
 
+def _level_numbers(level) -> tuple:
+    """``(voxel, corner, shape)`` of a raw level as the plans take it (see
+    ``plan_volume``), checked: positive voxel sizes, a finite corner, a
+    whole shape, one of each per axis."""
+    voxel = _numbers(_field(level, "voxel"), "the level's voxel size", positive=True)
+    corner = _numbers(_field(level, "corner"), "the level's corner")
+    shape = whole_voxels(_numbers(_field(level, "shape"), "the level's shape"), "the level's shape")
+    if not len(voxel) == len(corner) == len(shape):
+        raise ValueError(f"the level's voxel size, corner and shape ({len(voxel)}, {len(corner)} and {len(shape)} axes) "
+                         "do not have the same axes")
+    return voxel, corner, shape
+
+
+def _extent_in(shape, voxel, output_voxel) -> list:
+    """A level of ``shape`` voxels of size ``voxel`` in voxels of size
+    ``output_voxel``, rounded up so a partial voxel at the far end is
+    covered, after rounding off the float noise of nm."""
+    return [math.ceil(round(n * v / w, 6)) for n, v, w in zip(shape, voxel, output_voxel)]
+
+
 def plan_volume(level, model) -> dict:
     """Where a new volume lies for ``model`` over the raw ``level`` it reads.
 
@@ -131,16 +174,14 @@ def plan_volume(level, model) -> dict:
     its server serves the prediction at 20), and the volume's chunks were
     then not the model's blocks.
     """
-    voxel = _numbers(_field(level, "voxel"), "the level's voxel size", positive=True)
-    corner = _numbers(_field(level, "corner"), "the level's corner")
-    shape = whole_voxels(_numbers(_field(level, "shape"), "the level's shape"), "the level's shape")
+    voxel, corner, shape = _level_numbers(level)
     # The model's own, as plain numbers (ints kept ints): the root attrs are
     # written from them as they are.
     claimed_in = np.asarray(_field(model, "input_voxel_size")).tolist()
     claimed_out = np.asarray(_field(model, "output_voxel_size")).tolist()
     model_in = _numbers(claimed_in, "the model's input_voxel_size", positive=True)
     model_out = _numbers(claimed_out, "the model's output_voxel_size", positive=True)
-    if not len(voxel) == len(corner) == len(shape) == len(model_in) == len(model_out):
+    if not len(voxel) == len(model_in) == len(model_out):
         raise ValueError(f"the level ({len(voxel)} axes) and the model ({len(model_in)}) do not have the same axes")
     input_size, output_size = block_shapes(model)
 
@@ -148,9 +189,7 @@ def plan_volume(level, model) -> dict:
     # (infer/geometry.ts outputLevel), so the two agree to the last bit.
     output_voxel = [v * (o / i) for v, o, i in zip(voxel, model_out, model_in)]
     offset = [c + w / 2 for c, w in zip(corner, output_voxel)]
-    # The level's extent in output voxels, rounded up so a partial voxel at
-    # the far end is covered, after rounding off the float noise of nm.
-    covered = [math.ceil(round(n * v / w, 6)) for n, v, w in zip(shape, voxel, output_voxel)]
+    covered = _extent_in(shape, voxel, output_voxel)
     padded = [-(-n // c) * c for n, c in zip(covered, output_size)]
     return {
         "output_voxel_size": output_voxel,
@@ -162,3 +201,82 @@ def plan_volume(level, model) -> dict:
         "dataset_offset_nm": offset,
         "dataset_shape_voxels": padded,
     }
+
+
+# A level whose finest axis is at most this share coarser than a screen pixel
+# is still one the viewer shows at that zoom (the slack viewer/raw.py's
+# _view_contrast_range gives it, for the float noise of a zoom in nm).
+SHOWN_LEVEL_SLACK = 1.01
+
+
+def shown_level(voxel_sizes, pixel_nm=None) -> int:
+    """The index in ``voxel_sizes`` (each a raw level's voxel size in nm,
+    finest first) of the level the viewer shows when one screen pixel spans
+    ``pixel_nm``: the coarsest whose finest axis is no coarser than a pixel,
+    and the finest when zoomed in past it, as Neuroglancer picks the level
+    to draw (viewer/raw.py's _view_contrast_range reads it so). The finest
+    when the zoom is not known (None: no viewer, or none that has reported
+    one yet). A paint-first volume's voxel size is this level's unless the
+    user picks another. A ValueError when there is no level."""
+    finest_axes = [min(_numbers(size, "a level's voxel size", positive=True)) for size in voxel_sizes]
+    if not finest_axes:
+        raise ValueError("the raw has no levels to choose a voxel size from")
+    finest = min(range(len(finest_axes)), key=lambda i: (finest_axes[i], i))
+    try:
+        pixel = float(pixel_nm)
+    except (TypeError, ValueError):
+        return finest
+    if not (math.isfinite(pixel) and pixel > 0):
+        return finest
+    shown = [i for i, axis in enumerate(finest_axes) if axis <= pixel * SHOWN_LEVEL_SLACK]
+    return max(shown, key=lambda i: (finest_axes[i], -i)) if shown else finest
+
+
+def plan_paint_volume(level, voxel_size) -> dict:
+    """Where a new paint-first volume lies: over the raw ``level`` it is
+    read from, on a grid of ``voxel_size`` nm (z, y, x), for no model.
+
+    ``level`` is as ``plan_volume`` takes it: on the server the level
+    ``raw_level`` opens for ``voxel_size`` (the level at that size, else the
+    finest not coarser than it, at its own voxel size; with Resample on, the
+    raw resampled to it), in the browser the one ``chooseRawLevel`` picks.
+    The grid starts at the level's corner: at a level's own voxel size its
+    voxels are the level's (a size within float noise of it is taken as
+    it), and at another (one the user typed) the level's extent is covered
+    in voxels of that size, a partial voxel at the far end rounded up. The
+    chunks are PAINT_FIRST_CHUNK voxels a side, as thin as the volume along
+    an axis it is thinner along, and the extent is padded to whole chunks.
+
+    Answers ``plan_volume``'s fields: ``output_voxel_size`` the grid's,
+    ``input_voxel_size`` the level's (what the raw under the paint is read
+    at: Which model to start from's window of it), no claimed sizes (there
+    is no model to claim any), ``chunk_size``, ``input_size`` a chunk in the
+    level's voxels, rounded up, ``dataset_offset_nm`` voxel 0's centre and
+    ``dataset_shape_voxels`` the padded extent. A ValueError says what is
+    wrong with ``level`` or ``voxel_size``.
+    """
+    voxel, corner, shape = _level_numbers(level)
+    asked = _numbers(voxel_size if voxel_size is not None else [], "the voxel size", positive=True)
+    if len(asked) != len(voxel):
+        raise ValueError(f"the voxel size ({len(asked)} axes) and the raw's level ({len(voxel)}) do not have the same axes")
+    size = voxel if np.allclose(asked, voxel, rtol=WHOLE_VOXEL_TOLERANCE, atol=0) else asked
+    covered = _extent_in(shape, voxel, size)
+    chunk = [max(1, min(PAINT_FIRST_CHUNK, n)) for n in covered]
+    return {
+        "output_voxel_size": size,
+        "input_voxel_size": voxel,
+        "claimed_output_voxel_size": None,
+        "claimed_input_voxel_size": None,
+        "chunk_size": chunk,
+        "input_size": _extent_in(chunk, size, voxel),
+        "dataset_offset_nm": [c + w / 2 for c, w in zip(corner, size)],
+        "dataset_shape_voxels": [-(-n // c) * c for n, c in zip(covered, chunk)],
+    }
+
+
+def training_refusal(volume):
+    """Why ``volume`` (its record or root attrs: a mapping, or an object
+    with ``model_name``) is not trained on, or None when it can be:
+    PAINT_FIRST_TRAINING for a paint-first volume, which names no model,
+    so no model's blocks are its chunks to train on."""
+    return PAINT_FIRST_TRAINING if not _field(volume, "model_name") else None

@@ -13,7 +13,8 @@ The root attr ``dataset_offset_nm`` is voxel 0's *centre* and is also the
 OME translation, since that is where Neuroglancer draws voxel 0 while it is
 painted; ``volume_corner_nm`` gives the corner.
 
-Where a new volume lies (``plan_volume``) is planned by
+Where a new volume lies (``plan_volume``; ``plan_paint_volume`` for one
+painted before any model, on the raw's grid) is planned by
 ``cellmap_flow.portable.volume`` on the numbers read here, as the browser
 plans one on its own reads; this module reads and writes the zarrs.
 """
@@ -159,12 +160,44 @@ def plan_volume(raw_dataset_path: str, model_geometry, resample: bool = False) -
     return VolumeGeometry(**portable_volume.plan_volume(level, model_geometry), resample=bool(resample))
 
 
+def raw_voxel_sizes(raw_dataset_path: str) -> list:
+    """The voxel sizes (nm, z, y, x) of the raw's levels, finest first: what
+    a volume painted before any model is offered to be painted at.
+
+    A multiscale group's levels (or a precomputed volume's scales), from
+    its documents alone, no level opened; the path of one array is that one
+    level, as ImageDataInterface reads it.
+    """
+    from cellmap_flow.io import metadata
+
+    try:
+        metas = [meta for _, meta in metadata.list_levels(raw_dataset_path)]
+    except Exception:
+        metas = [metadata.read_array_meta(raw_dataset_path)]
+    sizes = [[float(v) for v in meta.spatial().voxel_size][-3:] for meta in metas]
+    return sorted(sizes, key=lambda size: float(np.prod(size)))
+
+
+def plan_paint_volume(raw_dataset_path: str, voxel_size, resample: bool = False) -> VolumeGeometry:
+    """Where a new volume over ``raw_dataset_path`` lies when it is painted
+    before any model: on the raw's grid at ``voxel_size`` (nm, z, y, x).
+
+    The planning is ``cellmap_flow.portable.volume.plan_paint_volume``'s,
+    which the browser runs too, over the raw level ``raw_level`` opens for
+    that voxel size, as a model reading it would read it (with ``resample``,
+    the raw resampled to it): the volume's voxels are that level's when the
+    size is a level's own, and it has no claimed sizes, as it has no model.
+    """
+    level = raw_level(raw_dataset_path, list(voxel_size), resample)
+    return VolumeGeometry(**portable_volume.plan_paint_volume(level, voxel_size), resample=bool(resample))
+
+
 def create_volume_zarr(
     zarr_path: str,
     geometry: VolumeGeometry,
     *,
     dataset_path: str,
-    model_name: str,
+    model_name: Optional[str],
     input_norm=None,
     postprocess=None,
     annotation_dtype="uint8",
@@ -172,6 +205,8 @@ def create_volume_zarr(
 ) -> str:
     """Write an empty volume: its metadata only, no chunks. Returns ``zarr_path``.
 
+    ``model_name`` is None for a volume painted before any model
+    (``plan_paint_volume``), and its attr is then null.
     ``input_norm`` and ``postprocess`` are the dashboard's chains when the
     volume was made, as YAML-style lists: a resumed session inherits the
     normalization, and a model finetuned on the volume is served with the

@@ -615,9 +615,11 @@ export interface PaintVolume {
   /** `vol-<8 hex>-<YYYYmmdd-HHMMSS>` (new_volume_id). */
   id: string;
   type: "annotation_volume";
-  model_name: string;
-  /** The ModelEntry's id (the browser's own field; the server has none). */
-  model_id: string;
+  /** The model the volume is on the grid of; null for one painted before
+   * any model (planPaintVolume), on the raw's grid, which is not trained on. */
+  model_name: string | null;
+  /** The ModelEntry's id (the browser's own field; the server has none); null as model_name. */
+  model_id: string | null;
   /** The raw volume's URL (the server's dataset_path). */
   dataset_path: string;
   /** The model's output block in voxels (z, y, x): the chunk. */

@@ -250,6 +250,18 @@ The Models tab's *Job Logs* shows each model's server output as it runs: `starti
 loads, then its status, and `failed to start` with its traceback when it dies
 before serving.
 
+The Input and Postprocess tabs list the input normalizers and postprocessing
+steps; the ticked ones run top to bottom, and dragging a row moves it. An edit
+takes effect only when you press *Apply*, at the top of either tab (or Enter in
+a parameter field), which sends both lists together; until then the bar says
+how many changes are not applied, and the viewer shows the chain as it was.
+The one exception is a model's start: when the chain has no input normalizers
+and the model declares some (an ONNX export's manifest does), starting it from
+the Models tab (Submit, or Add) sets them, and the Input tab shows them ticked
+with a note saying from which model. A chain that has input normalizers is left as it is.
+The browser app does the same; its chain starts with the exports'
+normalization already set.
+
 A data path is a zarr (v2 or v3), N5 or Neuroglancer precomputed volume, on
 disk or at an `s3://`, `gs://` or `https://` URL; public buckets are read
 anonymously, private ones with your AWS or Google credentials. See
@@ -460,7 +472,8 @@ models:
 ```
 
 The exports output logits: add a `SigmoidPostprocessor` (the dashboard suggests
-it, and their manifests' input normalization). Any other `.onnx` that takes
+it). Their manifests declare their input normalization, which the dashboard
+sets when one starts with no input normalizers in the chain (see *Usage*). Any other `.onnx` that takes
 `[1, 1, z, y, x]` works too, given its `input_voxel_size`. See
 [example/onnx_web_models.yaml](example/onnx_web_models.yaml).
 

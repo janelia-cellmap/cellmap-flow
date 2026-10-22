@@ -214,10 +214,15 @@ export function viewLabelsRoutes(router: Router): ViewLabelsState {
       const { volume, lo, hi } = await targetBox(ctx, body);
       const confirmation = confirmationNeeded(body, lo, hi);
       if (confirmation) return confirmation;
+      // null for a volume made before a model was chosen: the model picked
+      // under Prediction from seeds it, or the only model served.
       const base = volume.model_name;
-      if (!base) throw new Refused("The annotation volume does not say which model it is for.");
       const served = predictionSource(ctx.infer.served(), base, typeof body.model === "string" && body.model ? body.model : null);
-      if (!served) throw new Refused(`${base} is not served. Serve it from the Models tab, or pick a model.`);
+      if (!served) {
+        throw new Refused(base
+          ? `${base} is not served. Serve it from the Models tab, or pick a model.`
+          : "Pick the model to seed from under Prediction from: the volume was made before a model was chosen.");
+      }
       // The prediction is the open dataset's: a volume painted on another
       // one would get it at the wrong place.
       if (dataset.url !== volume.dataset_path) {
@@ -555,7 +560,7 @@ function defaultSource(sources: ServedModel[], base: string | null): ServedModel
 
 /** The served model whose prediction a seed reads: `chosen` when the page
  * names one (refused when it is not served), else defaultSource's. */
-function predictionSource(sources: ServedModel[], base: string, chosen: string | null): ServedModel | null {
+function predictionSource(sources: ServedModel[], base: string | null, chosen: string | null): ServedModel | null {
   if (chosen) {
     const found = sources.find((s) => s.entry.name === chosen);
     if (!found) throw new Refused(`${chosen} is not served. Pick another model to seed from.`);

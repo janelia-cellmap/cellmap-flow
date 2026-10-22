@@ -83,7 +83,7 @@ Set the pipeline
 
 ``PUT /api/pipeline`` sets the input normalization and postprocessing chains,
 and redraws the raw data and every prediction layer through them. It is what
-Submit on the dashboard page sends, and what the pipeline builder sends after
+Apply on the dashboard page sends, and what the pipeline builder sends after
 each edit. Each chain is a list of steps in the order they run, each step an
 op's class name and its parameters; send ``[]`` for none.
 

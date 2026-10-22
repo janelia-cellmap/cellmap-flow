@@ -1,7 +1,9 @@
 """The dashboard's chain, and the settings the pipeline builder keeps here.
 
 - ``PUT /api/pipeline``: set the chain and redraw the viewer through it (the
-  dashboard page's Submit, and the pipeline builder after each edit).
+  dashboard page's Apply, and the pipeline builder after each edit).
+- ``set_declared_input_norm()``: a model's start sets the input normalization
+  it declares, when the chain has none (services.launch.update_run_models).
 - ``POST /api/process`` and ``POST /api/pipeline/apply``: the two routes it
   replaced, kept for one release as its deprecated aliases.
 - ``/api/blockwise-config``: the builder's blockwise settings.
@@ -289,6 +291,81 @@ def _set_chain_and_redraw(spec, dashboard_url, *, built=None, builder=None) -> l
 
     logger.debug(f"Input normalizers: {session.input_norms}")
     return drawn
+
+
+def _declared_steps(model_config) -> list:
+    """The input normalization ``model_config`` declares itself
+    (``ModelConfig.declared_input_norm``: an onnx model's manifest), as
+    chain steps, each a copied ``{"name", **params}`` dict; ``[]`` for a
+    model that declares none, and for anything that is not a step."""
+    declared = getattr(model_config, "declared_input_norm", None)
+    steps = declared() if callable(declared) else None
+    return [dict(step) for step in steps or [] if isinstance(step, dict) and step.get("name")]
+
+
+def set_declared_input_norm(model_configs) -> Optional[str]:
+    """Set the input normalization a model declares as the chain's, as part
+    of starting it, when the chain has none. Returns the name of the model
+    whose declaration it is, or None when nothing changed.
+
+    The Models tab's Submit (services.launch.update_run_models) calls this
+    with the models it is about to start, in the tab's order, before their
+    layers are drawn, so they are drawn through it. The first of them that
+    declares any steps (_declared_steps) gives them, and the postprocessing
+    stays as it is; the chain is set through _set_chain_and_redraw, as
+    PUT /api/pipeline sets it, so the layers of the models already running
+    are redrawn through it too. A chain that has input normalizers already
+    (a YAML's, the user's Apply) is left alone, and after this only Apply
+    changes it: the page's Input list shows the chain as set
+    (GET /api/models/loaded's ``pipeline``, which the page reads after every
+    model change) and the notice that says where it came from. A model that
+    declares nothing changes nothing. A declaration that names an op the
+    registry does not have, or a value its class refuses, is skipped with a
+    warning, and the next model's is tried.
+
+    The browser's twin is web/src/backend/serving.ts setDeclaredInputNorm.
+    """
+    session = get_session()
+    if session.pipeline_spec.input_norm:
+        return None
+    for model_config in model_configs:
+        steps = _declared_steps(model_config)
+        if not steps:
+            continue
+        name = getattr(model_config, "name", None)
+        unknown = _unknown_op("normalizer", [step["name"] for step in steps])
+        if unknown:
+            logger.warning(f"{name}'s declared input normalization is not used: {unknown}")
+            continue
+        spec = PipelineSpec(steps, session.pipeline_spec.postprocess)
+        try:
+            built = spec.build()
+        except (TypeError, ValueError) as e:
+            logger.warning(f"{name}'s declared input normalization is not used: {e}")
+            continue
+        _set_chain_and_redraw(spec, None, built=built)
+        logger.info(f"Input normalization set from {name}'s declaration: "
+                    + " → ".join(step["name"] for step in steps))
+        return name
+    return None
+
+
+def input_norm_declared_by(model_configs) -> Optional[str]:
+    """The name of the first of ``model_configs`` whose declared input
+    normalization is the chain's input part as it stands, step for step;
+    None when none is, or the chain has no input normalizers.
+
+    GET /api/models/loaded answers it beside the chain, so the page can say
+    where an input normalization a model's start set came from
+    (set_declared_input_norm copies the declared steps as they are).
+    """
+    live = [dict(step) for step in get_session().pipeline_spec.input_norm]
+    if not live:
+        return None
+    for model_config in model_configs:
+        if _declared_steps(model_config) == live:
+            return getattr(model_config, "name", None)
+    return None
 
 
 def _problems_with_models(postprocess):

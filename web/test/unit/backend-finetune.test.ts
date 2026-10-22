@@ -6,14 +6,16 @@
 // (and needs_volume where the tab acts on it), not by its words.
 import { describe, expect, it } from "vitest";
 
+import { writeBox } from "../../src/ai-annotate/fill";
 import { createBackend } from "../../src/backend";
 import { type FinetuneDeps, finetuneRoutes, RESTART_EVENT } from "../../src/backend/routes/finetune";
+import { rankRoutes } from "../../src/backend/routes/rank";
 import { Router } from "../../src/backend/router";
 import type { ApiRequest, ApiResponse, ModelEntry } from "../../src/contracts";
 import { MANIFEST_METADATA_KEY } from "../../src/contracts";
 import { parseTrainGraph } from "../../src/finetune/full/graph";
 import type { Finetuned, FinetuneRun, RunFinetune } from "../../src/finetune/types";
-import { CHUNK_DIR, chunkKey, planVolume } from "../../src/finetune/volume";
+import { CHUNK_DIR, chunkKey, planVolume, readVolume } from "../../src/finetune/volume";
 import { entryFor, parseManifest } from "../../src/models/manifest";
 import { DATASET, entry, type FakeContext, fakeContext, NAME_54, NAME_56, request } from "./backend-fakes";
 import { rawManifest } from "./models-helpers";
@@ -540,6 +542,60 @@ describe.skipIf(!python)("downloads and deletion", () => {
     expect(ctx.session.state.paintVolume).toBeNull();
     expect((await h.handle(request("POST", "/api/finetune/delete-volume", { volume_id: "vol-nope" }))).status).toBe(404);
     expect((await h.handle(request("POST", "/api/finetune/delete-volume", { volume_id: "a/b" }))).status).toBe(400);
+  });
+});
+
+describe.skipIf(!python)("a volume painted before any model", () => {
+  it("is made on the raw's grid at the size asked, ranked and carried by Use this model, and not trained on", async () => {
+    // The raw at 8 and 16 nm, and no model served yet.
+    const levels = [{ shape: [1000, 1000, 1000], voxel: [8, 8, 8], origin: [4, 4, 4] }, { shape: [500, 500, 500], voxel: [16, 16, 16], origin: [8, 8, 8] }];
+    const ctx = fakeContext({ dataset: { ...DATASET, levels } });
+    const { run, calls } = fakeRun();
+    const router = new Router();
+    finetuneRoutes(router, { run });
+    rankRoutes(router);
+    const handle = (req: ApiRequest) => router.handle(req, ctx);
+    expect(body(await handle(request("GET", "/api/finetune/models")))).toMatchObject({ models: [], raw_voxel_sizes: [[8, 8, 8], [16, 16, 16]] });
+
+    // No size: the level the viewer shows, the finest while its URL holds no
+    // state, s1 once a screen pixel spans 2.5 of its 8 nm voxels (20 nm).
+    const create = (extra: Record<string, unknown> = {}) => handle(request("POST", "/api/finetune/create-volume", extra)).then(body);
+    expect((await create()).metadata.output_voxel_size).toEqual([8, 8, 8]);
+    const state = { dimensions: { x: [8e-9, "m"], y: [8e-9, "m"], z: [8e-9, "m"] }, position: [500, 500, 500], crossSectionScale: 2.5 };
+    ctx.viewer.viewerUrl = () => `http://localhost/ng/#!${encodeURIComponent(JSON.stringify(state))}`;
+    expect((await create()).metadata.output_voxel_size).toEqual([16, 16, 16]);
+    // The 16 nm level, asked for.
+    const created = await create({ voxel_size: [16, 16, 16] });
+    expect(created).toMatchObject({ success: true, model_name: null, metadata: { output_voxel_size: [16, 16, 16], chunk_size: [64, 64, 64], dataset_offset_nm: [8, 8, 8] } });
+    const volume = (await readVolume(ctx.paint, created.volume_id))!;
+    expect(volume).toMatchObject({ model_name: null, model_id: null, dataset_shape_voxels: [512, 512, 512], dtype: "uint8" });
+    expect(ctx.session.state.paintVolume).toBe(volume.id);
+    expect((await handle(request("POST", "/api/finetune/create-volume", { voxel_size: [0, 16, 16] }))).status).toBe(400);
+
+    // A 10^3 object in a 20^3 box of background, and a 16 nm model of the
+    // catalog's that sees it, on its level's grid, which is the volume's.
+    const inside = (z: number, y: number, x: number) => [z, y, x].every((v) => v >= 5 && v < 15);
+    await writeBox(ctx.paint, volume, [0, 0, 0], [20, 20, 20], new Uint8Array(20 ** 3).map((_, i) => (inside(Math.floor(i / 400), Math.floor(i / 20) % 20, i % 20) ? 2 : 1)));
+    const nuc = entry("setup_60", "nuc", ["nuc"], 16);
+    ctx.catalog.entries = [...ctx.catalog.entries, nuc];
+    await serve(ctx, nuc);
+    ctx.infer.outputAt = (_view, _c, z, y, x) => (inside(z, y, x) ? 4 : -4);
+
+    // Training on it is refused, saying where to go.
+    const refused = await handle(request("POST", "/api/finetune/submit", submitBody({ model_name: nuc.name })));
+    expect(refused.status).toBe(400);
+    expect(body(refused).paint_first).toBe(true);
+    expect(calls).toEqual([]);
+
+    // The rank: no model is the volume's; the served one is scored on it, then used.
+    const listed = body(await handle(request("GET", "/api/finetune/rank/candidates")));
+    expect(listed.volume).toMatchObject({ id: volume.id, model_name: null });
+    expect(listed.candidates.some((c: any) => c.volume_model)).toBe(false);
+    expect(body(await handle(request("POST", "/api/finetune/rank/score", { name: nuc.name })))).toMatchObject({ success: true, matches: 1 });
+    const used = body(await handle(request("POST", "/api/finetune/rank/use", { name: nuc.name })));
+    expect(used).toMatchObject({ success: true, from_volume: volume.id, painted_voxels: 20 ** 3, source_voxels: 20 ** 3, conflicts: 0 });
+    expect(await readVolume(ctx.paint, ctx.session.state.paintVolume!)).toMatchObject({ model_name: nuc.name, model_id: nuc.id });
+    expect(body(await handle(request("POST", "/api/finetune/submit", submitBody({ model_name: nuc.name })))).paint_first).toBeUndefined();
   });
 });
 

@@ -37,6 +37,34 @@ def plan_volume(args, arrays):
     return {**plan, "dtype": volume.annotation_dtype(args.get("output_type"))}
 
 
+@_refusal
+def plan_paint_volume(args, arrays):
+    """``volume.plan_paint_volume`` of ``level`` (``shape``, ``voxel``,
+    ``corner``: the raw level read at the voxel size) and ``voxel_size``
+    (nm, z, y, x), a volume painted before any model, with ``dtype`` uint8:
+    its labels are background and objects, which a model's volume they are
+    carried to holds in its own dtype."""
+    plan = volume.plan_paint_volume(args["level"], args.get("voxel_size"))
+    return {**plan, "dtype": volume.annotation_dtype(None)}
+
+
+@_refusal
+def shown_level(args, arrays):
+    """``{"index": volume.shown_level(voxel_sizes, pixel_nm)}``: which of
+    the raw's levels (``voxel_sizes``, nm, finest first) the viewer shows at
+    a screen pixel of ``pixel_nm`` (null: not known, the finest), the
+    default voxel size of a volume painted before any model."""
+    return {"index": volume.shown_level(args.get("voxel_sizes") or [], args.get("pixel_nm"))}
+
+
+def training_refusal(args, arrays):
+    """``{"error": <the sentence>}`` when ``volume`` (its record) is not
+    trained on (``volume.training_refusal``: a paint-first volume), else
+    ``{}``."""
+    refusal = volume.training_refusal(args.get("volume") or {})
+    return {"error": refusal} if refusal else {}
+
+
 def _layer_boxes(entries) -> list:
     """Each entry as the good_regions layer draws it: its box and label
     (``good`` without a label), or None for one that is not a region."""

@@ -8,9 +8,12 @@
 // stop inference servers) and routes/pipeline.py's _set_chain_and_redraw
 // (re-point every layer at the new chain). Here a "server" is an Engine
 // view with an onnxruntime-web session behind it (src/infer), so starting
-// one is Inference.serve and stopping one is ServedModel.dispose.
+// one is Inference.serve and stopping one is ServedModel.dispose. A model's
+// start sets the input normalization it declares when the chain has none
+// (setDeclaredInputNorm, routes/pipeline.py's set_declared_input_norm).
 import { ARGS_KEY } from "../contracts";
-import type { AppContext, Chain, ModelEntry, ServedModel } from "../contracts";
+import type { AppContext, Chain, ModelEntry, ServedModel, Step } from "../contracts";
+import { SUPPORTED_NORMALIZERS } from "../infer/norms";
 import { entryFor } from "../models";
 import { chainDigest, encodeArgs } from "../shared/args";
 import { shaderColor } from "../viewer/display";
@@ -61,6 +64,58 @@ export async function setChain(ctx: AppContext, chain: Chain): Promise<ServedMod
   const served = await serveModels(ctx, entries, chain, { blob, postprocessChanged });
   ctx.log(`Chain ${digest}: ${served.length ? served.map((s) => s.entry.name).join(", ") : "no model"} drawn through it`);
   return served;
+}
+
+/** The input normalization `entry`'s manifest declares (the steps the
+ * browser feeds the model through), each step copied; [] for none.
+ * pipeline.py's _declared_steps. */
+export function declaredInputNorm(entry: ModelEntry): Step[] {
+  return (entry.manifest.input_norm ?? []).map((step) => ({ ...step }));
+}
+
+/** Set the input normalization a model declares as the chain's, as part of
+ * starting it, when the chain has none (pipeline.py's
+ * set_declared_input_norm). Returns the name of the model whose declaration
+ * it is, or null when nothing changed.
+ *
+ * The Models tab's Submit and Add (routes/models.ts) call this with the
+ * models they are about to serve that are not served yet, before serving
+ * them. The first of them whose manifest declares steps gives them, and the
+ * postprocessing stays as it is; the chain is set through setChain, as PUT
+ * /api/pipeline sets it, so the models served already are drawn through it
+ * too. A chain that has input normalizers already is left alone, and after
+ * this only the page's Apply changes it: the Input list shows the chain as
+ * set (GET /api/models/loaded's `pipeline`, which the page reads after every
+ * model change) and says where it came from. A model that declares nothing
+ * changes nothing, and a declaration naming a step the browser cannot run
+ * is skipped, saying so, and the next model's is tried. */
+export async function setDeclaredInputNorm(ctx: AppContext, starting: readonly ModelEntry[]): Promise<string | null> {
+  const { chain } = ctx.session.state;
+  if (chain.input_norm.length) return null;
+  for (const entry of starting) {
+    const steps = declaredInputNorm(entry);
+    if (!steps.length) continue;
+    const unsupported = steps.find((step) => !SUPPORTED_NORMALIZERS.includes(step.name));
+    if (unsupported) {
+      ctx.log(`${entry.name}'s declared input normalization is not used: ${unsupported.name} is not available in the browser`);
+      continue;
+    }
+    await setChain(ctx, { input_norm: steps, postprocess: chain.postprocess });
+    ctx.log(`Input normalization set from ${entry.name}'s declaration: ${stepNames(steps).join(" → ")}`);
+    return entry.name;
+  }
+  return null;
+}
+
+/** The name of the first of `entries` whose declared input normalization is
+ * `chain`'s input part, step for step; null when none is, or the chain has
+ * no input normalizers (pipeline.py's input_norm_declared_by). GET
+ * /api/models/loaded answers it beside the chain, so the page can say where
+ * an input normalization a model's start set came from. */
+export function inputNormDeclaredBy(chain: Chain, entries: readonly ModelEntry[]): string | null {
+  if (!chain.input_norm.length) return null;
+  const live = JSON.stringify(chain.input_norm);
+  return entries.find((entry) => JSON.stringify(declaredInputNorm(entry)) === live)?.name ?? null;
 }
 
 export interface ServeOptions {

@@ -247,6 +247,26 @@ def test_a_seed_reads_the_model_chosen_else_the_latest_finetune(dashboard, serve
     assert dashboard.post(SEED, json={"model": "gone"}).status_code == 409
 
 
+def test_a_volume_painted_before_any_model_seeds_from_the_model_picked_or_the_only_one_served(
+        dashboard, served, server, monkeypatch):
+    """A volume made before a model was chosen (model_name None) names no
+    model to seed from: the one picked under Prediction from does, else the
+    only server running; with several running and none picked, the seed is
+    refused, not the volume."""
+    served()
+    get_session().annotation_volumes["vol-1"]["model_name"] = None
+    read = []
+    monkeypatch.setattr(view_labels, "read_prediction",
+                        lambda host, name, *a, **kw: read.append(name) or (np.zeros((1, 8, 8, 8), "f4"), a[1], a[2]))
+    get_session().jobs = [SimpleNamespace(model_name=name, host=f"http://{name}:8000") for name in ("model", "other")]
+    assert dashboard.get("/api/finetune/view-labels/sources").get_json()["default"] is None
+    assert dashboard.post(SEED, json={}).status_code == 409
+    assert dashboard.post(SEED, json={"model": "other"}).status_code == 200
+    get_session().jobs = get_session().jobs[:1]
+    assert dashboard.post(SEED, json={}).status_code == 200
+    assert read == ["other", "model"]
+
+
 def test_undo_takes_back_the_last_actions_and_keeps_strokes_painted_since(dashboard, served):
     """All Background over objects the user had not seen: Undo puts the box
     back, except where they painted after it."""

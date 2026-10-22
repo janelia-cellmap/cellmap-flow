@@ -1,6 +1,8 @@
 // An annotation volume in the browser: planned over the open dataset for a
 // model (planVolume, by cellmap_flow/portable/volume.py, the Python the
-// server plans with, run in the engine's Pyodide worker), written as zarr v2
+// server plans with, run in the engine's Pyodide worker), or before any model
+// on the raw's grid (planPaintVolume: not trained on, its paint carried onto
+// a model's grid by Use this model), written as zarr v2
 // files into the paint store (volumeFiles), and read back for training
 // (readVolume, the painted chunks). This file reads what the plan is made
 // from (the raw level the model reads, the model's blocks) and writes and
@@ -10,6 +12,8 @@ import { volumeCornerNm } from "../ai-annotate/fill";
 import type { Chain, DatasetInfo, Inference, ModelEntry, PaintStore, PaintVolume } from "../contracts";
 import { chooseRawLevel, geometryOf } from "../infer/geometry";
 import { stamp } from "../shared/format";
+import { decodeState } from "../viewer/share";
+import { pointerNm } from "../viewer/state";
 import type { PaintedChunk } from "./types";
 
 /** The directory of the labels' chunks within a volume: zarr v2, one level. */
@@ -47,6 +51,9 @@ export const VOLUME_CALLS = "cellmap_flow.portable.volume_calls";
 /** What plan_volume answers when it plans: the plan's fields of a PaintVolume. */
 type Plan = Pick<PaintVolume, "output_voxel_size" | "input_voxel_size" | "claimed_output_voxel_size" | "claimed_input_voxel_size" | "chunk_size" | "input_size" | "dataset_offset_nm" | "dataset_shape_voxels" | "dtype">;
 
+/** What plan_paint_volume answers: a Plan whose claimed sizes are null, as no model claims one. */
+type PaintPlan = Omit<Plan, "claimed_output_voxel_size" | "claimed_input_voxel_size"> & { claimed_output_voxel_size: null; claimed_input_voxel_size: null };
+
 /** A new volume over `dataset` for `entry`, through `chain`: the server's
  * plan_volume, which is cellmap_flow/portable/volume.py's, called in the
  * engine's Pyodide worker (`infer.python`). What it is given is what the
@@ -63,23 +70,102 @@ type Plan = Pick<PaintVolume, "output_voxel_size" | "input_voxel_size" | "claime
  *
  * Refused for a dataset with more than one channel, as serve() refuses it:
  * the browser mode reads single-channel volumes. */
-export async function planVolume(infer: Pick<Inference, "python">, dataset: DatasetInfo, entry: ModelEntry, chain: Chain, options: { id?: string; now?: Date } = {}): Promise<PaintVolume> {
-  if (dataset.channels > 1) {
-    throw new Error(`${dataset.url} has ${dataset.channels} channels; the browser mode paints and trains on single-channel volumes (it does not select a channel yet)`);
-  }
+export async function planVolume(infer: Pick<Inference, "python">, dataset: DatasetInfo, entry: ModelEntry, chain: Chain, options: VolumeOptions = {}): Promise<PaintVolume> {
+  refuseChannels(dataset);
   const model = geometryOf(entry);
   const raw = dataset.levels[chooseRawLevel(dataset.levels, model.input_voxel_size)];
   const plan = await infer.python<Plan | { error: string }>(`${VOLUME_CALLS}:plan_volume`, {
-    level: { shape: raw.shape, voxel: raw.voxel, corner: volumeCornerNm(raw.origin, raw.voxel) },
+    level: levelOf(raw),
     model,
     output_type: hasAffinityChannels(entry) ? "affinities" : "binary",
   });
   if ("error" in plan) throw new Error(plan.error);
+  return volumeOf(plan, dataset, entry, chain, options);
+}
+
+/** A new volume's id and creation time, by default a fresh id and now (tests pin them). */
+export interface VolumeOptions { id?: string; now?: Date }
+
+/** A new volume over `dataset` painted before any model (a "paint-first"
+ * volume), through `chain`: the server's plan_paint_volume, which is
+ * cellmap_flow/portable/volume.py's, in the engine's Pyodide worker, on the
+ * raw's grid at `voxelSize` (nm, z, y, x). The level the plan is over is
+ * the one chooseRawLevel picks for that size (the level at it, else the
+ * finest not coarser than it), as the server's raw_level opens it; with no
+ * voxel size, the level the viewer shows at a screen pixel of `pixelNm`
+ * (shownVoxelSize; null, the finest). Its model_name and model_id are null:
+ * it is not trained on (trainingRefusal), and Which model to start from's
+ * Use this model carries its paint onto a model's grid. Refused as
+ * planVolume is for a dataset of more than one channel, and with the
+ * Python's sentence for a voxel size it cannot plan at. */
+export async function planPaintVolume(infer: Pick<Inference, "python">, dataset: DatasetInfo, voxelSize: number[] | null, chain: Chain, options: VolumeOptions & { pixelNm?: number | null } = {}): Promise<PaintVolume> {
+  refuseChannels(dataset);
+  const size = voxelSize ?? (await shownVoxelSize(infer, dataset, options.pixelNm ?? null));
+  const raw = dataset.levels[chooseRawLevel(dataset.levels, size)];
+  const plan = await infer.python<PaintPlan | { error: string }>(`${VOLUME_CALLS}:plan_paint_volume`, { level: levelOf(raw), voxel_size: size });
+  if ("error" in plan) throw new Error(plan.error);
+  // No model claims a voxel size: the attrs leave them out, as the server's create_volume_zarr does.
+  const { claimed_output_voxel_size: _out, claimed_input_voxel_size: _in, ...grid } = plan;
+  return volumeOf(grid, dataset, null, chain, options);
+}
+
+/** The voxel size (nm, z, y, x) of `dataset`'s level the viewer shows at a
+ * screen pixel of `pixelNm` (null: not known, the finest), by the portable
+ * Python's shown_level, as the server's shown_voxel_size picks it. */
+export async function shownVoxelSize(infer: Pick<Inference, "python">, dataset: DatasetInfo, pixelNm: number | null): Promise<number[]> {
+  const shown = await infer.python<{ index: number } | { error: string }>(`${VOLUME_CALLS}:shown_level`, {
+    voxel_sizes: dataset.levels.map((level) => level.voxel),
+    pixel_nm: pixelNm,
+  });
+  if ("error" in shown) throw new Error(shown.error);
+  return dataset.levels[shown.index].voxel.slice();
+}
+
+/** The size in nm of one screen pixel of the viewer whose own URL is
+ * `viewerUrl` (ViewerController.viewerUrl: its state in the `#!` hash), as
+ * the server's viewer/raw.py view_of reads it: the state's
+ * crossSectionScale (voxels of its coordinate space a pixel spans) times
+ * the smallest of its z, y and x scales in nm. Null when the URL holds no
+ * state, or the state no zoom or lengths (a viewer that has not reported
+ * them yet). */
+export function viewPixelNm(viewerUrl: string | null): number | null {
+  const hash = viewerUrl ? viewerUrl.replace(/^[^#]*/, "") : "";
+  const state = decodeState(hash);
+  const zoom = state?.crossSectionScale;
+  // One voxel along every dimension, in nm: each of z, y and x's scale.
+  const scales = pointerNm(Object.keys(state?.dimensions ?? {}).map(() => 1), state?.dimensions);
+  if (typeof zoom !== "number" || !Number.isFinite(zoom) || zoom <= 0 || !scales) return null;
+  return zoom * Math.min(...scales);
+}
+
+/** Why `volume` is not trained on, or null when it can be: the portable
+ * Python's training_refusal (a volume painted before any model), the
+ * sentence the server's submit refuses it with. */
+export async function trainingRefusal(infer: Pick<Inference, "python">, volume: PaintVolume): Promise<string | null> {
+  const answer = await infer.python<{ error?: string }>(`${VOLUME_CALLS}:training_refusal`, { volume: { model_name: volume.model_name } });
+  return answer.error ?? null;
+}
+
+/** Refused for a dataset with more than one channel, as serve() refuses it:
+ * the browser mode reads single-channel volumes. */
+function refuseChannels(dataset: DatasetInfo): void {
+  if (dataset.channels > 1) {
+    throw new Error(`${dataset.url} has ${dataset.channels} channels; the browser mode paints and trains on single-channel volumes (it does not select a channel yet)`);
+  }
+}
+
+/** A raw level as the plans take it: its shape, voxel size and voxel-0 lower corner (the engine's origin is the centre). */
+function levelOf(raw: DatasetInfo["levels"][number]): { shape: number[]; voxel: number[]; corner: number[] } {
+  return { shape: raw.shape, voxel: raw.voxel, corner: volumeCornerNm(raw.origin, raw.voxel) };
+}
+
+/** The volume of `plan` over `dataset`, for `entry` (null: for no model), with `chain` and the options' id and time. */
+function volumeOf(plan: Plan, dataset: DatasetInfo, entry: ModelEntry | null, chain: Chain, options: VolumeOptions): PaintVolume {
   return {
     id: options.id ?? newVolumeId(options.now),
     type: "annotation_volume",
-    model_name: entry.name,
-    model_id: entry.id,
+    model_name: entry ? entry.name : null,
+    model_id: entry ? entry.id : null,
     dataset_path: dataset.url,
     ...plan,
     input_norm: chain.input_norm.map((step) => ({ ...step })),

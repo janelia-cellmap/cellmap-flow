@@ -142,6 +142,18 @@ before is deleted from the browser: a job keeps its latest model only, as the
 server serves only a job's latest iteration, and a new *Start Finetuning*
 makes a new one beside it.
 
+You can also paint before any model is running. *New Volume* then shows a
+*Voxel size (nm)* field that offers the dataset's levels and takes any size
+you type (one number, or z, y, x); left blank, it uses the level the viewer
+shows when you click. The volume lies on the raw's grid at that size, in
+64-voxel chunks, with no model recorded, as on the server. *Seed from
+Prediction* and *Fit to Paint* work on it with the model picked under
+*Prediction from* (or the only one served). *Start Finetuning* refuses it,
+because it is on no model's grid. Rank the models on
+the paint under *Which model to start from* (below) and click *Use this
+model*: that copies the paint onto the chosen model's grid, and you train on
+the new volume.
+
 The training panel's controls are the server's where they mean something for
 one layer: the epochs, the learning rate, the loss (BCE by default, MSE or
 margin; Dice scores whole patches and needs the server), label smoothing,
@@ -172,8 +184,9 @@ A finetune has least to learn from the model that already gets most of your
 paint right, and that is not always the one the volume was made for. The
 Training panel's *Which model to start from* ranks the models the browser can
 run, those finetuned in it among them, by how well each one's prediction
-matches the volume's paint: tick the models, press *Rank models*, and each is
-scored in turn, a few seconds to half a minute each, and listed best first.
+matches the volume's paint: open the card (it starts closed, and stays as you
+leave it), tick the models, press *Rank models*, and each is scored in turn,
+a few seconds to half a minute each, and listed best first.
 
 - **Match**, which ranks them, is the share of the painted voxels the model
   gets right, objects and background counting equally, so that paint mostly
@@ -181,15 +194,19 @@ scored in turn, a few seconds to half a minute each, and listed best first.
   such a model matches 50%. Beside it are the share of painted objects it
   calls object and of painted background it calls background.
 - Each model is scored at its own cut-off: the threshold on its output that
-  fits the paint best, which the row gives, with the match at the model's own
-  0 when that differs. A model that sees the objects but calls too much or
-  too little at 0 is ranked as it would be used once its threshold is set.
+  fits the paint best. The row's *Threshold* gives it as a probability, as
+  *Seed from Prediction* takes it (0.5 is the model's own boundary), with the
+  match at 0.5 when that differs. A model that sees the objects but calls too
+  much or too little at 0.5 is ranked as it would be used once its threshold
+  is set.
 - Raw that spans only a few grey levels (``jrc_jurkat-1``'s about 20 of
   0–255) looks almost flat to a model through its usual normalizer. Where
   the raw under the paint spans less than a quarter of the normalizer's
   range, the model is scored again with the normalizer stretched to the
   raw's 1st to 99th percentiles, and that is kept when it matches at least 3
-  points better; the row says so.
+  points better. The row's *Input* gives the grey levels the model read as 0
+  to 1: the normalizer's own range, or the stretched one with the match
+  unstretched beside it.
 - A model is scored on what its own finetune would train on: a nucleus or
   mitochondria model on its channel (a model of several such channels on the
   one that matches best, which the row names), an affinity model on the pairs
@@ -220,12 +237,21 @@ on the model's own grid, and its paint layer takes the old one's place (the
 old volume stays, under *Resume Existing Volume*). What its score chose comes
 with it: a stretched raw becomes the session's input normalization (the raw
 is the dataset's, so every model reads it so), and its cut-off becomes *Seed
-from Prediction*'s threshold. On the same grid the paint
+from Prediction*'s threshold, marked *set by ranking* beside the field until
+you change it; a line under *Label it*'s buttons says what was set. On the
+same grid the paint
 is copied voxel for voxel; on a finer one each painted voxel becomes the
 voxels it covers; on a coarser one each voxel takes the label of the painted
 voxels inside it, and is left unpainted where they disagree (object against
 background in one voxel), which the status line counts. A stroke thinner
 than the coarser voxel still lands, a voxel wide.
+
+*Fit to Paint*, beside *Seed from Prediction*, does the same for the model
+you already seed from (*Prediction from*), with no new volume and nothing
+served: it scores that model on your paint as a ranking would, sets *Seed
+from Prediction*'s threshold to the one that fits best, and stretches the
+input normalization when that scored clearly better. Paint a few strokes of
+object and background, fit, then seed: the seed is cut where your paint says.
 
 Training the whole network
 ~~~~~~~~~~~~~~~~~~~~~~~~~~

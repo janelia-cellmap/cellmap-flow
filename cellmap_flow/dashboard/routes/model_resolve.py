@@ -88,6 +88,12 @@ def add_model():
         return jsonify({"success": False, "error": str(e)}), 400
     drop_config(name)
     session.models_config.append(model_config)
+    # As Submit's start does: a chain with no input normalizers takes the ones
+    # this model declares, before the blob its layer is drawn with is taken
+    # (routes.pipeline.set_declared_input_norm).
+    from cellmap_flow.dashboard.routes.pipeline import set_declared_input_norm
+
+    set_declared_input_norm([model_config])
     _launch(name, run_model, model_config, session.layer_blob(), daemon=True)
     logger.info(f"Adding model {name} ({entry.get('type')})")
     return jsonify({"success": True, "name": name})
