@@ -15,7 +15,7 @@
 # serve and finetune on Apple's GPU). CUDA is Linux-only.
 [workspace]
 name = "cellmap-flow"
-version = "0.2.3"
+version = "0.3.0"
 description = "Realtime prediction using neuroglancer"
 channels = ["nvidia", "conda-forge", "pytorch"]
 platforms = ["linux-64", "osx-arm64"]

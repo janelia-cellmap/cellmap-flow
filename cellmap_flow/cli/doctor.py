@@ -28,8 +28,13 @@ WARN = "!"
 # would not work: the fork keeps upstream's version string.
 NEUROGLANCER_FORK_MARKER = "Paint Value"
 
+# The fork's commit pixi installs (pixi.toml, the finetune feature's
+# pypi-dependencies); tests/web/test_pins.py keeps the two the same, so a pip
+# user who follows the doctor gets the client that deploys. The install
+# builds the client with npm and a C++ extension with the compiler at hand.
+NEUROGLANCER_FORK_COMMIT = "fae54db8c667176a602a34f0d9d1028956009836"
 NEUROGLANCER_FORK_INSTALL = (
-    "pip install git+https://github.com/briossant/neuroglancer@feature/voxel-annotation"
+    f"pip install git+https://github.com/briossant/neuroglancer@{NEUROGLANCER_FORK_COMMIT}"
 )
 
 # MinIO stopped publishing prebuilt community server binaries: dl.min.io
@@ -127,6 +132,20 @@ def _check_neuroglancer_fork():
         "fail",
         "upstream neuroglancer installed -- painting tools missing",
         NEUROGLANCER_FORK_INSTALL,
+    )
+
+
+def painting_unavailable():
+    """One line for the dashboard's start when the installed neuroglancer
+    cannot paint (_check_neuroglancer_fork), with the install line; None when
+    it can. dashboard.app.create_and_run_app logs it, so a pip install, which
+    has upstream neuroglancer, hears at start why the Draw tab has no brush."""
+    result = _check_neuroglancer_fork()
+    if result.status == "ok":
+        return None
+    return (
+        f"Painting is unavailable: {result.detail}. To paint, install the fork: "
+        f"{result.fix} (cellmap_flow doctor checks the rest of the environment)."
     )
 
 

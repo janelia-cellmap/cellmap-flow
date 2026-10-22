@@ -115,11 +115,18 @@ def create_and_run_app(neuroglancer_url=None, server=None):
     the plugins, whose normalizers, postprocessors and model types its
     pages offer, if nothing has yet.
     """
+    from cellmap_flow.cli.doctor import painting_unavailable
     from cellmap_flow.plugins import load_plugins
 
     if not logging.getLogger().handlers:
         configure_logging()
     load_plugins()
+    # A pip install has upstream neuroglancer, whose client lacks the paint
+    # fork's brush, flood fill and MinIO writes: say so here, with the
+    # install line, rather than let the Draw tab come up without a brush.
+    unavailable = painting_unavailable()
+    if unavailable:
+        logger.warning(unavailable)
     get_session().neuroglancer_url = neuroglancer_url
     if server is None:
         server = bind_dashboard()

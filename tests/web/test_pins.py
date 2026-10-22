@@ -1,5 +1,6 @@
-"""chunkmirage is pinned twice, and the two pins move together.
-pyproject.toml's is a version range, the release the Python inference server
+"""Pins that move together: chunkmirage's two, and the neuroglancer fork's two.
+
+chunkmirage is pinned twice. pyproject.toml's is a version range, the release the Python inference server
 is installed from: PyPI refuses an upload whose dependencies name a URL, so
 a git pin there would keep cellmap-flow from being released.
 web/chunkmirage.lock's is a commit, the one the browser engine is cloned
@@ -31,3 +32,17 @@ def test_the_server_takes_a_chunkmirage_release_and_the_browser_a_commit():
     )
     commits = LOCK_PIN.findall((ROOT / "web" / "chunkmirage.lock").read_text())
     assert len(commits) == 1, f"web/chunkmirage.lock should pin one full commit, found {commits}"
+
+
+def test_the_doctors_neuroglancer_fork_install_names_the_commit_pixi_installs():
+    """The paint fork is installed by pixi (pixi.toml's finetune feature) and,
+    for a pip install, by the line `cellmap_flow doctor` prints: the two name
+    one commit, or a pip user who follows the doctor gets a different client
+    from the one that deploys. pyproject.toml's comment names it too."""
+    from cellmap_flow.cli.doctor import NEUROGLANCER_FORK_COMMIT, NEUROGLANCER_FORK_INSTALL
+
+    pixi = tomllib.loads((ROOT / "pixi.toml").read_text())
+    pinned = pixi["feature"]["finetune"]["pypi-dependencies"]["neuroglancer"]["rev"]
+    assert NEUROGLANCER_FORK_COMMIT == pinned
+    assert NEUROGLANCER_FORK_INSTALL.endswith(f"@{pinned}")
+    assert pinned in (ROOT / "pyproject.toml").read_text()
