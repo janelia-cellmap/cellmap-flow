@@ -244,7 +244,8 @@ export function initRank() {
       return { ready: false, message: `Nothing is painted in ${volume.id} yet: paint background (1) and objects (2 and up), then rank.`, tone: "muted" };
     }
     if (!candidates.length) return { ready: false, message: "No models to rank.", tone: "muted" };
-    return { ready: true, volume, message: `${plural(volume.painted_chunks, "painted chunk")} in ${volume.id}, painted for ${volume.model_name}.`, tone: "muted" };
+    const paintedFor = volume.model_name ? `painted for ${volume.model_name}` : "painted before a model was chosen";
+    return { ready: true, volume, message: `${plural(volume.painted_chunks, "painted chunk")} in ${volume.id}, ${paintedFor}.`, tone: "muted" };
   }
 
   // The status line and Rank from a listing; a ranking running, or one

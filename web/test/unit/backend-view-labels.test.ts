@@ -150,6 +150,21 @@ describe.skipIf(!python)("POST /api/finetune/view-labels/seed", () => {
     expect(await labelAt(ctx, volume, [40, 40, 40])).toBe(10);
   });
 
+  it("seeds a volume made before any model from the model picked, or the only one served", async () => {
+    const ctx = fakeContext();
+    await serve(ctx, entry("setup_54"), entry("setup_56", "nuc", ["nuc"], 128));
+    const h = harness(ctx);
+    const created = body(await h.handle(request("POST", "/api/finetune/create-volume", { voxel_size: [8, 8, 8] })));
+    expect(created).toMatchObject({ success: true, model_name: null });
+    await h.handle(request("POST", "/api/finetune/add-to-viewer", { crop_id: created.volume_id, minio_url: created.neuroglancer_url }));
+    ctx.viewer.positionNm = [...MIDDLE];
+    ctx.infer.outputAt = twoBalls;
+    // Two served and none picked: the seed is refused, not the volume.
+    expect((await h.handle(request("POST", `${BASE}/seed`, {}))).status).toBe(409);
+    const seeded = body(await h.handle(request("POST", `${BASE}/seed`, { model: NAME_56 })));
+    expect(seeded).toMatchObject({ success: true, model: NAME_56 });
+  });
+
   it("reuses free ids on a uint8 volume, and seeds by the mutex watershed for an affinity model", async () => {
     const { ctx, h, volume } = await ready(NAME_56);
     expect(volume.dtype).toBe("uint8");

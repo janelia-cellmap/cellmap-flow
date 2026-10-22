@@ -518,12 +518,16 @@ def seed_view_from_prediction():
         refused = _confirmation_needed(data, lo, hi)
         if refused:
             return refused
+        # None for a volume made before a model was chosen: the model picked
+        # under Prediction from seeds it, or the only server running.
         base_model = volume.get("model_name")
-        if not base_model:
-            raise _Refused("The annotation volume does not say which model it is for.")
         model_name, host = _prediction_server(base_model, data.get("model"))
         if host is None:
-            raise _Refused(f"No running server for {base_model}. Start it from the Models tab, or pick a model.")
+            raise _Refused(
+                f"No running server for {base_model}. Start it from the Models tab, or pick a model."
+                if base_model else
+                "Pick the model to seed from under Prediction from: the volume was made before a model was chosen."
+            )
         # The model read decides the channels: a finetune's are its base's.
         channels, output_type, offsets = _seed_plan(
             _model_read_as(model_name, base_model), data.get("select_channel")
