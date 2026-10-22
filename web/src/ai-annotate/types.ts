@@ -14,12 +14,13 @@
 // Who implements what: the plane, the image sent, the mask and the labels an
 // accept writes are the Python both modes run (cellmap_flow/portable/
 // ai_annotate.py), which plane.ts and mask.ts call in the engine's worker;
-// labels.ts and fill.ts are the Label it tools' box maths and the paint
-// store's box reads and writes, prompts.ts and organelles.ts the prompt and
-// the catalog (no DOM); images.ts is the canvas ImageCodec; gemini.ts,
-// fake.ts and providers.ts the Providers; backend/ai-annotate-job.ts and
-// backend/routes/ai-annotate.ts the routes. The constants with a Python twin
-// are the Python's, exported (generated/python-data.ts).
+// fill.ts is the paint store's box reads and writes (the box decisions,
+// an accept's and the Label it tools', are portable/fill.py's), prompts.ts
+// and organelles.ts the prompt and the catalog (no DOM); images.ts is the
+// canvas ImageCodec; gemini.ts, fake.ts and providers.ts the Providers;
+// backend/ai-annotate-job.ts and backend/routes/ai-annotate.ts the routes.
+// The constants with a Python twin are the Python's, exported
+// (generated/python-data.ts).
 import type { Inference } from "../contracts";
 import { PYTHON } from "../generated/python-data";
 

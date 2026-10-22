@@ -226,8 +226,9 @@ Centre* reads one plane of raw EM around the point from the open volume
 (`gemini.ts`: Google's Gemini API with an API key, or Vertex AI with a project
 and an access token; `fake.ts` paints in the page, for trying it and for the
 tests), turns the colour it painted into a mask (`mask.ts`) and, on *Accept*,
-writes it into the paint store as an object per connected piece (`labels.ts`,
-`fill.ts`), which the patch tools' *Undo* takes back. The routes
+writes it into the paint store as an object per connected piece (by the
+server's own Python, `cellmap_flow/portable/ai_annotate.py` and `fill.py`),
+which the patch tools' *Undo* takes back. The routes
 (`src/backend/routes/ai-annotate.ts`, `src/backend/ai-annotate-job.ts`) answer
 the Python routes' JSON, so the dashboard's `ai-annotate.js` drives both
 modes; the credentials pasted into the panel (`credentials.ts`) are used as

@@ -66,9 +66,8 @@ LABEL_IT_SCRIPT = ROOT / "web" / "test" / "fixtures" / "make_label_it_fixtures.p
 def test_label_it_fixture_is_fresh():
     # The same for the Label it tools' fixture (label_it.json), which
     # make_label_it_fixtures.py writes from dashboard/routes/finetune/
-    # view_labels.py (probability, segment_prediction, read_prediction),
-    # post/segment.py under them, and finetune/session/fill.py
-    # (relabel_objects, rewrite_foreground, restore_box).
+    # view_labels.py's segment_prediction (the mutex watershed), post/segment.py
+    # under it, and portable/label_it.py's affinities.
     pythonpath = os.pathsep.join(p for p in (str(ROOT), os.environ.get("PYTHONPATH", "")) if p)
     result = subprocess.run(
         [sys.executable, str(LABEL_IT_SCRIPT), "--check"],
@@ -79,8 +78,8 @@ def test_label_it_fixture_is_fresh():
         timeout=600,
     )
     assert result.returncode == 0, (
-        "web/test/fixtures/label_it.json is stale: view_labels.py's probability, segment_prediction or "
-        "read_prediction, post/segment.py, or finetune/session/fill.py changed since it was generated. Regenerate with\n"
+        "web/test/fixtures/label_it.json is stale: view_labels.py's segment_prediction, post/segment.py or "
+        "portable/label_it.py changed since it was generated. Regenerate with\n"
         "    python web/test/fixtures/make_label_it_fixtures.py\n"
         "(the pixi default environment's python) and commit the result with the change.\n\n"
         f"{result.stdout}{result.stderr}"

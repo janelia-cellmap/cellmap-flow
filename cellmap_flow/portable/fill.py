@@ -2,7 +2,8 @@
 tab's Seed, All Background and Split Objects and an accepted AI annotation
 (``finetune/session/fill.py`` says what each is for), on arrays alone, so the
 server makes them over MinIO's zarr and the browser over its paint store's
-chunks (``portable/ai_annotate_calls.py``).
+chunks (``portable/fill_calls.py`` for the Label it tools,
+``portable/ai_annotate_calls.py`` for an accept).
 
 - ``box_voxels``: the annotation voxels a box in world nm covers.
 - ``seed_labels``: the ids a box gets from a segmentation: the id the user
@@ -13,7 +14,9 @@ chunks (``portable/ai_annotate_calls.py``).
 
 Nothing here reads or writes a volume: the callers read the box, hand it in
 and write back what comes out (``finetune/session/fill.py`` through zarr
-over MinIO, ``web/src/ai-annotate/fill.ts`` through the paint store).
+over MinIO, ``web/src/backend/routes/view-labels.ts`` and
+``web/src/backend/ai-annotate-job.ts`` through the paint store's
+``web/src/ai-annotate/fill.ts``).
 """
 
 import numpy as np
@@ -89,6 +92,22 @@ def counts_up(instance_target, dtype) -> bool:
     return bool(instance_target) and np.dtype(dtype).itemsize > 1
 
 
+def _pair_counts(a, b):
+    """The distinct pairs ``(a[i], b[i])`` of two arrays of non-negative
+    int64 values, as the columns of a (2, n) array in order of ``a`` and then
+    ``b``, and how often each occurs: ``np.unique(np.stack([a, b]), axis=1,
+    return_counts=True)``, by one key per pair, ``a * (max(b) + 1) + b``,
+    which sorts in the same order. Sorting one array of keys is many times
+    quicker than sorting the pairs as rows (about 1 ms against 75 for the
+    foreground of a 64^3 box, natively, and the browser's numpy is slower
+    still). The keys stay within int64 for any label dtype up to uint32 in a
+    box of fewer than 2^31 voxels (``a`` counts objects, at most one a voxel).
+    """
+    base = int(b.max(initial=0)) + 1
+    keys, counts = np.unique(a * base + b, return_counts=True)
+    return np.stack([keys // base, keys % base]), counts
+
+
 def seed_labels(objects, existing, count_up=False):
     """Labels for a box from a segmentation: an id per object inside, 1 outside.
 
@@ -110,9 +129,7 @@ def seed_labels(objects, existing, count_up=False):
     ids = np.zeros(n + 1, dtype=np.int64)
     painted = (existing >= 2) & foreground
     if painted.any():
-        pairs, counts = np.unique(
-            np.stack([objects[painted], existing[painted].astype(np.int64)]), axis=1, return_counts=True
-        )
+        pairs, counts = _pair_counts(objects[painted], existing[painted].astype(np.int64))
         # Most-painted last, so its id is the one that stays.
         order = np.argsort(counts, kind="stable")
         ids[pairs[0, order]] = pairs[1, order]
@@ -179,7 +196,7 @@ def relabel_objects(existing, count_up=False, connectivity=1, per_slice=False):
     components = connected_components(foreground, connectivity, per_slice=per_slice)
     n = int(components.max())
     comp, old = components[foreground], existing[foreground].astype(np.int64)
-    pairs, pair_counts = np.unique(np.stack([comp, old]), axis=1, return_counts=True)
+    pairs, pair_counts = _pair_counts(comp, old)
     order = np.argsort(pair_counts, kind="stable")
     majority = np.zeros(n + 1, dtype=np.int64)
     majority[pairs[0, order]] = pairs[1, order]  # the most voxels last, so it stays

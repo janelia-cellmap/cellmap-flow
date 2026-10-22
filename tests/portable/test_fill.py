@@ -45,6 +45,16 @@ def test_a_wall_through_an_object_splits_it_and_a_stroke_across_two_merges_them(
     assert changed == int(np.count_nonzero(labels != box)) and (after == labels).all()
 
 
+def test_a_wall_in_one_slice_splits_only_per_slice_and_then_each_slice_is_its_own_object():
+    box = np.full((3, 3, 7), 5, dtype=np.uint8)
+    box[1, :, 3] = 1  # a wall in the middle slice: the sides still touch above and below it
+    _, counts = relabel_objects(box)
+    assert counts == {"objects": 1, "split": 0, "merged": 0}
+    labels, counts = relabel_objects(box, per_slice=True)
+    assert counts == {"objects": 4, "split": 3, "merged": 0}
+    assert len({int(labels[0, 0, 0]), int(labels[1, 0, 0]), int(labels[1, 0, 6]), int(labels[2, 0, 0])}) == 4
+
+
 def test_undo_puts_back_only_what_nobody_touched_since():
     before = np.array([0, 0, 0, 7], dtype=np.uint8)
     after = np.array([2, 2, 1, 7], dtype=np.uint8)

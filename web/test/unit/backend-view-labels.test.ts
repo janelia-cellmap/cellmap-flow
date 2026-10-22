@@ -3,11 +3,12 @@
 // routes for a served model, the viewer's position set, the model's output
 // a fake's (FakeInference.outputAt), and the answers, the paint store, the
 // viewer's refreshes and the undo stack checked against the Python routes'
-// behaviour (view_labels.py). A seed's maths is the portable Python, run
-// here in node's Pyodide (test/unit/pyodide.ts) and tested by pytest; the
-// mutex watershed and the relabelling are parity-tested against the Python
-// in test/parity/label-it.test.ts; these tests are about the routes. Without
-// Pyodide (no network for its wheels) the seed's tests skip.
+// behaviour (view_labels.py). A seed's maths and every tool's box, ids,
+// writes and undo are the portable Python (label_it.py, fill.py), run here
+// in node's Pyodide (test/unit/pyodide.ts) and tested by pytest; the mutex
+// watershed is parity-tested against the Python in
+// test/parity/label-it.test.ts; these tests are about the routes. Without
+// Pyodide (no network for its wheels) every test but the sources' skips.
 import { describe, expect, it, vi } from "vitest";
 
 import { readBox, writeBox } from "../../src/ai-annotate/fill";
@@ -206,7 +207,7 @@ describe.skipIf(!python)("POST /api/finetune/view-labels/seed", () => {
   });
 });
 
-describe("POST /api/finetune/view-labels/background", () => {
+describe.skipIf(!python)("POST /api/finetune/view-labels/background", () => {
   it("labels the unpainted voxels of the patch background, keeps the painted ones, and says when nothing is left", async () => {
     const { ctx, h, volume } = await ready();
     await paintVoxel(ctx, volume, [3, 3, 3], 5);
@@ -223,7 +224,7 @@ describe("POST /api/finetune/view-labels/background", () => {
   });
 });
 
-describe("POST /api/finetune/view-labels/split", () => {
+describe.skipIf(!python)("POST /api/finetune/view-labels/split", () => {
   it("gives the two sides of a wall their own ids, and merges a stroke's objects, per slice when asked", async () => {
     const { ctx, h, volume } = await ready();
     const object = new Uint16Array(4 * 4 * 9).fill(5);
@@ -250,6 +251,10 @@ describe.skipIf(!python)("POST /api/finetune/view-labels/undo", () => {
     const { ctx, h, volume } = await ready();
     const background = body(await h.handle(request("POST", `${BASE}/background`, { box_voxels: 4 })));
     expect([background.filled_background, background.can_undo]).toEqual([64, true]);
+    // With no dataset open the Python cannot run: refused, and the entry kept.
+    const closed = vi.spyOn(ctx.infer, "dataset").mockReturnValue(null);
+    expect((await h.handle(request("POST", `${BASE}/undo`, {}))).status).toBe(409);
+    closed.mockRestore();
     const seeded = body(await h.handle(request("POST", `${BASE}/seed`, {})));
     expect(seeded.filled_foreground + seeded.filled_background).toBe(60 ** 3 - 64);
     await paintVoxel(ctx, volume, [20, 20, 20], 9);  // a stroke over the seed
