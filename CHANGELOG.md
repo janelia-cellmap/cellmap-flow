@@ -4,6 +4,9 @@ All notable changes to cellmap-flow. The format follows [Keep a Changelog](https
 
 ## Unreleased
 
+### Fixed
+- **The Apply bar's notice and pending count hide when they are empty, and the Submit All log box is gone.** Bootstrap's `d-flex` and `d-block` on those two elements overrode the `hidden` attribute, so an empty blue box with a ✕ and a blank line sat under every Apply bar; `dark.css` sets their display now. The read-only textarea at the bottom of the Input and Postprocess tabs, where Submit All used to print the server's JSON, is removed; a chain the backend refuses is said in the bar instead of a browser alert.
+
 ## 0.3.0 — 2026-10-22
 
 ### Added
