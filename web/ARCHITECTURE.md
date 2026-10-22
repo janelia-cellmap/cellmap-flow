@@ -258,7 +258,8 @@ the format), which the page that opens it writes back into the base.
 Which model to start from (`backend/routes/rank.ts`) scores a model on the
 paint with the engine's own reads: the model served (or the served one
 reused), `readOutput` over at most `RANK_BLOCKS` of its blocks under the
-paint, each painted voxel's model voxel from Label it's `servedIndices`,
+paint, each painted voxel's model voxel from Label it's placement
+(`cellmap_flow.portable.label_it`, through `label-it/prediction.ts` `place`),
 and the targets from `targetTransformFor`; then each chunk's labels,
 targets and logits go to `cellmap_flow.portable.rank` (`Inference.python`,
 above), where the tallies, the score at the model's own cut-off and the
@@ -386,14 +387,18 @@ the same stage object and key, so the chunks the viewer had computed come
 out of the engine's staged cache; the page reads them over the view's URL
 through the service worker, as any client reads a view (the engine answers
 a page's requests through the route it registers, and has no other door to
-a chunk), and `infer/output.ts` places them in the box. `prediction.ts`
-puts each annotation voxel on the served voxel its centre lies in
-(read_prediction: any served model can seed, at its own voxel size);
-`segment.ts` turns the output into a probability by its output class and
-into objects by threshold and connected components or, for an affinity
-model, the mutex watershed (`infer/label.ts` and `infer/affinity.ts`, the
-postprocessors' segmenters, already parity-tested against scipy and
-mwatershed). The distance watershed and a model's own instances are not
+a chunk), and `infer/output.ts` places them in the box. The seed's maths
+is the server's own Python, `cellmap_flow/portable/label_it.py`, called
+through `portable/label_it_calls.py` (`Inference.python`, above): the
+request's options, the channels it reads, each annotation voxel on the
+served voxel its centre lies in (any served model can seed, at its own
+voxel size), the output as a probability by its output class, and threshold
+and connected components; `label-it/prediction.ts` reads the served box it
+names. For an affinity model the Python answers the mutex watershed's input
+and `label-it/segment.ts` runs the watershed itself (`infer/affinity.ts`,
+parity-tested against mwatershed, which has no Pyodide wheel). scipy, for
+the components, loads the first time a seed needs it, not when a dataset
+opens. The distance watershed and a model's own instances are not
 offered: no browser model outputs a distance or instance ids. The ids, the
 writes and the undo are `ai-annotate/labels.ts` and `fill.ts` (seedLabels,
 relabelObjects for Split Objects, paintBox, rewriteForeground, restoreBox).
@@ -425,7 +430,7 @@ volume (the finest level's extent), or typed (`withBox` redraws the box from
 the fields once typing has paused for `TYPED_BOX_DELAY_MS`); each model's
 box is the voxels of its served level the region touches (`servedLevel`,
 the level `infer/engine.ts` serves its view at, voxel 0's centre its OME
-translation, as `label-it/prediction.ts` places a seed), and its chunks are
+translation, as a seed is placed on it), and its chunks are
 its output blocks, which the summary counts. `run.ts` runs the models one
 after another through `Inference.materialize`, with the progress across
 them, the stop (an AbortSignal), and the provenance under `cellmap_flow` in
@@ -507,7 +512,8 @@ web/
     ai-annotate/             AI-assisted annotation (above): types.ts, geometry.ts, plane.ts, mask.ts, labels.ts, fill.ts, prompts.ts,
                              organelles.ts (the pure ports), images.ts (the canvas codec), gemini.ts, fake.ts, providers.ts,
                              credentials.ts, usage.ts, audit.ts; labels.ts and fill.ts are Label it's too
-    label-it/                Label it (above): segment.ts (probability, methods, objects), prediction.ts (the output under a box)
+    label-it/                Label it (above): segment.ts (the mutex watershed, the probability's call), prediction.ts (the served
+                             level, the placement's call, the output under a box)
     run-region/              Run on a region (above): region.ts (the box on each model's level, the run_region layer), run.ts
                              (the run, its progress and provenance), output.ts (the folder, the zip, the saved layer), panel.ts (the tab)
     local-folder/            a folder on this machine: index.ts (the local URL and its key, the pick/drop flow,

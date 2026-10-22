@@ -1,13 +1,14 @@
 """Generate the parity fixture for the browser's Label it tools.
 
-The browser mode re-implements the Finetune tab's Seed from Prediction, All
-Background, Split Objects and Undo in TypeScript (``web/src/label-it/``:
-``segment.ts`` and ``prediction.ts`` from
-``cellmap_flow/dashboard/routes/finetune/view_labels.py``; ``relabelObjects``
-in ``web/src/ai-annotate/labels.ts`` and ``rewriteForeground`` in
-``web/src/ai-annotate/fill.ts`` from ``cellmap_flow/finetune/session/fill.py``).
-A seed made in the browser must find the objects the server's seed finds in
-the same prediction, read the prediction under the same voxels, and a split
+A seed's maths is the Python both modes run
+(``cellmap_flow/portable/label_it.py``) save one step: the browser runs the
+mutex watershed in TypeScript (``web/src/label-it/segment.ts``
+``mutexObjects``, on ``web/src/infer/affinity.ts``), since ``mwatershed``
+has no Pyodide wheel. Split Objects and Undo are ported too
+(``relabelObjects`` in ``web/src/ai-annotate/labels.ts`` and
+``rewriteForeground`` in ``web/src/ai-annotate/fill.ts`` from
+``cellmap_flow/finetune/session/fill.py``). A seed made in the browser must
+find the objects the server's seed finds in the same affinities, and a split
 must give the same ids, so the vitest suite in
 ``web/test/parity/label-it.test.ts`` checks each port against what the
 *Python functions themselves* produce, written here as JSON.
@@ -29,23 +30,15 @@ Everything is deterministic (seeds recorded in the file) and the script is
 idempotent. Arrays are ``{"dtype", "shape", "data"}`` with ``data`` flat in C
 order (``make_fixtures.array_record``). The sections of ``label_it.json``:
 
-``blocks``
-    the predictions the cases segment, [C, z, y, x] float32: ``aff``, three
-    affinity channels of logits; ``aff_unit``, three of probabilities;
-    ``aff_small``, three of logits, small; ``binary``, one channel of
-    logits; ``unit``, a probability; ``signed``, two channels in [-1, 1] (a
-    tanh). Smoothed noise, so their objects are blobs, as a model's are.
-``probability``
-    ``view_labels.probability`` of blocks for an output class (or none, read
-    off the values) and channels: float32, compared within the float
-    tolerance (scipy's float32 expit and the port's agree to an ulp).
-``segment``
-    ``view_labels.segment_prediction``'s objects for components and the
-    mutex watershed over thresholds, smallest sizes, connectivities and per
-    slice. The blocks' seed is the first that keeps every voxel's
-    probability clear of its threshold, every mutex-watershed edge clear of
-    ties (make_fixtures' affinity_case_is_safe) and, through expit, its
-    edges 1e-6 apart, so a float32 ulp cannot move a voxel.
+``mutex_watershed``
+    ``view_labels.segment_prediction``'s objects by the mutex watershed over
+    thresholds (its bias) and smallest sizes, with the ``affinities`` the
+    browser's Python hands its watershed (``label_it.affinities`` of a
+    prediction: three affinity channels of probabilities, or of logits,
+    small, through the sigmoid; smoothed noise, so their objects are blobs,
+    as a model's are), [C, z, y, x] float32. The predictions' seed is the
+    first that keeps every edge clear of ties (make_fixtures'
+    affinity_case_is_safe), which mwatershed would break its own way.
 ``relabel_objects``
     ``fill.relabel_objects`` of label boxes (walls in every slice or one,
     strokes joining objects, ties, uint16 ids, ids running out with the
@@ -56,12 +49,6 @@ order (``make_fixtures.array_record``). The sections of ``label_it.json``:
     paint_box cases replace it: the volume before, the changed count and
     counts, the volume after, the undo entry, and ``fill.restore_box`` after
     a stroke painted in between.
-``read_prediction``
-    ``view_labels.read_prediction`` of a served array (the model's output on
-    its own grid, OME translation and voxel size, in chunks) for an
-    annotation volume's box, its server's HTTP replaced by the array's
-    files: the prediction and the box shrunk to what the server covers, or
-    the refusal's message when it covers nothing.
 """
 
 from __future__ import annotations
@@ -71,25 +58,21 @@ import json
 import sys
 import tempfile
 from pathlib import Path
-from types import SimpleNamespace
 
 import numpy as np
-import zarr
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
-from make_fixtures import ROOT, affinity_case_is_safe, affinity_edge_weights, array_record, differences, fixture_text  # noqa: E402  (puts the worktree's package first on sys.path)
+from make_fixtures import ROOT, affinity_case_is_safe, array_record, differences, fixture_text  # noqa: E402  (puts the worktree's package first on sys.path)
 
 from cellmap_flow.dashboard.routes.finetune import view_labels  # noqa: E402
 from cellmap_flow.finetune.session import fill  # noqa: E402
+from cellmap_flow.portable import label_it  # noqa: E402
 
 FIXTURES = ("label_it.json",)
 SEED = 20261016
 OFFSETS = [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
-# How far a voxel's mean probability must sit from its threshold, so the
-# port's float32 expit (an ulp from scipy's on a few values) decides it the same.
-PROBABILITY_MARGIN = 1e-5
 
 
 # --- the predictions ------------------------------------------------------------
@@ -116,42 +99,16 @@ def _sigmoid(x: np.ndarray) -> np.ndarray:
 def make_blocks(seed: int) -> dict:
     rng = np.random.default_rng(seed)
     return {
-        "aff": _affinities(rng, (6, 10, 12)).astype(np.float32),
-        # Probabilities already (output class unit), for the mutex watershed's
-        # larger cases: its input is then the fixture's own float32 values, with
-        # no expit between, and only its own ties matter (affinity_case_is_safe).
-        # A few hundred voxels, as make_fixtures' affinity blocks: near 1,
-        # float32's spacing makes exact ties likely among thousands of edges.
+        # Probabilities already (output class unit): the watershed's input is
+        # then the fixture's own float32 values. A few hundred voxels, as
+        # make_fixtures' affinity blocks: near 1, float32's spacing makes
+        # exact ties likely among thousands of edges.
         "aff_unit": _sigmoid(_affinities(rng, (4, 8, 9))).astype(np.float32),
-        # Logits for the mutex watershed through expit: small and of a modest
-        # range, so its edges can be kept a whole 1e-6 apart, which an ulp of
-        # expit cannot reorder.
+        # Logits, through the Python's sigmoid: small and of a modest range.
         "aff_small": _affinities(rng, (3, 5, 6), amplitude=1.2).astype(np.float32),
-        "binary": (3.0 * _field(rng, (6, 9, 10)))[None].astype(np.float32),
-        "unit": _sigmoid(2.5 * _field(rng, (5, 6, 7)))[None].astype(np.float32),
-        "signed": np.tanh(np.stack([_field(rng, (4, 6, 6)) for _ in range(2)])).astype(np.float32),
     }
 
 
-def _channels(channels):
-    """The fixture's channel list as the Python's slice (contiguous here), or None."""
-    return None if channels is None else slice(channels[0], channels[-1] + 1)
-
-
-# id, block, output class, channels, threshold, min_size, connectivity, per_slice
-COMPONENT_CASES = [
-    ("aff_default", "aff", "unbounded", [0, 1, 2], 0.5, 0, 1, False),
-    ("aff_low_edges", "aff", "unbounded", [0, 1, 2], 0.3, 0, 2, False),
-    ("aff_classified_all_min3", "aff", None, [0, 1, 2], 0.7, 3, 3, False),
-    ("aff_one_channel_per_slice", "aff", "unbounded", [1], 0.5, 0, 1, True),
-    ("binary_default", "binary", "unbounded", None, 0.5, 0, 1, False),
-    ("binary_per_slice_min5", "binary", "unbounded", None, 0.5, 5, 1, True),
-    ("binary_per_slice_all", "binary", "unbounded", None, 0.6, 0, 3, True),
-    ("unit_default", "unit", "unit", None, 0.5, 0, 1, False),
-    ("unit_classified_edges", "unit", None, None, 0.4, 0, 2, True),
-    ("signed_default", "signed", "signed_unit", None, 0.5, 0, 1, False),
-    ("signed_classified_min2", "signed", None, None, 0.6, 2, 1, False),
-]
 # id, block, output class, threshold (the bias), min_size
 MUTEX_CASES = [
     ("mutex_default", "aff_unit", "unit", 0.5, 0),
@@ -161,37 +118,14 @@ MUTEX_CASES = [
     ("mutex_logits", "aff_small", "unbounded", 0.5, 0),
     ("mutex_logits_classified_min2", "aff_small", None, 0.4, 2),
 ]
-# How far apart the edges of a mutex case through expit must be (and from
-# 0): an ulp of expit, ~6e-8 at most, then cannot reorder them.
-EXPIT_EDGE_MARGIN = 1e-6
-# id, block, output class, channels
-PROBABILITY_CASES = [
-    ("aff_unbounded", "aff_small", "unbounded", [0, 1, 2]),
-    ("aff_one_channel", "aff_small", "unbounded", [2]),
-    ("aff_classified", "aff_small", None, None),
-    ("binary_unbounded", "binary", "unbounded", None),
-    ("unit_unit", "unit", "unit", None),
-    ("unit_classified", "unit", None, None),
-    ("signed_signed", "signed", "signed_unit", None),
-    ("signed_classified", "signed", None, [1]),
-]
 
 
 def _safe(blocks: dict) -> bool:
-    """No component case's voxel near its threshold, no mutex case near a tie."""
-    for _, name, cls, channels, threshold, *_ in COMPONENT_CASES:
-        mean = view_labels.probability(blocks[name], cls, _channels(channels)).mean(axis=0)
-        if np.min(np.abs(mean.astype(np.float64) - np.float32(threshold))) <= PROBABILITY_MARGIN:
-            return False
-    for _, name, cls, threshold, _ in MUTEX_CASES:
-        affinities = view_labels.probability(blocks[name], cls, slice(0, len(OFFSETS)))
-        if not affinity_case_is_safe(affinities, OFFSETS, threshold):
-            return False
-        if name == "aff_small":  # through expit
-            weights = np.sort(affinity_edge_weights(affinities, OFFSETS, threshold))
-            if weights[0] <= EXPIT_EDGE_MARGIN or np.min(np.diff(weights)) <= EXPIT_EDGE_MARGIN:
-                return False
-    return True
+    """No mutex case near a tie."""
+    return all(
+        affinity_case_is_safe(label_it.affinities(blocks[name], cls, OFFSETS), OFFSETS, threshold)
+        for _, name, cls, threshold, _ in MUTEX_CASES
+    )
 
 
 def make_predictions() -> tuple[int, dict]:
@@ -199,35 +133,18 @@ def make_predictions() -> tuple[int, dict]:
         blocks = make_blocks(seed)
         if _safe(blocks):
             return seed, blocks
-    raise RuntimeError("no seed in 200 keeps the label-it fixture clear of thresholds and ties")
+    raise RuntimeError("no seed in 200 keeps the label-it fixture clear of ties")
 
 
-def make_probability(blocks: dict) -> list:
+def make_mutex(blocks: dict) -> list:
     cases = []
-    for case_id, name, cls, channels in PROBABILITY_CASES:
-        out = view_labels.probability(blocks[name], cls, _channels(channels))
-        cases.append({"id": case_id, "block": name, "output_class": cls, "channels": channels, "probability": array_record(out)})
-    return cases
-
-
-def make_segment(blocks: dict) -> list:
-    cases = []
-    for case_id, name, cls, channels, threshold, min_size, connectivity, per_slice in COMPONENT_CASES:
-        objects = view_labels.segment_prediction(
-            "components", blocks[name], cls, _channels(channels), None, threshold, min_size, connectivity, per_slice
-        )
-        cases.append({
-            "id": case_id, "method": "components", "block": name, "output_class": cls, "channels": channels, "offsets": None,
-            "threshold": threshold, "min_size": min_size, "connectivity": connectivity, "per_slice": per_slice,
-            "objects": array_record(objects), "count": int(objects.max()),
-        })
     for case_id, name, cls, threshold, min_size in MUTEX_CASES:
         objects = view_labels.segment_prediction(
-            "mutex_watershed", blocks[name], cls, _channels([0, 1, 2]), json.dumps(OFFSETS), threshold, min_size
+            "mutex_watershed", blocks[name], cls, slice(0, len(OFFSETS)), json.dumps(OFFSETS), threshold, min_size
         )
         cases.append({
-            "id": case_id, "method": "mutex_watershed", "block": name, "output_class": cls, "channels": [0, 1, 2], "offsets": OFFSETS,
-            "threshold": threshold, "min_size": min_size, "connectivity": 1, "per_slice": False,
+            "id": case_id, "output_class": cls, "offsets": OFFSETS, "threshold": threshold, "min_size": min_size,
+            "affinities": array_record(label_it.affinities(blocks[name], cls, OFFSETS)),
             "objects": array_record(objects), "count": int(objects.max()),
         })
     return cases
@@ -335,88 +252,6 @@ def make_rewrite() -> list:
     return cases
 
 
-# --- read_prediction -------------------------------------------------------------
-
-
-class _Reply:
-    """A model server's answer, as requests gives it: .json() and .content."""
-
-    def __init__(self, content: bytes):
-        self.content = content
-
-    def json(self):
-        return json.loads(self.content)
-
-
-def _serve(values: np.ndarray, voxel, translation, chunks):
-    """The files of a served array, [C, z, y, x], at OME `voxel` and
-    `translation` (voxel 0's centre), keyed by URL as read_prediction asks
-    for them, and its read in place of the HTTP one (view_labels._get)."""
-    store = {}
-    zarr.create(shape=values.shape, chunks=(values.shape[0], *chunks), dtype=values.dtype, compressor=None, store=store, fill_value=0)[:] = values
-    files = {f"base/s0/{key}": value for key, value in store.items()}
-    files["base/.zattrs"] = json.dumps({"multiscales": [{
-        "axes": [{"name": "c", "type": "channel"}] + [{"name": a, "type": "space", "unit": "nanometer"} for a in "zyx"],
-        "datasets": [{"path": "s0", "coordinateTransformations": [
-            {"type": "scale", "scale": [1.0, *map(float, voxel)]}, {"type": "translation", "translation": [0.0, *map(float, translation)]},
-        ]}],
-    }]}).encode()
-    return lambda url, timeout=None: _Reply(files[url])
-
-
-def _served_values(shape) -> np.ndarray:
-    """A served block whose value names its voxel: c·10^6 + z·10^4 + y·100 + x (exact in float32 here)."""
-    c, z, y, x = np.meshgrid(*(np.arange(n) for n in shape), indexing="ij")
-    return (c * 1_000_000 + z * 10_000 + y * 100 + x).astype(np.float32)
-
-
-# id, served (shape [C, z, y, x], voxel, translation, chunks), volume (voxel, dataset_offset_nm), lo, hi
-READ_CASES = [
-    # The grids are one: the box as it is, across the served chunks.
-    ("same_grid", ((2, 12, 12, 12), (8, 8, 8), (4, 4, 4), (4, 4, 4)), ((8, 8, 8), (4, 4, 4)), (2, 3, 1), (9, 10, 11)),
-    # The model served at twice the voxel: two annotation voxels to a served one.
-    ("coarser_served", ((1, 8, 8, 8), (16, 16, 16), (8, 8, 8), (4, 4, 4)), ((8, 8, 8), (4, 4, 4)), (1, 2, 3), (9, 12, 15)),
-    # At half: every other served voxel, the one each annotation voxel's centre lies in.
-    ("finer_served", ((1, 20, 20, 20), (4, 4, 4), (2, 2, 2), (5, 5, 5)), ((8, 8, 8), (4, 4, 4)), (0, 1, 2), (6, 7, 9)),
-    # Served from 20 nm on: annotation voxels before it are left out, the box shrinks.
-    ("offset_served_clips_low", ((1, 10, 10, 10), (8, 8, 8), (24, 24, 24), (4, 4, 4)), ((8, 8, 8), (4, 4, 4)), (0, 1, 2), (6, 7, 8)),
-    # Half a voxel off: each centre lies in one served voxel all the same.
-    ("half_voxel_shift", ((1, 10, 10, 10), (8, 8, 8), (8, 8, 8), (5, 5, 5)), ((8, 8, 8), (4, 4, 4)), (1, 1, 1), (8, 8, 8)),
-    # The box runs past the served array's end: shrunk to it.
-    ("clips_high", ((1, 6, 6, 6), (8, 8, 8), (4, 4, 4), (4, 4, 4)), ((8, 8, 8), (4, 4, 4)), (3, 2, 4), (9, 5, 12)),
-    # Anisotropic grids, z coarser.
-    ("anisotropic", ((3, 6, 12, 12), (16, 8, 8), (8, 4, 4), (3, 4, 4)), ((16, 8, 8), (8, 4, 4)), (1, 2, 3), (5, 11, 9)),
-    # Anisotropic, served coarser in y and x only.
-    ("anisotropic_coarser_xy", ((1, 6, 6, 6), (16, 16, 16), (8, 8, 8), (3, 3, 3)), ((16, 8, 8), (8, 4, 4)), (0, 1, 1), (5, 9, 10)),
-    # Nothing of the box served: the refusal.
-    ("outside", ((1, 4, 4, 4), (8, 8, 8), (4, 4, 4), (4, 4, 4)), ((8, 8, 8), (4, 4, 4)), (5, 0, 0), (8, 4, 4)),
-]
-
-
-def make_read_prediction() -> list:
-    view_labels._served_base = lambda host, model_name, postprocess=(), input_norm=None: "base"
-    view_labels.prediction_voxel_override = lambda *args: None
-    view_labels.get_session = lambda: SimpleNamespace(dataset_path="data")
-    cases = []
-    for case_id, (shape, voxel, translation, chunks), (volume_voxel, offset), lo, hi in READ_CASES:
-        values = _served_values(shape)
-        view_labels._get = _serve(values, voxel, translation, chunks)
-        volume = {"output_voxel_size": [float(v) for v in volume_voxel], "dataset_offset_nm": [float(v) for v in offset]}
-        # The served values are _served_values' formula, which the test computes again.
-        case = {
-            "id": case_id, "served": {"shape": list(shape), "voxel": list(voxel), "translation": list(translation), "chunks": list(chunks)},
-            "volume": volume, "lo": list(lo), "hi": list(hi),
-        }
-        try:
-            prediction, new_lo, new_hi = view_labels.read_prediction("host", "model", volume, np.asarray(lo), np.asarray(hi), {})
-        except view_labels._Refused as e:
-            case["error"] = {"message": str(e), "status": e.status}
-        else:
-            case.update({"prediction": array_record(prediction), "new_lo": [int(v) for v in new_lo], "new_hi": [int(v) for v in new_hi]})
-        cases.append(case)
-    return cases
-
-
 # --- writing and checking ---------------------------------------------------------
 
 
@@ -424,17 +259,14 @@ def make_label_it() -> dict:
     seed, blocks = make_predictions()
     return {
         "_format": (
-            "Parity fixture for web/src/label-it (segment.ts, prediction.ts) and the Label it parts of web/src/ai-annotate "
+            "Parity fixture for web/src/label-it/segment.ts (mutexObjects) and the Label it parts of web/src/ai-annotate "
             "(labels.ts relabelObjects, fill.ts rewriteForeground) against dashboard/routes/finetune/view_labels.py and "
             "finetune/session/fill.py; arrays are {dtype, shape, data} flat in C order; see make_label_it_fixtures.py's docstring"
         ),
         "seed": seed,
-        "blocks": {name: array_record(block) for name, block in blocks.items()},
-        "probability": make_probability(blocks),
-        "segment": make_segment(blocks),
+        "mutex_watershed": make_mutex(blocks),
         "relabel_objects": make_relabel(),
         "rewrite_foreground": make_rewrite(),
-        "read_prediction": make_read_prediction(),
     }
 
 

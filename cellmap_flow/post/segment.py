@@ -28,87 +28,23 @@ wall still touch. 2 adds the edge neighbours (18 in 3D, 8 in 2D).
 The segmentation libraries are imported inside the functions: the
 postprocessors import this module, and every chain is read through them,
 in processes that never segment anything (``tests/utils/test_import_hygiene``).
+``connected_components``, ``remove_small`` and the parsing of their options
+live in ``cellmap_flow/portable/label_it.py``, which the browser runs too.
 """
 
 import numpy as np
 
-# The connectivities in the order the forms list them, with their names.
-CONNECTIVITIES = {1: "faces", 2: "faces and edges", 3: "all neighbours"}
-
-
-def as_connectivity(value, ndim=3) -> int:
-    """``value`` as scipy's connectivity for an ``ndim``-D array: 1 up to ``ndim``.
-
-    Forms send strings, so "2" is 2. A value past ``ndim`` (3 for one 2D
-    slice) is ``ndim``: every neighbour, which is what it asked for.
-    Raises ValueError for anything that is not 1, 2 or 3.
-    """
-    try:
-        connectivity = int(value)
-    except (TypeError, ValueError):
-        raise ValueError(f"connectivity must be 1, 2 or 3, got {value!r}")
-    if connectivity not in CONNECTIVITIES:
-        raise ValueError(f"connectivity must be 1, 2 or 3, got {value!r}")
-    return min(connectivity, ndim)
-
-
-def as_bool(value) -> bool:
-    """A form's "true"/"false" as a bool; anything else by Python's truth."""
-    if isinstance(value, str):
-        return value.strip().lower() in ("true", "1", "yes", "on")
-    return bool(value)
-
-
-def _structure(ndim, connectivity):
-    from scipy.ndimage import generate_binary_structure
-
-    return generate_binary_structure(ndim, as_connectivity(connectivity, ndim))
-
-
-def remove_small(labels, min_size=0):
-    """``labels`` with objects of fewer than ``min_size`` voxels made background.
-
-    The rest are numbered 1..n again, in the order they had. ``labels``
-    must already be numbered without large gaps (any segmenter's output):
-    the sizes are counted per id.
-    """
-    labels = np.asarray(labels)
-    if min_size is None or int(min_size) <= 1 or not labels.any():
-        return labels.astype(np.uint64, copy=False)
-    sizes = np.bincount(labels.ravel().astype(np.intp))
-    keep = sizes >= int(min_size)
-    keep[0] = False
-    new_ids = np.zeros(sizes.size, dtype=np.uint64)
-    new_ids[keep] = np.arange(1, np.count_nonzero(keep) + 1, dtype=np.uint64)
-    return new_ids[labels.astype(np.intp)]
-
-
-def connected_components(mask, connectivity=1, min_size=0, per_slice=False):
-    """An id per connected object of ``mask`` (its nonzero voxels).
-
-    ``per_slice``: each z slice of a (z, y, x) mask is labelled on its own,
-    in 2D, its ids following the slice before's. For data whose objects are
-    2D (what Cellpose sees), or annotations painted slice by slice: an
-    object touching itself across slices is still one per slice.
-    ``min_size``: objects of fewer voxels are background (specks a
-    threshold let through); per slice, each slice's piece is counted alone.
-    """
-    from scipy.ndimage import label
-
-    mask = np.asarray(mask) != 0
-    if per_slice:
-        if mask.ndim != 3:
-            raise ValueError(f"per_slice labels (z, y, x) masks, got shape {mask.shape}")
-        structure = _structure(2, connectivity)
-        labels = np.zeros(mask.shape, dtype=np.uint64)
-        count = 0
-        for z, plane in enumerate(mask):
-            plane_labels, n = label(plane, structure)
-            labels[z] = np.where(plane_labels > 0, plane_labels.astype(np.uint64) + np.uint64(count), 0)
-            count += n
-    else:
-        labels, _ = label(mask, _structure(mask.ndim, connectivity))
-    return remove_small(labels, min_size)
+# The connected components and their options are cellmap_flow.portable's, the
+# Python the browser runs too (Label it's components method there), and are
+# imported here for the postprocessors and the other segmenters.
+from cellmap_flow.portable.label_it import (  # noqa: F401
+    CONNECTIVITIES,
+    _structure,
+    as_bool,
+    as_connectivity,
+    connected_components,
+    remove_small,
+)
 
 
 def mutex_watershed(affinities, offsets, bias=0.0, min_size=0):

@@ -13,23 +13,14 @@ and nothing in the tensor distinguishes them -- see ``UNBOUNDED`` below.
 
 import logging
 
+# The activation classes and their reading of a range are written once in
+# cellmap_flow.portable, where the browser's Python (a seed's probability)
+# reads them too: UNIT [0, 1], a sigmoid or softmax already applied;
+# SIGNED_UNIT [-1, 1], a tanh; UNBOUNDED, no output activation (logits,
+# distances, affinities...).
+from cellmap_flow.portable.label_it import SIGNED_UNIT, UNBOUNDED, UNIT, classify_output_range  # noqa: F401
+
 logger = logging.getLogger(__name__)
-
-UNIT = "unit"  # [0, 1] -- sigmoid/softmax already applied
-SIGNED_UNIT = "signed_unit"  # [-1, 1] -- tanh already applied
-UNBOUNDED = "unbounded"  # no output activation: logits, distances, affinities...
-
-
-def classify_output_range(lo: float, hi: float) -> str:
-    """Bucket an observed (min, max) output range into an activation class."""
-    # Small tolerance: a saturating activation can land a hair outside its
-    # asymptote in float32.
-    eps = 1e-4
-    if lo >= -eps and hi <= 1.0 + eps:
-        return UNIT
-    if lo >= -1.0 - eps and hi <= 1.0 + eps:
-        return SIGNED_UNIT
-    return UNBOUNDED
 
 
 def looks_like_affinities(out_channels=None, model_name="", channels_names=None) -> bool:
