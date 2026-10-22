@@ -1,14 +1,72 @@
 """Target transforms: an annotation (0 unannotated, 1 background, 2+ objects) as
-the target and the mask of voxels a loss is computed on. The binary and
-affinity targets are checked against the browser's by web/test/parity/targets."""
+the target and the mask of voxels a loss is computed on. The maths is
+cellmap_flow/portable/targets.py, which the browser runs too, through
+portable/targets_calls.py; the server's classes wrap it."""
 
+import json
 import math
 
 import numpy as np
 import pytest
 import torch
 
-from cellmap_flow.finetune.target_transforms import DistanceTargetTransform, IntervalTargetTransform
+from cellmap_flow.finetune.target_transforms import (
+    AffinityTargetTransform,
+    BroadcastBinaryTargetTransform,
+    DistanceTargetTransform,
+    IntervalTargetTransform,
+)
+from cellmap_flow.portable import targets
+
+
+def test_the_binary_target_is_the_objects_masked_where_painted_on_every_channel():
+    ann = torch.tensor([0, 1, 2, 3], dtype=torch.float32).reshape(1, 1, 1, 1, 4)
+    target, mask = BroadcastBinaryTargetTransform(2)(ann)
+    assert target.shape == mask.shape == (1, 2, 1, 1, 4) and target.dtype == torch.float32
+    assert target[0, :, 0, 0].tolist() == [[0, 0, 1, 1]] * 2
+    assert mask[0, :, 0, 0].tolist() == [[0, 1, 1, 1]] * 2
+
+
+def test_an_affinity_is_one_within_an_object_and_counts_where_both_voxels_are_painted():
+    """Along x: 2|2 the same object, 2|3 two objects, 3|1 object and background,
+    1|0 a pair half unpainted, and the last voxel's neighbour past the patch.
+    A channel past the offsets (an LSD, say) and one whose offset is None
+    train nothing."""
+    ann = torch.tensor([2, 2, 3, 1, 0], dtype=torch.float32).reshape(1, 1, 1, 1, 5)
+    target, mask = AffinityTargetTransform([[0, 0, 1], None], num_channels=3)(ann)
+    assert target[0, 0, 0, 0].tolist() == [1, 0, 0, 0, 0]
+    assert mask[0, 0, 0, 0].tolist() == [1, 1, 1, 0, 0]
+    assert not mask[0, 1:].any() and not target[0, 1:].any()
+
+
+@pytest.mark.parametrize("dz", [3, 4, 7])
+def test_an_offset_no_shorter_than_the_patch_pairs_nothing(dz):
+    """A one-slice patch's z channel (a 2D student's head) has an empty mask,
+    and so has a long-range offset past a short patch, either way along the
+    axis. Between one and two patch lengths that used to raise, as slicing
+    counted the stop from the far end."""
+    ann = np.full((3, 4, 4), 2, np.uint8)
+    _, one_slice = targets.affinity(ann[:1], [[1, 0, 0], [0, 1, 0]])
+    assert not one_slice[0].any() and one_slice[1].any()
+    target, mask = targets.affinity(ann, [[dz, 0, 0], [-dz, 0, 0], [2, 0, 0]])
+    assert not mask[:2].any() and not target[:2].any()
+    assert mask[2, :1].all() and not mask[2, 1:].any()
+
+
+def test_the_browser_call_answers_a_chunks_targets_as_the_server_makes_them():
+    """targets_calls.targets marshalled as chunkmirage's worker marshals it: an
+    instance volume's uint16 ids in, float32 (channels, z, y, x) back."""
+    from chunkmirage import calls
+
+    rng = np.random.default_rng(0)
+    labels = rng.choice(np.array([0, 1, 2, 300, 40000], np.uint16), size=(2, 3, 4))
+    offsets = [[1, 0, 0], [0, 1, 0], [0, 0, 1], None]
+    args = {"shape": [2, 3, 4], "labels_dtype": "uint16", "channels": 5}
+    for given, server in [(None, BroadcastBinaryTargetTransform(5)), (offsets, AffinityTargetTransform(offsets, 5))]:
+        value, (target, mask) = calls.call("cellmap_flow.portable.targets_calls:targets", json.dumps({**args, "offsets": given}), [labels.tobytes()])
+        want = [t[0].numpy() for t in server(torch.from_numpy(labels.astype(np.float32))[None, None])]
+        assert json.loads(value) == {"channels": 5}
+        assert [np.frombuffer(b, np.float32).reshape(5, 2, 3, 4).tolist() for b in (target, mask)] == [w.tolist() for w in want]
 
 
 def _soft(d, sigma):

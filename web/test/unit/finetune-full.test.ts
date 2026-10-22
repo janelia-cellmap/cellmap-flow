@@ -19,9 +19,8 @@ import { parseTrainGraph } from "../../src/finetune/full/graph";
 import { fullTrainStep, supervisedLoss } from "../../src/finetune/full/loss";
 import { onnxInitializerOffsets } from "../../src/finetune/full/run-full";
 import { loadTf } from "../../src/finetune/full/tfjs";
-import { blockLabels, blockRaw, blockTargets, normalizeTile, paintedVoxels, planBlocks } from "../../src/finetune/full/tiles";
+import { blockLabels, blockRaw, normalizeTile, paintedVoxels, planBlocks } from "../../src/finetune/full/tiles";
 import { batchLoss, mulberry32 } from "../../src/finetune/head-trainer";
-import { affinityOffsets, affinityTargets } from "../../src/finetune/targets";
 import type { PaintedChunk } from "../../src/finetune/types";
 
 const FIXTURES = resolve(import.meta.dirname, "../fixtures");
@@ -80,7 +79,7 @@ function trained(tf: Tf, bytes: Uint8Array, steps: number) {
 }
 
 describe("a 3D model's training blocks", () => {
-  it("hold the raw around the paint's cube in register with it, through flips of z and turns, and pair z neighbours", async () => {
+  it("hold the raw around the paint's cube in register with it, through flips of z and turns", async () => {
     // A 20³ volume in 4³ chunks, read for a network of 6³ in and 2³ out
     // (context 4: the input is the output cube grown by 2 each way). The
     // paint: a 2³ object at (8..9)³, its corner voxel another object (3);
@@ -118,11 +117,6 @@ describe("a 3D model's training blocks", () => {
       const l = at(transformBlock(labels, [output, output, output], d).indexOf(3), output);
       expect(r.map((v) => v - halo)).toEqual(l);
     }
-    // The z affinity pairs each voxel of the lower slice with the one above:
-    // 3 over 2 is a boundary, 2 over 2 the same object.
-    const t = blockTargets(labels, [output, output, output], affinityTargets(affinityOffsets(["mito_aff_z", "mito_aff_y", "mito_aff_x"]), 3));
-    const zPairs = [0, 1, 2, 3].map((p) => [t.mask[p * 3], t.target[p * 3]]);
-    expect(zPairs).toEqual([[1, 0], [1, 1], [1, 1], [1, 1]]);
   });
 
   it("repeat the volume's normalized edge past it, as the model stage serves a block", async () => {

@@ -43,7 +43,7 @@ import { paintedChunkIndices, readPaintedChunk } from "./volume";
  * painted among them is a sample all the same, its labels all 0: a good
  * region's block anchors the model whether or not anything in it was
  * painted (run.ts). */
-export async function* collectSamples(run: Pick<FinetuneRun, "volume" | "entry" | "chain" | "dataset" | "infer" | "paint">, indices?: number[][]): AsyncGenerator<Sample> {
+export async function* collectSamples(run: Pick<FinetuneRun, "volume" | "entry" | "chain" | "dataset" | "paint"> & { infer: Pick<FinetuneRun["infer"], "readRaw"> }, indices?: number[][]): AsyncGenerator<Sample> {
   const { volume, dataset, entry } = run;
   // The grid the model is served on, as engine.ts's serve() finds it: the
   // raw level the model reads, and the output level over it.

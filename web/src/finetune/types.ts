@@ -7,8 +7,9 @@
 //   samples.ts      the painted chunks of a volume and, for each, the
 //                   model's input block around it, read and normalized as
 //                   the model stage feeds the model (a Sample);
-//   targets.ts      a chunk's labels as training targets per output channel
-//                   with the voxels the loss counts (TargetTransform);
+//   target-call.ts  a chunk's labels as training targets per output channel
+//                   with the voxels the loss counts (TargetTransform), made
+//                   by cellmap_flow/portable/targets.py in the engine's Python;
 //   onnx-head.ts    the model's head, the last 1×1 convolution, found in
 //                   the ONNX graph; the graph with the head's input tensor
 //                   as a second output; the graph with new head weights;
@@ -76,7 +77,8 @@ export interface Targets {
   mask: Float32Array;
 }
 
-export type TargetTransform = (chunk: PaintedChunk) => Targets;
+/** A chunk's targets, answered by the engine's Python (target-call.ts). */
+export type TargetTransform = (chunk: PaintedChunk) => Promise<Targets>;
 
 /** A model's head: the last 1×1 convolution of its ONNX graph, which makes
  * the output channels from the final feature map, and its weights as
@@ -234,7 +236,7 @@ export interface FinetuneRun {
   volume: PaintVolume;
   chain: Chain;
   dataset: DatasetInfo;
-  infer: Pick<Inference, "readRaw">;
+  infer: Pick<Inference, "readRaw" | "python">;
   paint: PaintStore;
   options: FinetuneOptions;
   report: RunReporter;

@@ -237,8 +237,10 @@ edits with `onnx-proto.ts`'s field-level protobuf splicing, the head's input
 tensor as a second graph output and new weights in the head's initializers;
 `samples.ts` cuts, pads and normalizes each painted chunk's input block
 exactly as the model stage does (the port of `finetune/data/reader.py`);
-`features.ts` runs the model for its logits and features; `targets.ts` (the
-port of `target_transforms.py`, parity-tested) makes the targets and masks;
+`features.ts` runs the model for its logits and features; `target-call.ts`
+has the targets and masks made by `cellmap_flow.portable.targets`, the
+Python `target_transforms.py` wraps on the server (`Inference.python`,
+above), from the offsets the channel names say;
 `head-trainer.ts` gathers the painted voxels' features and trains the head
 from the model's own weights with Adam on a masked, class-balanced loss
 (BCE-with-logits, MSE or margin: the server's per-voxel losses), plus λ ×
@@ -495,7 +497,7 @@ web/
       routes/{data,pipeline,models,config,finetune,good-regions,view-labels,ai-annotate}.ts
     state/                   openSession(): SessionStore (sessionStorage: the tab is the server's process lifetime); db.ts + local-store.ts
                              for picked directories; paint-store.ts + paint-route.ts: the annotation volumes' files and the worker's paint/ route
-    finetune/                types.ts (the seams), volume.ts (planVolume, the zarr v2 files), samples.ts, targets.ts, onnx-proto.ts,
+    finetune/                types.ts (the seams), volume.ts (planVolume, the zarr v2 files), samples.ts, target-call.ts, onnx-proto.ts,
                              onnx-head.ts, features.ts, head-trainer.ts, distillation.ts, good-regions.ts, run.ts (runFinetune),
                              zip.ts (the paint's download), modes.ts (what a manifest offers), augment.ts (the whole network's)
       full/                  the whole network in TF.js: cellmap-tfjs-train.ts (Marwan's runtime, the weights read and written),

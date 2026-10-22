@@ -28,7 +28,7 @@
 // for one is refused as the server refuses a method the model does not
 // offer (the page lists them greyed out, saying what they need).
 import type { ModelEntry } from "../contracts";
-import { affinityOffsets } from "../finetune/targets";
+import { affinityOffsets } from "../finetune/target-call";
 import { hasAffinityChannels } from "../finetune/volume";
 import { mutexWatershed } from "../infer/affinity";
 import { connectedComponents } from "../infer/label";
@@ -68,7 +68,7 @@ export function methodsFor(outputType: OutputType): SeedMethod[] {
  * them: the selected channel when the request names one; else an affinity
  * model's offset channels (the rest, LSDs say, are masked out of its loss);
  * else every channel, which a binary target is broadcast over. An affinity
- * model's offsets are the ones its channel names say (finetune/targets.ts
+ * model's offsets are the ones its channel names say (finetune/target-call.ts
  * affinityOffsets: mito_aff_z, _y, _x are (1,0,0), (0,1,0), (0,0,1), the
  * unit offsets the server gives the first three `_aff` channels in order). */
 export interface SeedPlan {

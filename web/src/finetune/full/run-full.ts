@@ -51,7 +51,7 @@ import { AugmentTally, augmentIntensity, drawAugmentation, intensityRange, trans
 import { entryFor } from "../../models/manifest";
 import { readsOneSlice, refuseMode, sourceOf } from "../modes";
 import { readGraph, readModel } from "../onnx-proto";
-import { targetTransformFor } from "../targets";
+import { targetTransformFor } from "../target-call";
 import type { Finetuned, FinetuneOptions, FinetuneRun, RunFinetune } from "../types";
 import { buildNet, type InitializerOffsets, readOnnxWeights, readTorchParams, toOnnxWeights, writeOnnxWeights } from "./cellmap-tfjs-train";
 import { type FetchFullFiles, fetchFullFiles, type TorchParams } from "./files";
@@ -253,13 +253,13 @@ export function createRunFull(deps: FullDeps = { loadTf, fetchFiles: fetchFullFi
       ? `Augmentation on: each step's tiles get a brightness ×0.8 to ×1.2 and noise of 1% of ${range ? `the raw's range (${range[0]} to ${range[1]})` : "each tile's largest value"} on the raw before it is normalized, then random flips and quarter turns of the raw and the paint alike, with the targets${lambda > 0 ? " and the starting network's logits" : ""} made after`
       : "Augmentation off");
 
-    const transform = deps.targetTransformFor(entry);
+    const transform = deps.targetTransformFor(entry, run.infer);
     const samples: TileSample[] = [];
     let distilled = 0;
     for (const tile of tiles) {
       if (report.cancelled()) throw new Error("cancelled before training");
       const labels = tileLabels(tile, output, chunks, volume);
-      const t = tileTargets(labels, output, transform);
+      const t = await tileTargets(labels, output, transform);
       if (!t.masked) continue;  // paint the loss cannot count here (an affinity needs a painted pair)
       const { raw, inside } = await tileRaw(tile, side, output, run.infer, dataset, geo.rawLevel);
       samples.push(options.augment
@@ -302,7 +302,7 @@ export function createRunFull(deps: FullDeps = { loadTf, fetchFiles: fetchFullFi
           const rows = Math.min(batch, samples.length - from);
           let masked = 0;
           for (let r = 0; r < rows; r++) {
-            const s = augmented(samples[order[from + r]]);
+            const s = await augmented(samples[order[from + r]]);
             x.set(s.input, r * s.input.length);
             t.set(s.target, r * s.target.length);
             m.set(s.mask, r * s.mask.length);
@@ -365,12 +365,12 @@ export function createRunFull(deps: FullDeps = { loadTf, fetchFiles: fetchFullFi
     /** `s` as this step trains on it: as read, or with augmentation a new
      * draw of its raw and paint, normalized, turned, and its targets made
      * from the turned paint. */
-    function augmented(s: TileSample): Pick<TileSample, "input" | "target" | "mask" | "masked"> {
+    async function augmented(s: TileSample): Promise<Pick<TileSample, "input" | "target" | "mask" | "masked">> {
       if (!s.raw || !s.inside || !s.labels) return s;
       const draw = drawAugmentation(augmentRandom, turnable(s.tile.depth));
       tally.add(draw);
       const input = transformBlock(normalizeTile(augmentIntensity(s.raw, s.inside, draw.scale, range, augmentRandom), s.inside, norm, [1, side, side]), [1, side, side], draw);
-      const t = tileTargets(transformBlock(s.labels, [1, output, output], draw), output, transform);
+      const t = await tileTargets(transformBlock(s.labels, [1, output, output], draw), output, transform);
       return { input, target: t.target, mask: t.mask, masked: t.masked };
     }
   };
@@ -438,14 +438,14 @@ async function trainBlocks(run: FinetuneRun, deps: FullDeps): Promise<Finetuned>
     ? `Augmentation on: each step's block gets a brightness ×0.8 to ×1.2 and noise of 1% of ${range ? `the raw's range (${range[0]} to ${range[1]})` : "each block's largest value"} on the raw before it is normalized, then random flips along z, y and x${turnable ? " and quarter turns in y–x" : ""} of the raw and the paint alike, with the targets${lambda > 0 ? " and the starting network's logits" : ""} made after`
     : "Augmentation off");
 
-  const transform = deps.targetTransformFor(entry);
+  const transform = deps.targetTransformFor(entry, run.infer);
   const cube = [output, output, output] as const;
   const samples: BlockSample[] = [];
   let distilled = 0;
   for (const block of blocks) {
     if (report.cancelled()) throw new Error("cancelled before training");
     const labels = blockLabels(block, output, chunks, volume);
-    const t = blockTargets(labels, cube, transform);
+    const t = await blockTargets(labels, cube, transform);
     if (!t.masked) continue;  // paint the loss cannot count here (an affinity needs a painted pair)
     const { raw, inside } = await blockRaw(block, side, output, run.infer, dataset, geo.rawLevel);
     samples.push(options.augment
@@ -480,7 +480,7 @@ async function trainBlocks(run: FinetuneRun, deps: FullDeps): Promise<Finetuned>
       shuffle(order, random);
       let sum = 0, sumSupervised = 0, sumDistillation = 0, weight = 0;
       for (const i of order) {
-        const s = augmented(samples[i]);
+        const s = await augmented(samples[i]);
         const xs = tf.tensor5d(s.input, [1, side, side, side, 1]);
         const ts = tf.tensor5d(Float32Array.from(s.target), [1, output, output, output, channels]);
         const ms = tf.tensor5d(Float32Array.from(s.mask), [1, output, output, output, channels]);
@@ -536,12 +536,12 @@ async function trainBlocks(run: FinetuneRun, deps: FullDeps): Promise<Finetuned>
   /** `s` as this step trains on it: as read, or with augmentation a new
    * draw of its raw and paint, normalized, flipped and turned, and its
    * targets made from the turned paint. */
-  function augmented(s: BlockSample): Pick<BlockSample, "input" | "target" | "mask" | "masked"> {
+  async function augmented(s: BlockSample): Promise<Pick<BlockSample, "input" | "target" | "mask" | "masked">> {
     if (!s.raw || !s.inside || !s.labels) return s;
     const draw = drawAugmentation(augmentRandom, turnable);
     tally.add(draw);
     const input = transformBlock(normalizeTile(augmentIntensity(s.raw, s.inside, draw.scale, range, augmentRandom), s.inside, norm, [side, side, side]), [side, side, side], draw);
-    const t = blockTargets(transformBlock(s.labels, cube, draw), cube, transform);
+    const t = await blockTargets(transformBlock(s.labels, cube, draw), cube, transform);
     return { input, target: t.target, mask: t.mask, masked: t.masked };
   }
 }
