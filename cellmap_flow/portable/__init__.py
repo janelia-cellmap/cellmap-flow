@@ -19,5 +19,6 @@ A finetune's training targets are ``targets.py``, which the server's
 ``targets_calls.py``.
 AI-assisted annotation's plane, image, mask and labels are ``ai_annotate.py``
 (the browser calls ``ai_annotate_calls.py``), and the label decisions under
-it and the Finetune tab's box tools are ``fill.py``.
+it and the Finetune tab's box tools are ``fill.py`` (the browser's box tools
+call ``fill_calls.py``).
 """

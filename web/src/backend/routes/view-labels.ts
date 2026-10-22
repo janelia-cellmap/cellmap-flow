@@ -27,8 +27,13 @@
 //
 // Seed and All Background fill only unannotated voxels (a voxel the user
 // painted is a decision, a seed is a guess); Split writes only foreground
-// voxels whose id changes. Every write goes into the paint store
-// (ai-annotate/fill.ts) and pushes an undo entry onto the volume's stack.
+// voxels whose id changes. Those rules, the voxels a box covers, the ids a
+// seed or a split gives and what an undo puts back are the Python the
+// server's routes run too (cellmap_flow/portable/fill.py, called through
+// fill_calls.py in the engine's Pyodide worker), handed the box as the paint
+// store holds it; the box is read and the answer written back here
+// (ai-annotate/fill.ts readBox and writeBox), and every write pushes an undo
+// entry onto the volume's stack, as the AI annotation's Accept does.
 // The stacks are this module's, as the server's _undo_stack is
 // view_labels.py's, and the AI annotation's Accept pushes onto the same one
 // (ai_annotate.py imports it; createRouter hands it to routes/ai-annotate.ts),
@@ -53,15 +58,14 @@
 // - No MinIO: nothing to check is serving, nothing to pull to disk after.
 // - A seed reads the dataset the engine has open, so a volume painted on
 //   another dataset is refused, as an AI annotation run is; and the Python
-//   runs in that dataset's engine, so with no dataset open a seed is
-//   refused before anything else.
+//   runs in that dataset's engine, so with no dataset open every tool here
+//   is refused before anything else (409), Undo before it takes the entry.
 //
 // The refusals keep the Python's order, statuses and words (where a word
 // was the server's own, "server", the browser's), and the answers its keys:
 // the page keys on `needs_volume` and `needs_confirmation`.
-import { boxVoxels, paintBox, restoreBox, rewriteForeground } from "../../ai-annotate/fill";
-import { relabelObjects, seedLabels } from "../../ai-annotate/labels";
-import { AIAnnotateError, type Labels, type UndoEntry } from "../../ai-annotate/types";
+import { pushUndo, readBox, writeBox } from "../../ai-annotate/fill";
+import type { Labels, UndoEntry } from "../../ai-annotate/types";
 import type { AppContext, ModelEntry, PaintVolume, ServedModel } from "../../contracts";
 import { hasAffinityChannels, readVolume } from "../../finetune/volume";
 import { PYTHON } from "../../generated/python-data";
@@ -115,22 +119,32 @@ export function viewLabelsRoutes(router: Router): ViewLabelsState {
     return id ? readVolume(ctx.paint, id) : null;
   }
 
-  /** The session's volume and the box's voxels in it (_target_box). */
+  /** The session's volume and the box's voxels in it (_target_box): the
+   * voxels whose centres lie in the box on screen, by the Python's
+   * fill.box_voxels. */
   async function targetBox(ctx: AppContext, body: Record<string, unknown>): Promise<{ volume: PaintVolume; lo: number[]; hi: number[] }> {
     const volume = await sessionVolume(ctx);
     if (!volume) throw new Refused("No annotation volume to label. Create or resume one first.", 409, { needs_volume: true });
     let sizeNm = body.size_nm;
     if (body.box_voxels !== undefined && body.box_voxels !== null) sizeNm = boxNm(body.box_voxels, volume);
     const { centre, size } = viewBoxNm(ctx, sizeNm, volume);
-    const box = boxVoxels(volume, centre.map((c, a) => c - size[a] / 2), size, volume.dataset_shape_voxels);
+    const box = await ctx.infer.python<{ lo: number[]; hi: number[] } | null>(`${FILL}:box`, {
+      volume: { output_voxel_size: volume.output_voxel_size, dataset_offset_nm: volume.dataset_offset_nm ?? null },
+      offset_nm: centre.map((c, a) => c - size[a] / 2),
+      shape_nm: size,
+      volume_shape: volume.dataset_shape_voxels,
+    });
     if (!box) throw new Refused("The view is outside the annotation volume.", 400);
     return { volume, lo: box.lo, hi: box.hi };
   }
 
-  /** Fill the box's unannotated voxels with `labelsFor`'s labels (_fill): the answer's counts. */
-  async function fill(ctx: AppContext, volume: PaintVolume, lo: number[], hi: number[], labelsFor: (existing: Labels) => Labels) {
+  /** Fill the box's unannotated voxels by fill_calls.py's `call` (seed or
+   * background, with `args` and `arrays` beside the box; _fill): the
+   * answer's counts. */
+  async function fill(ctx: AppContext, volume: PaintVolume, lo: number[], hi: number[], call: string, args: Record<string, unknown> = {}, arrays: ArrayBuffer[] = []) {
     const stack = undoStack(volume.id);
-    const counts = await paintBox(ctx.paint, volume, lo, hi, labelsFor, { overwrite: false, undo: stack });
+    const { value: counts, before, after } = await onBox<PaintCounts>(ctx, volume, lo, hi, call, args, arrays);
+    if (after) pushUndo(stack, { lo, hi, before, after });
     const wrote = counts.n_foreground + counts.n_background > 0;
     // The viewer shows the chunks it already read until the paint layer is read again.
     const layerRefreshed = wrote ? ctx.viewer.refreshLayer(paintLayerName(volume.id)) : false;
@@ -150,8 +164,6 @@ export function viewLabelsRoutes(router: Router): ViewLabelsState {
   /** A refusal's answer, or the 500 of anything else (as the Python's catch-all). */
   function answerError(ctx: AppContext, e: unknown, what: string) {
     if (e instanceof Refused) return json(e.status, { success: false, error: e.message, ...e.extra });
-    // fill's ids running out (freshIds): a ValueError there, 400.
-    if (e instanceof AIAnnotateError) return json(400, { success: false, error: e.userMessage });
     ctx.log(`Error ${what}: ${message(e)}`);
     return json(500, { success: false, error: message(e) });
   }
@@ -193,8 +205,7 @@ export function viewLabelsRoutes(router: Router): ViewLabelsState {
     try {
       // The Python runs in the open dataset's engine, and a seed reads that
       // dataset: without one there is nothing to seed from.
-      const dataset = ctx.infer.dataset();
-      if (!dataset) throw new Refused(NO_DATASET);
+      const dataset = requireDataset(ctx);
       // The request's options as the server reads them, its defaults and its
       // refusals (label_it.seed_options), before anything else, as there.
       const { options } = refusedOr(await ctx.infer.python<{ options: SeedOptions } | Refusal>(`${LABEL_IT}:seed_options`, body));
@@ -236,12 +247,11 @@ export function viewLabelsRoutes(router: Router): ViewLabelsState {
       }
       const objects = await seedObjects(ctx, options, region, placement, plan, served.info.output_class);
       // An instance target needs ids apart from its neighbours'; a selected
-      // channel trains as a binary target. Ids counting up need room: an
-      // instance target on a uint16 volume gets them, a uint8 volume reuses
-      // free ids.
+      // channel trains as a binary target. Ids counting up need room: the
+      // Python gives them to an instance target on a uint16 volume, and a
+      // uint8 volume reuses free ids (fill.counts_up).
       const instanceTarget = outputType === "affinities" && (body.select_channel === undefined || body.select_channel === null);
-      const labelsFor = (existing: Labels) => seedLabels(objects, existing, instanceTarget && existing instanceof Uint16Array);
-      const answer = await fill(ctx, volume, placement.lo, placement.hi, labelsFor);
+      const answer = await fill(ctx, volume, placement.lo, placement.hi, "seed", { instance_target: instanceTarget }, [bytesOf(objects)]);
       return json(200, { ...answer, model: name, threshold: body.threshold ?? null, method });
     } catch (e) {
       return answerError(ctx, e, "seeding the view from the prediction");
@@ -254,17 +264,18 @@ export function viewLabelsRoutes(router: Router): ViewLabelsState {
   router.post(`${BASE}/background`, async (req, _params, ctx) => {
     const body = objectBody(req) ?? {};
     try {
+      requireDataset(ctx);
       const { volume, lo, hi } = await targetBox(ctx, body);
       const confirmation = confirmationNeeded(body, lo, hi);
       if (confirmation) return confirmation;
-      return json(200, await fill(ctx, volume, lo, hi, (existing) => (existing instanceof Uint16Array ? new Uint16Array(existing.length) : new Uint8Array(existing.length)).fill(1)));
+      return json(200, await fill(ctx, volume, lo, hi, "background"));
     } catch (e) {
       return answerError(ctx, e, "labelling the view background");
     }
   });
 
   // POST .../split: relabel the box on screen's foreground by connected
-  // component (labels.ts relabelObjects). For a merge the model made: paint
+  // component (fill.relabel_objects). For a merge the model made: paint
   // a background wall through the object, in every slice it spans, and
   // click; the two sides get ids of their own. A stroke joining two objects
   // merges them. JSON body, all optional: size_nm or box_voxels, and
@@ -274,6 +285,7 @@ export function viewLabelsRoutes(router: Router): ViewLabelsState {
   router.post(`${BASE}/split`, async (req, _params, ctx) => {
     const body = objectBody(req) ?? {};
     try {
+      requireDataset(ctx);
       const connectivity = valueOr400(() => asConnectivity((body.connectivity ?? 1) as never, 3));
       const perSlice = asBoolLike(body.per_slice as never);
       const { volume, lo, hi } = await targetBox(ctx, body);
@@ -281,7 +293,9 @@ export function viewLabelsRoutes(router: Router): ViewLabelsState {
       if (confirmation) return confirmation;
       const shape = hi.map((h, a) => h - lo[a]);
       const stack = undoStack(volume.id);
-      const { changed, counts } = await rewriteForeground(ctx.paint, volume, lo, hi, (existing) => relabelObjects(existing, shape, { connectivity, perSlice }), { undo: stack });
+      const { value, before, after } = await onBox<SplitCounts>(ctx, volume, lo, hi, "split", { connectivity, per_slice: perSlice });
+      if (after) pushUndo(stack, { lo, hi, before, after });
+      const { changed, ...counts } = value;
       const layerRefreshed = changed ? ctx.viewer.refreshLayer(paintLayerName(volume.id)) : false;
       ctx.log(`Relabelled box ${lo.join(",")}..${hi.join(",")} of ${volume.id}: ${counts.objects} objects, ${counts.split} split off, ${counts.merged} merged, ${changed} voxels changed`);
       return json(200, {
@@ -305,12 +319,15 @@ export function viewLabelsRoutes(router: Router): ViewLabelsState {
   // stroke painted there since is kept. 409 when there is nothing to undo.
   router.post(`${BASE}/undo`, async (_req, _params, ctx) => {
     try {
+      // Before the entry is taken: an undo the Python cannot run keeps it.
+      requireDataset(ctx);
       const volume = await sessionVolume(ctx);
       if (!volume) throw new Refused("No annotation volume to undo in.");
       const stack = undoStack(volume.id);
       const entry = stack.pop();
       if (!entry) throw new Refused("Nothing to undo.");
-      const restored = await restoreBox(ctx.paint, volume, entry);
+      const { value } = await onBox<{ restored: number }>(ctx, volume, entry.lo, entry.hi, "undo", {}, [bytesOf(entry.before), bytesOf(entry.after)]);
+      const restored = value.restored;
       const layerRefreshed = restored ? ctx.viewer.refreshLayer(paintLayerName(volume.id)) : false;
       ctx.log(`Undid the label action on box ${entry.lo.join(",")}..${entry.hi.join(",")} of ${volume.id}: ${restored} voxels restored`);
       return json(200, { success: true, restored, reload_viewer: restored > 0, layer_refreshed: layerRefreshed, can_undo: stack.length > 0 });
@@ -323,10 +340,82 @@ export function viewLabelsRoutes(router: Router): ViewLabelsState {
 }
 
 // ---------------------------------------------------------------------------
-// The seed
+// The box's labels, by the Python
 // ---------------------------------------------------------------------------
 
+/** What the box tools call: cellmap_flow/portable/fill_calls.py, over fill.py. */
+const FILL = "cellmap_flow.portable.fill_calls";
+
 const NO_DATASET = "No dataset is open. Open the one the annotation volume was painted on.";
+
+/** The open dataset, in whose engine the Python runs (Inference.python):
+ * without one no tool here can run, refused as a seed is refused (409). */
+function requireDataset(ctx: AppContext) {
+  const dataset = ctx.infer.dataset();
+  if (!dataset) throw new Refused(NO_DATASET);
+  return dataset;
+}
+
+/** What a fill wrote (fill.paint's counts, as fill_calls.seed and
+ * background answer them): the voxels written with foreground (2 and up)
+ * and with background, and those of them that held a label before (none,
+ * as these fill only unannotated voxels). The routes answer the first two
+ * as filled_foreground and filled_background. */
+interface PaintCounts {
+  n_foreground: number;
+  n_background: number;
+  n_overwritten: number;
+}
+
+/** What a split did (fill_calls.split): the components found, those given a
+ * fresh id (`split`), those that held more than one id (`merged`), and the
+ * voxels whose label changed. */
+interface SplitCounts {
+  objects: number;
+  split: number;
+  merged: number;
+  changed: number;
+}
+
+/** A typed array's own bytes, copied: a call's arrays are handed to the
+ * worker, and the box read here stays the undo entry's. */
+function bytesOf(a: ArrayBufferView): ArrayBuffer {
+  return a.buffer.slice(a.byteOffset, a.byteOffset + a.byteLength) as ArrayBuffer;
+}
+
+/** Run fill_calls.py's `call` on the box [lo, hi) of `volume` as the paint
+ * store holds it now (readBox; sent first, `arrays` after it), and write
+ * the box it answers back into the store (writeBox), when it answers one:
+ * it answers none when nothing changes, and nothing is written then.
+ * Returns the call's value, the box as it was (`before`) and, when written,
+ * as it is now (`after`, else null), for the caller's undo entry. A refusal
+ * (new ids that do not fit in the volume's dtype) is thrown as the 400 the
+ * server answers. */
+async function onBox<V extends object>(
+  ctx: AppContext,
+  volume: PaintVolume,
+  lo: number[],
+  hi: number[],
+  call: string,
+  args: Record<string, unknown>,
+  arrays: ArrayBuffer[] = [],
+): Promise<{ value: V; before: Labels; after: Labels | null }> {
+  const before = await readBox(ctx.paint, volume, lo, hi);
+  const answer = await ctx.infer.python<{ value: V; arrays: ArrayBuffer[] } | Refusal>(
+    `${FILL}:${call}`,
+    { ...args, shape: hi.map((h, a) => h - lo[a]), dtype: volume.dtype },
+    [bytesOf(before), ...arrays],
+  );
+  const { value, arrays: written } = refusedOr(answer);
+  if (!written.length) return { value, before, after: null };
+  const after = volume.dtype === "uint16" ? new Uint16Array(written[0]) : new Uint8Array(written[0]);
+  await writeBox(ctx.paint, volume, lo, hi, after);
+  return { value, before, after };
+}
+
+// ---------------------------------------------------------------------------
+// The seed
+// ---------------------------------------------------------------------------
 
 /** A refusal the Python answers in place of its value: the message the
  * server answers 400 with (a ValueError there). */

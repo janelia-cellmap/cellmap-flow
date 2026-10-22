@@ -403,12 +403,17 @@ and `label-it/segment.ts` runs the watershed itself (`infer/affinity.ts`,
 parity-tested against mwatershed, which has no Pyodide wheel). scipy, for
 the components, loads the first time a seed needs it, not when a dataset
 opens. The distance watershed and a model's own instances are not
-offered: no browser model outputs a distance or instance ids. The ids, the
-writes and the undo are `ai-annotate/labels.ts` and `fill.ts` (seedLabels,
-relabelObjects for Split Objects, paintBox, rewriteForeground, restoreBox).
-One undo stack per volume is the routes', and the AI annotation's Accept
-pushes onto it (createRouter hands it over, as `ai_annotate.py` uses
-`view_labels._undo_stack`), so one Undo takes back whichever came last.
+offered: no browser model outputs a distance or instance ids. The box a
+tool covers, the ids a seed or a split gives, which voxels each write
+changes and what an undo puts back are the server's Python too,
+`cellmap_flow/portable/fill.py`, called through `portable/fill_calls.py`
+(so with no dataset open every tool is refused, as a seed is); the routes
+read the box from the paint store and write back the box it answers
+(`ai-annotate/fill.ts` readBox and writeBox). Split Objects loads scipy as a
+seed does, the first time it is needed. One undo stack per volume is the
+routes', and the AI annotation's Accept pushes onto it (createRouter hands
+it over, as `ai_annotate.py` uses `view_labels._undo_stack`), so one Undo
+takes back whichever came last.
 
 ## Run on a region (src/run-region/)
 
@@ -513,9 +518,9 @@ web/
                              graph.ts (the training graph, its tile and block sides), net3d.ts (a 3D model's network in a GPU's
                              memory), files.ts, tiles.ts (2D tiles, 3D blocks), tfjs.ts (lazy TF.js), loss.ts (the head's loss
                              in TF.js), run-full.ts
-    ai-annotate/             AI-assisted annotation (above): types.ts, geometry.ts, plane.ts, mask.ts, labels.ts, fill.ts, prompts.ts,
-                             organelles.ts (the pure ports), images.ts (the canvas codec), gemini.ts, fake.ts, providers.ts,
-                             credentials.ts, usage.ts, audit.ts; labels.ts and fill.ts are Label it's too
+    ai-annotate/             AI-assisted annotation (above): types.ts, geometry.ts, plane.ts, mask.ts, fill.ts (the paint store's
+                             box reads and writes, and the undo stack), prompts.ts, organelles.ts, images.ts (the canvas codec),
+                             gemini.ts, fake.ts, providers.ts, credentials.ts, usage.ts, audit.ts; fill.ts is Label it's too
     label-it/                Label it (above): segment.ts (the mutex watershed, the probability's call), prediction.ts (the served
                              level, the placement's call, the output under a box)
     run-region/              Run on a region (above): region.ts (the box on each model's level, the run_region layer), run.ts
