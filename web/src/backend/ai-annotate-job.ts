@@ -17,16 +17,20 @@
 // built once when the result is ready and answered with `?preview=1`.
 //
 // What the job needs of the rest of the feature comes from the ai-annotate
-// modules: the plane's plan and read (geometry.ts, plane.ts), the mask and
-// the labels (mask.ts, plane.ts), the write and its undo (fill.ts), the
-// prompt (prompts.ts), the audit log (audit.ts) and the day's count
-// (usage.ts). The provider and the image codec are the routes' deps.
+// modules: the plane's plan and read (plane.ts), the mask and what the review
+// shows of it (mask.ts), the box's reads and writes and its undo (fill.ts),
+// the prompt (prompts.ts), the audit log (audit.ts) and the day's count
+// (usage.ts). Everything those decide about the plane, the image, the mask
+// and the labels is the Python both modes run
+// (cellmap_flow/portable/ai_annotate.py, in the engine's Pyodide worker
+// through Inference.python), so a plane is planned, sent, masked and
+// written as the server would. The provider and the image codec are the
+// routes' deps.
 import { record, type AuditEvent } from "../ai-annotate/audit";
-import { paintBox, readBox } from "../ai-annotate/fill";
-import { planPlane, screenShape, toScreen, writeShape } from "../ai-annotate/geometry";
+import { pushUndo, readBox, writeBox } from "../ai-annotate/fill";
 import { bytesToBase64 as base64 } from "../ai-annotate/gemini";
-import { maskFraction, overlay } from "../ai-annotate/mask";
-import { buildRequest, labelsForBox, maskToWriteShape, rawExtentNm, readPlane } from "../ai-annotate/plane";
+import { prepareMask, stageMask } from "../ai-annotate/mask";
+import { AI_PYTHON, buildRequest, type PlannedPlane, planPlane, type PythonRefusal, readImage } from "../ai-annotate/plane";
 import { buildRecolorPrompt, editablePrompt } from "../ai-annotate/prompts";
 import type {
   Credentials,
@@ -38,6 +42,7 @@ import type {
   PlanePlan,
   Preview,
   Provider,
+  RgbaImage,
   SegmentRequest,
   SegmentResult,
   Stage,
@@ -142,7 +147,8 @@ export class AiAnnotateJob {
   plan: PlanePlan | null = null;
   request: SegmentRequest | null = null;
   result: SegmentResult | null = null;
-  /** The mask's objects on the write box's in-plane voxels (plane.ts maskToWriteShape). */
+  /** The mask's objects on the write box's in-plane voxels, z, y, x order
+   * (portable/ai_annotate.py mask_to_write_shape, through mask.ts stageMask). */
   maskWrite: Int32Array | null = null;
   private current: Promise<void> = Promise.resolve();
 
@@ -235,11 +241,12 @@ export class AiAnnotateJob {
       this.setStage("fetching_crop");
       const dataset = ctx.infer.dataset();
       if (!dataset) throw new Refused("No dataset is open in the viewer.", 400);
-      const plan = planPlane(args.volume, args.volume.dataset_shape_voxels, args.pointNm, args.depthAxis, this.deps.cropSizePx, rawExtentNm(dataset, args.volume), args.displayDimensions ?? null);
+      const planned: PlannedPlane = await planPlane(ctx.infer, dataset, args.volume, args.pointNm, args.depthAxis, this.deps.cropSizePx, args.displayDimensions ?? null);
+      const plan = planned.plan;
       this.plan = plan;
       this.writeBox = { lo: plan.write_lo.map((v) => Math.trunc(v)), hi: plan.write_hi.map((v) => Math.trunc(v)) };
-      const plane = await readPlane(ctx.infer, dataset, args.volume, plan);
-      const request: SegmentRequest = buildRequest(plane, plan, args.profile, args.override);
+      const image = await readImage(ctx.infer, dataset, planned);
+      const request: SegmentRequest = buildRequest(image, planned, args.profile, args.override);
       this.request = request;
       await this.askAndStage(request);
     } catch (e) {
@@ -285,28 +292,32 @@ export class AiAnnotateJob {
    * reached the model. */
   private async askAndStage(request: SegmentRequest): Promise<void> {
     const args = this.args!;
-    const { usage, codec } = this.deps;
+    const { usage, codec, ctx } = this.deps;
+    const python = ctx.infer.python.bind(ctx.infer);
     this.setStage("sending");
     usage.checkAndCount(this.deps.dailyCallLimit);
+    // What the mask is labelled with loads while the model works (scipy, the first time).
+    prepareMask(python);
     let result: SegmentResult;
     try {
       // No outer timeout: the provider times each attempt out itself
       // (CALL_TIMEOUT_MS) and retries a busy service, so one call may take
       // several attempts' worth; a signal here would cut the retries short.
+      // The provider takes the mask out of the model's reply with the
+      // Python (mask.ts modelMask), as the server's backend does.
       const credentials = this.deps.credentials(args.providerId) ?? {};
-      result = await args.provider.segment(request, args.model, credentials);
+      result = await args.provider.segment(request, args.model, credentials, { python });
     } catch (e) {
       if (e instanceof AIAnnotateError && NOT_SENT.has(e.category)) usage.refund();
       throw e;
     }
     this.setStage("extracting_mask");
-    const plan = this.plan!;
-    const maskWrite = maskToWriteShape(result.mask, plan);
+    const staged = await stageMask(python, this.plan!, result.mask, request.image, request.target_rgb);
     this.setStage("staging_preview");
-    const preview = await buildPreview(codec, request, result, maskWrite, plan);
-    const fraction = maskFraction(maskWrite);
+    const preview = await buildPreview(codec, request, result, staged.overlay);
+    const fraction = staged.maskFraction;
     this.result = result;
-    this.maskWrite = maskWrite;
+    this.maskWrite = staged.objects;
     this.maskFraction = fraction;
     this.preview = preview;
     this.error = null;
@@ -367,13 +378,18 @@ export class AiAnnotateJob {
    * `overwrite` only unannotated voxels are written, as a seed writes them;
    * with it the staged labels replace what the plane held, except that the
    * model's background only fills unlabelled voxels: an object already
-   * painted that the model missed is kept, not erased. `undo` is the
-   * volume's stack, which gets the box as it was and as it is (fill.ts pushUndo
-   * keeps UNDO_DEPTH). The route sets the status around the call and answers can_undo.
+   * painted that the model missed is kept, not erased. Which voxels get
+   * which ids is the Python's (portable/ai_annotate_calls.py accept:
+   * accept_labels, as the server's accept route labels the box, then
+   * fill.paint's write rule), handed the box and the planes beside it as the
+   * paint store holds them now; the box it answers is written here, and
+   * `undo`, the volume's stack, gets the box as it was and as it is (fill.ts
+   * pushUndo keeps UNDO_DEPTH). The route sets the status around the call
+   * and answers can_undo.
    *
-   * Throws a Refused when the volume is gone, and whatever the labelling or
-   * the write throws (the Python answers a ValueError's message as a 409:
-   * fill's ids running out, a mask of the wrong shape). */
+   * Throws a Refused when the volume is gone, an AIAnnotateError
+   * ("refused", 409) when the ids run out (the Python's words, as the
+   * server's accept answers them), and whatever the store's write throws. */
   async accept(overwrite: boolean, undo: UndoEntry[]): Promise<AcceptResult> {
     const args = this.args!;
     const plan = this.plan!;
@@ -381,26 +397,29 @@ export class AiAnnotateJob {
     const { ctx } = this.deps;
     const volume = await readVolume(ctx.paint, args.volume.id);
     if (!volume) throw new Refused(`The annotation volume ${args.volume.id} is no longer open.`);
-    // As a seed: an instance target on a uint16 volume counts its ids up, a
-    // uint8 volume reuses free ones. The server asks what the model trains
-    // on (INSTANCE_TARGETS: affinities, flows); here the channel-name test
-    // stands for it, as annotationDtypeFor's does.
+    // An instance target counts its ids up on a volume of more than 8-bit
+    // ids (portable/fill.py counts_up). The server asks what the model
+    // trains on (affinities or Cellpose's flows); here the channel-name test
+    // stands for it, as annotationDtypeFor's does: the browser runs no flow model.
     const entry = (await ctx.catalog.resolve(volume.model_id)) ?? (await ctx.catalog.resolve(volume.model_name));
     const instanceTarget = entry ? hasAffinityChannels(entry) : false;
-    const countUp = instanceTarget && volume.dtype === "uint16";
     const lo = plan.write_lo.map((v) => Math.trunc(v));
     const hi = plan.write_hi.map((v) => Math.trunc(v));
     // Read just before the write, so a stroke painted in them since the plane was staged counts.
+    const existing = await readBox(ctx.paint, volume, lo, hi);
     const beside = await planesBeside(ctx.paint, volume, lo, hi, plan.depth_axis);
 
-    const labelsFor = (existing: Labels): Labels => {
-      const labels = labelsForBox(maskWrite, existing, lo, hi, plan.depth_axis, countUp, beside);
-      if (overwrite) {
-        for (let i = 0; i < labels.length; i++) if (labels[i] === 1 && existing[i] !== 0) labels[i] = 0;
-      }
-      return labels;
-    };
-    const counts = await paintBox(ctx.paint, volume, lo, hi, labelsFor, { undo, overwrite });
+    const answer = await ctx.infer.python<{ value: AcceptCounts; arrays: ArrayBuffer[] } | PythonRefusal>(`${AI_PYTHON}:accept`, {
+      depth_axis: plan.depth_axis, shape: hi.map((h, a) => h - lo[a]), dtype: volume.dtype, instance_target: instanceTarget,
+      overwrite, beside: beside.map((p) => p !== null),
+    }, [bytesOf(maskWrite), bytesOf(existing), ...beside.flatMap((p) => (p ? [bytesOf(p)] : []))]);
+    if ("refused" in answer) throw new AIAnnotateError("refused", answer.refused, 409);
+    const counts = answer.value;
+    if (answer.arrays.length) {
+      const after = volume.dtype === "uint16" ? new Uint16Array(answer.arrays[0]) : new Uint8Array(answer.arrays[0]);
+      await writeBox(ctx.paint, volume, lo, hi, after);
+      pushUndo(undo, { lo, hi, before: existing, after: after.slice() });
+    }
     const changed = Boolean(counts.n_foreground || counts.n_background || counts.n_overwritten);
     const layerRefreshed = changed ? ctx.viewer.refreshLayer(paintLayerName(volume.id)) : false;
     return {
@@ -413,13 +432,27 @@ export class AiAnnotateJob {
   }
 }
 
+/** What accepting wrote, as the Python answers it (fill.paint's counts): the
+ * voxels written with foreground and with background, and those of them
+ * that held a label before. */
+interface AcceptCounts {
+  n_foreground: number;
+  n_background: number;
+  n_overwritten: number;
+}
+
+/** A typed array's own bytes, copied: a call's arrays are handed to the worker. */
+function bytesOf(a: ArrayBufferView): ArrayBuffer {
+  return a.buffer.slice(a.byteOffset, a.byteOffset + a.byteLength) as ArrayBuffer;
+}
+
 // ---------------------------------------------------------------------------
 // The plane's surroundings
 // ---------------------------------------------------------------------------
 
 /** The planes on either side of the box [lo, hi) along `depthAxis`, as the
- * volume holds them (ai_annotate.py _planes_beside), for labelsForBox; null
- * for a side past the volume's edge. */
+ * volume holds them (ai_annotate.py _planes_beside), for the Python's
+ * accept_labels; null for a side past the volume's edge. */
 export async function planesBeside(store: PaintStore, volume: PaintVolume, lo: number[], hi: number[], depthAxis: DepthAxis): Promise<(Labels | null)[]> {
   const planes: (Labels | null)[] = [];
   for (const step of [-1, 1]) {
@@ -437,40 +470,20 @@ export async function planesBeside(store: PaintStore, volume: PaintVolume, lo: n
 }
 
 // ---------------------------------------------------------------------------
-// The preview (staging.py preview and overlay)
+// The preview (staging.py preview)
 // ---------------------------------------------------------------------------
 
 /** The review's images, base64 PNG: the image sent, the model's image (null
- * when it drew none) and the input with the voxels the mask labels tinted
- * the target colour. The mask is the write box's, laid out as the image is
- * (toScreen) and scaled to it by nearest neighbour, so the overlay shows
- * what accepting writes, not the model's own image. Every image is encoded
- * here, so nothing the model sent reaches the page as it came. */
-export async function buildPreview(codec: ImageCodec, request: SegmentRequest, result: SegmentResult, maskWrite: Int32Array, plan: PlanePlan): Promise<Preview> {
-  const [a, b] = writeShape(plan);
-  const [rows, cols] = screenShape([a, b], plan.depth_axis, plan.display_dimensions);
-  const screen = toScreen(Uint8Array.from(maskWrite, (o) => (o > 0 ? 1 : 0)), a, b, plan.depth_axis, plan.display_dimensions).data;
-  const scaled = nearestResize(screen, rows, cols, request.image.height, request.image.width);
+ * when it drew none) and `overlay`, the input with the voxels the mask labels
+ * tinted the target colour (mask.ts stageMask: the write box's mask laid out
+ * as the image is and scaled to it, so it shows what accepting writes, not
+ * the model's own image). Every image is encoded here, so nothing the model
+ * sent reaches the page as it came. */
+export async function buildPreview(codec: ImageCodec, request: SegmentRequest, result: SegmentResult, overlay: RgbaImage): Promise<Preview> {
   const [inputPng, modelPng, overlayPng] = await Promise.all([
     codec.encodePng(request.image),
     result.model_image ? codec.encodePng(result.model_image) : Promise.resolve(null),
-    codec.encodePng(overlay(request.image, scaled, request.target_rgb)),
+    codec.encodePng(overlay),
   ]);
   return { input_png: base64(inputPng), model_png: modelPng ? base64(modelPng) : null, overlay_png: base64(overlayPng) };
 }
-
-/** `mask` (rows × cols, rows first) at newRows × newCols by nearest
- * neighbour, pixel centre to pixel centre (PIL's NEAREST). */
-export function nearestResize(mask: Uint8Array, rows: number, cols: number, newRows: number, newCols: number): Uint8Array {
-  if (rows === newRows && cols === newCols) return mask;
-  const out = new Uint8Array(newRows * newCols);
-  for (let r = 0; r < newRows; r++) {
-    const sr = Math.min(rows - 1, Math.floor(((r + 0.5) * rows) / newRows));
-    for (let c = 0; c < newCols; c++) {
-      const sc = Math.min(cols - 1, Math.floor(((c + 0.5) * cols) / newCols));
-      out[r * newCols + c] = mask[sr * cols + sc];
-    }
-  }
-  return out;
-}
-

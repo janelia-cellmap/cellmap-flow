@@ -12,8 +12,8 @@ must give the same ids, so the vitest suite in
 ``web/test/parity/label-it.test.ts`` checks each port against what the
 *Python functions themselves* produce, written here as JSON.
 
-A separate generator from ``make_fixtures.py`` and ``make_ai_fixtures.py``
-(whose helpers and conventions it shares). Run it with a Python that has
+A separate generator from ``make_fixtures.py`` (whose helpers and
+conventions it shares). Run it with a Python that has
 cellmap_flow's dependencies (numpy, scipy, zarr, mwatershed, fastremap,
 flask), from anywhere::
 
@@ -52,8 +52,8 @@ order (``make_fixtures.array_record``). The sections of ``label_it.json``:
     refusal's message).
 ``rewrite_foreground``
     ``fill.rewrite_foreground`` with ``relabel_objects`` on an 8^3 volume in
-    4^3 chunks, MinIO replaced by an in-memory zarr as make_ai_fixtures'
-    paint_box cases replace it: the volume before, the changed count and
+    4^3 chunks, MinIO replaced by an in-memory zarr as
+    tests/ai_annotate/test_paint_box.py replaces it: the volume before, the changed count and
     counts, the volume after, the undo entry, and ``fill.restore_box`` after
     a stroke painted in between.
 ``read_prediction``
@@ -296,10 +296,36 @@ def make_relabel() -> list:
 
 # --- rewrite_foreground and restore_box -----------------------------------------
 
+STATE = {"bucket": "annotations"}
+
+
+class _Bucket:
+    """MinIO's bucket as s3fs sees it: an in-memory zarr per key (tests/ai_annotate/test_paint_box.py)."""
+
+    def __init__(self):
+        self.stores = {}
+
+    def exists(self, path):
+        root, _, rest = path.partition(".zarr/")
+        return rest in self.stores.get(root + ".zarr", {})
+
+
+def _served(initial: np.ndarray, chunks=(4, 4, 4)):
+    """``initial`` as MinIO would serve it: fill's S3 calls answered by an in-memory zarr."""
+    from cellmap_flow.finetune.session import minio
+
+    bucket = _Bucket()
+    store = bucket.stores["annotations/vol-1.zarr"] = zarr.MemoryStore()
+    minio.make_s3_filesystem = lambda state: bucket
+    fill.s3fs.S3Map = lambda root, s3, check: s3.stores[root]
+    labels = zarr.open_group(store).require_group("annotation").create_dataset(
+        "s0", shape=initial.shape, chunks=chunks, dtype=initial.dtype, fill_value=0
+    )
+    labels[:] = initial
+    return labels
+
 
 def make_rewrite() -> list:
-    from make_ai_fixtures import STATE, _served
-
     cut = np.zeros((8, 8, 8), dtype=np.uint8)
     cut[1:7, 1:7, 1:7] = 5
     cut[1:7, 1:7, 4] = 1  # a wall through every slice of the object, across the chunks

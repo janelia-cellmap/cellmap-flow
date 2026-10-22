@@ -1,35 +1,22 @@
-// The ids a box of labels gets from a segmentation: the port of
-// cellmap_flow/finetune/session/fill.py's _fresh_ids, seed_labels and
-// relabel_objects, and of the scipy.ndimage.label call
-// pipeline.mask_to_write_shape makes on the mask (label2d), for the browser's AI
-// annotation and the Finetune tab's Label it tools (Seed from Prediction's
-// ids, Split Objects' relabelling; backend/routes/view-labels.ts). The
-// connected-component labelling itself is infer/label.ts's (labelComponents,
-// which numbers objects as scipy does); for an AI annotation it is run on
-// one plane with scipy's default structure, 4-connectivity, so two objects
-// the model left touching only at a corner stay apart, as it was asked to
-// leave them.
+// The ids a box of labels gets from a segmentation, for the Finetune tab's
+// Label it tools (Seed from Prediction's ids, Split Objects' relabelling;
+// backend/routes/view-labels.ts): the port of
+// cellmap_flow/finetune/session/fill.py's fresh ids, seed_labels and
+// relabel_objects, which are cellmap_flow/portable/fill.py's now. An
+// accepted AI annotation's ids are that Python's own, called in the engine's
+// worker (portable/ai_annotate_calls.py accept); these stay until the Label
+// it routes call it too (test/parity/label-it.test.ts holds relabelObjects
+// to the Python). The connected-component labelling itself is
+// infer/label.ts's (connectedComponents, which numbers objects as scipy does).
 //
 // The ids: an object the user has already painted part of keeps the id
 // painted there most; the rest get fresh ones, the lowest the box does not
 // use from 2 up for a uint8 volume, counting up from the box's largest for an
 // instance target on a uint16 one (countUp). Ids running out is a refusal
-// (AIAnnotateError "refused", 409: the Python raises ValueError and its
-// accept route answers 409 with the message; its seed and split routes
-// answer 400, as the browser's do), with fill.py's own words.
-import { connectedComponents, earlierOffsets, labelComponents } from "../infer/label";
+// (AIAnnotateError "refused", 409; the Python raises ValueError and its seed
+// and split routes answer 400, as the browser's do), with fill.py's own words.
+import { connectedComponents } from "../infer/label";
 import { AIAnnotateError, type Labels } from "./types";
-
-/** The objects of `mask` (rows × cols, rows first, nonzero = foreground),
- * each pixel's id in an int32 array (scipy.ndimage.label's dtype), 0 for
- * background, numbered 1..count in raster order of their first pixel as
- * scipy numbers them; 4-connected (scipy's default structure in 2D: pixels
- * touching only at a corner are different objects). */
-export function label2d(mask: Uint8Array, rows: number, cols: number): { objects: Int32Array; count: number } {
-  if (mask.length !== rows * cols) throw new Error(`a ${rows}×${cols} mask has ${rows * cols} pixels, not ${mask.length}`);
-  const { labels, count } = labelComponents(mask, [1, rows, cols], earlierOffsets(2, 1));
-  return { objects: Int32Array.from(labels), count };
-}
 
 /** The largest id the labels' dtype holds (np.iinfo(dtype).max). */
 function biggestId(existing: Labels): number {
@@ -77,7 +64,7 @@ export function freshIds(existing: Labels, count: number, countUp: boolean): num
  * (fill.seed_labels).
  *
  * `objects` is a segmenter's output over the box (0 background, objects
- * 1..n; label2d's here), `existing` what the box holds now, the same length.
+ * 1..n; label-it/segment.ts's), `existing` what the box holds now, the same length.
  * Each object gets an id of its own (freshIds; `countUp` for an instance
  * target), so neighbouring objects are told apart, and a merge the model
  * made shows as one colour to split; but an object the user has already

@@ -3,10 +3,13 @@
 // rewrite_foreground and restore_box (and of finetune/session/volume.py's
 // volume_corner_nm, which box_voxels places voxels by) for the browser,
 // where the volume is the paint store's zarr v2 chunks (finetune/volume.ts)
-// instead of MinIO's. An accepted AI annotation writes through paintBox, as
-// do the Label it tools' Seed from Prediction and All Background; Split
-// Objects through rewriteForeground; Undo, of any of them, is restoreBox
-// (backend/routes/view-labels.ts).
+// instead of MinIO's. The Label it tools' Seed from Prediction and All
+// Background write through paintBox, Split Objects through
+// rewriteForeground; Undo, of any of them or of an accepted AI annotation,
+// is restoreBox (backend/routes/view-labels.ts). The decisions under them
+// are cellmap_flow/portable/fill.py's on the server; an accepted AI
+// annotation already takes them from that Python, in the engine's worker,
+// and writes what it answers with writeBox (backend/ai-annotate-job.ts).
 //
 // What the server does through zarr over MinIO (`arr[box]` read and written)
 // is done here chunk by chunk: readBox assembles the box from the chunks it
@@ -182,12 +185,8 @@ function asDtype(labels: Labels, like: Labels): Labels {
  * of the same length (0 for "leave as it is"). Without `overwrite` only
  * unannotated voxels (0) are written, as for a seed: what the user painted
  * stays. With it every voxel the labels cover is written, painted or not,
- * for a result the user has looked at and prefers to what is there; note
- * that the accept route (backend/routes/ai-annotate.ts, as the Python's
- * ai_annotate_accept) zeroes `labels == 1 & existing != 0` in its own
- * labelsFor before this sees them when overwrite is on, so the model's
- * background never erases paint; that is the route's rule, not this
- * function's, which writes exactly what the labels say. Nothing is written
+ * for a result the user has looked at and prefers to what is there; this
+ * writes exactly what the labels say. Nothing is written
  * when nothing would change (and nothing is pushed on `undo`). When
  * something is, `options.undo`, when given, gets `{lo, hi, before, after}`
  * pushed (pushUndo: UNDO_DEPTH entries at most) for restoreBox. */

@@ -1,6 +1,7 @@
 // Images for AI-assisted annotation: encoding the plane that is sent, checking
-// and decoding the image a model sends back, and the two pure helpers the
-// Gemini provider needs to line the answer up with the plane. The port of
+// and decoding the image a model sends back, and the padding the Gemini
+// provider sends the plane with (lining its answer up with the plane again
+// is the Python's: mask.ts modelMask). The port of
 // cellmap_flow/ai_annotate/images.py (decode_model_image: the checks a
 // model's image must pass before it is decoded) and of vertex_gemini.py's
 // _square, for the browser, where the canvas is the only image codec there
@@ -23,8 +24,8 @@
 //     where there is no canvas. It writes no real PNG: its bytes are a tiny
 //     container of the raw RGBA pixels (see RAW_CONTAINER_TAG), prefixed with
 //     the PNG signature so that the checks above treat them as a PNG and the
-//     Gemini provider's whole flow (encode, send, decode, resize, crop) runs
-//     unchanged in a test. It cannot decode a real PNG.
+//     Gemini provider's whole flow (encode, send, decode) runs unchanged in a
+//     test. It cannot decode a real PNG.
 import { AIAnnotateError, ALLOWED_IMAGE_TYPES, type ImageCodec, MAX_IMAGE_PIXELS, type RgbaImage } from "./types";
 
 // ---------------------------------------------------------------------------
@@ -123,7 +124,7 @@ export function medianOfBytes(values: Uint8Array): number {
 }
 
 // ---------------------------------------------------------------------------
-// Lining a model's answer up with the plane (vertex_gemini.py _square and the crop)
+// The plane padded square for the model (vertex_gemini.py _square)
 // ---------------------------------------------------------------------------
 
 /** `image` padded on the right or bottom to a square with its median grey
@@ -134,7 +135,7 @@ export function medianOfBytes(values: Uint8Array): number {
  * square, and resizing the answer back to it would stretch the mask. The
  * padding is a flat grey rather than black, which the prompt asks the model
  * to paint everything else, so it reads as nothing rather than as a
- * structure's dark edge; the provider crops it off the answer (cropTo). The
+ * structure's dark edge; the provider crops it off the answer (mask.ts modelMask). The
  * grey is the integer part of the median (int(np.median(...))). A square
  * image comes back as it is. */
 export function padToSquare(image: RgbaImage): { image: RgbaImage; padded: boolean } {
@@ -151,22 +152,6 @@ export function padToSquare(image: RgbaImage): { image: RgbaImage; padded: boole
     data.set(image.data.subarray(row * width * 4, (row + 1) * width * 4), row * side * 4);
   }
   return { image: { width: side, height: side, data }, padded: true };
-}
-
-/** The top-left `width` × `height` of `image` (PIL's crop((0, 0, width,
- * height))), which drops the padding padToSquare added once the model's
- * image is back at the sent size. The image returned is `image` itself when
- * nothing is cropped. A box reaching past the image is a programming error. */
-export function cropTo(image: RgbaImage, width: number, height: number): RgbaImage {
-  if (width > image.width || height > image.height) {
-    throw new Error(`cannot crop a ${image.width}×${image.height} image to ${width}×${height}`);
-  }
-  if (width === image.width && height === image.height) return image;
-  const data = new Uint8ClampedArray(width * height * 4);
-  for (let row = 0; row < height; row++) {
-    data.set(image.data.subarray(row * image.width * 4, row * image.width * 4 + width * 4), row * width * 4);
-  }
-  return { width, height, data };
 }
 
 // ---------------------------------------------------------------------------
@@ -193,7 +178,7 @@ function makeCanvas(width: number, height: number): { canvas: OffscreenCanvas | 
   return { canvas, ctx };
 }
 
-/** `image` drawn on a fresh canvas, for encoding or as the source of a resize. */
+/** `image` drawn on a fresh canvas, for encoding. */
 function canvasOf(image: RgbaImage): { canvas: OffscreenCanvas | HTMLCanvasElement; ctx: Canvas2D } {
   const made = makeCanvas(image.width, image.height);
   // ImageData wants a Uint8ClampedArray over an ArrayBuffer of its own; the copy also keeps the caller's pixels untouched.
@@ -213,8 +198,7 @@ function readPixels(ctx: Canvas2D, width: number, height: number): RgbaImage {
 
 /** The ImageCodec the page uses: PNG encoding through the canvas's own
  * encoder, decoding through createImageBitmap (PNG, JPEG and WebP, as every
- * browser decodes them), resizing by drawImage with the browser's smoothing
- * on (bilinear or better) or off (nearest neighbour). */
+ * browser decodes them). */
 export function canvasCodec(): ImageCodec {
   return {
     async encodePng(image) {
@@ -245,16 +229,6 @@ export function canvasCodec(): ImageCodec {
         bitmap.close();
       }
     },
-
-    async resize(image, width, height, smooth) {
-      if (width === image.width && height === image.height) return image;
-      const source = canvasOf(image);
-      const { ctx } = makeCanvas(width, height);
-      ctx.imageSmoothingEnabled = smooth;
-      if (smooth) ctx.imageSmoothingQuality = "high";
-      ctx.drawImage(source.canvas, 0, 0, image.width, image.height, 0, 0, width, height);
-      return readPixels(ctx, width, height);
-    },
   };
 }
 
@@ -271,10 +245,9 @@ const RAW_HEADER_BYTES = 8 + 4 + 4 + 4;
 /** A pure-JavaScript ImageCodec for the unit tests and Node: `encodePng`
  * writes the raw container described at RAW_CONTAINER_TAG (not a PNG, though
  * it begins with one's signature so that checkBeforeDecode treats it as
- * one), `decode` reads it back after the same checks the canvas codec makes,
- * and `resize` is a nearest-neighbour or bilinear resampler in JavaScript.
- * It cannot decode a real PNG, JPEG or WebP: those fail as "could not be
- * decoded". */
+ * one), and `decode` reads it back after the same checks the canvas codec
+ * makes. It cannot decode a real PNG, JPEG or WebP: those fail as "could
+ * not be decoded". */
 export function jsCodec(): ImageCodec {
   return {
     async encodePng(image) {
@@ -301,58 +274,7 @@ export function jsCodec(): ImageCodec {
       return { width, height, data: new Uint8ClampedArray(bytes.subarray(RAW_HEADER_BYTES)) };
     },
 
-    async resize(image, width, height, smooth) {
-      if (width === image.width && height === image.height) return image;
-      return smooth ? resizeBilinear(image, width, height) : resizeNearest(image, width, height);
-    },
   };
-}
-
-/** `image` at `width` × `height`, each pixel the source pixel whose centre
- * is nearest (pixel centres at + 0.5, as PIL's NEAREST maps them). */
-export function resizeNearest(image: RgbaImage, width: number, height: number): RgbaImage {
-  const data = new Uint8ClampedArray(width * height * 4);
-  const sx = image.width / width, sy = image.height / height;
-  for (let y = 0; y < height; y++) {
-    const srcY = Math.min(image.height - 1, Math.floor((y + 0.5) * sy));
-    for (let x = 0; x < width; x++) {
-      const srcX = Math.min(image.width - 1, Math.floor((x + 0.5) * sx));
-      const from = (srcY * image.width + srcX) * 4, to = (y * width + x) * 4;
-      data[to] = image.data[from];
-      data[to + 1] = image.data[from + 1];
-      data[to + 2] = image.data[from + 2];
-      data[to + 3] = image.data[from + 3];
-    }
-  }
-  return { width, height, data };
-}
-
-/** `image` at `width` × `height` by bilinear interpolation between the four
- * nearest source pixel centres (centres aligned: a destination centre maps
- * to (x + 0.5) × scale − 0.5 in the source, clamped at the edges), rounded
- * to the nearest byte. Plain interpolation, not PIL's wider antialiasing
- * filter when shrinking: close enough for lining a model's image up with
- * the plane, which is what the Gemini provider needs it for. */
-export function resizeBilinear(image: RgbaImage, width: number, height: number): RgbaImage {
-  const data = new Uint8ClampedArray(width * height * 4);
-  const sx = image.width / width, sy = image.height / height;
-  const src = image.data, sw = image.width;
-  for (let y = 0; y < height; y++) {
-    const fy = Math.min(Math.max((y + 0.5) * sy - 0.5, 0), image.height - 1);
-    const y0 = Math.floor(fy), y1 = Math.min(y0 + 1, image.height - 1), wy = fy - y0;
-    for (let x = 0; x < width; x++) {
-      const fx = Math.min(Math.max((x + 0.5) * sx - 0.5, 0), image.width - 1);
-      const x0 = Math.floor(fx), x1 = Math.min(x0 + 1, image.width - 1), wx = fx - x0;
-      const p00 = (y0 * sw + x0) * 4, p01 = (y0 * sw + x1) * 4, p10 = (y1 * sw + x0) * 4, p11 = (y1 * sw + x1) * 4;
-      const to = (y * width + x) * 4;
-      for (let c = 0; c < 4; c++) {
-        const top = src[p00 + c] * (1 - wx) + src[p01 + c] * wx;
-        const bottom = src[p10 + c] * (1 - wx) + src[p11 + c] * wx;
-        data[to + c] = Math.round(top * (1 - wy) + bottom * wy);
-      }
-    }
-  }
-  return { width, height, data };
 }
 
 // ---------------------------------------------------------------------------

@@ -20,9 +20,11 @@
 // The flow is vertex_gemini.py's: the plane padded to a square with its
 // median grey (images.ts padToSquare), sent as a PNG with the prompt and
 // response modalities IMAGE and TEXT; the answer's last image that is not a
-// `thought` part decoded (images.ts: the checks), resized to the sent size
-// when the model answered at another, the padding cropped off, and the
-// pixels of the asked-for colour taken as the mask (mask.ts extractMask).
+// `thought` part decoded (images.ts: the checks), then, by the Python both
+// modes run (mask.ts modelMask: portable/ai_annotate.py model_mask, which the
+// server's backend calls too), resized to the sent size when the model
+// answered at another, the padding cropped off, and the pixels of the
+// asked-for colour taken as the mask.
 // Only "try again later" answers (429, 503, or an error body whose status is
 // UNAVAILABLE or RESOURCE_EXHAUSTED) are retried, at most MAX_ATTEMPTS
 // attempts in all with the waits RETRY_WAITS_MS; everything else fails at
@@ -34,8 +36,8 @@
 // error.details[].reason, blockReason, finishReason) and the model's own
 // text, stripped of control characters and cut to MAX_REPLY_CHARS, are read
 // into a message, as vertex_gemini.py does. Nothing is logged.
-import { cropTo, padToSquare } from "./images";
-import { extractMask } from "./mask";
+import { padToSquare } from "./images";
+import { modelMask } from "./mask";
 import {
   AIAnnotateError,
   CALL_TIMEOUT_MS,
@@ -125,16 +127,14 @@ export function createGeminiProvider(type: GeminiType, deps: GeminiDeps): Provid
 
       const { image, text, mimeType } = imageAndText(answer);
       if (image === null) throw new AIAnnotateError("bad_response", noImageMessage(answer, text));
-      let modelImage = await deps.codec.decode(imageBytes(image), mimeType);
-      if (modelImage.width !== sent.width || modelImage.height !== sent.height) {
-        // The model answered at another size (or shape: stretching it then
-        // is what the preview shows). Back to the sent size, then the
-        // padding off: what is left lines up with the plane.
-        modelImage = await deps.codec.resize(modelImage, sent.width, sent.height, true);
-      }
-      modelImage = cropTo(modelImage, request.image.width, request.image.height);
-      const mask = extractMask(modelImage, request.target_rgb);
-      return { mask, model_image: modelImage, model, usage: usageOf(answer) } satisfies SegmentResult;
+      const reply = await deps.codec.decode(imageBytes(image), mimeType);
+      // A reply at another size (or shape: stretching it then is what the
+      // preview shows) goes back to the sent size, then the padding comes
+      // off: what is left lines up with the plane, and its pixels of the
+      // target colour are the mask.
+      if (!options.python) throw new Error("the Gemini provider takes its mask with the engine's Python: open a dataset first");
+      const { mask, model_image } = await modelMask(options.python, reply, sent, request.image, request.target_rgb);
+      return { mask, model_image, model, usage: usageOf(answer) } satisfies SegmentResult;
     },
 
     async listModels(credentials, options = {}) {

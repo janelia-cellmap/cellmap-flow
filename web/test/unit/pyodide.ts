@@ -1,6 +1,7 @@
 // cellmap_flow.portable in node, for the tests of what calls it (the rank
 // routes): Pyodide from the npm package (the version chunkmirage's workers
-// load from jsDelivr), numpy from jsDelivr, build/portable.ts's modules
+// load from jsDelivr), numpy from jsDelivr (scipy too, the first time a call
+// imports it, as the workers load it), build/portable.ts's modules
 // written as the page's workers get them, and chunkmirage's own dispatch
 // (chunkmirage.calls, from the clone) marshalling each answer as its worker
 // does. numpy's wheel needs the network the first time (Pyodide then caches
@@ -38,8 +39,21 @@ async function load(): Promise<PythonCall> {
   py.runPython('import sys; sys.path.insert(0, "/page")\nfrom chunkmirage import calls\n\ndef call(fn, args, arrays):\n    return calls.call(fn, args, [a.to_py() for a in arrays])\n');
   const call = py.globals.get("call");
   const buffer = (b: Uint8Array) => b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength) as ArrayBuffer;
+  // As the worker's withPackages (chunkmirage pyworker.ts): a package a call
+  // imports inside a function (scipy, scikit-image) is loaded the first time
+  // the import fails for it, and the call made again.
+  const lazy: Record<string, string> = { scipy: "scipy", skimage: "scikit-image" };
+  const withPackages = async <R>(run: () => R): Promise<R> => {
+    for (let tries = 0; ; tries++) {
+      try { return run(); } catch (e) {
+        const name = /No module named '(\w+)/.exec(String((e as Error)?.message ?? ""))?.[1];
+        if (!name || !lazy[name] || tries > 1) throw e;
+        await py.loadPackage([lazy[name]]);
+      }
+    }
+  };
   return async <T>(fn: string, args: Record<string, unknown>, arrays: ArrayBuffer[] = []): Promise<T> => {
-    const out = call(fn, JSON.stringify(args), arrays.map((b) => new Uint8Array(b)));
+    const out = await withPackages(() => call(fn, JSON.stringify(args), arrays.map((b) => new Uint8Array(b))));
     if (typeof out === "string") return JSON.parse(out) as T;
     const js = out.toJs() as Uint8Array | [string, Uint8Array[]];
     out.destroy();
