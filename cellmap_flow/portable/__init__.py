@@ -17,4 +17,7 @@ around it (``finetune/session/volume.py``'s ``carry_paint`` and
 A finetune's training targets are ``targets.py``, which the server's
 ``finetune/target_transforms.py`` wraps and the browser calls through
 ``targets_calls.py``.
+AI-assisted annotation's plane, image, mask and labels are ``ai_annotate.py``
+(the browser calls ``ai_annotate_calls.py``), and the label decisions under
+it and the Finetune tab's box tools are ``fill.py``.
 """

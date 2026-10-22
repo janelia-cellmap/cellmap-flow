@@ -331,21 +331,24 @@ the server: `backend/routes/ai-annotate.ts` answers the Python routes' JSON
 accept, reject; Accept's Undo is Label it's, below), and
 `backend/ai-annotate-job.ts` is the job, one at a time, its result staged in
 memory until Accept or Reject.
-Who does what: `geometry.ts` plans the plane (the depth axis from the
-viewer's layout, the raw box, the image laid out as the panel draws it, the
-click in image pixels); `plane.ts` reads it from the raw level through
-`Inference.readRaw` (clipped to the level and zero past it), resizes it to the image sent, normalizes it to uint8 RGBA (`mask.ts`)
-and builds the request; `gemini.ts` is the two Google providers
+Who does what: the plane planned (the raw box, the image laid out as the
+panel draws it, the click in image pixels), the image sent (resized to the
+plan's grid, normalized to uint8), the mask in the model's reply (resized
+back, cropped, thresholded by colour), its objects on the write box with the
+review's overlay, and the labels Accept writes are the Python both modes
+run, `cellmap_flow/portable/ai_annotate.py` (`ai_annotate_calls.py` is what
+the page calls); `plane.ts` hands it the plan's inputs and reads the raw box
+from the raw level through `Inference.readRaw` (clipped to the level and
+zero past it), and builds the request; `mask.ts` hands it the model's image
+and the mask; `geometry.ts` keeps the names the viewer's depth axis is read
+by; `gemini.ts` is the two Google providers
 (`gemini_api`: generativelanguage.googleapis.com with `x-goog-api-key`;
 `vertex_gemini`: aiplatform.googleapis.com, location global, with a bearer
 token), called straight from the page, with the Python's retries and
 timeout, and errors in the module's own words, never the service's body;
 `fake.ts` paints the dark pixels in a disc around the click, for trying the
-panel and for the tests; `mask.ts` reads the model's image into a mask by
-the colour the prompt asked for and draws the overlay; `labels.ts` and
-`fill.ts` are `fill.py` (4-connected objects in the plane, ids seeded from
-what the user painted beside, the box written to the paint store whole
-chunk by whole chunk, with the undo entry); `prompts.ts` and `organelles.ts`
+panel and for the tests; the accepted box is written to the paint store
+whole chunk by whole chunk, with the undo entry (`fill.ts`); `prompts.ts` and `organelles.ts`
 are the catalog; `credentials.ts`, `usage.ts` and `audit.ts` hold the
 credentials, the daily count (localStorage, 200 a day) and the audit log,
 one JSON line per event appended to `<volume>/ai_annotate_log.jsonl` in the

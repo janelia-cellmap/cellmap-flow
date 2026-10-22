@@ -446,7 +446,7 @@ def test_running_out_of_ids_says_what_to_do(dashboard, ai_config, ai_volume, syn
     def no_room(*args, **kwargs):
         raise ValueError("3 new objects do not fit in the volume's uint8 labels: make a new annotation volume")
 
-    monkeypatch.setattr(routes.pipeline, "labels_for_box", no_room)
+    monkeypatch.setattr(routes.pipeline, "accept_labels", no_room)
     response = dashboard.post(f"{API}/accept", json={"annotate_id": status["annotate_id"], "overwrite": False})
 
     assert response.status_code == 409 and "make a new annotation volume" in response.get_json()["error"]

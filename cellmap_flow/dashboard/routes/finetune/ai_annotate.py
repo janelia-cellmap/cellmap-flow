@@ -687,7 +687,7 @@ def _resend_job(ai, job, config, segment_request):
 def _planes_beside(state, volume_id, lo, hi, depth_axis):
     """The planes on either side of the box ``[lo, hi)`` along ``depth_axis``, as MinIO serves them.
 
-    For ``pipeline.labels_for_box``; None for a side past the volume's edge.
+    For ``pipeline.accept_labels``; None for a side past the volume's edge.
     Read just before the write, so a stroke painted in them since the plane
     was staged counts.
     """
@@ -742,20 +742,14 @@ def ai_annotate_accept():
         beside = _planes_beside(state, volume_id, lo, hi, plan.depth_axis)
 
         def labels_for(existing):
-            # As a seed: an instance target on a uint16/uint32 volume counts
+            # As a seed (an instance target on a uint16/uint32 volume counts
             # its ids up, a uint8 volume reuses free ones; an object
-            # continuing one in the plane beside keeps its id.
-            labels = pipeline.labels_for_box(
-                mask_write, existing, plan.depth_axis,
-                count_up=instance_target and existing.dtype.itemsize > 1, beside=beside,
-            )
-            if body.overwrite:
-                # Overwrite lets the model's objects replace what is under
-                # them, but its background only fills unlabelled voxels: an
-                # object already painted that the model missed is kept, not
-                # erased to background.
-                labels[(labels == 1) & (existing != 0)] = 0
-            return labels
+            # continuing one in the plane beside keeps its id), and with
+            # overwrite the model's background only filling unlabelled
+            # voxels: portable/ai_annotate.py's accept_labels, which the
+            # browser's Accept runs too.
+            return pipeline.accept_labels(mask_write, existing, plan.depth_axis, instance_target, body.overwrite,
+                                          beside=beside)
 
         n_foreground, n_background, n_overwritten = paint_box(
             state, volume_id, lo, hi, labels_for, volume.get("zarr_path"),
@@ -769,7 +763,7 @@ def ai_annotate_accept():
             logger.warning(f"Could not accept AI annotation {job['annotate_id']}: {e}")
             return _error("The staged annotation or the served volume is missing; reject it and run again.", 409)
         if isinstance(e, ValueError):
-            # Our own messages (labels_for_box, fill's ids running out), which
+            # Our own messages (accept_labels, fill's ids running out), which
             # say what to do: the seed route answers them the same way.
             logger.warning(f"Could not accept AI annotation {job['annotate_id']}: {e}")
             return _error(str(e), 409)

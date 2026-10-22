@@ -3,15 +3,14 @@
 The round trips are the point: a raw with a bright block at a known world
 position, a plane planned through it, read, masked by brightness, mapped to
 the write box and labelled must label exactly the annotation voxels that
-cover the block, on every plane and whatever the voxel sizes are.
+cover the block, on every plane and whatever the voxel sizes are. The mask's
+objects and ids on their own are tests/portable/test_ai_annotate.py's.
 """
-
-from types import SimpleNamespace
 
 import numpy as np
 import pytest
 
-from cellmap_flow.ai_annotate.geometry import from_screen, plan_plane, to_screen
+from cellmap_flow.ai_annotate.geometry import plan_plane
 from cellmap_flow.ai_annotate.pipeline import (
     labels_for_box,
     mask_to_write_shape,
@@ -162,61 +161,3 @@ def test_the_image_is_the_plane_as_the_panel_draws_it(raw_zarr, depth_axis, down
     side = bright_below_the_point_along(across)
     near, far = (side[:, 16:], side[:, :16]) if depth_axis == 0 else (side[:, :16], side[:, 16:])
     assert near.all() and not far.any()
-
-
-# --- the mask on the box ----------------------------------------------------------
-
-
-def test_a_one_pixel_line_parts_two_objects_on_coarser_voxels():
-    # 4 nm pixels on 8 nm voxels: each voxel takes every second pixel, and
-    # the line the model left between the two objects is on one none takes.
-    plan = plan_plane(_volume(None, (8, 8, 8), (4, 4, 4)), (24, 32, 40), (81, 113, 177), 0, crop_size_px=16)
-    assert plan.image_shape == (32, 32) and plan.write_shape == (16, 16)
-    mask = np.ones(plan.image_shape, dtype=bool)
-    mask[:, 16] = False
-    labels = labels_for_box(mask_to_write_shape(mask, plan), np.zeros((1, 16, 16), dtype=np.uint8), 0, count_up=False)
-    assert set(np.unique(labels)) == {2, 3}
-
-
-def _objects(mask, depth_axis):
-    """``mask`` (the box's plane, z, y, x order) cut into objects by
-    ``mask_to_write_shape``, from an image of the box's own size."""
-    plan = SimpleNamespace(write_shape=mask.shape, depth_axis=depth_axis, display_dimensions=None,
-                           from_screen=lambda image: from_screen(image, depth_axis))
-    return mask_to_write_shape(to_screen(mask, depth_axis), plan)
-
-
-@pytest.mark.parametrize("depth_axis", [0, 1, 2])
-def test_labels_for_box_gives_each_object_an_id(depth_axis):
-    mask = np.zeros((6, 8), dtype=bool)
-    mask[0:2, 0:2] = True
-    mask[3:5, 4:7] = True
-    mask[5, 7] = True  # touches the second only at a corner: an object of its own
-    existing = np.zeros(np.insert(mask.shape, depth_axis, 1), dtype=np.uint8)
-    labels = np.squeeze(labels_for_box(_objects(mask, depth_axis), existing, depth_axis, count_up=False), axis=depth_axis)
-    assert labels.dtype == np.uint8
-    assert np.all(labels[~mask] == 1)
-    ids = {int(labels[0, 0]), int(labels[3, 4]), int(labels[5, 7])}
-    assert ids == {2, 3, 4}
-    assert len(np.unique(labels[0:2, 0:2])) == 1 and len(np.unique(labels[3:5, 4:7])) == 1
-
-
-def test_labels_for_box_keeps_a_painted_objects_id():
-    mask = np.zeros((1, 6, 6), dtype=bool)[0]
-    mask[1:4, 1:4] = True
-    existing = np.zeros((1, 6, 6), dtype=np.uint8)
-    existing[0, 1, 1] = 7  # the user painted part of the object as 7
-    existing[0, 5, 5] = 9  # and another object elsewhere
-    labels = labels_for_box(mask, existing, 0, count_up=False)[0]
-    assert np.all(labels[1:4, 1:4] == 7)
-
-
-def test_labels_for_box_counts_up_on_an_instance_volume():
-    mask = np.zeros((4, 8), dtype=bool)
-    mask[:, 0:2] = True
-    mask[:, 4:6] = True
-    existing = np.zeros((4, 1, 8), dtype=np.uint16)
-    existing[0, 0, 7] = 300
-    labels = labels_for_box(_objects(mask, 1), existing, 1, count_up=True)[:, 0, :]
-    assert labels.dtype == np.uint16
-    assert {int(labels[0, 0]), int(labels[0, 4])} == {301, 302}

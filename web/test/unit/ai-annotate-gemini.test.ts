@@ -1,8 +1,10 @@
 // gemini.ts against a scripted fetch: the request's URL, headers and JSON for
 // both endpoints, the answer parsed (thought parts skipped, the last image
-// taken, the padding cropped, another size resized), the retries and their
-// waits, the failures' categories and statuses, and that no message ever
-// carries the key, the token or the service's body. The Vertex cases follow
+// taken, the padding cropped, another size resized: the mask is the portable
+// Python's, here in node's Pyodide, test/unit/pyodide.ts, so the cases that
+// read one skip without it), the retries and their waits, the failures'
+// categories and statuses, and that no message ever carries the key, the
+// token or the service's body. The Vertex cases follow
 // tests/ai_annotate/test_backends.py's; the Gemini API has its own
 // (listModels, the key header, API_KEY_INVALID).
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -13,6 +15,11 @@ import {
 } from "../../src/ai-annotate/gemini";
 import { jsCodec, PNG_SIGNATURE } from "../../src/ai-annotate/images";
 import { AIAnnotateError, CALL_TIMEOUT_MS, type Provider, type RgbaImage, type SegmentRequest } from "../../src/ai-annotate/types";
+import { portablePython } from "./pyodide";
+
+// Pyodide and numpy load once for the file, a few seconds.
+vi.setConfig({ testTimeout: 120_000 });
+const python = await portablePython();
 
 const codec = jsCodec();
 const RED: [number, number, number] = [255, 0, 0];
@@ -102,8 +109,10 @@ class FakeFetch {
   };
 }
 
+/** The provider for `type` over `fake`, its segment handed the portable Python as the job hands it. */
 function provider(type: GeminiType, fake: FakeFetch, sleeps: number[] = []): Provider {
-  return createGeminiProvider(type, { fetch: fake.fetch, codec, sleep: async (ms) => { sleeps.push(ms); } });
+  const made = createGeminiProvider(type, { fetch: fake.fetch, codec, sleep: async (ms) => { sleeps.push(ms); } });
+  return { ...made, segment: (req, model, credentials, options = {}) => made.segment(req, model, credentials, { python: python ?? undefined, ...options }) };
 }
 
 const GEMINI_CREDENTIALS = { api_key: KEY };
@@ -132,7 +141,7 @@ afterEach(() => {
 // ---------------------------------------------------------------------------
 
 describe("the request", () => {
-  it("sends the plane padded square as PNG with the prompt to the Gemini API with the key header, and reads the mask", async () => {
+  it.skipIf(!python)("sends the plane padded square as PNG with the prompt to the Gemini API with the key header, and reads the mask", async () => {
     const draft = image(60, 60, () => RED);  // a thought image: all red, which would mask everything if taken
     const fake = new FakeFetch([async () => json(200, answer([
       await imagePart(draft, "image/png", { thought: true }),
@@ -172,7 +181,7 @@ describe("the request", () => {
     expect(result.usage).toEqual({ prompt_tokens: 600, output_tokens: 1300, total_tokens: 1900 });
   });
 
-  it("sends to Vertex AI with the project, the location (global unless given) and the bearer token", async () => {
+  it.skipIf(!python)("sends to Vertex AI with the project, the location (global unless given) and the bearer token", async () => {
     const fake = new FakeFetch([async () => json(200, answer([await imagePart(paintedSquare())])), async () => json(200, answer([await imagePart(paintedSquare())]))]);
     const vertex = provider("vertex_gemini", fake);
     await vertex.segment(request(), "gemini-3-pro-image", VERTEX_CREDENTIALS);
@@ -211,7 +220,7 @@ describe("the answer", () => {
     expect(error.userMessage).not.toContain("x".repeat(201));
   });
 
-  it("resizes an image of another size back to the sent size, then crops the padding off", async () => {
+  it.skipIf(!python)("resizes an image of another size back to the sent size, then crops the padding off", async () => {
     const fake = new FakeFetch([
       async () => json(200, answer([await imagePart(paintedSquare(120))])),
       async () => json(200, answer([await imagePart(image(120, 80, (r, c) => (r >= 20 && r < 40 && c >= 40 && c < 70 ? RED : [0, 0, 0])))])),
@@ -228,7 +237,7 @@ describe("the answer", () => {
     expect(maskCount(stretched.mask)).toBeGreaterThan(0);
   });
 
-  it("decodes by the bytes when the model declares the wrong type, and refuses what is not an image", async () => {
+  it.skipIf(!python)("decodes by the bytes when the model declares the wrong type, and refuses what is not an image", async () => {
     const gifBytes = Uint8Array.from("GIF89a-not-an-image".split(""), (ch) => ch.charCodeAt(0));
     const huge = new Uint8Array(20);
     huge.set(PNG_SIGNATURE, 0);
@@ -258,7 +267,7 @@ describe("the answer", () => {
 });
 
 describe("retries", () => {
-  it("retries a 429 and a 503 with the bounded waits, then succeeds", async () => {
+  it.skipIf(!python)("retries a 429 and a 503 with the bounded waits, then succeeds", async () => {
     const sleeps: number[] = [];
     const fake = new FakeFetch([
       async () => apiError(429, "RESOURCE_EXHAUSTED"),

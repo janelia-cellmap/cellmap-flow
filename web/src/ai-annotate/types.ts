@@ -8,15 +8,19 @@
 // "AI-assisted annotation in the browser".
 //
 // Axes are z, y, x throughout, as in the Python. An image is laid out as the
-// viewer's panel draws the plane (geometry.ts toScreen): rows down, columns
-// across.
+// viewer's panel draws the plane (portable/ai_annotate.py to_screen): rows
+// down, columns across.
 //
-// Who implements what: geometry.ts, plane.ts, labels.ts, fill.ts, prompts.ts,
-// organelles.ts and mask.ts are pure (no DOM); images.ts is the canvas
-// ImageCodec; gemini.ts, fake.ts and providers.ts the Providers;
-// backend/ai-annotate-job.ts and backend/routes/ai-annotate.ts the routes.
-// The constants with a Python twin are the Python's, exported
-// (generated/python-data.ts).
+// Who implements what: the plane, the image sent, the mask and the labels an
+// accept writes are the Python both modes run (cellmap_flow/portable/
+// ai_annotate.py), which plane.ts and mask.ts call in the engine's worker;
+// labels.ts and fill.ts are the Label it tools' box maths and the paint
+// store's box reads and writes, prompts.ts and organelles.ts the prompt and
+// the catalog (no DOM); images.ts is the canvas ImageCodec; gemini.ts,
+// fake.ts and providers.ts the Providers; backend/ai-annotate-job.ts and
+// backend/routes/ai-annotate.ts the routes. The constants with a Python twin
+// are the Python's, exported (generated/python-data.ts).
+import type { Inference } from "../contracts";
 import { PYTHON } from "../generated/python-data";
 
 const AI = PYTHON.ai_annotate;
@@ -38,8 +42,8 @@ export const PLANE_NAMES: readonly ["XY", "XZ", "YZ"] = ["XY", "XZ", "YZ"];
  * pixel size (square pixels); `write_lo`/`write_hi` the annotation voxels
  * written, [lo, hi), one voxel thick along `depth_axis`;
  * `display_dimensions` the viewer's, which say how its panel draws the
- * plane (geometry.ts screenAxes), absent (z, y, x) in a plan saved before
- * plans kept them. */
+ * plane (portable/ai_annotate.py screen_axes), absent (z, y, x) in a plan
+ * saved before plans kept them. */
 export interface PlanePlan {
   depth_axis: DepthAxis;
   point_nm: number[];
@@ -115,10 +119,12 @@ export const MAX_IMAGE_PIXELS = AI.max_image_pixels;
 /** The formats a model's image may be in. */
 export const ALLOWED_IMAGE_TYPES: readonly string[] = ["image/png", "image/jpeg", "image/webp"];
 
-/** Encoding, decoding and resizing images: the page's canvas (images.ts), a
+/** Encoding and decoding images: the page's canvas (images.ts), a
  * plain-JavaScript stand-in in tests. A model's image is untrusted input, so
  * `decode` checks the type and the pixel count before decoding and raises
- * AIAnnotateError("bad_response") for anything else. */
+ * AIAnnotateError("bad_response") for anything else. Resizing is the
+ * Python's (mask.ts modelMask), so a reply at another size is lined up with
+ * the plane as the server lines it up. */
 export interface ImageCodec {
   /** `image` as PNG bytes. */
   encodePng(image: RgbaImage): Promise<Uint8Array>;
@@ -126,8 +132,6 @@ export interface ImageCodec {
    * `mimeType` is what the model declared, which may be empty or wrong: the
    * bytes decide. */
   decode(bytes: Uint8Array, mimeType: string): Promise<RgbaImage>;
-  /** `image` at `width` × `height`: bilinear when `smooth`, else nearest neighbour. */
-  resize(image: RgbaImage, width: number, height: number, smooth: boolean): Promise<RgbaImage>;
 }
 
 // ---------------------------------------------------------------------------
@@ -202,12 +206,17 @@ export interface ProviderInfo {
   credentials: CredentialField[];
 }
 
+/** The engine's call into the portable Python (Inference.python). */
+export type PythonCall = Inference["python"];
+
 export interface Provider {
   readonly info: ProviderInfo;
   /** Ask `model` to paint the request's structure, with `credentials`;
    * AIAnnotateError on failure, with a message written by the provider
-   * module, never the service's own text. */
-  segment(request: SegmentRequest, model: string, credentials: Credentials, options?: { signal?: AbortSignal }): Promise<SegmentResult>;
+   * module, never the service's own text. `options.python` is the engine's
+   * Python, which a provider whose model answers with an image takes the
+   * mask out of it with (mask.ts modelMask); nothing else is handed to it. */
+  segment(request: SegmentRequest, model: string, credentials: Credentials, options?: { signal?: AbortSignal; python?: PythonCall }): Promise<SegmentResult>;
   /** The image models `credentials` can reach, for a provider that can list
    * them (the Gemini API lists its models); null when it cannot say. */
   listModels?(credentials: Credentials, options?: { signal?: AbortSignal }): Promise<string[] | null>;
