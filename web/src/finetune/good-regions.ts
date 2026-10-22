@@ -1,9 +1,13 @@
 // Good regions: boxes the user marked (Mark as Good) where the model already
-// gets it right, the counterweight to the paint. The port of the server's
-// dashboard/routes/finetune/good_regions.py (the region a mark makes),
-// finetune/session/manifest.py (good_regions.json, read when a run starts)
-// and finetune/data/sampler.py with dataset.py (where a region anchors the
-// model) for the browser.
+// gets it right, the counterweight to the paint. Their rules are the
+// server's, cellmap_flow/portable/regions.py, run in the engine's Pyodide
+// worker (volume_calls.py): the region a mark makes and its size
+// (good_regions.py's mark-view), which stored entries are regions (what the
+// layer draws and the trainer places), and where a region anchors the model
+// on the volume's grid (the server trainer's rehearsal patch,
+// finetune/data/sampler.py with PatchReader.snap). This file keeps the
+// regions' file and turns the anchors into the browser trainer's per-chunk
+// masks (anchorChunks), which only its trainer has.
 //
 // Where they are kept. The server keeps a session's regions in
 // good_regions.json beside its corrections directory; a browser session is
@@ -15,30 +19,22 @@
 // volume's regions read as the server's do.
 //
 // What a region holds. The server draws a rehearsal patch for a region:
-// one model output block centred exactly on the region's centre, snapped to
-// whole voxels (PatchReader.snap), and holds its unpainted voxels to the
-// teacher (the anchor mask, `annotation == 0`, so a scribble inside a good
-// region wins: the region stays correctable). anchorBoxes makes the same
-// box on the volume's grid, whose blocks are the model's output blocks too,
-// so a region marked at the default size, one output block, anchors the
-// block it was marked over and no more. A region whose centre is outside
-// the volume is skipped, as the server skips one (marked on another volume,
-// it would anchor the model to padding).
-import { volumeCornerNm } from "../ai-annotate/fill";
-import type { PaintStore, PaintVolume } from "../contracts";
+// one model output block centred on the region's centre, snapped to whole
+// voxels, and holds its unpainted voxels to the teacher (the anchor mask,
+// `annotation == 0`, so a scribble inside a good region wins: the region
+// stays correctable). anchorBoxes makes the same box on the volume's grid,
+// whose blocks are the model's output blocks too, so a region marked at the
+// default size, one output block, anchors the block it was marked over and
+// no more. A region whose centre is outside the volume is skipped, as the
+// server skips one (marked on another volume, it would anchor the model to
+// padding).
+import type { Inference, PaintStore, PaintVolume } from "../contracts";
+import type { RegionBox } from "../viewer/layers";
 import type { GoodRegion } from "./types";
+import { VOLUME_CALLS } from "./volume";
 
 /** The regions' file, at the volume's root (manifest.GOOD_REGIONS_FILENAME). */
 export const GOOD_REGIONS_FILE = "good_regions.json";
-
-/** Whether `value` is a region the trainer can place: an id, a label, and a
- * box of three finite numbers each, its size positive. */
-export function isGoodRegion(value: unknown): value is GoodRegion {
-  if (!value || typeof value !== "object") return false;
-  const r = value as Record<string, unknown>;
-  const triple = (v: unknown, positive: boolean) => Array.isArray(v) && v.length === 3 && v.every((n) => typeof n === "number" && Number.isFinite(n) && (!positive || n > 0));
-  return typeof r.id === "string" && typeof r.label === "string" && triple(r.offset_nm, false) && triple(r.shape_nm, true);
-}
 
 /** The regions of volume `id`, as stored ([] when there are none, or the
  * file is not a list: manifest.load_good_regions's rule). An entry that is
@@ -60,78 +56,69 @@ export async function saveGoodRegions(store: PaintStore, id: string, regions: un
   await store.put(id, GOOD_REGIONS_FILE, new TextEncoder().encode(JSON.stringify(regions, null, 2)));
 }
 
-/** A new region's id: eight hex digits, as the server's uuid4().hex[:8]. */
-export function newRegionId(): string {
-  const bytes = new Uint8Array(4);
-  crypto.getRandomValues(bytes);
-  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+/** The good_regions layer's box of each stored entry, or null for one that
+ * is not a region (the Python's region_boxes, by the rule the server's layer
+ * draws by), so the layer's ids stay the entries' indices. */
+export async function regionBoxes(infer: Pick<Inference, "python">, regions: readonly unknown[]): Promise<(RegionBox | null)[]> {
+  return regions.length ? infer.python<(RegionBox | null)[]>(`${VOLUME_CALLS}:region_boxes`, { regions }) : [];
 }
 
-/** The default size of a region, in nm: one model output block of the
- * volume (good_regions._default_size_nm: the output size times the output
- * voxel size), which is what can be seen and judged on screen and what a
- * training sample computes its loss over. */
-export function defaultRegionSizeNm(volume: Pick<PaintVolume, "chunk_size" | "output_voxel_size">): number[] {
-  return volume.chunk_size.map((n, a) => n * volume.output_voxel_size[a]);
+/** The region a mark makes (mark_current_view_good), by the Python's
+ * mark_region: a box of the size `sizeNm` asks for, as the request sent it
+ * (one model output block of `volume` when none is, 896 nm a side without a
+ * volume; one number for every axis, or three), centred on `centreNm`,
+ * labelled `label` or good-<n + 1> after the `stored` regions; with the
+ * layer's boxes of the stored regions and it. A size that is not one is
+ * answered as the sentence it is refused with. */
+export function markRegion(
+  infer: Pick<Inference, "python">,
+  stored: readonly unknown[],
+  centreNm: readonly number[],
+  sizeNm: unknown,
+  label: unknown,
+  volume: Pick<PaintVolume, "chunk_size" | "output_voxel_size"> | null,
+): Promise<{ region: GoodRegion; boxes: (RegionBox | null)[] } | { error: string }> {
+  return infer.python(`${VOLUME_CALLS}:mark_region`, {
+    centre_nm: centreNm,
+    size_nm: sizeNm ?? null,
+    label: label ?? null,
+    regions: stored,
+    volume: volume && { chunk_size: volume.chunk_size, output_voxel_size: volume.output_voxel_size },
+  });
 }
 
-/** The region a mark makes (mark_current_view_good): a box of `sizeNm`
- * centred on `centreNm`, labelled `label` or good-<n + 1> after `count`
- * regions. */
-export function regionAt(centreNm: readonly number[], sizeNm: readonly number[], count: number, label?: string, id: string = newRegionId()): GoodRegion {
-  return {
-    id,
-    label: label || `good-${count + 1}`,
-    offset_nm: centreNm.map((c, a) => c - sizeNm[a] / 2),
-    shape_nm: [...sizeNm],
-  };
-}
+/** A stored entry that is a region: its box, and its id and label as stored
+ * (either may be missing: neither is needed to place a region). */
+export type StoredRegion = Pick<GoodRegion, "offset_nm" | "shape_nm"> & Partial<Pick<GoodRegion, "id" | "label">>;
 
 /** A region's anchor: the box of the volume's voxels it holds to the
  * teacher, [lo, hi) per axis (z, y, x), clipped to the volume. */
 export interface AnchorBox {
-  region: GoodRegion;
+  region: StoredRegion;
   lo: number[];
   hi: number[];
 }
 
-/** Rounded to a millionth of a voxel before a floor or a ceiling: the float
- * noise of nm → voxels (100.5 × 8 / 8 come back as 100.49999999999999) must
- * not move a box by a voxel. */
-export const steady = (x: number) => Math.round(x * 1e6) / 1e6;
-
 /** The anchor box of each usable region of `regions` on `volume`'s grid, and
  * what was skipped and why (sampler._index_rehearsal): an entry that is not
- * a region, or a region whose centre lies outside the volume.
- *
- * The box is the server's rehearsal patch: one output block (the volume's
- * chunk_size) whose centre is the region's centre snapped so that the block
- * is whole voxels, `lo = floor(c - size/2 + 1/2)` with c the centre in
- * voxels from the volume's corner (voxel v spans [v, v + 1)), then clipped
- * to the volume. */
-export function anchorBoxes(volume: Pick<PaintVolume, "chunk_size" | "output_voxel_size" | "dataset_offset_nm" | "dataset_shape_voxels">, regions: readonly unknown[]): { boxes: AnchorBox[]; malformed: unknown[]; outside: GoodRegion[] } {
-  const corner = volumeCornerNm(volume.dataset_offset_nm, volume.output_voxel_size);
-  const shape = volume.dataset_shape_voxels, size = volume.chunk_size;
-  const boxes: AnchorBox[] = [], malformed: unknown[] = [], outside: GoodRegion[] = [];
-  for (const region of regions) {
-    if (!isGoodRegion(region)) {
-      malformed.push(region);
-      continue;
-    }
-    const centre = region.offset_nm.map((o, a) => (o + region.shape_nm[a] / 2 - corner[a]) / volume.output_voxel_size[a]);
-    if (centre.some((c, a) => c < 0 || c >= shape[a])) {
-      outside.push(region);
-      continue;
-    }
-    const start = centre.map((c, a) => Math.floor(steady(c - size[a] / 2 + 0.5)));
-    const lo = start.map((s) => Math.max(s, 0)), hi = start.map((s, a) => Math.min(s + size[a], shape[a]));
-    if (hi.some((h, a) => h <= lo[a])) {
-      outside.push(region);
-      continue;
-    }
-    boxes.push({ region, lo, hi });
-  }
-  return { boxes, malformed, outside };
+ * a region, or a region whose centre lies outside the volume. The Python's
+ * anchor_boxes: the server's rehearsal patch, one output block (the
+ * volume's chunk_size) whose start is the region's centre snapped so that
+ * the block is whole voxels, clipped to the volume. */
+export async function anchorBoxes(
+  infer: Pick<Inference, "python">,
+  volume: Pick<PaintVolume, "chunk_size" | "output_voxel_size" | "dataset_offset_nm" | "dataset_shape_voxels">,
+  regions: readonly unknown[],
+): Promise<{ boxes: AnchorBox[]; malformed: unknown[]; outside: StoredRegion[] }> {
+  if (!regions.length) return { boxes: [], malformed: [], outside: [] };
+  const grid = { chunk_size: volume.chunk_size, output_voxel_size: volume.output_voxel_size, dataset_offset_nm: volume.dataset_offset_nm, dataset_shape_voxels: volume.dataset_shape_voxels };
+  // Each by its index in `regions`, which travel as they are stored.
+  const placed = await infer.python<{ boxes: { region: number; lo: number[]; hi: number[] }[]; malformed: number[]; outside: number[] }>(`${VOLUME_CALLS}:anchor_boxes`, { regions, volume: grid });
+  return {
+    boxes: placed.boxes.map(({ region, lo, hi }) => ({ region: regions[region] as StoredRegion, lo, hi })),
+    malformed: placed.malformed.map((i) => regions[i]),
+    outside: placed.outside.map((i) => regions[i] as StoredRegion),
+  };
 }
 
 /** The chunks the boxes reach, each with its voxels inside any box (a mask

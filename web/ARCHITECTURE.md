@@ -225,10 +225,11 @@ misses one it does, and when the server form's defaults leave
 ## Finetuning (src/finetune/)
 
 The Finetune tab works as on the server with the browser in the server's and
-MinIO's places. `volume.ts` (the port of `finetune/session/volume.py`) plans
-an annotation volume over the open dataset on the grid the model's
-predictions are served on, one chunk per output block, and writes its zarr v2
-metadata (uncompressed chunks, `.` separator) into the paint store;
+MinIO's places. `volume.ts` plans an annotation volume over the open dataset
+by the server's plan (`cellmap_flow.portable.volume`, through
+`Inference.python`) on the grid the model's predictions are served on, one
+chunk per output block, and writes its zarr v2 metadata (uncompressed
+chunks, `.` separator) into the paint store;
 `viewer/layers.ts` adds it as the fork's writable segmentation layer on
 `s3+http(s)://<host><page dir>paint/<volume>/annotation`. Training fits the
 model's head, the last 1×1 convolution of the ONNX graph: `onnx-head.ts` finds

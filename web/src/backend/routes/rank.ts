@@ -162,7 +162,7 @@ export function rankRoutes(router: Router): void {
       }
       const served = ctx.infer.served().find((s) => s.entry.id === entry.id);
       if (!served) throw new Error(`${name} did not start`);
-      const to = planVolume(dataset, served.entry, ctx.session.state.chain);
+      const to = await planVolume(ctx.infer, dataset, served.entry, ctx.session.state.chain);
       await createVolume(ctx.paint, to);
       const carried = await carryPaint(ctx, from, to);
       // Good regions are boxes in nm, the same on any grid: they go with the paint.

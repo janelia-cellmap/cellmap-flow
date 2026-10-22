@@ -45,6 +45,7 @@ from cellmap_flow.finetune.data.reader import across
 from cellmap_flow.finetune.session.manifest import voxels_inside_any_bbox
 from cellmap_flow.finetune.session.volume import volume_corner_nm
 from cellmap_flow.io.geometry import list_populated_chunks
+from cellmap_flow.portable.regions import region_centre_voxels
 
 logger = logging.getLogger(__name__)
 
@@ -448,17 +449,18 @@ class PatchSampler:
         """
         centres = []
         for region in self.good_regions:
-            try:
-                offset_nm = np.array(region["offset_nm"], dtype=float)
-                shape_nm = np.array(region["shape_nm"], dtype=float)
-            except (KeyError, TypeError, ValueError):
+            # What counts as a region, and where its centre lies, is the rule
+            # of cellmap_flow.portable.regions, by which the browser's
+            # trainer places regions too.
+            where, centre_voxels = region_centre_voxels(
+                region, self.corner_nm, self.output_voxel_size, self.shape_voxels
+            )
+            if where == "malformed":
                 logger.warning(f"Skipping malformed good region: {region!r}")
                 continue
-            centre_nm = offset_nm + shape_nm / 2.0
-            centre_voxels = (centre_nm - self.corner_nm) / self.output_voxel_size
             # A region marked against a different volume would sample pure
             # out-of-bounds zeros and quietly anchor the model to nothing.
-            if np.any(centre_voxels < 0) or np.any(centre_voxels >= self.shape_voxels):
+            if where == "outside":
                 logger.warning(
                     f"Good region {region.get('id', '?')} centres outside the "
                     f"volume at voxel {centre_voxels.astype(int).tolist()}; skipping."

@@ -227,14 +227,15 @@ export interface GoodRegion {
  * job started from, whichever head the run starts from (run.ts). The good
  * regions are the entries of the volume's good_regions.json as they are
  * when the run starts (good-regions.ts loadGoodRegions); one that is not a
- * GoodRegion is skipped with a line in the log, as the server skips it. */
+ * region is skipped with a line in the log, as the server skips it. */
 export interface FinetuneRun {
   entry: ModelEntry;
   baseBytes: ArrayBuffer;
   volume: PaintVolume;
   chain: Chain;
   dataset: DatasetInfo;
-  infer: Pick<Inference, "readRaw">;
+  /** The raw's reads, and the portable Python (the good regions' anchors). */
+  infer: Pick<Inference, "readRaw" | "python">;
   paint: PaintStore;
   options: FinetuneOptions;
   report: RunReporter;

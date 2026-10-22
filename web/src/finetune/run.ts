@@ -65,9 +65,9 @@ export function createRunFinetune(deps: RunDeps = { collectSamples, targetTransf
     // good regions' unpainted voxels when the volume has any, whatever the
     // form's scope, as the server's anchors decide alone; else the form's.
     const lambda = options.distillationLambda;
-    const { boxes, malformed, outside } = anchorBoxes(volume, run.goodRegions ?? []);
-    for (const region of malformed) report.log(`Skipping a good region that is not one (an id, a label, offset_nm and shape_nm of three numbers): ${JSON.stringify(region)}`);
-    for (const region of outside) report.log(`Good region ${region.label} (${region.id}) centres outside the volume; skipping it`);
+    const { boxes, malformed, outside } = await anchorBoxes(run.infer, volume, run.goodRegions ?? []);
+    for (const region of malformed) report.log(`Skipping a good region that is not one (offset_nm and shape_nm of three numbers, the shape positive): ${JSON.stringify(region)}`);
+    for (const region of outside) report.log(`Good region ${region.label ?? "?"} (${region.id ?? "?"}) centres outside the volume; skipping it`);
     let pick: DistillationPick | null = null;
     let indices = paintedIndices;
     const paintedKeys = new Set(paintedIndices.map(chunkKey));
