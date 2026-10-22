@@ -62,8 +62,16 @@ def test_the_browser_call_answers_a_chunks_targets_as_the_server_makes_them():
     labels = rng.choice(np.array([0, 1, 2, 300, 40000], np.uint16), size=(2, 3, 4))
     offsets = [[1, 0, 0], [0, 1, 0], [0, 0, 1], None]
     args = {"shape": [2, 3, 4], "labels_dtype": "uint16", "channels": 5}
-    for given, server in [(None, BroadcastBinaryTargetTransform(5)), (offsets, AffinityTargetTransform(offsets, 5))]:
-        value, (target, mask) = calls.call("cellmap_flow.portable.targets_calls:targets", json.dumps({**args, "offsets": given}), [labels.tobytes()])
+    cases = [
+        ({"offsets": None}, BroadcastBinaryTargetTransform(5)),
+        ({"offsets": offsets}, AffinityTargetTransform(offsets, 5)),
+        # The browser knows only its manifest's channel names; the server's
+        # rule (label_it.affinity_offsets) reads the first affinity channels
+        # as z, y, x and leaves the rest (LSDs) out of the loss.
+        ({"channel_names": ["m_aff_z", "m_aff_y", "m_aff_x", "lsd0", "lsd1"]}, AffinityTargetTransform(offsets[:3], 5)),
+    ]
+    for given, server in cases:
+        value, (target, mask) = calls.call("cellmap_flow.portable.targets_calls:targets", json.dumps({**args, **given}), [labels.tobytes()])
         want = [t[0].numpy() for t in server(torch.from_numpy(labels.astype(np.float32))[None, None])]
         assert json.loads(value) == {"channels": 5}
         assert [np.frombuffer(b, np.float32).reshape(5, 2, 3, 4).tolist() for b in (target, mask)] == [w.tolist() for w in want]

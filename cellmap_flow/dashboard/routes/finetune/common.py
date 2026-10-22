@@ -13,6 +13,7 @@ from cellmap_flow.finetune.session.minio import MINIO_PROXY_URL_ENV, proxied_url
 from cellmap_flow.finetune.session.store import SessionStore
 from cellmap_flow.models.geometry import channel_names_of
 from cellmap_flow.serving.client import fetch_model_info, running_job_host
+from cellmap_flow.portable.label_it import affinity_offsets
 
 logger = logging.getLogger(__name__)
 
@@ -265,13 +266,13 @@ def autodetect_output_type(model_config, output_type, offsets):
                 except Exception as e:
                     logger.debug(f"Could not resolve channels for autodetect: {e}")
 
-            if channels and any("_aff" in channel for channel in channels):
+            # The one rule for a model known by its channel names alone
+            # (portable/label_it.affinity_offsets): the browser's Python
+            # applies it to its manifest's names, for training and seeding,
+            # so both modes treat such a model the same way.
+            default_offsets = affinity_offsets(channels) if channels else None
+            if default_offsets is not None:
                 resolved_output_type = "affinities"
-                n_aff = sum(1 for channel in channels if "_aff" in channel)
-                default_offsets = [
-                    [1 if axis == index else 0 for axis in range(3)]
-                    for index in range(min(n_aff, 3))
-                ]
                 resolved_offsets = json.dumps(default_offsets)
                 logger.info(
                     f"Auto-detected output_type='affinities' from "
