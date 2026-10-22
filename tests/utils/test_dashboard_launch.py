@@ -18,6 +18,7 @@ from cellmap_flow.jobs import launch as jobs_launch
 from cellmap_flow.jobs.spec import JobStartError
 from cellmap_flow.models.bioimage_catalog import bioimage_entry
 from cellmap_flow.models.registry import build_model
+from cellmap_flow.pipeline_spec import PipelineSpec
 from cellmap_flow.process_chain import process_chain
 
 
@@ -101,6 +102,43 @@ def test_add_builds_a_pasted_models_entry_and_runs_it_in_its_environment(viewer,
                                                              "name": "mine"}}).status_code == 409
     bad = dashboard.post("/api/models/add", json={"entry": {"type": "nope", "name": "x"}})
     assert bad.status_code == 400 and "nope" in bad.get_json()["error"]
+
+
+# What an onnx export's manifest declares (cellmap/onnx-web-models).
+DECLARED = [{"name": "MinMaxNormalizer", "min_value": 0, "max_value": 255},
+            {"name": "LambdaNormalizer", "expression": "2*x-1"}]
+
+
+@pytest.mark.parametrize("chain", [[], [{"name": "LambdaNormalizer", "expression": "x/255"}]],
+                         ids=["no input normalization", "the user's"])
+def test_a_model_started_without_input_normalization_sets_the_one_it_declares(dashboard, monkeypatch, tmp_path,
+                                                                              chain):
+    """Its start sets them, as the chain's setter sets a chain, before its
+    layer is drawn, so the layer is drawn through them; the postprocessing
+    stays. A chain that has input normalizers is the user's, and is left as
+    it is. The page reads the chain back, and whose declaration it is, from
+    the Loaded models list."""
+    script = tmp_path / "m.py"
+    script.write_text("x = 1\n")
+    model = build_model({"type": "script", "script_path": str(script)}, "mine")
+    model.declared_input_norm = lambda: DECLARED  # as an onnx model's manifest declares them
+    drawn_through = []
+    monkeypatch.setattr(launch, "run_model",
+                        lambda config, st_data: drawn_through.append(PipelineSpec.from_url_blob(st_data)[0]))
+    monkeypatch.setattr(launch.threading, "Thread", _InlineThread)
+    session = get_session()
+    postprocess = [{"name": "SigmoidPostprocessor"}]
+    session.set_pipeline(PipelineSpec(chain, postprocess))
+    session.jobs, session.dataset_path, session.models_config = [], "/data/raw.zarr", [model]
+
+    assert dashboard.post("/api/models", json={"selected_models": ["mine"]}).status_code == 200
+    expected = chain or DECLARED
+    assert session.pipeline_spec == PipelineSpec(expected, postprocess)
+    assert drawn_through == [PipelineSpec(expected, postprocess)]
+    session.jobs = [_Job("mine")]
+    loaded = dashboard.get("/api/models/loaded").get_json()
+    assert loaded["pipeline"] == {"input_norm": expected, "postprocess": postprocess}
+    assert loaded["input_norm_from"] == (None if chain else "mine")
 
 
 def test_job_logs_keep_a_job_that_failed_to_start_until_it_is_started_again(dashboard, monkeypatch):

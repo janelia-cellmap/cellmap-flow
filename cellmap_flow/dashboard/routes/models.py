@@ -4,7 +4,9 @@ from datetime import datetime
 from flask import Blueprint, request, jsonify, Response
 
 from cellmap_flow.dashboard.requests import CreateModelConfig, RemoveModel, ServerConfigUpdate, SubmitModels, parse
-from cellmap_flow.dashboard.services.launch import NotRemovable, loaded_models, remove_model, update_run_models
+from cellmap_flow.dashboard.services.launch import (
+    NotRemovable, configs_by_name, loaded_models, remove_model, update_run_models,
+)
 from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.jobs import lsf
 
@@ -120,7 +122,9 @@ def submit_models():
     """Run the models the Models tab has ticked (a SubmitModels), and stop
     the others: services.launch.update_run_models. A zoo model that needs a
     voxel size and was given none, or a Cellpose model without one, is a
-    400, and nothing changes."""
+    400, and nothing changes. A chain with no input normalizers takes the
+    ones the first model started declares, if any (get_loaded_models says
+    so to the page)."""
     body, error = parse(SubmitModels, request.get_json(silent=True))
     if error:
         return error
@@ -150,8 +154,24 @@ def submit_models():
 def get_loaded_models():
     """The Models tab's Loaded models list: every model running or starting,
     with where it came from and whether its ✕ can remove it
-    (services.launch.loaded_models). ``{"success": true, "models": [...]}``."""
-    return jsonify({"success": True, "models": loaded_models()})
+    (services.launch.loaded_models), and the chain they run through.
+
+    ``{"success": true, "models": [...], "pipeline": {"input_norm",
+    "postprocess"}, "input_norm_from"}``: ``pipeline`` is the chain as it is
+    set (PUT /api/pipeline's answer gives it the same way), and
+    ``input_norm_from`` the loaded model whose declared input normalization
+    its input part is, else None (routes.pipeline.input_norm_declared_by).
+    The page reads them after every model change: a model's start can set
+    the input normalization (routes.pipeline.set_declared_input_norm), and
+    the Input list then shows it, saying from which model.
+    """
+    from cellmap_flow.dashboard.routes.pipeline import input_norm_declared_by
+
+    models = loaded_models()
+    configs = configs_by_name()
+    declared_by = input_norm_declared_by([configs[m["name"]] for m in models if m["name"] in configs])
+    return jsonify({"success": True, "models": models, "pipeline": get_session().pipeline_spec.to_json_data(),
+                    "input_norm_from": declared_by})
 
 
 @models_bp.route("/api/models/remove", methods=["POST"])

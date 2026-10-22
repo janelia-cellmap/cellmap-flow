@@ -115,6 +115,28 @@ describe("POST /api/models", () => {
     expect(ctx.infer.serves[1]).toEqual(expect.objectContaining({ name: NAME_54, variant: "int8w" }));
   });
 
+  // The manifests of the fakes declare MinMaxNormalizer then LambdaNormalizer.
+  it.each([
+    ["no input normalization", []],
+    ["the user's", [{ name: "LambdaNormalizer", expression: "x/255" }]],
+  ])("sets the input normalization a model starting declares only when the chain has none: %s", async (_label, inputNorm) => {
+    const postprocess = [{ name: "SigmoidPostprocessor" }];
+    const ctx = fakeContext({ state: { chain: { input_norm: inputNorm, postprocess } } });
+    const backend = createBackend(ctx);
+    expect((await backend.handle(submit([HF54]))).status).toBe(200);
+    const expected = { input_norm: inputNorm.length ? inputNorm : entry("setup_54").manifest.input_norm, postprocess };
+    expect(ctx.session.state.chain).toEqual(expected);
+    // the model is served, and its layer drawn, through it alone
+    expect(ctx.infer.served().map((s) => decodeArgs(s.view.split(ARGS_KEY)[1]).chain)).toEqual([expected]);
+    // the page reads the chain back with the model whose declaration it is
+    const loaded = body(await backend.handle(request("GET", "/api/models/loaded")));
+    expect(loaded.pipeline).toEqual(expected);
+    expect(loaded.input_norm_from).toBe(inputNorm.length ? null : NAME_54);
+    // a model added after it finds input normalizers there, and leaves them
+    await backend.handle(request("POST", "/api/models/add", { entry: { type: "onnx", repo: "cellmap/onnx-web-models", folder: "setup_56", name: NAME_56 } }));
+    expect(ctx.session.state.chain).toEqual(expected);
+  });
+
   it("refuses a reference that is not a model the browser runs, changing nothing", async () => {
     const ctx = fakeContext();
     const res = await createBackend(ctx).handle(submit(["cellmap/some-pytorch-model"]));
@@ -133,11 +155,14 @@ describe("the Loaded models list: GET /api/models/loaded and POST /api/models/re
   it("lists the served models in order, each with where it came from and the Hugging Face row that ticks it", async () => {
     const ctx = fakeContext();
     const backend = createBackend(ctx);
-    expect(body(await backend.handle(request("GET", "/api/models/loaded")))).toEqual({ success: true, models: [] });
+    expect(body(await backend.handle(request("GET", "/api/models/loaded")))).toEqual({ success: true, models: [], pipeline: defaultChain(), input_norm_from: null });
     await backend.handle(submit([HF56, HF54]));
     expect(body(await backend.handle(request("GET", "/api/models/loaded")))).toEqual({
       success: true,
       models: [loaded(NAME_56, "setup_56", HF56), loaded(NAME_54, "setup_54", HF54)],
+      // the chain they run through; the default's input normalization is what both declare
+      pipeline: defaultChain(),
+      input_norm_from: NAME_56,
     });
   });
 
