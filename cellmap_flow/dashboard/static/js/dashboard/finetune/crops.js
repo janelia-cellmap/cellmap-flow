@@ -33,7 +33,8 @@ export function sessionVolumeChanged(volumeId) {
 }
 
 // log: the panel's log; picker: the model picker; form: the training form
-// (its state is saved once a volume exists).
+// (its state is saved once a volume exists); grid: New Volume's voxel size
+// for a volume painted before any model (volume-grid.js).
 // Returns { addToViewer(cropId, neuroglancerUrl), volumeReady(volumeId) }.
 // addToViewer shows an annotation volume in the viewer, as the layer
 // annotation_<cropId>: the server names it, so that Load Crops, which looks
@@ -41,7 +42,7 @@ export function sessionVolumeChanged(volumeId) {
 // it sparse_annotation_<id>, and an import into the volume then added a
 // second writable layer over the same data. volumeReady says which volume the
 // browser mode's Download paint and Delete volume act on (nothing elsewhere).
-export function initCrops({ log, picker, form }) {
+export function initCrops({ log, picker, form, grid }) {
   const outputPathInput = document.getElementById("outputPath");
   const browser = isBrowserMode();
 
@@ -136,13 +137,21 @@ export function initCrops({ log, picker, form }) {
       });
   }
 
-  // Create annotation volume (sparse, full dataset)
+  // Create annotation volume (sparse, full dataset): on the picked model's
+  // grid, or with no model, on the raw's grid at the voxel size typed (blank:
+  // the level on screen), a volume Which model to start from's Use this
+  // model later copies onto a model's grid to train.
   const createVolumeBtn = document.getElementById("createVolumeBtn");
   createVolumeBtn.addEventListener("click", function() {
     const selectedModel = picker.selected();
+    let voxelSize = null;
     if (!selectedModel) {
-      alert("No model selected");
-      return;
+      try {
+        voxelSize = grid.voxelSize();
+      } catch (err) {
+        alert(err.message);
+        return;
+      }
     }
 
     // Browser mode: the volume goes to the browser's own store, so there is
@@ -154,13 +163,14 @@ export function initCrops({ log, picker, form }) {
     }
 
     setBusy(createVolumeBtn, true, "Creating...");
-    log.add(`Creating annotation volume for full dataset...`);
+    log.add(selectedModel
+      ? `Creating annotation volume for full dataset...`
+      : `Creating annotation volume for full dataset, for no model yet, at ${voxelSize ? `${voxelSize.join(" × ")} nm` : "the level on screen"}...`);
     if (!browser) log.add(`Output path: ${outputPath}`);
 
-    const payload = {
-      model_name: selectedModel.name,
-      output_path: outputPath
-    };
+    const payload = selectedModel
+      ? { model_name: selectedModel.name, output_path: outputPath }
+      : { voxel_size: voxelSize, output_path: outputPath };
 
     postAnswer("/api/finetune/create-volume", payload)
       .then(data => {
@@ -177,6 +187,9 @@ export function initCrops({ log, picker, form }) {
             log.add(`  MinIO URL: ${data.minio_url}`);
           }
           log.add(`  Label scheme: paint 1=background, 2=foreground, 0=unannotated`);
+          if (data.model_name === null) {
+            log.add(`  For no model yet: to train, rank the models under Which model to start from and click Use this model, which copies this paint onto its grid`);
+          }
 
           if (!browser) {
             document.getElementById("minioStatusContent").innerHTML = `

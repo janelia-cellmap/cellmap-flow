@@ -83,6 +83,19 @@
         Load Crops from YAML
       </button>
     </div>
+    {# With no model loaded, New Volume paints on the raw's own grid at this
+       voxel size (finetune/volume-grid.js shows the row only then); the
+       raw's levels are offered, and any size can be typed. #}
+    <div id="volumeVoxelRow" class="mt-2" hidden>
+      <div class="d-flex align-items-center gap-2">
+        <label class="mb-0 text-nowrap" for="volumeVoxelSize" style="font-size: 0.85rem;">Voxel size (nm)</label>
+        <input type="text" class="form-control form-control-sm" id="volumeVoxelSize" list="volumeVoxelSizes"
+               inputmode="decimal" placeholder="the level on screen" style="max-width: 12rem;"
+               title="The voxel size to paint at: one number for all three axes, or z, y, x. The raw's levels are offered; another size covers the raw in voxels of that size. Blank: the level the viewer shows now (the finest, without a viewer).">
+        <datalist id="volumeVoxelSizes"></datalist>
+      </div>
+      <small class="form-text text-muted d-block mt-1">No model is loaded, so the volume is painted on the raw's grid. To train, rank the models on your paint under <em>Which model to start from</em> and click <em>Use this model</em>: it copies the paint onto that model's grid.</small>
+    </div>
     <small class="form-text text-muted d-block mt-1">Paint <code>1</code> = background, <code>2</code> and up = foreground, an id per object.</small>
   </div>
 

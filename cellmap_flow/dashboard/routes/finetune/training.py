@@ -31,6 +31,7 @@ from cellmap_flow.dashboard.finetune_layers import follow_jobs
 from cellmap_flow.dashboard.finetune_utils import sync_all_annotations_from_minio
 from cellmap_flow.dashboard.requests import FinetuneRestart, FinetuneSubmit, parse
 from cellmap_flow.dashboard.routes.finetune import restart_key
+from cellmap_flow.dashboard.routes.finetune.annotation_core import paint_first_refusal
 from cellmap_flow.dashboard.routes.finetune.blueprint import finetune_bp
 from cellmap_flow.dashboard.routes.finetune.common import (
     LOG_FILTER_PATTERNS,
@@ -260,6 +261,11 @@ def submit_finetuning():
                     "error": f"Corrections path does not exist: {actual_corrections_path}. Please create annotation crops first.",
                 }
             ), 400
+        # A volume painted before any model is on no model's grid: Use this
+        # model carries its paint onto one (annotation_core).
+        paint_first = paint_first_refusal(actual_corrections_path)
+        if paint_first is not None:
+            return paint_first
 
         from cellmap_flow.finetune.session.manifest import read_manifest
 

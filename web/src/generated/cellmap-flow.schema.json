@@ -1397,11 +1397,30 @@
       "type": "object"
     },
     "CreateVolume": {
-      "description": "A new, empty annotation volume for ``model_name``, in a new session\nunder ``output_path`` (by default ~/.cellmap_flow/corrections).",
+      "description": "A new, empty annotation volume, in a new session under\n``output_path`` (by default ~/.cellmap_flow/corrections): for\n``model_name``, on the grid its prediction is served on; or, with no\nmodel named, a volume painted before any model (a \"paint-first\" one), on\nthe raw's grid at ``voxel_size`` (nm, z, y, x, or one number for all\nthree; none: the raw level the viewer shows), which Which model to start\nfrom's Use this model carries onto a model's grid. A voxel size with a\nmodel is refused: a model's volume lies on the model's grid.",
       "properties": {
         "model_name": {
-          "default": null,
-          "type": "string"
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "voxel_size": {
+          "anyOf": [
+            {
+              "items": {},
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "output_path": {}
       },
