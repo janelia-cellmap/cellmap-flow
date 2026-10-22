@@ -3,11 +3,13 @@
 // chunkmirage's workers load from jsDelivr), numpy from jsDelivr,
 // build/portable.ts's modules written as the page's workers get them, and
 // chunkmirage's own dispatch (chunkmirage.calls, from the clone) marshalling
-// each answer as its worker does. scipy is loaded as the worker loads it:
-// not at the start, but the first time a call fails to import it, and that
-// call is made again. A wheel needs the network the first time (Pyodide then
-// caches it in node_modules/pyodide): without it portablePython() is null,
-// with a warning, and the tests that need it skip.
+// each answer as its worker does. Any other package Pyodide ships (scipy,
+// Pillow, ...) is loaded as the worker loads it: not at the start, but the
+// first time a call fails to import it, found by the module's name in
+// Pyodide's lockfile, and that call is made again. A wheel needs the network
+// the first time (Pyodide then caches it in node_modules/pyodide): without
+// it portablePython() is null, with a warning, and the tests that need it
+// skip.
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
@@ -17,8 +19,6 @@ import { PORTABLE_MODULES } from "../../build/portable";
 export type PythonCall = <T>(fn: string, args: Record<string, unknown>, arrays?: ArrayBuffer[]) => Promise<T>;
 
 const CALLS = resolve(import.meta.dirname, "../../chunkmirage/src/chunkmirage/calls.py");
-/** The packages the worker loads on first import (pyworker.ts LAZY), by module name. */
-const LAZY: Record<string, string> = { scipy: "scipy", skimage: "scikit-image" };
 
 let loading: Promise<PythonCall | null> | null = null;
 
@@ -42,8 +42,14 @@ async function load(): Promise<PythonCall> {
   py.runPython('import sys; sys.path.insert(0, "/page")\nfrom chunkmirage import calls\n\ndef call(fn, args, arrays):\n    return calls.call(fn, args, [a.to_py() for a in arrays])\n');
   const call = py.globals.get("call");
   const buffer = (b: Uint8Array) => b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength) as ArrayBuffer;
-  // chunkmirage's pyworker.ts withPackages: a package the call could not
-  // import (scipy, for Label it's components), loaded once, then the call again.
+  // chunkmirage's pyworker.ts provider: the Pyodide package that provides
+  // the module `name`, by Pyodide's lockfile (PIL is Pillow's).
+  const provider = (name: string) =>
+    (Object.values(py.lockfile.packages) as { name: string; imports: string[] }[]).find((p) => p.imports.includes(name))?.name;
+  // And its withPackages: a package the call could not import (scipy for
+  // Label it's components, Pillow for an AI annotation's resizes), or one
+  // imported while it was still being installed, loaded once, then the call
+  // again.
   const loading = new Map<string, Promise<unknown>>();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const withPackages = async (run: () => any) => {
@@ -51,9 +57,11 @@ async function load(): Promise<PythonCall> {
       try {
         return run();
       } catch (e) {
-        const name = /No module named '(\w+)/.exec(String((e as Error)?.message ?? ""))?.[1];
-        if (!name || !LAZY[name] || tries > 1) throw e;
-        if (!loading.has(name)) loading.set(name, py.loadPackage([LAZY[name]]));
+        const text = String((e as Error)?.message ?? "");
+        const name = (/No module named '(\w+)/.exec(text) ?? /`(\w+)` install you are using seems to be broken/.exec(text))?.[1];
+        const pkg = name && provider(name);
+        if (!name || !pkg || tries > 1) throw e;
+        if (!loading.has(name)) loading.set(name, py.loadPackage([pkg]));
         await loading.get(name);
         py.runPython(`import sys\nfor m in [m for m in sys.modules if m == "${name}" or m.startswith("${name}.")]: del sys.modules[m]`);
       }

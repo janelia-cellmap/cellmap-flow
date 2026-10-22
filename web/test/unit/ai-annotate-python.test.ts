@@ -15,7 +15,8 @@ import type { DepthAxis, RgbaImage } from "../../src/ai-annotate/types";
 import type { DatasetInfo } from "../../src/contracts";
 import { portablePython } from "./pyodide";
 
-// Pyodide, numpy and (for the mask's objects) scipy load once for the file.
+// Pyodide, numpy, Pillow (for the resizes) and scipy (for the mask's objects)
+// load once for the file.
 vi.setConfig({ testTimeout: 120_000 });
 const python = await portablePython();
 
@@ -120,7 +121,7 @@ describe.skipIf(!python)("the AI annotation's portable Python", () => {
     await expect(planPlane(infer, dataset(LEVEL), volume(VOLUME_SHAPE), [-1, 403, 606], 0, 16)).rejects.toMatchObject({ category: "refused", httpStatus: 400 });
   });
 
-  it("takes the mask out of a reply at twice the size sent, lined up with the plane, with no Pillow", async () => {
+  it("takes the mask out of a reply at twice the size sent, lined up with the plane", async () => {
     // The plane is 32 × 24, sent padded to 32 × 32; the model answered 64 ×
     // 64 with the plane's left half red (in its own pixels, the left 24).
     const answer = reply(64, 64, (_r, c) => c < 24);

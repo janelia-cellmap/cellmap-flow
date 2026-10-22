@@ -3,10 +3,10 @@
 // (cellmap_flow/portable/ai_annotate.py, in the engine's Pyodide worker
 // through portable/ai_annotate_calls.py), as the server's backend and
 // staging do: the reply resized back to the size sent (Pillow's bilinear
-// filter, followed in numpy), the padding cut off and the target colour's
-// pixels taken (model_mask); the mask's objects put on the write box and
-// the image sent tinted where they are (stage). Here are the calls, with
-// the images as the canvas holds them.
+// filter; the worker loads Pillow the first time), the padding cut off and
+// the target colour's pixels taken (model_mask); the mask's objects put on
+// the write box and the image sent tinted where they are (stage). Here are
+// the calls, with the images as the canvas holds them.
 import { AI_PYTHON } from "./plane";
 import type { PlanePlan, PythonCall, RgbaImage } from "./types";
 
