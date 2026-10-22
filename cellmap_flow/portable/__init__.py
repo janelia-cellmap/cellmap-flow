@@ -8,4 +8,7 @@ browser calls). ``tests/portable/test_boundary.py`` holds every module here to
 that boundary. Nothing here reads a file, a zarr or the network: the callers
 do, around it (``finetune/session/volume.py``'s ``carry_paint``,
 ``dashboard/routes/finetune/rank_routes.py``, ``web/src/backend/routes/rank.ts``).
+A finetune's training targets are ``targets.py``, which the server's
+``finetune/target_transforms.py`` wraps and the browser calls through
+``targets_calls.py``.
 """

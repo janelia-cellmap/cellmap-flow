@@ -60,7 +60,7 @@ function block(index: number[]): Float32Array {
 }
 
 /** The binary target broadcast to both channels: object where the label is 2 or more, masked where painted. */
-function targets(c: PaintedChunk): Targets {
+async function targets(c: PaintedChunk): Promise<Targets> {
   const n = 36, target = new Float32Array(2 * n), mask = new Float32Array(2 * n);
   for (let v = 0; v < n; v++) for (let ch = 0; ch < 2; ch++) {
     target[ch * n + v] = c.labels[v] >= 2 ? 1 : 0;
@@ -97,7 +97,7 @@ function deps(collectSamples: () => AsyncGenerator<Sample>, disposed: { count: n
 }
 
 function run(over: Partial<FinetuneRun>, paint: MemoryPaintStore, report: ReturnType<typeof reporter>): FinetuneRun {
-  return { entry: ENTRY, baseBytes: BASE, volume: VOLUME, chain: CHAIN, dataset: DATASET, infer: { readRaw: async () => new ArrayBuffer(0) }, paint, options: { ...DEFAULT_OPTIONS, epochs: 8, learningRate: 0.05, batchPixels: 16 }, report, ...over };
+  return { entry: ENTRY, baseBytes: BASE, volume: VOLUME, chain: CHAIN, dataset: DATASET, infer: { readRaw: async () => new ArrayBuffer(0), python: () => Promise.reject(new Error("the targets are the test's own here")) }, paint, options: { ...DEFAULT_OPTIONS, epochs: 8, learningRate: 0.05, batchPixels: 16 }, report, ...over };
 }
 
 async function logitsOf(bytes: ArrayBuffer, input: Float32Array): Promise<Float32Array> {

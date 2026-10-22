@@ -346,16 +346,16 @@ export async function tileInput(tile: Tile, side: number, output: number, infer:
 }
 
 /** A tile's targets from its labels, through the model's transform
- * (targets.ts) on the tile as a one-slice chunk, channels last. */
-export function tileTargets(labels: Uint8Array | Uint16Array, output: number, transform: TargetTransform): { target: Uint8Array; mask: Uint8Array; channels: number; masked: number } {
+ * (target-call.ts) on the tile as a one-slice chunk, channels last. */
+export function tileTargets(labels: Uint8Array | Uint16Array, output: number, transform: TargetTransform): Promise<{ target: Uint8Array; mask: Uint8Array; channels: number; masked: number }> {
   return blockTargets(labels, [1, output, output], transform);
 }
 
 /** The targets of labels of `shape` (z, y, x; a tile's is one slice), through
- * the model's transform (targets.ts) on them as a chunk, channels last: a
+ * the model's transform (target-call.ts) on them as a chunk, channels last: a
  * cube's affinities pair z neighbours too. */
-export function blockTargets(labels: Uint8Array | Uint16Array, shape: readonly [number, number, number], transform: TargetTransform): { target: Uint8Array; mask: Uint8Array; channels: number; masked: number } {
-  const t = transform({ index: [0, 0, 0], shape: [...shape], labels });
+export async function blockTargets(labels: Uint8Array | Uint16Array, shape: readonly [number, number, number], transform: TargetTransform): Promise<{ target: Uint8Array; mask: Uint8Array; channels: number; masked: number }> {
+  const t = await transform({ index: [0, 0, 0], shape: [...shape], labels });
   const n = shape[0] * shape[1] * shape[2], C = t.channels;
   const target = new Uint8Array(n * C), mask = new Uint8Array(n * C);
   let masked = 0;

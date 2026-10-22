@@ -34,7 +34,7 @@ import { FINETUNED_REPO } from "../../contracts";
 import { loadGoodRegions, saveGoodRegions } from "../../finetune/good-regions";
 import { readsOneSlice } from "../../finetune/modes";
 import type { PaintedChunk } from "../../finetune/types";
-import { targetTransformFor } from "../../finetune/targets";
+import { targetTransformFor } from "../../finetune/target-call";
 import { CHUNK_DIR, chunkKey, createVolume, hasAffinityChannels, paintedChunkIndices, planVolume, readPaintedChunk, readVolume } from "../../finetune/volume";
 import { RANK_BLOCKS, WINDOW_MARGIN } from "../../generated/cellmap-flow";
 import { chooseRawLevel, geometryOf, outputShape, ratio } from "../../infer/geometry";
@@ -191,7 +191,7 @@ export function rankRoutes(router: Router): void {
 async function scorePaint(ctx: AppContext, dataset: DatasetInfo, volume: PaintVolume, indices: number[][], served: ServedModel): Promise<{ score: RankScore | null; blocks: number; read: { lo: number[]; hi: number[] }[]; outside: number }> {
   const entry = served.entry;
   const level = servedLevel(dataset, entry), block = outputShape(geometryOf(entry));
-  const transform = targetTransformFor(entry), affinity = hasAffinityChannels(entry);
+  const transform = targetTransformFor(entry, ctx.infer), affinity = hasAffinityChannels(entry);
   // Each painted chunk with the model's voxel under each of its painted
   // voxels (servedIndices, over the painted voxels' box, which it shrinks
   // to what the level covers), and the model's blocks those lie in.
@@ -233,7 +233,7 @@ async function scorePaint(ctx: AppContext, dataset: DatasetInfo, volume: PaintVo
       const [, bz, by, bx] = r.shape, [sz, sy, sx] = s.map((v, a) => v - r.lo[a]);
       for (let c = 0; c < C; c++) logits[c * n + i] = r.data[((c * bz + sz) * by + sy) * bx + sx];
     });
-    const { target, mask } = transform(chunk);
+    const { target, mask } = await transform(chunk);
     tallies = await ctx.infer.python<Tallies>(`${PORTABLE}:rank_tally`,
       { tallies, shape: chunk.shape, channels: C, labels_dtype: chunk.labels instanceof Uint16Array ? "uint16" : "uint8", affinity },
       [bytesOf(chunk.labels), bytesOf(target), bytesOf(mask), bytesOf(logits)]);

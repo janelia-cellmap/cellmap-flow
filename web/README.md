@@ -180,8 +180,9 @@ the model runs once per painted chunk on the block the model stage would feed
 it (`samples.ts`, through the volume's normalizers) for its logits and
 features (`features.ts`), and the head's weights are trained from the model's
 own on the painted voxels' features with Adam on a masked, class-balanced
-loss (`head-trainer.ts`; the targets are `targets.ts`, the port of
-`target_transforms.py`, checked against the Python classes): BCE-with-logits
+loss (`head-trainer.ts`; the targets are the server's own,
+`cellmap_flow/portable/targets.py` run in the page's Python by
+`target-call.ts`): BCE-with-logits
 by default, or the server's MSE on probabilities or margin loss; Dice, a
 whole patch's overlap, needs the server. *Voxels per Step* is the head's
 batch (the server's *Batch Size* counts patches). *Distillation Weight* λ

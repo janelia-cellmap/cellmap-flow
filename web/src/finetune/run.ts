@@ -19,7 +19,7 @@ import { runFull } from "./full/run-full";
 import { count, epochSummary, plural } from "./log-words";
 import { headOf, withHead } from "./onnx-head";
 import { collectSamples } from "./samples";
-import { targetTransformFor } from "./targets";
+import { targetTransformFor } from "./target-call";
 import type { FinetuneOptions, FinetuneRun, HeadFinetuned, RunFinetune } from "./types";
 import { chunkKey, paintedChunkIndices } from "./volume";
 
@@ -90,7 +90,7 @@ export function createRunFinetune(deps: RunDeps = { collectSamples, targetTransf
     const equalQuota = Math.ceil(DISTILLATION_VOXELS / Math.max(chunks, 1));
     const random = mulberry32((options.seed ^ SAMPLE_STREAM) >>> 0);
 
-    const targets = deps.targetTransformFor(run.entry);
+    const targets = deps.targetTransformFor(run.entry, run.infer);
     const runner = await deps.createFeatureRunner({ bytes: run.baseBytes, head, inputName: run.entry.manifest.io.input, outputName: run.entry.manifest.io.output, log: (line) => report.log(line) });
     try {
       const sets: PixelSet[] = [], heldSets: DistillationSet[] = [];
@@ -99,7 +99,7 @@ export function createRunFinetune(deps: RunDeps = { collectSamples, targetTransf
         i++;
         if (report.cancelled()) throw new Error("cancelled before training");
         const features = await runner.run(sample.input, sample.inputDims);
-        const chunkTargets = targets(sample.chunk);
+        const chunkTargets = await targets(sample.chunk);
         const set = gatherPixels(features, chunkTargets, head, sample.chunk.shape);
         if (paintedKeys.has(chunkKey(sample.chunk.index))) paintedChunks++;
         painted += set.count;
