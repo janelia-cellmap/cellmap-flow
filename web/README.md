@@ -180,8 +180,9 @@ the model runs once per painted chunk on the block the model stage would feed
 it (`samples.ts`, through the volume's normalizers) for its logits and
 features (`features.ts`), and the head's weights are trained from the model's
 own on the painted voxels' features with Adam on a masked, class-balanced
-loss (`head-trainer.ts`; the targets are `targets.ts`, the port of
-`target_transforms.py`, checked against the Python classes): BCE-with-logits
+loss (`head-trainer.ts`; the targets are the server's own,
+`cellmap_flow/portable/targets.py` run in the page's Python by
+`target-call.ts`): BCE-with-logits
 by default, or the server's MSE on probabilities or margin loss; Dice, a
 whole patch's overlap, needs the server. *Voxels per Step* is the head's
 batch (the server's *Batch Size* counts patches). *Distillation Weight* λ
@@ -225,8 +226,9 @@ Centre* reads one plane of raw EM around the point from the open volume
 (`gemini.ts`: Google's Gemini API with an API key, or Vertex AI with a project
 and an access token; `fake.ts` paints in the page, for trying it and for the
 tests), turns the colour it painted into a mask (`mask.ts`) and, on *Accept*,
-writes it into the paint store as an object per connected piece (`labels.ts`,
-`fill.ts`), which the patch tools' *Undo* takes back. The routes
+writes it into the paint store as an object per connected piece (by the
+server's own Python, `cellmap_flow/portable/ai_annotate.py` and `fill.py`),
+which the patch tools' *Undo* takes back. The routes
 (`src/backend/routes/ai-annotate.ts`, `src/backend/ai-annotate-job.ts`) answer
 the Python routes' JSON, so the dashboard's `ai-annotate.js` drives both
 modes; the credentials pasted into the panel (`credentials.ts`) are used as
@@ -246,11 +248,12 @@ of those or of an accepted AI annotation (one stack, 10 deep). A seed reads
 the model's own output, through its normalizers and none of its
 postprocessors (`Inference.readOutput`: the model stage served beside the
 layer, so the chunks already computed for the viewer are reused), placed on
-the volume's grid as the server places it (`src/label-it/prediction.ts`), and
-segments it by threshold and connected components or, for an affinity model,
-the mutex watershed (`src/label-it/segment.ts`, on the segmenters the
-postprocessors already use). These are checked against the Python on
-fixtures it writes (`test/fixtures/make_label_it_fixtures.py`). The server's
+the volume's grid and segmented by threshold and connected components by the
+server's own Python (`cellmap_flow/portable/label_it.py`, in the page's
+Pyodide worker), or, for an affinity model, by the mutex watershed
+(`src/label-it/segment.ts`, on the segmenter the postprocessors already use,
+checked against the Python on fixtures it writes,
+`test/fixtures/make_label_it_fixtures.py`). The server's
 distance watershed and a model's own instances are not offered: no model the
 browser runs outputs a distance or instance ids.
 

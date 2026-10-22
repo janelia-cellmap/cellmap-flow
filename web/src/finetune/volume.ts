@@ -1,15 +1,14 @@
 // An annotation volume in the browser: planned over the open dataset for a
-// model (planVolume), written as zarr v2 files into the paint store
-// (volumeFiles), and read back for training (readVolume, the painted chunks).
-// The port of cellmap_flow/finetune/session/volume.py (plan_volume,
-// create_volume_zarr, read_volume) for the browser, where the files are the
-// paint store's and the grid is the one the model stage serves on
-// (infer/geometry.ts); the labels' dtype follows
-// cellmap_flow/dashboard/routes/finetune/common.py's annotation_dtype_for.
-// See PLAN_browser_finetune.md, "The volume's layout".
-import type { Chain, DatasetInfo, ModelEntry, PaintStore, PaintVolume } from "../contracts";
-import { chooseRawLevel, geometryOf, inputShape, outputLevel, outputShape } from "../infer/geometry";
-import { isSegmentation } from "../infer/post";
+// model (planVolume, by cellmap_flow/portable/volume.py, the Python the
+// server plans with, run in the engine's Pyodide worker), written as zarr v2
+// files into the paint store (volumeFiles), and read back for training
+// (readVolume, the painted chunks). This file reads what the plan is made
+// from (the raw level the model reads, the model's blocks) and writes and
+// reads the files; the plan, the grid and the labels' dtype, is the
+// Python's. See PLAN_browser_finetune.md, "The volume's layout".
+import { volumeCornerNm } from "../ai-annotate/fill";
+import type { Chain, DatasetInfo, Inference, ModelEntry, PaintStore, PaintVolume } from "../contracts";
+import { chooseRawLevel, geometryOf } from "../infer/geometry";
 import { stamp } from "../shared/format";
 import type { PaintedChunk } from "./types";
 
@@ -42,79 +41,51 @@ function randomHex(n: number): string {
 // Planning a volume
 // ---------------------------------------------------------------------------
 
-/** A new volume over `dataset` for `entry`, through `chain`: plan_volume,
- * on the grid the served prediction has.
- *
- * The server snaps each of the model's voxel sizes to the raw level closest
- * to it (closest_raw_scale) and lays the volume on the output level's grid
- * from the data's corner, padded to whole chunks. Here the grid is the one
- * engine.ts's serve() builds for the model's view, so a chunk of paint is
- * exactly a chunk of the prediction layer it is painted over: the raw level
- * chooseRawLevel picks for the model's input voxel size, read as if it were
- * at that size, and the output level outputLevel derives from it (its voxel
- * size the raw level's times the model's ratio, its shape the raw level's
- * floor-divided by the ratio, its origin the raw level's corner plus half an
- * output voxel). DatasetInfo's levels are in nm (datasetInfoFrom), so the
- * volume is in nm, where serve() gives outputLevel the engine's level in the
- * source's own units for the view. input_voxel_size is the raw level's, as
- * the server's is the closest raw level's; the model's own are kept as the
- * claimed sizes, for provenance.
- *
- * dataset_offset_nm is the output level's origin. chunkmirage reads a
- * level's OME translation as its origin (web/chunkmirage/web/src/ome.ts,
- * openImage), and a translation is voxel 0's centre, which is what the
- * server stores and writes back as the volume's own translation (volume.py's
- * module docstring, volume_corner_nm), so the paint is drawn where the
- * prediction is. The extent is the level's shape rounded up to whole chunks,
- * as the server's _grid pads it, so that the last chunk along each axis is a
- * whole sample.
+/** The portable Python's entry points for volumes and good regions (cellmap_flow/portable/volume_calls.py), by module path. */
+export const VOLUME_CALLS = "cellmap_flow.portable.volume_calls";
+
+/** What plan_volume answers when it plans: the plan's fields of a PaintVolume. */
+type Plan = Pick<PaintVolume, "output_voxel_size" | "input_voxel_size" | "claimed_output_voxel_size" | "claimed_input_voxel_size" | "chunk_size" | "input_size" | "dataset_offset_nm" | "dataset_shape_voxels" | "dtype">;
+
+/** A new volume over `dataset` for `entry`, through `chain`: the server's
+ * plan_volume, which is cellmap_flow/portable/volume.py's, called in the
+ * engine's Pyodide worker (`infer.python`). What it is given is what the
+ * browser read: the raw level the model reads (chooseRawLevel, the server's
+ * "floor" level choice, as engine.ts's serve() picks it), its voxel-0
+ * corner, and the model's voxel sizes and blocks (geometryOf). The Python
+ * answers the grid, the one the model's prediction is served on (the
+ * level's corner, its voxel times the model's ratio: outputLevel's
+ * arithmetic, so a chunk of paint is a chunk of the prediction layer it is
+ * painted over), the extent (the level's, rounded up to whole output voxels
+ * and padded to whole chunks) and the labels' dtype (uint16 for a model
+ * trained on instances, here an affinity model: hasAffinityChannels, as the
+ * browser trains it). A refusal comes back as its sentence, thrown here.
  *
  * Refused for a dataset with more than one channel, as serve() refuses it:
  * the browser mode reads single-channel volumes. */
-export function planVolume(dataset: DatasetInfo, entry: ModelEntry, chain: Chain, options: { id?: string; now?: Date } = {}): PaintVolume {
+export async function planVolume(infer: Pick<Inference, "python">, dataset: DatasetInfo, entry: ModelEntry, chain: Chain, options: { id?: string; now?: Date } = {}): Promise<PaintVolume> {
   if (dataset.channels > 1) {
     throw new Error(`${dataset.url} has ${dataset.channels} channels; the browser mode paints and trains on single-channel volumes (it does not select a channel yet)`);
   }
-  const g = geometryOf(entry);
-  const raw = dataset.levels[chooseRawLevel(dataset.levels, g.input_voxel_size)];
-  const level = outputLevel(raw, g);
-  const chunk = outputShape(g);
+  const model = geometryOf(entry);
+  const raw = dataset.levels[chooseRawLevel(dataset.levels, model.input_voxel_size)];
+  const plan = await infer.python<Plan | { error: string }>(`${VOLUME_CALLS}:plan_volume`, {
+    level: { shape: raw.shape, voxel: raw.voxel, corner: volumeCornerNm(raw.origin, raw.voxel) },
+    model,
+    output_type: hasAffinityChannels(entry) ? "affinities" : "binary",
+  });
+  if ("error" in plan) throw new Error(plan.error);
   return {
     id: options.id ?? newVolumeId(options.now),
     type: "annotation_volume",
     model_name: entry.name,
     model_id: entry.id,
     dataset_path: dataset.url,
-    chunk_size: chunk,
-    input_size: inputShape(g),
-    output_voxel_size: level.voxel,
-    input_voxel_size: [...raw.voxel],
-    claimed_output_voxel_size: g.output_voxel_size,
-    claimed_input_voxel_size: g.input_voxel_size,
-    dataset_offset_nm: level.origin,
-    dataset_shape_voxels: level.shape.map((n, a) => Math.ceil(n / chunk[a]) * chunk[a]),
-    dtype: annotationDtypeFor(entry, chain),
+    ...plan,
     input_norm: chain.input_norm.map((step) => ({ ...step })),
     postprocess: chain.postprocess.map((step) => ({ ...step })),
     created_at: (options.now ?? new Date()).toISOString(),
   };
-}
-
-/** The labels' dtype of a new volume for `entry` through `chain`: common.py's
- * annotation_dtype_for. The server asks what the model trains on
- * (autodetect_output_type) and gives uint16 to a target trained on
- * instances, whose paint numbers each object (282 of a Cellpose model's
- * masks in one box did not fit a uint8 volume): affinities, which, when the
- * model type declares nothing, it tells by a channel name containing "_aff";
- * and Cellpose's flows, which only a model type declares. Everything else is
- * uint8, background and foreground. The channel-name test is followed as it
- * stands (hasAffinityChannels); the browser has no model types or scripts
- * to ask, and no flow model is on Hugging Face. One rule is the browser's
- * own: a chain that serves labels (isSegmentation: a threshold, an affinity
- * segmentation) is painted over object by object, each with its id, so its
- * volume holds ids too. */
-export function annotationDtypeFor(entry: ModelEntry, chain: Chain): PaintVolume["dtype"] {
-  return hasAffinityChannels(entry) || isSegmentation(chain.postprocess) === true ? "uint16" : "uint8";
 }
 
 /** Whether a model's channels are affinities (`mito_aff_z`, `mito_aff_y`,

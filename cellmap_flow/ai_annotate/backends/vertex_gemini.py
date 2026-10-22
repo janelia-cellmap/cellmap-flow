@@ -33,7 +33,7 @@ from PIL import Image
 from cellmap_flow.ai_annotate.backends.base import SegmentRequest, SegmentResult
 from cellmap_flow.ai_annotate.errors import INSTALL_HINT, AIAnnotateError
 from cellmap_flow.ai_annotate.images import decode_model_image
-from cellmap_flow.ai_annotate.mask_extraction import extract_mask
+from cellmap_flow.portable.ai_annotate import model_mask
 
 logger = logging.getLogger(__name__)
 
@@ -128,11 +128,11 @@ class VertexGeminiBackend:
         model_image = decode_model_image(image_bytes)
         if model_image.size != sent.size:
             _warn_if_aspect_differs(model_image.size, sent.size)
-            model_image = model_image.resize(sent.size, Image.BILINEAR)
-        # Drop the padding _square added: what is left lines up with the plane.
-        model_image = model_image.crop((0, 0, *request.image.size))
-        mask = extract_mask(model_image, request.target_rgb)
-        return SegmentResult(mask=mask, model_image=model_image, model=model, usage=_usage(response))
+        # Back to the sent size, the padding _square added dropped, and the
+        # target colour's pixels taken: what is left lines up with the plane
+        # (model_mask, which the browser's provider calls too).
+        mask, aligned = model_mask(np.asarray(model_image), sent.size[::-1], request.image.size[::-1], request.target_rgb)
+        return SegmentResult(mask=mask, model_image=Image.fromarray(aligned), model=model, usage=_usage(response))
 
     def _generate(self, client, model, contents, config):
         """``generate_content``, retried on 429/503 only, at most ``MAX_ATTEMPTS`` times."""

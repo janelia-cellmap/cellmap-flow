@@ -12,7 +12,11 @@ from cellmap_flow.finetune.options import OUTPUT_CLASSES, TrainingOptions
 from cellmap_flow.finetune.session.minio import MINIO_PROXY_URL_ENV, proxied_url
 from cellmap_flow.finetune.session.store import SessionStore
 from cellmap_flow.models.geometry import channel_names_of
+# INSTANCE_TARGETS: the targets trained on instances, whose annotation
+# volumes hold an id per object; imported from here by the routes.
+from cellmap_flow.portable.volume import INSTANCE_TARGETS, annotation_dtype  # noqa: F401
 from cellmap_flow.serving.client import fetch_model_info, running_job_host
+from cellmap_flow.portable.label_it import affinity_offsets
 
 logger = logging.getLogger(__name__)
 
@@ -191,25 +195,18 @@ def declared_output_type(model_config):
     return None
 
 
-# The targets trained on instances, whose annotation volumes hold an id per
-# object rather than foreground and background alone.
-INSTANCE_TARGETS = ("affinities", "flows")
-
-
 def annotation_dtype_for(model_config):
-    """The labels' dtype of a new annotation volume for ``model_config``.
-
-    uint8 (ids up to 255) for a model trained on foreground and background;
-    uint16 (up to 65535) for one trained on instances (affinities, Cellpose's
-    flows), whose seeds number each object: 282 of a Cellpose model's masks
-    in one box did not fit a uint8 volume.
-    """
+    """The labels' dtype of a new annotation volume for ``model_config``:
+    ``cellmap_flow.portable.volume.annotation_dtype`` (the browser's rule too)
+    of what it trains on (``autodetect_output_type``), uint16 for the
+    instance targets in INSTANCE_TARGETS, else uint8; uint8 when that cannot
+    be told."""
     try:
         output_type, _ = autodetect_output_type(model_config, None, None)
     except Exception as e:
         logger.info(f"Could not tell what {getattr(model_config, 'name', 'the model')} trains on ({e}): uint8 labels")
         return "uint8"
-    return "uint16" if output_type in INSTANCE_TARGETS else "uint8"
+    return annotation_dtype(output_type)
 
 
 def autodetect_output_type(model_config, output_type, offsets):
@@ -265,13 +262,13 @@ def autodetect_output_type(model_config, output_type, offsets):
                 except Exception as e:
                     logger.debug(f"Could not resolve channels for autodetect: {e}")
 
-            if channels and any("_aff" in channel for channel in channels):
+            # The one rule for a model known by its channel names alone
+            # (portable/label_it.affinity_offsets): the browser's Python
+            # applies it to its manifest's names, for training and seeding,
+            # so both modes treat such a model the same way.
+            default_offsets = affinity_offsets(channels) if channels else None
+            if default_offsets is not None:
                 resolved_output_type = "affinities"
-                n_aff = sum(1 for channel in channels if "_aff" in channel)
-                default_offsets = [
-                    [1 if axis == index else 0 for axis in range(3)]
-                    for index in range(min(n_aff, 3))
-                ]
                 resolved_offsets = json.dumps(default_offsets)
                 logger.info(
                     f"Auto-detected output_type='affinities' from "

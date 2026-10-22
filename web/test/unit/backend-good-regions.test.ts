@@ -13,6 +13,12 @@ import { createVolume } from "../../src/finetune/volume";
 import { defaultChain } from "../../src/state";
 import { GOOD_REGIONS_LAYER } from "../../src/viewer/layers";
 import { DATASET, type FakeContext, fakeContext, request } from "./backend-fakes";
+import { portablePython } from "./pyodide";
+
+// A volume's plan and a region's rules are the portable Python's, here in
+// node's Pyodide (pyodide.ts), loaded once for the file before the tests;
+// without it (no network for numpy's wheel) they skip.
+const python = await portablePython();
 
 function body(res: ApiResponse): any {
   if (!("json" in res)) throw new Error(`not a JSON answer: ${JSON.stringify(res)}`);
@@ -42,7 +48,7 @@ function drawn(ctx: FakeContext): unknown[][] {
   return layer.annotations.map((a) => [a.pointA, a.pointB, a.id, a.description]);
 }
 
-describe("POST /api/finetune/good-regions/mark-view", () => {
+describe.skipIf(!python)("POST /api/finetune/good-regions/mark-view", () => {
   it("marks one output block centred where the viewer looks, keeps it with the volume, and draws it", async () => {
     const { ctx, handle } = await harness();
     ctx.viewer.positionNm = [16, 32, 32];
@@ -63,7 +69,7 @@ describe("POST /api/finetune/good-regions/mark-view", () => {
   });
 });
 
-describe("POST /api/finetune/good-regions/delete", () => {
+describe.skipIf(!python)("POST /api/finetune/good-regions/delete", () => {
   it("deletes one region by id, every region without one, and answers 404 for an id the session has not", async () => {
     const { ctx, handle } = await harness();
     ctx.viewer.positionNm = [16, 32, 32];

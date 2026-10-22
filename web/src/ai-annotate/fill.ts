@@ -1,33 +1,30 @@
-// Labelling a whole box of an annotation volume at once, in the paint store:
-// the port of cellmap_flow/finetune/session/fill.py's box_voxels, paint_box,
-// rewrite_foreground and restore_box (and of finetune/session/volume.py's
-// volume_corner_nm, which box_voxels places voxels by) for the browser,
-// where the volume is the paint store's zarr v2 chunks (finetune/volume.ts)
-// instead of MinIO's. An accepted AI annotation writes through paintBox, as
-// do the Label it tools' Seed from Prediction and All Background; Split
-// Objects through rewriteForeground; Undo, of any of them, is restoreBox
-// (backend/routes/view-labels.ts).
+// A whole box of an annotation volume read from and written to the paint
+// store at once, and the undo stack the box writes push onto: the I/O
+// around the box decisions, which are the Python both modes run
+// (cellmap_flow/portable/fill.py). The Label it tools
+// (backend/routes/view-labels.ts, through portable/fill_calls.py) and an
+// accepted AI annotation (backend/ai-annotate-job.ts, through
+// portable/ai_annotate_calls.py accept) read the box with readBox, hand it
+// to that Python in the engine's worker, write the box it answers with
+// writeBox and push the box as it was and as it is (pushUndo), as the
+// server's finetune/session/fill.py does around the same functions over
+// MinIO.
 //
 // What the server does through zarr over MinIO (`arr[box]` read and written)
-// is done here chunk by chunk: readBox assembles the box from the chunks it
+// is done here chunk by chunk, the volume being the paint store's zarr v2
+// chunks (finetune/volume.ts): readBox assembles the box from the chunks it
 // touches (a chunk never painted is zeros, zarr's fill value), writeBox puts
 // each touched chunk back whole, read-modify-write, as the fork's writable
-// zarr source does when the brush paints. paintBox, rewriteForeground and
-// restoreBox are fill.paint_box, fill.rewrite_foreground and
-// fill.restore_box over those two, with the same write rules, the same
-// counts and the same "nothing written when nothing changes".
+// zarr source does when the brush paints.
 //
 // Where voxel 0 is: a volume's `dataset_offset_nm` is voxel 0's CENTRE (the
 // OME translation, as volume.py's docstring and volume_corner_nm say, and as
 // finetune/volume.ts planVolume sets it from the served level's origin), so
-// its corner is half a voxel before it, and a voxel is in a box when its
-// centre is (boxVoxels).
+// its corner is half a voxel before it (volumeCornerNm, which the ranking's
+// carry and planVolume place the grid by).
 import type { PaintStore, PaintVolume } from "../contracts";
 import { CHUNK_DIR, chunkKey, readPaintedChunk } from "../finetune/volume";
 import { type Labels, UNDO_DEPTH, type UndoEntry } from "./types";
-
-/** The volume fields the box arithmetic reads: its grid. */
-export type VolumeGrid = Pick<PaintVolume, "output_voxel_size" | "dataset_offset_nm">;
 
 /** The world position of an annotation volume's voxel-0 lower corner, in nm
  * (volume.volume_corner_nm): `datasetOffsetNm` is voxel 0's centre, so the
@@ -35,25 +32,6 @@ export type VolumeGrid = Pick<PaintVolume, "output_voxel_size" | "dataset_offset
  * no offset. */
 export function volumeCornerNm(datasetOffsetNm: readonly number[] | null | undefined, outputVoxelSize: readonly number[]): number[] {
   return outputVoxelSize.map((v, a) => (datasetOffsetNm ? datasetOffsetNm[a] : 0) - v / 2);
-}
-
-/** `{lo, hi}`: the annotation voxels whose centres lie in a box, clipped to
- * the volume (fill.box_voxels). `offsetNm` and `shapeNm` are the box's
- * lower corner and size in world nm (z, y, x); `volumeShape` the volume's
- * extent in voxels. null when no voxel of the volume is in the box. */
-export function boxVoxels(volume: VolumeGrid, offsetNm: readonly number[], shapeNm: readonly number[], volumeShape: readonly number[]): { lo: number[]; hi: number[] } | null {
-  const voxel = volume.output_voxel_size;
-  const corner = volumeCornerNm(volume.dataset_offset_nm, voxel);
-  const lo: number[] = [], hi: number[] = [];
-  for (let a = 0; a < 3; a++) {
-    const start = (offsetNm[a] - corner[a]) / voxel[a];
-    const end = start + shapeNm[a] / voxel[a];
-    // Voxel i's centre is at i + 0.5 voxels from the corner.
-    lo.push(Math.max(Math.ceil(start - 0.5), 0));
-    hi.push(Math.min(Math.ceil(end - 0.5), volumeShape[a]));
-  }
-  if (hi.some((h, a) => h <= lo[a])) return null;
-  return { lo, hi };
 }
 
 // ---------------------------------------------------------------------------
@@ -65,11 +43,6 @@ const prod = (shape: readonly number[]) => shape.reduce((a, b) => a * b, 1);
 /** A zero array of the volume's label dtype. */
 export function emptyLabels(volume: Pick<PaintVolume, "dtype">, n: number): Labels {
   return volume.dtype === "uint16" ? new Uint16Array(n) : new Uint8Array(n);
-}
-
-/** A zero array of the same kind as `like`. */
-function labelsLike(like: Labels, n: number): Labels {
-  return like instanceof Uint16Array ? new Uint16Array(n) : new Uint8Array(n);
 }
 
 function checkBox(volume: Pick<PaintVolume, "dataset_shape_voxels">, lo: readonly number[], hi: readonly number[]): void {
@@ -113,7 +86,7 @@ function copyOverlap(volume: Pick<PaintVolume, "chunk_size">, index: readonly nu
 
 /** A chunk's labels as the bytes the store holds (the layout labelsOf reads):
  * uint8 as they are, uint16 little-endian. A copy: the store keeps what it is given. */
-export function chunkBytes(labels: Labels): Uint8Array {
+function chunkBytes(labels: Labels): Uint8Array {
   if (labels instanceof Uint16Array) {
     const bytes = new Uint8Array(labels.length * 2);
     const view = new DataView(bytes.buffer);
@@ -153,130 +126,8 @@ export async function writeBox(store: PaintStore, volume: PaintVolume, lo: reado
 }
 
 // ---------------------------------------------------------------------------
-// paint_box and restore_box
+// The undo stack
 // ---------------------------------------------------------------------------
-
-/** What paintBox did (fill.paint_box's return): how many voxels were written
- * with foreground (2 and up) and with background (1), and how many of those
- * held a label before. The routes answer these as filled_foreground,
- * filled_background and overwritten. */
-export interface PaintCounts {
-  n_foreground: number;
-  n_background: number;
-  n_overwritten: number;
-}
-
-/** `labels` as the volume's dtype (np.asarray(..., dtype=arr.dtype)): a
- * value past the dtype wraps as numpy's astype wraps it, which never
- * happens for ids from freshIds, which refuses them first. */
-function asDtype(labels: Labels, like: Labels): Labels {
-  if ((like instanceof Uint16Array) === (labels instanceof Uint16Array)) return labels;
-  const out = labelsLike(like, labels.length);
-  for (let i = 0; i < labels.length; i++) out[i] = labels[i];
-  return out;
-}
-
-/** Write `labelsFor(existing)` into the box [lo, hi) (fill.paint_box).
- *
- * `labelsFor` gets the box as the store holds it (readBox) and returns labels
- * of the same length (0 for "leave as it is"). Without `overwrite` only
- * unannotated voxels (0) are written, as for a seed: what the user painted
- * stays. With it every voxel the labels cover is written, painted or not,
- * for a result the user has looked at and prefers to what is there; note
- * that the accept route (backend/routes/ai-annotate.ts, as the Python's
- * ai_annotate_accept) zeroes `labels == 1 & existing != 0` in its own
- * labelsFor before this sees them when overwrite is on, so the model's
- * background never erases paint; that is the route's rule, not this
- * function's, which writes exactly what the labels say. Nothing is written
- * when nothing would change (and nothing is pushed on `undo`). When
- * something is, `options.undo`, when given, gets `{lo, hi, before, after}`
- * pushed (pushUndo: UNDO_DEPTH entries at most) for restoreBox. */
-export async function paintBox(
-  store: PaintStore,
-  volume: PaintVolume,
-  lo: readonly number[],
-  hi: readonly number[],
-  labelsFor: (existing: Labels) => Labels,
-  options: { overwrite: boolean; undo?: UndoEntry[] },
-): Promise<PaintCounts> {
-  const existing = await readBox(store, volume, lo, hi);
-  const labels = asDtype(labelsFor(existing), existing);
-  if (labels.length !== existing.length) throw new Error(`labelsFor returned ${labels.length} labels for a box of ${existing.length} voxels`);
-  const write = new Uint8Array(existing.length);
-  let nWrite = 0, nForeground = 0, nOverwritten = 0;
-  for (let i = 0; i < existing.length; i++) {
-    const w = options.overwrite ? labels[i] > 0 && labels[i] !== existing[i] : existing[i] === 0 && labels[i] > 0;
-    if (!w) continue;
-    write[i] = 1;
-    nWrite++;
-    if (labels[i] >= 2) nForeground++;
-    if (existing[i] !== 0) nOverwritten++;
-  }
-  if (nWrite) {
-    const before = existing.slice();
-    for (let i = 0; i < existing.length; i++) if (write[i]) existing[i] = labels[i];
-    await writeBox(store, volume, lo, hi, existing);
-    if (options.undo) pushUndo(options.undo, { lo: [...lo], hi: [...hi], before, after: existing.slice() });
-  }
-  return { n_foreground: nForeground, n_background: nWrite - nForeground, n_overwritten: nOverwritten };
-}
-
-/** Write `relabel(existing)`'s labels over the box's foreground voxels
- * (fill.rewrite_foreground): Split Objects.
- *
- * `relabel` gets the box as the store holds it (readBox) and returns the
- * labels and its counts (labels.ts relabelObjects); only foreground voxels
- * (2 and up) whose label changed are written, so a stroke painted meanwhile
- * elsewhere in the box is kept, and nothing is written when none changed.
- * Returns how many voxels changed and the counts. `options.undo`: as for
- * paintBox. */
-export async function rewriteForeground<C>(
-  store: PaintStore,
-  volume: PaintVolume,
-  lo: readonly number[],
-  hi: readonly number[],
-  relabel: (existing: Labels) => { labels: Labels; counts: C },
-  options: { undo?: UndoEntry[] } = {},
-): Promise<{ changed: number; counts: C }> {
-  const existing = await readBox(store, volume, lo, hi);
-  const { labels: given, counts } = relabel(existing.slice());
-  const labels = asDtype(given, existing);
-  if (labels.length !== existing.length) throw new Error(`relabel returned ${labels.length} labels for a box of ${existing.length} voxels`);
-  const changed = new Uint8Array(existing.length);
-  let n = 0;
-  for (let i = 0; i < existing.length; i++) {
-    if (existing[i] >= 2 && labels[i] !== existing[i]) {
-      changed[i] = 1;
-      n++;
-    }
-  }
-  if (n) {
-    const before = existing.slice();
-    for (let i = 0; i < existing.length; i++) if (changed[i]) existing[i] = labels[i];
-    await writeBox(store, volume, lo, hi, existing);
-    if (options.undo) pushUndo(options.undo, { lo: [...lo], hi: [...hi], before, after: existing.slice() });
-  }
-  return { changed: n, counts };
-}
-
-/** Put the box back to `entry.before` where it still holds `entry.after`
- * (fill.restore_box): an undo. Only voxels the action changed and nobody has
- * touched since go back, so a stroke painted in the box after the action is
- * kept. Returns how many voxels were restored. */
-export async function restoreBox(store: PaintStore, volume: PaintVolume, entry: UndoEntry): Promise<number> {
-  const { lo, hi, before, after } = entry;
-  const current = await readBox(store, volume, lo, hi);
-  if (before.length !== current.length || after.length !== current.length) throw new Error(`the undo entry's ${before.length} voxels are not the box's ${current.length}`);
-  let restored = 0;
-  for (let i = 0; i < current.length; i++) {
-    if (before[i] !== after[i] && current[i] === after[i]) {
-      current[i] = before[i];
-      restored++;
-    }
-  }
-  if (restored) await writeBox(store, volume, lo, hi, current);
-  return restored;
-}
 
 /** Push `entry` on an undo stack that keeps the last UNDO_DEPTH entries (the
  * server's deque(maxlen=UNDO_DEPTH) per volume): the oldest goes when it is full. */

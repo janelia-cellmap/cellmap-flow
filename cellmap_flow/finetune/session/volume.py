@@ -12,6 +12,10 @@ zstd level 3 -- and its root attrs are a format.
 The root attr ``dataset_offset_nm`` is voxel 0's *centre* and is also the
 OME translation, since that is where Neuroglancer draws voxel 0 while it is
 painted; ``volume_corner_nm`` gives the corner.
+
+Where a new volume lies (``plan_volume``) is planned by
+``cellmap_flow.portable.volume`` on the numbers read here, as the browser
+plans one on its own reads; this module reads and writes the zarrs.
 """
 
 import logging
@@ -27,7 +31,10 @@ import numpy as np
 import zarr
 
 from cellmap_flow.io.multiscale import closest_raw_scale
-from cellmap_flow.io.ome import ome_corner, ome_translation
+from cellmap_flow.portable import volume as portable_volume
+# Voxel 0's corner from a volume's dataset_offset_nm, its centre; imported
+# from here by the server's readers of volumes.
+from cellmap_flow.portable.volume import volume_corner_nm  # noqa: F401
 
 logger = logging.getLogger(__name__)
 
@@ -100,40 +107,35 @@ def new_volume_id() -> str:
     return f"vol-{uuid.uuid4().hex[:8]}-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
 
 
-def volume_corner_nm(dataset_offset_nm, output_voxel_size) -> np.ndarray:
-    """The world position of an annotation volume's voxel-0 lower corner, in nm.
+def raw_level(raw_dataset_path: str, input_voxel_size, resample: bool = False) -> dict:
+    """The raw level a model at ``input_voxel_size`` reads, as the numbers
+    ``cellmap_flow.portable.volume.plan_volume`` plans on: ``voxel`` and
+    ``corner`` in nm and ``shape`` in voxels, z, y, x.
 
-    ``dataset_offset_nm`` (a root attr of every volume) is also written as the
-    volume's OME-NGFF translation, and a translation is voxel 0's *centre*.
-    Neuroglancer drew the volume that way while it was painted, so that is
-    where the labels are: read as a corner, the value puts every label half
-    an annotation voxel away from where it was drawn.
+    The level ``select_level``'s "floor" picks (``closest_raw_scale``), at its
+    own voxel size; with ``resample``, the raw resampled to
+    ``input_voxel_size``, as the trainer and a --resample server read it.
     """
-    offset = np.zeros(3) if dataset_offset_nm is None else dataset_offset_nm
-    return np.asarray(ome_corner(offset, output_voxel_size), dtype=float)
-
-
-def _grid(raw_dataset_path, output_voxel_size, chunk_size, resample=False):
-    """``(offset_nm, shape_voxels)`` of a volume over the data, padded to whole chunks."""
     from cellmap_flow.image_data_interface import ImageDataInterface
 
-    output_voxel_size = np.asarray(output_voxel_size, dtype=float)
-    chunk_size = np.asarray(chunk_size, dtype=int)
-    idi = ImageDataInterface(
-        raw_dataset_path,
-        voxel_size=output_voxel_size,
-        on_voxel_size_mismatch="resample" if resample else "relabel",
-    )
-    offset = np.asarray(ome_translation(np.asarray(idi.offset, dtype=float), output_voxel_size))
-    # The data's own extent in output voxels, rounded up so a partial voxel
-    # at the far end is covered. Not idi.roi's: that is the whole-nm box
-    # around the data, up to 2 nm larger, which would add a voxel to every
-    # level whose extent is not whole nm (10.48 nm...).
-    extent = np.asarray(idi.shape, dtype=float)[-output_voxel_size.size:] * np.asarray(
-        idi.voxel_size, dtype=float
-    )
-    shape = np.ceil(np.round(extent / output_voxel_size, 6)).astype(int)
-    return offset, np.ceil(shape / chunk_size).astype(int) * chunk_size
+    if resample:
+        voxel_size, mismatch = input_voxel_size, "resample"
+    else:
+        # Opened at the level's own voxel size, so that it is read as it is
+        # stored and its corner is its own, not one relabelled to the model's.
+        voxel_size = closest_raw_scale(raw_dataset_path, tuple(input_voxel_size)) or input_voxel_size
+        mismatch = "relabel"
+    idi = ImageDataInterface(raw_dataset_path, voxel_size=voxel_size, on_voxel_size_mismatch=mismatch)
+    axes = len(input_voxel_size)
+    # The data's own extent is its shape times its voxel size, which the plan
+    # takes. Not idi.roi's: that is the whole-nm box around the data, up to
+    # 2 nm larger, which would add a voxel to every level whose extent is not
+    # whole nm (10.48 nm...).
+    return {
+        "voxel": [float(v) for v in idi.voxel_size][-axes:],
+        "corner": [float(o) for o in idi.offset][-axes:],
+        "shape": [int(n) for n in idi.shape][-axes:],
+    }
 
 
 def plan_volume(raw_dataset_path: str, model_geometry, resample: bool = False) -> VolumeGeometry:
@@ -142,40 +144,19 @@ def plan_volume(raw_dataset_path: str, model_geometry, resample: bool = False) -
     ``model_geometry`` has ``input_voxel_size`` and ``output_voxel_size``,
     and either ``input_shape``/``output_shape`` in voxels or
     ``read_shape``/``write_shape`` in nm, which is what a server reports.
-    Each voxel size is snapped to the raw level closest to it (the model's
-    own is kept as the claimed one); the volume lies on the output level's
-    grid from its corner, one chunk per model output, and covers the data
-    padded to whole chunks.
+    The planning is ``cellmap_flow.portable.volume.plan_volume``'s, which the
+    browser runs too: the volume lies on the grid the model's prediction is
+    served on, that of the raw level it reads (``raw_level``), one chunk per
+    model output, and covers the level padded to whole chunks; the model's
+    own voxel sizes are kept as the claimed ones.
 
-    With ``resample`` (the dashboard's Resample setting) nothing is snapped:
-    the volume is at the model's own voxel sizes, and the trainer reads the
-    raw resampled to them, as a server started with --resample serves it.
+    With ``resample`` (the dashboard's Resample setting) the level is the raw
+    resampled to the model's input voxel size, so the volume is at the
+    model's own voxel sizes, and the trainer reads the raw resampled to them,
+    as a server started with --resample serves it.
     """
-    claimed_in = np.array(model_geometry.input_voxel_size)
-    claimed_out = np.array(model_geometry.output_voxel_size)
-    if getattr(model_geometry, "input_shape", None) is not None:
-        input_size = np.array(model_geometry.input_shape, dtype=int)
-        output_size = np.array(model_geometry.output_shape, dtype=int)
-    else:
-        input_size = (np.array(model_geometry.read_shape) / claimed_in).astype(int)
-        output_size = (np.array(model_geometry.write_shape) / claimed_out).astype(int)
-    if resample:
-        output_voxel_size, input_voxel_size = claimed_out, claimed_in
-    else:
-        output_voxel_size = np.array(closest_raw_scale(raw_dataset_path, tuple(claimed_out)) or claimed_out)
-        input_voxel_size = np.array(closest_raw_scale(raw_dataset_path, tuple(claimed_in)) or claimed_in)
-    offset, shape = _grid(raw_dataset_path, output_voxel_size, output_size, resample)
-    return VolumeGeometry(
-        output_voxel_size=output_voxel_size,
-        input_voxel_size=input_voxel_size,
-        claimed_output_voxel_size=claimed_out,
-        claimed_input_voxel_size=claimed_in,
-        chunk_size=output_size,
-        input_size=input_size,
-        dataset_offset_nm=offset,
-        dataset_shape_voxels=shape,
-        resample=bool(resample),
-    )
+    level = raw_level(raw_dataset_path, model_geometry.input_voxel_size, resample)
+    return VolumeGeometry(**portable_volume.plan_volume(level, model_geometry), resample=bool(resample))
 
 
 def create_volume_zarr(

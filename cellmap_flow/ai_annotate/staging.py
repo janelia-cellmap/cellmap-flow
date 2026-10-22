@@ -26,6 +26,7 @@ import numpy as np
 from PIL import Image
 
 from cellmap_flow.ai_annotate.errors import AIAnnotateError
+from cellmap_flow.portable import ai_annotate as portable
 
 ANNOTATE_ID_RE = re.compile(r"^[0-9a-f]{32}$")
 STAGING_DIRNAME = ".ai_annotate"
@@ -36,7 +37,7 @@ MASK_NPY = "mask_write.npy"
 META_JSON = "meta.json"
 
 # How strongly the overlay tints the mask with the target colour.
-OVERLAY_ALPHA = 0.5
+OVERLAY_ALPHA = portable.OVERLAY_ALPHA
 
 
 def new_annotate_id() -> str:
@@ -142,14 +143,10 @@ def overlay(input_image: Image.Image, mask_write: np.ndarray, target_rgb) -> Ima
 
     The mask is the write box's, laid out as the image is (``to_screen``)
     and scaled to it by nearest neighbour, so the overlay shows what
-    accepting writes, not the model's own image.
+    accepting writes, not the model's own image
+    (``portable.ai_annotate.overlay``, which the browser's review uses too).
     """
-    rgb = np.asarray(input_image.convert("RGB"), dtype=np.float32)
-    mask = Image.fromarray(np.asarray(mask_write, dtype=np.uint8) * 255).resize(input_image.size, Image.NEAREST)
-    on = np.asarray(mask) > 127
-    tint = np.asarray(target_rgb, dtype=np.float32)
-    rgb[on] = (1 - OVERLAY_ALPHA) * rgb[on] + OVERLAY_ALPHA * tint
-    return Image.fromarray(np.round(rgb).astype(np.uint8))
+    return Image.fromarray(portable.overlay(np.asarray(input_image.convert("RGB")), mask_write, target_rgb, OVERLAY_ALPHA))
 
 
 def preview(corrections_dir, annotate_id) -> dict:

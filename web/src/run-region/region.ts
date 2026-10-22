@@ -22,9 +22,8 @@
 import { levelCornerNm, levelExtentNm } from "../ai-annotate/plane";
 import { blobOf } from "../backend/serving";
 import type { Chain, DatasetInfo, LayerSpec, ServedModel } from "../contracts";
-import { steady } from "../finetune/good-regions";
 import { TYPED } from "../infer/dtype";
-import { geometryOf, type Level, outputShape } from "../infer/geometry";
+import { geometryOf, type Level, outputShape, steady } from "../infer/geometry";
 import { outputChannels, outputDtype } from "../infer/post";
 import { servedLevel } from "../label-it/prediction";
 import { decodeArgs } from "../shared/args";

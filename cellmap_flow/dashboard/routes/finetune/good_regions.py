@@ -18,7 +18,6 @@ POST ``/api/finetune/good-regions/delete`` (one region by ``id``, or all).
 """
 
 import logging
-import uuid
 
 import neuroglancer
 import numpy as np
@@ -28,19 +27,12 @@ from cellmap_flow.dashboard.routes.finetune.blueprint import finetune_bp
 from cellmap_flow.dashboard.routes.finetune.common import session_store, viewer_position_and_scales
 from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.finetune.session import manifest as session_manifest
+from cellmap_flow.portable import regions as portable_regions
 from cellmap_flow.viewer.layers import replace_layer
 
 logger = logging.getLogger(__name__)
 
 GOOD_REGIONS_LAYER = "good_regions"
-
-# Used when neither the request nor the active volume says how big a region
-# should be. One model *output* patch is the natural unit: it is what you can
-# actually see and judge on screen, and it is the region a training patch
-# computes loss over. Sizing to the input field of view instead would claim
-# the model is right across 2848nm when you only looked at the middle 896nm
-# of it -- and would not match annotation crops, which are already write_shape.
-DEFAULT_REGION_SIZE_NM = 896.0
 
 
 def _active_volume():
@@ -87,28 +79,16 @@ def save_good_regions(regions):
     return session_manifest.save_good_regions(path, regions)
 
 
-def _default_size_nm():
-    """One model output patch, in nm -- see DEFAULT_REGION_SIZE_NM."""
-    volume = _active_volume() or {}
-    output_size = volume.get("output_size")
-    output_voxel_size = volume.get("output_voxel_size")
-    if output_size and output_voxel_size:
-        try:
-            return (np.array(output_size, dtype=float)
-                    * np.array(output_voxel_size, dtype=float)).tolist()
-        except (TypeError, ValueError):
-            pass
-    return [DEFAULT_REGION_SIZE_NM] * 3
-
-
 def view_box_nm(size_nm=None):
     """``(centre_nm, size_nm)`` of the box centred where the viewer looks.
 
-    ``size_nm`` defaults to one model output patch (see
-    DEFAULT_REGION_SIZE_NM); one number is the same along every axis.
-    The labelling buttons beside "Mark This View as Good" use the same box,
-    so what they label is what a mark would cover. ValueError when there
-    is no viewer position or the size is not positive.
+    ``size_nm`` is as ``cellmap_flow.portable.regions.region_size_nm`` (the
+    browser's rule too) takes it: one model output patch of the active
+    volume when none is given (see DEFAULT_REGION_SIZE_NM there), one number
+    the same along every axis. The labelling buttons beside "Mark This View
+    as Good" use the same box, so what they label is what a mark would
+    cover. ValueError when there is no viewer position or the size is not
+    positive.
     """
     position, scales_nm = viewer_position_and_scales()
     if position is None:
@@ -120,12 +100,9 @@ def view_box_nm(size_nm=None):
     if scales_nm:
         centre_nm = centre_nm * np.array(scales_nm, dtype=float)
 
-    size_nm = np.array(size_nm or _default_size_nm(), dtype=float)
-    if size_nm.size == 1:
-        size_nm = np.repeat(size_nm, 3)
-    if np.any(size_nm <= 0):
-        raise ValueError("size_nm must be positive")
-    return centre_nm, size_nm
+    volume = _active_volume() or {}
+    size_nm = portable_regions.region_size_nm(size_nm, volume.get("output_size"), volume.get("output_voxel_size"))
+    return centre_nm, np.array(size_nm, dtype=float)
 
 
 @finetune_bp.route("/api/finetune/good-regions/mark-view", methods=["POST"])
@@ -135,15 +112,10 @@ def mark_current_view_good():
     try:
         centre_nm, size_nm = view_box_nm(data.get("size_nm"))
 
-        regions = load_good_regions()
-        region = {
-            "id": uuid.uuid4().hex[:8],
-            "label": data.get("label") or f"good-{len(regions) + 1}",
-            "offset_nm": (centre_nm - size_nm / 2).tolist(),
-            "shape_nm": size_nm.tolist(),
-        }
-        regions.append(region)
-        if not save_good_regions(regions):
+        stored = load_good_regions()
+        region = portable_regions.new_region(centre_nm, size_nm, len(stored), data.get("label"))
+        stored.append(region)
+        if not save_good_regions(stored):
             # Drawing the box anyway is what made this look like it worked.
             # A mark that is not on disk will not reach training, and the
             # next click will silently overwrite it, so say so instead.
@@ -157,16 +129,16 @@ def mark_current_view_good():
                 "needs_volume": True,
             }), 409
 
-        refresh_good_regions_layer(regions)
+        refresh_good_regions_layer(stored)
         logger.info(
             f"Marked good region {region['label']} at "
             f"{[round(v) for v in centre_nm]} nm, size {[round(v) for v in size_nm]} nm "
-            f"({len(regions)} total)"
+            f"({len(stored)} total)"
         )
         return jsonify({
             "success": True,
             "region": region,
-            "count": len(regions),
+            "count": len(stored),
             "persisted": True,
         })
     except ValueError as e:
@@ -202,7 +174,7 @@ def refresh_good_regions_layer(regions=None):
     session = get_session()
     if session.viewer is None:
         return 0
-    regions = load_good_regions() if regions is None else regions
+    entries = load_good_regions() if regions is None else regions
 
     axes_names = ["z", "y", "x"]
     try:
@@ -214,18 +186,20 @@ def refresh_good_regions_layer(regions=None):
         pass
 
     annotations = []
-    for index, region in enumerate(regions):
-        try:
-            lo = np.array(region["offset_nm"], dtype=float)
-            hi = lo + np.array(region["shape_nm"], dtype=float)
-        except (KeyError, TypeError, ValueError):
+    for index, region in enumerate(entries):
+        # An entry that is not a region is skipped and keeps its index, as
+        # the browser's layer skips it (portable_regions.region_box_nm).
+        box = portable_regions.region_box_nm(region)
+        if box is None:
             continue
+        lo, shape = box
+        label = region.get("label")
         annotations.append(
             neuroglancer.AxisAlignedBoundingBoxAnnotation(
                 point_a=lo.tolist(),
-                point_b=hi.tolist(),
+                point_b=(lo + shape).tolist(),
                 id=str(index),
-                description=region.get("label", "good"),
+                description=label if isinstance(label, str) else "good",
             )
         )
 

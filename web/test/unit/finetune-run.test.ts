@@ -16,15 +16,21 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { Chain, DatasetInfo, ModelEntry, PaintVolume } from "../../src/contracts";
 import { createFeatureRunner, type FeatureRunner } from "../../src/finetune/features";
-import { regionAt } from "../../src/finetune/good-regions";
 import { headOf } from "../../src/finetune/onnx-head";
 import { createRunFinetune, type RunDeps } from "../../src/finetune/run";
 import { DEFAULT_OPTIONS, type FinetuneRun, type HeadFinetuned, type PaintedChunk, type Sample, type Targets } from "../../src/finetune/types";
 import { CHUNK_DIR, chunkKey } from "../../src/finetune/volume";
 import { MemoryPaintStore } from "../../src/state/paint-store";
+import { portablePython, type PythonCall } from "./pyodide";
 
 // The page's ORT entry replaced by the package's Node entry (see finetune-onnx.test.ts).
 vi.mock("onnxruntime-web/webgpu", () => import("onnxruntime-web"));
+
+// The good regions' anchors are the portable Python's, here in node's
+// Pyodide (pyodide.ts), loaded once for the file; without it (no network for
+// numpy's wheel) the run with good regions skips.
+const python = await portablePython();
+const callPython: PythonCall = python ?? (() => Promise.reject(new Error("Pyodide is not available in this test run")));
 
 const HEAD = new Uint8Array(readFileSync(resolve(import.meta.dirname, "../fixtures/head.onnx")));
 const BASE = HEAD.buffer.slice(HEAD.byteOffset, HEAD.byteOffset + HEAD.byteLength) as ArrayBuffer;
@@ -60,7 +66,7 @@ function block(index: number[]): Float32Array {
 }
 
 /** The binary target broadcast to both channels: object where the label is 2 or more, masked where painted. */
-function targets(c: PaintedChunk): Targets {
+async function targets(c: PaintedChunk): Promise<Targets> {
   const n = 36, target = new Float32Array(2 * n), mask = new Float32Array(2 * n);
   for (let v = 0; v < n; v++) for (let ch = 0; ch < 2; ch++) {
     target[ch * n + v] = c.labels[v] >= 2 ? 1 : 0;
@@ -97,7 +103,7 @@ function deps(collectSamples: () => AsyncGenerator<Sample>, disposed: { count: n
 }
 
 function run(over: Partial<FinetuneRun>, paint: MemoryPaintStore, report: ReturnType<typeof reporter>): FinetuneRun {
-  return { entry: ENTRY, baseBytes: BASE, volume: VOLUME, chain: CHAIN, dataset: DATASET, infer: { readRaw: async () => new ArrayBuffer(0) }, paint, options: { ...DEFAULT_OPTIONS, epochs: 8, learningRate: 0.05, batchPixels: 16 }, report, ...over };
+  return { entry: ENTRY, baseBytes: BASE, volume: VOLUME, chain: CHAIN, dataset: DATASET, infer: { readRaw: async () => new ArrayBuffer(0), python: callPython }, paint, options: { ...DEFAULT_OPTIONS, epochs: 8, learningRate: 0.05, batchPixels: 16 }, report, ...over };
 }
 
 async function logitsOf(bytes: ArrayBuffer, input: Float32Array): Promise<Float32Array> {
@@ -184,12 +190,12 @@ function byIndex(chunks: PaintedChunk[]) {
 // 1×6×6 blocks. A good region centred on block (0, 1, 1), which nothing is
 // painted in, one on block (0, 0, 1), painted on 5 voxels, and one far
 // outside the volume.
-const ON_UNPAINTED = regionAt([0, 68, 68], [8, 48, 48], 0, undefined, "aaaa0001");
-const ON_PAINTED = regionAt([0, 20, 68], [8, 48, 48], 1, undefined, "aaaa0002");
-const OUTSIDE = regionAt([0, 500, 500], [8, 48, 48], 2, undefined, "aaaa0003");
+const ON_UNPAINTED = { id: "aaaa0001", label: "good-1", offset_nm: [-4, 44, 44], shape_nm: [8, 48, 48] };
+const ON_PAINTED = { id: "aaaa0002", label: "good-2", offset_nm: [-4, -4, 44], shape_nm: [8, 48, 48] };
+const OUTSIDE = { id: "aaaa0003", label: "good-3", offset_nm: [-4, 476, 476], shape_nm: [8, 48, 48] };
 
 describe("runFinetune's distillation", () => {
-  it("with good regions, holds their unpainted voxels instead of the form's scope, running the model on a region's unpainted block", async () => {
+  it.skipIf(!python)("with good regions, holds their unpainted voxels instead of the form's scope, running the model on a region's unpainted block", async () => {
     const { paint } = await painted(CHUNKS);
     const report = reporter();
     const goodRegions = [ON_UNPAINTED, ON_PAINTED, OUTSIDE, { not: "a region" }];

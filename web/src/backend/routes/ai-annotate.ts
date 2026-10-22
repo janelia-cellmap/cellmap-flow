@@ -580,8 +580,9 @@ export function aiAnnotateRoutes(router: Router, deps: Partial<AiAnnotateDeps> =
     } catch (e) {
       job.status = "ready";
       if (e instanceof Refused || e instanceof AIAnnotateError) return answerError(ctx, e);
-      // Our own messages (labelsForBox, fill's ids running out), which say
-      // what to do: the seed route answers them the same way.
+      // Our own messages (a store that would not write, a box the labels do
+      // not fit), as the server answers its ValueErrors; fill's ids running
+      // out is the AIAnnotateError above, in the Python's words.
       ctx.log(`Could not accept AI annotation ${job.annotateId}: ${message(e)}`);
       return json(409, { success: false, error: message(e) });
     }

@@ -19,7 +19,7 @@ import { runFull } from "./full/run-full";
 import { count, epochSummary, plural } from "./log-words";
 import { headOf, withHead } from "./onnx-head";
 import { collectSamples } from "./samples";
-import { targetTransformFor } from "./targets";
+import { targetTransformFor } from "./target-call";
 import type { FinetuneOptions, FinetuneRun, HeadFinetuned, RunFinetune } from "./types";
 import { chunkKey, paintedChunkIndices } from "./volume";
 
@@ -65,9 +65,9 @@ export function createRunFinetune(deps: RunDeps = { collectSamples, targetTransf
     // good regions' unpainted voxels when the volume has any, whatever the
     // form's scope, as the server's anchors decide alone; else the form's.
     const lambda = options.distillationLambda;
-    const { boxes, malformed, outside } = anchorBoxes(volume, run.goodRegions ?? []);
-    for (const region of malformed) report.log(`Skipping a good region that is not one (an id, a label, offset_nm and shape_nm of three numbers): ${JSON.stringify(region)}`);
-    for (const region of outside) report.log(`Good region ${region.label} (${region.id}) centres outside the volume; skipping it`);
+    const { boxes, malformed, outside } = await anchorBoxes(run.infer, volume, run.goodRegions ?? []);
+    for (const region of malformed) report.log(`Skipping a good region that is not one (offset_nm and shape_nm of three numbers, the shape positive): ${JSON.stringify(region)}`);
+    for (const region of outside) report.log(`Good region ${region.label ?? "?"} (${region.id ?? "?"}) centres outside the volume; skipping it`);
     let pick: DistillationPick | null = null;
     let indices = paintedIndices;
     const paintedKeys = new Set(paintedIndices.map(chunkKey));
@@ -90,7 +90,7 @@ export function createRunFinetune(deps: RunDeps = { collectSamples, targetTransf
     const equalQuota = Math.ceil(DISTILLATION_VOXELS / Math.max(chunks, 1));
     const random = mulberry32((options.seed ^ SAMPLE_STREAM) >>> 0);
 
-    const targets = deps.targetTransformFor(run.entry);
+    const targets = deps.targetTransformFor(run.entry, run.infer);
     const runner = await deps.createFeatureRunner({ bytes: run.baseBytes, head, inputName: run.entry.manifest.io.input, outputName: run.entry.manifest.io.output, log: (line) => report.log(line) });
     try {
       const sets: PixelSet[] = [], heldSets: DistillationSet[] = [];
@@ -99,7 +99,7 @@ export function createRunFinetune(deps: RunDeps = { collectSamples, targetTransf
         i++;
         if (report.cancelled()) throw new Error("cancelled before training");
         const features = await runner.run(sample.input, sample.inputDims);
-        const chunkTargets = targets(sample.chunk);
+        const chunkTargets = await targets(sample.chunk);
         const set = gatherPixels(features, chunkTargets, head, sample.chunk.shape);
         if (paintedKeys.has(chunkKey(sample.chunk.index))) paintedChunks++;
         painted += set.count;

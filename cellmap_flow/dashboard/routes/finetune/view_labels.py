@@ -14,6 +14,11 @@ or ``box_voxels`` annotation voxels when the request gives them):
 - POST ``/api/finetune/view-labels/background``: every unannotated voxel 1,
   for a region the model fills with false positives.
 
+A seed's maths (its options, the channels it reads, where the prediction
+lies on the paint's grid, the probability and the components method) is
+``cellmap_flow/portable/label_it.py``'s, which the browser runs too; this
+module reads the model's server and writes the paint around it.
+
 Both fill only unannotated voxels (``session.fill``): a voxel the user
 painted is a decision, a seed is a guess. The write goes to MinIO, which
 neuroglancer reads, and the changed chunks are pulled to disk at once.
@@ -36,7 +41,6 @@ import numpy as np
 import requests
 import zarr
 from flask import jsonify, request
-from scipy.special import expit
 
 from cellmap_flow.dashboard.finetune_utils import sync_annotation_volume_from_minio
 from cellmap_flow.dashboard.routes.finetune.blueprint import finetune_bp
@@ -50,12 +54,11 @@ from cellmap_flow.dashboard.routes.finetune.good_regions import view_box_nm
 from cellmap_flow.dashboard.routes.finetune.overlay import refresh_annotation_layer
 from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.finetune.session import fill
-from cellmap_flow.finetune.session.volume import volume_corner_nm
-from cellmap_flow.io.ome import ome_corner
 from cellmap_flow.pipeline_spec import PipelineSpec
+from cellmap_flow.portable import label_it
+from cellmap_flow.portable.label_it import SEED_METHODS, probability
 from cellmap_flow.post import segment
 from cellmap_flow.serving.client import fetch_model_info
-from cellmap_flow.serving.probe import SIGNED_UNIT, UNIT, classify_output_range
 from cellmap_flow.serving.protocol import ARGS_KEY
 from cellmap_flow.viewer.layers import prediction_url, prediction_voxel_override
 
@@ -71,24 +74,6 @@ PREDICTION_TIMEOUT_SECONDS = 120
 # Metadata only, asked while the page polls the picker: a server that does
 # not answer by then is left out of the methods until it does.
 METADATA_TIMEOUT_SECONDS = 5
-
-# How a seed makes objects of the prediction (``post.segment``), each fitting
-# a kind of output; ``seed_methods`` says which a model offers.
-SEED_METHODS = (
-    # Threshold, then an id per connected object: any output with a
-    # foreground threshold. The default.
-    "components",
-    # Affinity models: their offset channels, joined above the threshold.
-    "mutex_watershed",
-    # Distance models: touching objects cut apart where the distance dips.
-    "distance_watershed",
-    # A server that serves integer instance labels (Cellpose's masks).
-    "instances",
-)
-
-# Training targets made of instances, where ids must differ between nearby
-# objects (finetune.cli's output types).
-
 
 class _Refused(Exception):
     """A request these routes will not act on: ``status``, a message and extra answer fields."""
@@ -396,9 +381,9 @@ def read_prediction(host, model_name, volume, lo, hi, info, postprocess=(), inpu
     raw output, and that is where its decision boundary is. (``postprocess``
     asks for one anyway: Cellpose's masks of a flows server's output, for a
     seed of its instances.) Each annotation
-    voxel takes the served voxel its centre lies in, placed where
-    neuroglancer draws the layer (``prediction_voxel_override``), so the
-    seed lies under the prediction the user sees.
+    voxel takes the served voxel its centre lies in (``label_it.placement``),
+    placed where neuroglancer draws the layer (``prediction_voxel_override``),
+    so the seed lies under the prediction the user sees.
 
     Returns ``(prediction, lo, hi)``: a (channels, z, y, x) array, float32
     or, when the server serves integer labels, as served (an id past 2^24
@@ -416,34 +401,25 @@ def read_prediction(host, model_name, volume, lo, hi, info, postprocess=(), inpu
     scale = transforms["scale"]["scale"]
     # A translation of 0 may be left out.
     translation = transforms.get("translation", {}).get("translation", [0.0] * len(names))
-    declared = np.asarray([scale[i] for i in spatial], dtype=float)
-    corner_nm = np.asarray(ome_corner([translation[i] for i in spatial], declared))
-    drawn = np.asarray(
-        prediction_voxel_override(host, get_session().dataset_path, info) or declared, dtype=float
-    )
-    # Neuroglancer keeps the served offset in voxels when it redraws the
-    # layer at another voxel size.
-    served_corner_nm = corner_nm / declared * drawn
+    declared = [scale[i] for i in spatial]
+    # The voxel size neuroglancer draws the layer at, when not the declared one.
+    drawn = prediction_voxel_override(host, get_session().dataset_path, info) or None
     meta = _get(f"{base}/s0/.zarray").json()
     shape = [meta["shape"][i] for i in spatial]
-
-    voxel_size = np.asarray(volume["output_voxel_size"], dtype=float)
-    volume_corner = volume_corner_nm(volume.get("dataset_offset_nm"), voxel_size)
-    indices, new_lo, new_hi = [], lo.copy(), hi.copy()
-    for axis in range(3):
-        centres = volume_corner[axis] + (np.arange(lo[axis], hi[axis]) + 0.5) * voxel_size[axis]
-        index = np.floor((centres - served_corner_nm[axis]) / drawn[axis]).astype(int)
-        inside = np.flatnonzero((index >= 0) & (index < shape[axis]))
-        if not inside.size:
-            raise _Refused("The view is outside what the model's server predicts.", 400)
-        new_lo[axis], new_hi[axis] = lo[axis] + inside[0], lo[axis] + inside[-1] + 1
-        indices.append(index[inside])
+    placed = label_it.placement(
+        lo, hi, volume["output_voxel_size"], volume.get("dataset_offset_nm"),
+        [translation[i] for i in spatial], declared, shape, drawn,
+    )
+    if placed is None:
+        raise _Refused("The view is outside what the model's server predicts.", 400)
+    indices, new_lo, new_hi = placed
+    read_lo, read_hi = label_it.read_box(indices)
 
     # Fetched together, then read through zarr as the array they belong to.
     # Every channel is in one chunk, index 0.
     chunk = np.asarray([meta["chunks"][i] for i in spatial])
-    first = np.array([i[0] for i in indices]) // chunk
-    last = np.array([i[-1] for i in indices]) // chunk
+    first = np.asarray(read_lo) // chunk
+    last = (np.asarray(read_hi) - 1) // chunk
     separator = meta.get("dimension_separator", ".")
     keys = []
     for offset in np.ndindex(*(last - first + 1)):
@@ -456,93 +432,55 @@ def read_prediction(host, model_name, volume, lo, hi, info, postprocess=(), inpu
     store = {".zarray": json.dumps(meta).encode(), **dict(zip(keys, contents))}
     served = zarr.open_array(store=store, mode="r")
     window = [slice(None)] * len(names)
-    for axis, index in zip(spatial, indices):
-        window[axis] = slice(index[0], index[-1] + 1)
+    for axis, a, b in zip(spatial, read_lo, read_hi):
+        window[axis] = slice(a, b)
     region = served[tuple(window)]
     region = region[None] if channel is None else np.moveaxis(region, channel, 0)
-    prediction = region[(slice(None),) + np.ix_(*(i - i[0] for i in indices))]
+    prediction = label_it.gather(region, indices)
     if prediction.dtype.kind not in "iu":
         prediction = prediction.astype(np.float32)
-    return prediction, new_lo, new_hi
-
-
-def probability(prediction, output_class=None, channels=None):
-    """The prediction as a probability, (channels, z, y, x), 0.5 at the model's decision boundary.
-
-    The boundary depends on the output's activation: 0.5 on [0, 1] output
-    (a sigmoid already applied; the cellmap distance models end in one, and
-    0.5 is their object boundary), 0 on tanh's [-1, 1], and 0 on unbounded
-    output, logits or a signed distance alike. Each is turned into a
-    probability, so ``channels`` -- the affinity channels, say -- can be
-    averaged and one threshold means the same for every model.
-    ``output_class`` is the server's (serving.probe), or read off the
-    values when it has none.
-    """
-    if channels is not None:
-        prediction = prediction[channels]
-        if not prediction.shape[0]:
-            raise ValueError(f"The model has no channel {channels.start}")
-    prediction = prediction.astype(np.float32, copy=False)
-    output_class = output_class or classify_output_range(float(prediction.min()), float(prediction.max()))
-    if output_class == UNIT:
-        return prediction
-    if output_class == SIGNED_UNIT:
-        return (prediction + 1) / 2
-    return expit(prediction)
-
-
-def foreground_mask(prediction, output_class=None, channels=None, threshold=0.5):
-    """Where the model says foreground: its ``probability``, averaged over ``channels``, over ``threshold``.
-
-    ``threshold`` is in probability whatever the activation: 0.5 is the
-    model's own boundary.
-    """
-    return probability(prediction, output_class, channels).mean(axis=0) > threshold
+    return prediction, np.asarray(new_lo), np.asarray(new_hi)
 
 
 def _seed_plan(base_model, select_channel):
     """``(channels, output_type, offsets)``: the channels a seed reads, and what the model outputs.
 
-    As the trainer targets them: the selected channel; else an affinity
-    model's offset channels (the rest, LSDs say, are masked out of its
-    loss); else every channel, which a binary target is broadcast over.
-    ``output_type`` and ``offsets`` are ``model_output``'s.
+    ``label_it.seed_channels``' (the selected channel; else an affinity
+    model's offset channels; else every one), with the server's one case
+    more: a Cellpose flows model's probability channel. ``output_type`` and
+    ``offsets`` are ``model_output``'s.
     """
     output_type, offsets = model_output(base_model)
-    if select_channel is not None:
-        channel = int(select_channel)
-        if channel < 0:
-            raise ValueError(f"select_channel must be 0 or more, got {channel}")
-        return slice(channel, channel + 1), output_type, offsets
-    if output_type == "affinities":
-        return slice(0, len(json.loads(offsets))), output_type, offsets
-    if _serves_cellpose_flows(base_model):
+    channels = label_it.seed_channels(output_type, json.loads(offsets) if offsets else None, select_channel)
+    if channels is None and _serves_cellpose_flows(base_model):
         # Thresholding reads the probability, not the flows beside it: after
         # flow_y and flow_x (and flow_z first in 3D), as the config says.
         channel = getattr(find_model_config(base_model), "display_channel", None)
         channel = 2 if channel is None else channel
         return slice(channel, channel + 1), output_type, offsets
-    return None, output_type, offsets
+    return channels, output_type, offsets
 
 
 def segment_prediction(method, prediction, output_class, channels, offsets, threshold=0.5, min_size=0,
                        connectivity=1, per_slice=False):
     """The objects ``method`` makes of the prediction: 0 background, 1..n (``post.segment``).
 
-    ``threshold`` is a probability (``probability``) for every method that
-    thresholds: the foreground boundary for components and the distance
-    watershed, and the mutex watershed's bias, the affinity above which
-    two voxels join. ``connectivity`` and ``per_slice`` are the connected
-    components'; the watersheds take ``connectivity`` too. ``instances``
-    splits an id's disconnected parts: a server numbers each chunk's
-    objects on its own (Cellpose's from 1), and the box can span chunks.
+    ``threshold`` is a probability (``label_it.probability``) for every
+    method that thresholds: the foreground boundary for components and the
+    distance watershed, and the mutex watershed's bias, the affinity above
+    which two voxels join. ``connectivity`` and ``per_slice`` are the
+    connected components'; the watersheds take ``connectivity`` too.
+    ``instances`` splits an id's disconnected parts: a server numbers each
+    chunk's objects on its own (Cellpose's from 1), and the box can span
+    chunks. Components and the mutex watershed's input are
+    ``label_it``'s, as the browser's are; the mutex watershed itself, the
+    distance watershed and the instances are the server's.
     """
     if method == "components":
-        mask = foreground_mask(prediction, output_class, channels, threshold)
-        return segment.connected_components(mask, connectivity, min_size, per_slice)
+        return label_it.components(prediction, output_class, channels, threshold, min_size, connectivity, per_slice)
     if method == "mutex_watershed":
         offsets = json.loads(offsets)
-        affinities = probability(prediction, output_class, slice(0, len(offsets)))
+        affinities = label_it.affinities(prediction, output_class, offsets)
         return segment.mutex_watershed(affinities, offsets, bias=threshold, min_size=min_size)
     if method == "distance_watershed":
         distance = probability(prediction, output_class, channels).mean(axis=0)
@@ -573,17 +511,9 @@ def seed_view_from_prediction():
     """
     data = request.get_json(silent=True) or {}
     try:
-        threshold = data.get("threshold")
-        if threshold is not None and not 0 <= float(threshold) <= 1:
-            raise _Refused(f"threshold must be between 0 and 1, got {threshold}", 400)
-        min_size = int(data.get("min_size") or 0)
-        if min_size < 0:
-            raise _Refused(f"min_size cannot be negative, got {min_size}", 400)
-        method = data.get("method") or "components"
-        if method not in SEED_METHODS:
-            raise _Refused(f"method must be one of {', '.join(SEED_METHODS)}, got {method!r}", 400)
-        connectivity = segment.as_connectivity(data.get("connectivity", 1))
-        per_slice = segment.as_bool(data.get("per_slice", False))
+        # As the browser reads them (label_it.seed_options): a refusal is a ValueError, 400.
+        options = label_it.seed_options(data)
+        method = options["method"]
         volume_id, volume, lo, hi = _target_box(data)
         refused = _confirmation_needed(data, lo, hi)
         if refused:
@@ -615,7 +545,7 @@ def seed_view_from_prediction():
         )
         objects = segment_prediction(
             method, prediction, info.get("output_class"), channels, offsets,
-            0.5 if threshold is None else float(threshold), min_size, connectivity, per_slice,
+            options["threshold"], options["min_size"], options["connectivity"], options["per_slice"],
         )
         # An instance target needs ids apart from its neighbours'; a selected
         # channel trains as a binary target.
@@ -627,7 +557,7 @@ def seed_view_from_prediction():
             return fill.seed_labels(objects, existing, count_up=instance_target and existing.dtype.itemsize > 1)
 
         answer = _fill(volume_id, volume, lo, hi, labels_for)
-        return jsonify({**answer, "model": model_name, "threshold": threshold, "method": method})
+        return jsonify({**answer, "model": model_name, "threshold": data.get("threshold"), "method": method})
     except _Refused as e:
         return _error(str(e), e.status, **e.extra)
     except FileNotFoundError as e:

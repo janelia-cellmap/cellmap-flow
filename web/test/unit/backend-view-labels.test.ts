@@ -3,10 +3,13 @@
 // routes for a served model, the viewer's position set, the model's output
 // a fake's (FakeInference.outputAt), and the answers, the paint store, the
 // viewer's refreshes and the undo stack checked against the Python routes'
-// behaviour (view_labels.py). The numerics underneath (the probability, the
-// objects, the relabelling, the grids) are parity-tested against the Python
-// in test/parity/label-it.test.ts; these tests are about the routes.
-import { describe, expect, it } from "vitest";
+// behaviour (view_labels.py). A seed's maths and every tool's box, ids,
+// writes and undo are the portable Python (label_it.py, fill.py), run here
+// in node's Pyodide (test/unit/pyodide.ts) and tested by pytest; the mutex
+// watershed is parity-tested against the Python in
+// test/parity/label-it.test.ts; these tests are about the routes. Without
+// Pyodide (no network for its wheels) every test but the sources' skips.
+import { describe, expect, it, vi } from "vitest";
 
 import { readBox, writeBox } from "../../src/ai-annotate/fill";
 import { Router } from "../../src/backend/router";
@@ -17,6 +20,12 @@ import type { RunFinetune } from "../../src/finetune/types";
 import { readVolume } from "../../src/finetune/volume";
 import { paintLayerName } from "../../src/viewer/layers";
 import { entry, type FakeContext, fakeContext, NAME_54, NAME_56, request } from "./backend-fakes";
+import { portablePython } from "./pyodide";
+
+// Pyodide and numpy load once for the file, scipy at the first seed, a few
+// seconds each; each call after is quick.
+vi.setConfig({ testTimeout: 120_000 });
+const python = await portablePython();
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function body(res: ApiResponse): any {
@@ -110,7 +119,7 @@ describe("GET /api/finetune/view-labels/sources", () => {
   });
 });
 
-describe("POST /api/finetune/view-labels/seed", () => {
+describe.skipIf(!python)("POST /api/finetune/view-labels/seed", () => {
   it("fills the patch from the prediction: an id per object counting up on a uint16 volume, background 1, the layer re-read", async () => {
     const { ctx, h, volume, id } = await ready();
     const res = body(await h.handle(request("POST", `${BASE}/seed`, {})));
@@ -160,6 +169,7 @@ describe("POST /api/finetune/view-labels/seed", () => {
       [{ min_size: -2 }, 400],
       [{ method: "watershed" }, 400],
       [{ connectivity: 4 }, 400],
+      [{ connectivity: null }, 400],  // as the server reads it: given, and not 1, 2 or 3
       [{ box_voxels: [1, 2] }, 400],
       [{ model: "nope" }, 409],
       [{ method: "mutex_watershed" }, 400],  // setup_56 offers components only
@@ -197,7 +207,7 @@ describe("POST /api/finetune/view-labels/seed", () => {
   });
 });
 
-describe("POST /api/finetune/view-labels/background", () => {
+describe.skipIf(!python)("POST /api/finetune/view-labels/background", () => {
   it("labels the unpainted voxels of the patch background, keeps the painted ones, and says when nothing is left", async () => {
     const { ctx, h, volume } = await ready();
     await paintVoxel(ctx, volume, [3, 3, 3], 5);
@@ -214,7 +224,7 @@ describe("POST /api/finetune/view-labels/background", () => {
   });
 });
 
-describe("POST /api/finetune/view-labels/split", () => {
+describe.skipIf(!python)("POST /api/finetune/view-labels/split", () => {
   it("gives the two sides of a wall their own ids, and merges a stroke's objects, per slice when asked", async () => {
     const { ctx, h, volume } = await ready();
     const object = new Uint16Array(4 * 4 * 9).fill(5);
@@ -236,11 +246,15 @@ describe("POST /api/finetune/view-labels/split", () => {
   });
 });
 
-describe("POST /api/finetune/view-labels/undo", () => {
+describe.skipIf(!python)("POST /api/finetune/view-labels/undo", () => {
   it("takes back the label actions last first, keeping a stroke painted since, until there is nothing left", async () => {
     const { ctx, h, volume } = await ready();
     const background = body(await h.handle(request("POST", `${BASE}/background`, { box_voxels: 4 })));
     expect([background.filled_background, background.can_undo]).toEqual([64, true]);
+    // With no dataset open the Python cannot run: refused, and the entry kept.
+    const closed = vi.spyOn(ctx.infer, "dataset").mockReturnValue(null);
+    expect((await h.handle(request("POST", `${BASE}/undo`, {}))).status).toBe(409);
+    closed.mockRestore();
     const seeded = body(await h.handle(request("POST", `${BASE}/seed`, {})));
     expect(seeded.filled_foreground + seeded.filled_background).toBe(60 ** 3 - 64);
     await paintVoxel(ctx, volume, [20, 20, 20], 9);  // a stroke over the seed

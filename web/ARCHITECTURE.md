@@ -225,10 +225,11 @@ misses one it does, and when the server form's defaults leave
 ## Finetuning (src/finetune/)
 
 The Finetune tab works as on the server with the browser in the server's and
-MinIO's places. `volume.ts` (the port of `finetune/session/volume.py`) plans
-an annotation volume over the open dataset on the grid the model's
-predictions are served on, one chunk per output block, and writes its zarr v2
-metadata (uncompressed chunks, `.` separator) into the paint store;
+MinIO's places. `volume.ts` plans an annotation volume over the open dataset
+by the server's plan (`cellmap_flow.portable.volume`, through
+`Inference.python`) on the grid the model's predictions are served on, one
+chunk per output block, and writes its zarr v2 metadata (uncompressed
+chunks, `.` separator) into the paint store;
 `viewer/layers.ts` adds it as the fork's writable segmentation layer on
 `s3+http(s)://<host><page dir>paint/<volume>/annotation`. Training fits the
 model's head, the last 1×1 convolution of the ONNX graph: `onnx-head.ts` finds
@@ -237,8 +238,10 @@ edits with `onnx-proto.ts`'s field-level protobuf splicing, the head's input
 tensor as a second graph output and new weights in the head's initializers;
 `samples.ts` cuts, pads and normalizes each painted chunk's input block
 exactly as the model stage does (the port of `finetune/data/reader.py`);
-`features.ts` runs the model for its logits and features; `targets.ts` (the
-port of `target_transforms.py`, parity-tested) makes the targets and masks;
+`features.ts` runs the model for its logits and features; `target-call.ts`
+has the targets and masks made by `cellmap_flow.portable.targets`, the
+Python `target_transforms.py` wraps on the server (`Inference.python`,
+above), from the offsets the channel names say;
 `head-trainer.ts` gathers the painted voxels' features and trains the head
 from the model's own weights with Adam on a masked, class-balanced loss
 (BCE-with-logits, MSE or margin: the server's per-voxel losses), plus λ ×
@@ -256,7 +259,8 @@ the format), which the page that opens it writes back into the base.
 Which model to start from (`backend/routes/rank.ts`) scores a model on the
 paint with the engine's own reads: the model served (or the served one
 reused), `readOutput` over at most `RANK_BLOCKS` of its blocks under the
-paint, each painted voxel's model voxel from Label it's `servedIndices`,
+paint, each painted voxel's model voxel from Label it's placement
+(`cellmap_flow.portable.label_it`, through `label-it/prediction.ts` `place`),
 and the targets from `targetTransformFor`; then each chunk's labels,
 targets and logits go to `cellmap_flow.portable.rank` (`Inference.python`,
 above), where the tallies, the score at the model's own cut-off and the
@@ -327,21 +331,24 @@ the server: `backend/routes/ai-annotate.ts` answers the Python routes' JSON
 accept, reject; Accept's Undo is Label it's, below), and
 `backend/ai-annotate-job.ts` is the job, one at a time, its result staged in
 memory until Accept or Reject.
-Who does what: `geometry.ts` plans the plane (the depth axis from the
-viewer's layout, the raw box, the image laid out as the panel draws it, the
-click in image pixels); `plane.ts` reads it from the raw level through
-`Inference.readRaw` (clipped to the level and zero past it), resizes it to the image sent, normalizes it to uint8 RGBA (`mask.ts`)
-and builds the request; `gemini.ts` is the two Google providers
+Who does what: the plane planned (the raw box, the image laid out as the
+panel draws it, the click in image pixels), the image sent (resized to the
+plan's grid, normalized to uint8), the mask in the model's reply (resized
+back, cropped, thresholded by colour), its objects on the write box with the
+review's overlay, and the labels Accept writes are the Python both modes
+run, `cellmap_flow/portable/ai_annotate.py` (`ai_annotate_calls.py` is what
+the page calls); `plane.ts` hands it the plan's inputs and reads the raw box
+from the raw level through `Inference.readRaw` (clipped to the level and
+zero past it), and builds the request; `mask.ts` hands it the model's image
+and the mask; `geometry.ts` keeps the names the viewer's depth axis is read
+by; `gemini.ts` is the two Google providers
 (`gemini_api`: generativelanguage.googleapis.com with `x-goog-api-key`;
 `vertex_gemini`: aiplatform.googleapis.com, location global, with a bearer
 token), called straight from the page, with the Python's retries and
 timeout, and errors in the module's own words, never the service's body;
 `fake.ts` paints the dark pixels in a disc around the click, for trying the
-panel and for the tests; `mask.ts` reads the model's image into a mask by
-the colour the prompt asked for and draws the overlay; `labels.ts` and
-`fill.ts` are `fill.py` (4-connected objects in the plane, ids seeded from
-what the user painted beside, the box written to the paint store whole
-chunk by whole chunk, with the undo entry); `prompts.ts` and `organelles.ts`
+panel and for the tests; the accepted box is written to the paint store
+whole chunk by whole chunk, with the undo entry (`fill.ts`); `prompts.ts` and `organelles.ts`
 are the catalog; `credentials.ts`, `usage.ts` and `audit.ts` hold the
 credentials, the daily count (localStorage, 200 a day) and the audit log,
 one JSON line per event appended to `<volume>/ai_annotate_log.jsonl` in the
@@ -384,20 +391,29 @@ the same stage object and key, so the chunks the viewer had computed come
 out of the engine's staged cache; the page reads them over the view's URL
 through the service worker, as any client reads a view (the engine answers
 a page's requests through the route it registers, and has no other door to
-a chunk), and `infer/output.ts` places them in the box. `prediction.ts`
-puts each annotation voxel on the served voxel its centre lies in
-(read_prediction: any served model can seed, at its own voxel size);
-`segment.ts` turns the output into a probability by its output class and
-into objects by threshold and connected components or, for an affinity
-model, the mutex watershed (`infer/label.ts` and `infer/affinity.ts`, the
-postprocessors' segmenters, already parity-tested against scipy and
-mwatershed). The distance watershed and a model's own instances are not
-offered: no browser model outputs a distance or instance ids. The ids, the
-writes and the undo are `ai-annotate/labels.ts` and `fill.ts` (seedLabels,
-relabelObjects for Split Objects, paintBox, rewriteForeground, restoreBox).
-One undo stack per volume is the routes', and the AI annotation's Accept
-pushes onto it (createRouter hands it over, as `ai_annotate.py` uses
-`view_labels._undo_stack`), so one Undo takes back whichever came last.
+a chunk), and `infer/output.ts` places them in the box. The seed's maths
+is the server's own Python, `cellmap_flow/portable/label_it.py`, called
+through `portable/label_it_calls.py` (`Inference.python`, above): the
+request's options, the channels it reads, each annotation voxel on the
+served voxel its centre lies in (any served model can seed, at its own
+voxel size), the output as a probability by its output class, and threshold
+and connected components; `label-it/prediction.ts` reads the served box it
+names. For an affinity model the Python answers the mutex watershed's input
+and `label-it/segment.ts` runs the watershed itself (`infer/affinity.ts`,
+parity-tested against mwatershed, which has no Pyodide wheel). scipy, for
+the components, loads the first time a seed needs it, not when a dataset
+opens. The distance watershed and a model's own instances are not
+offered: no browser model outputs a distance or instance ids. The box a
+tool covers, the ids a seed or a split gives, which voxels each write
+changes and what an undo puts back are the server's Python too,
+`cellmap_flow/portable/fill.py`, called through `portable/fill_calls.py`
+(so with no dataset open every tool is refused, as a seed is); the routes
+read the box from the paint store and write back the box it answers
+(`ai-annotate/fill.ts` readBox and writeBox). Split Objects loads scipy as a
+seed does, the first time it is needed. One undo stack per volume is the
+routes', and the AI annotation's Accept pushes onto it (createRouter hands
+it over, as `ai_annotate.py` uses `view_labels._undo_stack`), so one Undo
+takes back whichever came last.
 
 ## Run on a region (src/run-region/)
 
@@ -423,7 +439,7 @@ volume (the finest level's extent), or typed (`withBox` redraws the box from
 the fields once typing has paused for `TYPED_BOX_DELAY_MS`); each model's
 box is the voxels of its served level the region touches (`servedLevel`,
 the level `infer/engine.ts` serves its view at, voxel 0's centre its OME
-translation, as `label-it/prediction.ts` places a seed), and its chunks are
+translation, as a seed is placed on it), and its chunks are
 its output blocks, which the summary counts. `run.ts` runs the models one
 after another through `Inference.materialize`, with the progress across
 them, the stop (an AbortSignal), and the provenance under `cellmap_flow` in
@@ -495,17 +511,18 @@ web/
       routes/{data,pipeline,models,config,finetune,good-regions,view-labels,ai-annotate}.ts
     state/                   openSession(): SessionStore (sessionStorage: the tab is the server's process lifetime); db.ts + local-store.ts
                              for picked directories; paint-store.ts + paint-route.ts: the annotation volumes' files and the worker's paint/ route
-    finetune/                types.ts (the seams), volume.ts (planVolume, the zarr v2 files), samples.ts, targets.ts, onnx-proto.ts,
+    finetune/                types.ts (the seams), volume.ts (planVolume, the zarr v2 files), samples.ts, target-call.ts, onnx-proto.ts,
                              onnx-head.ts, features.ts, head-trainer.ts, distillation.ts, good-regions.ts, run.ts (runFinetune),
                              zip.ts (the paint's download), modes.ts (what a manifest offers), augment.ts (the whole network's)
       full/                  the whole network in TF.js: cellmap-tfjs-train.ts (Marwan's runtime, the weights read and written),
                              graph.ts (the training graph, its tile and block sides), net3d.ts (a 3D model's network in a GPU's
                              memory), files.ts, tiles.ts (2D tiles, 3D blocks), tfjs.ts (lazy TF.js), loss.ts (the head's loss
                              in TF.js), run-full.ts
-    ai-annotate/             AI-assisted annotation (above): types.ts, geometry.ts, plane.ts, mask.ts, labels.ts, fill.ts, prompts.ts,
-                             organelles.ts (the pure ports), images.ts (the canvas codec), gemini.ts, fake.ts, providers.ts,
-                             credentials.ts, usage.ts, audit.ts; labels.ts and fill.ts are Label it's too
-    label-it/                Label it (above): segment.ts (probability, methods, objects), prediction.ts (the output under a box)
+    ai-annotate/             AI-assisted annotation (above): types.ts, geometry.ts, plane.ts, mask.ts, fill.ts (the paint store's
+                             box reads and writes, and the undo stack), prompts.ts, organelles.ts, images.ts (the canvas codec),
+                             gemini.ts, fake.ts, providers.ts, credentials.ts, usage.ts, audit.ts; fill.ts is Label it's too
+    label-it/                Label it (above): segment.ts (the mutex watershed, the probability's call), prediction.ts (the served
+                             level, the placement's call, the output under a box)
     run-region/              Run on a region (above): region.ts (the box on each model's level, the run_region layer), run.ts
                              (the run, its progress and provenance), output.ts (the folder, the zip, the saved layer), panel.ts (the tab)
     local-folder/            a folder on this machine: index.ts (the local URL and its key, the pick/drop flow,

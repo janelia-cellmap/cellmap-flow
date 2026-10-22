@@ -34,11 +34,11 @@ import { FINETUNED_REPO } from "../../contracts";
 import { loadGoodRegions, saveGoodRegions } from "../../finetune/good-regions";
 import { readsOneSlice } from "../../finetune/modes";
 import type { PaintedChunk } from "../../finetune/types";
-import { targetTransformFor } from "../../finetune/targets";
+import { targetTransformFor } from "../../finetune/target-call";
 import { CHUNK_DIR, chunkKey, createVolume, hasAffinityChannels, paintedChunkIndices, planVolume, readPaintedChunk, readVolume } from "../../finetune/volume";
 import { RANK_BLOCKS, WINDOW_MARGIN } from "../../generated/cellmap-flow";
 import { chooseRawLevel, geometryOf, outputShape, ratio } from "../../infer/geometry";
-import { servedIndices, servedLevel } from "../../label-it/prediction";
+import { place, type Placement, servedLevel } from "../../label-it/prediction";
 import { probability } from "../../label-it/segment";
 import { entryFor } from "../../models/manifest";
 import { PAINT_TAB, paintLayer, paintLayerName, paintLayerUrl } from "../../viewer/layers";
@@ -162,7 +162,7 @@ export function rankRoutes(router: Router): void {
       }
       const served = ctx.infer.served().find((s) => s.entry.id === entry.id);
       if (!served) throw new Error(`${name} did not start`);
-      const to = planVolume(dataset, served.entry, ctx.session.state.chain);
+      const to = await planVolume(ctx.infer, dataset, served.entry, ctx.session.state.chain);
       await createVolume(ctx.paint, to);
       const carried = await carryPaint(ctx, from, to);
       // Good regions are boxes in nm, the same on any grid: they go with the paint.
@@ -191,11 +191,12 @@ export function rankRoutes(router: Router): void {
 async function scorePaint(ctx: AppContext, dataset: DatasetInfo, volume: PaintVolume, indices: number[][], served: ServedModel): Promise<{ score: RankScore | null; blocks: number; read: { lo: number[]; hi: number[] }[]; outside: number }> {
   const entry = served.entry;
   const level = servedLevel(dataset, entry), block = outputShape(geometryOf(entry));
-  const transform = targetTransformFor(entry), affinity = hasAffinityChannels(entry);
+  const transform = targetTransformFor(entry, ctx.infer), affinity = hasAffinityChannels(entry);
   // Each painted chunk with the model's voxel under each of its painted
-  // voxels (servedIndices, over the painted voxels' box, which it shrinks
-  // to what the level covers), and the model's blocks those lie in.
-  const placed: { chunk: PaintedChunk; origin: number[]; at: NonNullable<ReturnType<typeof servedIndices>> }[] = [];
+  // voxels (label-it's place, the Python's placement, over the painted
+  // voxels' box, which it shrinks to what the level covers), and the
+  // model's blocks those lie in.
+  const placed: { chunk: PaintedChunk; origin: number[]; at: Placement }[] = [];
   const blocks = new Map<string, number[]>();
   let outside = 0;
   for (const index of indices) {
@@ -203,7 +204,7 @@ async function scorePaint(ctx: AppContext, dataset: DatasetInfo, volume: PaintVo
     const box = chunk && paintedBox(chunk);
     if (!chunk || !box) continue;
     const origin = index.map((i, a) => i * volume.chunk_size[a]);
-    const at = servedIndices(volume, box.lo.map((v, a) => v + origin[a]), box.hi.map((v, a) => v + origin[a]), level);
+    const at = await place(ctx.infer, volume, box.lo.map((v, a) => v + origin[a]), box.hi.map((v, a) => v + origin[a]), level);
     if (!at) { outside++; continue; }
     placed.push({ chunk, origin, at });
     forEachPainted(chunk, origin, at, (_i, s) => {
@@ -217,7 +218,7 @@ async function scorePaint(ctx: AppContext, dataset: DatasetInfo, volume: PaintVo
   for (const key of spread(keys, RANK_BLOCKS)) {
     const lo = blocks.get(key)!.map((b, a) => b * block[a]), hi = lo.map((l, a) => Math.min(l + block[a], level.shape[a]));
     const out = await ctx.infer.readOutput(served.view, lo, hi);
-    read.set(key, { lo, hi, shape: out.shape, data: logitsOf(out, served.info.output_class) });
+    read.set(key, { lo, hi, shape: out.shape, data: await logitsOf(ctx, out, served.info.output_class) });
   }
   // Each placed chunk added to the model's tallies by the Python (rank.tally,
   // with paint_edges for the voxels a binary model's score skips): its
@@ -233,7 +234,7 @@ async function scorePaint(ctx: AppContext, dataset: DatasetInfo, volume: PaintVo
       const [, bz, by, bx] = r.shape, [sz, sy, sx] = s.map((v, a) => v - r.lo[a]);
       for (let c = 0; c < C; c++) logits[c * n + i] = r.data[((c * bz + sz) * by + sy) * bx + sx];
     });
-    const { target, mask } = transform(chunk);
+    const { target, mask } = await transform(chunk);
     tallies = await ctx.infer.python<Tallies>(`${PORTABLE}:rank_tally`,
       { tallies, shape: chunk.shape, channels: C, labels_dtype: chunk.labels instanceof Uint16Array ? "uint16" : "uint8", affinity },
       [bytesOf(chunk.labels), bytesOf(target), bytesOf(mask), bytesOf(logits)]);
@@ -245,12 +246,12 @@ async function scorePaint(ctx: AppContext, dataset: DatasetInfo, volume: PaintVo
 /** A model's output block as logits, whatever its activation, as the
  * server's ranking reads it (rank_routes._score): the output as a
  * probability by the served model's output class (label-it's probability,
- * so a sigmoid model's 0.9 and a logit model's 2.2 are one and the same),
- * clipped to [1e-6, 1 - 1e-6], then its logit. A logit model's output comes
- * back as it was, within float32; a probability's is no longer read as if
- * 0.1 said object. */
-function logitsOf(out: { data: Float32Array; shape: number[] }, outputClass: string | null | undefined): Float32Array {
-  const p = probability(out, outputClass, null).data;
+ * the Python's, so a sigmoid model's 0.9 and a logit model's 2.2 are one
+ * and the same), clipped to [1e-6, 1 - 1e-6], then its logit. A logit
+ * model's output comes back as it was, within float32; a probability's is
+ * no longer read as if 0.1 said object. `out` is handed to the worker. */
+async function logitsOf(ctx: AppContext, out: { data: Float32Array; shape: number[] }, outputClass: string | null | undefined): Promise<Float32Array> {
+  const p = (await probability(ctx.infer, out, outputClass)).data;
   for (let i = 0; i < p.length; i++) {
     const q = Math.min(Math.max(p[i], 1e-6), 1 - 1e-6);
     p[i] = Math.log(q / (1 - q));
@@ -283,9 +284,9 @@ async function rawWindow(ctx: AppContext, dataset: DatasetInfo, entry: ModelEntr
 
 /** `visit(i, served)` for each painted voxel of `chunk` the model's level
  * covers: `i` its index in the chunk, `served` the model's voxel under it,
- * from `at` (servedIndices over a box of the volume, `origin` the chunk's
- * first voxel). */
-function forEachPainted(chunk: PaintedChunk, origin: number[], at: NonNullable<ReturnType<typeof servedIndices>>, visit: (i: number, served: number[]) => void): void {
+ * from `at` (place over a box of the volume, `origin` the chunk's first
+ * voxel). */
+function forEachPainted(chunk: PaintedChunk, origin: number[], at: Placement, visit: (i: number, served: number[]) => void): void {
   const [, h, w] = chunk.shape;
   for (let z = at.lo[0]; z < at.hi[0]; z++) for (let y = at.lo[1]; y < at.hi[1]; y++) for (let x = at.lo[2]; x < at.hi[2]; x++) {
     const i = ((z - origin[0]) * h + y - origin[1]) * w + x - origin[2];

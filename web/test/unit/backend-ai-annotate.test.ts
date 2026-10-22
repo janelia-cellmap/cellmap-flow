@@ -5,8 +5,10 @@
 // routes' refusals, their order and their statuses; and what each does to the
 // paint store (the mask written, the undo, the audit log), the viewer (the
 // key bound, the layer refreshed) and the stores (credentials, the day's
-// count).
-import { describe, expect, it } from "vitest";
+// count). A run plans, reads, masks and accepts its plane through the
+// portable Python (here in node's Pyodide, test/unit/pyodide.ts), so the
+// cases that run one skip without it.
+import { describe, expect, it, vi } from "vitest";
 
 import { readLog } from "../../src/ai-annotate/audit";
 import { CREDENTIALS_KEY, createCredentialStore } from "../../src/ai-annotate/credentials";
@@ -29,6 +31,11 @@ import { readVolume } from "../../src/finetune/volume";
 import { type KeyValueStore, MemoryKeyValueStore } from "../../src/models/listing-cache";
 import { paintLayerName } from "../../src/viewer/layers";
 import { entry, type FakeContext, fakeContext, NAME_54, NAME_56, request } from "./backend-fakes";
+import { portablePython } from "./pyodide";
+
+// Pyodide, numpy, Pillow and scipy load once for the file, a few seconds.
+vi.setConfig({ testTimeout: 120_000 });
+const python = await portablePython();
 
 function body(res: ApiResponse): any {
   if (!("json" in res)) throw new Error(`not a JSON answer: ${JSON.stringify(res)}`);
@@ -305,7 +312,7 @@ describe("POST /api/finetune/ai-annotate/settings", () => {
   });
 });
 
-describe("POST /api/finetune/ai-annotate/run: the refusals, in _begin_run's order", () => {
+describe.skipIf(!python)("POST /api/finetune/ai-annotate/run: the refusals, in _begin_run's order", () => {
   it("wants settings first, then a volume (needs_volume), then the acknowledgement, then the credentials", async () => {
     const ctx = fakeContext();
     ctx.viewer.positionNm = POINT;
@@ -384,7 +391,7 @@ describe("POST /api/finetune/ai-annotate/run: the refusals, in _begin_run's orde
   });
 });
 
-describe("a run on another dataset than the volume's", () => {
+describe.skipIf(!python)("a run on another dataset than the volume's", () => {
   it("is refused before anything is sent or counted: the plane would be read from one dataset and written on another's grid", async () => {
     const { ctx, h, id } = await ready();
     ctx.viewer.positionNm = POINT;
@@ -398,7 +405,7 @@ describe("a run on another dataset than the volume's", () => {
   });
 });
 
-describe("a run to ready", () => {
+describe.skipIf(!python)("a run to ready", () => {
   it("reads the plane around the point, asks the model, and stages the mask with its preview; the status's fields are set as it goes", async () => {
     const { ctx, h, id } = await ready();
     expect((await status(h))).toMatchObject({ success: true, annotate_id: null, status: "idle", error: null, preview: null, needs_volume: false });
@@ -475,7 +482,7 @@ describe("a run to ready", () => {
 
 });
 
-describe("Shift+G", () => {
+describe.skipIf(!python)("Shift+G", () => {
   it("without a volume says so with needs_volume, for the page to offer one", async () => {
     const ctx = fakeContext();
     const h = harness(ctx);
@@ -510,7 +517,7 @@ describe("Shift+G", () => {
   });
 });
 
-describe("POST /api/finetune/ai-annotate/resend", () => {
+describe.skipIf(!python)("POST /api/finetune/ai-annotate/resend", () => {
   it("sends the same plane again with the edited prompt under the same id, and replaces the preview", async () => {
     const gemini = new TestProvider();
     const { ctx, h, id } = await ready({ deps: { providers: providers(gemini) }, settings: { provider: "gemini", model: "gemini-3-pro-image", destination: gemini.info.destination } });
@@ -540,7 +547,7 @@ describe("POST /api/finetune/ai-annotate/resend", () => {
 
 });
 
-describe("POST /api/finetune/ai-annotate/accept", () => {
+describe.skipIf(!python)("POST /api/finetune/ai-annotate/accept", () => {
   it("writes the mask's objects with ids of their own and background elsewhere in the plane, refreshes the layer, and leaves nothing to review", async () => {
     const { ctx, h, id, volume } = await ready();
     const annotateId = await runToEnd(h);
@@ -625,7 +632,7 @@ describe("POST /api/finetune/ai-annotate/accept", () => {
 
 });
 
-describe("POST /api/finetune/view-labels/undo", () => {
+describe.skipIf(!python)("POST /api/finetune/view-labels/undo", () => {
   it("restores the box as it was, keeping a stroke painted since, and says when nothing is left", async () => {
     const { ctx, h, volume } = await ready();
     const annotateId = await runToEnd(h);
@@ -649,7 +656,7 @@ describe("POST /api/finetune/view-labels/undo", () => {
 
 });
 
-describe("POST /api/finetune/ai-annotate/reject", () => {
+describe.skipIf(!python)("POST /api/finetune/ai-annotate/reject", () => {
   it("throws the staged mask away, writing nothing, and takes a failed job too", async () => {
     const { ctx, h, id } = await ready();
     const annotateId = await runToEnd(h);
@@ -687,7 +694,7 @@ describe("the daily limit", () => {
     expect(inMemory.callsToday()).toBe(1);
   });
 
-  it("is applied to a run (429) and shown by the config", async () => {
+  it.skipIf(!python)("is applied to a run (429) and shown by the config", async () => {
     const { h } = await ready({ deps: { dailyCallLimit: 1 } });
     const annotateId = await runToEnd(h);
     expect(body(await h.handle(request("GET", `${BASE}/config`)))).toMatchObject({ daily_call_limit: 1, calls_today: 1 });

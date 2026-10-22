@@ -6,15 +6,14 @@ the input normalizers (``web/src/infer/norms.ts`` from
 (``web/src/infer/post.ts`` from ``cellmap_flow/post/postprocessors.py``, with
 the segmentation steps in ``affinity.ts`` and ``morton.ts``, which also port
 ``cellmap_flow/post/segment.py``'s ``mutex_watershed`` and pymorton's
-interleave), the layer URL's args blob (``web/src/shared/args.ts`` from
-``cellmap_flow/pipeline_spec.py`` and ``serving/protocol.py``) and the
-finetune's target transforms (``web/src/finetune/targets.ts`` from
-``cellmap_flow/finetune/target_transforms.py``). A shared link works across
-the two modes only if these agree byte for byte, and a model finetuned in the
-browser learns what the server's would only if the targets do, so the vitest
+interleave) and the layer URL's args blob (``web/src/shared/args.ts`` from
+``cellmap_flow/pipeline_spec.py`` and ``serving/protocol.py``). A shared link
+works across the two modes only if these agree byte for byte, so the vitest
 suite in ``web/test/parity`` checks each port against what the *Python classes
 themselves* produce, written here as JSON, rather than against a reading of
-the Python code.
+the Python code. (The finetune's target transforms had a port and a fixture
+here too; the browser now runs the Python itself, ``cellmap_flow/portable/
+targets.py``, so there is nothing to keep in step.)
 
 Run it with a Python that has cellmap_flow's dependencies, from anywhere::
 
@@ -52,11 +51,6 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[2]
 sys.path.insert(0, str(ROOT))
 
-from cellmap_flow.finetune.target_transforms import (  # noqa: E402
-    AffinityTargetTransform,
-    BinaryTargetTransform,
-    BroadcastBinaryTargetTransform,
-)
 from cellmap_flow.pipeline_spec import (  # noqa: E402
     PipelineSpec,
     chain_is_segmentation,
@@ -72,7 +66,7 @@ from cellmap_flow.post.postprocessors import (  # noqa: E402
 from cellmap_flow.serving.protocol import ARGS_KEY  # noqa: E402
 from cellmap_flow.viewer.layers import prediction_url  # noqa: E402
 
-FIXTURES = ("norms.json", "post.json", "args.json", "affinity.json", "morton.json", "targets.json")
+FIXTURES = ("norms.json", "post.json", "args.json", "affinity.json", "morton.json")
 
 # The dashboard a browser-mode blob names, and the model/host the layer URL
 # fixture uses. Any values do; they only have to be the same on both sides.
@@ -666,114 +660,9 @@ def make_morton() -> dict:
     }
 
 
-# --- targets.json -------------------------------------------------------------
-
-# The unit offsets of the browser's affinity models (channels *_aff_z, *_aff_y,
-# *_aff_x), the order their manifests name them in.
-TARGET_OFFSETS = [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
-TARGET_BLOCKS = [
-    # (name, shape, dtype, the labels drawn from; None for all zero). Labels
-    # are what the paint layer writes: 0 unpainted, 1 background, 2+ objects.
-    # A one-slice block is a 2D student's chunk, where the z offset pairs
-    # nothing; the dense block has no unpainted voxel, so every in-chunk pair
-    # is masked; the uint16 block has an instance volume's ids past 255.
-    ("slice_1_6_7", (1, 6, 7), np.uint8, [0, 1, 2, 3]),
-    ("block_4_5_6", (4, 5, 6), np.uint8, [0, 1, 2, 3, 4]),
-    ("block_2_3_3", (2, 3, 3), np.uint8, [0, 1, 2]),
-    ("dense_3_4_4", (3, 4, 4), np.uint8, [1, 2, 3]),
-    ("ids_2_3_4_uint16", (2, 3, 4), np.uint16, [0, 1, 2, 300, 40000]),
-    ("zeros_1_4_4", (1, 4, 4), np.uint8, None),
-]
-TARGET_TRANSFORMS = [
-    # (id prefix, class name, constructor arguments). Four channels for three
-    # offsets: the fourth is masked out, as num_channels says of LSD channels.
-    ("binary", "BinaryTargetTransform", {}),
-    ("broadcast_3", "BroadcastBinaryTargetTransform", {"num_channels": 3}),
-    ("affinity_3", "AffinityTargetTransform", {"offsets": TARGET_OFFSETS, "num_channels": 3}),
-    ("affinity_4", "AffinityTargetTransform", {"offsets": TARGET_OFFSETS, "num_channels": 4}),
-]
-TARGET_CLASSES = {
-    "BinaryTargetTransform": BinaryTargetTransform,
-    "BroadcastBinaryTargetTransform": BroadcastBinaryTargetTransform,
-    "AffinityTargetTransform": AffinityTargetTransform,
-}
-
-
-def target_blocks(seed: int) -> dict:
-    """The label blocks of TARGET_BLOCKS, by name, drawn with one generator in order."""
-    rng = np.random.default_rng(seed)
-    blocks = {}
-    for name, shape, dtype, values in TARGET_BLOCKS:
-        if values is None:
-            blocks[name] = np.zeros(shape, dtype=dtype)
-        else:
-            blocks[name] = rng.choice(np.array(values, dtype=dtype), size=shape)
-    return blocks
-
-
-def make_targets() -> dict:
-    import torch
-
-    seed = 0
-    blocks = target_blocks(seed)
-    # Every block has an object next to a same-labelled voxel and next to a
-    # differently labelled one along some offset, so the affinity cases
-    # have both ones and zeros in their masked targets (the all-zero block
-    # and the one-slice block's z channel aside, which are there for their
-    # empty masks).
-    for name, block in blocks.items():
-        if name.startswith("zeros"):
-            continue
-        same = any(((block[s] == block[d]) & (block[s] > 1)).any() for s, d in _target_pairs(block.shape))
-        different = any(((block[s] != block[d]) & (block[s] > 0) & (block[d] > 0)).any() for s, d in _target_pairs(block.shape))
-        assert same and different, f"{name}: the seed gives no same-object pair or no different pair"
-    cases = []
-    for prefix, class_name, params in TARGET_TRANSFORMS:
-        transform = TARGET_CLASSES[class_name](**params)
-        for name, block in blocks.items():
-            # As the server's dataset hands a patch to the transform: a float32
-            # tensor (exact for every id below 2**24), one sample, one channel.
-            annotation = torch.from_numpy(block.astype(np.float32))[None, None]
-            target, mask = transform(annotation)
-            assert target.shape[0] == 1 and mask.shape[0] == 1 and target.shape == mask.shape, f"{prefix}_{name}"
-            assert target.shape[2:] == block.shape and mask.shape[2:] == block.shape, f"{prefix}_{name}"
-            cases.append(
-                {
-                    "id": f"{prefix}_{name}",
-                    "transform": class_name,
-                    "params": params,
-                    "input": name,
-                    "target": array_record(target[0].numpy()),
-                    "mask": array_record(mask[0].numpy()),
-                }
-            )
-    return {
-        "_format": (
-            "Target transforms, from cellmap_flow/finetune/target_transforms.py. `inputs` are label blocks "
-            "[z, y, x] by name (0 unpainted, 1 background, 2+ objects, the paint layer's values); each case "
-            "builds its `transform` class with `params`, applies it to the named input as the server's "
-            "dataset does (a float32 tensor of shape (1, 1, z, y, x)) and records the `target` and `mask` it "
-            "returned with the batch axis dropped: float32 [C, z, y, x], the channel outermost, which is "
-            "the browser's channels × N layout. Arrays are {dtype, shape, data} with data flat in C order. "
-            "Generated by make_fixtures.py; do not edit."
-        ),
-        "seed": seed,
-        "inputs": {name: array_record(block) for name, block in blocks.items()},
-        "cases": cases,
-    }
-
-
-def _target_pairs(shape):
-    """(source, neighbour) index tuples of the voxel pairs along each TARGET_OFFSET inside a block."""
-    for offset in TARGET_OFFSETS:
-        src = tuple(slice(max(0, -d), min(n, n - d)) for d, n in zip(offset, shape))
-        dst = tuple(slice(max(0, d), min(n, n + d)) for d, n in zip(offset, shape))
-        yield src, dst
-
-
 # --- writing and checking -----------------------------------------------------
 
-MAKERS = {"norms.json": make_norms, "post.json": make_post, "args.json": make_args, "affinity.json": make_affinity, "morton.json": make_morton, "targets.json": make_targets}
+MAKERS = {"norms.json": make_norms, "post.json": make_post, "args.json": make_args, "affinity.json": make_affinity, "morton.json": make_morton}
 
 
 def write_fixtures(out_dir: Path) -> None:

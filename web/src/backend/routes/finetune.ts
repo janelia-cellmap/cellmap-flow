@@ -210,7 +210,8 @@ export function finetuneRoutes(router: Router, deps: Partial<FinetuneDeps> = {})
   });
 
   // POST /api/finetune/create-volume {model_name}: a new volume over the
-  // open dataset on the model's output grid (planVolume), its zarr files in
+  // open dataset on the model's output grid (planVolume: the portable
+  // Python's plan, whose refusal is a 400), its zarr files in
   // the paint store, and the session's volume from now on. The answer's
   // URLs are the paint route's (volumeUrls); the tab then calls
   // add-to-viewer with neuroglancer_url, as it does on the server.
@@ -227,7 +228,7 @@ export function finetuneRoutes(router: Router, deps: Partial<FinetuneDeps> = {})
     if (!dataset) return badRequest(NO_DATASET);
     let volume: PaintVolume;
     try {
-      volume = d.plan(dataset, model.entry, ctx.session.state.chain, { now: d.now() });
+      volume = await d.plan(ctx.infer, dataset, model.entry, ctx.session.state.chain, { now: d.now() });
     } catch (e) {
       return badRequest(message(e));
     }
