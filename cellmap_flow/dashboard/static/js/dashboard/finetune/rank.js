@@ -25,7 +25,7 @@
 // it and Use this model mark Seed from Prediction's threshold as set by
 // ranking, and say on the line under Label it's buttons what they set.
 import { h, setBusy } from "../../lib/dom.js";
-import { announce, listen, MODELS_CHANGED_EVENT } from "../../lib/events.js";
+import { announce, CHAIN_CHANGED_EVENT, listen, MODELS_CHANGED_EVENT } from "../../lib/events.js";
 import { readJSON, writeJSON } from "../../lib/stored.js";
 import { sessionVolumeChanged } from "./crops.js";
 import { pickModel } from "./models.js";
@@ -517,6 +517,9 @@ export function initRank() {
           return;
         }
         window = set.window;
+        // The Input tab's list shows the stretched normalizer as it now runs
+        // (main.js reads the chain again), so a later Apply keeps it.
+        announce(CHAIN_CHANGED_EVENT);
       }
       installThreshold(name, d.threshold);
       sayFit(fittedText(name, d, window), "success");

@@ -256,9 +256,9 @@ takes effect only when you press *Apply*, at the top of either tab (or Enter in
 a parameter field), which sends both lists together; until then the bar says
 how many changes are not applied, and the viewer shows the chain as it was.
 The one exception is a model's start: when the chain has no input normalizers
-and the model declares some (an ONNX export's manifest does), submitting it on
-the Models tab sets them, and the Input tab shows them ticked with a note
-saying from which model. A chain that has input normalizers is left as it is.
+and the model declares some (an ONNX export's manifest does), starting it from
+the Models tab (Submit, or Add) sets them, and the Input tab shows them ticked
+with a note saying from which model. A chain that has input normalizers is left as it is.
 The browser app does the same; its chain starts with the exports'
 normalization already set.
 

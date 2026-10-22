@@ -4,7 +4,7 @@
 // A module runs once the page is parsed and before DOMContentLoaded, so the
 // page's elements are all there.
 import { ApiError, getJSON, postJSON } from "../lib/api.js";
-import { listen, MODELS_CHANGED_EVENT } from "../lib/events.js";
+import { CHAIN_CHANGED_EVENT, listen, MODELS_CHANGED_EVENT } from "../lib/events.js";
 import { chainChanges, mountOpChain } from "../shared/op-chain.js";
 import { readCount, saveServerConfig } from "../shared/server-config.js";
 import { initConnect } from "./connect.js";
@@ -178,7 +178,7 @@ function initApply(inputChain, postChain) {
       part.chain.markApplied();
       say(part, part.key === "input_norm" && declaredBy
         ? `Input normalization set from ${declaredBy}'s declaration when it started.`
-        : `The ${part.tab} chain was changed outside this tab (a model's start, or Use this model); the list shows it as it runs now.`);
+        : `The ${part.tab} chain was changed outside this tab (a model's start, Use this model or Fit to Paint); the list shows it as it runs now.`);
     });
   }
 
@@ -195,6 +195,8 @@ function initApply(inputChain, postChain) {
     part.bar.querySelector(".apply-notice-close").addEventListener("click", () => say(part, null));
   });
   listen(MODELS_CHANGED_EVENT, readLive);
+  // Fit to Paint sets the raw's window with no model change (finetune/rank.js).
+  listen(CHAIN_CHANGED_EVENT, readLive);
   render();
   readLive();
 

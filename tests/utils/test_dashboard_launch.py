@@ -141,6 +141,40 @@ def test_a_model_started_without_input_normalization_sets_the_one_it_declares(da
     assert loaded["input_norm_from"] == (None if chain else "mine")
 
 
+def test_a_model_added_without_input_normalization_sets_the_one_it_declares_too(dashboard, monkeypatch, tmp_path):
+    """The Models tab's Add (POST /api/models/add) starts a model as Submit
+    does: with no input normalization set, the chain takes the one the model
+    declares before its layer is drawn."""
+    from cellmap_flow.models import registry
+
+    script = tmp_path / "m.py"
+    script.write_text("x = 1\n")
+    built = registry.build_model
+
+    def declaring(entry, name):
+        model = built(entry, name)
+        model.declared_input_norm = lambda: DECLARED
+        return model
+
+    monkeypatch.setattr(registry, "build_model", declaring)
+    drawn_through = []
+    monkeypatch.setattr(launch, "run_model",
+                        lambda config, st_data: drawn_through.append(PipelineSpec.from_url_blob(st_data)[0]))
+    monkeypatch.setattr(launch.threading, "Thread", _InlineThread)
+    import threading as _threading
+
+    monkeypatch.setattr(_threading, "Thread", lambda target, args=(), daemon=None: _InlineThread(target, args))
+    session = get_session()
+    postprocess = [{"name": "SigmoidPostprocessor"}]
+    session.set_pipeline(PipelineSpec([], postprocess))
+    session.jobs, session.dataset_path = [], "/data/raw.zarr"
+
+    answer = dashboard.post("/api/models/add", json={"entry": {"type": "script", "script_path": str(script), "name": "mine"}})
+    assert answer.status_code == 200
+    assert session.pipeline_spec == PipelineSpec(DECLARED, postprocess)
+    assert drawn_through == [PipelineSpec(DECLARED, postprocess)]
+
+
 def test_job_logs_keep_a_job_that_failed_to_start_until_it_is_started_again(dashboard, monkeypatch):
     """Its log, the one being read, vanished from the page when it died."""
     from cellmap_flow.jobs import launch as jobs_launch
