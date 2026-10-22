@@ -269,13 +269,13 @@ LAYOUTS = {
             "downsamplingFactors": [2, 2, 1], "offset": [30, 20, 10]}),
         ("n5", ZYX, (8.0, 8.0, 4.0), (10.0, 20.0, 30.0), (10, 20, 30), (5, 10, 15)),
     ),
-    # ... which usually have no offset: a downsampled level then follows BigDataViewer,
-    # each voxel centred on the full-resolution voxels it covers, (f - 1) / 2 of them on
-    # (worldarray's spec, Conventions 1).
+    # ... which usually have no offset: every level's corner is then at the origin, as
+    # Neuroglancer draws N5 (worldarray 0.1.1; 0.1.0 followed BigDataViewer, each level
+    # half a base voxel lower).
     "n5-pixel-resolution-without-offset": (
         lambda f: f.write_array("n5", np.zeros((10, 20, 30), np.uint8), {
             "pixelResolution": {"dimensions": [2, 4, 8], "unit": "nm"}, "downsamplingFactors": [2, 2, 1]}),
-        ("n5", ZYX, (8.0, 8.0, 4.0), (-4.0, -2.0, -1.0), (10, 20, 30), (5, 10, 15)),
+        ("n5", ZYX, (8.0, 8.0, 4.0), (0.0,) * 3, (10, 20, 30), (5, 10, 15)),
     ),
     # x, y, z voxels (3, 2, 1) at (4, 8, 16) nm: the corner is (16, 16, 12) nm.
     "precomputed": (

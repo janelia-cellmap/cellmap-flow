@@ -4,6 +4,9 @@ All notable changes to cellmap-flow. The format follows [Keep a Changelog](https
 
 ## Unreleased
 
+### Changed
+- **worldarray 0.1.1.** An N5 pyramid with `downsamplingFactors` and no `offset` (BigDataViewer's and Paintera's) now has its corner at the origin at every level, as Neuroglancer draws N5; 0.1.0 followed BigDataViewer and put each level half a base voxel lower. Levels and imported crops with a COSEM `transform` or a funlib `offset` are where they were. With it: an array carrying no attributes under a group with funlib's is placed by the group's, funlib's `voxel_size`/`offset` on an N5 array are read in the array's own order, a path naming a precomputed scale is that scale whatever level is asked for, a pyramid opened at one of its levels places them from the group's document, and a `gs://` read on a Google machine keeps its credentials (the metadata-server guard now applies only off Google Cloud). cellmap-flow requires `worldarray>=0.1.1`, the version its placement tests describe.
+
 ## 0.3.0 — 2026-10-22
 
 ### Added
