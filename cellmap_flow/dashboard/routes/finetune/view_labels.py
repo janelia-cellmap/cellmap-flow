@@ -37,7 +37,6 @@ import logging
 import time
 
 import numpy as np
-import requests
 import tensorstore as ts
 import worldarray as wa
 from flask import jsonify, request
@@ -313,12 +312,14 @@ def _served_base(host, model_name, postprocess=(), input_norm=None):
 def _serves_integers(host, model_name):
     """Whether the model's raw output is integer labels, from the served array's dtype; None when unknown.
 
-    Asked with requests rather than worldarray: tensorstore's http reads have
-    no timeout of their own, and the page polls this."""
+    The documents alone, no array opened, and one attempt of
+    METADATA_TIMEOUT_SECONDS: the page polls this."""
     try:
-        response = requests.get(f"{_served_base(host, model_name)}/s0/.zarray", timeout=METADATA_TIMEOUT_SECONDS)
-        response.raise_for_status()
-        return np.dtype(response.json()["dtype"]).kind in "iu"
+        meta = wa.metadata(
+            f"{_served_base(host, model_name)}/s0", open=False,
+            retries=wa.Retry(timeout=METADATA_TIMEOUT_SECONDS, max_attempts=1),
+        )
+        return np.dtype(meta.dtype).kind in "iu"
     except Exception as e:
         logger.debug(f"Could not read {model_name}'s served dtype: {e}")
         return None
@@ -404,8 +405,9 @@ def read_prediction(host, model_name, volume, lo, hi, info, postprocess=(), inpu
     """
     base = _served_base(host, model_name, postprocess, input_norm)
     try:
-        # A server that takes the connection and never answers holds this
-        # open: worldarray's timeout is on the read below.
+        # The open waits under the same retries as the read below (worldarray
+        # 0.7), so a server that takes the connection and never answers is an
+        # error, not a hang.
         served = wa.open(
             f"{base}/s0", strict_units=False, context=_server_context(),
             retries=wa.Retry(timeout=PREDICTION_TIMEOUT_SECONDS, max_attempts=3, base_delay=5),
