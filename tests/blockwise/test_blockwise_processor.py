@@ -8,6 +8,7 @@ import subprocess
 import daisy
 import numpy as np
 import pytest
+import worldarray as wa
 import zarr
 from funlib.geometry import Coordinate
 from starlette.testclient import TestClient
@@ -102,7 +103,7 @@ def test_a_block_gets_the_same_label_ids_served_or_blockwise(ome_pyramid, poolin
     for index in range(2):  # along z
         roi = daisy.Roi((corner + 32 * index, corner, corner), (32, 32, 32))
         worker.process_fn(daisy.Block(roi, roi, roi, task_id="t"))
-        written = worker.outputs[0].arrays[0].to_ndarray(roi)
+        written = worker.outputs[0].arrays[0].read(roi)
         served = read_chunk(client, layer(posts=posts), (index, 0, 0))[0]
         assert np.all(written == served) and np.all(served == 1 + 64 * index), index
 
@@ -146,7 +147,7 @@ def test_a_box_runs_output_is_the_box(ome_pyramid, pooling_model, task_yaml, mon
     s0, offset, translation = written(master.output_path)
     the_box = daisy.Roi((8, 16, 0), (56, 40, 80))
     assert (s0.shape, s0.chunks, offset, translation) == ((7, 5, 10), (4, 4, 4), [8, 16, 0], [12.0, 20.0, 4.0])
-    assert master.outputs[0].arrays[0].roi == the_box
+    assert master.outputs[0].arrays[0].box == wa.Box.coerce(the_box)
     np.testing.assert_array_equal(s0[:], raw_at(the_box))
     # 2 x 2 x 3 blocks from the box's corner, 32 nm apart; those at its end overhang it.
     begins = sorted(roi.offset for _, roi in blocks)
@@ -162,7 +163,7 @@ def test_a_box_is_cut_to_the_data(ome_pyramid, pooling_model, task_yaml):
     raw, model = ome_pyramid(((8, 4),)) + "/s0", pooling_model()
     master = CellMapFlowBlockwiseProcessor(task_yaml(raw, model, bounding_boxes=[box((96, -20, 0), (64, 50, 16))]),
                                            create=True)
-    assert master.outputs[0].arrays[0].roi == daisy.Roi((96, 0, 0), (32, 32, 16))
+    assert master.outputs[0].arrays[0].box == wa.Box((96, 0, 0), (128, 32, 16))
 
     outside = task_yaml(raw, model, bounding_boxes=[box((200, 0, 0), (8, 8, 8))])
     with pytest.raises(ConfigError, match="bounding box 1 .* is outside the data"):
@@ -213,21 +214,24 @@ def test_separate_bounding_boxes_zarrs_gives_each_box_its_own_output(ome_pyramid
         Coordinate(z, 64, x) for z in (72, 104) for x in (40, 72))
 
 
-@pytest.mark.parametrize("first, then", [
+@pytest.mark.parametrize("first, then, difference", [
     pytest.param({"bounding_boxes": [box((0, 0, 0), (32, 32, 32))]}, {"bounding_boxes": [box((32, 0, 0), (32, 32, 32))]},
-                 id="another-box-of-the-same-shape"),
-    pytest.param({}, {"bounding_boxes": [box((0, 0, 0), (32, 32, 32))]}, id="a-box-into-a-whole-volume-output"),
+                 "translation", id="another-box-of-the-same-shape"),
+    pytest.param({}, {"bounding_boxes": [box((0, 0, 0), (32, 32, 32))]}, "shape",
+                 id="a-box-into-a-whole-volume-output"),
 ])
-def test_resuming_into_an_output_over_another_region_is_refused(ome_pyramid, pooling_model, task_yaml, first, then):
+def test_resuming_into_an_output_over_another_region_is_refused(ome_pyramid, pooling_model, task_yaml, first, then,
+                                                                difference):
     """A run over the region the output covers resumes it; one over another
-    region is refused, saying so: another box of the same shape, or a box
-    into a whole volume's output (which is also what an older cellmap-flow
-    wrote for a box run)."""
+    region is refused, naming what differs: another box of the same shape
+    sits elsewhere, and a box into a whole volume's output (which is also
+    what an older cellmap-flow wrote for a box run) is smaller."""
     raw, model = ome_pyramid(((8, 4),)) + "/s0", pooling_model()
     CellMapFlowBlockwiseProcessor(task_yaml(raw, model, **first), create=True)
     CellMapFlowBlockwiseProcessor(task_yaml(raw, model, **first), create=True)  # the same region resumes
-    with pytest.raises(ConfigError, match="already holds an output covering"):
+    with pytest.raises(ConfigError) as refused:
         CellMapFlowBlockwiseProcessor(task_yaml(raw, model, **then), create=True)
+    assert f"{difference}: found" in str(refused.value)
 
 
 @pytest.mark.parametrize("failing", [pytest.param(True, id="blocks-failed"), pytest.param(False, id="clean-run")])

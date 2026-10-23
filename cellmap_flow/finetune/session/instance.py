@@ -8,7 +8,10 @@ and the overlay treat them like any other.
 
 The routes in ``dashboard/routes/finetune/instance_correction`` document the
 workflow; the functions here do the work for them and return
-``(success, info or error)``.
+``(success, info or error)``. The volume on disk is written with worldarray;
+MinIO's copy is read and written with zarr-python over s3fs, which takes the
+session's own credentials (tensorstore takes S3 credentials only from the
+environment).
 """
 
 import gc
@@ -18,10 +21,16 @@ import time
 
 import numpy as np
 import s3fs
+import worldarray as wa
 import zarr
 
 from cellmap_flow.finetune.session import minio
-from cellmap_flow.finetune.session.volume import VolumeGeometry, create_volume_zarr
+from cellmap_flow.finetune.session.volume import (
+    VolumeGeometry,
+    create_volume_zarr,
+    open_labels,
+    update_root_attrs,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -61,28 +70,26 @@ def seed_instance_volume(
     """
     from scipy.ndimage import binary_dilation
 
-    from cellmap_flow.io.metadata import read_array_meta
-    from cellmap_flow.io.ome import ome_translation
+    from cellmap_flow.io.metadata import snap_integral
 
     s0_path = os.path.join(instance_zarr_path, "s0")
     try:
-        # OME multiscales or resolution/offset attributes alike; the
-        # translation it gives is voxel 0's lower corner, in nm.
-        meta = read_array_meta(s0_path).spatial()
-        src_s0 = zarr.open(s0_path, mode="r")
+        # Placed by OME multiscales or resolution/offset attributes alike,
+        # in nm on its spatial axes.
+        source = wa.open(s0_path, strict_units=False)
     except Exception as e:
         return False, f"Failed to open instance zarr s0: {e}"
-    source_voxel_size = [float(v) for v in meta.voxel_size]
-    if all(v == 1.0 for v in source_voxel_size):
-        # read_array_meta's fallback when the array says nothing.
+    if source.meta.placed_by is None:
         return False, f"{s0_path} has no voxel size in its metadata"
+    # Unit conversion's float noise snapped away (0.016 um is 16 nm).
+    source_voxel_size = [float(v) for v in snap_integral(source.voxel_size)]
     # dataset_offset_nm is voxel 0's centre, the OME translation, as in every
-    # volume (see volume.volume_corner_nm); meta.translation is the corner.
-    source_offset_nm = ome_translation(meta.translation, source_voxel_size)
-    source_shape = tuple(src_s0.shape)
+    # volume (see volume.volume_corner_nm): worldarray's translation.
+    source_offset_nm = [float(t) for t in snap_integral(source.translation)]
+    source_shape = tuple(source.shape)
 
     # The whole ROI fits in memory (~300 MB of uint32).
-    instances = src_s0[:].astype(np.uint32)
+    instances = source.read_index((0,) * len(source_shape), source_shape).astype(np.uint32)
     n_source_instances = int(instances.max())
     if n_source_instances + 1 > np.iinfo(np.dtype(annotation_dtype)).max:
         return False, (
@@ -112,7 +119,7 @@ def seed_instance_volume(
         input_voxel_size=list(input_voxel_size),
         claimed_output_voxel_size=claimed_output_voxel_size,
         claimed_input_voxel_size=claimed_input_voxel_size,
-        chunk_size=list(src_s0.chunks if chunk_size is None else chunk_size),
+        chunk_size=list(source.meta.chunk_shape if chunk_size is None else chunk_size),
         input_size=list(input_size),
         dataset_offset_nm=list(source_offset_nm),
         dataset_shape_voxels=list(source_shape),
@@ -132,21 +139,17 @@ def seed_instance_volume(
         return False, str(e)
 
     try:
-        # Chunks with no labels stay unwritten, as in any volume: the trainer
-        # and the overlay count the chunks on disk as annotated.
-        zarr.open_array(
-            os.path.join(output_zarr_path, "annotation", "s0"),
-            mode="r+",
-            write_empty_chunks=False,
-        )[:] = annotation
+        # Chunks with no labels stay unwritten, as in any volume (open_labels
+        # stores none that are all 0): the trainer and the overlay count the
+        # chunks on disk as annotated.
+        open_labels(output_zarr_path, mode="r+").write_index((0,) * len(source_shape), source_shape, annotation)
         # What the volume was seeded from and how, so it can be re-seeded
         # later without losing track of its source.
-        root = zarr.open(output_zarr_path, mode="r+")
-        root.attrs.update(
-            seed_source_instance_zarr=str(instance_zarr_path),
-            seed_dilation_radius_voxels=int(dilation_radius_voxels),
-            seed_n_instances=n_source_instances,
-        )
+        update_root_attrs(output_zarr_path, {
+            "seed_source_instance_zarr": str(instance_zarr_path),
+            "seed_dilation_radius_voxels": int(dilation_radius_voxels),
+            "seed_n_instances": n_source_instances,
+        })
     except Exception as e:
         return False, f"Failed to write seeded annotation: {e}"
 
