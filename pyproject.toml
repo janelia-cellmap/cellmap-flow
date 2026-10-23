@@ -19,7 +19,7 @@ dependencies = [
     "flask",
     "tensorstore",
     # The shared reader: placement, levels, padded and resampled reads.
-    "worldarray>=0.7,<1",
+    "worldarray>=0.7.1,<1",
     "funlib.geometry",
     "scikit-image",
     "numcodecs==0.15.0",
