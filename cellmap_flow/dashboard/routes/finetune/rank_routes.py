@@ -302,24 +302,25 @@ def _offsets(offsets):
 
 
 def _painted_chunks(volume):
-    """The indices of the volume's painted chunks on disk (synced from MinIO), in index order."""
+    """The indices of the volume's painted chunks on disk (synced from MinIO), in index order; none without a volume directory."""
     import os
 
-    from cellmap_flow.io.geometry import list_populated_chunks
+    import worldarray as wa
 
-    try:
-        return list_populated_chunks(os.path.join(volume["zarr_path"], "annotation", "s0"))
-    except OSError:
-        return []
+    return wa.list_chunk_keys(os.path.join(volume["zarr_path"], "annotation", "s0"), separator=".", ndim=3)
 
 
 def _painted_box(volume, index):
     """``(lo, hi, labels)``: the box of chunk ``index``'s painted voxels, in annotation voxels, and their labels; None when none is painted."""
-    import zarr
+    import os
 
-    array = zarr.open(volume["zarr_path"], mode="r")["annotation/s0"]
-    lo = [i * c for i, c in zip(index, array.chunks)]
-    chunk = array[tuple(slice(l, l + c) for l, c in zip(lo, array.chunks))]
+    import worldarray as wa
+
+    from cellmap_flow.finetune.session.manifest import read_chunk
+
+    array = wa.open(os.path.join(volume["zarr_path"], "annotation", "s0"), units=None)
+    lo = [i * c for i, c in zip(index, array.meta.chunk_shape)]
+    chunk = read_chunk(array, index)
     where = np.nonzero(chunk)
     if not where[0].size:
         return None

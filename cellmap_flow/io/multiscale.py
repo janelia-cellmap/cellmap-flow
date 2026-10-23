@@ -1,104 +1,35 @@
-"""Choosing a level of a multiscale pyramid for a voxel size.
+"""The voxel size of the raw level a model's output is drawn over.
 
-The rule is worldarray's ``select_level`` (its spec's Behaviour 3: "floor",
-"exact", "nearest", "resample"), on the levels ``io.metadata.list_levels``
-gives, in the order the group's ``datasets`` list them; a precomputed
-volume's levels are its scales. Voxel sizes are compared as nanometer floats
-on the spatial axes, so 10.48 nm is not 10 nm. ``select_dataset`` and
-``closest_raw_scale`` choose from the group's own document
-(``worldarray.Pyramid.voxel_sizes``), opening no level. What stays here: no
-voxel size picks the first level, and a path resolves to cellmap-flow's path
-of its level.
+Choosing a level for a voxel size is worldarray's (``select_level``, its
+spec's Behaviour 3; ``wa.open(path, voxel_size=...)`` applies it). What stays
+here is the viewer's question: given any path into a pyramid and a model's
+declared voxel size, which stored level does the model actually read, so
+that its output can be placed over the raw at that level's size.
 """
 
 import logging
-from typing import List, Literal, Optional, Sequence, Tuple
+from typing import Optional
 
-from worldarray import select_level as _select_level
-from worldarray.levels import coarser_anywhere, same_voxel_size  # noqa: F401
-
-from cellmap_flow.io import metadata, paths
-from cellmap_flow.io.metadata import ArrayMeta
+import worldarray as wa
 
 logger = logging.getLogger(__name__)
-
-Level = Tuple[str, ArrayMeta]
-
-Mode = Literal["floor", "exact", "nearest", "resample"]
-
-
-def select_level(levels: Sequence[Level], voxel_size=None, mode: Mode = "floor") -> Level:
-    """The ``(path, ArrayMeta)`` of ``levels`` to read at ``voxel_size``: the
-    first (finest) with no ``voxel_size``, else worldarray's ``select_level``
-    by ``mode``. "floor" there is the coarsest level no coarser than
-    ``voxel_size`` on any axis, else the first: whatever the listing order,
-    where cellmap-flow's took the last level before the first too coarse one
-    (the same level for a pyramid listed finest first)."""
-    levels = list(levels)
-    if not levels:
-        raise ValueError("no levels to choose from")
-    if voxel_size is None:
-        return levels[0]
-    name, _ = _select_level([(path, meta.spatial().voxel_size) for path, meta in levels], voxel_size, mode)
-    return next(level for level in levels if level[0] == name)
-
-
-def _voxel_sizes(group: str) -> List[Tuple[str, Tuple[float, ...]]]:
-    """``(cellmap-flow's level name, nm voxel size)`` per level of ``group``,
-    from its document."""
-    group, pyramid = metadata.pyramid(group, units="nanometer")
-    return list(zip(metadata.level_names(group, pyramid), (vs for _, vs in pyramid.voxel_sizes())))
-
-
-def select_dataset(dataset_path: str, voxel_size=None, mode: Mode = "floor") -> Tuple[str, Optional[str]]:
-    """``(path of the array to read, level chosen)`` for a dataset path.
-
-    A multiscale group resolves to its level for ``voxel_size`` (see
-    ``select_level``); an array is read as it is, with level None. Raises
-    when a group has no multiscales it can read.
-
-    A precomputed volume is a group whose levels are its scales: it
-    resolves to ``…/s<N>`` for ``voxel_size`` the same way, and the path of
-    one scale is read as it is. Without a voxel size a volume is read at
-    scale 0, without opening it.
-    """
-    if paths.is_precomputed(dataset_path):
-        volume, scale = paths.precomputed_scale(dataset_path)
-        if scale is not None or voxel_size is None:
-            return dataset_path, None
-        group = volume
-    else:
-        node, kind = metadata.node_type(dataset_path)
-        if kind != "group":
-            return dataset_path, None
-        group = node
-    sizes = _voxel_sizes(group)
-    level = sizes[0][0] if voxel_size is None else _select_level(sizes, voxel_size, mode)[0]
-    return paths.join(group, level), level
-
-
-def _pyramid_of(dataset_path: str) -> str:
-    """The multiscale group a dataset path belongs to: itself, or the group
-    above it when it is one level's array (a precomputed scale's volume)."""
-    if paths.is_precomputed(dataset_path):
-        return paths.precomputed_scale(dataset_path)[0]
-    node, kind = metadata.node_type(dataset_path)
-    # A per-scale path (.../s1) is an array; the pyramid is described by the
-    # group above it.
-    return paths.parent(node) if kind == "array" else node
 
 
 def closest_raw_scale(dataset_path: str, target_voxel_size) -> Optional[tuple]:
     """The voxel size (nm, z/y/x) of the level of ``dataset_path``'s pyramid
-    that ``select_level`` picks for ``target_voxel_size``, or None if it
-    can't be determined.
+    that a model at ``target_voxel_size`` reads (worldarray's "floor": the
+    level at that size, else the coarsest no coarser than it on any axis,
+    else the first), or None, with a warning, when it cannot be determined.
 
-    ``dataset_path`` may be the multiscale group or one of its levels (a
-    precomputed volume or one of its scales).
+    ``dataset_path`` may be the multiscale group or one of its levels, a
+    precomputed volume or one of its scales, or a lone array (its own size).
+    The sizes come from the group's own document where it lists them
+    (OME-NGFF, COSEM N5, precomputed); no level is opened then.
     """
     try:
-        sizes = _voxel_sizes(_pyramid_of(dataset_path))
-        return tuple(float(v) for v in _select_level(sizes, target_voxel_size, "floor")[1])
+        pyramid = wa.open_pyramid(dataset_path, units="nanometer", strict_units=False)
+        _, voxel_size = wa.select_level(pyramid.voxel_sizes(), target_voxel_size, "floor")
+        return tuple(float(v) for v in voxel_size)
     except Exception as e:
         logger.warning(
             f"Could not determine closest raw scale for {dataset_path} at "

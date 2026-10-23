@@ -12,8 +12,8 @@ import logging
 from urllib.parse import urlparse
 
 import neuroglancer
+import worldarray as wa
 
-from cellmap_flow.io import metadata
 from cellmap_flow.utils.address import this_machine_ip
 from cellmap_flow.viewer import VIEWER_AXES
 from cellmap_flow.viewer.layers import raw_layer
@@ -41,26 +41,20 @@ def viewer_space(names, scales):
 
 def raw_dimensions(dataset_path):
     """The viewer's dimensions for ``dataset_path``: the axes and voxel size
-    of the finest level of its pyramid (of the array itself, if it is none),
-    x, y, z (viewer_space).
+    (nm) of the finest level of the pyramid it belongs to -- the group, one
+    of its levels or a precomputed volume (``wa.open_pyramid``), the array
+    itself when it is in none -- x, y, z (viewer_space).
 
     Set before any layer is added, so that the raw data decides the viewer's
     coordinate space rather than whichever layer neuroglancer takes it from,
     such as an extra layer at another voxel size. None if it cannot be read.
     """
     try:
-        group = dataset_path
-        last = dataset_path.rstrip("/").rsplit("/", 1)[-1]
-        if last.startswith("s") and last[1:].isdigit():  # one level, as get_raw_layer reads it
-            group = dataset_path.rstrip("/").rsplit("/", 1)[0]
-        try:
-            levels = [meta for _, meta in metadata.list_levels(group)]
-        except Exception:
-            levels = [metadata.read_array_meta(dataset_path)]
-        finest = min(levels, key=lambda meta: tuple(meta.spatial().voxel_size))
-        # The names and sizes the raw layer's volume gets.
-        spatial = finest.spatial()
-        return viewer_space([a for a in spatial.axes if a], spatial.voxel_size)
+        pyramid = wa.open_pyramid(dataset_path, units="nanometer", strict_units=False)
+        name, voxel_size = min(pyramid.voxel_sizes(), key=lambda level: tuple(level[1]))
+        # The names the raw layer's volume gets: z, y, x when the store names none.
+        meta = pyramid.level_meta(name)
+        return viewer_space([meta.axes[i] for i in meta.spatial], voxel_size)
     except Exception as e:
         logger.warning(f"Could not read the viewer's dimensions from {dataset_path}: {e}")
         return None

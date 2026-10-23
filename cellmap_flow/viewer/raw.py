@@ -19,15 +19,16 @@ sampled from the data where it can be read.
 
 import logging
 import math
-import os
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 
 import neuroglancer
 import numpy as np
 import tensorstore as ts
+import worldarray as wa
 
-from cellmap_flow.io import metadata, paths
+from cellmap_flow.io import paths
+from cellmap_flow.io.metadata import _NM_PER_UNIT
 from cellmap_flow.io.raw import apply_norms, channel_select, open_raw, spatial_axes, spatial_shape
 from cellmap_flow.process_chain import process_chain
 
@@ -302,25 +303,23 @@ class View:
     pixel_nm: float
 
 
-_NM_PER_UNIT = {"m": 1e9, "um": 1e3, "µm": 1e3, "nm": 1.0}
-
-
 def view_of(state):
     """``state``'s View (a neuroglancer ViewerState), or None when it does
     not have one yet (no position or zoom: the browser has not reported
-    them), or its units are not lengths.
+    them), or its units are not all lengths (a dimensionless or time axis).
 
     The position is in voxels of the viewer's coordinate space, whose
-    scales neuroglancer reports in SI units (8 nm as 8e-9 m). Its
-    ``crossSectionScale`` is how many of the smallest display dimension's
-    voxels one screen pixel spans.
+    scales neuroglancer reports in SI units (8 nm as 8e-9 m; the unit table
+    is worldarray's, ``io.metadata._NM_PER_UNIT``). Its ``crossSectionScale``
+    is how many of the smallest display dimension's voxels one screen pixel
+    spans.
     """
     try:
         dimensions, position, zoom = state.dimensions, state.position, state.cross_section_scale
         if dimensions is None or position is None or zoom is None:
             return None
         names, scales, units = list(dimensions.names), list(dimensions.scales), list(dimensions.units)
-        if len(position) != len(names):
+        if len(position) != len(names) or any(unit not in _NM_PER_UNIT for unit in units):
             return None
         scales_nm = [float(scale) * _NM_PER_UNIT[unit] for scale, unit in zip(scales, units)]
         display = list(state.display_dimensions or names[:3])
@@ -443,71 +442,38 @@ def _is_sn(name):
     return name.startswith("s") and name[1:].isdigit()
 
 
-def _is_array(path):
-    try:
-        return metadata.node_type(path)[1] == "array"
-    except Exception:
-        return False
-
-
-def _sn_arrays(group):
-    """The sN children of ``group``, s0 first; none when it has none or is
-    not a directory or group. A URL cannot be listed, so there s0, s1, ...
-    are looked for in turn, up to the first that is not an array."""
-    if paths.is_remote(group):
-        names = []
-        while _is_array(paths.join(group, f"s{len(names)}")):
-            names.append(f"s{len(names)}")
-        return names
-    try:
-        names = os.listdir(group)
-    except Exception:
-        return []
-    return sorted((name for name in names if _is_sn(name)), key=lambda name: int(name[1:]))
-
-
 def _pyramid(dataset_path):
     """``(group, level paths)`` when ``dataset_path`` is a multiscale pyramid
-    or one of its levels, else None.
+    of two or more levels, or one of its levels, else None.
 
-    An OME-Zarr group's levels are the arrays its multiscales list, by their
-    ``datasets[].path`` in the order listed, whatever they are named ("s0"
-    or "0"); the path of one of them finds the others. A pyramid without
-    OME multiscales (N5, funlib) is a group's sN arrays, and an sN path is
-    one of its parent's. A precomputed volume's are its scales (see
-    _precomputed_pyramid).
+    The levels are the ones worldarray finds (``open_pyramid``), from the
+    documents alone. An OME-Zarr group's are the arrays its multiscales
+    list, by their ``datasets[].path`` in the order listed, whatever they
+    are named ("s0" or "0"); the path of one of them finds the others, and
+    an array the group does not list is not one of its levels. A pyramid
+    without OME multiscales (N5, funlib) is a group's s0, s1, ... arrays,
+    and an sN path is one of its parent's. A precomputed volume's are its
+    scales, each at ``volume/<key>``. A pyramid of one level, or a volume of
+    one scale, is shown as one array.
     """
-    if paths.is_precomputed(dataset_path):
-        return _precomputed_pyramid(dataset_path)
     parent, _, leaf = dataset_path.rstrip("/").rpartition("/")
     for group, level in ((dataset_path, None), (parent, leaf)):
+        if level is not None and not _is_sn(level):
+            break
         try:
-            levels = [path.strip("/") for path, _ in metadata.list_levels(group)]
-        except Exception:
-            continue  # no OME multiscales there
-        # An array an OME group does not list is not one of its levels.
-        return (group, levels) if level is None or level in levels else None
-    group = parent if _is_sn(leaf) else dataset_path
-    levels = _sn_arrays(group)
-    return (group, levels) if levels else None
+            pyramid = wa.open_pyramid(group, strict_units=False)
+        except Exception as e:
+            logger.debug(f"No pyramid at {group}: {e}")
+            continue
+        names = pyramid.names
+        if len(names) < 2 or (level is not None and level not in names):
+            continue
+        levels = [pyramid.level_meta(name).path for name in names]
+        return levels[0][: -len(names[0])].rstrip("/"), levels
+    return None
 
 
-def _precomputed_pyramid(dataset_path):
-    """``(volume, level paths)`` for a precomputed volume of more than one
-    scale, or one of its scales (``…/s2``), else None.
-
-    Its levels are s0, s1, ..., each scale its info lists, in that order
-    (io.metadata.list_levels). A volume of one scale is shown as one array,
-    as it always was.
-    """
-    volume, scale = paths.precomputed_scale(dataset_path)
-    try:
-        levels = [path for path, _ in metadata.list_levels(volume)]
-    except Exception:
-        return None
-    if len(levels) < 2 or (scale is not None and scale >= len(levels)):
-        return None
-    return volume, levels
+_NEUROGLANCER_FORMAT = {"zarr2": "zarr", "zarr3": "zarr", "n5": "n5", "precomputed": "precomputed"}
 
 
 def neuroglancer_source(dataset_path):
@@ -515,15 +481,15 @@ def neuroglancer_source(dataset_path):
     browser (``wrap_raw=False``): its location with the format in front, as
     neuroglancer names its data sources -- ``zarr://`` (v2 or v3, which
     neuroglancer tells apart), ``n5://`` or ``precomputed://``, followed by a
-    local path or an ``http(s)://``, ``s3://`` or ``gs://`` URL.
+    local path or an ``http(s)://``, ``s3://`` or ``gs://`` URL. The format
+    is what worldarray finds there (``wa.detect``), not what the path's
+    suffix says.
 
     A precomputed volume is named whole: neuroglancer opens a volume, never
-    one of its scales (``…/s2`` has no info of its own), and a bare ``gs://``
-    path is one.
+    one of its scales (``…/s2`` has no info of its own).
     """
-    if paths.is_precomputed(dataset_path):
-        return "precomputed://" + paths.precomputed_volume(dataset_path)[0]
-    return f"{paths.suffix_format(dataset_path) or 'zarr'}://{dataset_path}"
+    node = wa.detect(dataset_path)
+    return f"{_NEUROGLANCER_FORMAT[node.format]}://{node.path}"
 
 
 def get_raw_layer(
@@ -541,36 +507,34 @@ def get_raw_layer(
     over the whole volume.
     """
     dataset_path = paths.normalize_path(dataset_path)
-    original_dataset_path = dataset_path
     pyramid = _pyramid(dataset_path)
-    if pyramid is not None:
-        dataset_path, scales = pyramid
 
     if not wrap_raw:
         # Unwrapped: neuroglancer fetches the file directly, so the input
         # normalizers never run on what it displays. Sample unnormalized
         # too, or the contrast range lands in the wrong space entirely. A
         # pyramid is sampled from its levels: its group is no array to read.
-        levels = [paths.join(dataset_path, sc) for sc in scales] if pyramid is not None else [original_dataset_path]
+        group, levels = pyramid if pyramid is not None else (dataset_path, [dataset_path])
         return _layer(
-            neuroglancer_source(dataset_path),
+            neuroglancer_source(group),
             lambda: _raw_shader(levels, normalize=False, view=view),
             segmentation,
             disable_meshes,
         )
 
     if pyramid is not None:
+        _, levels = pyramid
         try:
 
-            def level(scale):
-                array = open_raw(paths.join(dataset_path, scale))
+            def level(path):
+                array = open_raw(path)
                 return array, _local_volume(array, normalize and not segmentation)
 
             # Each level's metadata read and tensorstore open is a round trip
             # to wherever the data is, about 40 ms each on gs://, where a
             # volume can have a dozen levels: they are made side by side.
-            with ThreadPoolExecutor(max_workers=len(scales)) as pool:
-                arrays, layers = (list(built) for built in zip(*pool.map(level, scales)))
+            with ThreadPoolExecutor(max_workers=len(levels)) as pool:
+                arrays, layers = (list(built) for built in zip(*pool.map(level, levels)))
             # ScalePyramid serves every level as a downsampling of the finest
             # one, so the finest level's corner places them all. That holds
             # for pyramids whose levels share a corner (Janelia's all sit at
@@ -584,9 +548,7 @@ def get_raw_layer(
                 neuroglancer.LayerDataSource(
                     url=ScalePyramid(layers), transform=_corner_transform(finest)
                 ),
-                lambda: _raw_shader(
-                    [paths.join(dataset_path, sc) for sc in scales], normalize, array=finest, view=view,
-                ),
+                lambda: _raw_shader(levels, normalize, array=finest, view=view),
                 segmentation,
                 disable_meshes,
             )
@@ -595,12 +557,12 @@ def get_raw_layer(
 
     # One array, or a pyramid that could not be shown as one. An image here
     # reads through the input chain whatever normalize says, as it always has.
-    array = open_raw(original_dataset_path)
+    array = open_raw(dataset_path)
     return _layer(
         neuroglancer.LayerDataSource(
             url=_local_volume(array, not segmentation), transform=_corner_transform(array)
         ),
-        lambda: _raw_shader([original_dataset_path], normalize, array=array, view=view),
+        lambda: _raw_shader([dataset_path], normalize, array=array, view=view),
         segmentation,
         disable_meshes,
     )

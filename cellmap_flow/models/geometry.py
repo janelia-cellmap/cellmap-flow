@@ -11,7 +11,7 @@ derived from them.
 the stand-ins ``serving.client`` and ``models.geometry_cache`` build from a
 server's ``model_info`` or the cache, which carry no block shape.
 
-Importing this module is cheap: numpy, funlib.geometry and io.ome only.
+Importing this module is cheap: numpy and funlib.geometry only.
 """
 
 from dataclasses import dataclass, field
@@ -20,8 +20,9 @@ from typing import Optional, Tuple
 import numpy as np
 from funlib.geometry import Coordinate
 
-from cellmap_flow.io.ome import CHANNEL_AXIS_NAMES
-
+# The names a model's output axes list gives its channel axis
+# (``chunk_output_axes``): never space.
+CHANNEL_AXIS_NAMES = ("c", "c^", "channel")
 DEFAULT_OUTPUT_AXES = ("c", "z", "y", "x")
 
 

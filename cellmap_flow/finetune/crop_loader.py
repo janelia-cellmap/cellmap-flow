@@ -12,10 +12,10 @@ physical offsets.
 This module owns:
     - The pydantic schema (:class:`CropEntry`, :class:`CropsConfig`).
     - The label remap function (:func:`remap_labels`).
-    - Small zarr-attrs helpers used by the loader to derive a crop's voxel
-      size, offset, and the array sub-path inside an OME-NGFF group (the
-      array itself is read with worldarray, opened by
-      ``io.metadata.open_level``).
+    - Where a crop sits (:func:`_read_voxel_size_and_offset`): its voxel
+      size, the corner of its voxel 0 and the array's sub-path inside a
+      group, read by worldarray from the crop's documents (the array itself
+      is read with worldarray too, opened by ``io.metadata.open_level``).
 """
 
 from __future__ import annotations
@@ -25,12 +25,9 @@ import os
 from typing import Iterable, List, Literal, Optional, Tuple
 
 import numpy as np
+import worldarray as wa
 import yaml
-import zarr
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
-
-from cellmap_flow.io import metadata, paths
-from cellmap_flow.io.ome import ome_corner
 
 logger = logging.getLogger(__name__)
 
@@ -173,33 +170,30 @@ def parse_crops_yaml(yaml_text_or_path: str) -> CropsConfig:
 
 
 # ---------------------------------------------------------------------------
-# Zarr metadata helpers
+# Where a crop sits
 # ---------------------------------------------------------------------------
 
 
 def _read_voxel_size_and_offset(
     zarr_path: str,
 ) -> Tuple[Tuple[str, ...], np.ndarray, np.ndarray]:
-    """Return ``(array_subpath, voxel_size_nm, offset_nm)`` for an annotation zarr.
+    """Return ``(array_subpath, voxel_size, offset)`` for an annotation zarr.
 
-    ``offset_nm`` is the lower corner of voxel 0. An OME-NGFF translation is
-    voxel 0's centre, so half a voxel is taken off it; the legacy
-    ``transform``/``offset`` attributes are corners already.
-
-    Handles three layouts, in zarr v2 and v3 alike:
-        1. Multiscale group with ``multiscales`` -> first scale's array.
-        2. Plain array with ``transform``/``resolution`` attrs.
-        3. Plain array with no metadata -> voxel_size=(1,1,1),
-           offset=(0,0,0).
-
-    The values are read as written: in the file's units, every axis.
+    ``offset`` is the lower corner of voxel 0; ``array_subpath`` is the path
+    components from ``zarr_path`` down to the array (none for an array).
+    The placement is read as worldarray reads it (``wa.metadata``, from the
+    documents alone, in the file's units, every axis): a group's first level
+    (the first its multiscales list, else ``s0``) by the group's multiscales,
+    an array by them when its group lists it, else by its own attributes
+    (funlib's ``resolution``/``offset``, a COSEM ``transform`` whose
+    ``translate`` is voxel 0's centre, the group's funlib attributes when the
+    array has none), else voxels of 1 with the corner at 0. Zarr v2 and v3
+    alike.
     """
-    # zarr.open reports the path *inside* the store, which for a missing
-    # directory is the empty string -- "nothing found at path ''" names
-    # neither the crop nor the typo that caused it. A manifest listing
-    # .../rc_amphiuma-means-liver-1/... instead of .../jrc_amphiuma-.../ got
-    # exactly that, twice, with nothing to go on. Check first and say which
-    # path is missing, and how far down it stopped existing.
+    # Say which path is missing, and how far down it stopped existing. A
+    # manifest listing .../rc_amphiuma-means-liver-1/... instead of
+    # .../jrc_amphiuma-.../ once got "nothing found at path ''", twice, with
+    # nothing to go on.
     if not os.path.exists(zarr_path):
         existing = zarr_path
         while existing and not os.path.exists(existing):
@@ -215,49 +209,10 @@ def _read_voxel_size_and_offset(
         )
         raise FileNotFoundError(f"Crop path not found: {zarr_path}.{detail}")
 
-    if paths.is_v3_container(zarr_path):
-        return _read_voxel_size_and_offset_v3(zarr_path)
-    node = zarr.open(zarr_path, mode="r")
-    if isinstance(node, zarr.hierarchy.Group):
-        return _crop_geometry(zarr_path, dict(node.attrs), "s0" in node)
-    return _crop_geometry(zarr_path, dict(node.attrs), None)
-
-
-def _read_voxel_size_and_offset_v3(
-    zarr_path: str,
-) -> Tuple[Tuple[str, ...], np.ndarray, np.ndarray]:
-    """Zarr-v3 counterpart of :func:`_read_voxel_size_and_offset`, read from
-    ``zarr.json`` (zarr-python 2.x cannot open v3 stores)."""
-    meta = metadata.read_zarr_json(zarr_path)
-    attrs = metadata.attrs_from_meta(meta)
-    if meta.get("node_type") == "group":
-        return _crop_geometry(
-            zarr_path, attrs, paths.is_v3_container(os.path.join(zarr_path, "s0"))
-        )
-    return _crop_geometry(zarr_path, attrs, None)
-
-
-def _crop_geometry(zarr_path, attrs, has_s0):
-    """``_read_voxel_size_and_offset`` for a node's ``attrs``; ``has_s0`` is
-    None for an array, else whether the group has an ``s0`` child."""
-    if has_s0 is None:
-        voxel_size, offset = metadata.legacy_attrs(attrs, ndim=3)
-        return (), np.array(voxel_size, dtype=float), np.array(offset, dtype=float)
-
-    multiscales = attrs.get("multiscales")
-    if multiscales:
-        entry = multiscales[0]["datasets"][0]
-        scale, translation = metadata.dataset_transforms(entry)
-        scale = np.array([1.0, 1.0, 1.0] if scale is None else scale, dtype=float)
-        translation = np.array(
-            [0.0, 0.0, 0.0] if translation is None else translation, dtype=float
-        )
-        return (entry["path"],), scale, np.array(ome_corner(translation, scale))
-    if has_s0:
-        return ("s0",), np.array([1.0, 1.0, 1.0]), np.array([0.0, 0.0, 0.0])
-    raise ValueError(
-        f"Group at {zarr_path} has no 'multiscales' attribute and no 's0' child."
-    )
+    node = wa.detect(zarr_path)
+    meta = wa.metadata(zarr_path, level=None if node.kind == "array" else 0, units=None, open=False)
+    subpath = tuple(meta.path[len(node.path):].strip("/").split("/")) if meta.path != node.path else ()
+    return subpath, np.array(meta.voxel_size, dtype=float), np.array(meta.corner, dtype=float)
 
 
 # ---------------------------------------------------------------------------

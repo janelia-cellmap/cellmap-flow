@@ -50,7 +50,7 @@ import threading
 import traceback
 
 import numpy as np
-import zarr
+import worldarray as wa
 from flask import jsonify, request
 
 from cellmap_flow.ai_annotate import audit, config as ai_config, geometry, organelles, pipeline, prompts, staging, usage
@@ -396,7 +396,7 @@ def _run_job(ai, job, config, volume):
             point_nm=job["point_nm"], depth_axis=job["depth_axis"], prompt_override=job["override"],
         )
         _stage(ai, job, viewer, "fetching_crop")
-        shape = zarr.open_array(f"{volume['zarr_path']}/annotation/s0", mode="r").shape
+        shape = wa.metadata(f"{volume['zarr_path']}/annotation/s0", open=False).shape
         plan = geometry.plan_plane(volume, shape, job["point_nm"], job["depth_axis"], config.crop_size_px,
                                    data_box_nm=pipeline.raw_extent_nm(volume),
                                    display_dimensions=job["display_dimensions"])
