@@ -332,6 +332,45 @@ def _to_unit_range(lo, hi) -> dict:
 SHIFT_TO_SIGNED = {"name": "LambdaNormalizer", "expression": "x*2-1"}
 
 
+def same_value(configured, declared) -> bool:
+    """Whether a configured parameter value is the declared one: numbers by
+    value (the form sends "255.0" for a manifest's 255), anything else as
+    text, trimmed and without regard to case (a form's "False", Python's
+    False and JSON's false are one value; an expression is compared as
+    written)."""
+    try:
+        return float(configured) == float(declared)
+    except (TypeError, ValueError):
+        return str(configured).strip().lower() == str(declared).strip().lower()
+
+
+def input_norm_differences(configured_steps, declared) -> list:
+    """Where the configured input normalization departs from what a model
+    declares, when it has the declared steps in the declared order: one
+    ``{"step", "param", "configured", "declared"}`` per declared parameter
+    whose value is not the configured one (same_value), in step order. ``[]``
+    when every value is the declared one, and when the steps themselves
+    differ, which the step names already say. A parameter the declaration
+    does not name (a MinMaxNormalizer's ``invert``) is not compared.
+
+    ``configured_steps`` are the chain's steps as ``{"name", **params}``
+    dicts (``to_dict()`` of the live normalizers); ``declared`` is the
+    model's declaration in suggest_input_norm's ``declared`` form,
+    ``{name: params}`` in order. The browser's twin is
+    web/src/backend/routes/models.ts inputNormDifferences.
+    """
+    if not declared or [step.get("name") for step in configured_steps] != list(declared):
+        return []
+    differences = []
+    for step in configured_steps:
+        for param, value in (declared.get(step["name"]) or {}).items():
+            if not same_value(step.get(param), value):
+                differences.append(
+                    {"step": step["name"], "param": param, "configured": step.get(param), "declared": value}
+                )
+    return differences
+
+
 def suggest_input_norm(
     framework=None, raw_dtype="uint8", declared=None, source=None, data_range=None
 ) -> dict:

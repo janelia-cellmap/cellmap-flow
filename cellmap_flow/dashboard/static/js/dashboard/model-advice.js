@@ -99,8 +99,12 @@ function renderInputNormAdvice(m, box, wanted) {
   // wrong, it just degrades the prediction -- but render it muted so it does
   // not read as a finding.
   const assumed = sug.confidence === "low";
+  // The steps are the declared ones but a value is not (a LambdaNormalizer
+  // expression edited): [{step, param, configured, declared}], from the
+  // backend, which compares the values as the chain carries them.
+  const differences = m.input_norm_differences || [];
   const key = adviceKey("input", m, [
-    !!m.input_norm_matches, names, sug.input_norm, m.configured_input_norm || [],
+    !!m.input_norm_matches, names, sug.input_norm, m.configured_input_norm || [], differences,
   ]);
   if (m.input_norm_matches) {
     // Confirmation, not a prompt: when the norms came from a yaml there is
@@ -120,17 +124,30 @@ function renderInputNormAdvice(m, box, wanted) {
   showAdvice(box, wanted, key, function () {
     const div = document.createElement("div");
     div.className = "alert " + (assumed ? "alert-secondary" : "alert-info");
-    div.innerHTML = "<strong>"
-                  + (assumed ? "Assumed input normalization" : "Suggested input normalization")
-                  + "</strong> for <code>" + esc(m.model || "model") + "</code><br>"
-                  + esc(sug.reason || "")
-                  + "<br><small>confidence: " + esc(sug.confidence || "unknown")
-                  + "; currently set: "
-                  + esc((m.configured_input_norm || []).join(" → ") || "none")
-                  + "</small>";
+    if (differences.length) {
+      // The same steps, so naming them would say nothing: say the values.
+      div.innerHTML = "<strong>Input normalization differs from what <code>"
+                    + esc(m.model || "model") + "</code> declares</strong><br>"
+                    + differences.map(function (d) {
+                        return esc(d.step) + " " + esc(d.param) + " is " + esc(String(d.configured))
+                             + ", declared " + esc(String(d.declared));
+                      }).join("<br>")
+                    + "<br><small>" + esc(sug.reason || "") + "</small>";
+    } else {
+      div.innerHTML = "<strong>"
+                    + (assumed ? "Assumed input normalization" : "Suggested input normalization")
+                    + "</strong> for <code>" + esc(m.model || "model") + "</code><br>"
+                    + esc(sug.reason || "")
+                    + "<br><small>confidence: " + esc(sug.confidence || "unknown")
+                    + "; currently set: "
+                    + esc((m.configured_input_norm || []).join(" → ") || "none")
+                    + "</small>";
+    }
     div.appendChild(document.createElement("br"));
+    // Fills the Input list in; the Apply bar then counts the change, and
+    // the user's Apply sends it.
     div.appendChild(adviceButton("btn btn-sm btn-primary ms-2 mt-2",
-      "Apply: " + names.join(" → "),
+      differences.length ? "Apply the declared values" : "Apply: " + names.join(" → "),
       function () { applyInputNormSuggestion(sug.input_norm, names); hideAdvice(key); }));
     div.appendChild(adviceButton("btn btn-sm btn-link", "Dismiss",
       function () { hideAdvice(key); }));

@@ -4,6 +4,10 @@ All notable changes to cellmap-flow. The format follows [Keep a Changelog](https
 
 ## Unreleased
 
+### Fixed
+- **The Apply bar's notice and pending count hide when they are empty, and the Submit All log box is gone.** Bootstrap's `d-flex` and `d-block` on those two elements overrode the `hidden` attribute, so an empty blue box with a ✕ and a blank line sat under every Apply bar; `dark.css` sets their display now. The read-only textarea at the bottom of the Input and Postprocess tabs, where Submit All used to print the server's JSON, is removed; a chain the backend refuses is said in the bar instead of a browser alert.
+- **The model advice holds a model's declared input normalization to its values.** The banner said the input normalization *looks right* for a model whose manifest declares it as long as the steps were the declared ones, whatever their values: `2*x` for the declared `2*x-1`, which feeds the model something else, passed. Both modes now compare the declared values too (numbers by value, as the form spells them), and when the steps are the declared ones but a value is not, the banner says which (*LambdaNormalizer expression is 2*x, declared 2*x-1*) and offers the declared values, which fill the Input list in for your Apply as before (`input_norm_differences` in `GET /api/model_advice`). A suggestion from a convention rather than a manifest is still matched by its steps alone.
+
 ## 0.3.0 — 2026-10-22
 
 ### Added

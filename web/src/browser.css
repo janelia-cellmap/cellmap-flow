@@ -163,14 +163,31 @@
    by src/run-region/panel.ts): the region's offset and size in nm as a grid,
    a row each, a column per axis (z, y, x) under a header row, narrow enough
    for the dashboard's column on a phone; and the models' checkboxes, one a
-   line. */
+   line. Each number field is at least eight characters wide, so a six-digit
+   nm value shows whole on a phone, where the columns used to shrink until
+   the last digits were cut off; the spinner goes (step is "any", and the
+   values come from the box drawn in the viewer). */
 .run-region-fields {
   display: grid;
-  grid-template-columns: max-content repeat(3, minmax(0, 1fr));
+  grid-template-columns: max-content repeat(3, minmax(8ch, 1fr));
   align-items: center;
   gap: 4px 8px;
   max-width: 440px;
   font-size: 0.85rem;
+}
+
+.run-region-fields input {
+  min-width: 0;
+  padding-inline: 0.35rem;
+  font-variant-numeric: tabular-nums;
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+.run-region-fields input::-webkit-inner-spin-button,
+.run-region-fields input::-webkit-outer-spin-button {
+  appearance: none;
+  margin: 0;
 }
 
 .run-region-axis {
