@@ -177,7 +177,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/3f/34/c500f90c7ae641b8e0f98965b36b8a7ac79cc8b296e8d251fe3eb592ee54/nvidia_nccl_cu13-2.30.7-py3-none-manylinux_2_18_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/3f/44/3159af4fb3c868970a412e294320ed6bb1a9fbdfa6431050eda8e0b34b6e/xarray-2026.9.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/3f/70/4f193de89a48b71714e74602ee14d04e4019ad36a5a9f20c425776e72cd6/nvidia_cufile-1.15.1.6-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl
-      - pypi: https://files.pythonhosted.org/packages/fd/5a/591afc5cb10f00d2b0df3bf4563ce2827db15b6a07c5796b49a23def1b79/worldarray-0.6.0-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/0d/e9/0aee7c8f689f07018ba78b78032f8f9370d3918b0e6fd0d8da51f4802e17/worldarray-0.7.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/43/3f/f88a53f60a472b46f4023f56d204dd7de33d34c5d2acbfa0d70a674e639e/threadpoolctl-3.7.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/43/e3/7d92a15f894aa0c9c4b49b8ee9ac9850d6e63b03c9c32c0367a13ae62209/mpmath-1.3.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/47/8d/d529b5d697919ba8c11ad626e835d4039be708a35b0d22de83a269a6682c/pyasn1_modules-0.4.2-py3-none-any.whl
@@ -394,7 +394,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/3e/30/e900b21425a860e195f32e37657aa1f7c7f2b1bfb26f03ca209b90933c06/annotated_doc-0.0.5-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/3e/fd/2c3fd2ed64ed47f4140c547e817193efb49e96a85313fa943306059c5b3e/fastmorph-1.8.0-cp313-cp313-macosx_11_0_arm64.whl
       - pypi: https://files.pythonhosted.org/packages/3f/44/3159af4fb3c868970a412e294320ed6bb1a9fbdfa6431050eda8e0b34b6e/xarray-2026.9.0-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/fd/5a/591afc5cb10f00d2b0df3bf4563ce2827db15b6a07c5796b49a23def1b79/worldarray-0.6.0-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/0d/e9/0aee7c8f689f07018ba78b78032f8f9370d3918b0e6fd0d8da51f4802e17/worldarray-0.7.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/43/3f/f88a53f60a472b46f4023f56d204dd7de33d34c5d2acbfa0d70a674e639e/threadpoolctl-3.7.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/43/e3/7d92a15f894aa0c9c4b49b8ee9ac9850d6e63b03c9c32c0367a13ae62209/mpmath-1.3.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/46/28/faa7c02d87df1343aa8e51c816694a82eb37f41d0e83253e6e75a00b96ec/google_genai-2.30.1-py3-none-any.whl
@@ -619,7 +619,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/3e/30/e900b21425a860e195f32e37657aa1f7c7f2b1bfb26f03ca209b90933c06/annotated_doc-0.0.5-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/3f/34/c500f90c7ae641b8e0f98965b36b8a7ac79cc8b296e8d251fe3eb592ee54/nvidia_nccl_cu13-2.30.7-py3-none-manylinux_2_18_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/3f/70/4f193de89a48b71714e74602ee14d04e4019ad36a5a9f20c425776e72cd6/nvidia_cufile-1.15.1.6-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl
-      - pypi: https://files.pythonhosted.org/packages/fd/5a/591afc5cb10f00d2b0df3bf4563ce2827db15b6a07c5796b49a23def1b79/worldarray-0.6.0-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/0d/e9/0aee7c8f689f07018ba78b78032f8f9370d3918b0e6fd0d8da51f4802e17/worldarray-0.7.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/43/3f/f88a53f60a472b46f4023f56d204dd7de33d34c5d2acbfa0d70a674e639e/threadpoolctl-3.7.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/43/e3/7d92a15f894aa0c9c4b49b8ee9ac9850d6e63b03c9c32c0367a13ae62209/mpmath-1.3.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/47/8d/d529b5d697919ba8c11ad626e835d4039be708a35b0d22de83a269a6682c/pyasn1_modules-0.4.2-py3-none-any.whl
@@ -817,7 +817,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/3d/86/0a70d3ae2f0f2256bb41302d9804dbca65d4360281e7feb3e1f94102ac46/websockets-16.1.1-cp313-cp313-macosx_11_0_arm64.whl
       - pypi: https://files.pythonhosted.org/packages/3e/30/e900b21425a860e195f32e37657aa1f7c7f2b1bfb26f03ca209b90933c06/annotated_doc-0.0.5-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/3e/fd/2c3fd2ed64ed47f4140c547e817193efb49e96a85313fa943306059c5b3e/fastmorph-1.8.0-cp313-cp313-macosx_11_0_arm64.whl
-      - pypi: https://files.pythonhosted.org/packages/fd/5a/591afc5cb10f00d2b0df3bf4563ce2827db15b6a07c5796b49a23def1b79/worldarray-0.6.0-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/0d/e9/0aee7c8f689f07018ba78b78032f8f9370d3918b0e6fd0d8da51f4802e17/worldarray-0.7.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/43/3f/f88a53f60a472b46f4023f56d204dd7de33d34c5d2acbfa0d70a674e639e/threadpoolctl-3.7.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/43/e3/7d92a15f894aa0c9c4b49b8ee9ac9850d6e63b03c9c32c0367a13ae62209/mpmath-1.3.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/46/28/faa7c02d87df1343aa8e51c816694a82eb37f41d0e83253e6e75a00b96ec/google_genai-2.30.1-py3-none-any.whl
@@ -1059,7 +1059,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/3f/44/3159af4fb3c868970a412e294320ed6bb1a9fbdfa6431050eda8e0b34b6e/xarray-2026.9.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/3f/70/4f193de89a48b71714e74602ee14d04e4019ad36a5a9f20c425776e72cd6/nvidia_cufile-1.15.1.6-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/40/b5/1b84b2c784db76d69442334bc8b8748c840f13ca53be086f4f250ad4a0bc/narwhals-2.26.0-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/fd/5a/591afc5cb10f00d2b0df3bf4563ce2827db15b6a07c5796b49a23def1b79/worldarray-0.6.0-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/0d/e9/0aee7c8f689f07018ba78b78032f8f9370d3918b0e6fd0d8da51f4802e17/worldarray-0.7.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/43/38/f4621d9c1c9bf385a78824b0fef25ad5d96cff718be590570137ef1b09d5/iohub-0.2.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/43/3f/f88a53f60a472b46f4023f56d204dd7de33d34c5d2acbfa0d70a674e639e/threadpoolctl-3.7.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/43/e3/7d92a15f894aa0c9c4b49b8ee9ac9850d6e63b03c9c32c0367a13ae62209/mpmath-1.3.0-py3-none-any.whl
@@ -1302,7 +1302,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/3e/30/e900b21425a860e195f32e37657aa1f7c7f2b1bfb26f03ca209b90933c06/annotated_doc-0.0.5-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/3e/fd/2c3fd2ed64ed47f4140c547e817193efb49e96a85313fa943306059c5b3e/fastmorph-1.8.0-cp313-cp313-macosx_11_0_arm64.whl
       - pypi: https://files.pythonhosted.org/packages/3f/44/3159af4fb3c868970a412e294320ed6bb1a9fbdfa6431050eda8e0b34b6e/xarray-2026.9.0-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/fd/5a/591afc5cb10f00d2b0df3bf4563ce2827db15b6a07c5796b49a23def1b79/worldarray-0.6.0-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/0d/e9/0aee7c8f689f07018ba78b78032f8f9370d3918b0e6fd0d8da51f4802e17/worldarray-0.7.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/43/38/f4621d9c1c9bf385a78824b0fef25ad5d96cff718be590570137ef1b09d5/iohub-0.2.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/43/3f/f88a53f60a472b46f4023f56d204dd7de33d34c5d2acbfa0d70a674e639e/threadpoolctl-3.7.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/43/e3/7d92a15f894aa0c9c4b49b8ee9ac9850d6e63b03c9c32c0367a13ae62209/mpmath-1.3.0-py3-none-any.whl
@@ -1593,7 +1593,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/3e/30/e900b21425a860e195f32e37657aa1f7c7f2b1bfb26f03ca209b90933c06/annotated_doc-0.0.5-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/3f/34/c500f90c7ae641b8e0f98965b36b8a7ac79cc8b296e8d251fe3eb592ee54/nvidia_nccl_cu13-2.30.7-py3-none-manylinux_2_18_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/3f/70/4f193de89a48b71714e74602ee14d04e4019ad36a5a9f20c425776e72cd6/nvidia_cufile-1.15.1.6-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl
-      - pypi: https://files.pythonhosted.org/packages/fd/5a/591afc5cb10f00d2b0df3bf4563ce2827db15b6a07c5796b49a23def1b79/worldarray-0.6.0-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/0d/e9/0aee7c8f689f07018ba78b78032f8f9370d3918b0e6fd0d8da51f4802e17/worldarray-0.7.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/43/3f/f88a53f60a472b46f4023f56d204dd7de33d34c5d2acbfa0d70a674e639e/threadpoolctl-3.7.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/43/e3/7d92a15f894aa0c9c4b49b8ee9ac9850d6e63b03c9c32c0367a13ae62209/mpmath-1.3.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/47/8d/d529b5d697919ba8c11ad626e835d4039be708a35b0d22de83a269a6682c/pyasn1_modules-0.4.2-py3-none-any.whl
@@ -1810,7 +1810,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/38/0c/b54a4fdd7f90a3af8b02ebc9ce6712c2c208b7926a2f7bad95c33ebbe943/uvicorn-0.54.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/38/bb/d215ee7c73b61497b28a5503f9f53523f294fcc936762b7caf90e0c1c2b5/pyparsing-3.3.3-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/3e/30/e900b21425a860e195f32e37657aa1f7c7f2b1bfb26f03ca209b90933c06/annotated_doc-0.0.5-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/fd/5a/591afc5cb10f00d2b0df3bf4563ce2827db15b6a07c5796b49a23def1b79/worldarray-0.6.0-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/0d/e9/0aee7c8f689f07018ba78b78032f8f9370d3918b0e6fd0d8da51f4802e17/worldarray-0.7.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/43/3f/f88a53f60a472b46f4023f56d204dd7de33d34c5d2acbfa0d70a674e639e/threadpoolctl-3.7.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/43/e3/7d92a15f894aa0c9c4b49b8ee9ac9850d6e63b03c9c32c0367a13ae62209/mpmath-1.3.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/46/28/faa7c02d87df1343aa8e51c816694a82eb37f41d0e83253e6e75a00b96ec/google_genai-2.30.1-py3-none-any.whl
@@ -2089,7 +2089,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/3e/30/e900b21425a860e195f32e37657aa1f7c7f2b1bfb26f03ca209b90933c06/annotated_doc-0.0.5-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/3f/34/c500f90c7ae641b8e0f98965b36b8a7ac79cc8b296e8d251fe3eb592ee54/nvidia_nccl_cu13-2.30.7-py3-none-manylinux_2_18_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/3f/70/4f193de89a48b71714e74602ee14d04e4019ad36a5a9f20c425776e72cd6/nvidia_cufile-1.15.1.6-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl
-      - pypi: https://files.pythonhosted.org/packages/fd/5a/591afc5cb10f00d2b0df3bf4563ce2827db15b6a07c5796b49a23def1b79/worldarray-0.6.0-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/0d/e9/0aee7c8f689f07018ba78b78032f8f9370d3918b0e6fd0d8da51f4802e17/worldarray-0.7.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/43/3f/f88a53f60a472b46f4023f56d204dd7de33d34c5d2acbfa0d70a674e639e/threadpoolctl-3.7.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/43/e3/7d92a15f894aa0c9c4b49b8ee9ac9850d6e63b03c9c32c0367a13ae62209/mpmath-1.3.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/47/8d/d529b5d697919ba8c11ad626e835d4039be708a35b0d22de83a269a6682c/pyasn1_modules-0.4.2-py3-none-any.whl
@@ -2339,7 +2339,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/38/0c/b54a4fdd7f90a3af8b02ebc9ce6712c2c208b7926a2f7bad95c33ebbe943/uvicorn-0.54.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/38/bb/d215ee7c73b61497b28a5503f9f53523f294fcc936762b7caf90e0c1c2b5/pyparsing-3.3.3-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/3e/30/e900b21425a860e195f32e37657aa1f7c7f2b1bfb26f03ca209b90933c06/annotated_doc-0.0.5-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/fd/5a/591afc5cb10f00d2b0df3bf4563ce2827db15b6a07c5796b49a23def1b79/worldarray-0.6.0-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/0d/e9/0aee7c8f689f07018ba78b78032f8f9370d3918b0e6fd0d8da51f4802e17/worldarray-0.7.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/43/3f/f88a53f60a472b46f4023f56d204dd7de33d34c5d2acbfa0d70a674e639e/threadpoolctl-3.7.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/43/e3/7d92a15f894aa0c9c4b49b8ee9ac9850d6e63b03c9c32c0367a13ae62209/mpmath-1.3.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/46/28/faa7c02d87df1343aa8e51c816694a82eb37f41d0e83253e6e75a00b96ec/google_genai-2.30.1-py3-none-any.whl
@@ -2548,7 +2548,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/3e/30/e900b21425a860e195f32e37657aa1f7c7f2b1bfb26f03ca209b90933c06/annotated_doc-0.0.5-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/3f/34/c500f90c7ae641b8e0f98965b36b8a7ac79cc8b296e8d251fe3eb592ee54/nvidia_nccl_cu13-2.30.7-py3-none-manylinux_2_18_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/3f/70/4f193de89a48b71714e74602ee14d04e4019ad36a5a9f20c425776e72cd6/nvidia_cufile-1.15.1.6-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl
-      - pypi: https://files.pythonhosted.org/packages/fd/5a/591afc5cb10f00d2b0df3bf4563ce2827db15b6a07c5796b49a23def1b79/worldarray-0.6.0-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/0d/e9/0aee7c8f689f07018ba78b78032f8f9370d3918b0e6fd0d8da51f4802e17/worldarray-0.7.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/43/3f/f88a53f60a472b46f4023f56d204dd7de33d34c5d2acbfa0d70a674e639e/threadpoolctl-3.7.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/43/e3/7d92a15f894aa0c9c4b49b8ee9ac9850d6e63b03c9c32c0367a13ae62209/mpmath-1.3.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/44/bd/cb244695f67f77b0a36200ce1670fc42a6fe2770847e870daab99cc2b177/sphinx_click-6.2.0-py3-none-any.whl
@@ -2760,7 +2760,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/3d/86/0a70d3ae2f0f2256bb41302d9804dbca65d4360281e7feb3e1f94102ac46/websockets-16.1.1-cp313-cp313-macosx_11_0_arm64.whl
       - pypi: https://files.pythonhosted.org/packages/3e/30/e900b21425a860e195f32e37657aa1f7c7f2b1bfb26f03ca209b90933c06/annotated_doc-0.0.5-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/3e/fd/2c3fd2ed64ed47f4140c547e817193efb49e96a85313fa943306059c5b3e/fastmorph-1.8.0-cp313-cp313-macosx_11_0_arm64.whl
-      - pypi: https://files.pythonhosted.org/packages/fd/5a/591afc5cb10f00d2b0df3bf4563ce2827db15b6a07c5796b49a23def1b79/worldarray-0.6.0-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/0d/e9/0aee7c8f689f07018ba78b78032f8f9370d3918b0e6fd0d8da51f4802e17/worldarray-0.7.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/43/3f/f88a53f60a472b46f4023f56d204dd7de33d34c5d2acbfa0d70a674e639e/threadpoolctl-3.7.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/43/e3/7d92a15f894aa0c9c4b49b8ee9ac9850d6e63b03c9c32c0367a13ae62209/mpmath-1.3.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/44/bd/cb244695f67f77b0a36200ce1670fc42a6fe2770847e870daab99cc2b177/sphinx_click-6.2.0-py3-none-any.whl
@@ -3008,7 +3008,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/3f/34/c500f90c7ae641b8e0f98965b36b8a7ac79cc8b296e8d251fe3eb592ee54/nvidia_nccl_cu13-2.30.7-py3-none-manylinux_2_18_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/3f/44/3159af4fb3c868970a412e294320ed6bb1a9fbdfa6431050eda8e0b34b6e/xarray-2026.9.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/3f/70/4f193de89a48b71714e74602ee14d04e4019ad36a5a9f20c425776e72cd6/nvidia_cufile-1.15.1.6-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl
-      - pypi: https://files.pythonhosted.org/packages/fd/5a/591afc5cb10f00d2b0df3bf4563ce2827db15b6a07c5796b49a23def1b79/worldarray-0.6.0-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/0d/e9/0aee7c8f689f07018ba78b78032f8f9370d3918b0e6fd0d8da51f4802e17/worldarray-0.7.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/43/38/f4621d9c1c9bf385a78824b0fef25ad5d96cff718be590570137ef1b09d5/iohub-0.2.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/43/3f/f88a53f60a472b46f4023f56d204dd7de33d34c5d2acbfa0d70a674e639e/threadpoolctl-3.7.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/43/e3/7d92a15f894aa0c9c4b49b8ee9ac9850d6e63b03c9c32c0367a13ae62209/mpmath-1.3.0-py3-none-any.whl
@@ -3253,7 +3253,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/3e/fd/2c3fd2ed64ed47f4140c547e817193efb49e96a85313fa943306059c5b3e/fastmorph-1.8.0-cp313-cp313-macosx_11_0_arm64.whl
       - pypi: https://files.pythonhosted.org/packages/3f/2f/103cdc5b7077cd569989d3ddb99ee3d4e96ee31bde8df2a6e426b2dc6195/contourpy-1.4.0-cp313-cp313-macosx_11_0_arm64.whl
       - pypi: https://files.pythonhosted.org/packages/3f/44/3159af4fb3c868970a412e294320ed6bb1a9fbdfa6431050eda8e0b34b6e/xarray-2026.9.0-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/fd/5a/591afc5cb10f00d2b0df3bf4563ce2827db15b6a07c5796b49a23def1b79/worldarray-0.6.0-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/0d/e9/0aee7c8f689f07018ba78b78032f8f9370d3918b0e6fd0d8da51f4802e17/worldarray-0.7.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/43/38/f4621d9c1c9bf385a78824b0fef25ad5d96cff718be590570137ef1b09d5/iohub-0.2.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/43/3f/f88a53f60a472b46f4023f56d204dd7de33d34c5d2acbfa0d70a674e639e/threadpoolctl-3.7.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/43/e3/7d92a15f894aa0c9c4b49b8ee9ac9850d6e63b03c9c32c0367a13ae62209/mpmath-1.3.0-py3-none-any.whl
@@ -3489,7 +3489,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/3e/30/e900b21425a860e195f32e37657aa1f7c7f2b1bfb26f03ca209b90933c06/annotated_doc-0.0.5-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/3f/34/c500f90c7ae641b8e0f98965b36b8a7ac79cc8b296e8d251fe3eb592ee54/nvidia_nccl_cu13-2.30.7-py3-none-manylinux_2_18_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/3f/70/4f193de89a48b71714e74602ee14d04e4019ad36a5a9f20c425776e72cd6/nvidia_cufile-1.15.1.6-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl
-      - pypi: https://files.pythonhosted.org/packages/fd/5a/591afc5cb10f00d2b0df3bf4563ce2827db15b6a07c5796b49a23def1b79/worldarray-0.6.0-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/0d/e9/0aee7c8f689f07018ba78b78032f8f9370d3918b0e6fd0d8da51f4802e17/worldarray-0.7.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/43/3f/f88a53f60a472b46f4023f56d204dd7de33d34c5d2acbfa0d70a674e639e/threadpoolctl-3.7.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/43/e3/7d92a15f894aa0c9c4b49b8ee9ac9850d6e63b03c9c32c0367a13ae62209/mpmath-1.3.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/47/8d/d529b5d697919ba8c11ad626e835d4039be708a35b0d22de83a269a6682c/pyasn1_modules-0.4.2-py3-none-any.whl
@@ -3688,7 +3688,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/3d/86/0a70d3ae2f0f2256bb41302d9804dbca65d4360281e7feb3e1f94102ac46/websockets-16.1.1-cp313-cp313-macosx_11_0_arm64.whl
       - pypi: https://files.pythonhosted.org/packages/3e/30/e900b21425a860e195f32e37657aa1f7c7f2b1bfb26f03ca209b90933c06/annotated_doc-0.0.5-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/3e/fd/2c3fd2ed64ed47f4140c547e817193efb49e96a85313fa943306059c5b3e/fastmorph-1.8.0-cp313-cp313-macosx_11_0_arm64.whl
-      - pypi: https://files.pythonhosted.org/packages/fd/5a/591afc5cb10f00d2b0df3bf4563ce2827db15b6a07c5796b49a23def1b79/worldarray-0.6.0-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/0d/e9/0aee7c8f689f07018ba78b78032f8f9370d3918b0e6fd0d8da51f4802e17/worldarray-0.7.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/43/3f/f88a53f60a472b46f4023f56d204dd7de33d34c5d2acbfa0d70a674e639e/threadpoolctl-3.7.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/43/e3/7d92a15f894aa0c9c4b49b8ee9ac9850d6e63b03c9c32c0367a13ae62209/mpmath-1.3.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/47/8d/d529b5d697919ba8c11ad626e835d4039be708a35b0d22de83a269a6682c/pyasn1_modules-0.4.2-py3-none-any.whl
@@ -3954,7 +3954,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/3e/30/e900b21425a860e195f32e37657aa1f7c7f2b1bfb26f03ca209b90933c06/annotated_doc-0.0.5-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/3f/34/c500f90c7ae641b8e0f98965b36b8a7ac79cc8b296e8d251fe3eb592ee54/nvidia_nccl_cu13-2.30.7-py3-none-manylinux_2_18_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/3f/70/4f193de89a48b71714e74602ee14d04e4019ad36a5a9f20c425776e72cd6/nvidia_cufile-1.15.1.6-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl
-      - pypi: https://files.pythonhosted.org/packages/fd/5a/591afc5cb10f00d2b0df3bf4563ce2827db15b6a07c5796b49a23def1b79/worldarray-0.6.0-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/0d/e9/0aee7c8f689f07018ba78b78032f8f9370d3918b0e6fd0d8da51f4802e17/worldarray-0.7.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/43/3f/f88a53f60a472b46f4023f56d204dd7de33d34c5d2acbfa0d70a674e639e/threadpoolctl-3.7.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/43/e3/7d92a15f894aa0c9c4b49b8ee9ac9850d6e63b03c9c32c0367a13ae62209/mpmath-1.3.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/47/8d/d529b5d697919ba8c11ad626e835d4039be708a35b0d22de83a269a6682c/pyasn1_modules-0.4.2-py3-none-any.whl
@@ -4181,7 +4181,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/38/0c/b54a4fdd7f90a3af8b02ebc9ce6712c2c208b7926a2f7bad95c33ebbe943/uvicorn-0.54.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/38/bb/d215ee7c73b61497b28a5503f9f53523f294fcc936762b7caf90e0c1c2b5/pyparsing-3.3.3-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/3e/30/e900b21425a860e195f32e37657aa1f7c7f2b1bfb26f03ca209b90933c06/annotated_doc-0.0.5-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/fd/5a/591afc5cb10f00d2b0df3bf4563ce2827db15b6a07c5796b49a23def1b79/worldarray-0.6.0-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/0d/e9/0aee7c8f689f07018ba78b78032f8f9370d3918b0e6fd0d8da51f4802e17/worldarray-0.7.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/43/3f/f88a53f60a472b46f4023f56d204dd7de33d34c5d2acbfa0d70a674e639e/threadpoolctl-3.7.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/43/e3/7d92a15f894aa0c9c4b49b8ee9ac9850d6e63b03c9c32c0367a13ae62209/mpmath-1.3.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/46/28/faa7c02d87df1343aa8e51c816694a82eb37f41d0e83253e6e75a00b96ec/google_genai-2.30.1-py3-none-any.whl
@@ -9647,7 +9647,7 @@ packages:
   - fastmorph
   - flask
   - tensorstore
-  - worldarray>=0.6,<1
+  - worldarray>=0.7,<1
   - funlib-geometry
   - scikit-image
   - numcodecs==0.15.0
@@ -11268,10 +11268,10 @@ packages:
   - sqlparse>=0.5.5 ; extra == 'sql'
   - sqlframe>=3.22.0,!=3.39.3 ; extra == 'sqlframe'
   requires_python: '>=3.10'
-- pypi: https://files.pythonhosted.org/packages/fd/5a/591afc5cb10f00d2b0df3bf4563ce2827db15b6a07c5796b49a23def1b79/worldarray-0.6.0-py3-none-any.whl
+- pypi: https://files.pythonhosted.org/packages/0d/e9/0aee7c8f689f07018ba78b78032f8f9370d3918b0e6fd0d8da51f4802e17/worldarray-0.7.0-py3-none-any.whl
   name: worldarray
-  version: 0.6.0
-  sha256: 4d2bc1dfbca4b7b7b74d92f7e0115bcd9778287890b1904bf88ad0f274fa5248
+  version: 0.7.0
+  sha256: da30291a8ce50082064cb60ed7b750bda5e874b3436fa4f1f814bbb1d8293962
   requires_dist:
   - numpy>=1.26
   - tensorstore>=0.1.60
