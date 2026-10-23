@@ -42,7 +42,7 @@ from starlette.routing import Route
 
 from cellmap_flow.inference.runner import DeviceSlots
 from cellmap_flow.inferencer import Inferencer
-from cellmap_flow.io.raw import open_raw, selected_channel, spatial_axes, spatial_shape, stored_placement
+from cellmap_flow.io.raw import open_raw, selected_channel, spatial_axes, spatial_shape
 from cellmap_flow.jobs.spec import IP_PATTERN
 from cellmap_flow.pipeline_spec import PipelineSpec
 from cellmap_flow.process_chain import process_chain
@@ -198,7 +198,7 @@ class ChunkmirageServer:
         from chunkmirage.sources import open_source
 
         raw = self.raw
-        voxel_size, translation = stored_placement(raw)
+        voxel_size, translation = raw.source_voxel_size, raw.source_translation
         # Any channel axis comes first, in OME's order as in worldarray's for
         # a precomputed volume (whose only channel, if it has one, both drop:
         # chunkmirage opens the level through worldarray too); pipeline_for
@@ -301,7 +301,7 @@ class ChunkmirageServer:
         one is at the level's, which moves the output (see to_model_info).
         """
         raw = self.raw
-        stored, _ = stored_placement(raw)
+        stored = raw.source_voxel_size
         info = self.geometry.to_model_info(self.axes, raw.voxel_size if raw.resampled else stored)
         info["output_axes"] = (["c"] if self.has_channel else []) + list(self.axes)
         info["input_resampled_from"] = list(stored) if raw.resampled else None

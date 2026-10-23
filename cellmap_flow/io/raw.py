@@ -61,8 +61,9 @@ def open_raw(path, voxel_size=None, resample=False, padding="edge", context=None
 
     When the level is not at ``voxel_size``, reads are relabelled (the
     default, with a warning: the level is read voxel for voxel as if it were
-    at ``voxel_size``, so the data really lies where ``stored_placement``
-    says and ``corner`` is its own corner rescaled) or, with ``resample``,
+    at ``voxel_size``, so the data really lies where its ``source_voxel_size``
+    and ``source_translation`` say and ``corner`` is its own corner
+    rescaled) or, with ``resample``,
     resampled to it by worldarray (labels by the nearest voxel, intensities
     linearly), from the level's own corner. ``resampled`` tells the two
     apart; ``voxel_size`` is the size reads are at either way.
@@ -86,7 +87,7 @@ def open_raw(path, voxel_size=None, resample=False, padding="edge", context=None
     array.method = "nearest" if is_label_dtype(array.dtype) else "linear"
     if array.level_path != path:
         logger.info(f"found level {array.level_name} for voxel size {requested}: {array.level_path}")
-    stored, _ = stored_placement(array)
+    stored = array.source_voxel_size
     if requested is not None and not same_voxel_size(stored, requested):
         key = (array.level_path, requested, resample)
         if key not in _warned:
@@ -99,22 +100,6 @@ def open_raw(path, voxel_size=None, resample=False, padding="edge", context=None
                     f"{message}; reading it as if it were {requested} nm (the data is not resampled; {RESAMPLE_HINT})"
                 )
     return array
-
-
-def stored_placement(array: wa.WorldArray) -> tuple:
-    """``(voxel_size, translation)`` of the level ``array`` reads as it is
-    stored, nm, spatial axes, the translation voxel 0's centre: where its
-    data really lies. The array's own ``voxel_size`` and ``translation`` are
-    those its reads are done at, which for a level read as if it were at a
-    model's voxel size (relabelled) are that size and the level's corner
-    rescaled with it; worldarray's ``source_voxel_size`` gives the stored
-    size alone, and the stored translation only the metadata has.
-    """
-    stored = array.meta.in_units(space="nanometer", strict=False)
-    return (
-        tuple(float(stored.voxel_size[i]) for i in array.spatial),
-        tuple(float(stored.translation[i]) for i in array.spatial),
-    )
 
 
 def spatial_shape(array: wa.WorldArray) -> tuple:
