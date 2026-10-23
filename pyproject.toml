@@ -30,7 +30,6 @@ dependencies = [
     "mwatershed",
     "neuroglancer",
     "pydantic",
-    "funlib.persistence==0.6.1",
     "daisy>=1.2.2,<2",
     "cellmap-models",
     # Below 2: tokenizers requires it, and with hub 2 allowed the resolver

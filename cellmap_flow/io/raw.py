@@ -25,8 +25,7 @@ import numpy as np
 import worldarray as wa
 from worldarray.levels import same_voxel_size
 
-from cellmap_flow.io import metadata, paths
-from cellmap_flow.io.ome import CHANNEL_AXIS_NAMES
+from cellmap_flow.io import CHANNEL_AXIS_NAMES, metadata, paths
 from cellmap_flow.process_chain import process_chain
 
 logger = logging.getLogger(__name__)

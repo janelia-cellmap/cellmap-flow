@@ -9,7 +9,8 @@ read voxel and world boxes. These modules keep what cellmap-flow needs on top:
 gives nanometers per unit; ``multiscale`` names the raw level a model reads
 (``closest_raw_scale``); ``paths`` undoes a shell-escaped space; ``raw`` opens
 the level a model reads and reads it through the input chain (``open_raw``,
-``RawInput``). ``ome``, ``geometry`` and ``store`` are on their way out.
+``RawInput``). Writing is worldarray's too (``wa.create``, ``write``,
+``write_index``, ``write_chunk``), at the writers themselves.
 
 The submodules import nothing from the rest of cellmap_flow -- ``raw``
 excepted, which reads the process's chain (``cellmap_flow.process_chain``)
@@ -18,3 +19,9 @@ without configuring logging, loading a Flow or importing
 flask/neuroglancer/torch; importing worldarray brings numpy and tensorstore.
 Import the submodule you need; this package imports none of them itself.
 """
+
+# The names of a channel axis wherever cellmap-flow names axes (a store's
+# axes, a model's ``chunk_output_axes``): never space. worldarray writes an
+# axis named "c" as an OME channel axis itself; "c^" and "channel" are
+# cellmap-flow's own spellings. Defined here, where importing costs nothing.
+CHANNEL_AXIS_NAMES = ("c", "c^", "channel")

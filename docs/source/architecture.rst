@@ -31,21 +31,25 @@ Reading data and running a model
        ``globals``, Flask, neuroglancer or torch). Import the submodule you
        need:
 
-       - ``paths``: where a container ends, and which format a path is;
-       - ``metadata``: ``read_array_meta``, one ``ArrayMeta`` for zarr v2
-         and v3, N5 and precomputed; ``list_levels`` for a pyramid;
-       - ``multiscale``: the pyramid level for a voxel size, and
-         ``closest_raw_scale``;
-       - ``geometry``: ``list_populated_chunks``, the chunks of a zarr v2
-         array that exist on disk;
+       - ``paths``: undoing a shell-escaped space in a path;
+       - ``metadata``: ``open_level``, a path opened the way every reader
+         does (a group at its first level unless a voxel size asks for
+         another), and nanometers per unit (worldarray's unit table, which
+         the browser imports too);
+       - ``multiscale``: ``closest_raw_scale``, the raw level a model reads,
+         from the pyramid's document alone;
        - ``raw``: ``open_raw``, the level a model reads as a worldarray
          ``WorldArray`` (chosen for the voxel size, relabelled or resampled
          when none is at it, its edge repeated past the data), and
          ``RawInput``, that array read through the input chain
          (``to_ndarray_ts(roi)``): what model scripts are given, so its path
          is public;
-       - ``ome``: OME-NGFF translation to corner and back, and the
-         ``multiscales`` attributes writers use.
+       - ``CHANNEL_AXIS_NAMES``: the names a channel axis may have.
+
+       Metadata, pyramids, chunk listing, reading and writing are
+       worldarray's own (``wa.metadata``, ``wa.open_pyramid``,
+       ``list_chunk_keys``, ``read_index``, ``create``, ``write``), called
+       where they are needed.
    * - ``norm/``
      - ``input_normalize``: the input normalizers (``InputNormalizer``
        subclasses) and ``SerializableInterface``. ``safe_expression``: the
@@ -545,8 +549,8 @@ A blockwise run
 #. The master, ``CellMapFlowBlockwiseProcessor(yaml, create=True)``, reads
    the YAML (``config.yaml.load_config``, ``registry.build_models``,
    ``resolve_data_path``), builds no ``Inferencer`` (it needs the geometry
-   only), and creates the output arrays, with OME attributes from
-   ``io.ome.singlescale_attrs``, on a grid that starts at the corner of the
+   only), and creates the output arrays with ``worldarray.create``, which
+   writes their OME attributes, on a grid that starts at the corner of the
    raw level the model reads. An output covers the raw extent, or only the
    bounding boxes: their bounding box, or each box in its own
    ``<output_path>/box_<n>`` with ``separate_bounding_boxes_zarrs``.
@@ -780,12 +784,12 @@ Conventions
 An OME translation is voxel 0's centre
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-OME-NGFF, and Neuroglancer, put ``translation`` at the centre of voxel 0.
-Everything inside cellmap-flow works with the lower corner of voxel 0
-(``ArrayMeta.translation``, ``io.geometry.Grid``). Readers convert with
-``io.ome.ome_corner`` and writers with ``io.ome.ome_translation`` (or
-``multiscales_attrs`` and ``singlescale_attrs``, which use it); no other code
-adds or subtracts half a voxel. Janelia pyramids have
+OME-NGFF, and Neuroglancer, put ``translation`` at the centre of voxel 0,
+and so does worldarray: a ``WorldArray``'s and an ``ArrayMeta``'s
+``translation`` is that centre and ``corner`` the lower corner of voxel 0,
+and worldarray converts when it reads a store's documents and when it
+writes them (``create``); no code in cellmap-flow adds or subtracts half a
+voxel. Janelia pyramids have
 ``translation = scale/2 − 4`` nm, so every level's corner is at −4 nm. The
 served zarr and the blockwise output start at the corner of the raw level the
 model reads. The legacy

@@ -21,8 +21,10 @@ import numpy as np
 from funlib.geometry import Coordinate
 
 # The names a model's output axes list gives its channel axis
-# (``chunk_output_axes``): never space.
-CHANNEL_AXIS_NAMES = ("c", "c^", "channel")
+# (``chunk_output_axes``): never space. The io package's, which costs
+# nothing to import.
+from cellmap_flow.io import CHANNEL_AXIS_NAMES  # noqa: F401  (re-read from here by the model types)
+
 DEFAULT_OUTPUT_AXES = ("c", "z", "y", "x")
 
 

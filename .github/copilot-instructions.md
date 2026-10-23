@@ -4,7 +4,7 @@ cellmap-flow serves PyTorch, TensorFlow, DaCapo and bioimage.io models to Neurog
 
 **Geometry**
 - World coordinates are in nm. A `Roi` is (lower corner, shape) in nm, and voxel `i` covers `[corner + i*vs, corner + (i+1)*vs)` along each axis.
-- An OME-NGFF `translation` is the centre of voxel 0, not its corner: read it with `io.ome.ome_corner` and write it with `io.ome.ome_translation`. Legacy `resolution`/`offset` attributes and N5 `transform` are already corners.
+- An OME-NGFF `translation` is the centre of voxel 0, not its corner. worldarray reads and writes it (a `WorldArray`'s `translation` is the centre, its `corner` the lower corner); nothing in cellmap-flow adds or subtracts half a voxel. Legacy `resolution`/`offset` attributes are corners; a COSEM `transform.translate` is a centre, as worldarray reads it.
 - Voxel sizes can be fractional (5.24 nm), and a corner need not lie on the voxel grid (Janelia raw has a -4 nm corner at 8 nm). `Coordinate` truncates to integers, so keep worldarray's floats (`WorldArray.voxel_size`, `.corner`, `.translation`; `cellmap_flow.io.raw.open_raw` opens the level a model reads).
 - A model's forward takes `(batch, 1, z, y, x)` and returns `(batch, C, z, y, x)`. A processed chunk is channel-first, `(c, z, y, x)`, or `(z, y, x)` when the config's `chunk_output_axes` names no channel axis: the server and blockwise read `chunk_output_axes` only for whether there is one, not where. The served zarr array (chunkmirage's, `<name>/zarr`) puts the channel axis first.
 
