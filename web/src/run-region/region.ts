@@ -237,17 +237,31 @@ export function runRegionLayer(axes?: readonly string[]): LayerSpec {
   return { ...goodRegionsLayer([], axes), tool: BOX_TOOL, annotationColor: RUN_REGION_COLOR };
 }
 
-/** The coordinate space a local annotation layer stores its points in:
- * its source's transform's input dimensions when it names them, else its
- * output dimensions (Neuroglancer's identity transform then), whichever of
- * Neuroglancer's forms the source is in (an object, or a list of them);
- * null when it says neither. */
-function annotationDimensions(source: unknown): Record<string, [number, string]> | null {
+type Dimensions = Record<string, [number, string]>;
+
+const isDimensions = (value: unknown): value is Dimensions => !!value && typeof value === "object" && Object.keys(value).length > 0;
+
+/** The coordinate space a local annotation layer stores its points in,
+ * named by axis: its source's transform's input dimensions when they carry
+ * the axis names, whichever of Neuroglancer's forms the source is in (an
+ * object, or a list of them). Neuroglancer names a local layer's source
+ * dimensions "0", "1", "2" once the layer has been in the viewer, and keeps
+ * the axis names on the output dimensions, which map to the source's one
+ * to one (its identity transform), so unnamed input dimensions take the
+ * output's names in order, at the input's scales; without input dimensions
+ * the output's are the space. Read positionally instead, an x, y, z
+ * viewer's box came out as z, y, x, and a run computed the mirrored
+ * region. null when the source names no dimensions. */
+function annotationDimensions(source: unknown): Dimensions | null {
   const first = Array.isArray(source) ? source[0] : source;
   if (!first || typeof first !== "object") return null;
   const transform = (first as { transform?: { inputDimensions?: unknown; outputDimensions?: unknown } }).transform;
-  const dimensions = transform?.inputDimensions ?? transform?.outputDimensions;
-  return dimensions && typeof dimensions === "object" ? (dimensions as Record<string, [number, string]>) : null;
+  const input = transform?.inputDimensions, output = transform?.outputDimensions;
+  if (isDimensions(input) && ["z", "y", "x"].every((axis) => axis in input)) return input;
+  if (!isDimensions(output)) return null;
+  if (!isDimensions(input)) return output;
+  const scales = Object.values(input);
+  return Object.fromEntries(Object.keys(output).map((name, i) => [name, scales[i] ?? output[name]]));
 }
 
 /** The layer's points are in nm (runRegionLayer) when its source says nothing else. */

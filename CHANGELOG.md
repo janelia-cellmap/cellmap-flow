@@ -4,6 +4,10 @@ All notable changes to cellmap-flow. The format follows [Keep a Changelog](https
 
 ## Unreleased
 
+### Fixed
+- **A box drawn for Run on a region is read in the viewer's axis order.** The Run tab read the box's corners in the run_region layer's source dimensions, which Neuroglancer names 0, 1 and 2 once the layer has been in the viewer, and took them as z, y, x by position: in a viewer whose dimensions are x, y, z the box came out mirrored (z and x swapped), the fields showed the mirrored offset, and the run computed and saved the mirrored region. The names now come from the layer's output dimensions, which map to the source's one to one, so the box is the one drawn in any axis order, and a box typed into the fields is drawn in the same space.
+
+
 ## 0.3.0 — 2026-10-22
 
 ### Added

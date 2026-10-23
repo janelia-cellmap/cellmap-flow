@@ -16,7 +16,7 @@ import type { Chain, DatasetInfo, RegionStore, ServedModel } from "../../src/con
 import { InferenceEngine, type ModelRunner } from "../../src/infer/engine";
 import type { Level } from "../../src/infer/geometry";
 import { type OutputFolder, overwriteQuestion, prepareFolder, savedLayer, savedLayerName, zarrName, zipRun } from "../../src/run-region/output";
-import { isPlan, latestBox, type ModelPlan, planModel, runRegionLayer, sameRegion } from "../../src/run-region/region";
+import { isPlan, latestBox, planModel, runRegionLayer, sameRegion, type ModelPlan, withBox } from "../../src/run-region/region";
 import { type RunProgress, runRegion, type RunTarget } from "../../src/run-region/run";
 import { memorySession } from "../../src/state";
 import { DATASET, entry, type FakeContext, fakeContext, NAME_54, NAME_56 } from "./backend-fakes";
@@ -141,6 +141,13 @@ describe("the run_region layer", () => {
     // The source's own (input) dimensions win over the space it is shown in.
     const shown = { ...layer, source: { url: "local://annotations", transform: { inputDimensions: { z: [1e-6, "m"], y: [1e-6, "m"], x: [1e-6, "m"] }, outputDimensions: space } } };
     expect(latestBox(shown)).toEqual({ offset: [1000, 2000, 3000], size: [1000, 2000, 3000] });
+    // Neuroglancer names a local layer's source dimensions "0", "1", "2" and
+    // keeps the axis names on the output side, mapped one to one: a box in
+    // an x, y, z viewer is x, y, z, not z, y, x by position.
+    const unnamed = { ...layer, source: { url: "local://annotations", transform: { inputDimensions: { 0: [1e-9, "m"], 1: [1e-9, "m"], 2: [1e-9, "m"] }, outputDimensions: { x: [1e-9, "m"], y: [1e-9, "m"], z: [1e-9, "m"] } } } };
+    expect(latestBox(unnamed)).toEqual({ offset: [3, 2, 1], size: [3, 2, 1] });
+    // And a box written back goes into that same space.
+    expect(latestBox(withBox(unnamed, { offset: [30, 20, 10], size: [3, 2, 1] }))).toEqual({ offset: [30, 20, 10], size: [3, 2, 1] });
   });
 
   it("takes a box read back a little off as the same region (Neuroglancer's 32-bit corners)", () => {
