@@ -35,11 +35,11 @@ import json
 from collections import deque
 import logging
 import time
-from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
 import requests
-import zarr
+import tensorstore as ts
+import worldarray as wa
 from flask import jsonify, request
 
 from cellmap_flow.dashboard.finetune_utils import sync_annotation_volume_from_minio
@@ -59,7 +59,6 @@ from cellmap_flow.portable import label_it
 from cellmap_flow.portable.label_it import SEED_METHODS, probability
 from cellmap_flow.post import segment
 from cellmap_flow.serving.client import fetch_model_info
-from cellmap_flow.serving.protocol import ARGS_KEY
 from cellmap_flow.viewer.layers import prediction_url, prediction_voxel_override
 
 logger = logging.getLogger(__name__)
@@ -70,10 +69,24 @@ logger = logging.getLogger(__name__)
 LARGE_BOX_VOXELS = 128**3
 
 # A chunk can be the first the server computes, which waits on its warm-up.
+# worldarray waits this long for a read, then twice and three times as long
+# when it asks again.
 PREDICTION_TIMEOUT_SECONDS = 120
 # Metadata only, asked while the page polls the picker: a server that does
 # not answer by then is left out of the methods until it does.
 METADATA_TIMEOUT_SECONDS = 5
+
+
+@functools.cache
+def _server_context():
+    """The tensorstore context every read of a model's server shares: 8
+    requests at once, and a failed one asked again 3 times (tensorstore's own
+    default goes on asking for minutes)."""
+    return ts.Context({
+        "http_request_retries": {"max_retries": 3, "initial_delay": "1s", "max_delay": "30s"},
+        "http_request_concurrency": {"limit": 8},
+    })
+
 
 class _Refused(Exception):
     """A request these routes will not act on: ``status``, a message and extra answer fields."""
@@ -104,7 +117,7 @@ def _target_box(data):
         centre_nm, size_nm = view_box_nm(size_nm)
     except ValueError as e:
         raise _Refused(str(e), 400)
-    shape = zarr.open_array(f"{volume['zarr_path']}/annotation/s0", mode="r").shape
+    shape = wa.metadata(f"{volume['zarr_path']}/annotation/s0").shape
     box = fill.box_voxels(volume, centre_nm - size_nm / 2, size_nm, shape)
     if box is None:
         raise _Refused("The view is outside the annotation volume.", 400)
@@ -298,10 +311,14 @@ def _served_base(host, model_name, postprocess=(), input_norm=None):
 
 
 def _serves_integers(host, model_name):
-    """Whether the model's raw output is integer labels, from the served array's dtype; None when unknown."""
+    """Whether the model's raw output is integer labels, from the served array's dtype; None when unknown.
+
+    Asked with requests rather than worldarray: tensorstore's http reads have
+    no timeout of their own, and the page polls this."""
     try:
-        meta = _get(f"{_served_base(host, model_name)}/s0/.zarray", METADATA_TIMEOUT_SECONDS).json()
-        return np.dtype(meta["dtype"]).kind in "iu"
+        response = requests.get(f"{_served_base(host, model_name)}/s0/.zarray", timeout=METADATA_TIMEOUT_SECONDS)
+        response.raise_for_status()
+        return np.dtype(response.json()["dtype"]).kind in "iu"
     except Exception as e:
         logger.debug(f"Could not read {model_name}'s served dtype: {e}")
         return None
@@ -365,13 +382,6 @@ def seed_sources():
     })
 
 
-def _get(url, timeout=PREDICTION_TIMEOUT_SECONDS):
-    response = requests.get(url, timeout=timeout)
-    if response.status_code != 200:
-        raise RuntimeError(f"{url.split(ARGS_KEY)[0]}... answered HTTP {response.status_code}")
-    return response
-
-
 def read_prediction(host, model_name, volume, lo, hi, info, postprocess=(), input_norm=None):
     """The model's raw output over annotation voxels ``[lo, hi)``.
 
@@ -385,56 +395,52 @@ def read_prediction(host, model_name, volume, lo, hi, info, postprocess=(), inpu
     placed where neuroglancer draws the layer (``prediction_voxel_override``),
     so the seed lies under the prediction the user sees.
 
+    The served level is read with worldarray, as any zarr is, and placed by
+    its OME metadata. A server that fails to answer raises RuntimeError.
+
     Returns ``(prediction, lo, hi)``: a (channels, z, y, x) array, float32
     or, when the server serves integer labels, as served (an id past 2^24
     is not exact in float32); and the box, shrunk to what the server covers.
     """
     base = _served_base(host, model_name, postprocess, input_norm)
-    multiscale = _get(f"{base}/.zattrs").json()["multiscales"][0]
+    try:
+        # A server that takes the connection and never answers holds this
+        # open: worldarray's timeout is on the read below.
+        served = wa.open(
+            f"{base}/s0", strict_units=False, context=_server_context(),
+            retries=wa.Retry(timeout=PREDICTION_TIMEOUT_SECONDS, max_attempts=3, base_delay=5),
+        )
+    except (ValueError, OSError) as e:
+        # tensorstore's errors are ValueErrors; nothing at the URL is an OSError.
+        raise RuntimeError(f"{model_name}'s server: {e}") from e
     # The channel axis comes first; the axes are found by name all the same.
-    names = [axis["name"] for axis in multiscale["axes"]]
-    if not all(axis in names for axis in "zyx"):
-        raise RuntimeError(f"{model_name}'s server serves axes {multiscale['axes']}, not z, y and x")
-    spatial = [names.index(axis) for axis in "zyx"]
-    channel = next((i for i in range(len(names)) if i not in spatial), None)
-    transforms = {t["type"]: t for t in multiscale["datasets"][0]["coordinateTransformations"]}
-    scale = transforms["scale"]["scale"]
-    # A translation of 0 may be left out.
-    translation = transforms.get("translation", {}).get("translation", [0.0] * len(names))
-    declared = [scale[i] for i in spatial]
+    if not all(axis in served.axes for axis in "zyx"):
+        raise RuntimeError(f"{model_name}'s server serves axes {served.axes}, not z, y and x")
+    spatial = [served.axes.index(axis) for axis in "zyx"]
+    channel = next((i for i in range(len(served.axes)) if i not in spatial), None)
+    # Every axis, the spatial ones in nm; the translation is voxel 0's
+    # centre, the OME translation as written, which placement takes.
+    grid = served.grid
     # The voxel size neuroglancer draws the layer at, when not the declared one.
     drawn = prediction_voxel_override(host, get_session().dataset_path, info) or None
-    meta = _get(f"{base}/s0/.zarray").json()
-    shape = [meta["shape"][i] for i in spatial]
     placed = label_it.placement(
         lo, hi, volume["output_voxel_size"], volume.get("dataset_offset_nm"),
-        [translation[i] for i in spatial], declared, shape, drawn,
+        [grid.translation[i] for i in spatial], [grid.voxel_size[i] for i in spatial],
+        [grid.shape[i] for i in spatial], drawn,
     )
     if placed is None:
         raise _Refused("The view is outside what the model's server predicts.", 400)
     indices, new_lo, new_hi = placed
     read_lo, read_hi = label_it.read_box(indices)
 
-    # Fetched together, then read through zarr as the array they belong to.
-    # Every channel is in one chunk, index 0.
-    chunk = np.asarray([meta["chunks"][i] for i in spatial])
-    first = np.asarray(read_lo) // chunk
-    last = (np.asarray(read_hi) - 1) // chunk
-    separator = meta.get("dimension_separator", ".")
-    keys = []
-    for offset in np.ndindex(*(last - first + 1)):
-        key = [0] * len(names)
-        for axis, value in zip(spatial, first + np.asarray(offset)):
-            key[axis] = int(value)
-        keys.append(separator.join(map(str, key)))
-    with ThreadPoolExecutor(max_workers=min(len(keys), 8)) as pool:
-        contents = list(pool.map(lambda key: _get(f"{base}/s0/{key}").content, keys))
-    store = {".zarray": json.dumps(meta).encode(), **dict(zip(keys, contents))}
-    served = zarr.open_array(store=store, mode="r")
-    window = [slice(None)] * len(names)
+    begin, end = [0] * len(grid.shape), list(grid.shape)
     for axis, a, b in zip(spatial, read_lo, read_hi):
-        window[axis] = slice(a, b)
-    region = served[tuple(window)]
+        begin[axis], end[axis] = a, b
+    try:
+        region = served.read_index(begin, end)
+    except (ValueError, OSError) as e:
+        # A timeout on every attempt is a TimeoutError, an OSError.
+        raise RuntimeError(f"{model_name}'s server: {e}") from e
     region = region[None] if channel is None else np.moveaxis(region, channel, 0)
     prediction = label_it.gather(region, indices)
     if prediction.dtype.kind not in "iu":
@@ -568,7 +574,7 @@ def seed_view_from_prediction():
         return _error(str(e), 409)
     except ValueError as e:
         return _error(str(e), 400)
-    except (requests.RequestException, RuntimeError) as e:
+    except RuntimeError as e:
         logger.warning(f"Could not read the prediction to seed from: {e}")
         return _error(f"Could not read the model's prediction: {e}", 502)
     except Exception as e:
