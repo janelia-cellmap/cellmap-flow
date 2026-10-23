@@ -5,7 +5,7 @@ All notable changes to cellmap-flow. The format follows [Keep a Changelog](https
 ## Unreleased
 
 ### Changed
-- **The browser app runs on chunkmirage 0.1.0a3's engine** (`web/chunkmirage.lock`, which named a commit between 0.1.0a2 and 0.1.0a3). Stored arrays are placed in the browser by worldarray's rules, as the server places them: an N5 level with no `offset` has its corner at the origin, an OME multiscale's own `coordinateTransformations` count, funlib and COSEM attributes on an array are read. The engine's OME multiscales type a channel axis as `channel` and a `t` axis as time, where both were `space`. A precomputed scale with a `voxel_offset` serves its chunks. Pyodide loads any package it ships the first time the portable Python imports it. The Python side stays on chunkmirage 0.1.0a2: 0.1.0a3 requires `worldarray<0.7`, and cellmap-flow needs 0.7.
+- **The browser app runs on chunkmirage 0.1.0a4's engine** (`web/chunkmirage.lock`, which named a commit between 0.1.0a2 and 0.1.0a3; 0.1.0a4's engine is 0.1.0a3's). Stored arrays are placed in the browser by worldarray's rules, as the server places them: an N5 level with no `offset` has its corner at the origin, an OME multiscale's own `coordinateTransformations` count, funlib and COSEM attributes on an array are read. The engine's OME multiscales type a channel axis as `channel` and a `t` axis as time, where both were `space`. A precomputed scale with a `voxel_offset` serves its chunks. Pyodide loads any package it ships the first time the portable Python imports it. The server runs the same release (`chunkmirage>=0.1.0a4`).
 
 ## 0.3.0 — 2026-10-22
 
