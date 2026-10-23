@@ -12,6 +12,7 @@ import re
 import shutil
 from datetime import datetime
 
+import worldarray as wa
 from flask import jsonify, request
 
 from cellmap_flow.dashboard.finetune_utils import ensure_minio_serving
@@ -26,9 +27,8 @@ from cellmap_flow.dashboard.routes.finetune.common import (
 from cellmap_flow.dashboard.routes.finetune.overlay import refresh_annotated_regions_layer
 from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.finetune.session import manifest as session_manifest
-from cellmap_flow.finetune.session import sync as session_sync
 from cellmap_flow.finetune.session.manifest import read_manifest
-from cellmap_flow.finetune.session.volume import read_volume
+from cellmap_flow.finetune.session.volume import read_root_attrs, read_volume
 
 logger = logging.getLogger(__name__)
 
@@ -68,11 +68,12 @@ def _copytree_with_progress(src, dst, load_id, label, parent_done, parent_total)
     if files_in_src == 0:
         return 0
 
-    # Use exactly what LSF allocated (LSB_DJOB_NUMPROC, falling back to CPU
-    # affinity). No artificial ceiling — going above the slot count means
+    # Exactly the threads the job was given (worldarray's thread_budget:
+    # OMP_NUM_THREADS, else the scheduler's slots, else the CPUs this process
+    # may run on). No artificial ceiling — going above the slot count means
     # using cores LSF didn't give us; going below leaves throughput on the
     # table.
-    workers = max(1, min(session_sync.worker_count(), files_in_src))
+    workers = max(1, min(wa.thread_budget(), files_in_src))
 
     def _copy_one(pair):
         s, d = pair
@@ -115,14 +116,13 @@ def _annotation_volume_dirs(corrections_dir):
     for entry in os.listdir(corrections_dir):
         if not entry.endswith(".zarr") or "_chunk_" in entry:
             continue
-        attrs_file = os.path.join(corrections_dir, entry, ".zattrs")
+        path = os.path.join(corrections_dir, entry)
         try:
-            with open(attrs_file) as f:
-                if json.load(f).get("type") != "annotation_volume":
-                    continue
+            if read_root_attrs(path).get("type") != "annotation_volume":
+                continue
+            volumes.append((os.path.getmtime(os.path.join(path, ".zattrs")), entry))
         except (OSError, ValueError):
             continue
-        volumes.append((os.path.getmtime(attrs_file), entry))
     volumes = [entry for _, entry in sorted(volumes, reverse=True)]
     try:
         trained = (read_manifest(corrections_dir) or {}).get("volume_zarr_path")
@@ -139,9 +139,8 @@ def _volume_dataset(volume_path):
     """The raw dataset an annotation volume was painted on (its attrs'
     ``dataset_path``), or None when it does not say."""
     try:
-        with open(os.path.join(volume_path, ".zattrs")) as f:
-            return json.load(f).get("dataset_path")
-    except (OSError, ValueError):
+        return read_root_attrs(volume_path).get("dataset_path")
+    except ValueError:
         return None
 
 
@@ -347,11 +346,7 @@ def load_existing_volume():
             )
 
         new_volume_path = os.path.join(new_corrections, volume_dir)
-        zattrs_file = os.path.join(new_volume_path, ".zattrs")
-        volume_meta = {}
-        if os.path.exists(zattrs_file):
-            with open(zattrs_file) as f:
-                volume_meta = json.load(f)
+        volume_meta = read_root_attrs(new_volume_path)
 
         s0_count = _populated_chunk_count(new_volume_path)
 
