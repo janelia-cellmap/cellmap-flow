@@ -221,11 +221,10 @@ def _random_volume(write_array, layout):
 
 @pytest.mark.parametrize("layout", RESAMPLED_VALUES)
 def test_a_resampled_read_is_the_direct_computation(write_array, layout):
-    """Every target voxel, read by index: ``raw.array.box`` is the data's own
-    extent, which can end before the last target voxel's centre (5 x voxels
-    of 8 nm are 40 nm, two 24 nm voxels centred at 12 and 36 nm, the second
-    reaching past the data; at 7 they are 56 nm and the third, at 60 nm, is
-    outside it)."""
+    """Every target voxel, read by index and as the array's own box, which
+    covers the voxels the data resamples to even where they reach past it
+    (5 z voxels of 8 nm are 40 nm; two 24 nm voxels, centred at 12 and 36
+    nm, cover them, and the box ends at 48 nm)."""
     raw, data = _random_volume(write_array, layout)
     source_vs, _, dtype, requested = RESAMPLED_VALUES[layout]
     shape = spatial_shape(raw.array)
@@ -235,6 +234,7 @@ def test_a_resampled_read_is_the_direct_computation(write_array, layout):
         np.testing.assert_allclose(got, expected, rtol=1e-6)
     else:
         np.testing.assert_array_equal(got, expected)
+    np.testing.assert_array_equal(raw.to_ndarray_ts(raw.array.box), got)
     # Through the chain after resampling, as a stored level would be.
     doubled = raw.with_input_norms([LambdaNormalizer("x * 2")]).read_index((0, 0, 0), shape)
     np.testing.assert_allclose(doubled, expected.astype(np.float32) * 2, rtol=1e-6)

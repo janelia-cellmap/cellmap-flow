@@ -107,8 +107,8 @@ def stored_placement(array: wa.WorldArray) -> tuple:
     data really lies. The array's own ``voxel_size`` and ``translation`` are
     those its reads are done at, which for a level read as if it were at a
     model's voxel size (relabelled) are that size and the level's corner
-    rescaled with it; worldarray's ``source_voxel_size`` reports the
-    relabelled size too, so it is no use here.
+    rescaled with it; worldarray's ``source_voxel_size`` gives the stored
+    size alone, and the stored translation only the metadata has.
     """
     stored = array.meta.in_units(space="nanometer", strict=False)
     return (
