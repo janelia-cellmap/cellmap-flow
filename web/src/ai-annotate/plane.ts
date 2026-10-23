@@ -13,9 +13,8 @@
 // openImage composes each level's coordinateTransformations and takes the
 // shift as the origin, converted to nm by infer/geometry.ts datasetInfoFrom),
 // and an OME translation is voxel 0's CENTRE: that is how the Python reads a
-// translation (io/ome.py ome_corner takes half a voxel off it to get the
-// corner, which is what worldarray's `corner`, the `corner` the server's
-// read_plane passes raw_box, holds), how infer/geometry.ts outputLevel
+// translation (worldarray takes half a voxel off it for its `corner`, the
+// `corner` the server's read_plane passes raw_box), how infer/geometry.ts outputLevel
 // treats it (the served level's origin is the raw corner, `origin - voxel/2`,
 // plus half an output voxel) and so how finetune/volume.ts planVolume gets a
 // volume's dataset_offset_nm, which the Python reads as a centre. So the raw
