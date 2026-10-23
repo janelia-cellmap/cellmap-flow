@@ -18,7 +18,7 @@ import os
 from typing import Tuple
 
 import numpy as np
-import zarr
+import worldarray as wa
 
 logger = logging.getLogger(__name__)
 
@@ -80,8 +80,8 @@ class PatchReader:
     would train on raw uint8 while inference sees normalized [-1, 1].
 
     The arrays are opened on first read. In training that is in a loader
-    worker, after the dataset was pickled to it: no open zarr or
-    tensorstore handle is ever pickled.
+    worker, after the dataset was pickled to it: no open tensorstore handle
+    is ever pickled.
     """
 
     def __init__(
@@ -148,8 +148,9 @@ class PatchReader:
 
         Cut across ``depth_axis`` and handed over in ``slice_axes`` order,
         so its shape is ``output_size`` whichever axis it is cut across.
-        Out-of-bounds voxels are 0, unannotated, which the trainer's loss
-        masks out when ``mask_unannotated`` is on.
+        Out-of-bounds voxels are 0, unannotated (worldarray pads a read
+        past the array), which the trainer's loss masks out when
+        ``mask_unannotated`` is on.
 
         The dtype is the volume's because an instance-correction volume is
         uint16 or uint32 (instance id + 1): a uint8 patch wrapped its ids
@@ -159,24 +160,12 @@ class PatchReader:
         """
         out_size = across(self.output_size, depth_axis)
         lo = (centre_voxels - out_size / 2).astype(int)
-        hi = lo + out_size
-
-        clip_lo = np.maximum(lo, 0)
-        clip_hi = np.minimum(hi, self.shape_voxels)
-        valid = np.all(clip_hi > clip_lo)
-
         if self._volume_arr is None:
-            self._volume_arr = zarr.open(
-                os.path.join(self.volume_zarr_path, "annotation", "s0"), mode="r"
+            # Index reads only: the volume's units are not asked about.
+            self._volume_arr = wa.open(
+                os.path.join(self.volume_zarr_path, "annotation", "s0"), units=None, padding=0
             )
-        patch = np.zeros(out_size, dtype=self._volume_arr.dtype)
-        if valid:
-            src_slices = tuple(slice(int(c), int(d)) for c, d in zip(clip_lo, clip_hi))
-            dst_slices = tuple(
-                slice(int(c - l), int(d - l))
-                for c, d, l in zip(clip_lo, clip_hi, lo)
-            )
-            patch[dst_slices] = self._volume_arr[src_slices]
+        patch = self._volume_arr.read_index(lo, lo + out_size)
         return np.ascontiguousarray(patch.transpose(slice_axes(depth_axis)))
 
     def raw(self, centre_voxels: np.ndarray, depth_axis: int = 0) -> np.ndarray:
