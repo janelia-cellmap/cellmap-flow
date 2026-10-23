@@ -44,13 +44,15 @@ dependencies = [
     # Serves the predictions (serving/chunkmirage_server.py). From PyPI by
     # version, not from git by commit: PyPI refuses an upload whose
     # dependencies name a URL, so a git pin would keep cellmap-flow from
-    # being released. 0.1.0a2 was built from chunkmirage's commit 584b343;
-    # the browser engine's pin in web/chunkmirage.lock is that commit or a
-    # later one. Naming a pre-release in the lower bound lets pip take the
+    # being released. 0.1.0a4 was built from chunkmirage's commit a7b0948,
+    # the first release on worldarray 0.7, which cellmap-flow needs; its
+    # browser engine is 0.1.0a3's (a4 changed only the worldarray range).
+    # web/chunkmirage.lock pins the engine the browser app is built on, by
+    # commit. Naming a pre-release in the lower bound lets pip take the
     # alpha without --pre; the upper bound is there because the plugin API
     # (the ops and the consumer hook this app registers) may still change
     # before 0.1.0.
-    "chunkmirage>=0.1.0a2,<0.2",
+    "chunkmirage>=0.1.0a4,<0.2",
     ]
 
 # extras
