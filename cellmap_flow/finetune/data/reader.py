@@ -18,7 +18,7 @@ import os
 from typing import Tuple
 
 import numpy as np
-import zarr
+import worldarray as wa
 
 logger = logging.getLogger(__name__)
 
@@ -80,8 +80,8 @@ class PatchReader:
     would train on raw uint8 while inference sees normalized [-1, 1].
 
     The arrays are opened on first read. In training that is in a loader
-    worker, after the dataset was pickled to it: no open zarr or
-    tensorstore handle is ever pickled.
+    worker, after the dataset was pickled to it: no open tensorstore handle
+    is ever pickled.
     """
 
     def __init__(
@@ -108,7 +108,7 @@ class PatchReader:
         self.input_norm_config = input_norm_config or {}
         self.normalizers = input_normalizers(self.input_norm_config)
         self._volume_arr = None
-        self._raw_idi = None
+        self._raw = None
         # Read the raw resampled to input_voxel_size when it has no level at
         # it (the volume's resample, see session.volume.plan_volume).
         self.resample = bool(resample)
@@ -148,8 +148,9 @@ class PatchReader:
 
         Cut across ``depth_axis`` and handed over in ``slice_axes`` order,
         so its shape is ``output_size`` whichever axis it is cut across.
-        Out-of-bounds voxels are 0, unannotated, which the trainer's loss
-        masks out when ``mask_unannotated`` is on.
+        Out-of-bounds voxels are 0, unannotated (worldarray pads a read
+        past the array), which the trainer's loss masks out when
+        ``mask_unannotated`` is on.
 
         The dtype is the volume's because an instance-correction volume is
         uint16 or uint32 (instance id + 1): a uint8 patch wrapped its ids
@@ -159,24 +160,12 @@ class PatchReader:
         """
         out_size = across(self.output_size, depth_axis)
         lo = (centre_voxels - out_size / 2).astype(int)
-        hi = lo + out_size
-
-        clip_lo = np.maximum(lo, 0)
-        clip_hi = np.minimum(hi, self.shape_voxels)
-        valid = np.all(clip_hi > clip_lo)
-
         if self._volume_arr is None:
-            self._volume_arr = zarr.open(
-                os.path.join(self.volume_zarr_path, "annotation", "s0"), mode="r"
+            # Index reads only: the volume's units are not asked about.
+            self._volume_arr = wa.open(
+                os.path.join(self.volume_zarr_path, "annotation", "s0"), units=None, padding=0
             )
-        patch = np.zeros(out_size, dtype=self._volume_arr.dtype)
-        if valid:
-            src_slices = tuple(slice(int(c), int(d)) for c, d in zip(clip_lo, clip_hi))
-            dst_slices = tuple(
-                slice(int(c - l), int(d - l))
-                for c, d, l in zip(clip_lo, clip_hi, lo)
-            )
-            patch[dst_slices] = self._volume_arr[src_slices]
+        patch = self._volume_arr.read_index(lo, lo + out_size)
         return np.ascontiguousarray(patch.transpose(slice_axes(depth_axis)))
 
     def raw(self, centre_voxels: np.ndarray, depth_axis: int = 0) -> np.ndarray:
@@ -187,40 +176,37 @@ class PatchReader:
         ``normalize`` applies the session's own afterwards.
 
         The patch is a box of raw voxels: ``input_size`` of them, from the
-        one the patch's lower edge falls in (Grid.world_to_box's rule). It
-        used to go through a whole-nm Roi, whose Coordinate truncated the
-        edge and the shape, so at 5.24 nm or 10.48 nm the patch came out a
-        voxel short and started a voxel early. Where the edge is whole nm
-        on a whole-nm grid (the 8 and 16 nm levels) both give the same box.
+        one the patch's lower edge falls in. It used to go through a whole-nm
+        Roi, whose Coordinate truncated the edge and the shape, so at 5.24 nm
+        or 10.48 nm the patch came out a voxel short and started a voxel
+        early. Where the edge is whole nm on a whole-nm grid (the 8 and 16 nm
+        levels) both give the same box.
         """
-        from cellmap_flow.image_data_interface import ImageDataInterface
-        from cellmap_flow.io.geometry import Box
         from cellmap_flow.io.metadata import snap_integral
+        from cellmap_flow.io.raw import RawInput, open_raw
 
-        if self._raw_idi is None:
-            self._raw_idi = ImageDataInterface(
-                self.raw_dataset_path,
-                voxel_size=self.input_voxel_size,
-                normalize=False,
-                on_voxel_size_mismatch="resample" if self.resample else "relabel",
-                padding="edge",
+        if self._raw is None:
+            # The level at input_voxel_size, resampled to it when the volume
+            # was made to (no level at it); past the array its edge is
+            # repeated, as the served model's input is (BlockInput).
+            self._raw = RawInput(
+                open_raw(self.raw_dataset_path, self.input_voxel_size, resample=self.resample), normalize=False
             )
-        raw_voxel_size = np.asarray(self._raw_idi.voxel_size, dtype=float)
-        raw_corner_nm = np.asarray(self._raw_idi.offset, dtype=float)
+        raw_voxel_size = np.asarray(self._raw.array.voxel_size, dtype=float)
+        raw_corner_nm = np.asarray(self._raw.array.corner, dtype=float)
         in_size = across(self.input_size, depth_axis)
         centre_nm = self.corner_nm + centre_voxels * self.output_voxel_size
         lower_edge_nm = centre_nm - in_size * raw_voxel_size / 2
         # snap_integral: float noise (39.9999999 voxels) counts as the whole
         # number it is.
-        begin = np.floor(snap_integral((lower_edge_nm - raw_corner_nm) / raw_voxel_size))
-        box = Box(tuple(int(b) for b in begin), tuple(int(s) for s in in_size))
+        begin = np.floor(snap_integral((lower_edge_nm - raw_corner_nm) / raw_voxel_size)).astype(int)
         # The selected channel, unnormalized (normalize=False), resampled when
-        # the volume is; out of the array its edge is repeated, as the served
-        # model's input is (BlockInput). normalize() comes after, which for
-        # pointwise normalizers (the manifests' MinMax, Lambda, ZScore) is the
-        # same as normalizing first; zeros here became -1 after them, a black
-        # wall the served model never saw.
-        return np.ascontiguousarray(self._raw_idi.read_box(box).transpose(slice_axes(depth_axis)))
+        # the volume is. normalize() comes after, which for pointwise
+        # normalizers (the manifests' MinMax, Lambda, ZScore) is the same as
+        # normalizing first; zeros here became -1 after them, a black wall
+        # the served model never saw.
+        patch = self._raw.read_index(begin, begin + in_size)
+        return np.ascontiguousarray(patch.transpose(slice_axes(depth_axis)))
 
     def normalize(self, raw: np.ndarray) -> np.ndarray:
         """``raw`` through the session's normalizers, in order, as apply_norms() does for inference."""

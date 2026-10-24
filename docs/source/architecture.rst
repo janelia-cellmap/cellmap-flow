@@ -31,21 +31,25 @@ Reading data and running a model
        ``globals``, Flask, neuroglancer or torch). Import the submodule you
        need:
 
-       - ``paths``: where a container ends, and which format a path is;
-       - ``metadata``: ``read_array_meta``, one ``ArrayMeta`` for zarr v2
-         and v3, N5 and precomputed; ``list_levels`` for a pyramid;
-       - ``multiscale``: the pyramid level for a voxel size, and
-         ``closest_raw_scale``;
-       - ``geometry``: ``Grid`` and ``Box``, world nanometres to voxels and
-         back; ``list_populated_chunks``;
-       - ``source``: ``open_array`` and ``read_padded``, tensorstore reads
-         that pad what lies outside the array;
-       - ``ome``: OME-NGFF translation to corner and back, and the
-         ``multiscales`` attributes writers use.
-   * - ``image_data_interface.py``
-     - ``ImageDataInterface``: a dataset read in world coordinates through the
-       input chain. It picks the level, keeps the grid and the array, and pads
-       reads. Model scripts use it, so its path is public.
+       - ``paths``: undoing a shell-escaped space in a path;
+       - ``metadata``: ``open_level``, a path opened the way every reader
+         does (a group at its first level unless a voxel size asks for
+         another), and nanometers per unit (worldarray's unit table, which
+         the browser imports too);
+       - ``multiscale``: ``closest_raw_scale``, the raw level a model reads,
+         from the pyramid's document alone;
+       - ``raw``: ``open_raw``, the level a model reads as a worldarray
+         ``WorldArray`` (chosen for the voxel size, relabelled or resampled
+         when none is at it, its edge repeated past the data), and
+         ``RawInput``, that array read through the input chain
+         (``to_ndarray_ts(roi)``): what model scripts are given, so its path
+         is public;
+       - ``CHANNEL_AXIS_NAMES``: the names a channel axis may have.
+
+       Metadata, pyramids, chunk listing, reading and writing are
+       worldarray's own (``wa.metadata``, ``wa.open_pyramid``,
+       ``list_chunk_keys``, ``read_index``, ``create``, ``write``), called
+       where they are needed.
    * - ``norm/``
      - ``input_normalize``: the input normalizers (``InputNormalizer``
        subclasses) and ``SerializableInterface``. ``safe_expression``: the
@@ -183,9 +187,9 @@ The viewer and the dashboard
      - What it is for
    * - ``viewer/``
      - The neuroglancer viewer. It never imports or starts the dashboard;
-       callers pass what a layer needs. (The raw layer is read through
-       ``ImageDataInterface``, and so through the process's input chain,
-       ``process_chain()``.)
+       callers pass what a layer needs. (The raw layer is a worldarray
+       array indexed through ``raw.LazyNormalization``, and so through the
+       process's input chain, ``process_chain()``.)
 
        - ``bootstrap``: ``new_viewer()``;
        - ``layers``: ``prediction_layer``, ``prediction_source``,
@@ -410,8 +414,9 @@ A chunk served to Neuroglancer
    (``input_relabelled_from``).
 #. chunkmirage resolves an unknown name on its first request
    (``ChunkmirageServer.pipeline_for``) into a pipeline of
-   ``serving.chunkmirage_ops.layer_ops``: the raw data (the level and grid
-   the ``ImageDataInterface`` chose, as a chunkmirage source); an
+   ``serving.chunkmirage_ops.layer_ops``: the raw data (the level
+   ``io.raw.open_raw`` chose, as a chunkmirage source placed where it is
+   stored); an
    ``InferenceOp``, the model on the layer's normalizers; one
    ``PostprocessOp`` per postprocessing step (the ``PostProcessor`` steps the
    Output tab builds, run as they always were, with their state kept for the
@@ -430,8 +435,8 @@ A chunk served to Neuroglancer
    slot: by default one chunk at a time on the GPU, first come first
    served. ``InferenceOp`` hands the model a ``BlockInput`` for its
    ``to_ndarray_ts``, which applies the normalizers to what lies inside the
-   data and repeats its edge after, as ``ImageDataInterface.to_ndarray_ts``
-   does with ``padding="edge"``; a
+   data and repeats its edge after, as ``io.raw.RawInput.to_ndarray_ts``
+   does over an array ``open_raw`` padded with ``"edge"``; a
    config with its own ``process_chunk`` (TensorFlow, ONNX, cellpose,
    bioimage.io) reads through the same. A chunk the data ends in is computed
    whole and cropped.
@@ -544,8 +549,8 @@ A blockwise run
 #. The master, ``CellMapFlowBlockwiseProcessor(yaml, create=True)``, reads
    the YAML (``config.yaml.load_config``, ``registry.build_models``,
    ``resolve_data_path``), builds no ``Inferencer`` (it needs the geometry
-   only), and creates the output arrays, with OME attributes from
-   ``io.ome.singlescale_attrs``, on a grid that starts at the corner of the
+   only), and creates the output arrays with ``worldarray.create``, which
+   writes their OME attributes, on a grid that starts at the corner of the
    raw level the model reads. An output covers the raw extent, or only the
    bounding boxes: their bounding box, or each box in its own
    ``<output_path>/box_<n>`` with ``separate_bounding_boxes_zarrs``.
@@ -779,12 +784,12 @@ Conventions
 An OME translation is voxel 0's centre
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-OME-NGFF, and Neuroglancer, put ``translation`` at the centre of voxel 0.
-Everything inside cellmap-flow works with the lower corner of voxel 0
-(``ArrayMeta.translation``, ``io.geometry.Grid``). Readers convert with
-``io.ome.ome_corner`` and writers with ``io.ome.ome_translation`` (or
-``multiscales_attrs`` and ``singlescale_attrs``, which use it); no other code
-adds or subtracts half a voxel. Janelia pyramids have
+OME-NGFF, and Neuroglancer, put ``translation`` at the centre of voxel 0,
+and so does worldarray: a ``WorldArray``'s and an ``ArrayMeta``'s
+``translation`` is that centre and ``corner`` the lower corner of voxel 0,
+and worldarray converts when it reads a store's documents and when it
+writes them (``create``); no code in cellmap-flow adds or subtracts half a
+voxel. Janelia pyramids have
 ``translation = scale/2 − 4`` nm, so every level's corner is at −4 nm. The
 served zarr and the blockwise output start at the corner of the raw level the
 model reads. The legacy
@@ -883,7 +888,7 @@ Tests
   per group: ``jobs/`` and the job manager (through ``jobs.launch`` and
   ``job_manager.manager``, which import the rest), ``serving/`` (with
   ``models.geometry``, ``geometry_cache``, ``inference.runner``, the
-  ``Inferencer`` and ``ImageDataInterface``), the registry (with
+  ``Inferencer`` and ``io.raw``), the registry (with
   ``config.yaml`` and ``serving.launch``), ``models.resolve``, the state's
   owners (with ``process_chain``), ``finetune/session/`` and a finetune
   run's modules (``adaptation``, ``losses``, ``data`` and the training
@@ -978,10 +983,11 @@ Each of these still works in 0.3.0, warns, and goes in the next release.
    * - ``cellmap_flow.models.model_registry.list_huggingface_models`` and
        ``refresh_huggingface_models``
      - The same names in ``cellmap_flow.models.hf_catalog``
-   * - ``ImageDataInterface(output_voxel_size=...)`` (K18)
-     - Read at the dataset's voxel size and resample what is read.
-   * - ``ImageDataInterface(custom_fill_value=...)`` (K18)
-     - Read within the dataset's ROI and pad what is read.
+   * - ``cellmap_flow.image_data_interface.ImageDataInterface`` (removed, no
+       alias: its ``output_voxel_size`` and ``custom_fill_value`` had been
+       deprecated as K18)
+     - ``cellmap_flow.io.raw``: ``open_raw(path, voxel_size, resample=)``
+       for the array, ``RawInput(array)`` for ``to_ndarray_ts(roi)``.
 
 Using a name through one of the three alias modules raises a
 ``DeprecationWarning`` that names its new path;

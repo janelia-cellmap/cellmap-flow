@@ -2,24 +2,33 @@
 
 The volume is a 16^3 grid of 16 nm voxels, its labels in an in-memory
 "MinIO"; the view is one 8-voxel output patch, voxels 4..12 on each axis.
-The model's server is faked at the HTTP level, serving a prediction over
-the same grid, so the reading of chunks and the placing of voxels are
-tested along with the labels.
+The model's server is a local HTTP server of the zarr a test predicts over
+the same grid, read as any server is, so the reading of chunks and the
+placing of voxels are tested along with the labels; and one test reads a
+running chunkmirage server.
 """
 
-import json
+import functools
+import threading
+import time
+from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from types import SimpleNamespace
 
 import neuroglancer
 import numpy as np
 import pytest
+import worldarray as wa
 import zarr
+from starlette.testclient import TestClient
 
 from cellmap_flow.dashboard.routes.finetune import view_labels
 from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.finetune.session import fill, minio
-from cellmap_flow.serving.protocol import ARGS_KEY
+from cellmap_flow.models.models_config import ScriptModelConfig
+from cellmap_flow.serving.chunkmirage_server import ChunkmirageServer
+from cellmap_flow.serving.client import fetch_model_info
 from cellmap_flow.serving.probe import UNBOUNDED, UNIT
+from tests.utils.serving_helpers import COARSER_MODEL, layer, read_chunk, write_raw, write_script
 
 SEED, BACKGROUND, SPLIT, UNDO = (f"/api/finetune/view-labels/{what}" for what in ("seed", "background", "split", "undo"))
 BOX = (slice(4, 12),) * 3
@@ -77,37 +86,43 @@ def served(tmp_path, monkeypatch, viewer):
     return make
 
 
+class _ServedFiles(SimpleHTTPRequestHandler):
+    """The files of one served zarr at any layer's URL, ``/<layer name>/zarr/<key>``."""
+
+    def translate_path(self, path):
+        return super().translate_path("/" + path.partition("/zarr/")[2])
+
+    def log_message(self, *args):
+        pass
+
+
 @pytest.fixture
-def server(monkeypatch):
-    """A running server for "model" that predicts ``server.prediction`` (z, y, x, c) over the volume,
-    served as the chunkmirage server serves it: the name followed by ``/zarr``, channels first, "/" keys."""
-    fake = SimpleNamespace(prediction=None, output_class=UNIT)
+def server(tmp_path, monkeypatch):
+    """A running server for "model", over HTTP on this machine: ``server.serve(prediction)``
+    (z, y, x, c over the volume) serves it as the chunkmirage server does, an OME group under
+    the layer's name followed by ``/zarr``, channels first, "/" keys."""
+    root = tmp_path / "served"
+    files = ThreadingHTTPServer(("127.0.0.1", 0), functools.partial(_ServedFiles, directory=str(root)))
+    # Polled often, so shutting it down takes no half second.
+    threading.Thread(target=files.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True).start()
+    fake = SimpleNamespace(output_class=UNIT, host=f"http://127.0.0.1:{files.server_port}")
 
-    def get(url, timeout):
-        path = url.split(ARGS_KEY)[2]
-        assert path.startswith("/zarr/"), url
-        path = path[len("/zarr"):]
-        data = np.moveaxis(fake.prediction, -1, 0)
-        if path == "/.zattrs":
-            body = json.dumps({"multiscales": [{"version": "0.4", "axes": [
-                {"name": "c", "type": "channel"}, *({"name": a, "type": "space", "unit": "nanometer"} for a in "zyx")],
-                "datasets": [{"path": "s0", "coordinateTransformations": [
-                    {"type": "scale", "scale": [1.0, 16.0, 16.0, 16.0]},
-                    {"type": "translation", "translation": [0.0, 8.0, 8.0, 8.0]}]}]}]}).encode()
-        else:
-            served = zarr.open_array(zarr.MemoryStore(), mode="w", shape=data.shape, chunks=(data.shape[0], 4, 4, 4),
-                                     dtype=data.dtype, compressor=None, dimension_separator="/")
-            served[:] = data
-            body = served.store[path[len("/s0/"):]]
-        return SimpleNamespace(status_code=200, content=body, json=lambda: json.loads(body))
+    def serve(prediction, output_class=UNIT):
+        data = np.moveaxis(prediction, -1, 0)
+        level = wa.create(str(root / "s0"), data.shape, data.dtype, voxel_size=(16,) * 3, translation=(8.0,) * 3,
+                           axes=("c", "z", "y", "x"), chunks=(data.shape[0], 4, 4, 4), format="zarr2", separator="/")
+        level.write_index((0,) * data.ndim, data.shape, data)
+        fake.output_class = output_class
 
-    monkeypatch.setattr(view_labels.requests, "get", get)
+    fake.serve = serve
     monkeypatch.setattr(view_labels, "fetch_model_info", lambda host: {
         "available": True, "output_class": fake.output_class, "engine": "chunkmirage",
         "output_voxel_size": [16] * 3, "effective_output_voxel_size": [16] * 3,
     })
-    get_session().jobs = [SimpleNamespace(model_name="model", host="http://gpu:8000")]
-    return fake
+    get_session().jobs = [SimpleNamespace(model_name="model", host=fake.host)]
+    yield fake
+    files.shutdown()
+    files.server_close()
 
 
 def _predicting(foreground, low=0.1, high=0.9, channels=1):
@@ -125,7 +140,7 @@ def test_a_seed_is_the_thresholded_prediction_in_the_unpainted_voxels_of_the_vie
     labels[10, 10, 10] = 2  # painted foreground where it says background
     foreground = np.zeros((16,) * 3, bool)
     foreground[5:9, 5:9, 5:9] = True
-    server.prediction, server.output_class = _predicting(foreground, low, high), output_class
+    server.serve(_predicting(foreground, low, high), output_class)
 
     body = dashboard.post(SEED, json={}).get_json()
 
@@ -151,8 +166,9 @@ def test_an_affinity_seed_labels_each_object(dashboard, served, server, monkeypa
     foreground = np.zeros((16,) * 3, bool)
     foreground[4:7, 4:7, 4:7] = foreground[9:12, 9:12, 9:12] = True
     # Three affinity channels and an LSD one, which the seed must not read.
-    server.prediction = _predicting(foreground, low=0.4, channels=4)
-    server.prediction[..., 3] = 0.9
+    prediction = _predicting(foreground, low=0.4, channels=4)
+    prediction[..., 3] = 0.9
+    server.serve(prediction)
     monkeypatch.setattr(view_labels, "find_model_config", lambda name: object())
     monkeypatch.setattr(view_labels, "autodetect_output_type",
                         lambda config, output_type, offsets: ("affinities", "[[1,0,0],[0,1,0],[0,0,1]]"))
@@ -160,6 +176,37 @@ def test_an_affinity_seed_labels_each_object(dashboard, served, server, monkeypa
     assert dashboard.post(SEED, json={}).get_json()["success"]
     assert (labels[4:7, 4:7, 4:7] == ids[0]).all() and (labels[9:12, 9:12, 9:12] == ids[1]).all()
     assert labels[8, 8, 8] == 1
+
+
+def test_the_prediction_read_from_a_running_chunkmirage_server_is_its_chunks_on_the_annotation_grid(tmp_path):
+    """tensorstore reads the server over HTTP as neuroglancer does, each chunk
+    computed on asking. Its output (2 channels, 16 nm voxels from the raw's
+    corner at 0 nm, in 4^3 chunks) under 8 nm annotation voxels: each takes
+    the output voxel its centre lies in, and the box ends where the output does."""
+    data = (np.arange(12**3) % 251).astype(np.uint8).reshape((12,) * 3)
+    chunkmirage = ChunkmirageServer(write_raw(tmp_path, data), ScriptModelConfig(script_path=write_script(tmp_path, COARSER_MODEL)))
+    thread = threading.Thread(target=chunkmirage.run, kwargs={"port": 0}, daemon=True)
+    thread.start()
+    try:
+        deadline = time.monotonic() + 30
+        while getattr(chunkmirage, "port", None) is None and time.monotonic() < deadline:
+            time.sleep(0.05)
+        host = f"http://127.0.0.1:{chunkmirage.port}"
+        volume = {"output_voxel_size": [8] * 3, "dataset_offset_nm": [4.0] * 3}  # voxel 0's centre
+        prediction, lo, hi = view_labels.read_prediction(
+            host, "m", volume, np.array([2, 3, 1]), np.array([14, 12, 9]), fetch_model_info(host))
+        # Every chunk of the served 6^3, asked for one by one.
+        client, served = TestClient(chunkmirage.app), np.zeros((2, 6, 6, 6), np.float32)
+        for index in np.ndindex(2, 2, 2):
+            chunk = read_chunk(client, layer(), index)
+            served[(slice(None), *(slice(4 * i, 4 * i + n) for i, n in zip(index, chunk.shape[1:])))] = chunk
+    finally:
+        chunkmirage.stop()
+        thread.join(10)
+
+    assert (lo.tolist(), hi.tolist()) == ([2, 3, 1], [12, 12, 9])
+    on_annotation_grid = served.repeat(2, axis=1).repeat(2, axis=2).repeat(2, axis=3)
+    np.testing.assert_array_equal(prediction, on_annotation_grid[:, 2:12, 3:12, 1:9])
 
 
 @pytest.mark.parametrize("position, box", [
@@ -232,7 +279,7 @@ def test_split_relabels_the_views_objects_by_connected_component(dashboard, serv
 
 def test_a_seed_reads_the_model_chosen_else_the_latest_finetune(dashboard, served, server, monkeypatch):
     served()
-    get_session().jobs = [SimpleNamespace(model_name=name, host=f"http://{name}:8000")
+    get_session().jobs = [SimpleNamespace(model_name=name, host=server.host)
                           for name in ("model", "model_finetuned_1", "model_finetuned_2", "other")]
     sources = dashboard.get("/api/finetune/view-labels/sources").get_json()
     assert (sources["models"], sources["default"]) == (
@@ -258,7 +305,7 @@ def test_a_volume_painted_before_any_model_seeds_from_the_model_picked_or_the_on
     read = []
     monkeypatch.setattr(view_labels, "read_prediction",
                         lambda host, name, *a, **kw: read.append(name) or (np.zeros((1, 8, 8, 8), "f4"), a[1], a[2]))
-    get_session().jobs = [SimpleNamespace(model_name=name, host=f"http://{name}:8000") for name in ("model", "other")]
+    get_session().jobs = [SimpleNamespace(model_name=name, host=server.host) for name in ("model", "other")]
     assert dashboard.get("/api/finetune/view-labels/sources").get_json()["default"] is None
     assert dashboard.post(SEED, json={}).status_code == 409
     assert dashboard.post(SEED, json={"model": "other"}).status_code == 200

@@ -5,7 +5,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Optional
 
-import zarr
+import worldarray as wa
 
 from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.finetune.options import OUTPUT_CLASSES, TrainingOptions
@@ -102,17 +102,20 @@ def session_store():
 
 
 def ensure_corrections_storage(output_path):
+    """``(session path, corrections directory)``: the corrections directory
+    of ``output_path``'s session in this dashboard (made when it has none),
+    or, with no ``output_path``, ``~/.cellmap_flow/corrections`` and no
+    session. The directory is made, and made a zarr v2 group (its
+    ``.zgroup``, written again each time with the same content), the
+    volumes' parent."""
     if output_path:
         session_path = session_store().get_or_create(output_path)
         corrections_dir = os.path.join(session_path, "corrections")
-        os.makedirs(corrections_dir, exist_ok=True)
-        zarr.open_group(corrections_dir, mode="a")
-        return session_path, corrections_dir
-
-    corrections_dir = os.path.expanduser("~/.cellmap_flow/corrections")
+    else:
+        session_path, corrections_dir = None, os.path.expanduser("~/.cellmap_flow/corrections")
     os.makedirs(corrections_dir, exist_ok=True)
-    zarr.open_group(corrections_dir, mode="a")
-    return None, corrections_dir
+    wa.write.write_bare_group(corrections_dir, "zarr2")
+    return session_path, corrections_dir
 
 
 def load_user_prefs():

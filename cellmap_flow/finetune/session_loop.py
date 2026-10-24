@@ -26,6 +26,7 @@ from pathlib import Path
 from typing import Collection, Optional
 
 import torch
+from worldarray.store import is_remote
 
 from cellmap_flow.finetune import markers, run_outputs
 from cellmap_flow.finetune.adaptation import strategy_for
@@ -34,7 +35,6 @@ from cellmap_flow.finetune.data import create_dataloader
 from cellmap_flow.finetune.data.loader import training_patch_voxels
 from cellmap_flow.finetune.trainer import Finetuner
 from cellmap_flow.finetune.trainer.supervised import probe_output_class
-from cellmap_flow.io.paths import is_remote
 from cellmap_flow.models.models_config import ModelConfig
 from cellmap_flow.serving.restart_token import read_or_create_restart_token
 from cellmap_flow.utils.device import best_device

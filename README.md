@@ -505,7 +505,7 @@ Define these variables in your script (`cellmap_flow infer script -s path/to/you
 - **output_channels**:
   The number of channels in the output of the model.
 - **process_chunk** (optional):
-  (Optional) A function that takes an ImageDataInterface and an ROI and returns the data to be display. This can be used to run a TensorFlow model or do other custom data processing.
+  (Optional) A function that takes a `RawInput` (`cellmap_flow.io.raw`; anything with `to_ndarray_ts(roi)`, as the server's `BlockInput` is) and an ROI and returns the data to be displayed. This can be used to run a TensorFlow model or do other custom data processing.
 
 To run TensorFlow models, we suggest installing TensorFlow via conda: `conda install tensorflow-gpu==2.16.1`
 

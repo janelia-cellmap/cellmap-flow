@@ -4,7 +4,8 @@
 annotation volume and carries the patch geometry and normalization;
 ``good_regions.json``, one level up, lists the regions the user marked as
 already right. ``has_painted_annotations`` says whether a volume holds
-scribbles as well as imported crops.
+scribbles as well as imported crops; ``read_chunk`` reads one chunk of the
+volume's ``annotation/s0`` for it, for the sampler and for the ranking.
 """
 
 import json
@@ -13,9 +14,7 @@ import os
 from typing import Optional
 
 import numpy as np
-import zarr
-
-from cellmap_flow.io.geometry import list_populated_chunks
+import worldarray as wa
 
 logger = logging.getLogger(__name__)
 
@@ -113,6 +112,15 @@ def voxels_inside_any_bbox(
     return np.any(ge & lt, axis=-1)
 
 
+def read_chunk(array: wa.WorldArray, index) -> np.ndarray:
+    """Chunk ``index`` of ``array``, cut short at the array's end as the
+    stored chunk is."""
+    chunk = array.meta.chunk_shape
+    lo = [int(i) * c for i, c in zip(index, chunk)]
+    hi = [min(l + c, n) for l, c, n in zip(lo, chunk, array.shape)]
+    return array.read_index(lo, hi)
+
+
 def has_painted_annotations(volume_zarr_path: str) -> bool:
     """Whether the volume holds annotations outside its imported crops.
 
@@ -123,8 +131,8 @@ def has_painted_annotations(volume_zarr_path: str) -> bool:
     try:
         with open(os.path.join(volume_zarr_path, ".zattrs")) as f:
             imported = json.load(f).get("imported_crops", []) or []
-        arr = zarr.open(s0_path, mode="r")
-        chunks = list_populated_chunks(s0_path)
+        arr = wa.open(s0_path, units=None)
+        chunks = wa.list_chunk_keys(s0_path, separator=".", ndim=3)  # the z.y.x chunk files
     except (OSError, ValueError, KeyError) as e:
         logger.debug(f"Could not look for painted annotations in {volume_zarr_path}: {e}")
         return False
@@ -133,7 +141,7 @@ def has_painted_annotations(volume_zarr_path: str) -> bool:
         bbox_ends = bbox_offsets + np.array([c["annotation_shape_voxels"] for c in imported], dtype=np.int64)
     else:
         bbox_offsets = bbox_ends = np.zeros((0, 3), dtype=np.int64)
-    chunk_shape = np.array(arr.chunks, dtype=np.int64)
+    chunk_shape = np.array(arr.meta.chunk_shape, dtype=np.int64)
     for index in chunks:
         origin = np.array(index, dtype=np.int64) * chunk_shape
         end = origin + chunk_shape
@@ -141,7 +149,7 @@ def has_painted_annotations(volume_zarr_path: str) -> bool:
             np.all(origin >= bbox_offsets, axis=1) & np.all(end <= bbox_ends, axis=1)
         ):
             continue  # all of it inside one crop
-        annotated = np.argwhere(arr.blocks[index] >= 1).astype(np.int64) + origin
+        annotated = np.argwhere(read_chunk(arr, index) >= 1).astype(np.int64) + origin
         if not annotated.size:
             continue
         if not bbox_offsets.shape[0] or not voxels_inside_any_bbox(annotated, bbox_offsets, bbox_ends).all():

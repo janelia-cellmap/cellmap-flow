@@ -10,12 +10,13 @@ elsewhere, as a seed from a model's prediction is labelled.
 
 The maths is ``cellmap_flow.portable.ai_annotate``'s, which the browser runs
 too (its resampling is Pillow's, in both modes); what is the server's alone
-is reading the raw through ``ImageDataInterface``.
+is reading the raw, through worldarray (``cellmap_flow.io.raw``).
 """
 
 import numpy as np
 
 from cellmap_flow.ai_annotate.geometry import PlanePlan, raw_box
+from cellmap_flow.io.raw import RawInput, open_raw, spatial_shape
 from cellmap_flow.portable.ai_annotate import (  # noqa: F401  (re-exported for the routes)
     accept_labels,
     labels_for_box,
@@ -24,24 +25,24 @@ from cellmap_flow.portable.ai_annotate import (  # noqa: F401  (re-exported for 
 )
 
 
-def _raw(volume: dict, voxel_size):
-    """The volume's raw dataset at ``voxel_size``, as its trainer reads it."""
-    from cellmap_flow.image_data_interface import ImageDataInterface
-
-    return ImageDataInterface(
-        volume["dataset_path"],
-        voxel_size=voxel_size,
+def _raw(volume: dict, voxel_size) -> RawInput:
+    """The volume's raw dataset at ``voxel_size``, as its trainer reads it:
+    the level for that size, resampled when the volume was made with Resample
+    on, the channel the chain selects, as stored (no normalization), and 0
+    outside the raw."""
+    return RawInput(
+        open_raw(volume["dataset_path"], voxel_size, resample=bool(volume.get("resample")), padding=0),
         normalize=False,
-        on_voxel_size_mismatch="resample" if volume.get("resample") else "relabel",
     )
 
 
 def raw_extent_nm(volume: dict):
     """``(lo, hi)``, world nm z, y, x: where the volume's raw data is, read at
     its input voxel size (``plan_plane``'s ``data_box_nm``)."""
-    idi = _raw(volume, tuple(volume["input_voxel_size"]))
-    lo = np.asarray(idi.offset, dtype=float)[-3:]
-    return lo, lo + np.asarray(idi.shape, dtype=float)[-3:] * np.asarray(idi.voxel_size, dtype=float)[-3:]
+    array = _raw(volume, tuple(volume["input_voxel_size"])).array
+    lo = np.asarray(array.corner, dtype=float)[-3:]
+    extent = np.asarray(spatial_shape(array), dtype=float)[-3:] * np.asarray(array.voxel_size, dtype=float)[-3:]
+    return lo, lo + extent
 
 
 def read_plane(volume: dict, plan: PlanePlan) -> np.ndarray:
@@ -55,9 +56,9 @@ def read_plane(volume: dict, plan: PlanePlan) -> np.ndarray:
     padded with 0. The raw's dtype is kept unless the plane had to be
     resized to the image's grid, when it is float32.
     """
-    idi = _raw(volume, plan.input_voxel_size)
-    box = raw_box(plan, idi.voxel_size, idi.offset)
-    return plane_image(np.asarray(idi.read_box(box)), plan)
+    raw = _raw(volume, plan.input_voxel_size)
+    begin, end = raw_box(plan, raw.array.voxel_size, raw.array.corner)
+    return plane_image(np.asarray(raw.read_index(begin, end)), plan)
 
 
 def build_request(plane: np.ndarray, plan: PlanePlan, profile, prompt_override=None):

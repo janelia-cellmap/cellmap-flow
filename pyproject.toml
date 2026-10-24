@@ -19,7 +19,7 @@ dependencies = [
     "flask",
     "tensorstore",
     # The shared reader: placement, levels, padded and resampled reads.
-    "worldarray>=0.1,<1",
+    "worldarray>=0.9,<1",
     "funlib.geometry",
     "scikit-image",
     "numcodecs==0.15.0",
@@ -30,7 +30,6 @@ dependencies = [
     "mwatershed",
     "neuroglancer",
     "pydantic",
-    "funlib.persistence==0.6.1",
     "daisy>=1.2.2,<2",
     "cellmap-models",
     # Below 2: tokenizers requires it, and with hub 2 allowed the resolver
@@ -45,13 +44,15 @@ dependencies = [
     # Serves the predictions (serving/chunkmirage_server.py). From PyPI by
     # version, not from git by commit: PyPI refuses an upload whose
     # dependencies name a URL, so a git pin would keep cellmap-flow from
-    # being released. 0.1.0a2 was built from chunkmirage's commit 584b343;
-    # the browser engine's pin in web/chunkmirage.lock is that commit or a
-    # later one. Naming a pre-release in the lower bound lets pip take the
+    # being released. 0.1.0a5 was built from chunkmirage's commit 75eb8eb
+    # and takes any worldarray from 0.8 below 1; its browser engine is
+    # 0.1.0a3's (a4 and a5 changed only the worldarray range).
+    # web/chunkmirage.lock pins the engine the browser app is built on, by
+    # commit. Naming a pre-release in the lower bound lets pip take the
     # alpha without --pre; the upper bound is there because the plugin API
     # (the ops and the consumer hook this app registers) may still change
     # before 0.1.0.
-    "chunkmirage>=0.1.0a2,<0.2",
+    "chunkmirage>=0.1.0a5,<0.2",
     ]
 
 # extras
