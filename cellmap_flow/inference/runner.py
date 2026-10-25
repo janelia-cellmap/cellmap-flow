@@ -2,8 +2,9 @@
 
 ``ModelRunner`` puts a ModelConfig's model on the device, warms it up (the
 same forward checks the declared shapes and probes the output's range), and
-predicts an output region from an ImageDataInterface: the model's raw output,
-``(C, *spatial)``, with no postprocessing and no process-wide state.
+predicts an output region from a ``RawInput`` (``cellmap_flow.io.raw``; in
+the server, its ``BlockInput``): the model's raw output, ``(C, *spatial)``,
+with no postprocessing and no process-wide state.
 ``cellmap_flow.inferencer.Inferencer`` adds the normalization and
 postprocessing chain on top.
 
@@ -124,8 +125,11 @@ def predict(read_roi, write_roi, config, **kwargs):
     """The default forward: read ``read_roi`` from ``kwargs["idi"]``, run
     ``config.model`` on ``kwargs["device"]``, return ``(C, *spatial)``.
 
-    A script may define its own ``predict`` with this signature instead; it
-    is then given ``idi``, ``device`` and ``use_half_prediction``.
+    ``idi`` is what the model reads from: a ``RawInput``
+    (``cellmap_flow.io.raw``), or the server's ``BlockInput``, anything with
+    ``to_ndarray_ts(roi)``; the keyword keeps its old name, which scripts
+    read. A script may define its own ``predict`` with this signature
+    instead; it is then given ``idi``, ``device`` and ``use_half_prediction``.
     """
     import torch
 
@@ -139,7 +143,7 @@ def predict(read_roi, write_roi, config, **kwargs):
 
     use_half_prediction = kwargs.get("use_half_prediction", False)
 
-    with timing.stage("read"):  # and normalize, which the idi does as it reads
+    with timing.stage("read"):  # and normalize, which to_ndarray_ts does as it reads
         raw_input = idi.to_ndarray_ts(read_roi)
     raw_input = np.expand_dims(raw_input, (0, 1))
     if raw_input.dtype == np.float64:
@@ -386,8 +390,9 @@ class ModelRunner:
     def predict(self, idi, out_roi):
         """The model's raw output for ``out_roi``: ``(C, *spatial)``, not postprocessed.
 
-        ``idi`` is read around ``out_roi`` with the model's context, normalized
-        however ``idi`` normalizes.
+        ``idi`` (a ``RawInput``, or anything with ``to_ndarray_ts(roi)``) is
+        read around ``out_roi`` with the model's context, through whatever
+        input chain it reads with.
         """
         own = getattr(self.model_config.config, "process_chunk", None)
         if own and callable(own):

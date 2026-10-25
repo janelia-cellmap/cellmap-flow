@@ -2,7 +2,7 @@
 of ``finetune/session/volume.py`` (its module docstring says what a volume
 is), on numbers alone, so that the server and the browser plan a volume the
 same way. The server reads the raw level and the model's geometry
-(``ImageDataInterface``, ``resolve_model_geometry``) and the browser its
+(``open_raw``, ``resolve_model_geometry``) and the browser its
 ``DatasetInfo`` and model manifest (``web/src/finetune/volume.ts``, through
 ``volume_calls.py``); both hand what they found to ``plan_volume`` here.
 

@@ -53,17 +53,17 @@ def stored_voxel_size(raw_dataset_path: str, voxel_size, resample: bool) -> Opti
     ``voxel_size``, as stored, before any resampling to it; None when its
     metadata cannot be read here.
 
-    The level is the one PatchReader's ImageDataInterface opens. Resampled
-    to cubes, voxels stored three times as deep are still blurred across z,
-    so a side slice through them is not an x–y slice.
+    The level is the one PatchReader's ``open_raw`` opens: chosen for
+    ``voxel_size`` as a resampling read chooses (``on_mismatch="resample"``)
+    or as a plain one does, and kept at its own size. Resampled to cubes,
+    voxels stored three times as deep are still blurred across z, so a side
+    slice through them is not an x–y slice.
     """
-    from cellmap_flow.io import multiscale, paths
-    from cellmap_flow.io.metadata import read_array_meta
+    from cellmap_flow.io.metadata import open_level
 
     try:
-        path = paths.normalize_path(raw_dataset_path)
-        level_path, _ = multiscale.select_dataset(path, voxel_size, mode="resample" if resample else "floor")
-        return tuple(float(v) for v in read_array_meta(level_path).spatial().voxel_size)
+        level = open_level(raw_dataset_path, voxel_size, on_mismatch="resample" if resample else "keep")
+        return tuple(float(v) for v in level.source_voxel_size)
     except Exception as e:
         logger.debug(f"Could not read the voxel size of {raw_dataset_path}: {e}")
         return None

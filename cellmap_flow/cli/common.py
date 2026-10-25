@@ -53,7 +53,7 @@ def log_level_option(default=None, help="Set the logging level"):
 def resample_option():
     """``--resample/--no-resample``, on by default: read the dataset resampled
     to the model's input voxel size when it has no level at that size
-    (ImageDataInterface's ``on_voxel_size_mismatch="resample"``). With
+    (``open_raw``'s ``resample=True``, ``cellmap_flow.io.raw``). With
     ``--no-resample`` the level chosen is read as if it were at the model's
     voxel size, with a warning."""
     return click.option(

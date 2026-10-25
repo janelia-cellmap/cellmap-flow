@@ -7,7 +7,9 @@ dataset on the grid predictions are made on, with one chunk per model output,
 so each chunk is one training sample. Only painted or imported chunks exist
 on disk. MinIO and neuroglancer write chunks straight into it, so its layout
 -- uint8 unless the labels are instance ids, "." separated chunk keys, Blosc
-zstd level 3 -- and its root attrs are a format.
+zstd level 3 (``ANNOTATION_CODEC``) -- and its root attrs are a format.
+worldarray writes it and reads it back, as zarr v2; the root attrs are read
+and set with ``read_root_attrs`` and ``update_root_attrs``.
 
 The root attr ``dataset_offset_nm`` is voxel 0's *centre* and is also the
 OME translation, since that is where Neuroglancer draws voxel 0 while it is
@@ -29,7 +31,7 @@ from pathlib import Path
 from typing import Optional
 
 import numpy as np
-import zarr
+import worldarray as wa
 
 from cellmap_flow.io.multiscale import closest_raw_scale
 from cellmap_flow.portable import volume as portable_volume
@@ -38,6 +40,11 @@ from cellmap_flow.portable import volume as portable_volume
 from cellmap_flow.portable.volume import volume_corner_nm  # noqa: F401
 
 logger = logging.getLogger(__name__)
+
+# The labels' compressor, part of the format (neuroglancer encodes a
+# painted chunk with the one .zarray names): what zarr-python's
+# Blosc(cname="zstd", clevel=3, shuffle=Blosc.SHUFFLE) wrote.
+ANNOTATION_CODEC = {"id": "blosc", "cname": "zstd", "clevel": 3, "shuffle": 1, "blocksize": 0}
 
 # The root attrs a record's geometry comes from: record key -> attr.
 GEOMETRY_ATTRS = {
@@ -117,25 +124,23 @@ def raw_level(raw_dataset_path: str, input_voxel_size, resample: bool = False) -
     own voxel size; with ``resample``, the raw resampled to
     ``input_voxel_size``, as the trainer and a --resample server read it.
     """
-    from cellmap_flow.image_data_interface import ImageDataInterface
+    from cellmap_flow.io.raw import open_raw, spatial_shape
 
     if resample:
-        voxel_size, mismatch = input_voxel_size, "resample"
+        voxel_size = input_voxel_size
     else:
         # Opened at the level's own voxel size, so that it is read as it is
         # stored and its corner is its own, not one relabelled to the model's.
         voxel_size = closest_raw_scale(raw_dataset_path, tuple(input_voxel_size)) or input_voxel_size
-        mismatch = "relabel"
-    idi = ImageDataInterface(raw_dataset_path, voxel_size=voxel_size, on_voxel_size_mismatch=mismatch)
+    array = open_raw(raw_dataset_path, voxel_size, resample=resample)
     axes = len(input_voxel_size)
     # The data's own extent is its shape times its voxel size, which the plan
-    # takes. Not idi.roi's: that is the whole-nm box around the data, up to
-    # 2 nm larger, which would add a voxel to every level whose extent is not
-    # whole nm (10.48 nm...).
+    # takes: not a whole-nm box around the data, up to 2 nm larger, which
+    # would add a voxel to every level whose extent is not whole nm (10.48 nm...).
     return {
-        "voxel": [float(v) for v in idi.voxel_size][-axes:],
-        "corner": [float(o) for o in idi.offset][-axes:],
-        "shape": [int(n) for n in idi.shape][-axes:],
+        "voxel": [float(v) for v in array.voxel_size][-axes:],
+        "corner": [float(o) for o in array.corner][-axes:],
+        "shape": [int(n) for n in spatial_shape(array)][-axes:],
     }
 
 
@@ -164,17 +169,23 @@ def raw_voxel_sizes(raw_dataset_path: str) -> list:
     """The voxel sizes (nm, z, y, x) of the raw's levels, finest first: what
     a volume painted before any model is offered to be painted at.
 
-    A multiscale group's levels (or a precomputed volume's scales), from
-    its documents alone, no level opened; the path of one array is that one
-    level, as ImageDataInterface reads it.
+    A group's levels (its multiscales, else its s0, s1, ...) or a
+    precomputed volume's scales, as worldarray's pyramid lists them: from
+    the group's document where it gives their scales, else by opening each.
+    The path of one array, or of one precomputed scale, is that one level,
+    as ``open_raw`` reads it. Unit conversion's float noise is snapped away
+    (0.009 um is 9 nm, not 8.999999999999998).
     """
-    from cellmap_flow.io import metadata
+    from cellmap_flow.io.metadata import open_level, snap_integral
+    from cellmap_flow.io.paths import normalize_path
 
-    try:
-        metas = [meta for _, meta in metadata.list_levels(raw_dataset_path)]
-    except Exception:
-        metas = [metadata.read_array_meta(raw_dataset_path)]
-    sizes = [[float(v) for v in meta.spatial().voxel_size][-3:] for meta in metas]
+    path = normalize_path(raw_dataset_path)
+    node = wa.detect(path)
+    if node.kind == "group" and node.scale_key is None:
+        sizes = [size for _, size in wa.open_pyramid(path, units="nanometer", strict_units=False).voxel_sizes()]
+    else:
+        sizes = [open_level(path).voxel_size]
+    sizes = [[float(v) for v in snap_integral(size)][-3:] for size in sizes]
     return sorted(sizes, key=lambda size: float(np.prod(size)))
 
 
@@ -212,35 +223,27 @@ def create_volume_zarr(
     normalization, and a model finetuned on the volume is served with the
     postprocessing. ``annotation_dtype`` is uint16 or uint32 when the labels
     are instance ids.
+
+    worldarray creates ``annotation/s0`` and writes the ``annotation``
+    group's OME multiscales, which place it, and the root group; nothing at
+    ``zarr_path`` is overwritten (an existing volume there raises
+    FileExistsError).
     """
-    root = zarr.open(zarr_path, mode="w")
-    annotation = root.create_group("annotation")
-    annotation.create_dataset(
-        "s0",
-        shape=geometry.dataset_shape_voxels,
+    wa.create(
+        str(Path(zarr_path, "annotation", "s0")),
+        geometry.dataset_shape_voxels,
+        annotation_dtype,
+        geometry.output_voxel_size,
+        # dataset_offset_nm is voxel 0's centre, so it is the OME translation
+        # as it stands (see volume_corner_nm).
+        geometry.dataset_offset_nm,
+        axes=("z", "y", "x"),
         chunks=geometry.chunk_size,
-        dtype=annotation_dtype,
-        compressor=zarr.Blosc(cname="zstd", clevel=3, shuffle=zarr.Blosc.SHUFFLE),
+        codecs=ANNOTATION_CODEC,
+        format="zarr2",
+        separator=".",
         fill_value=0,
     )
-    # dataset_offset_nm is voxel 0's centre, so it is the OME translation as
-    # it stands (see volume_corner_nm).
-    annotation.attrs["multiscales"] = [
-        {
-            "version": "0.4",
-            "name": "annotation",
-            "axes": [{"name": a, "type": "space", "unit": "nanometer"} for a in ("z", "y", "x")],
-            "datasets": [
-                {
-                    "path": "s0",
-                    "coordinateTransformations": [
-                        {"type": "scale", "scale": [float(v) for v in geometry.output_voxel_size]},
-                        {"type": "translation", "translation": [float(o) for o in geometry.dataset_offset_nm]},
-                    ],
-                }
-            ],
-        }
-    ]
 
     attrs = {
         "type": annotation_type,
@@ -266,13 +269,37 @@ def create_volume_zarr(
     for key, chain in (("input_norm", input_norm), ("postprocess", postprocess)):
         if chain is not None:
             attrs[key] = chain
-    root.attrs.update(attrs)
+    update_root_attrs(zarr_path, attrs)
 
     logger.info(
         f"Created annotation volume zarr at {zarr_path} "
         f"(shape={list(geometry.dataset_shape_voxels)}, chunks={list(geometry.chunk_size)})"
     )
     return zarr_path
+
+
+def read_root_attrs(zarr_path) -> dict:
+    """The root attrs of the volume at ``zarr_path`` (its root group's
+    ``.zattrs``): its record, as create_volume_zarr wrote it and imports and
+    seeding added to it; ``{}`` when there is no such file. ValueError when
+    it cannot be read or is not JSON."""
+    return wa.write.read_group_attrs(wa.store.Location(str(zarr_path)), "zarr2")[0]
+
+
+def open_labels(zarr_path, mode: str = "r") -> "wa.WorldArray":
+    """The labels of the volume at ``zarr_path`` (its ``annotation/s0``), in
+    voxels: read and written by index, ``mode="r+"`` to write. Its writes
+    store nothing for a chunk that ends up all 0, unannotated."""
+    return wa.open(str(Path(zarr_path, "annotation", "s0")), mode=mode, units=None)
+
+
+def update_root_attrs(zarr_path, attrs: dict) -> None:
+    """Set ``attrs`` in the root attrs of the volume at ``zarr_path``, every
+    other key kept: a read, a merge and a write, unlocked, as zarr-python's
+    ``attrs.update`` was."""
+    root = wa.store.Location(str(zarr_path))
+    current, raw = wa.write.read_group_attrs(root, "zarr2")
+    wa.write.write_group_attrs(root, "zarr2", {**current, **attrs}, raw)
 
 
 def read_volume(zarr_path: str, *, require_geometry: bool = True) -> dict:
@@ -285,7 +312,7 @@ def read_volume(zarr_path: str, *, require_geometry: bool = True) -> dict:
     NotAnAnnotationVolume (a ValueError) if it is not an annotation volume
     at all.
     """
-    attrs = dict(zarr.open(zarr_path, mode="r").attrs)
+    attrs = read_root_attrs(zarr_path)
     if attrs.get("type") != "annotation_volume":
         raise NotAnAnnotationVolume(f"{zarr_path} is not an annotation volume (type {attrs.get('type')!r})")
     missing = [attr for attr in GEOMETRY_ATTRS.values() if not attrs.get(attr)]
@@ -384,18 +411,20 @@ def write_crop_into_volume(volume_meta: dict, entry, *, progress_callback=None) 
 
     The labels are remapped to 1 background and 2+ foreground, resampled to
     the volume's voxel size if it differs, and written into ``annotation/s0``
-    in parallel slabs; ``progress_callback(done, total)`` follows the slabs.
-    The import is appended to the volume's ``imported_crops`` attr (the
-    trainer's dense pool and the overlay's boxes), and returned.
+    in parallel slabs, in the volume's dtype; ``progress_callback(done,
+    total)`` follows the slabs. The import is appended to the volume's
+    ``imported_crops`` attr (the trainer's dense pool and the overlay's
+    boxes), and returned.
     """
     from cellmap_flow.finetune.crop_loader import _read_voxel_size_and_offset, remap_labels
-    from cellmap_flow.finetune.session import sync  # sync reads volumes: import here
-    from cellmap_flow.io.source import open_array
+    from cellmap_flow.io.metadata import open_level
 
     started = time.time()
     sub, src_voxel_size_nm, src_offset_nm = _read_voxel_size_and_offset(entry.path)
-    # The whole crop at once, decoding chunks on every core.
-    src_data = open_array(str(Path(entry.path, *sub)), concurrency_limit=None).read()
+    # The whole crop at once, decoding chunks on the job's threads
+    # (worldarray's shared context, sized by its thread_budget).
+    crop = open_level(str(Path(entry.path, *sub)), units=None)
+    src_data = crop.read_index((0,) * crop.meta.ndim, crop.meta.shape)
     if src_data.ndim != 3:
         raise ValueError(f"Crop {entry.path}: expected 3D (z, y, x), got shape {src_data.shape}")
     remapped = remap_labels(
@@ -435,7 +464,9 @@ def write_crop_into_volume(volume_meta: dict, entry, *, progress_callback=None) 
         (src_offset_nm - volume_corner_nm(volume_meta["dataset_offset_nm"], voxel_size)) / voxel_size
     ).astype(int).tolist()
     sz, sy, sx = remapped.shape
-    arr = zarr.open(volume_meta["zarr_path"], mode="r+")["annotation/s0"]
+    arr = open_labels(volume_meta["zarr_path"], mode="r+")
+    # remap_labels gives uint8; an instance volume holds uint16 or uint32.
+    remapped = remapped.astype(arr.dtype, copy=False)
     if (
         min(z0, y0, x0) < 0
         or z0 + sz > arr.shape[0]
@@ -458,21 +489,23 @@ def write_crop_into_volume(volume_meta: dict, entry, *, progress_callback=None) 
             "check its OME-NGFF translation against the dataset offset."
         )
 
-    # Z slabs, as many as there are threads to write them (sync.worker_count:
-    # the slots the job was given), cut on the volume's chunk rows: two
-    # threads writing parts of one chunk each rewrite it whole, and one's
-    # part is lost. The cuts used to be whole chunks from the crop's own
+    # Z slabs, as many as there are threads to write them (worldarray's
+    # thread_budget: the slots the job was given), cut on the volume's chunk
+    # rows: two threads writing parts of one chunk each rewrite it whole, and
+    # one's part is lost. The cuts used to be whole chunks from the crop's own
     # first row, which is almost never on a chunk boundary.
-    chunk_z = max(int(arr.chunks[0]), 1)
+    chunk_z = max(int(arr.meta.chunk_shape[0]), 1)
     first_row, end_row = z0 // chunk_z, -(-(z0 + sz) // chunk_z)
-    n_slabs = max(1, min(sync.worker_count(), end_row - first_row))
+    n_slabs = max(1, min(wa.thread_budget(), end_row - first_row))
     rows_per_slab = max(1, -(-(end_row - first_row) // n_slabs))
     edges = [0, *(row * chunk_z - z0 for row in range(first_row + rows_per_slab, end_row, rows_per_slab)), sz]
     slabs = [(a, b) for a, b in zip(edges, edges[1:]) if a < b]
 
     def write(slab):
+        # partial: a slab's z rows are its own, but it covers the crop's
+        # extent in y and x, which is rarely whole chunks.
         a, b = slab
-        arr[z0 + a : z0 + b, y0 : y0 + sy, x0 : x0 + sx] = remapped[a:b]
+        arr.write_index((z0 + a, y0, x0), (z0 + b, y0 + sy, x0 + sx), remapped[a:b], partial=True)
 
     with ThreadPoolExecutor(max_workers=max(1, len(slabs))) as ex:
         for done, fut in enumerate(as_completed([ex.submit(write, s) for s in slabs]), start=1):
@@ -489,8 +522,8 @@ def write_crop_into_volume(volume_meta: dict, entry, *, progress_callback=None) 
         "annotation_shape_voxels": [int(sz), int(sy), int(sx)],
         "n_fg_voxels": n_fg,
     }
-    root = zarr.open(volume_meta["zarr_path"], mode="r+")
-    root.attrs["imported_crops"] = list(root.attrs.get("imported_crops", [])) + [record]
+    imported = list(read_root_attrs(volume_meta["zarr_path"]).get("imported_crops", []))
+    update_root_attrs(volume_meta["zarr_path"], {"imported_crops": imported + [record]})
     return record
 
 
@@ -499,7 +532,7 @@ def carry_paint(from_meta: dict, to_meta: dict) -> dict:
     volume over the same dataset on another model's grid: Which model to
     start from's Use this model. The maths is ``cellmap_flow.portable.carry``,
     which the browser runs too (web/src/backend/routes/rank.ts); here are
-    the zarr reads and writes around it.
+    the reads and writes around it.
 
     Each new voxel takes the paint of the old voxels whose centres lie
     inside it (one for a grid as fine as the old, several for a coarser
@@ -515,26 +548,25 @@ def carry_paint(from_meta: dict, to_meta: dict) -> dict:
     painted, the old painted voxels they came from, the new voxels left
     unpainted where their old voxels disagreed, and the new chunks written.
     """
-    from cellmap_flow.io.geometry import list_populated_chunks
     from cellmap_flow.portable.carry import Grid, carry
 
-    old = zarr.open(from_meta["zarr_path"], mode="r")["annotation/s0"]
-    new = zarr.open(to_meta["zarr_path"], mode="r+")["annotation/s0"]
+    old, new = open_labels(from_meta["zarr_path"]), open_labels(to_meta["zarr_path"], mode="r+")
+    old_chunks, new_chunks = old.meta.chunk_shape, new.meta.chunk_shape
     grids = [
         Grid(tuple(volume_corner_nm(meta.get("dataset_offset_nm"), meta["output_voxel_size"]).tolist()),
-             tuple(float(v) for v in meta["output_voxel_size"]), tuple(array.shape), tuple(array.chunks))
+             tuple(float(v) for v in meta["output_voxel_size"]), tuple(array.shape), tuple(array.meta.chunk_shape))
         for meta, array in ((from_meta, old), (to_meta, new))
     ]
-    box = lambda lo, hi: tuple(slice(a, b) for a, b in zip(lo, hi))  # noqa: E731
+    # Each painted chunk whole: one at the array's end padded with 0, unpainted.
     painted = (
-        (index, old[box(lo, [l + c for l, c in zip(lo, old.chunks)])])
-        for index in list_populated_chunks(str(Path(from_meta["zarr_path"], "annotation", "s0")))
-        for lo in [[i * c for i, c in zip(index, old.chunks)]]
+        (index, old.read_index(lo, [l + c for l, c in zip(lo, old_chunks)]))
+        for index in old.list_chunks()
+        for lo in [[i * c for i, c in zip(index, old_chunks)]]
     )
-    chunks, counts = carry(*grids, painted, lambda lo, hi: old[box(lo, hi)], new.dtype)
+    chunks, counts = carry(*grids, painted, old.read_index, new.dtype)
     for index, labels in chunks.items():
-        lo = [i * c for i, c in zip(index, new.chunks)]
-        target = box(lo, [min(l + c, n) for l, c, n in zip(lo, new.chunks, new.shape)])
-        part = labels[tuple(slice(0, s.stop - s.start) for s in target)]
-        new[target] = np.where(part > 0, part, new[target])
+        lo = [i * c for i, c in zip(index, new_chunks)]
+        hi = [min(l + c, n) for l, c, n in zip(lo, new_chunks, new.shape)]
+        part = labels[tuple(slice(0, h - l) for l, h in zip(lo, hi))]
+        new.write_chunk(index, np.where(part > 0, part, new.read_index(lo, hi)))
     return counts

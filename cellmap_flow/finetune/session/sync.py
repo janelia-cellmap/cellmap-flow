@@ -9,6 +9,10 @@ source of truth: nothing on disk is ever deleted because MinIO lacks it.
 ``state`` is the dashboard's ``minio_state`` and ``volumes`` its volume
 registry, passed to every call; only the lock and the failure counter of
 the periodic sync are kept here.
+
+MinIO is read with s3fs (and zarr-python over it, for the metadata), which
+take the session's own credentials; tensorstore, under worldarray, takes S3
+credentials only from the environment.
 """
 
 import json
@@ -21,11 +25,11 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 import s3fs
+import worldarray as wa
 import zarr
 
 from cellmap_flow.finetune.session import minio
 from cellmap_flow.finetune.session.volume import NotAnAnnotationVolume, read_volume
-from cellmap_flow.io.geometry import CHUNK_KEY_RE
 
 logger = logging.getLogger(__name__)
 
@@ -39,31 +43,6 @@ SYNC_PERIOD_SECONDS = 30
 # How often a periodic sync that keeps failing says so, in seconds.
 SYNC_FAILURE_WARNING_INTERVAL = 300
 _sync_failures = {"count": 0, "last_warned": None}
-
-
-def worker_count() -> int:
-    """How many threads chunk copies and writes may use.
-
-    The CPU count the scheduler gave the job (LSF's ``bsub -n``, SGE, SLURM,
-    OpenMP) first, else the CPUs this process may run on.
-    """
-    for key in (
-        "LSB_DJOB_NUMPROC",
-        "LSB_MAX_NUM_PROCESSORS",
-        "NSLOTS",
-        "SLURM_CPUS_PER_TASK",
-        "OMP_NUM_THREADS",
-    ):
-        try:
-            value = int(os.environ.get(key, ""))
-        except ValueError:
-            continue
-        if value > 0:
-            return value
-    try:
-        return max(1, len(os.sched_getaffinity(0)))
-    except Exception:
-        return max(1, os.cpu_count() or 1)
 
 
 def chunk_version(entry) -> str:
@@ -91,6 +70,7 @@ def copy_chunks_parallel(s3, copy_pairs) -> set:
     node reads this same volume -- sees the old chunk or the new one, never
     a half-written file (which blosc rejects).
 
+    As many at once as the job has threads (worldarray's thread_budget).
     Returns the source paths that could not be copied. Their chunks keep
     what was on disk, and the caller must not record them as synced.
     """
@@ -109,7 +89,7 @@ def copy_chunks_parallel(s3, copy_pairs) -> set:
                 tmp.unlink()
 
     failed = set()
-    with ThreadPoolExecutor(max_workers=max(1, min(len(copy_pairs), worker_count()))) as executor:
+    with ThreadPoolExecutor(max_workers=max(1, min(len(copy_pairs), wa.thread_budget()))) as executor:
         futures = {executor.submit(copy_one, src, dst): src for src, dst in copy_pairs}
         for fut in as_completed(futures):
             try:
@@ -202,7 +182,8 @@ def diff_and_sync_chunks(s3, s0_path, dst_s0_path, known_state, force=False) -> 
     for entry in entries:
         name = (entry.get("name") or entry.get("Key") or "") if isinstance(entry, dict) else str(entry)
         key = Path(name).name
-        if CHUNK_KEY_RE.match(key):
+        # A chunk of the three-dimensional labels: z.y.x, whole numbers.
+        if wa.parse_chunk_key(key, "zarr2", separator=".", ndim=3) is not None:
             remote_state[key] = chunk_version(entry)
 
     changed = [k for k, v in remote_state.items() if force or known_state.get(k) != v]

@@ -19,7 +19,6 @@ import os
 import re
 
 import numpy as np
-import zarr
 from flask import jsonify, request
 
 from cellmap_flow.dashboard.finetune_utils import ensure_minio_serving
@@ -29,7 +28,7 @@ from cellmap_flow.dashboard.routes.finetune.common import rewrite_minio_url_for_
 from cellmap_flow.dashboard.routes.finetune.overlay import add_annotation_layer
 from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.finetune.session import instance as session_instance
-from cellmap_flow.finetune.session.volume import read_volume
+from cellmap_flow.finetune.session.volume import read_root_attrs, read_volume, update_root_attrs
 from cellmap_flow.io.multiscale import closest_raw_scale
 from cellmap_flow.models.geometry_cache import resolve_model_geometry
 
@@ -294,15 +293,15 @@ def create_instance_correction():
                     }),
                     400,
                 )
-            root = zarr.open(effective_zarr_path, mode="r+")
-            if root.attrs.get("type") == _LEGACY_TYPE:
-                root.attrs["type"] = "annotation_volume"
-            elif root.attrs.get("type") != "annotation_volume":
+            volume_type = read_root_attrs(effective_zarr_path).get("type")
+            if volume_type == _LEGACY_TYPE:
+                update_root_attrs(effective_zarr_path, {"type": "annotation_volume"})
+            elif volume_type != "annotation_volume":
                 # Refused before it is served: the listing, the overlay and
                 # training skip it, and it cannot be registered as a volume.
                 return _error(
                     f"{effective_zarr_path} is not an annotation volume "
-                    f"(its attrs say type {root.attrs.get('type')!r})"
+                    f"(its attrs say type {volume_type!r})"
                 )
             logger.info(
                 f"Reattaching paintable layer for {roi_name}: "

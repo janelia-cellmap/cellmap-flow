@@ -19,7 +19,7 @@ import requests
 from funlib.geometry import Roi
 from starlette.testclient import TestClient
 
-from cellmap_flow.image_data_interface import ImageDataInterface
+from cellmap_flow.io.raw import RawInput, open_raw
 from cellmap_flow.models.models_config import ScriptModelConfig
 from cellmap_flow.norm.input_normalize import LambdaNormalizer
 from cellmap_flow.pipeline_spec import PipelineSpec
@@ -61,7 +61,7 @@ def _computed(server, index, posts=(), norms=()):
     served = server.served
     roi = chunk_roi(index, served.block, served.output_voxel_size, served.origin)
     out = server.inferencer.process_chunk(
-        server.idi_raw, roi, input_norms=list(norms), postprocess=list(posts), grid_origin=served.origin
+        RawInput(server.raw), roi, input_norms=list(norms), postprocess=list(posts), grid_origin=served.origin
     )
     return out[None] if served.has_channel and out.ndim == 3 else out
 
@@ -155,8 +155,8 @@ def process_chunk(idi, roi):
 def test_a_config_reading_its_own_input_reads_the_same_voxels(tmp_path):
     """Cellpose, the BioImage zoo and model scripts read their input
     themselves, from the chunk grown by their context: the block chunkmirage
-    read for the chunk (chunkmirage_ops.BlockInput) gives them the voxels an
-    ImageDataInterface does."""
+    read for the chunk (chunkmirage_ops.BlockInput) gives them the voxels a
+    RawInput does."""
     server, client = _server(write_raw(tmp_path, (np.arange(12**3) % 251).astype(np.uint8).reshape((12,) * 3)),
                              write_script(tmp_path, OWN_PROCESS_CHUNK))
     for index in [(0, 0, 0), (1, 2, 0), (2, 2, 2)]:
@@ -355,8 +355,7 @@ def test_cellmap_flow_serve_resample_serves_the_model_its_own_voxel_size(ome_pyr
     assert (info["effective_output_voxel_size"], info["input_resampled_from"], info["input_relabelled_from"]) == (
         effective, resampled_from, relabelled_from)
     # Each chunk is the model (the identity) on the input read the same way.
-    reader = ImageDataInterface(path, voxel_size=(8, 8, 8), on_voxel_size_mismatch="relabel" if flag == "--no-resample" else "resample",
-                                input_norms=[])
+    reader = RawInput(open_raw(path, (8, 8, 8), resample=flag != "--no-resample"), input_norms=[])
     for index in [(0, 0, 0), (0, 1, 1)]:
         corner = server.served.origin + 32 * np.array(index)
         expected = reader.to_ndarray_ts(Roi(tuple(corner), (32, 32, 32)))

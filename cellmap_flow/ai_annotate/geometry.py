@@ -5,7 +5,7 @@ too, and is re-exported here under the names the server's callers use:
 ``plan_plane`` (a ``PlanePlan``: the square field around the point, snapped
 to the annotation volume's voxels and clipped to the volume and the data,
 and the raw read covering the same physical area), ``raw_box`` (that read on
-the raw's grid, as an ``io.geometry.Box``) and the screen layout
+the raw's grid, as voxel ``(begin, end)``) and the screen layout
 (``screen_axes``, ``screen_shape``, ``to_screen``, ``from_screen``): the
 image sent is laid out as the viewer's panel shows the plane. What is the
 server's alone is reading which plane the viewer shows: its layout and its
@@ -18,7 +18,6 @@ image sent (``portable/ai_annotate.py`` says how it is drawn).
 
 from cellmap_flow import viewer
 from cellmap_flow.ai_annotate.errors import AIAnnotateError
-from cellmap_flow.io.geometry import Box
 from cellmap_flow.portable import ai_annotate as portable
 from cellmap_flow.portable.ai_annotate import (  # noqa: F401  (re-exported for the server's callers)
     AXIS_NAMES,
@@ -103,9 +102,9 @@ def plan_plane(volume: dict, volume_shape, point_nm, depth_axis: int, crop_size_
         raise AIAnnotateError("refused", str(e), http_status=400) from None
 
 
-def raw_box(plan: PlanePlan, voxel_size, corner) -> Box:
-    """The raw voxels to read for ``plan``, on a raw grid of ``voxel_size``
-    from ``corner`` (its voxel 0's lower corner), as an ``io.geometry.Box``
-    (``portable.ai_annotate.raw_box``)."""
+def raw_box(plan: PlanePlan, voxel_size, corner) -> tuple:
+    """The raw voxels to read for ``plan``, ``(begin, end)`` on a raw grid of
+    ``voxel_size`` from ``corner`` (its voxel 0's lower corner):
+    ``portable.ai_annotate.raw_box``'s box."""
     begin, count = portable.raw_box(plan, voxel_size, corner)
-    return Box(begin, count)
+    return tuple(int(b) for b in begin), tuple(int(b) + int(n) for b, n in zip(begin, count))
