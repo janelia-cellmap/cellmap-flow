@@ -105,7 +105,7 @@ For advanced use cases or non-standard frameworks like TensorFlow v1, define a `
     import os, json
     import numpy as np
     from funlib.geometry import Coordinate, Roi
-    from cellmap_flow.image_data_interface import ImageDataInterface
+    from cellmap_flow.io.raw import RawInput
 
     # Define voxel sizes and context
     voxel_size = Coordinate((8, 8, 8))
@@ -147,7 +147,7 @@ For advanced use cases or non-standard frameworks like TensorFlow v1, define a `
         )
         return (result[output_tensorname[0]].clip(0, 1) * 255).astype(np.uint8)
 
-    def process_chunk(idi: ImageDataInterface, input_roi: Roi):
+    def process_chunk(idi: RawInput, input_roi: Roi):
         input_roi = input_roi.grow(context, context)
         chunk = idi.to_ndarray_ts(input_roi)
         input_tensor, output_tensor = get_tensor_names(setup_dir, ["raw"], ["embedding"])

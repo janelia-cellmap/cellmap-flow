@@ -7,29 +7,28 @@ logger = logging.getLogger(__name__)
 import os
 from pathlib import Path
 from typing import NamedTuple
-import zarr
 import daisy
 import numpy as np
+import worldarray as wa
 from funlib.geometry.coordinate import Coordinate
-from funlib.persistence import Array, open_ds, prepare_ds
-from funlib.persistence.arrays.datasets import ArrayNotFoundError
-from zarr.storage import NestedDirectoryStore
-from zarr.hierarchy import open_group
 from functools import partial
 from pydantic import ValidationError
 from cellmap_flow.blockwise.bounding_box import BoundingBox, TaskBoundingBox
-from cellmap_flow.image_data_interface import ImageDataInterface
+from cellmap_flow.io.raw import RawInput, open_raw, spatial_shape
 from cellmap_flow.inferencer import Inferencer
 from cellmap_flow.pipeline_spec import PipelineSpec
 from cellmap_flow.config.yaml import ConfigError, load_config, resolve_data_path
 from cellmap_flow.models.registry import build_models
-from cellmap_flow.io.ome import singlescale_attrs
 from cellmap_flow.models.model_merger import get_model_merger
 from cellmap_flow.jobs.launch import submit_bsub_job
 from cellmap_flow.jobs.spec import shell_quote
 from cellmap_flow.jobs.settings import launcher_settings
 from cellmap_flow.jobs.site import current_site
 from cellmap_flow.process_chain import process_chain
+
+# How an output's chunks are compressed: what funlib's prepare_ds wrote, so
+# outputs read, and take the room on disk, as they always have.
+OUTPUT_CODEC = {"id": "blosc", "cname": "lz4", "clevel": 5, "shuffle": 1, "blocksize": 0}
 
 
 def _validate_settings(config):
@@ -95,7 +94,7 @@ def _check_bounding_boxes(boxes):
 class _Output:
     """One zarr a run writes, ``<path>/<output channel>/s0``: ``roi`` (nm,
     z, y, x) is where it lies, and ``arrays`` its arrays, one per output
-    channel, once created or opened."""
+    channel, once created or opened (writable worldarray arrays)."""
 
     def __init__(self, path, roi):
         self.path, self.roi, self.arrays = Path(path), roi, []
@@ -174,10 +173,7 @@ class CellMapFlowBlockwiseProcessor:
 
         logger.info(f"Data path: {self.input_path}")
 
-        self.output_path = self.config["output_path"]
-        z_con = self.output_path.split(".zarr")[0]+".zarr"
-        zarr.open(z_con,mode="a")  # this is to create the zarr if it does not exist
-        self.output_path = Path(self.output_path)
+        self.output_path = Path(self.config["output_path"])
 
         output_channels = None
         if "output_channels" in self.config:
@@ -245,8 +241,8 @@ class CellMapFlowBlockwiseProcessor:
             raise ConfigError("No models found in the configuration.")
 
         # The same data_path + scale rule as cellmap_flow infer and yaml.
-        # All models read through one ImageDataInterface, so the first
-        # model's scale is the one that applies.
+        # All models read through one raw input, so the first model's scale
+        # is the one that applies.
         scale = getattr(models[0], "scale", None)
         other_scales = [
             getattr(m, "scale", None) for m in models[1:] if getattr(m, "scale", None) != scale
@@ -340,28 +336,19 @@ class CellMapFlowBlockwiseProcessor:
         # resample (true unless the task says false) reads the data resampled
         # to the model's input voxel size when it has no level at it; the
         # grid below is then the resampled one, starting at the level's own
-        # corner.
-        # padding="edge": the data's edge repeated past it, as the inference
-        # server pads the model's input (BlockInput).
-        self.idi_raw = ImageDataInterface(
-            self.input_path,
-            voxel_size=self.input_voxel_size,
-            on_voxel_size_mismatch="resample" if self.config.get("resample", True) else "relabel",
-            padding="edge",
-        )
+        # corner. Past the data a read repeats its edge (open_raw's padding),
+        # as the inference server pads the model's input (BlockInput). Every
+        # model reads through this one input, with the task's chain.
+        raw = open_raw(self.input_path, self.input_voxel_size, resample=self.config.get("resample", True))
+        self.raw_input = RawInput(raw)
 
         # The output grid starts at the corner of the raw level the model
         # reads (whole nanometers), so every output voxel sits exactly on the
         # input voxels it is computed from; anchored at 0 it was half a raw
         # voxel off Janelia data, whose corner is -4 nm. The whole-volume
         # output is the raw extent, shrunk to whole output voxels.
-        self.grid_origin = Coordinate(
-            int(v) for v in np.round(np.array(self.idi_raw.offset, dtype=float))
-        )
-        raw_roi = daisy.Roi(
-            self.grid_origin,
-            Coordinate(self.idi_raw.shape) * self.input_voxel_size,
-        )
+        self.grid_origin = Coordinate(int(v) for v in np.round(np.array(raw.corner, dtype=float)))
+        raw_roi = daisy.Roi(self.grid_origin, Coordinate(spatial_shape(raw)) * self.input_voxel_size)
         self.full_output_roi = self._snap_to_output_grid(raw_roi)
 
         self.bounding_boxes = self.config.get("bounding_boxes", None)
@@ -381,17 +368,14 @@ class CellMapFlowBlockwiseProcessor:
             raise Exception(f"output_channels has duplicated channel names. channels: {self.output_channels}")
 
         for output in self.outputs:
-            if create and output.path != Path(z_con):
-                # A group, with the groups between it and the zarr, so that
-                # listing the zarr finds it (box_1, box_2, ...).
-                zarr.open_group(z_con, mode="a", path=str(output.path.relative_to(z_con)))
             for channel in self.output_channels:
                 if create:
                     array = self._create_output(output, channel)
                 else:
-                    # A worker opens what the master created.
+                    # A worker opens what the master created, once, and
+                    # writes each of its blocks into it.
                     try:
-                        array = open_ds(NestedDirectoryStore(output.path / channel / "s0"), "a")
+                        array = wa.open(str(output.path / channel / "s0"), mode="r+")
                     except Exception as e:
                         raise Exception(f"Failed to open {output.path / channel}\n{e}")
                 output.arrays.append(array)
@@ -457,20 +441,29 @@ class CellMapFlowBlockwiseProcessor:
         return inside
 
     def _create_output(self, output, channel):
-        """Create ``output``'s output ``channel``: its array s0, and its group's OME attributes.
+        """Create ``output``'s output ``channel``, ``<output>/<channel>/s0``;
+        a writable worldarray array.
 
         Spatially, z, y, x, the array is ``output.roi`` in output voxels,
         voxel 0's corner at its offset. An output that a dict of
         output_channels gives several model channels stacks them on a
         leading axis "c", with voxel size 1 and offset 0, and each chunk
         holds all of them; any other output holds one channel and is 3-D.
-        Resuming into an output that covers another region, or whose
-        attributes differ, is refused.
+
+        worldarray writes the channel group's OME multiscales (translation
+        voxel 0's centre), and a bare group for each group above it up to
+        the zarr, so that listing the zarr finds a box_<n>. s0 also carries
+        funlib's voxel_size, offset (the corner), axis_names and units, for
+        readers that open it with funlib. An output already there resumes
+        only if it is the same array: another region (another box, or a
+        whole volume's output; an older cellmap-flow made a box run's output
+        that size), another placement (an older cellmap-flow put outputs half
+        a voxel off), another dtype or chunking, or other funlib attributes,
+        is refused, naming each difference.
         """
         path = output.path / channel / "s0"
         shape = tuple(int(s) for s in output.roi.shape / self.output_voxel_size)
         offset = tuple(int(o) for o in output.roi.offset)
-        _refuse_another_region(path, output.roi)
         chunk_shape, voxel_size = tuple(self.block_shape), tuple(self.output_voxel_size)
         axes, units = ["z", "y", "x"], ["nanometer"] * 3
         if self.output_channels_is_dict and self.output_channel_indices:
@@ -480,48 +473,25 @@ class CellMapFlowBlockwiseProcessor:
                 voxel_size, offset = (1, *voxel_size), (0, *offset)
                 axes, units = ["c", *axes], ["", *units]
         try:
-            array = prepare_ds(
-                NestedDirectoryStore(path),
+            return wa.create(
+                str(path),
                 shape,
-                dtype=self.dtype,
-                chunk_shape=chunk_shape,
-                voxel_size=Coordinate(voxel_size),
-                axis_names=axes,
-                units=units,
-                offset=Coordinate(offset),
-            )
-        except Exception as e:
-            raise Exception(
-                f"Failed to prepare {path} \n try deleting it manually and run again ! {e}"
-            )
-        try:
-            z_store = NestedDirectoryStore(output.path / channel)
-            zg = open_group(store=z_store, mode="a")
-            zattrs = singlescale_attrs(
-                arr_name="s0",
-                voxel_size=voxel_size,
-                offset=offset,
-                units=units,
+                self.dtype,
+                voxel_size,
+                wa.corner_to_centre(offset, voxel_size, axes),
                 axes=axes,
+                units="nanometer",
+                chunks=chunk_shape,
+                codecs=OUTPUT_CODEC,
+                format="zarr2",
+                separator="/",
+                attrs={"voxel_size": list(voxel_size), "offset": list(offset), "axis_names": axes, "units": units},
+                exists="adopt",
             )
-            if "multiscales" in list(zg.attrs):
-                old_multiscales = zg.attrs["multiscales"]
-                if old_multiscales != zattrs["multiscales"]:
-                    logger.info(f"Old multiscales: {old_multiscales}")
-                    logger.info(f"New multiscales: {zattrs['multiscales']}")
-                    raise ValueError(
-                        f"multiscales attribute already exists in {z_store.path} and is "
-                        "different from the new one. If it was written by an older "
-                        "cellmap-flow, which placed outputs half a voxel off (OME "
-                        "translation is a voxel centre), its blocks are on a different "
-                        "grid: write to a new output path instead of resuming."
-                    )
-            zg.attrs["multiscales"] = zattrs["multiscales"]
-        except Exception as e:
-            raise Exception(
-                f"Failed to prepare ome-ngff metadata for {path}, {e}"
-            )
-        return array
+        except ValueError as e:
+            raise ConfigError(
+                f"{path} cannot be resumed by this task: {e}\nWrite to a new output path, or delete it."
+            ) from None
 
     def _snap_to_output_grid(self, roi, mode="shrink"):
         """``roi`` snapped onto the output voxel grid anchored at grid_origin:
@@ -583,7 +553,7 @@ class CellMapFlowBlockwiseProcessor:
         if len(self.inferencers) == 1:
             # Single model - original behavior
             chunk_data = self.inferencers[0].process_chunk(
-                self.idi_raw,
+                self.raw_input,
                 block.write_roi,
                 input_norms=self.input_norms,
                 postprocess=self.postprocess,
@@ -594,7 +564,7 @@ class CellMapFlowBlockwiseProcessor:
             model_outputs = []
             for inferencer in self.inferencers:
                 output = inferencer.process_chunk(
-                    self.idi_raw,
+                    self.raw_input,
                     block.write_roi,
                     input_norms=self.input_norms,
                     postprocess=self.postprocess,
@@ -612,14 +582,19 @@ class CellMapFlowBlockwiseProcessor:
 
         chunk_data = chunk_data.astype(self.dtype)
 
+        # The block's prediction covers its whole write ROI; only write_roi,
+        # the part inside the region, is written (in output voxels from the
+        # block's corner, every channel of a stacked output).
+        voxel_size = np.array(self.output_voxel_size)
+        first = (np.array(write_roi.begin) - np.array(block.write_roi.begin)) // voxel_size
+        inside = (Ellipsis, *(slice(b, b + n) for b, n in zip(first, np.array(write_roi.shape) // voxel_size)))
         for channel, array in zip(self.output_channels, arrays):
-            prediction = Array(
-                self._output_data(chunk_data, channel), block.write_roi.offset, self.output_voxel_size
-            )
-            array_roi = write_roi
-            if array.roi.dims == 4:  # stacked: its whole channel axis, which starts at 0
-                array_roi = daisy.Roi((0, *write_roi.offset), (array.roi.shape[0], *write_roi.shape))
-            array[array_roi] = prediction.to_ndarray(write_roi)
+            # partial: a block cut at a box's end, in an output several boxes
+            # share, ends inside a chunk. Otherwise a block writes chunks of
+            # its own (_blocks_roi lays the blocks on the output's chunk grid,
+            # the model's output blocks unless the task's block_size says
+            # otherwise), and the tasks run one after another.
+            array.write(write_roi, self._output_data(chunk_data, channel)[inside], partial=True)
 
     def _output_data(self, chunk_data, channel):
         """The part of a block's prediction ``chunk_data`` (channels first)
@@ -721,28 +696,6 @@ class CellMapFlowBlockwiseProcessor:
             )
             return False
         return True
-
-
-def _refuse_another_region(path, roi):
-    """Raise ConfigError if an array at ``path`` covers anything but ``roi`` (nm, z, y, x).
-
-    Resuming writes into what is there, block by block, so it must be the
-    same region. funlib's prepare_ds refuses another shape saying only that
-    the dataset is not compatible, and takes another offset with the same
-    shape, keeping the old one, which the OME check after it then blamed on
-    an older cellmap-flow's half-voxel placement.
-    """
-    try:
-        existing = open_ds(NestedDirectoryStore(path), "r")
-    except ArrayNotFoundError:
-        return
-    there = daisy.Roi(existing.roi.offset[-3:], existing.roi.shape[-3:])
-    if there != roi:
-        raise ConfigError(
-            f"{path} already holds an output covering {there} nm, and this task's covers {roi} nm: "
-            "write to a new output path, or delete it. (A run over bounding_boxes by an older "
-            "cellmap-flow wrote an array the size of the whole volume; it now covers only the boxes.)"
-        )
 
 
 def _run_blockwise(tasks, server_factory=None):

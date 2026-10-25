@@ -5,8 +5,8 @@ submitted, which the finetune manifest and the exported YAML read as
 ``spec``. In an inference server or a blockwise worker it is the fallback
 for a layer or caller that brings no chain of its own: always empty for a
 server started from the CLI, and set by the user scripts that call
-``process_chunk`` themselves (ImageDataInterface's docstring says they rely
-on it).
+``process_chunk`` themselves (``io.raw``'s docstring says they rely on it:
+a ``RawInput`` given no chain reads through this one).
 
 - ``input_norms`` and ``postprocess`` are the live op instances, which can
   hold state (SimpleBlockwiseMerger's equivalences), so they are replaced

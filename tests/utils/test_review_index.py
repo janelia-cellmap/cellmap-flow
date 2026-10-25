@@ -4,10 +4,9 @@ index the Review tab reads out."""
 
 import numpy as np
 import pytest
-import zarr
+import worldarray as wa
 
 from cellmap_flow import review
-from cellmap_flow.io.ome import multiscales_attrs
 from cellmap_flow.review_index import main
 
 BIG = 2**40 + 3  # a uint64 id that a float would round
@@ -23,15 +22,16 @@ EXPECTED = {
 
 @pytest.fixture
 def labels(tmp_path):
+    """An OME-Zarr group of one level, s0, whose voxel 0 has its lower corner at CORNER."""
     data = np.zeros((6, 8, 10), dtype=np.uint64)
     data[0:2, 0:3, 0:4] = 5
     data[1:6, 5:8, 3:10] = 7
     data[5, 0, 9] = BIG
-    group = zarr.open_group(str(tmp_path / "labels.zarr"), mode="w")
-    group.create_dataset("s0", data=data, chunks=(2, 4, 4))
-    group.attrs.update(
-        multiscales_attrs(["z", "y", "x"], ["nanometer"] * 3, [("s0", VOXEL_SIZE, CORNER)])
+    level = wa.create(
+        str(tmp_path / "labels.zarr" / "s0"), data.shape, data.dtype, VOXEL_SIZE,
+        wa.corner_to_centre(CORNER, VOXEL_SIZE), chunks=(2, 4, 4), format="zarr2",
     )
+    level.write_index((0, 0, 0), data.shape, data)
     return str(tmp_path / "labels.zarr")
 
 

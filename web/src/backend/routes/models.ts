@@ -9,7 +9,7 @@
 // Python route starts and kills inference servers. The BioImage Model Zoo
 // and Cellpose have no web exports: their lists are empty and their
 // selections ignored (the template hides their panels in browser mode).
-import type { AppContext, FinetunedRecord, ModelEntry, ServedModel, Step } from "../../contracts";
+import type { AppContext, Chain, FinetunedRecord, ModelEntry, ServedModel, Step } from "../../contracts";
 import { isFinetuned } from "../../models";
 import type { Router } from "../router";
 import { badRequest, json, message, objectBody, unavailable } from "../router";
@@ -221,10 +221,7 @@ export function modelRoutes(router: Router): void {
   });
 
   router.get("/api/model_advice", (_req, _params, ctx) => {
-    const { chain } = ctx.session.state;
-    const configuredNorm = stepNames(chain.input_norm);
-    const configuredPost = stepNames(chain.postprocess);
-    return json(200, { success: true, models: ctx.infer.served().map((s) => advice(s, configuredNorm, configuredPost)) });
+    return json(200, { success: true, models: ctx.infer.served().map((s) => advice(s, ctx.session.state.chain)) });
   });
 }
 
@@ -232,13 +229,61 @@ function sizeText(size: number | number[]): string {
   return Array.isArray(size) ? size.join("x") : String(size);
 }
 
+/** A value's number, when it is one: a number, or a string spelling one
+ * (the form sends "255.0" for a manifest's 255); null otherwise ("" and
+ * null are not numbers). */
+function numeric(value: unknown): number | null {
+  if (typeof value === "number") return value;
+  if (typeof value === "string" && value.trim() !== "" && !Number.isNaN(Number(value))) return Number(value);
+  return null;
+}
+
+/** Whether a configured parameter value is the declared one: numbers by
+ * value, anything else as text, trimmed and without regard to case (a
+ * form's "False", Python's False and JSON's false are one value; an
+ * expression is compared as written). probe.py's same_value. */
+export function sameValue(configured: unknown, declared: unknown): boolean {
+  const a = numeric(configured), b = numeric(declared);
+  if (a !== null && b !== null) return a === b;
+  return String(configured).trim().toLowerCase() === String(declared).trim().toLowerCase();
+}
+
+export interface InputNormDifference {
+  step: string;
+  param: string;
+  configured: unknown;
+  declared: unknown;
+}
+
+/** Where the configured input normalization departs from what a model
+ * declares, when it has the declared steps in the declared order: one
+ * {step, param, configured, declared} per declared parameter whose value is
+ * not the configured one (sameValue), in step order; [] when every value is
+ * the declared one, and when the steps themselves differ, which the step
+ * names already say. A parameter the declaration does not name (a
+ * MinMaxNormalizer's invert) is not compared. `declared` is {name: params}
+ * in order, as advice builds it from the manifest. probe.py's
+ * input_norm_differences. */
+export function inputNormDifferences(configured: Step[], declared: Record<string, Record<string, unknown>>): InputNormDifference[] {
+  const order = Object.keys(declared);
+  if (!order.length || JSON.stringify(stepNames(configured)) !== JSON.stringify(order)) return [];
+  const differences: InputNormDifference[] = [];
+  for (const step of configured) {
+    for (const [param, value] of Object.entries(declared[step.name] ?? {})) {
+      if (!sameValue(step[param], value)) differences.push({ step: step.name, param, configured: step[param] ?? null, declared: value });
+    }
+  }
+  return differences;
+}
+
 /** One model's entry of /api/model_advice. There is no output probe in the
  * browser (probe_available: false, and a review that says so, which the
  * banner does not show); the input normalization is the one the model's
  * manifest declares, which suggest_input_norm treats as declared metadata:
  * high confidence, and a match when the configured steps are those in
- * that order. */
-export function advice(served: ServedModel, configuredNorm: string[], configuredPost: string[]) {
+ * that order with the declared values (inputNormDifferences says where
+ * a value is not). */
+export function advice(served: ServedModel, chain: Chain) {
   const manifest = served.entry.manifest;
   const declared: Record<string, Record<string, unknown>> = {};
   for (const step of manifest.input_norm ?? []) {
@@ -246,6 +291,8 @@ export function advice(served: ServedModel, configuredNorm: string[], configured
     declared[name] = params;
   }
   const order = Object.keys(declared);
+  const configuredNorm = stepNames(chain.input_norm);
+  const differences = inputNormDifferences(chain.input_norm, declared);
   const output = manifest.output ?? "";
   return {
     model: served.entry.name,
@@ -254,7 +301,7 @@ export function advice(served: ServedModel, configuredNorm: string[], configured
     output_class: /logit|unbounded|distance/i.test(output) ? "unbounded" : /sigmoid|probab|\[0, ?1\]/i.test(output) ? "unit" : null,
     output_min: null,
     output_max: null,
-    configured_postprocess: configuredPost,
+    configured_postprocess: stepNames(chain.postprocess),
     configured_input_norm: configuredNorm,
     input_voxel_size: served.info.input_voxel_size,
     input_resampled_from: null,
@@ -267,6 +314,7 @@ export function advice(served: ServedModel, configuredNorm: string[], configured
     input_norm_suggestion: order.length
       ? { input_norm: declared, order, reason: "Declared in the model's manifest (cellmap/onnx-web-models)", confidence: "high" }
       : { input_norm: null, order: [], reason: "The model's manifest does not say", confidence: "low" },
-    input_norm_matches: order.length > 0 && JSON.stringify(configuredNorm) === JSON.stringify(order),
+    input_norm_differences: differences,
+    input_norm_matches: order.length > 0 && JSON.stringify(configuredNorm) === JSON.stringify(order) && differences.length === 0,
   };
 }

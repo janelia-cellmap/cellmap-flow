@@ -311,6 +311,27 @@ describe("GET /api/model_advice", () => {
     const m = body(await backend.handle(request("GET", "/api/model_advice"))).models[0];
     expect(m.input_norm_matches).toBe(false);
     expect(m.configured_input_norm).toEqual(["LambdaNormalizer"]);
+    expect(m.input_norm_differences).toEqual([]);
+  });
+
+  it("holds a declared value to its number, not its spelling, and names a value that differs", async () => {
+    // The manifest declares MinMax 0..255 then 2*x-1 (backend-fakes.ts); this
+    // is that chain as the Input tab's form sends it.
+    const asForm = [
+      { name: "MinMaxNormalizer", min_value: "0.0", max_value: "255.0", invert: "False" },
+      { name: "LambdaNormalizer", expression: "2*x-1" },
+    ];
+    const ctx = fakeContext({ state: { chain: { input_norm: asForm, postprocess: [] } } });
+    const backend = createBackend(ctx);
+    await backend.handle(submit([HF54]));
+    let m = body(await backend.handle(request("GET", "/api/model_advice"))).models[0];
+    expect(m.input_norm_matches).toBe(true);
+    expect(m.input_norm_differences).toEqual([]);
+    // The same steps with the expression edited rated "looks right" before.
+    await backend.handle(request("PUT", "/api/pipeline", { input_norm: [asForm[0], { name: "LambdaNormalizer", expression: "2*x" }], postprocess: [] }));
+    m = body(await backend.handle(request("GET", "/api/model_advice"))).models[0];
+    expect(m.input_norm_matches).toBe(false);
+    expect(m.input_norm_differences).toEqual([{ step: "LambdaNormalizer", param: "expression", configured: "2*x", declared: "2*x-1" }]);
   });
 });
 

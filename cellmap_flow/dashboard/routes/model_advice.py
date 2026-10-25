@@ -23,7 +23,7 @@ import numpy as np
 from flask import Blueprint, jsonify
 
 from cellmap_flow.dashboard.state import get_session
-from cellmap_flow.serving.probe import review_postprocess, suggest_input_norm
+from cellmap_flow.serving.probe import input_norm_differences, review_postprocess, suggest_input_norm
 from cellmap_flow.serving.client import fetch_model_info
 
 logger = logging.getLogger(__name__)
@@ -90,14 +90,12 @@ def _raw_dtype_and_range(dataset_path):
 
     dtype_name, value_range = None, None
     try:
-        from cellmap_flow.image_data_interface import ImageDataInterface
+        from cellmap_flow.io.metadata import open_level
         from cellmap_flow.viewer.raw import _auto_contrast_range
 
-        # normalize=False: we want the range of the data as stored, which is
-        # what the normalizers being proposed have to map from.
-        idi = ImageDataInterface(dataset_path, normalize=False)
-        dtype = idi.ts.dtype
-        dtype = np.dtype(getattr(dtype, "numpy_dtype", dtype))
+        # The range of the data as stored, which is what the normalizers
+        # being proposed have to map from.
+        dtype = open_level(dataset_path).dtype
         dtype_name = dtype.name
         if dtype.kind in "ui":
             info = np.iinfo(dtype)
@@ -123,9 +121,10 @@ def model_advice():
     configured_post = [
         p.to_dict().get("name") for p in (session.postprocess or []) if hasattr(p, "to_dict")
     ]
-    configured_norm = [
-        n.to_dict().get("name") for n in (session.input_norms or []) if hasattr(n, "to_dict")
+    configured_steps = [
+        n.to_dict() for n in (session.input_norms or []) if hasattr(n, "to_dict")
     ]
+    configured_norm = [step.get("name") for step in configured_steps]
 
     raw_dtype, raw_range = _raw_dtype_and_range(session.dataset_path)
 
@@ -182,9 +181,11 @@ def model_advice():
             )
 
         # Input side is a declared convention, not something we can observe.
+        declared = _declared_input_norm(by_name.get(name))
         if getattr(by_name.get(name), "normalizes_input", False):
             # No suggestion, so the page shows none: [-1, 1] was suggested
             # for a Cellpose model, which normalizes each slice itself.
+            declared = None
             entry["input_norm_suggestion"] = {
                 "input_norm": None,
                 "order": [],
@@ -195,7 +196,7 @@ def model_advice():
             entry["input_norm_suggestion"] = suggest_input_norm(
                 framework=meta.get("framework"),
                 raw_dtype=raw_dtype,
-                declared=_declared_input_norm(by_name.get(name)),
+                declared=declared,
                 source=meta.get("repo") or meta.get("folder_path"),
                 data_range=raw_range,
             )
@@ -206,9 +207,15 @@ def model_advice():
         suggestion = entry["input_norm_suggestion"]
         # Order-sensitive on purpose: LambdaNormalizer("x*2-1") before the
         # rescale computes something quite different from after it, so the
-        # same two normalizers in the wrong sequence is not a match.
-        entry["input_norm_matches"] = list(configured_norm) == list(
-            suggestion["order"]
+        # same two normalizers in the wrong sequence is not a match. A
+        # declaration counts down to its values too: the declared steps with
+        # 2*x for a manifest's 2*x-1 feed the model something else, and the
+        # page said that "looks right". A convention's values are not held
+        # to the letter (its x*2-1 is anyone's 2*x-1).
+        entry["input_norm_differences"] = input_norm_differences(configured_steps, declared)
+        entry["input_norm_matches"] = (
+            list(configured_norm) == list(suggestion["order"])
+            and not entry["input_norm_differences"]
         )
         results.append(entry)
 

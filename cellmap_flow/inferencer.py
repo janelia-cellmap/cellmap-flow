@@ -56,9 +56,14 @@ class Inferencer(ModelRunner):
     """A ModelRunner that normalizes its input and postprocesses its output."""
 
     def process_chunk(self, idi, roi, input_norms=None, postprocess=None, grid_origin=None):
-        """Predict ``roi`` and postprocess it.
+        """Predict ``roi``, read from ``idi``, and postprocess it.
 
-        ``input_norms`` / ``postprocess``: the chain to use for this chunk.
+        ``idi`` is what the model reads from: a ``RawInput``
+        (``cellmap_flow.io.raw``), or the server's ``BlockInput``, which
+        already reads through the layer's chain.
+
+        ``input_norms`` / ``postprocess``: the chain to use for this chunk; a
+        ``RawInput`` is read through ``input_norms`` (``with_input_norms``).
         ``None`` falls back to the process's chain (``process_chain()``), for
         callers (scripts) that set the chain process-wide.
 
@@ -86,9 +91,10 @@ class Inferencer(ModelRunner):
     def _output_voxels_in(self, roi, idi):
         """How many output voxels ``roi`` holds, the spacing for unique label ids.
 
-        This used the IDI's output voxel size, which the server and blockwise
-        leave at the input voxel size, so a model whose output is finer than
-        its input spaced ids too closely and neighbouring chunks collided.
+        This once used the raw reader's output voxel size, which the server
+        and blockwise left at the input voxel size, so a model whose output is
+        finer than its input spaced ids too closely and neighbouring chunks
+        collided. It is the model's.
         """
         shape = np.array(roi.get_shape(), dtype=float) / np.array(
             self.model_config.geometry.output_voxel_size, dtype=float

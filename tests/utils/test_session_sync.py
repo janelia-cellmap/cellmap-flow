@@ -7,8 +7,6 @@
 import json
 from pathlib import Path
 
-import pytest
-
 from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.finetune.session import minio as session_minio
 from cellmap_flow.finetune.session import sync
@@ -86,8 +84,3 @@ def test_a_periodic_round_pulls_strokes_and_leaves_the_viewer_alone(tmp_path, mo
 
     assert (corrections / "vol.zarr" / "annotation" / "s0" / "0.0.0").read_bytes() == b"stroke"
     assert pushes == []
-
-
-@pytest.fixture(autouse=True)
-def _small_pool(monkeypatch):
-    monkeypatch.setattr(sync, "worker_count", lambda: 2)

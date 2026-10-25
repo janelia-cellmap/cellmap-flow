@@ -12,13 +12,13 @@ import os
 
 import neuroglancer
 import numpy as np
+import worldarray as wa
 from flask import jsonify, request
 
 from cellmap_flow.dashboard.finetune_utils import sync_all_annotations_from_minio
 from cellmap_flow.dashboard.routes.finetune.blueprint import finetune_bp
 from cellmap_flow.dashboard.state import get_session
 from cellmap_flow.finetune.session.volume import volume_corner_nm
-from cellmap_flow.io.geometry import list_populated_chunks
 from cellmap_flow.viewer.layers import replace_layer
 
 logger = logging.getLogger(__name__)
@@ -315,7 +315,7 @@ def refresh_annotated_regions_layer(corrections_path=None):
                     s0_path = os.path.join(corrections_dir, entry, "annotation", "s0")
                     if not os.path.isdir(s0_path):
                         continue
-                    for index in list_populated_chunks(s0_path):
+                    for index in wa.list_chunk_keys(s0_path, separator=".", ndim=3):
                         chunk_lo_vox = np.array(index, dtype=np.int64) * chunk_size_arr
                         chunk_hi_vox = chunk_lo_vox + chunk_size_arr
                         if not _chunk_outside_all_bboxes(

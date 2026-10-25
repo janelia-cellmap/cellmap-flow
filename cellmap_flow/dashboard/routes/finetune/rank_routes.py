@@ -302,24 +302,25 @@ def _offsets(offsets):
 
 
 def _painted_chunks(volume):
-    """The indices of the volume's painted chunks on disk (synced from MinIO), in index order."""
+    """The indices of the volume's painted chunks on disk (synced from MinIO), in index order; none without a volume directory."""
     import os
 
-    from cellmap_flow.io.geometry import list_populated_chunks
+    import worldarray as wa
 
-    try:
-        return list_populated_chunks(os.path.join(volume["zarr_path"], "annotation", "s0"))
-    except OSError:
-        return []
+    return wa.list_chunk_keys(os.path.join(volume["zarr_path"], "annotation", "s0"), separator=".", ndim=3)
 
 
 def _painted_box(volume, index):
     """``(lo, hi, labels)``: the box of chunk ``index``'s painted voxels, in annotation voxels, and their labels; None when none is painted."""
-    import zarr
+    import os
 
-    array = zarr.open(volume["zarr_path"], mode="r")["annotation/s0"]
-    lo = [i * c for i, c in zip(index, array.chunks)]
-    chunk = array[tuple(slice(l, l + c) for l, c in zip(lo, array.chunks))]
+    import worldarray as wa
+
+    from cellmap_flow.finetune.session.manifest import read_chunk
+
+    array = wa.open(os.path.join(volume["zarr_path"], "annotation", "s0"), units=None)
+    lo = [i * c for i, c in zip(index, array.meta.chunk_shape)]
+    chunk = read_chunk(array, index)
     where = np.nonzero(chunk)
     if not where[0].size:
         return None
@@ -362,22 +363,21 @@ def _raw_window(volume, boxes):
     voxels, at most RAW_SAMPLE), read as stored at the volume's input voxel
     size, or None when nothing could be read."""
     from cellmap_flow.ai_annotate.pipeline import _raw
-    from cellmap_flow.io.geometry import Box
 
     try:
-        idi = _raw(volume, tuple(volume["input_voxel_size"]))
+        raw = _raw(volume, tuple(volume["input_voxel_size"]))
     except Exception as e:
         logger.debug(f"No raw window: {e}")
         return None
     voxel = np.asarray(volume["output_voxel_size"], dtype=float)
     corner = volume_corner_nm(volume.get("dataset_offset_nm"), voxel)
-    raw_voxel = np.asarray(idi.voxel_size, dtype=float)[-3:]
-    raw_corner = np.asarray(idi.offset, dtype=float)[-3:]
+    raw_voxel = np.asarray(raw.array.voxel_size, dtype=float)[-3:]
+    raw_corner = np.asarray(raw.array.corner, dtype=float)[-3:]
     parts = []
     for lo, hi, _ in boxes:
         begin = np.floor((corner + lo * voxel - raw_corner) / raw_voxel + 1e-6).astype(int)
         end = np.ceil((corner + hi * voxel - raw_corner) / raw_voxel - 1e-6).astype(int)
-        parts.append(np.asarray(idi.read_box(Box(tuple(int(v) for v in begin), tuple(int(v) for v in np.maximum(end - begin, 1))))).ravel())
+        parts.append(np.asarray(raw.read_index(begin, np.maximum(end, begin + 1))).ravel())
     values = np.concatenate(parts) if parts else np.zeros(0)
     if not values.size:
         return None

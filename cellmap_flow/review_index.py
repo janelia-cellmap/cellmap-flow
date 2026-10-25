@@ -3,7 +3,7 @@ from an instance segmentation.
 
     python -m cellmap_flow.review_index LABELS OUT.sqlite [--queue NAME ...]
 
-LABELS is anything ImageDataInterface reads (zarr v2/v3, N5, precomputed;
+LABELS is anything worldarray reads (zarr v2/v3, N5, precomputed;
 a multiscale group is read at its finest level), with 0 as background. The
 index has the schema cellmap_flow.review reads: one ``instances`` row per
 label with its voxel count, bounding box (voxels, half-open) and centroid
@@ -90,8 +90,7 @@ def build_index(
     Refuses to overwrite ``db_path``: its ledger holds the verdicts.
     Returns ``{"n_instances", "voxel_size_nm", "offset_nm"}``.
     """
-    from cellmap_flow.image_data_interface import ImageDataInterface
-    from cellmap_flow.io.metadata import read_array_meta
+    from cellmap_flow.io.metadata import open_level, snap_integral
 
     unknown = [q for q in queues if q not in QUEUES]
     if unknown:
@@ -101,26 +100,23 @@ def build_index(
     if os.path.exists(db_path):
         raise FileExistsError(f"{db_path} exists; its ledger may hold verdicts")
 
-    idi = ImageDataInterface(labels_path, normalize=False, input_norms=[])
-    meta = read_array_meta(idi.path).spatial()
-    store = idi.ts
-    if store.rank != 3 or meta.axes not in (("z", "y", "x"), ("",) * 3):
+    # Opened in nm; an array that names no axes is z, y, x to worldarray.
+    array = open_level(labels_path)
+    if tuple(array.axes) != ("z", "y", "x"):
         raise ValueError(
-            f"expected a 3-D z, y, x segmentation; {idi.path} has axes {meta.axes}"
+            f"expected a 3-D z, y, x segmentation; {array.level_path} has axes {array.axes}"
         )
-    lo = np.asarray(store.domain.inclusive_min)
-    hi = np.asarray(store.domain.exclusive_max)
-    chunk = np.asarray(meta.chunk_shape)
+    shape = np.asarray(array.shape)
+    chunk = np.asarray(array.meta.chunk_shape)
     if block_shape is None:
         block_shape = chunk * np.maximum(1, -(-MIN_BLOCK_EDGE // chunk))
     block_shape = np.asarray(block_shape)
 
     parts = []
-    for start in product(*(range(0, n, b) for n, b in zip(hi - lo, block_shape))):
+    for start in product(*(range(0, n, b) for n, b in zip(shape, block_shape))):
         start = np.asarray(start)
-        stop = np.minimum(start + block_shape, hi - lo)
-        index = tuple(slice(int(a), int(b)) for a, b in zip(lo + start, lo + stop))
-        parts.append(_block_stats(store[index].read().result(), start))
+        stop = np.minimum(start + block_shape, shape)
+        parts.append(_block_stats(array.read_index(start, stop), start))
     stats = np.concatenate(parts) if parts else np.zeros((0, 11), dtype=np.int64)
 
     # Labels that span blocks: add the counts and sums, take the bbox extremes.
@@ -134,8 +130,9 @@ def build_index(
     np.maximum.at(bbox_hi, where, stats[:, 8:11])
     vox = total[:, 0]
     centroid = total[:, 1:4] / np.maximum(vox, 1)[:, None]
-    voxel_size = np.asarray(meta.voxel_size, dtype=float)
-    corner = np.asarray(meta.translation, dtype=float)
+    # Whole nanometers stay whole after a unit conversion (0.008 um is 8 nm).
+    voxel_size = snap_integral(array.voxel_size)
+    corner = snap_integral(array.corner)
     # Voxel i covers [corner + i * size, corner + (i + 1) * size).
     centroid_nm = corner + (centroid + 0.5) * voxel_size
 
@@ -172,7 +169,7 @@ def build_index(
                 "INSERT INTO ledger (instance_id) VALUES (?)", ((int(i),) for i in ids)
             )
             conn.executemany("INSERT INTO meta VALUES (?, ?)", [
-                ("source_zarr", idi.path),
+                ("source_zarr", array.level_path),
                 ("built_at", time.strftime("%Y-%m-%dT%H:%M:%S")),
                 ("voxel_size_nm", json.dumps(voxel_size.tolist())),
                 # The lower corner of voxel 0, in nm.

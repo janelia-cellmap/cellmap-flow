@@ -35,9 +35,12 @@ export interface NgState {
   [key: string]: unknown;
 }
 
-/** nm per unit of a dimension, as Neuroglancer names units (raw.py's
- * _NM_PER_UNIT and review_routes' nm_per_unit). */
-const NM_PER_UNIT: Record<string, number> = { m: 1e9, mm: 1e6, um: 1e3, "µm": 1e3, nm: 1 };
+/** nm per unit of a dimension, as Neuroglancer names units ("m", "nm",
+ * "µm"...): worldarray's length units, as cellmap_flow/io/metadata.py
+ * exports them (generated/python-data.ts). A dimension with no unit ("") is
+ * not a length here, where infer/geometry.ts takes a source's unitless axis
+ * as nm. */
+const NM_PER_UNIT: Readonly<Record<string, number>> = PYTHON.units.nm_per_unit;
 
 /** The state's layers as an array. Neuroglancer's current JSON is an array
  * of layers with `name`; its oldest links held an object keyed by name,

@@ -71,7 +71,7 @@ def fake_cellpose(monkeypatch):
 
 
 class ArrayIDI:
-    """An ImageDataInterface over a numpy array at ``voxel_size``, origin 0."""
+    """A RawInput over a numpy array at ``voxel_size``, origin 0."""
 
     def __init__(self, array, voxel_size):
         self.array, self.voxel_size = array, Coordinate(voxel_size)

@@ -106,8 +106,8 @@ cellpose = ">=4"
 fly-organelles = { git = "https://github.com/mzouink/fly-organelles", rev = "ab89c10" }
 
 [feature.fly.pypi-options.dependency-overrides]
-# fly-organelles pins xarray==2023.12.0, but cellmap-flow's
-# funlib.persistence 0.6.1 needs iohub, which needs xarray>=2024.1.1. The
+# fly-organelles pins xarray==2023.12.0, but the funlib.persistence its
+# training dependencies bring needs iohub, which needs xarray>=2024.1.1. The
 # StandardUnet does not use xarray; only the training data code does.
 xarray = ">=2024.1.1"
 # corditea (a fly-organelles dependency) asks for lsd-lite over git+ssh, which
@@ -117,8 +117,8 @@ lsd-lite = { git = "https://github.com/neptunes5thmoon/lsd-lite.git", rev = "055
 
 # Does not import DaCapo yet: dacapo-ml 0.3.0 resolves, with fibsem-tools 7,
 # which no longer has the fibsem_tools.metadata it imports. 0.3.5 pins
-# fibsem-tools<=6.3, whose tifffile<2024 holds numpy below the 2.0 that
-# funlib.persistence 0.6.1 needs; DaCapo's main branch wants funlib.persistence
+# fibsem-tools<=6.3, whose tifffile<2024 holds numpy below the 2.0 the rest
+# of the environment is on; DaCapo's main branch wants funlib.persistence
 # from a git branch (ome-ngff) that no longer exists. So DaCapoModelConfig has
 # no default_env: a DaCapo model's entry names a conda environment that has it.
 [feature.dacapo.pypi-dependencies]

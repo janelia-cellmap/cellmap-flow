@@ -61,7 +61,7 @@ from cellmap_flow.models.configs.base import Config, ModelConfig, _get_device
 from cellmap_flow.models.geometry import _numbers
 
 if TYPE_CHECKING:
-    from cellmap_flow.image_data_interface import ImageDataInterface
+    from cellmap_flow.io.raw import RawInput
 
 logger = logging.getLogger(__name__)
 
@@ -611,7 +611,7 @@ class BioModelConfig(ModelConfig):
             nm = [nm[0], *nm]  # a 2D model's slices: as far apart as its y voxels
         return _numbers(nm)
 
-    def process_chunk(self, idi: "ImageDataInterface", output_roi):
+    def process_chunk(self, idi: "RawInput", output_roi):
         """``output_roi`` predicted: ``(channels, z, y, x)``, in ``output_dtype``."""
         from bioimageio.core import Sample, Tensor
 

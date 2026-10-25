@@ -3,7 +3,7 @@ from funlib.geometry import Coordinate
 import numpy as np
 import cellpose.models
 
-from cellmap_flow.image_data_interface import ImageDataInterface
+from cellmap_flow.io.raw import RawInput
 
 input_voxel_size = Coordinate((426, 233, 233))
 output_voxel_size = Coordinate((426, 233, 233))
@@ -36,7 +36,7 @@ eval_kwargs = {
 model = cellpose.models.CellposeModel(**model_kwargs)
 
 
-def process_chunk(idi: ImageDataInterface, input_roi):
+def process_chunk(idi: RawInput, input_roi):
     input_roi = input_roi.grow(context, context)
     data = idi.to_ndarray_ts(input_roi)
     output = model.eval(data, **eval_kwargs)[0]
@@ -48,14 +48,10 @@ def process_chunk(idi: ImageDataInterface, input_roi):
 
 
 # # %%
-# import cellmap_flow.image_data_interface
-# from importlib import reload
-
-# reload(cellmap_flow.image_data_interface)
-# from cellmap_flow.image_data_interface import ImageDataInterface
+# from cellmap_flow.io.raw import open_raw
 # from funlib.geometry import Roi
 
-# idi = ImageDataInterface("/nrs/cellmap/ackermand/fromGreg.n5/c3/s0")
+# idi = RawInput(open_raw("/nrs/cellmap/ackermand/fromGreg.n5/c3/s0"))
 # output = process_chunk(idi, Roi((0, 0, 0), read_shape))
 
 # %%
