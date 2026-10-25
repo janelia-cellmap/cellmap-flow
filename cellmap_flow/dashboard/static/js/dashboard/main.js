@@ -118,10 +118,14 @@ function initApply(inputChain, postChain) {
     });
   }
 
-  function say(part, text) {
+  // The bar's notice: `text`, or nothing (null hides it). `tone` is "info"
+  // (a chain the backend changed) or "danger" (an Apply it refused).
+  function say(part, text, tone = "info") {
     if (!part.bar) return;
     const notice = part.bar.querySelector(".apply-notice");
     notice.querySelector(".apply-notice-text").textContent = text || "";
+    notice.classList.toggle("alert-info", tone === "info");
+    notice.classList.toggle("alert-danger", tone === "danger");
     notice.hidden = !text;
   }
 
@@ -141,18 +145,15 @@ function initApply(inputChain, postChain) {
           say(part, null);
         });
         live = data.pipeline || live;
-        ["submissionLog_inputNorm", "submissionLog_postProcess"].forEach((id) => {
-          const logArea = document.getElementById(id);
-          if (logArea) logArea.value += "Server response:\n" + JSON.stringify(data, null, 2) + "\n";
-        });
         refreshModelAdvice();
       })
       .catch((err) => {
         console.error("Error:", err);
         // A chain the server refused comes back with why (a parameter its
         // op's class does not take, say); no answer, or an error page, does not.
+        // Said in both bars: the one Apply sent both lists.
         const why = err instanceof ApiError && err.body && err.body.error ? ": " + err.body.error : "";
-        alert("Could not apply the chain" + why);
+        parts.forEach((part) => say(part, "Could not apply the chain" + why, "danger"));
       })
       .finally(() => {
         applying = false;
