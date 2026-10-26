@@ -348,6 +348,12 @@ export interface FinetunedRecord {
    * no volume here (""), no parameters and no epochs: the training was in
    * the browser the link was made in. */
   from_link?: { name: string };
+  /** Set when the model was opened from a file on this machine (the Models
+   * tab's Open an .onnx file…, src/model-file.ts): the file's name. Such a
+   * record's `base` is that file too (no id: it is no catalog entry), and it
+   * has no volume, parameters or epochs; a link can name it only once it
+   * has been published. */
+  from_file?: { name: string };
   /** Set when the model was published to Hugging Face from this browser
    * (publish/): the repository and folder it was uploaded to, which is also
    * its ref (`<repo>/<folder>`), so a link names it there rather than

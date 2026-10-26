@@ -68,7 +68,7 @@ export function metadataFor(entry: ModelEntry, record?: FinetunedRecord): Record
     ...Object.fromEntries((["source_repo", "distilled_from_repo", "torch_version", "exporter", "opset"] as const).filter((k) => m[k] !== undefined).map((k) => [k, m[k]])),
     // And where a finetuned model came from, so the base's name or the
     // volume's id find it in the tab's search.
-    ...(record ? { finetuned: { base: record.base, volume: record.volume, created_at: record.created_at, epochs: record.epochs, final_loss: record.final_loss, params: record.params, ...(record.from_link ? { from_link: record.from_link } : {}) } } : {}),
+    ...(record ? { finetuned: { base: record.base, volume: record.volume, created_at: record.created_at, epochs: record.epochs, final_loss: record.final_loss, params: record.params, ...(record.from_link ? { from_link: record.from_link } : {}), ...(record.from_file ? { from_file: record.from_file } : {}) } } : {}),
   };
 }
 
@@ -82,7 +82,8 @@ export function metadataFor(entry: ModelEntry, record?: FinetunedRecord): Record
  * browser serves it under another: "from a shared link (as
  * mito_aff_setup54_16nm-ft1): mito_aff_setup54_16nm with the link's last
  * layer, 2026-10-16", with no epochs or loss, which stayed with the
- * browser that trained it.
+ * browser that trained it; one opened from a file, "opened from
+ * mito_aff_setup54_16nm-ft1.onnx in this browser, 2026-10-26".
  *
  * A model of another repo than HF_REPO says the repo first, and what its
  * manifest's published block says it was finetuned from: "alice/mito-ft1,
@@ -96,6 +97,8 @@ export function describe(entry: ModelEntry, record?: FinetunedRecord): string {
     if (record?.from_link) {
       const as = record.from_link.name === record.name ? "" : ` (as ${record.from_link.name})`;
       parts.push(`from a shared link${as}: ${record.base.name} with the link's last layer, ${dateOf(record.created_at)}`);
+    } else if (record?.from_file) {
+      parts.push(`opened from ${record.from_file.name} in this browser, ${dateOf(record.created_at)}`);
     } else if (record) {
       const what = record.params.finetune_mode === "full" ? "whole network finetuned" : "finetuned";
       parts.push(`${what} in this browser from ${record.base.name} on ${record.volume}, ${dateOf(record.created_at)}`);

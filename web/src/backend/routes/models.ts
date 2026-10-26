@@ -46,8 +46,8 @@ function strings(value: unknown, name: string): string[] | { error: string } {
 
 /** What the browser can add, for the answer to a ref that is none of it. */
 const CAN_ADD =
-  `the browser runs the ONNX models of ${HF_REPO} (a folder, such as setup_54) and those of any public Hugging Face model repo laid out as that one is ` +
-  "(<owner>/<repo>/<folder>, a folder holding a manifest.json and the .onnx files it names)";
+  `the browser runs the ONNX models of ${HF_REPO} (a folder, such as setup_54), those of any public Hugging Face model repo laid out as that one is ` +
+  "(<owner>/<repo>/<folder>, a folder holding a manifest.json and the .onnx files it names), and an .onnx file opened with Open an .onnx file…";
 
 /** The catalog's entry for `ref`, or an error that says why there is none:
  * the catalog's own (no such public repo, no such folder, ...) or CAN_ADD. */

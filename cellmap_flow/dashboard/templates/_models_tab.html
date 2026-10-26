@@ -25,6 +25,20 @@
         {% endif %}
         <button type="button" class="btn btn-sm btn-outline-secondary" id="addModelResolveBtn">Resolve</button>
       </div>
+      {# Browser mode only: a path means nothing to a page, so a model sent
+         as a file is picked instead (web/src/model-file.ts): kept in this
+         browser, then resolved here by its name. Flask passes no mode, and
+         its field takes the file's path. #}
+      {% if mode == "browser" %}
+      <div class="d-flex align-items-center gap-2 mt-2 flex-wrap">
+        <button type="button" class="btn btn-sm btn-outline-secondary" id="openModelFileBtn"
+                title="An .onnx file this app downloaded (Download finetuned model), which carries its manifest, or any .onnx picked together with its manifest.json. It is kept in this browser like a finetuned model; nothing is uploaded.">
+          Open an .onnx file&hellip;
+        </button>
+        <input type="file" id="openModelFileInput" accept=".onnx,.json" multiple hidden>
+        <small class="text-muted">with its manifest.json if it carries none</small>
+      </div>
+      {% endif %}
       <div id="addModelResult" class="add-model-result mt-2" hidden>
         <div id="addModelSummary" class="small"></div>
         <div id="addModelNotes" class="small text-muted"></div>
