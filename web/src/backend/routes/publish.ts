@@ -77,6 +77,8 @@ interface Job {
   progress: PublishProgress | null;
   error?: string;
   created?: boolean;
+  /** What Hugging Face says the repository is, read back after the commit. */
+  private?: boolean;
   at?: string;
 }
 
@@ -236,7 +238,7 @@ export function publishRoutes(router: Router, deps: Partial<PublishDeps> = {}): 
         finetunedFrom: finetunedFrom(record, await ctx.catalog.finetuned()),
         dataset: options.includeDataset ? await trainedOn(ctx, record) : null,
       };
-      const { created } = await publishFiles({
+      const { created, private: isPrivate } = await publishFiles({
         token: who.token,
         repo: job.repo,
         private: options.private,
@@ -251,7 +253,7 @@ export function publishRoutes(router: Router, deps: Partial<PublishDeps> = {}): 
       // keep a record, and writes the bytes again with it.
       const latest = (await ctx.catalog.finetuned()).find((r) => r.id === record.id);
       if (latest) await ctx.catalog.addFinetuned({ ...latest, published: { repo: job.repo, folder: job.folder, at: p.publishedAt } }, bytes);
-      Object.assign(job, { status: "done", created, at: p.publishedAt });
+      Object.assign(job, { status: "done", created, private: isPrivate, at: p.publishedAt });
       ctx.log(`Published ${job.folder} to ${HUB}/${job.repo} as ${refOf(job.repo, job.folder)}${created ? " (a new repository)" : ""}`);
     } catch (e) {
       job.status = "failed";
@@ -285,6 +287,7 @@ function answerOf(ctx: AppContext, job: Job): Record<string, unknown> {
     const links = appLinks(pageBase(), ref, ctx.session.state.datasetUrl);
     Object.assign(answer, { ref, url: `${HUB}/${job.repo}`, try_link: links.tryLink, dataset_link: links.datasetLink, at: job.at ?? null });
     if (job.created !== undefined) answer.created = job.created;
+    if (job.private !== undefined) answer.private = job.private;
   }
   return answer;
 }

@@ -28,11 +28,12 @@ const ONNX = new Uint8Array([8, 1, 18, 4, 116, 101, 115, 116]);
 /** A fake Hugging Face, as far as a publish goes: whoami-v2 for its tokens
  * (each a user of the organization "cellmap"), repos/create, a commit's
  * requests (preupload, the LFS batch answered with a basic transfer, the
- * commit) and the storage's PUT. `committed` holds each commit's files by
- * path; `refuse` answers the repository and commit requests with that
- * status (403: a token that may not write). */
+ * commit), the storage's PUT, and the read-back (a repository's files and
+ * whether it is private). `committed` holds each commit's files by path;
+ * `refuse` answers the repository and commit requests with that status
+ * (403: a token that may not write). */
 function fakeHub(users: Record<string, string>, refuse: number | null = null) {
-  const repos = new Set<string>();
+  const repos = new Map<string, { private: boolean; files: Map<string, Uint8Array> }>();
   const stored = new Map<string, Uint8Array>();
   const committed: Map<string, Uint8Array>[] = [];
   const answer = (value: unknown, status = 200) => new Response(JSON.stringify(value), { status, headers: { "Content-Type": "application/json" } });
@@ -52,11 +53,15 @@ function fakeHub(users: Record<string, string>, refuse: number | null = null) {
     if (refuse) return answer({ error: "You don't have the rights to do that" }, refuse);
     const sent = typeof init.body === "string" ? init.body : "";
     if (url.pathname === "/api/repos/create") {
-      const { organization, name } = JSON.parse(sent);
+      const { organization, name, visibility } = JSON.parse(sent);
       if (repos.has(`${organization}/${name}`)) return answer({ error: "You already created this model repo" }, 409);
-      repos.add(`${organization}/${name}`);
+      repos.set(`${organization}/${name}`, { private: visibility === "private", files: new Map() });
       return answer({ url: `https://huggingface.co/${organization}/${name}`, id: "1" });
     }
+    const [, owner, name, route] = url.pathname.match(/^\/api\/models\/([^/]+)\/([^/]+)\/([^/]+)/) ?? [];
+    const repo = repos.get(`${owner}/${name}`);
+    if (route === "tree") return answer([...(repo?.files ?? [])].map(([path, bytes]) => ({ type: "file", path, size: bytes.length })));
+    if (route === "revision") return repo ? answer({ id: `${owner}/${name}`, private: repo.private }) : answer({ error: "Repository not found" }, 404);
     if (url.pathname.includes("/preupload/")) {
       const files = JSON.parse(sent).files as { path: string }[];
       return answer({ files: files.map((f) => ({ path: f.path, uploadMode: f.path.endsWith(".onnx") ? "lfs" : "regular" })) });
@@ -72,6 +77,7 @@ function fakeHub(users: Record<string, string>, refuse: number | null = null) {
         if (line.key === "lfsFile") files.set(line.value.path, stored.get(line.value.oid)!);
       }
       committed.push(files);
+      for (const [path, bytes] of files) repo?.files.set(path, bytes);
       return answer({ commitOid: "0123abc", commitUrl: `${url.origin}/commit/0123abc` });
     }
     return answer({ error: `no route ${url.pathname}` }, 404);
@@ -122,7 +128,7 @@ describe("publishing a model finetuned in the browser", () => {
     expect(body(started)).toMatchObject({ status: "running", repo: `alice/${NAME}`, folder: NAME });
     const done = await settled(router, ctx);
     const ref = `alice/${NAME}/${NAME}`;
-    expect(done).toMatchObject({ status: "done", created: true, ref, url: `https://huggingface.co/alice/${NAME}`, try_link: `http://localhost/?model=${ref}` });
+    expect(done).toMatchObject({ status: "done", created: true, private: false, ref, url: `https://huggingface.co/alice/${NAME}`, try_link: `http://localhost/?model=${ref}` });
     expect(done.dataset_link).toBe(`http://localhost/?dataset=${RAW}&model=${ref}`);
 
     const [files] = hub.committed;

@@ -1,6 +1,7 @@
 // The publish's calls to Hugging Face, through @huggingface/hub, with the
 // user's token: who the token is (whoIs), and the repository made if need be
-// and the model's files uploaded in one commit, with progress (publishFiles).
+// and the model's files uploaded in one commit, with progress, then read back
+// (publishFiles).
 // The library is loaded when first needed, in a chunk of its own, as TF.js
 // is (finetune/full/tfjs.ts): most visits never publish. Its errors are put
 // in words that say what to do (publishError), never with its URLs, which
@@ -26,9 +27,10 @@ export interface Account {
 
 /** Where a publish has got: making the repository, then the library's
  * phases (preparing the upload, hashing and uploading a file, the
- * commit), the file and its share done where there is one. */
+ * commit), the file and its share done where there is one, then reading
+ * the repository back. */
 export interface PublishProgress {
-  step: "creating" | "preparing" | "hashing" | "uploading" | "committing";
+  step: "creating" | "preparing" | "hashing" | "uploading" | "committing" | "checking";
   file: string | null;
   fraction: number | null;
 }
@@ -50,7 +52,9 @@ export async function whoIs(token: string): Promise<Account> {
  * it is there already, and upload `files` to it in one commit titled
  * `title`, telling `onProgress` how far it has got. A repository that is
  * there already takes the files as a new commit, its visibility as it was;
- * `created` says which. */
+ * `created` says which. Then the repository is read back, so that done means
+ * Hugging Face shows each file at the size sent (else this throws), and
+ * `private` is what the Hub says the repository is, whatever was asked. */
 export async function publishFiles(opts: {
   token: string;
   repo: string;
@@ -58,8 +62,8 @@ export async function publishFiles(opts: {
   files: { path: string; content: Blob }[];
   title: string;
   onProgress: (progress: PublishProgress) => void;
-}): Promise<{ created: boolean }> {
-  const { createRepo, uploadFilesWithProgress } = await loadHub();
+}): Promise<{ created: boolean; private: boolean }> {
+  const { createRepo, listFiles, modelInfo, uploadFilesWithProgress } = await loadHub();
   const repo = { type: "model" as const, name: opts.repo };
   opts.onProgress({ step: "creating", file: null, fraction: null });
   let created = true;
@@ -79,7 +83,13 @@ export async function publishFiles(opts: {
       opts.onProgress({ step: event.state, file: event.path, fraction: event.progress });
     }
   }
-  return { created };
+  opts.onProgress({ step: "checking", file: null, fraction: null });
+  const sizes = new Map<string, number>();
+  for await (const entry of listFiles({ repo, recursive: true, accessToken: opts.token })) sizes.set(entry.path, entry.lfs?.size ?? entry.size);
+  const absent = opts.files.filter((f) => sizes.get(f.path) !== f.content.size).map((f) => f.path);
+  if (absent.length) throw new Error(`the commit went through, but Hugging Face does not show ${absent.join(", ")} at the size uploaded`);
+  const info = await modelInfo({ name: opts.repo, accessToken: opts.token });
+  return { created, private: info.private };
 }
 
 function isHubError(e: unknown): e is HubApiError {

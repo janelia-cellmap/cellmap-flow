@@ -108,7 +108,14 @@ async function boot() {
   const view = await linkedHash(location.hash, { served, renamed: linkedModels.renamed, paint, log });
   if (view.hash !== location.hash) history.replaceState(null, "", withHash(location.href, view.hash));
   const missing = linkedModels.leftOut.length + view.dropped.length > 0;
-  showLinkNotice(missing ? "Some of the link is not shown here." : "The link opened with a model renamed.", linkNotes(linkedModels, view.dropped), missing ? "warning" : "info");
+  const notes = linkNotes(linkedModels, view.dropped);
+  const title = missing ? "Some of the link is not shown here." : notes.length ? "The link opened with a model renamed." : "Open a volume to run the link's models.";
+  // A link with models and no dataset, as a published model's card has it:
+  // nothing shows until a volume is opened, so the page says what waits.
+  if (!session.state.datasetUrl && linkedModels.entries.length) {
+    notes.push(`${linkedModels.entries.map((m) => m.name).join(", ")} will run on the volume you open.`);
+  }
+  showLinkNotice(title, notes, missing ? "warning" : "info");
   const ctx: AppContext = { session, catalog, infer, viewer, paint, events, log };
   const backend = createBackend(ctx);
   listenForApiRequests(backend);

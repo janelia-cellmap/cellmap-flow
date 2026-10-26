@@ -27,6 +27,7 @@ const STEP_WORDS = {
   hashing: "Hashing",
   uploading: "Uploading",
   committing: "Committing",
+  checking: "Checking what Hugging Face has",
 };
 
 export function initPublish() {
@@ -127,7 +128,12 @@ export function initPublish() {
     if (answer.status === "failed") say(answer.error);
     if (answer.status === "done") {
       const how = answer.created === true ? " (a new repository)" : answer.created === false ? " (a new commit)" : "";
-      say(`Published to ${answer.repo}${how}${answer.at ? `, ${new Date(answer.at).toLocaleString()}` : ""}.`);
+      // What Hugging Face says, read back after the commit: a private
+      // repository's links open it for no one, this app reading public ones only.
+      const seen = answer.private === true
+        ? " Hugging Face shows every file. The repository is private, so its links will not open it: make it public in its Settings on Hugging Face."
+        : answer.private === false ? " Hugging Face shows every file, in a public repository." : "";
+      say(`Published to ${answer.repo}${how}${answer.at ? `, ${new Date(answer.at).toLocaleString()}` : ""}.${seen}`);
     }
     showResult(answer.status === "done" ? answer : null);
   }
@@ -135,7 +141,10 @@ export function initPublish() {
   // The links of a publish that is done, or none.
   function showResult(answer) {
     result.hidden = !answer;
-    for (const [key, input] of Object.entries(fields)) input.value = (answer && answer[key]) || "";
+    for (const [key, el] of Object.entries(fields)) {
+      el.textContent = (answer && answer[key]) || "";
+      if (el.tagName === "A") el.href = el.textContent || "#";
+    }
     for (const el of result.querySelectorAll("[data-dataset-link]")) el.hidden = !(answer && answer.dataset_link);
   }
 
@@ -236,15 +245,15 @@ export function initPublish() {
 
   for (const copy of panel.querySelectorAll("[data-copy]")) {
     copy.addEventListener("click", async () => {
-      const input = document.getElementById(copy.dataset.copy);
+      const el = document.getElementById(copy.dataset.copy);
       try {
-        await navigator.clipboard.writeText(input.value);
+        await navigator.clipboard.writeText(el.textContent);
         copy.textContent = "Copied";
         setTimeout(() => { copy.textContent = "Copy"; }, 1500);
       } catch (_) {
         // The clipboard refused (a page the browser does not trust with
         // it): selected, for Ctrl+C.
-        input.select();
+        window.getSelection().selectAllChildren(el);
       }
     });
   }

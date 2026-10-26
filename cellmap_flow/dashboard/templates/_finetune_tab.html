@@ -1065,26 +1065,36 @@
                title="owner/name: your account or one of your organizations, and the repository's name. One that exists already gets the files as a new commit.">
       </div>
       <div class="form-check mt-1">
-        <input class="form-check-input" type="checkbox" id="publishPrivate">
-        <label class="form-check-label small" for="publishPrivate">Private (a new repository is public otherwise)</label>
+        <input class="form-check-input" type="checkbox" id="publishPrivate" autocomplete="off">
+        <label class="form-check-label small" for="publishPrivate">Private (its links will not open it: the app reads public repositories only)</label>
       </div>
-      <div class="form-check">
-        <input class="form-check-input" type="checkbox" id="publishIncludeDataset">
-        <label class="form-check-label small" for="publishIncludeDataset">Name the dataset's URL in the model card</label>
+      <div class="form-check" title="The model card is public with the repository, and a dataset's URL can be an internal one (a cluster path, a private bucket), so it is left out unless you ask for it.">
+        <input class="form-check-input" type="checkbox" id="publishIncludeDataset" autocomplete="off">
+        <label class="form-check-label small" for="publishIncludeDataset">Add an <em>Open on this dataset</em> link to the model card</label>
       </div>
       <div class="d-flex align-items-center gap-2 flex-wrap mt-2">
         <button type="button" class="btn btn-primary btn-sm" id="publishBtn">Publish</button>
         <small class="text-muted" id="publishStatus"></small>
       </div>
-      <div class="patch-tools-fields publish-fields" id="publishResult" hidden>
-        <label for="publishUrl">Hugging Face</label>
-        <div class="input-group input-group-sm"><input type="text" class="form-control" id="publishUrl" readonly><button type="button" class="btn btn-outline-secondary" data-copy="publishUrl">Copy</button></div>
-        <label for="publishRef">Model ref</label>
-        <div class="input-group input-group-sm"><input type="text" class="form-control font-monospace" id="publishRef" readonly><button type="button" class="btn btn-outline-secondary" data-copy="publishRef">Copy</button></div>
-        <label for="publishTryLink">Try it in the browser</label>
-        <div class="input-group input-group-sm"><input type="text" class="form-control" id="publishTryLink" readonly><button type="button" class="btn btn-outline-secondary" data-copy="publishTryLink">Copy</button></div>
-        <label for="publishDatasetLink" data-dataset-link>Open on this dataset</label>
-        <div class="input-group input-group-sm" data-dataset-link><input type="text" class="form-control" id="publishDatasetLink" readonly><button type="button" class="btn btn-outline-secondary" data-copy="publishDatasetLink">Copy</button></div>
+      {# One row per link, its name and Copy above the link itself, which
+         wraps: the panel is as narrow as the sidebar. #}
+      <div class="publish-result mt-2" id="publishResult" hidden>
+        <div>
+          <div class="publish-result-head"><span>Hugging Face</span><button type="button" class="btn btn-link btn-sm" data-copy="publishUrl">Copy</button></div>
+          <a id="publishUrl" target="_blank" rel="noopener"></a>
+        </div>
+        <div>
+          <div class="publish-result-head"><span>Model ref, for <em>Add a model</em></span><button type="button" class="btn btn-link btn-sm" data-copy="publishRef">Copy</button></div>
+          <code id="publishRef"></code>
+        </div>
+        <div>
+          <div class="publish-result-head"><span>Try it in the browser</span><button type="button" class="btn btn-link btn-sm" data-copy="publishTryLink">Copy</button></div>
+          <a id="publishTryLink" target="_blank" rel="noopener"></a>
+        </div>
+        <div data-dataset-link>
+          <div class="publish-result-head"><span>Open on this dataset</span><button type="button" class="btn btn-link btn-sm" data-copy="publishDatasetLink">Copy</button></div>
+          <a id="publishDatasetLink" target="_blank" rel="noopener"></a>
+        </div>
       </div>
     </div>
     {% endif %}

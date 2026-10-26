@@ -576,6 +576,30 @@ textarea.form-control[readonly] {
   grid-template-columns: auto 1fr;
 }
 
+/* A publish's links, each under its name and Copy, wrapping anywhere. */
+.publish-result {
+  display: grid;
+  gap: 6px;
+  font-size: 0.85rem;
+}
+
+.publish-result a,
+.publish-result code {
+  overflow-wrap: anywhere;
+}
+
+.publish-result-head {
+  display: flex;
+  align-items: baseline;
+  color: var(--text-muted);
+}
+
+.publish-result-head .btn {
+  margin-left: auto;
+  padding: 0;
+  font-size: inherit;
+}
+
 /* The AI panel's API key and access token: text fields shown as dots, so a
    browser's password manager does not offer to save them as it does a
    password field's (_finetune_tab.html says why). */
