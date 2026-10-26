@@ -33,6 +33,7 @@ import type { AppContext, Chain } from "./contracts";
 import { createInference } from "./infer";
 import { chainFromHash, linkedHash, type LinkedModels, linkNotes, parseLink, resolveLinkedModels, withoutLink } from "./link";
 import { installLocalFolderUi, restoreLocalFolder } from "./local-folder";
+import { installOpenFileUi } from "./model-file";
 import { createCatalog } from "./models";
 import { installApiDownloads, installApiRebase } from "./rebase";
 import { installRunRegionUi } from "./run-region/panel";
@@ -140,6 +141,9 @@ async function boot() {
   // The connect panel's Browse button and drop target press Connect, which
   // connect.js (in the dashboard's script) now listens on.
   installLocalFolderUi({ log });
+  // The Models tab's Open an .onnx file… presses Add a model's Resolve,
+  // which add-model.js listens on.
+  installOpenFileUi({ catalog, log });
   installShareUi({ session, viewer, catalog, log });
   // The Run tab (src/run-region): its own DOM, the folder picker in its
   // clicks and the engine's materialize; nothing of the dashboard's script.

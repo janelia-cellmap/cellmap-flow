@@ -101,6 +101,8 @@ def _models_on_disk(tmp):
     pytest.param("cpsam", ("cellpose", {"pretrained_model": "cpsam"}, "cpsam", ["voxel_size"]), id="cellpose-name"),
     pytest.param("hf:org/repo@v2", ("huggingface", {"repo": "org/repo", "revision": "v2"}, "repo", []),
                  id="hf-prefix"),
+    pytest.param("hf:someone/my-models/mito-ft1", ("onnx", {"repo": "someone/my-models", "folder": "mito-ft1"}, "mito-ft1", []),
+                 id="hf-prefix-folder"),
     pytest.param("dacapo:my@run@100000", ("dacapo", {"run_name": "my@run", "iteration": 100000}, "my@run_100000", []),
                  id="dacapo-prefix"),
     pytest.param("cellmap/mito", ("huggingface", {"repo": "cellmap/mito"}, "mito", []), id="hub-repo"),

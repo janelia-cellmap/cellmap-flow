@@ -48,7 +48,7 @@ import { chooseRawLevel, geometryOf, inputShape, outputLevel, outputShape, ratio
 import { mulberry32, shuffle, SLICE_MS, yieldEvery } from "../head-trainer";
 import { count, epochSummary, plural } from "../log-words";
 import { AugmentTally, augmentIntensity, drawAugmentation, intensityRange, transformBlock } from "../augment";
-import { entryFor } from "../../models/manifest";
+import { withVariant } from "../../models/manifest";
 import { readsOneSlice, refuseMode, sourceOf } from "../modes";
 import { readGraph, readModel } from "../onnx-proto";
 import { targetTransformFor } from "../target-call";
@@ -94,7 +94,7 @@ export function writableBlocks(entry: ModelEntry): Map<number, ModelVariant> {
 export function trainingEntry(entry: ModelEntry, options: Pick<FinetuneOptions, "mode" | "tileSize">): ModelEntry {
   if (options.mode !== "full" || !options.tileSize) return entry;
   const v = writableBlocks(entry).get(options.tileSize);
-  return v && v.file !== entry.variant.file ? entryFor(entry.folder, entry.manifest, v, entry.repo) : entry;
+  return v && v.file !== entry.variant.file ? withVariant(entry, v) : entry;
 }
 
 /** The largest block side offered or accepted: setup_54 takes 9.9 GB to train a block of 172³. */

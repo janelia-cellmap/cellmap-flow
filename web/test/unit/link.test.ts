@@ -8,6 +8,7 @@ import { readFileSync } from "node:fs";
 import { resolve as resolvePath } from "node:path";
 import { describe, expect, it } from "vitest";
 
+import { createBackend, restoreSession } from "../../src/backend";
 import { ARGS_KEY, type FinetunedRecord, type ModelEntry } from "../../src/contracts";
 import { headOf, withHead } from "../../src/finetune/onnx-head";
 import { chainFromHash, finetunedRef, type LinkCatalog, type LinkedFinetuned, linkedView, parseLink, resolveLinkedModels, sameHead } from "../../src/link";
@@ -20,7 +21,8 @@ import { encodeArgs } from "../../src/shared/args";
 import { paintLayerUrl } from "../../src/viewer/layers";
 import { encodeState } from "../../src/viewer/share";
 import type { NgState } from "../../src/viewer/state";
-import { fakeHub, fakeLog, type HubOptions } from "./models-helpers";
+import { fakeContext, request } from "./backend-fakes";
+import { entryFixture, fakeHub, fakeLog, type HubOptions, publishedManifest } from "./models-helpers";
 
 const DATASET = "https://janelia-cosem-datasets.s3.amazonaws.com/jrc_mus-liver/jrc_mus-liver.zarr/recon-1/em/fibsem-uint8";
 
@@ -30,6 +32,23 @@ describe("parseLink", () => {
     expect(parseLink("?model=setup_53&model=setup_54,setup_53&dataset=")).toEqual({ datasetUrl: null, models: ["setup_53", "setup_54"] });
     expect(parseLink("")).toEqual({ datasetUrl: null, models: [] });
     expect(parseLink("?other=1")).toEqual({ datasetUrl: null, models: [] });
+  });
+});
+
+describe("a link that names a model and no volume", () => {
+  it("puts another repo's model in the session, which is served once a volume is opened", async () => {
+    const ALICE = "alice/mito-ft1", FT = "mito_aff_setup54_16nm-ft1";
+    const hub = fakeHub({ repos: { [ALICE]: { manifests: { [FT]: publishedManifest(entryFixture("setup_54"), FT) } } }, onnx: { [`${FT}.onnx`]: HEAD_ONNX } });
+    const catalog = createCatalog({ log: () => {}, fetch: hub.fetch, storage: new MemoryKeyValueStore(), bytes: new MemoryByteCache(), finetuned: new MemoryFinetunedRegistry() });
+    // "Try it in the browser", as a published model's card links it.
+    const link = parseLink(`?model=${ALICE}/${FT}`);
+    expect(link.datasetUrl).toBeNull();
+    const linked = await resolveLinkedModels(catalog, link.models, () => {});
+    // As main.ts does: the models into the session; then Connect, and the session's restore after its reload.
+    const ctx = { ...fakeContext({ dataset: null, state: { models: linked.entries } }), catalog };
+    expect((await createBackend(ctx).handle(request("POST", "/api/set-data", { dataset_path: DATASET }))).status).toBe(200);
+    await restoreSession(ctx);
+    expect(ctx.infer.served().map((s) => s.entry.id)).toEqual([`${ALICE}/${FT}`]);
   });
 });
 

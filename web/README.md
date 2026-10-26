@@ -8,7 +8,8 @@ machine's GPU through WebGPU (or on its CPU through WebAssembly when there is
 none), and serves the predictions to Neuroglancer as a zarr array through a
 service worker, chunk by chunk, as the viewer asks for them. The models are
 ONNX exports of cellmap's networks, fetched from Hugging Face
-([cellmap/onnx-web-models](https://huggingface.co/cellmap/onnx-web-models))
+([cellmap/onnx-web-models](https://huggingface.co/cellmap/onnx-web-models),
+or any public repo laid out the same way, [below](#models-from-other-repos-and-from-a-file))
 and cached in the browser. Anyone with a recent browser can open a volume,
 tick a model and look at its predictions, with nothing to install and no
 cluster account: it is live at **https://janelia-cellmap.github.io/cellmap-flow/app/**,
@@ -64,6 +65,38 @@ separately), `npm test` (vitest unit tests in `test/`), and from the
 repository's root `python -m pytest tests/web` for the rendered page.
 `npm run build` writes the deployable site to `web/dist/`.
 
+## Models from other repos and from a file
+
+The Models tab's *Add a model* takes a model of any public Hugging Face
+model repo laid out as cellmap/onnx-web-models is: a folder holding a
+`manifest.json` (that repo's format) and the `.onnx` files it names, such as
+a model published from this app. Its ref is `<owner>/<repo>/<folder>`, or
+`<owner>/<repo>` when the repo holds one model, with `hf:` before it or as a
+huggingface.co URL (`/<owner>/<repo>/tree/main/<folder>`) if you like; the
+server's *Add a model* takes `<owner>/<repo>/<folder>` and the URLs too
+(`cellmap_flow/models/resolve.py`).
+The catalog (`src/models/index.ts` `resolve`) reads the repo's file list and
+manifests from the Hub, lists its models under Hugging Face after
+cellmap's, and remembers the repo (localStorage, each repo's listing cached
+for a day like cellmap's), so the next visit lists it too; a repo the Hub
+later answers 401 or 404 for (deleted, or made private) is forgotten. A repo
+that does not exist or is private, a folder it does not have, and a repo of
+several models named without its folder are refused, saying so; only the
+`main` revision is read. A published model's manifest names it
+(`published.name`); every name in the list is unique, the catalog's and the
+finetuned models' kept and another repo's model whose name is taken
+followed by `_2` (`withUniqueNames`).
+
+*Open an .onnx file…* beside it (browser only, `src/model-file.ts`) takes a
+model sent as a file: one this app downloaded (*Download finetuned model*
+writes the model's manifest into the file's `metadata_props` under
+`cellmap_flow.manifest`), or any `.onnx` picked together with its
+`manifest.json`. Nothing is uploaded: the model is kept in this browser as a
+finetuned model is (IndexedDB), named after its published name or its file,
+so it survives a reload and is served, finetuned and published like one;
+the same file opened twice is kept once. A link cannot name it until it has
+been published.
+
 ## A link that opens a volume and runs models
 
 The page's query can name what Connect and Submit would be used for:
@@ -73,17 +106,24 @@ https://janelia-cellmap.github.io/cellmap-flow/app/?dataset=<url>&model=<name>&m
 ```
 
 `dataset` is the volume's URL; each `model` is a model as the Models tab
-lists it (`setup_53`) or its repository path
-(`cellmap/onnx-web-models/setup_53`), repeated or comma-separated. At boot
+lists it (`setup_53`), its repository path
+(`cellmap/onnx-web-models/setup_53`), or another repo's
+`<owner>/<repo>/<folder>`, which the catalog looks up there and lists from
+then on, repeated or comma-separated. At boot
 (`src/main.ts`, `src/link.ts`) they go into the tab's session, the session's
 restore opens the volume and serves the models, and the query is taken off
-the address bar, so a later tab completed from the URL starts fresh. A model
-the catalog does not know is logged and left out. The README's example link
-opens an OpenOrganelle volume with `setup_53` running.
+the address bar, so a later tab completed from the URL starts fresh. A link
+may name models and no volume (`?model=<owner>/<repo>/<folder>`, the *Try it
+in the browser* link of a published model): the models are served on the
+first volume opened. A model the catalog does not know is logged and left
+out. The README's example link opens an OpenOrganelle volume with
+`setup_53` running.
 
 **Share** in the header (`src/share-link.ts`) copies such a link to what the
-tab has open, with the viewer's `#!` state after it: the view (position,
-zoom, layout, each layer as shown with its shader), whose model layers name
+tab has open, each model by its ref (a folder of cellmap/onnx-web-models
+by its name, another repo's as `<owner>/<repo>/<folder>`), with the viewer's
+`#!` state after it: the view (position, zoom, layout, each layer as shown
+with its shader), whose model layers name
 the chain they were drawn through; the recipient's page serves the models
 through that chain and its Input and Postprocess lists show it (`main.js`'s
 `showChain`, called by `src/main.ts` when the session's chain is not the
@@ -92,21 +132,26 @@ URL mirrored the viewer's, Chrome's omnibox completed a typed address to the
 last view and a new tab came back with it.
 
 A model finetuned in the browser is kept in that browser alone, so its name
-would mean nothing elsewhere; the link carries what rebuilds it instead.
+would mean nothing elsewhere. Once published to Hugging Face from the
+Finetune tab (its record keeps where), the link names it there,
+`<owner>/<repo>/<folder>`, as any other repo's model, whatever was trained.
+Until then the link carries what rebuilds it instead.
 A last-layer finetune changes only the model's last 1×1 convolution, so the
 model is its base's file with other numbers in that layer, and its `model`
 value is
 
 ```
-<name>~<base folder>~<base file>~<out>x<in>~<weights>
+<name>~<base>~<base file>~<out>x<in>~<weights>
 ```
 
 for example `mito_aff_setup53_16nm-ft1~setup_53~setup_53_mito_affinities_16nm_in140_fp16.onnx~3x32~AAC…`,
 the weight matrix then the biases as float32 little-endian in URL-safe
 base64 (528 characters for a 3 × 32 head; `~` is never escaped in a URL, and
 no plain ref has one, so links made before still read as they did). The base
-is the Hugging Face model at the root of the model's lineage, and the file
-the one its head was trained on. Opening the link downloads that file
+is the Hugging Face model at the root of the model's lineage, or the first
+model on the way there that was published, named by its ref (`setup_53`, or
+`<owner>/<repo>/<folder>`), and the file the one its head was trained on.
+Opening the link downloads that file
 (the catalog's default when the manifest no longer lists it), writes the
 numbers in (`src/finetune/onnx-head.ts` `withHead`), keeps the result as a
 finetuned model whose record says it came from a link, and serves it in the
@@ -118,8 +163,10 @@ read or rebuilt (its base unknown, its download failed, its head another
 shape than the base's) is logged and left out; the rest run. A model whose
 whole network was trained (a 2D model's *Whole network*), or one
 finetuned from such a model, has millions of numbers changed, not a head's
-few dozen: it is named by its folder, which opens only in this browser, and
-the notice says so; its *Download finetuned model* is the way to send it.
+few dozen, and a model opened from a file may have too: unless published,
+it is named by its folder, which opens only in this browser, and the notice
+says so; publishing it, or the file *Download finetuned model* saves, is the
+way to send it.
 
 Paint does not travel: an annotation volume is its chunks in the browser's
 paint store, too much for a link. Share still copies the link, and a notice

@@ -4,13 +4,15 @@
 // chain they are served through.
 //
 // In the browser the models are the ONNX exports of cellmap/onnx-web-models
-// (the Catalog); "serving" one is an Engine view with an onnxruntime-web
-// session (Inference.serve), so Submit serves and disposes views where the
-// Python route starts and kills inference servers. The BioImage Model Zoo
-// and Cellpose have no web exports: their lists are empty and their
-// selections ignored (the template hides their panels in browser mode).
+// and of the Hugging Face repos added beside it, and the models finetuned
+// in this browser or opened from a file (the Catalog); "serving" one is an
+// Engine view with an onnxruntime-web session (Inference.serve), so Submit
+// serves and disposes views where the Python route starts and kills
+// inference servers. The BioImage Model Zoo and Cellpose have no web
+// exports: their lists are empty and their selections ignored (the template
+// hides their panels in browser mode).
 import type { AppContext, Chain, FinetunedRecord, ModelEntry, ServedModel, Step } from "../../contracts";
-import { isFinetuned } from "../../models";
+import { HF_REPO, isFinetuned } from "../../models";
 import type { Router } from "../router";
 import { badRequest, json, message, objectBody, unavailable } from "../router";
 import { inputNormDeclaredBy, serveModels, setDeclaredInputNorm, stepNames, unserveModel } from "../serving";
@@ -42,15 +44,31 @@ function strings(value: unknown, name: string): string[] | { error: string } {
   return value as string[];
 }
 
+/** What the browser can add, for the answer to a ref that is none of it. */
+const CAN_ADD =
+  `the browser runs the ONNX models of ${HF_REPO} (a folder, such as setup_54), those of any public Hugging Face model repo laid out as that one is ` +
+  "(<owner>/<repo>/<folder>, a folder holding a manifest.json and the .onnx files it names), and an .onnx file opened with Open an .onnx file…";
+
+/** The catalog's entry for `ref`, or an error that says why there is none:
+ * the catalog's own (no such public repo, no such folder, ...) or CAN_ADD. */
+async function resolveOne(ctx: AppContext, ref: string): Promise<{ entry: ModelEntry } | { error: string }> {
+  try {
+    const entry = await ctx.catalog.resolve(ref);
+    return entry ? { entry } : { error: `${ref} is not a model the browser can run: ${CAN_ADD}.` };
+  } catch (e) {
+    return { error: message(e) };
+  }
+}
+
 /** The catalog entries for the references the dashboard sent (repo ids from
  * the Hugging Face list, names of models added by hand), one per model, or
  * the first reference that is not a model the browser can run. */
 async function resolveAll(ctx: AppContext, refs: string[]): Promise<{ entries: ModelEntry[] } | { error: string }> {
   const entries: ModelEntry[] = [];
   for (const ref of refs) {
-    const entry = await ctx.catalog.resolve(ref);
-    if (!entry) return { error: `${ref} is not a model the browser can run: only the ONNX exports listed under Hugging Face are.` };
-    if (!entries.some((e) => e.id === entry.id)) entries.push(entry);
+    const resolved = await resolveOne(ctx, ref);
+    if ("error" in resolved) return resolved;
+    if (!entries.some((e) => e.id === resolved.entry.id)) entries.push(resolved.entry);
   }
   return { entries };
 }
@@ -167,20 +185,27 @@ export function modelRoutes(router: Router): void {
     return json(200, { success: true, removed: name, models: await loadedModels(ctx) });
   });
 
-  // Add a model by reference: what a Hugging Face ONNX model resolves to, in
-  // the shape models/resolve.py's Resolved gives, as the server's onnx type's
-  // entry (routes/config.ts serverParams, without the file: the one run is
-  // chosen for this GPU); anything else (a path, a checkpoint, a zoo id)
-  // needs a server.
+  // Add a model by reference: what a Hugging Face ONNX model resolves to (a
+  // folder of the built-in catalog, or of any repo laid out as it is, which
+  // the catalog then lists: Catalog.resolve), or a model kept in this
+  // browser, in the shape models/resolve.py's Resolved gives, as the
+  // server's onnx type's entry (routes/config.ts serverParams, without the
+  // file: the one run is chosen for this GPU). A ref the catalog finds
+  // wanting (no such public repo, no such folder) is a 400 with its reason,
+  // as the server answers resolve's ValueError; anything else (a path, a
+  // checkpoint, a zoo id) needs a server.
   router.post("/api/models/resolve", async (req, _params, ctx) => {
     const body = objectBody(req);
     if (!body) return badRequest("expected a JSON object");
     const ref = typeof body.ref === "string" ? body.ref.trim() : "";
     if (!ref) return badRequest("ref is required");
-    const entry = await ctx.catalog.resolve(ref);
-    if (!entry) {
-      return unavailable(`Only the ONNX models of Hugging Face repositories such as cellmap/onnx-web-models can be added in the browser; ${ref} is not one of them.`);
+    let entry: ModelEntry | null;
+    try {
+      entry = await ctx.catalog.resolve(ref);
+    } catch (e) {
+      return badRequest(message(e));
     }
+    if (!entry) return unavailable(`${ref} is not a model the browser can add: ${CAN_ADD}.`);
     // The catalog's default variant; the one served is chosen for the GPU when it is.
     const v = entry.variant;
     return json(200, {
@@ -194,6 +219,7 @@ export function modelRoutes(router: Router): void {
       notes: [
         `${entry.manifest.task}: ${entry.manifest.channels.join(", ")} at ${entry.manifest.output_voxel_size_nm.join("x")} nm.`,
         `Variants ${entry.manifest.variants.map((x) => x.variant).filter((x, i, a) => a.indexOf(x) === i).join(", ")}; ${v.variant} at ${sizeText(v.input_size)} voxels is ${v.file_mb} MB. The one run is chosen for this GPU.`,
+        ...(entry.repo !== HF_REPO && !isFinetuned(entry) ? [`${entry.repo}'s models are listed under Hugging Face from now on.`] : []),
       ],
     });
   });
@@ -209,8 +235,9 @@ export function modelRoutes(router: Router): void {
     if (ctx.infer.served().some((s) => s.entry.name === name)) return json(409, { success: false, error: `A model named ${name} is already running` });
     // The entry as resolve answered it (repo and folder), else by its name.
     const ref = typeof e.repo === "string" && typeof e.folder === "string" ? `${e.repo}/${e.folder}` : name;
-    const model = (await ctx.catalog.resolve(ref)) ?? (await ctx.catalog.resolve(name));
-    if (!model) return badRequest(`${ref} is not a model the browser can run`);
+    const resolved = await resolveOne(ctx, ref);
+    const model = "entry" in resolved ? resolved.entry : await ctx.catalog.resolve(name).catch(() => null);
+    if (!model) return badRequest("error" in resolved ? resolved.error : `${name} is not a model the browser can run`);
     if (!ctx.infer.dataset()) return badRequest(NO_DATASET);
     const entries = [...ctx.session.state.models.filter((m) => m.id !== model.id), model];
     // As Submit: a chain with no input normalizers takes the ones it declares.
