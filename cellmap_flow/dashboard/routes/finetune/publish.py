@@ -495,10 +495,15 @@ def start_publish(name):
 @finetune_bp.route("/api/finetune/model/<name>/publish", methods=["GET"])
 def publish_status(name):
     """This dashboard's publish of the model ``name`` (running, done or failed), else status "none"."""
-    if _served_job(name) is None:
+    job = _served_job(name)
+    if job is None:
         return _error(f"No model finetuned on this server is named {name}", 404)
     publish = get_session().huggingface["publishes"].get(name)
-    return jsonify(_answer(publish) if publish else {"success": True, "status": "none"})
+    answer = _answer(publish) if publish else {"success": True, "status": "none"}
+    # What Also upload model.pt2 costs for this model: its weights in float32
+    # once the finetune is folded in, as its training logged their count.
+    parameters = job.network_parameters
+    return jsonify({**answer, "lora_copy_bytes": 4 * parameters if parameters else None})
 
 
 def _run(hf, publish, job, who, private, include_dataset, lora_copy):

@@ -180,12 +180,14 @@ def monitored(make_job, monkeypatch):
 
 def test_the_monitor_reads_one_loss_per_epoch(monitored):
     """From the epoch's summary line, even split across two reads; per-batch
-    losses are running means mid-epoch, and are not read."""
-    run = monitored(["Starting epoch 1 of 10...\n  Batch 1/3 - Loss: 0.9\nEpoch 1/10 - Lo",
+    losses are running means mid-epoch, and are not read. The network's size
+    the trainer printed first is kept too (the Publish panel's cost)."""
+    run = monitored(["NETWORK_PARAMETERS: 2122\nStarting epoch 1 of 10...\n  Batch 1/3 - Loss: 0.9\nEpoch 1/10 - Lo",
                      "ss: 0.5 - Supervised: 0.5\nStarting epoch 2 of 10...\nEpoch 2/10 - Loss: 0.25 - Sup\n",
                      "  Batch 1/3 - Loss: 0.123\n"])
     assert [(epoch, loss) for _, epoch, loss in run.seen] == [(1, None), (2, 0.25), (2, 0.25)]
     assert run.job.total_epochs == 10
+    assert run.job.network_parameters == 2122
 
 
 def test_the_last_status_marker_in_the_log_decides(monitored):

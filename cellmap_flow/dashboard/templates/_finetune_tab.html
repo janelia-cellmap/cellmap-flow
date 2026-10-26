@@ -1099,7 +1099,7 @@
       <div class="form-check" title="model.pt2 is the network as torch.export saves it, which a LoRA finetune attaches to. Without it the published model still runs anywhere, and can still be finetuned whole.">
         <input class="form-check-input" type="checkbox" id="publishLoraCopy" autocomplete="off" checked>
         <label class="form-check-label small" for="publishLoraCopy">Also upload <code>model.pt2</code>, so it can be LoRA-finetuned on a server</label>
-        <div class="text-muted small">Costs a second copy of the weights in the upload and on Hugging Face: 4 bytes a parameter, so about 8 MB for a 2M-parameter model, 3.2 GB for an 800M-parameter UNet.</div>
+        <div class="text-muted small" id="publishLoraCost">Costs a second copy of the weights in the upload and on Hugging Face: 4 bytes a parameter, so about 8 MB for a 2M-parameter model, 3.2 GB for an 800M-parameter UNet.</div>
       </div>
       {% endif %}
       <div class="d-flex align-items-center gap-2 flex-wrap mt-2">

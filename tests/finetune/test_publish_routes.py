@@ -126,7 +126,7 @@ def served(make_job, tmp_path, monkeypatch):
         "base_model": {"type": "huggingface", "repo": "cellmap/mito-base"},
     }]}))
     job = make_job(finetuned_model_name=MODEL, model_yaml_path=yaml_path, current_epoch=3, latest_loss=0.25,
-                   inference_server_ready=True)
+                   inference_server_ready=True, network_parameters=2_000_000)
     get_session().finetune_job_manager = SimpleNamespace(jobs={job.job_id: job})
 
     export = SimpleNamespace(started=[], no_browser=None)
@@ -171,6 +171,8 @@ def test_a_pasted_token_publishes_the_served_model_in_both_forms_with_its_card_a
     assert (account["signed_in"], account["user"], account["via"]) == (True, "ada", "token")
     assert secrets.redact(TOKEN) == secrets.REDACTED
 
+    # The panel says what model.pt2 adds for this model: its 2M parameters in float32.
+    assert dashboard.get(PUBLISH).get_json() == {"success": True, "status": "none", "lora_copy_bytes": 8_000_000}
     started = dashboard.post(PUBLISH, json={"repo": "lab/mito", "include_dataset": True})
     assert started.status_code == 200, started.get_json()
     done = dashboard.get(PUBLISH).get_json()

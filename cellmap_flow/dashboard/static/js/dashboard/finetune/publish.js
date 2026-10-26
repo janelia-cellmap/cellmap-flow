@@ -29,6 +29,7 @@
 // it in memory (the page's, or the dashboard's process's), never in the
 // page's storage; nothing here keeps it, logs it or puts it in a message.
 import { HUGGINGFACE_SIGN_IN_EVENT, listen } from "../../lib/events.js";
+import { formatMb } from "../../lib/format.js";
 import { poll } from "../../lib/poll.js";
 import { getAnswer, postAnswer } from "./requests.js";
 
@@ -64,6 +65,8 @@ export function initPublish() {
   const datasetBox = document.getElementById("publishIncludeDataset");
   // The server's only (its publish uploads a copy of the network; the template leaves it out elsewhere).
   const loraBox = document.getElementById("publishLoraCopy");
+  const loraCost = document.getElementById("publishLoraCost");
+  const loraCostAnyModel = loraCost ? loraCost.textContent : "";
   const publishBtn = document.getElementById("publishBtn");
   const statusLine = document.getElementById("publishStatus");
   const result = document.getElementById("publishResult");
@@ -164,6 +167,13 @@ export function initPublish() {
     if (!answer.success) {
       say(answer.error);
       return;
+    }
+    // What model.pt2 costs for this model, where its training said how big
+    // its network is (the server's status answer); else the rule for any.
+    if (loraCost && "lora_copy_bytes" in answer) {
+      loraCost.textContent = answer.lora_copy_bytes
+        ? `Adds ${formatMb(answer.lora_copy_bytes / 1e6)} for this model: a second copy of its weights, in the upload and on Hugging Face.`
+        : loraCostAnyModel;
     }
     running = answer.status === "running";
     publishBtn.disabled = running || !signedIn();

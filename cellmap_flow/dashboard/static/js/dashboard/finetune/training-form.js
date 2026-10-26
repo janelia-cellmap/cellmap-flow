@@ -1,6 +1,7 @@
 // The Finetune tab's form: the output path and the training parameters,
 // kept in localStorage (the output path on the server too), the advice shown
 // next to some of them, and the GPU queue picker.
+import { formatMb, formatMs } from "../../lib/format.js";
 import { isBrowserMode } from "../../lib/page-data.js";
 import { readJSON, writeJSON } from "../../lib/stored.js";
 import { fillQueueSelect, queueHint, subscribeGpuQueues } from "../../shared/gpu-queues.js";
@@ -340,14 +341,6 @@ function updateTileHint() {
     : `About ${formatMs(tile.step_ms * batch)} and ${formatMb(tile.peak_mb * batch)} a step${where}; `;
   hint.textContent = `${cost}${useful}. Smaller ${noun}s train faster in less memory, but spend more of each ${noun} on context.`;
   hint.title = full.measured_on ? `Measured on ${full.measured_on}` : "";
-}
-
-function formatMs(ms) {
-  return ms < 1000 ? `${Math.round(ms)} ms` : `${(ms / 1000).toFixed(1)} s`;
-}
-
-function formatMb(mb) {
-  return mb < 1000 ? `${Math.round(mb)} MB` : `${(mb / 1000).toFixed(1)} GB`;
 }
 
 // The pane's data-training and the notes, from the Training field.

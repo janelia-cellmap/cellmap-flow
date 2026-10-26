@@ -29,6 +29,7 @@ finetune.run_outputs', and its stdout markers are finetune.markers'.
 import logging
 import sys
 
+from cellmap_flow.finetune import markers
 from cellmap_flow.finetune.adaptation import FullStrategy, LoraStrategy
 from cellmap_flow.finetune.cli import model_config_from_args, options_of, parse_args
 from cellmap_flow.finetune.model_loading import load_trainable_model
@@ -83,6 +84,7 @@ def main():
 
     model_config = model_config_from_args(args)
     base_model = load_trainable_model(model_config)
+    markers.emit(markers.NETWORK_PARAMETERS, sum(p.numel() for p in base_model.parameters()))
 
     # === Wrap with LoRA (once - same object is reused across restarts) ===
     # The request decides, here only: --mode full (or a rank of 0) is a full
