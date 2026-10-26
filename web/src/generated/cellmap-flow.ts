@@ -34,6 +34,8 @@ export interface RequestBodies {
   "POST /api/finetune/load-crops"?: LoadCrops;
   "POST /api/finetune/submit"?: FinetuneSubmit;
   "POST /api/finetune/job/<job_id>/restart"?: FinetuneRestart;
+  "POST /api/huggingface/credentials"?: HuggingFaceCredentials;
+  "POST /api/finetune/model/<name>/publish"?: FinetunePublish;
   "POST /api/finetune/ai-annotate/settings"?: AIAnnotateSettings;
   "POST /api/finetune/ai-annotate/run"?: AIAnnotateRun;
   "POST /api/finetune/ai-annotate/resend"?: AIAnnotateResend;
@@ -629,6 +631,27 @@ export interface FinetuneRestart {
   [k: string]: unknown;
 }
 /**
+ * A Hugging Face access token to publish with (``token``, hf_...), or
+ * ``forget`` the one in use: signing out.
+ */
+export interface HuggingFaceCredentials {
+  token?: string | null;
+  forget?: boolean;
+}
+/**
+ * Where to publish a finetuned model on Hugging Face: ``repo`` as
+ * ``owner/name`` (blank: the signed-in user's, named after the model),
+ * whether a repository made for it is ``private`` (a model repository is
+ * public otherwise), and whether its manifest and model card name the
+ * dataset it was trained on (``include_dataset``: off unless asked, since a
+ * dataset's URL can be internal).
+ */
+export interface FinetunePublish {
+  repo?: string | null;
+  private?: boolean;
+  include_dataset?: boolean;
+}
+/**
  * The provider and model to use (ids the config lists), the target, as
  * an organelle catalog key and/or a name, the editable prompt (null: the
  * catalog's), and whether the user acknowledges where the provider sends
@@ -798,6 +821,10 @@ export const ROUTES: readonly Route[] = [
   { method: "POST", path: "/api/finetune/job/<job_id>/stop-early", availability: "both", request: null },
   { method: "POST", path: "/api/finetune/job/<job_id>/restart", availability: "both", request: "FinetuneRestart" },
   { method: "GET", path: "/api/finetune/model/<name>/download", availability: "browser", request: null },
+  { method: "GET", path: "/api/huggingface/credentials", availability: "browser", request: null },
+  { method: "POST", path: "/api/huggingface/credentials", availability: "browser", request: "HuggingFaceCredentials" },
+  { method: "POST", path: "/api/finetune/model/<name>/publish", availability: "browser", request: "FinetunePublish" },
+  { method: "GET", path: "/api/finetune/model/<name>/publish", availability: "browser", request: null },
   { method: "GET", path: "/api/finetune/good-regions", availability: "both", request: null },
   { method: "POST", path: "/api/finetune/good-regions/mark-view", availability: "both", request: null },
   { method: "POST", path: "/api/finetune/good-regions/delete", availability: "both", request: null },

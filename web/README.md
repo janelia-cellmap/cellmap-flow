@@ -248,7 +248,8 @@ and paint inside a region wins over it. The trained
 weights are written back into a copy of the model's initializers, and the
 result is an ordinary model entry (`src/models/finetuned.ts`, repo
 `finetuned`, kept in IndexedDB with its bytes): served beside the base
-when *Auto-serve* is on, listed on the Models tab, downloadable as `.onnx`.
+when *Auto-serve* is on, listed on the Models tab, downloadable as `.onnx`
+and publishable to Hugging Face (below).
 
 The download (`GET /api/finetune/model/:name/download`,
 `downloadableOnnx` in `src/backend/routes/finetune.ts`) writes the entry's
@@ -303,6 +304,95 @@ checked against the Python on fixtures it writes,
 `test/fixtures/make_label_it_fixtures.py`). The server's
 distance watershed and a model's own instances are not offered: no model the
 browser runs outputs a distance or instance ids.
+
+## Publishing a model to Hugging Face
+
+*Publish to Hugging Face*, on the Training Status card beside *Download
+finetuned model* (`static/js/dashboard/finetune/publish.js`), uploads a
+model finetuned in the browser, its last layer or its whole network, to a
+repository of the user's own Hugging Face account, from the page itself
+(`src/publish/`, on `@huggingface/hub`, loaded when first needed). The user
+signs in with Hugging Face in a popup, or pastes an access token; the
+repository is `<user>/<model name>` unless another is typed (theirs or one of
+their organizations'); a new repository is **public unless *Private* is
+ticked**, and one that exists already gets the files as a new commit. One
+commit uploads:
+
+```
+README.md                  the model card: what it predicts, at what voxel sizes, what it was finetuned
+                           from and how, and how to open it (src/publish/model.ts modelCard)
+<model>/manifest.json      the model's own manifest (the catalog entry's, its one variant as it is,
+                           `source` and all: the Hugging Face file the bytes were made from, which a
+                           finetune of the published model needs), with a
+                           "published" block: its name, the ref it was finetuned from, head or full,
+                           epochs, final loss, when it was trained and published, the app's version,
+                           and the dataset's URL only when "Name the dataset's URL" is ticked
+<model>/<model>.onnx       the bytes the browser serves for it
+```
+
+The answer gives the repository's page, the model's ref,
+`<user>/<repo>/<model>` (which *Add a model* takes here and on the server, and
+a link's `model=`), and two app links: *Try it in the browser*,
+`<app>?model=<ref>`, which opens the app with the model chosen for any volume,
+and *Open on this dataset*, `<app>?dataset=<raw>&model=<ref>`. The model card
+always has the first, on the public app's address (`PUBLIC_APP`, never a
+development server's), and the second only when the dataset's URL is named.
+The record keeps where the model went (`FinetunedRecord.published`), so the
+panel shows it after a reload.
+
+The routes are `src/backend/routes/publish.ts`: `GET`/`POST
+/api/huggingface/credentials` (who is signed in, a pasted token, sign out)
+and `POST`/`GET /api/finetune/model/:name/publish` (start a publish, and
+follow it: the upload is a job, polled, since tens of megabytes can outlast
+the service worker's wait for an answer). They are in `cellmap_flow/schema.py`'s
+table as the browser's, shaped so the server can answer them too.
+
+The token lives in the page's memory only, as the AI panel's key does
+(`src/ai-annotate/credentials.ts` says why): never in storage, a link, the
+session or a log line, sent only to Hugging Face, and a reload asks again.
+The service worker leaves requests with an `Authorization` header alone
+(`src/sw.ts`), so its store, which keys by URL, never answers one token's
+request with another's. Hugging Face's API (`huggingface.co`), its Xet
+storage (`cas-server.xethub.hf.co`) and its S3 bucket answer the browser's
+cross-origin preflights from `janelia-cellmap.github.io` (checked
+2026-10-26 without a token; the upload itself needs one).
+
+**An access token** (the fallback, and the only way until the OAuth app
+below is registered): at <https://huggingface.co/settings/tokens>, *Create
+new token*, type *Write* (or *Fine-grained* with write access to your
+repositories), copy the `hf_…` value and paste it into the panel's *Access
+token* field.
+
+**Sign in with Hugging Face** (`src/publish/oauth.ts`): OAuth with PKCE in a
+popup, `oauth.html` beside the page (a build input in `vite.config.ts`), so
+the app keeps its state. The popup goes to Hugging Face's authorize page, and
+on the way back exchanges the code for the token (`@huggingface/hub`'s
+`oauthLoginUrl` and `oauthHandleRedirect`, its PKCE verifier and nonce kept in
+the popup's sessionStorage, not the library's localStorage default) and hands
+the token to the page over a `BroadcastChannel` named for that tab, then
+closes. The button is hidden while `HF_OAUTH_CLIENT_ID` is empty. To register
+the app, at <https://huggingface.co/settings/applications/new>, signed in as
+the account that should own it:
+
+- Application name: `cellmap-flow`; homepage:
+  `https://janelia-cellmap.github.io/cellmap-flow/app/`; a logo if wanted.
+- Scopes: `openid`, `profile` and `contribute-repos` (`HF_OAUTH_SCOPES`):
+  who the user is, and to make repositories and write to those made through
+  the app, no others. A scope the app is not registered with is refused at
+  sign-in. (`write-repos` with `manage-repos` would let the page publish into
+  repositories made by hand too, and change or delete any of the user's.)
+- Redirect URLs, one per line:
+  `https://janelia-cellmap.github.io/cellmap-flow/app/oauth.html`,
+  `http://localhost/oauth.html` and `http://127.0.0.1/oauth.html`. Hugging
+  Face takes a loopback `http` redirect on any port with the path exactly as
+  registered, which covers `npm run dev` and `vite preview` on any port; a
+  page reached any other way (a tunnel's host, a workstation's address) needs
+  its own `…/oauth.html` registered, or a token instead.
+- No client secret: a public app, PKCE only (delete the secret if one was
+  made).
+
+Then put the app's client id (not a secret) in `HF_OAUTH_CLIENT_ID`, rebuild,
+and deploy.
 
 ## Browser requirements
 

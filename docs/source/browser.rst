@@ -457,6 +457,40 @@ a YAML that ``cellmap_flow yaml`` runs, each model a ``type: onnx`` entry; a
 finetuned model's ``.onnx``, from *Download finetuned model*, goes beside it.
 See :ref:`onnx` for what the YAML holds and what to add for the cluster.
 
+Publishing a finetuned model
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+*Publish to Hugging Face*, beside *Download finetuned model*, puts the model
+(its last layer or its whole network finetuned) in a repository of your own
+Hugging Face account, uploaded from the page when you click *Publish*, where
+anyone can run it: in this app, in the server
+dashboard, or from the files. Sign in with Hugging Face, in a popup that
+closes itself (the page keeps everything it has open), or paste an access
+token with write access: at
+`huggingface.co/settings/tokens <https://huggingface.co/settings/tokens>`__,
+*Create new token* of type *Write* (or a fine-grained one that may write to
+your repositories). Either is kept in the page's memory only and sent only to
+Hugging Face; a reload asks again. *Sign in with Hugging Face* appears once the
+app has its Hugging Face OAuth app; until then, paste a token.
+
+The repository is ``<you>/<model name>`` unless you type another, yours or one
+of your organizations'. A new repository is **public** unless you tick
+*Private*; one that exists already gets the files as a new commit, its
+visibility as it was, so publishing a model again updates it. The upload is
+the model card (``README.md``: what the model predicts, at what voxel sizes,
+what it was finetuned from and how, and how to open it), the model's manifest
+(``<model>/manifest.json``, as cellmap-flow reads a model's geometry, channels
+and input normalization) and its ``.onnx``. The model card names the dataset
+it was trained on only when you tick *Name the dataset's URL in the model
+card*: a dataset's URL can be internal.
+
+When it is done the panel shows the model's Hugging Face page, its ref
+(``<you>/<repo>/<model>``, which *Add a model* takes in this app and on the
+server) and two links, each with *Copy*: *Try it in the browser* opens the
+app with the model chosen, for whatever volume one opens, and *Open on this
+dataset* opens it on the dataset you have open. The model card carries the
+first always, and the second only with the dataset named.
+
 Browsers and devices
 --------------------
 

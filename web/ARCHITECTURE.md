@@ -77,8 +77,9 @@ viewer's layer JSON (`viewer/`), the backend
 behind the dashboard's routes (`backend/`), the session (`state/`), a folder
 picked on this machine (`local-folder/`), finetuning (`finetune/`),
 AI-assisted annotation (`ai-annotate/`), the Label it tools
-(`label-it/`) and Run on a region (`run-region/`), all four below, and the
-dashboard build (`build/`, `vite.config.ts`).
+(`label-it/`), Run on a region (`run-region/`) and publishing a finetuned
+model to Hugging Face (`publish/`), all five below, and the dashboard build
+(`build/`, `vite.config.ts`).
 
 ## Boot (src/main.ts)
 
@@ -177,7 +178,7 @@ other once its logic is portable; it is not ported by hand.
 
 | both modes (logic written once) | browser only | server only |
 |---|---|---|
-| view; input and postprocess chains; paint volumes; Label it; rank, threshold, norm choice and re-check; targets; good regions; AI annotate (prompt, mask, fill); export config | ORT Web inference; head and TF.js finetune; local folders; Run on a region to disk; share links | LSF model servers; LoRA and whole-network torch training; blockwise; Review tab; crops import; bioimageio, dacapo and Cellpose models; pipeline builder |
+| view; input and postprocess chains; paint volumes; Label it; rank, threshold, norm choice and re-check; targets; good regions; AI annotate (prompt, mask, fill); export config | ORT Web inference; head and TF.js finetune; local folders; Run on a region to disk; share links; publish to Hugging Face | LSF model servers; LoRA and whole-network torch training; blockwise; Review tab; crops import; bioimageio, dacapo and Cellpose models; pipeline builder |
 
 Both modes have "a finetune", but not one algorithm: what they share is the
 targets, the sampling plan, the loss definitions and the job card's JSON.
@@ -465,6 +466,29 @@ the folder's handle stored under a fresh `local/` key for the service
 worker's `local/` route, so the saved predictions are read back from the
 folder.
 
+## Publishing to Hugging Face (src/publish/)
+
+The Training Status card's *Publish to Hugging Face* (`static/js/dashboard/
+finetune/publish.js`, shown with *Download finetuned model*) drives
+`backend/routes/publish.ts`: the user's token (`/api/huggingface/
+credentials`: pasted, or from the Sign in popup; checked with whoAmI, kept
+in the routes' closure, which is the page's memory), and a publish of a
+finetuned model by its name (`/api/finetune/model/:name/publish`, a job the
+POST starts and the GET follows, as a finetune is, since an upload can
+outlast the service worker's API_TIMEOUT_MS). `model.ts` is what is
+uploaded: the model card, the record's manifest with its `published` block,
+the catalog's bytes, and the app links (share-link.ts's `shareLink` for the
+one with a dataset); `hub.ts` is `@huggingface/hub` (a chunk of its own,
+imported when first used): whoAmI, createRepo (409, there already: a new
+commit) and uploadFilesWithProgress, with the library's errors put in words
+that say what to do; `oauth.ts` is the sign-in (OAuth with PKCE in a popup,
+`oauth.html`, a second input of the build), the popup's script and the
+BroadcastChannel hand-over of its token to the page, named for the tab.
+Done, the record gets `published` through `Catalog.addFinetuned`, the
+catalog's one way to keep a record. The service worker passes requests with
+an `Authorization` header to the network unkept (sw.ts): its store keys by
+URL.
+
 ## State
 
 `src/state/` keeps `SessionState` (see `contracts.ts`) in the tab's
@@ -474,8 +498,10 @@ each, keyed by URL and ETag: the page asks Hugging Face for a file's ETag
 before serving its cached copy, so a model re-exported under the same name
 is downloaded again; Hugging Face rate-limits anonymous downloads) and the finetuned
 models' records and bytes (`models/`). localStorage holds the AI
-annotation's daily call count (`ai-annotate/usage.ts`); its credentials are
-in no storage at all (`credentials.ts`).
+annotation's daily call count (`ai-annotate/usage.ts`); its credentials, and
+the Hugging Face token a publish uses (`backend/routes/publish.ts`), are in
+no storage at all (`credentials.ts`). The Sign in popup keeps its PKCE
+verifier in its own sessionStorage until it is back from Hugging Face.
 
 ## Layout
 
@@ -493,13 +519,14 @@ web/
                              and its Vite plugin web/vite-ort.ts (onnxruntime-web's wasm files served/copied under ./ort/)
   ng/                        (gitignored) the Neuroglancer build, served at ./ng/
   index.html                 (gitignored) rendered
+  oauth.html                 the Sign in with Hugging Face popup's page (src/publish/oauth.ts)
   src/
     main.ts                  boot
     contracts.ts             the types the modules share
     generated/               python-data.json (written by build/export_data.py, committed; never edited by hand) and
                              python-data.ts, which gives it to the modules: the op registry and which ops the browser runs,
                              the default chain, the organelle catalog and prompt sentences, the shaders and colours, the
-                             ranking's and the finetune log's constants, the unit table
+                             ranking's and the finetune log's constants, the unit table, the version
     rebase.ts                root-relative /api/ URLs → the page's directory
     browser.css              hides .server-only under data-mode="browser"
     sw.ts                    the service worker: chunkmirage's relay for /api/* and /virtual/*, its store cache, our local/ files and paint/ store
@@ -508,7 +535,7 @@ web/
       relay.ts  registerServiceWorker(), listenForApiRequests(backend) on chunkmirage's route(); Ask/Reply/Later are chunkmirage's types
       router.ts, sse.ts, yaml.ts (the export), serving.ts (serve and re-serve the session's models, and stop serving one)
       finetune-jobs.ts (a finetune run as the dashboard's job), ai-annotate-job.ts (one AI annotation, staged for review)
-      routes/{data,pipeline,models,config,finetune,good-regions,view-labels,ai-annotate}.ts
+      routes/{data,pipeline,models,config,finetune,good-regions,view-labels,ai-annotate,rank,publish}.ts
     state/                   openSession(): SessionStore (sessionStorage: the tab is the server's process lifetime); db.ts + local-store.ts
                              for picked directories; paint-store.ts + paint-route.ts: the annotation volumes' files and the worker's paint/ route
     finetune/                types.ts (the seams), volume.ts (planVolume, the zarr v2 files), samples.ts, target-call.ts, onnx-proto.ts,
@@ -525,6 +552,8 @@ web/
                              level, the placement's call, the output under a box)
     run-region/              Run on a region (above): region.ts (the box on each model's level, the run_region layer), run.ts
                              (the run, its progress and provenance), output.ts (the folder, the zip, the saved layer), panel.ts (the tab)
+    publish/                 Publishing to Hugging Face (above): model.ts (the files, the card, the links), hub.ts (the library's
+                             calls and errors), oauth.ts (Sign in: the popup, the hand-over), oauth-popup.ts (oauth.html's entry)
     local-folder/            a folder on this machine: index.ts (the local URL and its key, the pick/drop flow,
                              the boot-time permission check), panel.ts (the connect panel's DOM: button, drop target, prompt)
     infer/                   createInference(): Inference — the Engine, one serveStages() view per model

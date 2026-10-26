@@ -5,8 +5,9 @@ The browser mode re-implements parts of cellmap_flow in TypeScript, and those
 parts lean on data: which normalizers and postprocessors the browser runs and
 their parameters, the chain a fresh session starts with, the organelle
 catalog and the prompt's sentences, the viewer's shaders and colours, the
-ranking's constants, the finetune log's patterns and the unit table. This
-script reads them from the Python that owns them and writes them to
+ranking's constants, the finetune log's patterns, the unit table and the
+version a model published from the browser names. This script reads them
+from the Python that owns them and writes them to
 web/src/generated/python-data.json, which web/src/generated/python-data.ts
 gives to the app. One source, so the two modes cannot drift apart.
 
@@ -85,6 +86,7 @@ def python_data():
     ``_NM_PER_UNIT``): read here by name, so renaming one fails this export
     and its freshness test.
     """
+    import cellmap_flow
     from cellmap_flow.ai_annotate import config as ai_config
     from cellmap_flow.ai_annotate import geometry as ai_geometry
     from cellmap_flow.ai_annotate import images as ai_images
@@ -100,6 +102,9 @@ def python_data():
     from cellmap_flow.viewer import layers, raw
 
     return {
+        # The release, which a model published to Hugging Face from the
+        # browser names in its manifest (web/src/publish/model.ts).
+        "version": cellmap_flow.__version__,
         "ops": {
             "input_norm": ops(get_input_normalizers()),
             "postprocess": ops(get_postprocessors_list()),

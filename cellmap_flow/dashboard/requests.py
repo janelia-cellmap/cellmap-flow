@@ -22,6 +22,9 @@ message is pydantic's, after the field's name.
 - ``AIAnnotateSettings``, ``AIAnnotateRun``, ``AIAnnotateResend`` and
   ``AIAnnotateDecision``: POST /api/finetune/ai-annotate/{settings,run,resend},
   and accept and reject
+- ``FinetunePublish``: POST /api/finetune/model/<name>/publish, and
+  ``HuggingFaceCredentials``: POST /api/huggingface/credentials (the browser
+  answers both for now: web/src/backend/routes/publish.ts)
 - ``BlockwiseValidate``, ``BlockwiseGenerate``, ``BlockwisePrecheck`` and
   ``BlockwiseSubmit``: POST /api/blockwise/{validate,generate,precheck,submit},
   which answer through ``check`` instead (see there)
@@ -423,6 +426,27 @@ class AIAnnotateDecision(BaseModel):
 
     annotate_id: Annotated[_ANNOTATE_ID, _required("annotate_id")] = Field(None, validate_default=True)
     overwrite: bool = False
+
+
+class FinetunePublish(BaseModel):
+    """Where to publish a finetuned model on Hugging Face: ``repo`` as
+    ``owner/name`` (blank: the signed-in user's, named after the model),
+    whether a repository made for it is ``private`` (a model repository is
+    public otherwise), and whether its manifest and model card name the
+    dataset it was trained on (``include_dataset``: off unless asked, since a
+    dataset's URL can be internal)."""
+
+    repo: Optional[str] = Field(None, max_length=200)
+    private: bool = False
+    include_dataset: bool = False
+
+
+class HuggingFaceCredentials(BaseModel):
+    """A Hugging Face access token to publish with (``token``, hf_...), or
+    ``forget`` the one in use: signing out."""
+
+    token: Optional[str] = Field(None, max_length=4096)
+    forget: bool = False
 
 
 # --- The pipeline builder's blockwise steps -----------------------------------------

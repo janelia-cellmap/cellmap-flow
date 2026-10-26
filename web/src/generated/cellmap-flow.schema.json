@@ -488,6 +488,30 @@
     },
     {
       "method": "GET",
+      "path": "/api/huggingface/credentials",
+      "availability": "browser",
+      "request": null
+    },
+    {
+      "method": "POST",
+      "path": "/api/huggingface/credentials",
+      "availability": "browser",
+      "request": "HuggingFaceCredentials"
+    },
+    {
+      "method": "POST",
+      "path": "/api/finetune/model/<name>/publish",
+      "availability": "browser",
+      "request": "FinetunePublish"
+    },
+    {
+      "method": "GET",
+      "path": "/api/finetune/model/<name>/publish",
+      "availability": "browser",
+      "request": null
+    },
+    {
+      "method": "GET",
       "path": "/api/finetune/good-regions",
       "availability": "both",
       "request": null
@@ -1450,6 +1474,33 @@
       "title": "Equivalences",
       "type": "object"
     },
+    "FinetunePublish": {
+      "description": "Where to publish a finetuned model on Hugging Face: ``repo`` as\n``owner/name`` (blank: the signed-in user's, named after the model),\nwhether a repository made for it is ``private`` (a model repository is\npublic otherwise), and whether its manifest and model card name the\ndataset it was trained on (``include_dataset``: off unless asked, since a\ndataset's URL can be internal).",
+      "properties": {
+        "repo": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "private": {
+          "default": false,
+          "type": "boolean"
+        },
+        "include_dataset": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "title": "FinetunePublish",
+      "type": "object"
+    },
     "FinetuneRestart": {
       "additionalProperties": true,
       "description": "The next iteration of a job: the training settings to change, each checked as\nTrainingOptions checks it (``changes``; the trainer applies them, cli.apply_restart_params),\nand the manifest overrides. Nothing is required: the job's model and corrections\nstay as launched.",
@@ -2002,6 +2053,29 @@
       "title": "FinetuneSubmit",
       "type": "object"
     },
+    "HuggingFaceCredentials": {
+      "description": "A Hugging Face access token to publish with (``token``, hf_...), or\n``forget`` the one in use: signing out.",
+      "properties": {
+        "token": {
+          "anyOf": [
+            {
+              "maxLength": 4096,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "forget": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "title": "HuggingFaceCredentials",
+      "type": "object"
+    },
     "LoadCrops": {
       "description": "Crops imported into the session's annotation volume for ``model_name``:\n``yaml`` is the YAML's text or its path, ``output_path`` as for\nCreateVolume, and ``load_id`` names the import's progress.",
       "properties": {
@@ -2158,6 +2232,12 @@
         },
         "POST /api/finetune/job/<job_id>/restart": {
           "$ref": "#/$defs/FinetuneRestart"
+        },
+        "POST /api/huggingface/credentials": {
+          "$ref": "#/$defs/HuggingFaceCredentials"
+        },
+        "POST /api/finetune/model/<name>/publish": {
+          "$ref": "#/$defs/FinetunePublish"
         },
         "POST /api/finetune/ai-annotate/settings": {
           "$ref": "#/$defs/AIAnnotateSettings"
