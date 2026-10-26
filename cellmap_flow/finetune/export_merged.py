@@ -76,14 +76,18 @@ def load_eager_base(folder_path):
     return model.eval()
 
 
-def apply_finetune(eager, lora_adapter_path=None, weights_path=None):
+def apply_finetune(trainable, lora_adapter_path=None, weights_path=None):
     """Return a plain nn.Module with the finetune folded in.
 
-    Both finetune flavours were trained on ``BatchLoopWrapper(export)``, whose
-    child is named ``model``, so adapter target names and full-finetune state
-    dict keys carry a ``model.`` prefix. Wrapping the eager module the same
-    way reproduces those names exactly (checked: 38/38 adapter tensors
-    identical, 0.0 output difference at 178^3).
+    ``trainable`` is the module tree the finetune was trained on, as
+    ``model_loading.load_trainable_model`` builds it: the adapter's target
+    names and a full finetune's state dict keys are that tree's, and load
+    onto no other. A TorchScript base's tree is ``BatchLoopWrapper(export)``,
+    whose child is named ``model``, so its names carry a ``model.`` prefix;
+    the wrapper only loops over the batch, and the folded module comes back
+    without it. A base's eager ``model.pt`` wrapped the same way reproduces
+    those names exactly (checked: 38/38 adapter tensors identical, 0.0 output
+    difference at 178^3), which is how ``main`` uses it.
 
     The adapter is folded in by ``LoraStrategy.merge``, the merge training
     uses to continue from a finetuned model: every adapted layer, Conv3d,
@@ -94,17 +98,19 @@ def apply_finetune(eager, lora_adapter_path=None, weights_path=None):
 
     if bool(lora_adapter_path) == bool(weights_path):
         raise ValueError("pass exactly one of lora_adapter_path / weights_path")
-    wrapped = BatchLoopWrapper(eager).eval()
+    trainable = trainable.eval()
     if lora_adapter_path:
         from cellmap_flow.finetune.lora_wrapper import load_lora_adapter
 
-        peft = load_lora_adapter(wrapped, lora_adapter_path, is_trainable=False).eval()
-        merged = LoraStrategy.merge(peft).model   # merge gives back the BatchLoopWrapper
+        peft = load_lora_adapter(trainable, lora_adapter_path, is_trainable=False).eval()
+        merged = LoraStrategy.merge(peft)  # the tree the adapter was loaded onto
     else:
         state = torch.load(weights_path, map_location="cpu", weights_only=True)
-        missing, unexpected = wrapped.load_state_dict(state, strict=True)
+        trainable.load_state_dict(state, strict=True)
         logger.info(f"Loaded full-finetune weights: {len(state)} tensors")
-        merged = wrapped.model
+        merged = trainable
+    if isinstance(merged, BatchLoopWrapper):
+        merged = merged.model
     return merged.eval()
 
 
@@ -205,8 +211,12 @@ def main(argv=None):
         base_folder = cm.folder_path
     else:
         base_folder = args.base_folder
+    from cellmap_flow.finetune.lora_wrapper import BatchLoopWrapper
+
+    # Both finetune flavours of these models were trained on
+    # BatchLoopWrapper(export), so the eager module is wrapped as they were.
     eager = load_eager_base(base_folder)
-    merged = apply_finetune(eager, args.lora_adapter_path, args.weights_path)
+    merged = apply_finetune(BatchLoopWrapper(eager), args.lora_adapter_path, args.weights_path)
 
     d_ref = r_ref = scale = d_tile = r_tile = None
     if not args.skip_check:
